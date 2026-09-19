@@ -10,9 +10,12 @@ name: Mobile test track
 #   * Both published to the private repository twuijri/core-hub-test-builds as
 #     the rolling release `latest-test-mobile`; public artifacts are removed.
 
+# `mobile-staging` is where work accumulates: it compiles and runs the tests
+# but publishes nothing. Merging it into `mobile` is what produces a build for
+# the owner, so that merge waits for him to ask for one.
 on:
   push:
-    branches: [mobile]
+    branches: [mobile, mobile-staging]
     paths:
       - 'clients/**'
       - '.github/workflows/mobile-test-track.yml'
@@ -153,7 +156,7 @@ jobs:
   # provisioning profiles are needed.
   testflight:
     needs: [version, ios]
-    if: needs.ios.result == 'success'
+    if: needs.ios.result == 'success' && github.ref == 'refs/heads/mobile'
     runs-on: macos-latest
     env:
       MARKETING_VERSION: ${{ needs.version.outputs.store }}
@@ -257,7 +260,7 @@ jobs:
 
   publish:
     needs: [version, android, ios]
-    if: always() && needs.android.result == 'success'
+    if: always() && needs.android.result == 'success' && github.ref == 'refs/heads/mobile'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
