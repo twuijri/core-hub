@@ -3,8 +3,8 @@ import PhotosUI
 
 /// Settings page in the web's section order: Current Account, Account
 /// Management (sa), Webhooks (sa), Display, Proxy, Compression, Privacy,
-/// Models — plus Advanced and Workspace tools so every existing screen stays
-/// reachable after the tab bar was removed.
+/// Models — plus Voice (which voice speaks the reply), Advanced and Workspace
+/// tools so every existing screen stays reachable after the tab bar was removed.
 struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
     var body: some View {
@@ -35,6 +35,9 @@ struct SettingsView: View {
                 NavigationLink { ModelCatalogView() } label: { SettingsRow(icon: "cpu.fill", color: CoreHubTokens.Palette.accent, title: "Models and providers") }
                 NavigationLink { ModelsView() } label: { SettingsRow(icon: "checklist", color: CoreHubTokens.Palette.info, title: "Default model") }
                 NavigationLink { ProvidersView() } label: { SettingsRow(icon: "network", color: CoreHubTokens.Palette.info, title: "Provider status") }
+            }
+            Section("Voice") {
+                VoiceOutputSettingsRow()
             }
             Section("This device") {
                 NavigationLink { ServerView() } label: { SettingsRow(icon: "server.rack", color: CoreHubTokens.Palette.success, title: "Core Hub connection", subtitle: store.baseURL) }

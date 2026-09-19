@@ -910,3 +910,19 @@
 /* جلسة محفوظة لم تعد موجودة على الخادم */
 "This conversation is no longer on the server." = "لم تعد هذه المحادثة موجودة على الخادم.";
 "Send a message to start a new one." = "أرسل رسالة لبدء محادثة جديدة.";
+
+/* صوت الرد المنطوق: مزوّد Core Hub الخاص بالبروفايل أو صوت الجهاز */
+"Spoken replies" = "الردود المنطوقة";
+"This iPhone's voice" = "‏صوت هذا الـ iPhone";
+"The built-in iOS voice. Nothing is sent to Core Hub." = "‏الصوت المدمج في iOS. لا يُرسَل شيء إلى Core Hub.";
+"The spoken reply uses the voice provider configured for this profile in Core Hub. This iPhone's voice speaks only when you pick it here, or when the server voice fails." = "‏يستخدم الرد المنطوق مزوّد الصوت المهيّأ لهذا البروفايل في Core Hub. ولا ينطق صوت هذا الـ iPhone إلا إذا اخترته هنا أو تعذّر صوت الخادم.";
+"No voice provider is configured for this profile. Add one under Studio → Voice." = "‏لا يوجد مزوّد صوت مهيّأ لهذا البروفايل. أضِف واحدًا من Studio ← Voice.";
+"Active on the server" = "المفعَّل على الخادم";
+"Written to the profile: %@" = "‏يُحفَظ في البروفايل: %@";
+"The voice provider returned no audio." = "لم يُرجع مزوّد الصوت أي صوت.";
+"the server voice" = "صوت الخادم";
+"%1$@ failed" = "‏فشل %1$@";
+"%1$@ failed: %2$@" = "‏فشل %1$@: %2$@";
+"%1$@ failed (HTTP %2$lld)" = "‏فشل %1$@ (HTTP %2$lld)";
+"%1$@ failed (HTTP %2$lld): %3$@" = "‏فشل %1$@ (HTTP %2$lld): %3$@";
+"Server voice unavailable (%@); the device voice was used instead." = "‏صوت الخادم غير متاح (%@)؛ استُخدم صوت الجهاز بدلًا منه.";
