@@ -77,7 +77,7 @@ struct WorkflowDetailView: View {
                 TechnicalText(text: String(run.id.prefix(12)), font: CoreHubTokens.Typography.sessionTitleFont, color: CoreHubTokens.Palette.textPrimary)
                 HStack(spacing: 6) {
                     Text("\(run.nodes.count) nodes")
-                    Text(SessionTimeFormatter.string(for: run.createdAt > 0 ? Date(timeIntervalSince1970: Double(run.createdAt) / 1000) : nil, locale: store.locale))
+                    Text(SessionTimeFormatter.string(for: startedAt(run), locale: store.locale))
                 }
                 .font(CoreHubTokens.Typography.metaFont)
                 .foregroundStyle(CoreHubTokens.Palette.textMuted)
@@ -85,6 +85,12 @@ struct WorkflowDetailView: View {
             Spacer(minLength: 0)
             WorkflowStatusChip(status: run.status)
         }
+    }
+
+    /// Runs carry millisecond timestamps; `nil` keeps the row without a time.
+    private func startedAt(_ run: WorkflowRun) -> Date? {
+        guard run.createdAt > 0 else { return nil }
+        return Date(timeIntervalSince1970: Double(run.createdAt) / 1000)
     }
 
     private var linksSection: some View {
@@ -182,7 +188,7 @@ struct WorkflowRunPromptView: View {
     private func start() async {
         starting = true
         defer { starting = false }
-        let timeout = timeoutMinutes > 0 ? timeoutMinutes * 60_000 : nil
+        let timeout: Int? = timeoutMinutes > 0 ? timeoutMinutes * 60_000 : nil
         guard await store.attempt({
             try await store.api.runWorkflow(workflow.id, input: input.nilIfEmpty, startNodeIDs: Array(selected), timeoutMs: timeout)
         }) != nil else { return }
