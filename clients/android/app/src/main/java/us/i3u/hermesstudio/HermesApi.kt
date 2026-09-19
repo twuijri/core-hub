@@ -422,14 +422,27 @@ class HermesApi(
      * — one window of the transcript (oldest first) plus the total, for
      * infinite scroll towards older messages.
      */
-    fun conversationPage(sessionId: String, offset: Int, limit: Int, profile: String?): MessagePage {
-        val root = call("/api/studio/sessions/conversations/${enc(sessionId)}/messages/paginated?offset=$offset&limit=$limit", profile = profile)
+    fun conversationPage(sessionId: String, offset: Int, limit: Int, profile: String?): MessagePage =
+        parseConversationPage(
+            call("/api/studio/sessions/conversations/${enc(sessionId)}/messages/paginated?offset=$offset&limit=$limit", profile = profile),
+            offset,
+        )
+
+    /**
+     * The body of [conversationPage], split out so the transcript mapping can
+     * be unit tested. `display_content` is nullable on the server, and
+     * `JSONObject.opt` hands back [JSONObject.NULL] rather than Kotlin's
+     * `null` for it, so every lookup has to reject that sentinel or the row
+     * renders as the literal text "null".
+     */
+    internal fun parseConversationPage(root: JSONObject, offset: Int): MessagePage {
         val array = root.optJSONArray("messages") ?: JSONArray()
         val messages = (0 until array.length()).mapNotNull { index ->
             val item = array.optJSONObject(index) ?: return@mapNotNull null
             val role = firstNonBlank(item, "display_role", "role") ?: "assistant"
             if (role == "tool" || role == "moa") return@mapNotNull null
-            val content = when (val raw = item.opt("display_content") ?: item.opt("content")) {
+            val raw = jsonValue(item, "display_content") ?: jsonValue(item, "content")
+            val content = when (raw) {
                 is JSONArray -> GroupJson.blocksToText(raw)
                 is String -> if (raw.startsWith("[")) runCatching { GroupJson.blocksToText(JSONArray(raw)) }.getOrDefault(raw) else raw
                 null -> ""
@@ -2368,6 +2381,10 @@ class HermesApi(
         if (source.has(key) && !source.isNull(key)) return source.optInt(key)
         return source.optJSONArray(arrayKey)?.length()
     }
+
+    /** The value at [key], with an absent field and a JSON `null` both read as Kotlin `null`. */
+    private fun jsonValue(source: JSONObject, key: String): Any? =
+        source.opt(key).takeUnless { it == null || it == JSONObject.NULL }
 
     private fun firstNonBlank(source: JSONObject, vararg keys: String): String? {
         for (key in keys) {

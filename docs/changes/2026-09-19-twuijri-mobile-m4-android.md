@@ -104,3 +104,16 @@ gradle testDebugUnitTest assembleDebug   → BUILD SUCCESSFUL
 بلا دفع. الخطوة التالية للمالك: مراجعة الفرق، ثم تشغيل التطبيق على سيرفر
 حقيقي للمرور على قائمة «لم يُتحقق» أعلاه (خصوصًا البث في الغرفة وتشغيل سير
 عمل حتى نهايته)، ثم الدفع وفتح PR إلى `mobile`، ثم M4 iOS.
+
+## إصلاح بعد تجربة المالك: كل الرسائل تظهر «null»
+المالك جرّب نسخة أندرويد فظهرت كل رسائل المحادثة بنص «null». السبب أن
+`display_content` قابل لأن يكون `null` على الخادم، و`JSONObject.opt` في أندرويد
+يعيد `JSONObject.NULL` (وليس `null` في كوتلن)، فلا يعمل `?:` ويصل الحارس
+`raw.toString()` فيطبع الكلمة. الويب يستخدم `??` فلا تظهر عنده.
+- `HermesApi.parseConversationPage` (استُخرج من `conversationPage` ليصبح قابلًا
+  للاختبار) صار يتجاهل `JSONObject.NULL` في `display_content` و`content`.
+- `GroupJson.message` كان يحمل العيب نفسه في نص رسائل الغرف؛ أُصلح.
+- اختبار جديد `ConversationPageTest` (٥ حالات) يثبّت السلوك: التراجع إلى
+  `content`، أولوية `display_content`، إسقاط الرسالة الفارغة بدل عرض «null»،
+  استبعاد صفوف الأدوات، ورسالة غرفة بمحتوى فارغ.
+- الدليل: `BUILD SUCCESSFUL`، ‏171 اختبارًا بلا إخفاق (كانت 166).

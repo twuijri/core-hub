@@ -288,7 +288,7 @@ object GroupJson {
 
     fun message(item: JSONObject): GroupMessage? {
         val id = item.optString("id").takeIf { it.isNotBlank() } ?: return null
-        val content = when (val raw = item.opt("content")) {
+        val content = when (val raw = item.opt("content").takeUnless { it == JSONObject.NULL }) {
             is JSONArray -> blocksToText(raw)
             is String -> if (raw.startsWith("[")) runCatching { blocksToText(JSONArray(raw)) }.getOrDefault(raw) else raw
             null -> ""
