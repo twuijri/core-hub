@@ -246,6 +246,48 @@ final class SpeechLanguageTests: XCTestCase {
         XCTAssertFalse(server.isEmpty)
     }
 
+    // MARK: - The occasional "long-press the mic" hint
+
+    func testTheHintIsShownOnEveryOneOfTheFirstRecordings() {
+        for count in 0..<DictationHintPolicy.firstRecordings {
+            XCTAssertTrue(DictationHintPolicy.shouldShow(recordingCount: count, longPressUsed: false),
+                          "recording \(count)")
+        }
+    }
+
+    func testAfterTheFirstRecordingsTheHintOnlyReturnsOccasionally() {
+        // Recordings 4 to 7 (counts 3…6) stay quiet, then it comes back.
+        for count in DictationHintPolicy.firstRecordings..<DictationHintPolicy.occasionalPeriod {
+            XCTAssertFalse(DictationHintPolicy.shouldShow(recordingCount: count, longPressUsed: false),
+                           "recording \(count)")
+        }
+        XCTAssertTrue(DictationHintPolicy.shouldShow(recordingCount: 7, longPressUsed: false))
+        XCTAssertTrue(DictationHintPolicy.shouldShow(recordingCount: 14, longPressUsed: false))
+        XCTAssertTrue(DictationHintPolicy.shouldShow(recordingCount: 21, longPressUsed: false))
+    }
+
+    func testTheGapsBetweenHintsStayInTheFifthToTenthRange() {
+        let shown = (0..<40).filter { DictationHintPolicy.shouldShow(recordingCount: $0, longPressUsed: false) }
+        XCTAssertEqual(Array(shown.prefix(6)), [0, 1, 2, 7, 14, 21])
+        // From the last of the opening run onwards: 2 → 7 is five, then seven.
+        let tail = shown.dropFirst(DictationHintPolicy.firstRecordings - 1)
+        let gaps = zip(tail, tail.dropFirst()).map { $1 - $0 }
+        XCTAssertFalse(gaps.isEmpty)
+        for gap in gaps { XCTAssertTrue((5...10).contains(gap), "gap \(gap)") }
+    }
+
+    func testTheHintStopsForeverOnceTheLongPressHasBeenUsed() {
+        for count in [0, 1, 2, 7, 14, 700] {
+            XCTAssertFalse(DictationHintPolicy.shouldShow(recordingCount: count, longPressUsed: true),
+                           "recording \(count)")
+        }
+    }
+
+    func testANegativeOrMissingCountIsTreatedAsTheFirstRecording() {
+        XCTAssertTrue(DictationHintPolicy.shouldShow(recordingCount: -1, longPressUsed: false))
+        XCTAssertFalse(DictationHintPolicy.shouldShow(recordingCount: -1, longPressUsed: true))
+    }
+
     // MARK: - Helpers
 
     func testLanguageCodeTakesTheFirstSubtag() {

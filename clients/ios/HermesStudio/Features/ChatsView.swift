@@ -456,7 +456,7 @@ struct SessionCategoriesView: View {
     @State private var editName = ""
     var body: some View {
         List {
-            Section("New category") { HStack { TextField("Category name", text: $newName); Button("Add") { Task { await create() } }.disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) } }
+            Section("New category") { HStack { TextField("Category name", text: $newName).contentDirection(of: newName); Button("Add") { Task { await create() } }.disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) } }
             Section("Categories") {
                 if categories.isEmpty { Text("No categories yet").font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.textMuted) }
                 ForEach(categories) { category in Button { editing = category; editName = category.name } label: { Label(category.name, systemImage: "folder.fill") }.foregroundStyle(.primary) }

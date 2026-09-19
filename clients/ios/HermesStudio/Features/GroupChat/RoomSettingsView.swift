@@ -67,7 +67,7 @@ struct RoomSettingsView: View {
 
     private var generalSection: some View {
         Section("Room") {
-            TextField("Name", text: $draft.name)
+            TextField("Name", text: $draft.name).contentDirection(of: draft.name)
             SaveButton(title: String(localized: "Save room"), state: configState) { Task { await saveConfig() } }
         }
     }
@@ -166,7 +166,7 @@ struct RoomSettingsView: View {
     private var summarySection: some View {
         Section {
             if !summaryStatus.isEmpty { StatusPill(text: summaryStatus, color: summaryStatus == "error" ? CoreHubTokens.Palette.error : CoreHubTokens.Palette.info) }
-            TextField("Room summary", text: $summary, axis: .vertical).lineLimit(3...12)
+            TextField("Room summary", text: $summary, axis: .vertical).lineLimit(3...12).contentDirection(of: summary)
             SaveButton(title: String(localized: "Save summary"), state: summaryState) { Task { await saveSummary() } }
         } header: { Text("Summary") } footer: { Text("Core Hub rewrites this automatically; edit it when the agents need a different starting point.") }
     }

@@ -85,13 +85,12 @@ struct ChatComposer: View {
     }
 }
 
+/// The field the owner types **and dictates** into: live partial results land
+/// here, so its direction has to follow the words, not the app language.
 private struct ComposerInput: View {
     @Binding var text: String
     var focused: FocusState<Bool>.Binding
     let onSubmit: () -> Void
-    @EnvironmentObject private var store: AppStore
-
-    private var direction: LayoutDirection { text.isEmpty ? store.layoutDirection : MarkdownText.layoutDirection(for: text) }
 
     var body: some View {
         TextField("Type a message…", text: $text, axis: .vertical)
@@ -99,11 +98,13 @@ private struct ComposerInput: View {
             .foregroundStyle(CoreHubTokens.Palette.textPrimary)
             .lineLimit(1...8)
             .focused(focused)
-            .multilineTextAlignment(.leading)
-            .environment(\.layoutDirection, direction)
             .padding(.horizontal, 4)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
+            // Last: the frame's `.leading` must resolve in the text's own
+            // direction, otherwise Arabic is laid out right-to-left inside a
+            // box that is still anchored to the left.
+            .contentDirection(of: text)
     }
 }
 
@@ -410,7 +411,7 @@ private struct SpeechLanguageChip: View {
                 .padding(.horizontal, 7)
                 .padding(.vertical, 2)
                 .background(CoreHubTokens.Palette.bgSecondary, in: Capsule())
-                .environment(\.layoutDirection, MarkdownText.layoutDirection(for: label))
+                .contentDirection(of: label)
                 .accessibilityLabel(Text("Dictation language"))
                 .accessibilityValue(Text(label))
         }
@@ -464,7 +465,7 @@ struct ContextUsageView: View {
             Text(loading ? String(localized: "Context…") : label)
                 .font(CoreHubTokens.Typography.metaFont)
                 .lineLimit(1)
-                .environment(\.layoutDirection, .leftToRight)
+                .technicalDirection()
             ZStack(alignment: .leading) {
                 Capsule().fill(CoreHubTokens.Palette.border)
                 Capsule().fill(color).frame(width: CoreHubTokens.Layout.contextBarWidthPhone * ratio)

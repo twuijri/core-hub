@@ -120,7 +120,7 @@ struct SpeechInputLanguageList: View {
 
     private func localeRow(_ option: SpeechLocaleOption) -> some View {
         pickRow(title: Text(option.endonym)
-            .environment(\.layoutDirection, MarkdownText.layoutDirection(for: option.endonym)),
+            .contentDirection(of: option.endonym),
                 detail: "",
                 trailing: option.identifier,
                 selected: choice == .locale(option.identifier)) {

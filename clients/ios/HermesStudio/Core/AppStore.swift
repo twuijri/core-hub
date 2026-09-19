@@ -144,6 +144,22 @@ final class AppStore: ObservableObject {
         speechLanguageRevision += 1
     }
 
+    /// Counts one started dictation for this profile and answers whether the
+    /// "long-press the mic" hint belongs above the composer this time.
+    /// Called once per recording that actually starts listening.
+    func registerDictationAndShouldHint(profile: String) -> Bool {
+        let count = Preferences.dictationCount(for: profile)
+        Preferences.setDictationCount(count + 1, profile: profile)
+        return DictationHintPolicy.shouldShow(recordingCount: count,
+                                              longPressUsed: Preferences.dictationLongPressUsed(for: profile))
+    }
+
+    /// The owner used the long press, so the hint has done its job and stops
+    /// for this profile.
+    func markDictationLongPressUsed(profile: String) {
+        Preferences.setDictationLongPressUsed(true, profile: profile)
+    }
+
     func boot() async {
         await StudioLogoStore.shared.loadCached()
         guard isConfigured else { phase = .signedOut; return }

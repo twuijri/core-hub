@@ -580,6 +580,8 @@
 "App language (%@)" = "لغة التطبيق (%@)";
 "Detected by the Core Hub server" = "يكتشفها خادم Core Hub";
 "Touch and hold to choose the dictation language" = "اضغط مطوّلًا لاختيار لغة الإملاء";
+"Touch and hold the microphone to change the dictation language" = "اضغط مطوّلًا على الميكروفون لتغيير لغة الإملاء";
+"Opens the dictation language picker" = "يفتح قائمة اختيار لغة الإملاء";
 "On-device speech is unavailable for %@; using the Core Hub server" = "التعرّف على الكلام داخل الجهاز غير متاح للغة %@؛ سيُستخدم خادم Core Hub";
 "The Core Hub server cannot transcribe right now (%1$@). Dictating in %2$@ on this iPhone instead." = "تعذّر التفريغ في خادم Core Hub حاليًا (%1$@). سيجري الإملاء بلغة %2$@ على هذا الآيفون بدلًا من ذلك.";
 

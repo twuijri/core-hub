@@ -294,6 +294,8 @@
 "App language (%@)" = "App language (%@)";
 "Detected by the Core Hub server" = "Detected by the Core Hub server";
 "Touch and hold to choose the dictation language" = "Touch and hold to choose the dictation language";
+"Touch and hold the microphone to change the dictation language" = "Touch and hold the microphone to change the dictation language";
+"Opens the dictation language picker" = "Opens the dictation language picker";
 "On-device speech is unavailable for %@; using the Core Hub server" = "On-device speech is unavailable for %@; using the Core Hub server";
 "The Core Hub server cannot transcribe right now (%1$@). Dictating in %2$@ on this iPhone instead." = "The Core Hub server cannot transcribe right now (%1$@). Dictating in %2$@ on this iPhone instead.";
 

@@ -135,14 +135,14 @@ struct CreateRoomView: View {
 
     private var roomSection: some View {
         Section("Room") {
-            TextField("Name", text: $draft.name)
+            TextField("Name", text: $draft.name).contentDirection(of: draft.name)
             HStack {
                 TextField("Invite code", text: $draft.inviteCode).textInputAutocapitalization(.characters).autocorrectionDisabled()
                 Button { draft.inviteCode = RoomInviteLink.generateCode() } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.plain).accessibilityLabel("Generate invite code")
             }
             TextField("Workspace path", text: $draft.workspace).textInputAutocapitalization(.never).autocorrectionDisabled()
-            TextField("Your name in this room", text: $draft.memberName)
+            TextField("Your name in this room", text: $draft.memberName).contentDirection(of: draft.memberName)
         }
     }
 

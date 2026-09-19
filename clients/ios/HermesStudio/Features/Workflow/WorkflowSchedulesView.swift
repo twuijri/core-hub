@@ -91,13 +91,13 @@ struct WorkflowScheduleEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Cron expression", text: $expression).textInputAutocapitalization(.never).autocorrectionDisabled().environment(\.layoutDirection, .leftToRight)
+                    TextField("Cron expression", text: $expression).textInputAutocapitalization(.never).autocorrectionDisabled().technicalDirection()
                     Text(CronDescription.describe(expression)).font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.textMuted)
                     TextField("Time zone", text: $timezone).textInputAutocapitalization(.never).autocorrectionDisabled()
                     Toggle("Enabled", isOn: $enabled)
                 } header: { Text("Schedule") } footer: { Text("Five cron fields: minute, hour, day of month, month, day of week.") }
                 Section("Input") {
-                    TextField("Optional input", text: $input, axis: .vertical).lineLimit(1...5)
+                    TextField("Optional input", text: $input, axis: .vertical).lineLimit(1...5).contentDirection(of: input)
                 }
                 Section { SaveStateLabel(state: state) }
             }

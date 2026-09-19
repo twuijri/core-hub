@@ -139,7 +139,7 @@ struct ClarificationAnswer: View {
                     .padding(.vertical, 7)
                     .background(CoreHubTokens.Palette.bgInput, in: RoundedRectangle(cornerRadius: CoreHubTokens.Radius.control))
                     .overlay(RoundedRectangle(cornerRadius: CoreHubTokens.Radius.control).stroke(CoreHubTokens.Palette.inputBorderIdle))
-                    .environment(\.layoutDirection, MarkdownText.layoutDirection(for: answer))
+                    .contentDirection(of: answer)
                 Button { respond(trimmed); answer = "" } label: {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 14, weight: .semibold))
