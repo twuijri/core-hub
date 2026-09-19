@@ -92,6 +92,9 @@ android {
 tasks.withType<Test>().configureEach {
     inputs.dir("src/main/res").withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.file("src/main/java/us/i3u/hermesstudio/Locales.kt")
+    // AttachmentSheetTest compares the two clients' attachment sheet, so an
+    // iOS-only edit has to invalidate this task too.
+    inputs.dir("../../ios/HermesStudio").withPathSensitivity(PathSensitivity.RELATIVE)
     testLogging { events("failed") }
 }
 

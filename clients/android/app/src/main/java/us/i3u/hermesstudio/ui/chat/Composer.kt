@@ -37,17 +37,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.ModelTraining
-import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.CircularProgressIndicator
@@ -190,6 +187,17 @@ internal fun Composer(
     LaunchedEffect(state.chatProfile) { viewModel.loadSpeechLanguages() }
     if (speechLanguageSheet) SpeechLanguageSheet(state, viewModel) { speechLanguageSheet = false }
 
+    // The "+" opens the attachment sheet (ui/chat/AttachmentSheet.kt), not a
+    // menu anchored to the button.
+    if (attachMenu) {
+        AttachmentSheet(
+            onDismiss = { attachMenu = false },
+            onCamera = { askCamera.launch(Manifest.permission.CAMERA) },
+            onGallery = { pickImage.launch("image/*") },
+            onFile = { pickFile.launch("*/*") },
+        )
+    }
+
     when (sheet) {
         ComposerSheet.Model -> ModalBottomSheet(onDismissRequest = { sheet = null }, sheetState = rememberModalBottomSheetState()) {
             PickerSheet(
@@ -331,26 +339,7 @@ internal fun Composer(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Box {
-                        RoundToolbarButton(icon = Icons.Filled.Add, label = stringResource(R.string.composer_attach), enabled = !state.sending) { attachMenu = true }
-                        DropdownMenu(expanded = attachMenu, onDismissRequest = { attachMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.sheet_camera)) },
-                                leadingIcon = { Icon(Icons.Filled.PhotoCamera, null) },
-                                onClick = { attachMenu = false; askCamera.launch(Manifest.permission.CAMERA) },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.sheet_gallery)) },
-                                leadingIcon = { Icon(Icons.Filled.Image, null) },
-                                onClick = { attachMenu = false; pickImage.launch("image/*") },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.sheet_file)) },
-                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.InsertDriveFile, null) },
-                                onClick = { attachMenu = false; pickFile.launch("*/*") },
-                            )
-                        }
-                    }
+                    RoundToolbarButton(icon = Icons.Filled.Add, label = stringResource(R.string.composer_attach), enabled = !state.sending) { attachMenu = true }
                     Row(
                         modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
                         verticalAlignment = Alignment.CenterVertically,

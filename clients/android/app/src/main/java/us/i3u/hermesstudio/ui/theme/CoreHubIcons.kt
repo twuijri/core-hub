@@ -105,6 +105,29 @@ object CoreHubIcons {
         line("Folder", "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z")
     }
     val Close: ImageVector by lazy { line("Close", "M18 6L6 18 M6 6l12 12") }
+
+    /** Attachment sheet: take a photo, pick one from the library, pick any file. */
+    val Camera: ImageVector by lazy {
+        line(
+            "Camera",
+            "M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z",
+            circle(12f, 13f, 3f),
+        )
+    }
+    val Image: ImageVector by lazy {
+        line(
+            "Image",
+            "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z",
+            circle(9f, 9f, 2f),
+            "M21 15l-3.1-3.1a2 2 0 0 0-2.8 0L6 21",
+        )
+    }
+    val Paperclip: ImageVector by lazy {
+        line(
+            "Paperclip",
+            "M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48",
+        )
+    }
     val ChevronRight: ImageVector by lazy { line("ChevronRight", "M9 6l6 6-6 6", mirror = true) }
     val Back: ImageVector by lazy { line("Back", "M19 12H5 M12 19l-7-7 7-7", mirror = true) }
     val Logout: ImageVector by lazy {

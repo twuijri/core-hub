@@ -428,6 +428,14 @@
 "%llds" = "%llds";
 "Take photo" = "Take photo";
 "Photo library" = "Photo library";
+"Attach files" = "Attach files";
+"Choose what to add to this message" = "Choose what to add to this message";
+"Photos" = "Photos";
+"Documents" = "Documents";
+"Open the camera now" = "Open the camera now";
+"Choose from your photos" = "Choose from your photos";
+"Any file from this device" = "Any file from this device";
+"Close" = "Close";
 "Voice mode" = "Voice mode";
 "Show tool calls" = "Show tool calls";
 "Push" = "Push";

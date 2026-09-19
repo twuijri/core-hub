@@ -670,6 +670,13 @@
 "%llds" = "%lld ث";
 "Take photo" = "التقاط صورة";
 "Photo library" = "مكتبة الصور";
+"Choose what to add to this message" = "اختر ما تضيفه إلى هذه الرسالة";
+"Photos" = "الصور";
+"Documents" = "المستندات";
+"Open the camera now" = "افتح الكاميرا الآن";
+"Choose from your photos" = "اختر من صورك";
+"Any file from this device" = "أي ملف من هذا الجهاز";
+"Close" = "إغلاق";
 "Voice mode" = "الوضع الصوتي";
 "Show tool calls" = "إظهار نداءات الأدوات";
 "Push" = "الإشعارات";
