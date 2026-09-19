@@ -485,6 +485,21 @@ function resolveStoredProvider(fields: Record<string, string>): StoredSttProvide
   return assertStoredSttProvider(fields.provider || '')
 }
 
+/**
+ * The caller may name the spoken language per request, which matters for
+ * clients whose interface language is not the language being dictated (a
+ * phone in English whose owner speaks Arabic). An absent or blank field keeps
+ * the profile's stored language, so existing callers are unaffected.
+ */
+function settingsWithRequestLanguage<T extends { language?: string }>(
+  settings: T,
+  fields: Record<string, string>,
+): T {
+  const language = String(fields.language || '').trim()
+  if (!language) return settings
+  return { ...settings, language }
+}
+
 function localStreamOwnerKey(userId: number, ctx: Context): string {
   return `${userId}:${requestedProfile(ctx)}`
 }
@@ -645,7 +660,7 @@ export async function transcribe(ctx: Context) {
       audio: audio.data,
       fileName: audio.filename || 'audio',
       mimeType: audio.contentType || 'application/octet-stream',
-      settings: runtimeSetting.settings,
+      settings: settingsWithRequestLanguage(runtimeSetting.settings, parsed.fields),
       secrets: runtimeSetting.secrets,
       signal: controller.signal,
     })
