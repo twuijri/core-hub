@@ -89,6 +89,7 @@ import androidx.compose.material.icons.filled.VpnLock
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.RestartAlt
@@ -1439,7 +1440,12 @@ internal fun DeviceSettings(state: UiState, viewModel: AppViewModel) {
     var appearanceSheet by remember { mutableStateOf(false) }
     var reasoningSheet by remember { mutableStateOf(false) }
     var voiceSheet by remember { mutableStateOf(false) }
+    var voiceOutputSheet by remember { mutableStateOf(false) }
     val language = APP_LANGUAGES.firstOrNull { it.tag == state.language } ?: APP_LANGUAGES.first()
+
+    // Core Hub keeps TTS settings per profile, so the row has to show this
+    // profile's voice before the sheet is ever opened.
+    LaunchedEffect(state.activeProfile) { viewModel.loadVoiceSettings() }
 
     val pickLogo = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
@@ -1501,6 +1507,26 @@ internal fun DeviceSettings(state: UiState, viewModel: AppViewModel) {
             )
         }
     }
+    if (voiceOutputSheet) {
+        ModalBottomSheet(onDismissRequest = { voiceOutputSheet = false }, sheetState = rememberModalBottomSheetState()) {
+            PickerSheet(
+                title = stringResource(R.string.settings_voice_output),
+                loading = state.loadingVoiceSettings,
+                rows = voiceOutputRows(state) { choice ->
+                    voiceOutputSheet = false
+                    viewModel.setVoiceOutput(choice)
+                },
+            )
+            state.voiceSettingsError?.let { failure ->
+                Text(
+                    stringResource(R.string.voice_output_unreadable, failure),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
+            }
+        }
+    }
 
     SettingsRow(
         icon = Icons.Filled.DisplaySettings,
@@ -1534,6 +1560,22 @@ internal fun DeviceSettings(state: UiState, viewModel: AppViewModel) {
     )
     Text(
         stringResource(R.string.settings_voice_input_note),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+    )
+    SettingsRow(
+        icon = Icons.Filled.RecordVoiceOver,
+        label = stringResource(R.string.settings_voice_output),
+        value = voiceOutputLabel(state),
+        onClick = {
+            // The owner may have just changed the provider in the web client.
+            viewModel.loadVoiceSettings(force = true)
+            voiceOutputSheet = true
+        },
+    )
+    Text(
+        stringResource(R.string.settings_voice_output_note),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),

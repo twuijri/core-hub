@@ -84,6 +84,21 @@ class Store(context: Context) {
         get() = prefs.getString(KEY_PROFILE, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_PROFILE, value).apply()
 
+    /**
+     * Settings → Voice, per profile: which voice reads a reply out loud.
+     *
+     * [VoiceOutput.DEVICE] is the Android engine, a provider id is that Core
+     * Hub provider, and [VoiceOutput.FOLLOW_SERVER] (the default, blank) means
+     * whatever the profile's active provider is on the server. Kept per
+     * profile because Core Hub stores its TTS settings per profile too.
+     */
+    fun voiceOutput(profile: String): String =
+        prefs.getString("$KEY_VOICE_OUTPUT_PREFIX${profile.ifBlank { "default" }}", "").orEmpty()
+
+    fun setVoiceOutput(profile: String, value: String) {
+        prefs.edit().putString("$KEY_VOICE_OUTPUT_PREFIX${profile.ifBlank { "default" }}", value).apply()
+    }
+
     fun sessionFor(profile: String): String =
         prefs.getString(sessionKey(profile), "").orEmpty()
 
@@ -174,6 +189,7 @@ class Store(context: Context) {
         private const val KEY_TOKEN_REFRESHED_AT = "token_refreshed_at"
         private const val KEY_APP_CONNECTION_ID = "app_connection_id"
         private const val KEY_VOICE_INPUT = "voice_input"
+        private const val KEY_VOICE_OUTPUT_PREFIX = "voice_output_"
         private const val KEY_PROFILE = "profile"
         private const val KEY_SESSION_PREFIX = "session_"
         private const val KEY_REASONING = "reasoning_effort"

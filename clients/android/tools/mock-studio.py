@@ -28,8 +28,24 @@ Two fixtures reproduce reported bugs without a real server:
       know — including the id a brand-new chat mints locally. The app must
       clear the stored id and show one neutral empty state, never a stack of
       red rows.
+
+  TTS  the "speak" button fell back to the device voice. The profile has an
+      Arabic ElevenLabs voice configured and active, but a synthesize call
+      that names no provider is resolved the way the server resolves it —
+      `edge`, Microsoft's free voice — and that one answers 502 here. The
+      routes below make each outcome reachable:
+
+        no provider / edge  → HTTP 502 with {"error", "detail"}
+        groq                → a JSON error body served as HTTP 200
+        gemini              → HTTP 400, a provider that is not configured
+        elevenlabs          → real WAV bytes with X-TTS-Provider
+
+A port can be given on the command line (default 8099) so a test can run this
+on a free one:
+
+    python3 tools/mock-studio.py 0
 """
-import base64, json, re, time
+import base64, json, re, struct, sys, time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -272,6 +288,36 @@ PETS = [
 ACTIVE_PET = {"enabled": True, "slug": "luna", "displayName": "Luna", "kind": "cat", "scale": 1.0,
               "spritesheetDataUrl": "data:image/png;base64," + base64.b64encode(LOGO).decode()}
 
+# GET /api/studio/tts/settings — the envelope the TTS controller returns:
+# `settings` rows with non-secret options, `secrets.apiKey` as the marker
+# "[stored]", and the profile's active provider. The Arabic voice is the
+# active one; `edge` is the built-in the server falls back to on its own.
+TTS_SETTINGS = [
+    {"provider": "elevenlabs",
+     "settings": {"baseUrl": "https://api.elevenlabs.io/v1", "model": "eleven_multilingual_v2",
+                  "voice": "ar-Layla", "language": "ar", "speed": "1",
+                  "baseUrlPresets": ["https://api.elevenlabs.io/v1"]},
+     "secrets": {"apiKey": "[stored]"}, "createdAt": 1785000000000, "updatedAt": 1785000000000},
+    {"provider": "groq",
+     "settings": {"baseUrl": "https://api.groq.com/openai/v1", "model": "playai-tts-arabic", "voice": "Nasser"},
+     "secrets": {"apiKey": "[stored]"}, "createdAt": 1785000000000, "updatedAt": 1785000000000},
+    {"provider": "edge",
+     "settings": {"voice": "ar-SA-HamedNeural", "rate": "+0%", "pitch": "+0Hz"},
+     "secrets": {}, "createdAt": 1785000000000, "updatedAt": 1785000000000},
+]
+TTS_ACTIVE_PROVIDER = "elevenlabs"
+# What the server picks when the request names no provider (resolveActiveTtsProvider
+# with nothing stored and more than one provider configured).
+TTS_UNNAMED_PROVIDER = "edge"
+
+
+def wav_bytes(milliseconds=200, rate=8000):
+    """A real, tiny, silent WAV so the app's format sniffing has something to read."""
+    frames = b"\x00\x00" * int(rate * milliseconds / 1000)
+    header = b"RIFF" + struct.pack("<I", 36 + len(frames)) + b"WAVEfmt "
+    header += struct.pack("<IHHIIHH", 16, 1, 1, rate, rate * 2, 2, 16)
+    return header + b"data" + struct.pack("<I", len(frames)) + frames
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 
@@ -282,6 +328,33 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def send_audio(self, audio, provider, engine, mime='audio/wav'):
+        self.send_response(200)
+        self.send_header('Content-Type', mime)
+        self.send_header('Content-Length', str(len(audio)))
+        self.send_header('X-TTS-Provider', provider)
+        self.send_header('X-TTS-Engine', engine)
+        self.end_headers()
+        self.wfile.write(audio)
+
+    def synthesize(self, body):
+        """
+        POST /api/studio/tts/synthesize. The chosen provider decides the
+        outcome, so every failure the phone has to report is reachable.
+        """
+        provider = (body.get('provider') or '').strip() or TTS_UNNAMED_PROVIDER
+        if provider == 'edge':
+            # What the owner's server does with Microsoft's free voice.
+            self.send({"error": "TTS synthesis failed",
+                       "detail": "edge-tts returned 403 for this network"}, 502)
+        elif provider == 'groq':
+            # A JSON error body served as HTTP 200; MediaPlayer used to choke on it.
+            self.send({"error": "TTS synthesis failed", "detail": "model playai-tts-arabic is decommissioned"})
+        elif provider not in {row['provider'] for row in TTS_SETTINGS}:
+            self.send({"error": "unknown TTS provider"}, 400)
+        else:
+            self.send_audio(wav_bytes(), provider, 'mock-tts')
 
     def json_body(self):
         length = int(self.headers.get('Content-Length') or 0)
@@ -449,6 +522,8 @@ class Handler(BaseHTTPRequestHandler):
         elif path == '/api/hermes/petdex/manifest':
             self.send({"generatedAt": "2026-07-31", "total": len(PETS), "pets": PETS})
         elif path == '/api/hermes/pets/active': self.send({"pet": ACTIVE_PET})
+        elif path == '/api/studio/tts/settings':
+            self.send({"settings": TTS_SETTINGS, "activeProvider": TTS_ACTIVE_PROVIDER})
         elif path == '/api/cron-history':
             job_id = parse_qs(parsed.query).get('jobId', ['morning-brief'])[0]
             self.send({"runs": [{"jobId": job_id, "fileName": "2026-07-31T09-00-00.md", "runTime": "2026-07-31 09:00:00", "size": len(RUN_OUTPUT.encode()), "hasOutput": True, "status": "ok"}]})
@@ -491,6 +566,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == '/api/studio/chat-run/runs':
             time.sleep(1)
             self.send({"output": "تم، سجلت الملاحظة.", "session_id": "s1"})
+        elif path == '/api/studio/tts/synthesize': self.synthesize(body)
         elif path.endswith('/gateway/restart'): self.send({"success": True})
         elif path == '/api/hermes/jobs':
             job_id = f"mock-job-{len(JOBS) + 1}"
@@ -563,6 +639,15 @@ class Handler(BaseHTTPRequestHandler):
         body = self.json_body()
         if path.startswith('/api/studio/group-chat/') or path.startswith('/api/studio/workflows'):
             self.send(self.m4_write(path, body))
+            return
+        if path == '/api/studio/tts/settings/active':
+            global TTS_ACTIVE_PROVIDER
+            provider = (body.get('provider') or '').strip()
+            if provider not in {row['provider'] for row in TTS_SETTINGS}:
+                self.send({"error": "unknown TTS provider"}, 400)
+                return
+            TTS_ACTIVE_PROVIDER = provider
+            self.send({"activeProvider": TTS_ACTIVE_PROVIDER})
             return
         if path == '/api/hermes/config':
             section = body.get('section')
@@ -674,5 +759,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send({"ok": True})
 
 if __name__ == '__main__':
-    print('mock Hermes Studio on http://0.0.0.0:8099 — any credentials work')
-    HTTPServer(('0.0.0.0', 8099), Handler).serve_forever()
+    # Port 0 asks the OS for a free one and prints it, which is how a test
+    # starts this without fighting over 8099.
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8099
+    server = HTTPServer(('0.0.0.0', port), Handler)
+    print(f'mock Hermes Studio on http://0.0.0.0:{server.server_address[1]} - any credentials work', flush=True)
+    server.serve_forever()
