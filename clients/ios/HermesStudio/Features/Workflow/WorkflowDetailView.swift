@@ -98,13 +98,13 @@ struct WorkflowDetailView: View {
 
     private func load() async {
         loading = true
-        detail = (await store.attempt { try await store.api.workflow(workflow.id) }) ?? detail
+        detail = (await store.attempt({ try await store.api.workflow(workflow.id) })) ?? detail
         await loadRuns()
         loading = false
     }
 
     private func loadRuns() async {
-        runs = (await store.attempt { try await store.api.workflowRuns(workflow.id) }) ?? runs
+        runs = (await store.attempt({ try await store.api.workflowRuns(workflow.id) })) ?? runs
     }
 
     private func stop(runID: String) async {
@@ -121,7 +121,7 @@ struct WorkflowDetailView: View {
     private func export() async {
         guard let data = await store.attempt({ try await store.api.exportWorkflow(workflow.id) }) else { return }
         let name = current.name.replacingOccurrences(of: "/", with: "-")
-        exportURL = await store.attempt { try APIClient.writeTemporaryFile(data, name: "\(name)-workflow.json") }
+        exportURL = await store.attempt({ try APIClient.writeTemporaryFile(data, name: "\(name)-workflow.json") })
     }
 }
 

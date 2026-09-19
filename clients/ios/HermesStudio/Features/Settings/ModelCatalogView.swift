@@ -71,7 +71,7 @@ struct ModelCatalogView: View {
 
     private func load() async {
         loading = true
-        catalog = (await store.attempt { try await store.api.modelCatalog(profile: store.selectedProfile) }) ?? catalog
+        catalog = (await store.attempt({ try await store.api.modelCatalog(profile: store.selectedProfile) })) ?? catalog
         loading = false
     }
 

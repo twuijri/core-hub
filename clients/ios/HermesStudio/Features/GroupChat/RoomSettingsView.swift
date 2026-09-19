@@ -193,9 +193,9 @@ struct RoomSettingsView: View {
     // MARK: Data
 
     private func load() async {
-        models = (await store.attempt { try await store.api.models(profile: store.selectedProfile) }) ?? []
-        agents = (await store.attempt { try await store.api.roomAgents(room.id) }) ?? agents
-        handoffs = (await store.attempt { try await store.api.roomHandoffs(room.id) }) ?? handoffs
+        models = (await store.attempt({ try await store.api.models(profile: store.selectedProfile) })) ?? []
+        agents = (await store.attempt({ try await store.api.roomAgents(room.id) })) ?? agents
+        handoffs = (await store.attempt({ try await store.api.roomHandoffs(room.id) })) ?? handoffs
         if let detail = await store.attempt({ try await store.api.roomDetail(room.id, limit: 1) }) { members = detail.members }
         if let state = await store.attempt({ try await store.api.roomSummary(room.id) }) {
             summary = state.summary

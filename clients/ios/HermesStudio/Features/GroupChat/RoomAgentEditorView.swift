@@ -134,7 +134,7 @@ struct RoomAgentEditorView: View {
     // MARK: Presets
 
     private func loadPresets() async {
-        presets = (await store.attempt { try await store.api.agentPresets(profile: store.selectedProfile) }) ?? []
+        presets = (await store.attempt({ try await store.api.agentPresets(profile: store.selectedProfile) })) ?? []
         if presetName.isEmpty { presetName = input.name }
     }
 

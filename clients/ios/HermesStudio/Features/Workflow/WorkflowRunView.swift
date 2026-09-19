@@ -57,7 +57,7 @@ struct WorkflowRunView: View {
 
     private func load() async {
         loading = true
-        run = (await store.attempt { try await store.api.workflowRun(workflow.id, runID: runID) }) ?? run
+        run = (await store.attempt({ try await store.api.workflowRun(workflow.id, runID: runID) })) ?? run
         loading = false
     }
 

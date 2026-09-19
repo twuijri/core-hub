@@ -58,7 +58,7 @@ struct GroupsView: View {
 
     private func load() async {
         loading = true
-        rooms = (await store.attempt { try await store.api.rooms() }) ?? rooms
+        rooms = (await store.attempt({ try await store.api.rooms() })) ?? rooms
         loading = false
     }
 
@@ -170,7 +170,7 @@ struct CreateRoomView: View {
     private func load() async {
         if draft.summaryProfile.isEmpty { draft.summaryProfile = store.selectedProfile }
         if draft.memberName.isEmpty { draft.memberName = store.currentUser?.username ?? "" }
-        models = (await store.attempt { try await store.api.models(profile: store.selectedProfile) }) ?? []
+        models = (await store.attempt({ try await store.api.models(profile: store.selectedProfile) })) ?? []
         if draft.summaryProvider.isEmpty, let match = models.first(where: { $0.id == draft.summaryModel }) { draft.summaryProvider = match.provider }
     }
 

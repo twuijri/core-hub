@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Status chip shared by the workflow list, the run list and the node
 /// timeline (web `WorkflowRuntimeState`).
@@ -95,7 +96,7 @@ struct WorkflowsView: View {
 
     private func load() async {
         loading = true
-        workflows = (await store.attempt { try await store.api.workflows(profile: store.selectedProfile) }) ?? workflows
+        workflows = (await store.attempt({ try await store.api.workflows(profile: store.selectedProfile) })) ?? workflows
         loading = false
     }
 
@@ -127,7 +128,7 @@ struct WorkflowsView: View {
     }
 
     private func cancelImport() async {
-        await store.attempt { try await store.api.cancelWorkflowImport(token: importToken, profile: store.selectedProfile) }
+        await store.attempt({ try await store.api.cancelWorkflowImport(token: importToken, profile: store.selectedProfile) })
         importToken = ""
     }
 }

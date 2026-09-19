@@ -59,7 +59,7 @@ struct WorkflowSchedulesView: View {
 
     private func load() async {
         loading = true
-        schedules = (await store.attempt { try await store.api.workflowSchedules(workflow.id) }) ?? schedules
+        schedules = (await store.attempt({ try await store.api.workflowSchedules(workflow.id) })) ?? schedules
         loading = false
     }
 

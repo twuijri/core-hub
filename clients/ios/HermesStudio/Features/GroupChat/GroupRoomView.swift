@@ -1,5 +1,6 @@
 import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// One group-chat room: persistent `/group-chat` socket, the reduced room
 /// state, the M3 message rows, per-agent activity, typing, the execution
