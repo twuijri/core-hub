@@ -11,12 +11,11 @@ struct SettingsView: View {
         List {
             Section("Current Account") {
                 NavigationLink { AccountView() } label: { HStack(spacing: 13) { ProfileAvatar(name: store.currentUser?.username ?? "Account", avatar: store.currentUser?.avatar, size: 48); VStack(alignment: .leading, spacing: 3) { Text(store.currentUser?.username ?? "Account").font(.headline); Text(store.currentUser?.role.replacingOccurrences(of: "_", with: " ").capitalized ?? "").font(.caption).foregroundStyle(.secondary) } } }
-                NavigationLink { ServerView() } label: { SettingsRow(icon: "server.rack", color: CoreHubTokens.Palette.success, title: "Core Hub connection", subtitle: store.baseURL) }
                 Button(role: .destructive) { store.signOut() } label: { Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right") }
             }
             if store.isSuperAdmin {
                 Section("Account Management") {
-                    NavigationLink { ComingLaterView(title: "Account Management") } label: { SettingsRow(icon: "person.2.badge.gearshape", color: CoreHubTokens.Palette.info, title: "Account Management", subtitle: String(localized: "Coming in a later milestone")) }
+                    NavigationLink { AccountManagementView() } label: { SettingsRow(icon: "person.2.badge.gearshape", color: CoreHubTokens.Palette.info, title: "Account Management") }
                 }
                 Section("Webhooks") {
                     NavigationLink { WebhooksView() } label: { SettingsRow(icon: "arrow.triangle.branch", color: CoreHubTokens.Palette.warning, title: "Webhooks") }
@@ -24,18 +23,26 @@ struct SettingsView: View {
             }
             Section("Display") {
                 Picker(selection: Binding(get: { store.appearance }, set: store.setAppearance)) { Text("System").tag("system"); Text("Light").tag("light"); Text("Dark").tag("dark") } label: { SettingsRow(icon: "circle.lefthalf.filled", color: CoreHubTokens.Palette.accent, title: "Appearance") { EmptyView() } }
-                Picker(selection: Binding(get: { store.language }, set: store.setLanguage)) { Text("System").tag("system"); Text("العربية").tag("ar"); Text("English").tag("en") } label: { SettingsRow(icon: "globe", color: CoreHubTokens.Palette.info, title: "Language") { EmptyView() } }
-                Picker(selection: Binding(get: { store.reasoningEffort }, set: store.setReasoning)) { Text("Default").tag(""); Text("Low").tag("low"); Text("Medium").tag("medium"); Text("High").tag("high"); Text("Extra high").tag("xhigh") } label: { SettingsRow(icon: "brain.head.profile", color: CoreHubTokens.Palette.accent, title: "Reasoning effort") { EmptyView() } }
-                Picker(selection: Binding(get: { store.voiceInput }, set: store.setVoiceInput)) { Text("This device").tag(Preferences.voiceInputDevice); Text("Core Hub server").tag(Preferences.voiceInputServer) } label: { SettingsRow(icon: "mic.fill", color: CoreHubTokens.Palette.error, title: "Voice input") { EmptyView() } }
+                Picker(selection: Binding(get: { store.language }, set: store.setLanguage)) { Text("System").tag("system"); Text("العربية").tag("ar"); Text("English").tag("en") } label: { SettingsRow(icon: "globe", color: CoreHubTokens.Palette.info, title: "App language") { EmptyView() } }
+                TextScaleRow()
+                NavigationLink { ThemeStudioView() } label: { SettingsRow(icon: "paintpalette.fill", color: CoreHubTokens.Palette.accent, title: "Theme and background") }
                 NavigationLink { StudioSectionSettings(section: .display) } label: { SettingsRow(icon: "rectangle.on.rectangle", color: CoreHubTokens.Palette.info, title: "Chat display") }
-                NavigationLink { ThemeStudioView() } label: { SettingsRow(icon: "paintpalette.fill", color: CoreHubTokens.Palette.accent, title: "Theme") }
             }
             Section("Proxy") { NavigationLink { StudioSectionSettings(section: .proxy) } label: { SettingsRow(icon: "network", color: CoreHubTokens.Palette.info, title: "Proxy") } }
             Section("Compression") { NavigationLink { StudioSectionSettings(section: .compression) } label: { SettingsRow(icon: "arrow.down.right.and.arrow.up.left", color: CoreHubTokens.Palette.warning, title: "Compression") } }
             Section("Privacy") { NavigationLink { StudioSectionSettings(section: .privacy) } label: { SettingsRow(icon: "hand.raised.fill", color: CoreHubTokens.Palette.error, title: "Privacy") } }
             Section("Models") {
-                NavigationLink { ModelsView() } label: { SettingsRow(icon: "cpu.fill", color: CoreHubTokens.Palette.accent, title: "Models") }
-                NavigationLink { ProvidersView() } label: { SettingsRow(icon: "network", color: CoreHubTokens.Palette.info, title: "Providers") }
+                NavigationLink { ModelCatalogView() } label: { SettingsRow(icon: "cpu.fill", color: CoreHubTokens.Palette.accent, title: "Models and providers") }
+                NavigationLink { ModelsView() } label: { SettingsRow(icon: "checklist", color: CoreHubTokens.Palette.info, title: "Default model") }
+                NavigationLink { ProvidersView() } label: { SettingsRow(icon: "network", color: CoreHubTokens.Palette.info, title: "Provider status") }
+            }
+            Section("This device") {
+                NavigationLink { ServerView() } label: { SettingsRow(icon: "server.rack", color: CoreHubTokens.Palette.success, title: "Core Hub connection", subtitle: store.baseURL) }
+                Picker(selection: Binding(get: { store.voiceInput }, set: store.setVoiceInput)) { Text("This device").tag(Preferences.voiceInputDevice); Text("Core Hub server").tag(Preferences.voiceInputServer) } label: { SettingsRow(icon: "mic.fill", color: CoreHubTokens.Palette.error, title: "Voice input") { EmptyView() } }
+                Picker(selection: Binding(get: { store.reasoningEffort }, set: store.setReasoning)) { Text("Default").tag(""); Text("Low").tag("low"); Text("Medium").tag("medium"); Text("High").tag("high"); Text("Extra high").tag("xhigh") } label: { SettingsRow(icon: "brain.head.profile", color: CoreHubTokens.Palette.accent, title: "Reasoning effort") { EmptyView() } }
+                Toggle(isOn: Binding(get: { store.showToolCalls }, set: store.setShowToolCalls)) { SettingsRow(icon: "wrench.and.screwdriver.fill", color: CoreHubTokens.Palette.warning, title: "Show tool calls") { EmptyView() } }
+                Toggle(isOn: Binding(get: { store.autoSpeakReplies }, set: store.setAutoSpeakReplies)) { SettingsRow(icon: "speaker.wave.2.fill", color: CoreHubTokens.Palette.info, title: "Voice mode") { EmptyView() } }
+                Toggle(isOn: Binding(get: { store.allProfilesSessions }, set: store.setAllProfilesSessions)) { SettingsRow(icon: "person.2.fill", color: CoreHubTokens.Palette.accent, title: "Conversations from every profile") { EmptyView() } }
             }
             Section("Advanced") {
                 NavigationLink { StudioSectionSettings(section: .agent) } label: { SettingsRow(icon: "sparkles", color: CoreHubTokens.Palette.accent, title: "Agent") }
@@ -73,6 +80,22 @@ struct SettingsView: View {
         // Rebuild this visible list after UIKit's direction transform has
         // settled (see AppStore.setLanguage).
         .id("\(store.language)-\(store.languageRefresh)")
+    }
+}
+
+/// Device-local text scale (0.85–1.45) applied to every screen.
+private struct TextScaleRow: View {
+    @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SettingsRow(icon: "textformat.size", color: CoreHubTokens.Palette.info, title: "Text size") {
+                Text(verbatim: "\(Int((store.textScale * 100).rounded()))%").foregroundStyle(.secondary)
+            }
+            Slider(value: Binding(get: { store.textScale }, set: store.setTextScale), in: 0.85...1.45, step: 0.05)
+                .accessibilityLabel("Text size")
+        }
+        .padding(.vertical, 2)
     }
 }
 

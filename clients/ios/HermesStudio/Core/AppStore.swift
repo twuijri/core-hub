@@ -61,6 +61,7 @@ final class AppStore: ObservableObject {
         api = APIClient(baseURL: Preferences.baseURL, token: "")
         api.update(baseURL: baseURL, token: token)
         api.activeProfile = selectedProfile
+        CoreHubTokens.Typography.scale = CGFloat(textScale)
         api.tokenRefresher = { [weak self] in
             guard let self else { return nil }
             return await self.refreshAppToken(force: true)
@@ -377,7 +378,15 @@ final class AppStore: ObservableObject {
     func setShowToolCalls(_ value: Bool) { showToolCalls = value; Preferences.showToolCalls = value }
     func setAutoSpeakReplies(_ value: Bool) { autoSpeakReplies = value; Preferences.autoSpeakReplies = value }
     func setAllProfilesSessions(_ value: Bool) { allProfilesSessions = value; Preferences.allProfilesSessions = value; sessionsChanged() }
-    func setTextScale(_ value: Double) { let clamped = min(1.45, max(0.85, value)); textScale = clamped; Preferences.textScale = clamped }
+    func setTextScale(_ value: Double) {
+        let clamped = min(1.45, max(0.85, value))
+        textScale = clamped
+        Preferences.textScale = clamped
+        CoreHubTokens.Typography.scale = CGFloat(clamped)
+        // Token fonts are computed, not observed: rebuild the shell so every
+        // cached row picks up the new size.
+        languageRefresh &+= 1
+    }
     /// Profile filter for session lists: `nil` = every profile.
     var sessionListProfile: String? { allProfilesSessions ? nil : selectedProfile.nilIfEmpty }
 

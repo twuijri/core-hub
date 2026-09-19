@@ -101,7 +101,7 @@ struct WorkflowScheduleEditor: View {
                 }
                 Section { SaveStateLabel(state: state) }
             }
-            .navigationTitle(schedule == nil ? "New schedule" : "Edit schedule")
+            .navigationTitle(schedule == nil ? Text("New schedule") : Text("Edit schedule"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
