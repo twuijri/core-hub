@@ -1276,15 +1276,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * The newest [HISTORY_PAGE] messages through the paginated endpoint: one
-     * call tells the total, a second one (long sessions only) fetches the tail.
-     * Older pages arrive through [loadOlderHistory] as the list is scrolled up.
+     * The newest [HISTORY_PAGE] messages through the paginated endpoint.
+     *
+     * The server counts `offset` backwards from the newest message
+     * (`ORDER BY id DESC LIMIT ? OFFSET ?` in session-store.ts and
+     * sessions-db.ts, and the web passes its loaded count as the offset), so
+     * offset 0 already *is* the latest page. The old second call with
+     * `total - HISTORY_PAGE` fetched the oldest page instead, which is why a
+     * long conversation opened on its first messages. Older pages arrive
+     * through [loadOlderHistory] as the list is scrolled up.
      */
     private suspend fun loadLatestPage(session: SessionSummary, profile: String) {
         runCatching {
             withContext(Dispatchers.IO) {
-                var page = api.conversationPage(session.id, 0, HISTORY_PAGE, profile)
-                if (page.total > HISTORY_PAGE) page = api.conversationPage(session.id, page.total - HISTORY_PAGE, HISTORY_PAGE, profile)
+                val page = api.conversationPage(session.id, 0, HISTORY_PAGE, profile)
                 val window = runCatching { api.contextLength(profile, session.provider, session.model) }
                 Triple(page, window.getOrDefault(0), window.exceptionOrNull())
             }
@@ -1301,9 +1306,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         // Live context arrives with `usage.updated`; the transcript alone does not carry it.
                         contextTokens = 0,
                         contextWindow = window,
-                        historyOffset = page.offset,
+                        historyOffset = page.fetched,
                         historyTotal = page.total,
-                        historyHasMore = page.offset > 0,
+                        historyHasMore = page.hasMore,
                         sessionPushEnabled = page.pushEnabled,
                         openSession = state.openSession?.copy(
                             title = page.title ?: state.openSession.title,
@@ -1317,6 +1322,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             .onFailure { failure ->
                 if (failure is kotlinx.coroutines.CancellationException) return@onFailure
+                // 404 means the conversation is gone on the server; showing
+                // the raw "Session not found" as a banner is noise, and the
+                // stale id must not be reused by the next send.
+                if (failure.isMissingSession()) {
+                    forgetMissingSession(profile, session.id)
+                    return@onFailure
+                }
                 _state.update {
                     if (it.screen == Screen.Conversation && it.openSession?.id == session.id) {
                         it.copy(loadingHistory = false, loadingContext = false, error = failure.readableMessage(localized))
@@ -1337,25 +1349,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         command = message.role == "command",
     )
 
-    /** Infinite scroll towards older messages: the page before [UiState.historyOffset]. */
+    /**
+     * Infinite scroll towards older messages. `offset` counts backwards from
+     * the newest message, so the next page starts where the loaded window
+     * ends — the same arithmetic as the web's `loadOlderMessages`.
+     */
     fun loadOlderHistory() {
         val session = _state.value.openSession ?: return
         val state = _state.value
-        if (state.loadingOlderHistory || state.loadingHistory || !state.historyHasMore || state.historyOffset <= 0) return
+        if (state.loadingOlderHistory || state.loadingHistory || !state.historyHasMore) return
         val profile = session.profile?.ifBlank { null } ?: currentProfile()
-        val offset = (state.historyOffset - HISTORY_PAGE).coerceAtLeast(0)
-        val limit = state.historyOffset - offset
+        val offset = state.historyOffset
         _state.update { it.copy(loadingOlderHistory = true) }
         viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { api.conversationPage(session.id, offset, limit, profile) } }
+            runCatching { withContext(Dispatchers.IO) { api.conversationPage(session.id, offset, HISTORY_PAGE, profile) } }
                 .onSuccess { page ->
                     _state.update { current ->
                         if (current.openSession?.id != session.id) return@update current.copy(loadingOlderHistory = false)
                         val known = current.lines.mapNotNull { it.messageId }.toSet()
                         current.copy(
                             loadingOlderHistory = false,
-                            historyOffset = page.offset,
-                            historyHasMore = page.offset > 0,
+                            historyOffset = offset + page.fetched,
+                            historyHasMore = page.hasMore && page.fetched > 0,
                             lines = page.messages.filter { it.id !in known }.map(::lineOf) + current.lines,
                         )
                     }
@@ -1477,8 +1492,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val wantsVoiceReply = _state.value.voiceReplyPending
 
         // Studio's own client names a conversation before it exists, which is
-        // what lets the very first message belong to a session.
-        val sessionId = store.sessionFor(profile).ifBlank { session?.id }
+        // what lets the very first message belong to a session. The open
+        // conversation wins over the stored id; a blank store means a new
+        // chat, and the id minted here is the one the server will create.
+        val sessionId = chatSessionIdFor(session?.id, store.sessionFor(profile))
             ?: java.util.UUID.randomUUID().toString().also { store.setSessionFor(profile, it) }
 
         val echo = if (files.isEmpty()) text else {
@@ -1623,7 +1640,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                 val reasoning = event.reasoning.ifBlank { thinking.toString() }
                                 if (streamed) {
                                     updateLastReply(output, reasoning, streaming = false)
-                                } else {
+                                } else if (output.isNotBlank() || reasoning.isNotBlank()) {
+                                    // A completion with neither text nor
+                                    // reasoning has nothing to show; adding it
+                                    // drew an avatar, an author label and a
+                                    // timestamp around an empty bubble.
                                     _state.update {
                                         it.copy(
                                             lines = it.lines + ChatLine(
@@ -1687,6 +1708,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                     )
                                 }
                             }
+                            is RunEvent.SessionGone -> {
+                                updateLastReply(
+                                    answer.toString(),
+                                    thinking.toString(),
+                                    streaming = false,
+                                    terminalToolStatus = ToolRunStatus.Error,
+                                )
+                                forgetMissingSession(profile, sessionId)
+                            }
                             is RunEvent.Failed -> {
                                 // A socket that never got going is not a failed
                                 // run: fall back to the REST wrapper instead of
@@ -1699,13 +1729,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                     terminalToolStatus = ToolRunStatus.Error,
                                 )
                                 _state.update {
-                                    it.copy(lines = it.lines + ChatLine(event.error, fromUser = false, isError = true))
+                                    it.copy(lines = withErrorLine(it.lines, event.error), error = event.error)
                                 }
                             }
                         }
                     }
             }.onFailure { failure ->
                 if (failure is kotlinx.coroutines.CancellationException) return@onFailure
+                if (failure.isMissingSession()) {
+                    forgetMissingSession(profile, sessionId)
+                    finishRun(sessionId)
+                    return@launch
+                }
                 if (failure is SocketUnavailable) {
                     sendOverRest(
                         profile = profile,
@@ -1721,17 +1756,52 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     finishRun(sessionId)
                     return@launch
                 }
-                _state.update {
-                    it.copy(
-                        lines = it.lines + ChatLine(failure.readableMessage(localized), fromUser = false, isError = true),
-                    )
-                }
+                val message = failure.readableMessage(localized)
+                _state.update { it.copy(lines = withErrorLine(it.lines, message), error = message) }
             }
             if ((wantsVoiceReply || _state.value.speakReplies) && finalReply.isNotBlank()) {
                 val key = _state.value.lines.lastOrNull { !it.fromUser && !it.isError && !it.system && !it.command }?.key
                 speakText(finalReply, key, profile)
             }
             finishRun(sessionId)
+        }
+    }
+
+    /**
+     * The server has no such conversation: the id was minted here and never
+     * created, or it was deleted on the server while this phone still had it
+     * in `Store.setSessionFor`, which survives restarts.
+     *
+     * Drop the stored id, take the conversation back to the neutral empty
+     * state and say it once. No red row: the next send creates a session.
+     */
+    private fun forgetMissingSession(profile: String, sessionId: String) {
+        if (store.sessionFor(profile) == sessionId) store.setSessionFor(profile, "")
+        resumePageIds.remove(sessionId)
+        _state.update { state ->
+            val open = state.openSession?.id == sessionId
+            state.copy(
+                openSession = if (open) null else state.openSession,
+                lines = if (open || state.openSession == null) emptyList() else state.lines,
+                sessions = state.sessions.filterNot { it.id == sessionId },
+                sessionSearchResults = state.sessionSearchResults?.filterNot { it.id == sessionId },
+                unreadSessionIds = state.unreadSessionIds - sessionId,
+                loadingHistory = false,
+                loadingOlderHistory = false,
+                loadingContext = false,
+                historyOffset = 0,
+                historyTotal = 0,
+                historyHasMore = false,
+                pendingRunAction = null,
+                queuedRuns = emptyList(),
+                backgroundAgentRuns = emptyList(),
+                compression = null,
+                abortPhase = null,
+                locationRequest = null,
+                sessionPushEnabled = false,
+                error = null,
+                notice = str(R.string.conversation_session_gone),
+            )
         }
     }
 
@@ -1768,11 +1838,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val next = !_state.value.sessionPushEnabled
+        val profile = _state.value.openSession?.profile?.ifBlank { null } ?: currentProfile()
         _state.update { it.copy(sessionPushEnabled = next) }
         viewModelScope.launch {
             runCatching { withContext(Dispatchers.IO) { api.setSessionPushEnabled(sessionId, next) } }
                 .onFailure { failure ->
-                    _state.update { it.copy(sessionPushEnabled = !next, error = failure.readableMessage(localized)) }
+                    if (failure.isMissingSession()) forgetMissingSession(profile, sessionId)
+                    else _state.update { it.copy(sessionPushEnabled = !next, error = failure.readableMessage(localized)) }
                 }
         }
     }
@@ -1879,23 +1951,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }.onSuccess { reply ->
             if (activeRunSessionId != sessionId) return@onSuccess
             reply.sessionId?.let { store.setSessionFor(profile, it) }
-            val line = if (reply.error != null && reply.output.isBlank()) {
-                ChatLine(reply.error, fromUser = false, isError = true)
-            } else {
-                ChatLine(reply.output, fromUser = false, reasoning = reply.reasoning)
+            val line = when {
+                reply.error != null && reply.output.isBlank() ->
+                    ChatLine(reply.error, fromUser = false, isError = true)
+                // Nothing to draw: no empty bubble, as on the socket path.
+                reply.output.isBlank() && reply.reasoning.isNullOrBlank() -> null
+                else -> ChatLine(reply.output, fromUser = false, reasoning = reply.reasoning)
             }
-            _state.update { it.copy(lines = it.lines + line, sending = false, activity = null) }
-            if (speakReply && !line.isError && line.text.isNotBlank()) speak(line.text, profile)
+            _state.update {
+                it.copy(
+                    lines = if (line == null) it.lines else it.lines + line,
+                    sending = false,
+                    activity = null,
+                )
+            }
+            if (speakReply && line != null && !line.isError && line.text.isNotBlank()) speak(line.text, profile)
         }.onFailure { failure ->
             if (failure is kotlinx.coroutines.CancellationException || activeRunSessionId != sessionId) {
                 return@onFailure
             }
+            if (failure.isMissingSession()) {
+                forgetMissingSession(profile, sessionId)
+                _state.update { it.copy(sending = false, activity = null) }
+                return@onFailure
+            }
+            val message = failure.readableMessage(localized)
             _state.update {
-                it.copy(
-                    lines = it.lines + ChatLine(failure.readableMessage(localized), fromUser = false, isError = true),
-                    sending = false,
-                    activity = null,
-                )
+                it.copy(lines = withErrorLine(it.lines, message), error = message, sending = false, activity = null)
             }
         }
     }
@@ -2498,10 +2580,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Applies a model to the open session, or remembers it for the next one. */
+    /**
+     * Applies a model to the open session, or remembers it for the next one.
+     *
+     * Only a conversation the server already knows can be written to. The
+     * stored id of a chat that has not sent its first message yet exists only
+     * on this phone, so `PUT /sessions/{id}/model` answered 404 "Session not
+     * found" and a brand-new chat opened with an error banner.
+     */
     fun selectModel(option: ModelOption) {
-        val sessionId = _state.value.openSession?.id
-            ?: store.sessionFor(currentProfile()).ifBlank { null }
+        val sessionId = _state.value.openSession?.id?.takeIf { it.isNotBlank() }
         _state.update {
             it.copy(
                 sessionModel = option.id,
@@ -2525,11 +2613,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (sessionId == null) return
 
+        val profile = currentProfile()
         viewModelScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) { api.setSessionModel(sessionId, option.id, option.provider) }
             }.onFailure { failure ->
-                _state.update { it.copy(error = failure.readableMessage(localized)) }
+                if (failure.isMissingSession()) forgetMissingSession(profile, sessionId)
+                else _state.update { it.copy(error = failure.readableMessage(localized)) }
             }
         }
     }
@@ -2539,9 +2629,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         store.reasoningEffort = effort
         _state.update { it.copy(reasoningEffort = effort) }
         val session = _state.value.openSession ?: return
+        val profile = session.profile?.ifBlank { null } ?: currentProfile()
         viewModelScope.launch {
             runCatching { withContext(Dispatchers.IO) { api.setSessionReasoningEffort(session.id, effort) } }
-                .onFailure { failure -> _state.update { it.copy(error = failure.readableMessage(localized)) } }
+                .onFailure { failure ->
+                    if (failure.isMissingSession()) forgetMissingSession(profile, session.id)
+                    else _state.update { it.copy(error = failure.readableMessage(localized)) }
+                }
         }
     }
 
@@ -4665,6 +4759,37 @@ internal const val HISTORY_PAGE = 60
 
 internal fun Throwable.invalidatesSavedSession(): Boolean =
     (this as? HermesException)?.statusCode in setOf(401, 403)
+
+/**
+ * A session-scoped endpoint answered 404: the conversation was never created
+ * on the server, or it has been deleted there. The stored id has to go, and
+ * the screen shows the neutral empty state rather than the server's wording.
+ */
+internal fun Throwable.isMissingSession(): Boolean {
+    val failure = this as? HermesException ?: return false
+    return failure.statusCode == 404 || isSessionGoneError(failure.message)
+}
+
+/**
+ * The session a turn belongs to: the open conversation first, the per-profile
+ * stored id only when nothing is open. Reading the store first meant a stale
+ * id — one the server had deleted — outranked the conversation the user was
+ * actually looking at.
+ */
+internal fun chatSessionIdFor(openSessionId: String?, storedSessionId: String): String? =
+    openSessionId?.takeIf { it.isNotBlank() } ?: storedSessionId.takeIf { it.isNotBlank() }
+
+/**
+ * Adds an error row unless the transcript already carries that exact message.
+ * A reconnect loop used to stack one identical red row per attempt; the
+ * banner already says it once.
+ */
+internal fun withErrorLine(lines: List<ChatLine>, text: String): List<ChatLine> {
+    val message = text.trim()
+    if (message.isEmpty()) return lines
+    if (lines.any { it.isError && it.text == message }) return lines
+    return lines + ChatLine(message, fromUser = false, isError = true)
+}
 
 /** Strips Markdown scaffolding and file links so a voice does not read "asterisk asterisk". */
 internal fun plainSpeechText(markdown: String): String = parseChatMessage(markdown).text

@@ -288,9 +288,14 @@ object GroupJson {
 
     fun message(item: JSONObject): GroupMessage? {
         val id = item.optString("id").takeIf { it.isNotBlank() } ?: return null
+        // Handed to the renderer as the server wrote it, like the transcript.
+        // Flattening blocks here destroyed upload cards and — because
+        // JSONArray() parses "[label](/path) …" leniently — emptied any room
+        // message whose text merely begins with "[". parseChatMessage is the
+        // one place that reads content blocks.
         val content = when (val raw = item.opt("content").takeUnless { it == JSONObject.NULL }) {
-            is JSONArray -> blocksToText(raw)
-            is String -> if (raw.startsWith("[")) runCatching { blocksToText(JSONArray(raw)) }.getOrDefault(raw) else raw
+            is JSONArray -> raw.toString()
+            is String -> raw
             null -> ""
             else -> raw.toString()
         }
@@ -422,15 +427,6 @@ object GroupJson {
             summary = summary(root.optJSONObject("roomSummary")),
         )
     }
-
-    /** Text of a content-block array: text blocks joined, files named. */
-    fun blocksToText(blocks: JSONArray): String = objects(blocks).joinToString("\n") { block ->
-        when (block.optString("type")) {
-            "text" -> block.optString("text")
-            "image", "file" -> block.optString("name").takeIf { it.isNotBlank() }?.let { "📎 $it" }.orEmpty()
-            else -> ""
-        }
-    }.trim()
 
     private fun prettyJson(value: Any): String = when (value) {
         is JSONObject -> value.toString(2)

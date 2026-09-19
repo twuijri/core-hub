@@ -15,6 +15,19 @@ app/src/debug/res/xml/network_security_config.xml); release builds do not.
 This mock speaks REST only. The app tries the /chat-run socket first and falls
 back to POST /api/studio/chat-run/runs when it cannot connect, so running against this
 file exercises that fallback rather than streaming.
+
+Two fixtures reproduce reported bugs without a real server:
+
+  s4  "محادثة قديمة" — an old conversation whose display_content is null on
+      every row, with the content shapes that used to be dropped from the
+      transcript or drawn as a bubble with no text at all. Open it from the
+      drawer; every row must show text or a download card.
+
+  s5  a session the server deleted. Every per-session route answers 404
+      "Session not found", as does any conversation id the mock does not
+      know — including the id a brand-new chat mints locally. The app must
+      clear the stored id and show one neutral empty state, never a stack of
+      red rows.
 """
 import base64, json, re, time
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -34,11 +47,51 @@ SESSIONS = [
     {"id": "s1", "title": "تقرير الأسبوع", "model": "claude-opus-5", "updated_at": "2026-07-30T18:20:00", "profile": "manager"},
     {"id": "s2", "title": "Deploy the staging box", "model": "claude-sonnet-5", "updated_at": "2026-07-30T14:02:00", "profile": "barq"},
     {"id": "s3", "title": "مراجعة كود الاستديو", "model": "gpt-5", "updated_at": "2026-07-29T09:41:00", "profile": "deep-engineer"},
+    {"id": "s4", "title": "محادثة قديمة", "model": "claude-opus-5", "updated_at": "2026-09-01T09:04:00", "profile": "manager"},
 ]
 MESSAGES = [
     {"id": "m1", "role": "user", "content": "وش وضع التقرير؟", "timestamp": "2026-07-30T18:19:00"},
     {"id": "m2", "role": "assistant", "content": "خلصت الجزء الأول ورفعته على السيرفر. باقي المراجعة النهائية.", "timestamp": "2026-07-30T18:20:00"},
 ]
+
+# Regression fixture for "an old conversation renders with no text".
+#
+# Shapes taken from the real wire contract: sessions-db.ts `mapMessageRow`
+# always sends `content` as a string and `display_content` as a nullable
+# string, so a conversation whose display_content is null everywhere falls
+# back to `content`. These five rows are the ones that used to disappear or
+# render as an empty bubble:
+#   o1  prose that merely begins with "[" — JSONArray() parsed it leniently,
+#       the flattener returned "" and the whole message was dropped
+#   o2  an upload stored as Studio content blocks — the flattener turned the
+#       download card into the text "📎 name"
+#   o3  content blocks whose attachment is not a server-local path — nothing
+#       could be drawn and the row became an avatar, a name and a timestamp
+#   o4  a block array this client does not model (a thinking block) — dropped
+#   o5  an ordinary reply, the control
+OLD_MESSAGES = [
+    {"id": "o1", "role": "user", "display_content": None, "timestamp": "2026-09-01T09:00:00",
+     "content": "[التقرير](/home/agent/report.pdf) هذا هو الملخص الكامل، راجعه من فضلك."},
+    {"id": "o2", "role": "user", "display_content": None, "timestamp": "2026-09-01T09:01:00",
+     "content": json.dumps([{"type": "text", "text": "حلل هذا التسجيل"},
+                            {"type": "file", "name": "meeting.m4a",
+                             "path": "/home/agent/.hermes-web-ui/upload/manager/meeting.m4a",
+                             "media_type": "audio/mp4"}], ensure_ascii=False)},
+    {"id": "o3", "role": "user", "display_content": None, "timestamp": "2026-09-01T09:02:00",
+     "content": json.dumps([{"type": "image", "name": "shot.png", "path": "uploads/shot.png"}],
+                           ensure_ascii=False)},
+    {"id": "o4", "role": "assistant", "display_content": None, "timestamp": "2026-09-01T09:03:00",
+     "content": json.dumps([{"type": "thinking", "thinking": "..."},
+                            {"type": "text", "text": "[1] المصدر الأول\n[2] المصدر الثاني"}],
+                           ensure_ascii=False)},
+    {"id": "o5", "role": "assistant", "display_content": None, "timestamp": "2026-09-01T09:04:00",
+     "content": "راجعت التقرير وكل شيء واضح."},
+]
+CONVERSATIONS = {"s1": MESSAGES, "s2": MESSAGES, "s3": MESSAGES, "s4": OLD_MESSAGES}
+# `s5` is the stale id: the phone still has it in Store.setSessionFor, the
+# server deleted it. Every per-session route answers 404 "Session not found",
+# which is what used to stack red rows into the transcript.
+DELETED_SESSION_IDS = {"s5"}
 ROOM_AGENTS = [
     {"id": "seat-1", "agentId": "seat-1", "agent": "hermes", "agentMode": "scoped", "profile": "manager",
      "provider": "anthropic", "model": "claude-opus-5", "apiMode": "", "reasoningEffort": "high",
@@ -238,6 +291,40 @@ class Handler(BaseHTTPRequestHandler):
     def find_job(self, job_id):
         return next((job for job in JOBS if job['job_id'] == job_id), None)
 
+    def session_gone(self, session_id):
+        """The server's 404 for a conversation that is not there any more."""
+        if session_id not in DELETED_SESSION_IDS and session_id in CONVERSATIONS:
+            return False
+        self.send({"error": "Session not found"}, 404)
+        return True
+
+    def paginated_messages(self, session_id, query):
+        """
+        `GET /api/studio/sessions/conversations/{id}/messages/paginated`, with
+        the server's own semantics: `offset` counts backwards from the newest
+        message (session-store.ts orders `id DESC` and then reverses the
+        window), and `hasMore` is `offset + returned < total`.
+        """
+        if self.session_gone(session_id):
+            return
+        messages = CONVERSATIONS[session_id]
+        offset = max(0, int(parse_qs(query).get('offset', ['0'])[0] or 0))
+        limit = max(1, int(parse_qs(query).get('limit', ['150'])[0] or 150))
+        total = len(messages)
+        end = max(0, total - offset)
+        window = messages[max(0, end - limit):end]
+        session = next((item for item in SESSIONS if item['id'] == session_id), SESSIONS[0])
+        self.send({
+            "session": {"id": session['id'], "profile": session.get('profile', 'default'),
+                        "title": session['title'], "model": session.get('model'),
+                        "source": "api_server", "message_count": total,
+                        "input_tokens": 0, "output_tokens": 0},
+            "messages": window,
+            "taskPlans": [], "workspaceRunChanges": [],
+            "total": total, "offset": offset, "limit": limit,
+            "hasMore": offset + len(window) < total,
+        })
+
     def m4_write(self, path, body):
         """
         One writer for the M4 routes (rooms, presets, workflows, sessions).
@@ -295,7 +382,12 @@ class Handler(BaseHTTPRequestHandler):
         elif path == '/api/auth/locked-ips': self.send({"locks": LOCKS})
         elif path == '/api/hermes/profiles': self.send({"profiles": PROFILES})
         elif path == '/api/studio/sessions': self.send({"sessions": SESSIONS})
-        elif re.match(r'/api/studio/sessions/conversations/.+/messages', path): self.send({"messages": MESSAGES})
+        elif re.fullmatch(r'/api/studio/sessions/conversations/([^/]+)/messages/paginated', path):
+            self.paginated_messages(unquote(path.split('/')[5]), parsed.query)
+        elif re.match(r'/api/studio/sessions/conversations/.+/messages', path):
+            session_id = unquote(path.split('/')[5])
+            if not self.session_gone(session_id):
+                self.send({"messages": CONVERSATIONS[session_id]})
         elif path == '/api/studio/sessions/search':
             needle = parse_qs(parsed.query).get('q', [''])[0]
             hits = [dict(item, snippet=needle) for item in SESSIONS if needle in item['title']] or SESSIONS[:1]
@@ -373,6 +465,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send({"name": "imported-skill"})
             return
         body = self.json_body()
+        # Session-scoped writes 404 for a conversation the server never
+        # created — exactly what a phone-minted id or a deleted session gets,
+        # and what used to paint a banner over a brand-new chat.
+        session_write = re.fullmatch(
+            r'/api/studio/sessions/([^/]+)/(model|reasoning-effort|push-enabled|workspace|category|rename)', path,
+        )
+        if session_write and self.session_gone(unquote(session_write.group(1))):
+            return
         if path.startswith('/api/studio/group-chat/') or path.startswith('/api/studio/workflows') or path.startswith('/api/studio/sessions'):
             self.send(self.m4_write(path, body))
             return

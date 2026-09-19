@@ -87,4 +87,51 @@ class ChatFilesTest {
         assertEquals("حلل هذا التسجيل", parsed.text)
         assertEquals("meeting.m4a", parsed.files.single().fileName)
     }
+
+    // ── nothing may parse down to an empty row ───────────────────────────
+
+    @Test
+    fun `an attachment that cannot become a card is named instead of vanishing`() {
+        // No server-local path, so there is no download to offer — but the
+        // reader still has to see that a file rode along. Returning an empty
+        // ParsedChatMessage drew a bubble with no text at all.
+        val parsed = parseChatMessage("""[{"type":"image","name":"shot.png","path":"uploads/shot.png"}]""")
+
+        assertEquals("📎 shot.png", parsed.text)
+        assertTrue(parsed.files.isEmpty())
+    }
+
+    @Test
+    fun `blocks that yield nothing fall back to the original text`() {
+        val content = """[{"type":"thinking","thinking":"..."}]"""
+        val parsed = parseChatMessage(content)
+
+        assertEquals(content, parsed.text)
+        assertTrue(parsed.files.isEmpty())
+    }
+
+    @Test
+    fun `an empty text block never becomes an empty bubble`() {
+        val parsed = parseChatMessage("""[{"type":"text","text":"   "}]""")
+
+        assertFalse("nothing to draw must not look like a parsed message", parsed.text.isBlank() && parsed.files.isEmpty())
+    }
+
+    @Test
+    fun `renderability is what decides whether a row is kept`() {
+        assertTrue(hasRenderableChatContent("مرحبا"))
+        assertTrue(hasRenderableChatContent("[التقرير](/home/agent/report.pdf) الملخص"))
+        assertTrue(hasRenderableChatContent("""[{"type":"file","name":"a.m4a","path":"/upload/a.m4a"}]"""))
+        assertTrue(hasRenderableChatContent("""[{"type":"thinking","thinking":"..."}]"""))
+        assertFalse(hasRenderableChatContent(""))
+        assertFalse(hasRenderableChatContent("   "))
+    }
+
+    @Test
+    fun `an answer that is only a download link keeps its card`() {
+        val parsed = parseChatMessage("[a](/p/a.pdf)")
+
+        assertEquals("", parsed.text)
+        assertEquals("/p/a.pdf", parsed.files.single().path)
+    }
 }

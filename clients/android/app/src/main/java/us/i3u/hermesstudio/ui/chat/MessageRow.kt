@@ -127,6 +127,21 @@ fun MessageRow(
     actions: MessageActions?,
 ) {
     val parsed = remember(line.text) { parseChatMessage(line.text) }
+    // Last line of defence against the empty bubble: a chat row with no text,
+    // no attachment, no tool card, no thinking block and nothing streaming
+    // would paint an avatar, an author label and a timestamp around nothing.
+    // System, command and error rows draw line.text directly, so they are not
+    // subject to this.
+    val chatRow = line.kind == ChatLineKind.User || line.kind == ChatLineKind.Assistant
+    if (chatRow &&
+        parsed.text.isBlank() &&
+        parsed.files.isEmpty() &&
+        line.tools.isEmpty() &&
+        line.reasoning.isNullOrBlank() &&
+        !line.streaming
+    ) {
+        return
+    }
     when (line.kind) {
         ChatLineKind.User -> UserRow(line, parsed, bubbleColor, bubbleShape, speech, actions)
         ChatLineKind.Assistant -> AssistantRow(line, parsed, profile, avatar, bubbleColor, bubbleShape, showToolCalls, speech, actions)

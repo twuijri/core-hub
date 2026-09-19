@@ -20,8 +20,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +53,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -90,6 +97,18 @@ fun CoreHubDrawerHost(
         animationSpec = tween(CoreHubTokens.Metrics.drawerSlideMs),
         label = "drawer",
     )
+    // The soft keyboard covered the drawer's lower half (profile, Sign Out,
+    // settings) whenever the composer still had focus. Dismiss it on the
+    // open transition itself — not on a timer — and drop the composer's focus
+    // so Android does not bring the keyboard straight back.
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(open) {
+        if (open) {
+            keyboard?.hide()
+            focusManager.clearFocus(force = true)
+        }
+    }
     BackHandler(enabled = open) { onOpenChange(false) }
     val width = CoreHubTokens.Metrics.drawerWidth
     Box(Modifier.fillMaxSize()) {
@@ -146,7 +165,16 @@ fun CoreHubDrawerContent(state: UiState, viewModel: AppViewModel, onClose: () ->
         shadowElevation = CoreHubTokens.Shadow.card,
         modifier = Modifier.fillMaxHeight(),
     ) {
-        Column(Modifier.fillMaxHeight().statusBarsPadding().navigationBarsPadding()) {
+        // Bottom inset = max(navigation bar, IME). The host dismisses the
+        // keyboard when the drawer opens; if one is still up (a hardware or
+        // third-party IME that ignores hide()), the footer stays reachable
+        // instead of sitting underneath it.
+        Column(
+            Modifier
+                .fillMaxHeight()
+                .statusBarsPadding()
+                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth().height(CoreHubTokens.Metrics.headerHeight).padding(start = 14.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,

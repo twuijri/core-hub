@@ -94,6 +94,7 @@
 
     <!-- المحادثة -->
     <string name="conversation_empty">أرسل رسالة إلى %1$s</string>
+    <string name="conversation_session_gone">لم تعد هذه المحادثة موجودة على الخادم. رسالتك التالية تبدأ محادثة جديدة.</string>
     <string name="run_requires_approval">هذا التشغيل ينتظر موافقة. افتح الاستديو للرد.</string>
     <string name="run_requires_clarification">هذا التشغيل يحتاج إجابة قبل أن يكمل. افتح الاستديو للرد.</string>
     <string name="conversation_your_agent">وكيلك</string>
