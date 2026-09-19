@@ -47,7 +47,7 @@ private struct CronEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Job") { TextField("Name", text: $name); TextField("What should the agent do?", text: $prompt, axis: .vertical).lineLimit(4...10) }
+                Section("Job") { TextField("Name", text: $name).contentDirection(of: name); TextField("What should the agent do?", text: $prompt, axis: .vertical).lineLimit(4...10).contentDirection(of: prompt) }
                 Section("Schedule") {
                     Picker("Frequency", selection: $preset) { Text("Every hour").tag("hourly"); Text("Every day").tag("daily"); Text("Every week").tag("weekly"); Text("Custom cron").tag("custom") }.onChange(of: preset) { _, value in if value != "custom" { schedule = value == "hourly" ? "0 * * * *" : (value == "weekly" ? "0 9 * * 1" : "0 9 * * *") } }
                     TextField("Cron expression", text: $schedule).font(.body.monospaced()).textInputAutocapitalization(.never).disabled(preset != "custom")

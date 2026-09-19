@@ -15,9 +15,11 @@ struct DirectionalText: View {
             .font(font)
             .foregroundStyle(color)
             .lineLimit(lineLimit)
-            .multilineTextAlignment(.leading)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .environment(\.layoutDirection, MarkdownText.layoutDirection(for: text))
+            // Last in the chain on purpose: the frame above resolves
+            // `.leading` in the direction this modifier installs, so an
+            // Arabic title ends at the physical right edge of an English app.
+            .contentDirection(of: text)
     }
 }
 
@@ -33,6 +35,6 @@ struct TechnicalText: View {
             .foregroundStyle(color)
             .lineLimit(1)
             .truncationMode(.middle)
-            .environment(\.layoutDirection, .leftToRight)
+            .technicalDirection()
     }
 }

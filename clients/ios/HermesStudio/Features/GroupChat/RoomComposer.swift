@@ -55,11 +55,12 @@ struct RoomComposer: View {
             .foregroundStyle(CoreHubTokens.Palette.textPrimary)
             .lineLimit(1...8)
             .focused(focused)
-            .multilineTextAlignment(.leading)
-            .environment(\.layoutDirection, MarkdownText.layoutDirection(for: text))
             .padding(.horizontal, 4)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
+            // Last: see `ComposerInput`. An empty draft keeps the interface
+            // direction so the caret and the placeholder do not jump sides.
+            .contentDirection(of: text)
     }
 
     private var toolbar: some View {

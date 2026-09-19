@@ -114,6 +114,22 @@ enum Preferences {
     static func setRecentSpeechLanguages(_ value: [String], profile: String) {
         UserDefaults.standard.set(value, forKey: "speechLanguageRecent.\(profile)")
     }
+    /// How many dictations this profile has started, and whether the mic's
+    /// long press has ever been used. Together they decide the occasional
+    /// hint above the composer (`DictationHintPolicy`). Counting only, no
+    /// timestamps and nothing leaves the device.
+    static func dictationCount(for profile: String) -> Int {
+        UserDefaults.standard.integer(forKey: "dictationCount.\(profile)")
+    }
+    static func setDictationCount(_ value: Int, profile: String) {
+        UserDefaults.standard.set(value, forKey: "dictationCount.\(profile)")
+    }
+    static func dictationLongPressUsed(for profile: String) -> Bool {
+        UserDefaults.standard.bool(forKey: "dictationLongPressUsed.\(profile)")
+    }
+    static func setDictationLongPressUsed(_ value: Bool, profile: String) {
+        UserDefaults.standard.set(value, forKey: "dictationLongPressUsed.\(profile)")
+    }
 
     static func session(for profile: String) -> String { UserDefaults.standard.string(forKey: "session.\(profile)") ?? "" }
     static func setSession(_ id: String, profile: String) { UserDefaults.standard.set(id, forKey: "session.\(profile)") }

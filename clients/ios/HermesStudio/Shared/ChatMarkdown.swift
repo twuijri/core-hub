@@ -104,6 +104,10 @@ enum ChatMarkdownParser {
 
 struct MarkdownText: View {
     let text: String
+    /// Direction of the surrounding interface, captured before the container
+    /// is pinned to LTR below: a block with no strong character of its own
+    /// (a number, a bare path, "…") follows the interface like `dir="auto"`.
+    @Environment(\.layoutDirection) private var interface
 
     var body: some View {
         let blocks = ChatMarkdownParser.parse(text)
@@ -125,35 +129,35 @@ struct MarkdownText: View {
     private func blockView(_ block: ChatMarkdownBlock) -> some View {
         switch block {
         case let .heading(level, text):
-            DirectionalMarkdownLine(text: text, font: headingFont(level))
+            DirectionalMarkdownLine(text: text, interface: interface, font: headingFont(level))
         case let .unordered(indent, text):
             listRow(marker: "◦", text: text, indent: indent, subtleMarker: true)
         case let .ordered(indent, marker, text):
             listRow(marker: marker, text: text, indent: indent, subtleMarker: false)
         case let .quote(text):
-            DirectionalMarkdownLine(text: text)
+            DirectionalMarkdownLine(text: text, interface: interface)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
         case let .code(text):
-            DirectionalMarkdownLine(text: text, isCode: true)
+            DirectionalMarkdownLine(text: text, interface: interface, isCode: true)
                 .padding(9)
                 .background(.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 9))
         case let .paragraph(text):
-            DirectionalMarkdownLine(text: text)
+            DirectionalMarkdownLine(text: text, interface: interface)
         }
     }
 
     @ViewBuilder
     private func listRow(marker: String, text: String, indent: Int, subtleMarker: Bool) -> some View {
-        let direction = Self.layoutDirection(for: text)
+        let direction = ContentDirection.resolve(text, interface: interface)
         HStack(alignment: .firstTextBaseline, spacing: 3) {
             if direction == .rightToLeft {
-                DirectionalMarkdownLine(text: text)
+                DirectionalMarkdownLine(text: text, interface: interface)
                 listMarker(marker, subtle: subtleMarker)
             } else {
                 listMarker(marker, subtle: subtleMarker)
-                DirectionalMarkdownLine(text: text)
+                DirectionalMarkdownLine(text: text, interface: interface)
             }
         }
         .padding(direction == .rightToLeft ? .trailing : .leading, CGFloat(indent) * 16)
@@ -198,26 +202,22 @@ struct MarkdownText: View {
         )
     }
 
+    /// First-strong direction of one string, with no interface to fall back
+    /// on. `ContentDirection.resolve(_:interface:)` is the full rule and the
+    /// one to use wherever the surrounding direction is known.
     static func layoutDirection(for source: String) -> LayoutDirection {
-        for scalar in source.unicodeScalars {
-            switch scalar.value {
-            case 0x0590...0x08FF, 0xFB1D...0xFDFF, 0xFE70...0xFEFF:
-                return .rightToLeft
-            default:
-                if CharacterSet.letters.contains(scalar) { return .leftToRight }
-            }
-        }
-        return .leftToRight
+        ContentDirection.resolve(source, interface: .leftToRight)
     }
 }
 
 private struct DirectionalMarkdownLine: View {
     let text: String
+    var interface: LayoutDirection = .leftToRight
     var isCode = false
     var font: Font = .body
 
     var body: some View {
-        let direction = MarkdownText.layoutDirection(for: text)
+        let direction = ContentDirection.resolve(text, interface: interface)
         Group {
             if let value = MarkdownText.attributed(text) { Text(value) } else { Text(text) }
         }

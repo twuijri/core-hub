@@ -303,6 +303,34 @@ enum SpeechLanguageHistory {
     }
 }
 
+// MARK: - The occasional "long-press the mic" hint
+
+/// When the composer shows the one-line reminder that a long press on the
+/// microphone changes the dictation language.
+///
+/// The gesture is invisible, so it has to be said out loud — but a line that
+/// appears on every single recording becomes furniture and stops being read.
+/// The rule is therefore: every one of the **first three** recordings, then
+/// only occasionally (a gap of five, then seven), and **never again** once
+/// the long press has actually been used, because at that point the owner
+/// knows the gesture. The count is per profile, like the language itself.
+enum DictationHintPolicy {
+    /// Recordings that always carry the hint.
+    static let firstRecordings = 3
+    /// After those, the hint returns on every nth recording — "roughly every
+    /// fifth to tenth use": recordings 1–3, then 8, 15, 22…
+    static let occasionalPeriod = 7
+
+    /// `recordingCount` is how many recordings this profile has already
+    /// started, so the very first one is `0`.
+    static func shouldShow(recordingCount: Int, longPressUsed: Bool) -> Bool {
+        if longPressUsed { return false }
+        let count = max(0, recordingCount)
+        if count < firstRecordings { return true }
+        return count % occasionalPeriod == 0
+    }
+}
+
 // MARK: - Labels
 
 enum SpeechLanguageLabel {

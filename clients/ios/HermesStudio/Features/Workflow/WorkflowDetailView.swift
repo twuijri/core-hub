@@ -152,7 +152,7 @@ struct WorkflowRunPromptView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Optional input", text: $input, axis: .vertical).lineLimit(2...6)
+                    TextField("Optional input", text: $input, axis: .vertical).lineLimit(2...6).contentDirection(of: input)
                 } header: { Text("Input") } footer: { Text("The input is handed to the start nodes of the run.") }
                 Section {
                     if nodes.isEmpty { Text("This workflow has no nodes yet.").font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.textMuted) }

@@ -56,6 +56,9 @@ struct ConversationView: View {
     @State private var showingCamera = false
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var showingSpeechLanguage = false
+    /// The occasional "long-press the mic" reminder above the composer.
+    /// `DictationHintPolicy` decides when; this only says it is on screen.
+    @State private var showingDictationHint = false
     @FocusState var inputFocused: Bool
 
     var body: some View {
@@ -72,6 +75,11 @@ struct ConversationView: View {
                                     onCancel: { item in socket.cancelQueued(sessionID: session.id, queueID: item.id); stream.queued.removeAll { $0.id == item.id } })
                 }
                 if !stream.workspaceChanges.isEmpty { WorkspaceChangesRow(changes: stream.workspaceChanges, workspace: stream.workspace) }
+                if showingDictationHint {
+                    DictationLanguageHint(onTap: { openSpeechLanguagePicker() },
+                                          onExpire: { withAnimation(CoreHubTokens.Motion.drawer) { showingDictationHint = false } })
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
                 ChatComposer(text: $input, focused: $inputFocused, uploads: uploads, reference: reference, state: composerState, actions: composerActions, availableWidth: geometry.size.width)
             }
         }
@@ -103,7 +111,7 @@ struct ConversationView: View {
         // The drawer opens over the composer: drop focus with it so the
         // keyboard does not stay up covering the drawer.
         .onChange(of: store.drawerOpen) { _, open in if open { inputFocused = false } }
-        .onDisappear { speaker.stop(); speech.cancel(); if recorder.isRecording { _ = recorder.stop() }; voiceState = .idle }
+        .onDisappear { speaker.stop(); speech.cancel(); if recorder.isRecording { _ = recorder.stop() }; voiceState = .idle; showingDictationHint = false }
     }
 
     // MARK: - Pieces
@@ -214,7 +222,7 @@ struct ConversationView: View {
         actions.stop = { socket.abort(sessionID: session.id); if !socket.isConnected { finishLocally() } }
         actions.queue = { queueCurrentMessage() }
         actions.mic = { Task { await voice() } }
-        actions.micLanguage = { showingSpeechLanguage = true }
+        actions.micLanguage = { openSpeechLanguagePicker() }
         actions.attachCamera = { if CameraPicker.isAvailable { showingCamera = true } else { store.errorMessage = String(localized: "No camera is available on this device.") } }
         actions.attachPhotos = { showingPhotos = true }
         actions.attachFiles = { importing = true }
@@ -628,7 +636,7 @@ struct ChatHeaderTitle: View {
                 .font(CoreHubTokens.Typography.titleFont)
                 .foregroundStyle(CoreHubTokens.Palette.textPrimary)
                 .lineLimit(1)
-                .environment(\.layoutDirection, MarkdownText.layoutDirection(for: title))
+                .contentDirection(of: title)
             HStack(spacing: 6) {
                 if !workspace.isEmpty {
                     HStack(spacing: 4) {
@@ -658,8 +666,27 @@ extension ConversationView {
         case .idle, .error: break
         }
         store.errorMessage = nil
-        // The dictation language is per profile and decides both paths: the
-        // recogniser's locale here, and the `language` hint on the server.
+        await startVoice()
+        // Only a recording that actually opened the microphone counts, and
+        // only then can the hint appear: a failed start already has a banner
+        // of its own and must not also carry a tip.
+        guard voiceState == .listening else { return }
+        let show = store.registerDictationAndShouldHint(profile: session.profile)
+        withAnimation(CoreHubTokens.Motion.drawer) { showingDictationHint = show }
+    }
+
+    /// Opens the dictation-language picker and records that the gesture has
+    /// been found, which retires the hint for this profile.
+    func openSpeechLanguagePicker() {
+        store.markDictationLongPressUsed(profile: session.profile)
+        withAnimation(CoreHubTokens.Motion.drawer) { showingDictationHint = false }
+        showingSpeechLanguage = true
+    }
+
+    /// Picks the transcription path for this recording. The dictation
+    /// language is per profile and decides both: the recogniser's locale
+    /// here, and the `language` hint on the server.
+    private func startVoice() async {
         let plan = store.speechPlan(for: session.profile)
         if plan.requiresServer || store.voiceInput == Preferences.voiceInputServer {
             await startServerVoice(plan: plan); return
@@ -734,6 +761,7 @@ extension ConversationView {
     }
 
     private func stopVoice() {
+        withAnimation(CoreHubTokens.Motion.drawer) { showingDictationHint = false }
         if speech.isListening { speech.stop(); voiceState = .transcribing; return }
         if recorder.isRecording { Task { await finishServerVoice() } }
     }

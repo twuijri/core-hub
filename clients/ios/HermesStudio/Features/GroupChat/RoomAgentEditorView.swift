@@ -113,8 +113,8 @@ struct RoomAgentEditorView: View {
 
     private var identitySection: some View {
         Section {
-            TextField("Display name", text: $input.name)
-            TextField("Description", text: $input.description, axis: .vertical).lineLimit(1...4)
+            TextField("Display name", text: $input.name).contentDirection(of: input.name)
+            TextField("Description", text: $input.description, axis: .vertical).lineLimit(1...4).contentDirection(of: input.description)
         } header: { Text("Identity") } footer: {
             Text("The display name is what people type after @ in the room. `all` is reserved.")
         }
@@ -122,7 +122,7 @@ struct RoomAgentEditorView: View {
 
     private var savePresetSection: some View {
         Section("Save as preset") {
-            TextField("Preset name", text: $presetName)
+            TextField("Preset name", text: $presetName).contentDirection(of: presetName)
             SaveButton(title: String(localized: "Save preset"), state: presetState) { Task { await savePreset() } }
                 .disabled(!input.isValid)
             if !input.presetID.isEmpty {

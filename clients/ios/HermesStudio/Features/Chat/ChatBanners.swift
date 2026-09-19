@@ -141,3 +141,51 @@ struct WorkspaceChangesRow: View {
         .padding(.vertical, 5)
     }
 }
+
+/// The occasional reminder that a long press on the microphone changes the
+/// dictation language, shown above the composer the moment recording starts.
+///
+/// Transient by construction and never modal: it steals no focus, blocks
+/// nothing, sits on the composer's own pill styling (11 pt meta, radius 999,
+/// `bgCard` over a light border, card shadow), fades in and out with the
+/// 250 ms motion token and takes itself away after a few seconds. Tapping it
+/// is a shortcut to the same picker as the long press. How *often* it appears
+/// is `DictationHintPolicy`, not this view.
+struct DictationLanguageHint: View {
+    /// Open the dictation-language picker (same destination as the gesture).
+    let onTap: () -> Void
+    /// Called when the hint has been on screen long enough.
+    let onExpire: () -> Void
+
+    /// Long enough to read one short line, short enough not to sit over a
+    /// recording the owner is watching.
+    private static let visibleSeconds: Double = 5
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 6) {
+                Image(systemName: "character.bubble")
+                    .font(.system(size: 11, weight: .medium))
+                Text("Touch and hold the microphone to change the dictation language")
+                    .font(CoreHubTokens.Typography.metaFont)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            .foregroundStyle(CoreHubTokens.Palette.textSecondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(CoreHubTokens.Palette.bgCard, in: Capsule())
+            .overlay(Capsule().stroke(CoreHubTokens.Palette.borderLight))
+            .coreHubShadow(CoreHubTokens.Shadow.card)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 2)
+        .accessibilityHint("Opens the dictation language picker")
+        .task {
+            try? await Task.sleep(for: .seconds(Self.visibleSeconds))
+            guard !Task.isCancelled else { return }
+            onExpire()
+        }
+    }
+}

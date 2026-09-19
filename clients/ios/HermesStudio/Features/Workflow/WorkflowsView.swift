@@ -147,7 +147,7 @@ struct NewWorkflowView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Name", text: $name)
+                    TextField("Name", text: $name).contentDirection(of: name)
                     Picker("Profile", selection: $profile) { ForEach(store.profiles) { Text($0.name).tag($0.name) } }
                     TextField("Workspace path", text: $workspace).textInputAutocapitalization(.never).autocorrectionDisabled()
                 } footer: {
