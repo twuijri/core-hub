@@ -18,8 +18,10 @@ import org.junit.Test
 class SpeechLanguageTest {
 
     private val detects = DetectionSupport(
-        platform = true,
-        engineConfirmed = true,
+        checked = true,
+        sdkInt = SpeechLanguages.DETECTION_SDK,
+        engineAnswered = true,
+        detectionAccepted = true,
         allowed = listOf("ar-SA", "en-US"),
     )
 
@@ -92,13 +94,36 @@ class SpeechLanguageTest {
     }
 
     @Test
-    fun `a device that cannot detect falls back to a named language, never silently`() {
+    fun `a device that cannot detect falls back to a named language, and says which reason`() {
+        val both = listOf("ar-SA", "en-US")
         val cases = listOf(
-            "the platform is older than Android 14" to DetectionSupport(platform = false, engineConfirmed = true, allowed = listOf("ar-SA", "en-US")),
-            "the engine would not confirm" to DetectionSupport(platform = true, engineConfirmed = false, allowed = listOf("ar-SA", "en-US")),
-            "one language is not a choice" to DetectionSupport(platform = true, engineConfirmed = true, allowed = listOf("en-US")),
+            Triple(
+                "nobody has asked the device yet",
+                DetectionSupport(checked = false, sdkInt = 35, engineAnswered = true, detectionAccepted = true, allowed = both),
+                DetectionBlock.NotChecked,
+            ),
+            Triple(
+                "the platform is older than Android 14",
+                DetectionSupport(checked = true, sdkInt = 33, engineAnswered = true, detectionAccepted = true, allowed = both),
+                DetectionBlock.PlatformTooOld,
+            ),
+            Triple(
+                "the engine never answered at all",
+                DetectionSupport(checked = true, sdkInt = 34, engineAnswered = false, detectionAccepted = false, allowed = both),
+                DetectionBlock.EngineSilent,
+            ),
+            Triple(
+                "the engine answered, but refused an intent that asked to detect",
+                DetectionSupport(checked = true, sdkInt = 34, engineAnswered = true, detectionAccepted = false, allowed = both),
+                DetectionBlock.EngineRefused,
+            ),
+            Triple(
+                "one language is not a choice",
+                DetectionSupport(checked = true, sdkInt = 34, engineAnswered = true, detectionAccepted = true, allowed = listOf("en-US")),
+                DetectionBlock.NoModels,
+            ),
         )
-        cases.forEach { (why, support) ->
+        cases.forEach { (why, support, expected) ->
             val plan = SpeechLanguages.plan(
                 inputMode = Store.VOICE_INPUT_DEVICE,
                 choice = SpeechLanguages.AUTOMATIC,
@@ -106,8 +131,80 @@ class SpeechLanguageTest {
                 recognizerAvailable = true,
                 detection = support,
             )
-            // The flag is what makes the composer say so out loud.
-            assertEquals(why, SpeechPlan.OnDevice("en-US", detectionUnavailable = true), plan)
+            // The reason is what makes the composer say so out loud, instead
+            // of a take in the wrong language looking like a successful one.
+            assertEquals(why, SpeechPlan.OnDevice("en-US", detectionBlock = expected), plan)
+            assertTrue(why, (plan as SpeechPlan.OnDevice).detectionUnavailable)
+            assertFalse(why, support.usable)
+        }
+    }
+
+    @Test
+    fun `a take that is not automatic carries no detection reason at all`() {
+        val plan = SpeechLanguages.plan(
+            inputMode = Store.VOICE_INPUT_DEVICE,
+            choice = "ar-SA",
+            appLanguageTag = "en-US",
+            recognizerAvailable = true,
+            detection = DetectionSupport(),
+        )
+        // Nobody asked this take to detect, so "detection is unavailable" is
+        // not a thing that happened to it.
+        assertEquals(DetectionBlock.None, (plan as SpeechPlan.OnDevice).detectionBlock)
+        assertFalse(plan.detectionUnavailable)
+    }
+
+    // ── the reported bug: an English phone in Saudi Arabia ───────────────
+
+    @Test
+    fun `en-SA is a real device locale and no engine has it, so the take moves to one it has`() {
+        // This is exactly what the owner's phone reported: the display
+        // language crossed with the region it sits in. Android hands it over
+        // as one tag and it survives normalisation, because it is well formed.
+        assertEquals("en-SA", SpeechLanguages.normalizeTag("en-SA"))
+
+        val plan = SpeechLanguages.plan(
+            inputMode = Store.VOICE_INPUT_DEVICE,
+            choice = SpeechLanguages.FOLLOW_APP,
+            appLanguageTag = "en-SA",
+            recognizerAvailable = true,
+            supported = listOf("ar-SA", "en-GB", "en-US"),
+        )
+        assertEquals(SpeechPlan.OnDevice("en-GB", requestedTag = "en-SA"), plan)
+    }
+
+    @Test
+    fun `a supported tag is left exactly as it is, and an engine that said nothing is not second-guessed`() {
+        assertEquals("en-US", SpeechLanguages.supportedTag("en_us", listOf("ar-SA", "en-US")))
+        // No list means the engine reported nothing; inventing a substitution
+        // would be a guess, and the recognizer's own error is more honest.
+        assertEquals("en-SA", SpeechLanguages.supportedTag("en-SA", emptyList()))
+        // Nothing of that language at all: there is no honest fallback, so the
+        // tag stands and the engine's ERROR_LANGUAGE_NOT_SUPPORTED explains it.
+        assertEquals("ja-JP", SpeechLanguages.supportedTag("ja-JP", listOf("ar-SA", "en-US")))
+    }
+
+    @Test
+    fun `automatic on a device that cannot detect still lands on a language the engine has`() {
+        val plan = SpeechLanguages.plan(
+            inputMode = Store.VOICE_INPUT_DEVICE,
+            choice = SpeechLanguages.AUTOMATIC,
+            appLanguageTag = "en-SA",
+            recognizerAvailable = true,
+            detection = DetectionSupport(checked = true, sdkInt = 33),
+            supported = listOf("ar-SA", "en-US"),
+        )
+        // Two separate things went wrong and the composer has to say both.
+        assertEquals(
+            SpeechPlan.OnDevice("en-US", detectionBlock = DetectionBlock.PlatformTooOld, requestedTag = "en-SA"),
+            plan,
+        )
+    }
+
+    @Test
+    fun `the detection reason always has a sentence of its own`() {
+        DetectionBlock.entries.forEach { block ->
+            assertTrue("$block has no string", detectionReasonRes(block) != 0)
         }
     }
 

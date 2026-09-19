@@ -217,22 +217,14 @@ private fun AnnotatedString.Builder.appendMarkdown(
     }
 }
 
-internal fun chatTextDirection(text: String): TextDirection {
-    text.forEach { char ->
-        when (Character.getDirectionality(char)) {
-            Character.DIRECTIONALITY_RIGHT_TO_LEFT,
-            Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC,
-            Character.DIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING,
-            Character.DIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE,
-            -> return TextDirection.Rtl
-            Character.DIRECTIONALITY_LEFT_TO_RIGHT,
-            Character.DIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING,
-            Character.DIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE,
-            -> return TextDirection.Ltr
-        }
-    }
-    return TextDirection.Content
-}
+/**
+ * One markdown block's direction, from the shared content rule so the chat and
+ * the composer cannot drift apart. An isolated run — a model id or a language
+ * name wrapped in U+2068…U+2069 — no longer decides the block's direction,
+ * which is the whole reason it was isolated.
+ */
+internal fun chatTextDirection(text: String): TextDirection =
+    ContentDirections.ofText(text).textDirection()
 
 @Composable
 internal fun ChatMarkdownText(text: String, modifier: Modifier = Modifier) {

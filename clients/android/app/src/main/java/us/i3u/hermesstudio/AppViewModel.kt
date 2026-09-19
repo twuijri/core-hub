@@ -232,6 +232,28 @@ data class UiState(
     val takeLanguage: String = "",
     /** True when the running take was allowed to work the language out itself. */
     val takeDetecting: Boolean = false,
+    /**
+     * Why the running take is *not* detecting although the owner asked it to.
+     * [DetectionBlock.None] for every take that was not asked to detect, and
+     * for the ones that are. The recording strip turns this into the concrete
+     * sentence — the API level, the engine, the missing models — instead of
+     * letting a take in the wrong language look like a successful one.
+     */
+    val takeDetectionBlock: DetectionBlock = DetectionBlock.None,
+    /**
+     * The language the take asked for and this engine does not serve, when it
+     * had to be moved onto one that it does. `en-SA` — an English phone in
+     * Saudi Arabia — is the case that started this.
+     */
+    val takeFallbackFrom: String = "",
+    /**
+     * What the finished take has to admit about itself: it ran in a language
+     * the owner did not choose. Stays until the next take or until dismissed,
+     * because the text it produced is still sitting in the composer.
+     */
+    val dictationWarning: String? = null,
+    /** The long-press hint is showing above the composer right now. */
+    val dictationHint: Boolean = false,
     val speaking: Boolean = false,
     val models: List<ModelOption> = emptyList(),
     /** Profile whose entries are currently in [models]. */
@@ -2331,8 +2353,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 it.copy(
                     speechLanguages = supported,
                     speechDetection = DetectionSupport(
-                        platform = android.os.Build.VERSION.SDK_INT >= SpeechLanguages.DETECTION_SDK,
-                        engineConfirmed = reported.answered,
+                        checked = true,
+                        sdkInt = android.os.Build.VERSION.SDK_INT,
+                        engineAnswered = reported.answered,
+                        detectionAccepted = reported.detectionAccepted,
                         allowed = allowed,
                     ),
                 )
@@ -2446,7 +2470,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             appLanguageTag = appLanguageTag(),
             recognizerAvailable = available,
             detection = state.speechDetection,
+            supported = state.speechLanguages.map { it.tag },
         )
+        noteDictationStarted()
         when (plan) {
             is SpeechPlan.OnServer -> {
                 if (state.voiceInput != Store.VOICE_INPUT_SERVER) {
@@ -2458,21 +2484,78 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             is SpeechPlan.Detect -> startDeviceListening(plan.seed, plan.allowed)
 
             is SpeechPlan.OnDevice -> {
-                if (plan.detectionUnavailable) {
-                    // The owner picked automatic; this engine cannot do it, and
-                    // saying nothing would leave the wrong language unexplained.
-                    _state.update {
-                        it.copy(
-                            notice = str(
-                                R.string.notice_speech_detection_unavailable,
-                                SpeechLanguages.isolatedEndonym(plan.languageTag),
-                            ),
-                        )
-                    }
-                }
-                startDeviceListening(plan.languageTag, emptyList())
+                // The owner picked automatic and this device cannot do it, or
+                // asked for a locale the engine does not have. Either way the
+                // take is about to run in a language nobody chose, and saying
+                // nothing is what made the last transcript look successful.
+                val warning = detectionWarning(plan.detectionBlock, plan.languageTag)
+                    ?: fallbackWarning(plan.requestedTag, plan.languageTag)
+                startDeviceListening(
+                    languageTag = plan.languageTag,
+                    detectAmong = emptyList(),
+                    detectionBlock = plan.detectionBlock,
+                    fallbackFrom = plan.requestedTag,
+                    warning = warning,
+                )
             }
         }
+    }
+
+    /**
+     * The sentence for a take that was asked to detect and cannot, naming the
+     * thing that is actually in the way. Null when detection is running.
+     *
+     * Every branch reports something the device told us: its own API level,
+     * that its engine never answered, that its engine refused an intent
+     * carrying the detection extras, or that fewer than two of the owner's
+     * languages have a model installed.
+     */
+    private fun detectionWarning(block: DetectionBlock, languageTag: String): String? {
+        if (block == DetectionBlock.None) return null
+        return str(
+            R.string.notice_speech_detect_off,
+            SpeechLanguages.isolatedEndonym(languageTag),
+            str(detectionReasonRes(block), android.os.Build.VERSION.RELEASE.orEmpty(), android.os.Build.VERSION.SDK_INT),
+        )
+    }
+
+    /** The sentence for a take that had to move off a locale the engine lacks. */
+    private fun fallbackWarning(requested: String, used: String): String? {
+        if (requested.isBlank()) return null
+        return str(
+            R.string.notice_speech_language_fallback,
+            SpeechLanguages.isolatedEndonym(requested),
+            SpeechLanguages.isolatedEndonym(used),
+        )
+    }
+
+    /**
+     * Counts one dictation take for this profile and decides whether the mic
+     * long-press is worth mentioning again. [DictationHint] owns the cadence;
+     * this only keeps the counter and clears whatever the last take warned
+     * about, which no longer describes the text about to arrive.
+     */
+    private fun noteDictationStarted() {
+        val profile = currentProfile()
+        val count = store.dictationCount(profile) + 1
+        store.setDictationCount(profile, count)
+        val show = DictationHint.showsOn(count, store.dictationLongPressUsed(profile))
+        _state.update { it.copy(dictationHint = show, dictationWarning = null) }
+    }
+
+    /** The hint has been on screen long enough, or the owner tapped it away. */
+    fun dismissDictationHint() = _state.update { if (it.dictationHint) it.copy(dictationHint = false) else it }
+
+    /** The owner dismissed what the last take had to admit about its language. */
+    fun dismissDictationWarning() = _state.update { it.copy(dictationWarning = null) }
+
+    /**
+     * The mic long-press was used. That is the gesture the hint exists to
+     * teach, so it is never shown for this profile again.
+     */
+    fun noteDictationLongPress() {
+        store.setDictationLongPressUsed(currentProfile(), true)
+        _state.update { it.copy(dictationHint = false) }
     }
 
     /** Ends the take; the text arrives through the voice segment. */
@@ -2490,7 +2573,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (_state.value.voiceViaServer) recorder.cancel() else speech.cancel()
         lastPartial = null
         emitVoiceSegment("", VoiceSegmentKind.Discard)
-        _state.update { it.copy(voice = VoiceStatus.Idle) }
+        // Nothing was inserted, so there is nothing left to warn about.
+        _state.update { it.copy(voice = VoiceStatus.Idle, dictationWarning = null, dictationHint = false) }
     }
 
     /** Clears the error state of the mic button after the message was seen. */
@@ -2506,7 +2590,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * settled on through `onLanguageDetected`, and that is the only thing the
      * recording sheet will claim was detected.
      */
-    private fun startDeviceListening(languageTag: String, detectAmong: List<String>) {
+    private fun startDeviceListening(
+        languageTag: String,
+        detectAmong: List<String>,
+        detectionBlock: DetectionBlock = DetectionBlock.None,
+        fallbackFrom: String = "",
+        warning: String? = null,
+    ) {
         lastPartial = null
         val started = speech.start(
             languageTag,
@@ -2530,7 +2620,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         return
                     }
                     emitVoiceSegment(spoken, VoiceSegmentKind.Final)
-                    _state.update { it.copy(voice = VoiceStatus.Idle, voiceReplyPending = true, error = null) }
+                    _state.update {
+                        // A detecting take that never reported a language did
+                        // not detect anything; the text is whatever the seed
+                        // language made of the audio, and it says so.
+                        val silentDetection = it.takeDetecting && it.detectedLanguage.isBlank()
+                        it.copy(
+                            voice = VoiceStatus.Idle,
+                            voiceReplyPending = true,
+                            error = null,
+                            dictationWarning = when {
+                                silentDetection -> str(
+                                    R.string.notice_speech_detect_silent,
+                                    SpeechLanguages.isolatedEndonym(it.takeLanguage),
+                                )
+                                else -> it.dictationWarning
+                            },
+                        )
+                    }
                 }
 
                 override fun onError(code: Int) {
@@ -2565,6 +2672,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // sheet never names a language the engine was not given.
                 takeLanguage = languageTag,
                 takeDetecting = detectAmong.isNotEmpty(),
+                takeDetectionBlock = detectionBlock,
+                takeFallbackFrom = fallbackFrom,
+                // Carried through the take rather than flashed once, because
+                // the text it produces outlives any transient notice.
+                dictationWarning = warning,
             )
         }
     }
@@ -2591,6 +2703,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 detectedLanguage = "",
                 takeLanguage = hint.orEmpty(),
                 takeDetecting = hint == null,
+                // The server decides for itself; nothing about this device's
+                // recognizer applies to the take.
+                takeDetectionBlock = DetectionBlock.None,
+                takeFallbackFrom = "",
             )
         }
     }

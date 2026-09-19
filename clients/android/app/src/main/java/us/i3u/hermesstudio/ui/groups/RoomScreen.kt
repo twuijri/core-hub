@@ -73,6 +73,7 @@ import us.i3u.hermesstudio.LoadingRow
 import us.i3u.hermesstudio.NoticeNote
 import us.i3u.hermesstudio.PendingRunAction
 import us.i3u.hermesstudio.QueueItem
+import us.i3u.hermesstudio.ContentDirectionBox
 import us.i3u.hermesstudio.R
 import us.i3u.hermesstudio.RoomInteraction
 import us.i3u.hermesstudio.RoomState
@@ -226,16 +227,23 @@ fun RoomScreen(state: UiState, viewModel: AppViewModel) {
                         IconButton(onClick = { picker.launch("*/*") }, modifier = Modifier.size(CoreHubTokens.Metrics.composerButton)) {
                             Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.composer_attach), tint = palette.textSecondary)
                         }
-                        OutlinedTextField(
-                            value = draft,
-                            onValueChange = { draft = it },
-                            placeholder = { Text(stringResource(R.string.room_hint), color = palette.textMuted) },
-                            modifier = Modifier.weight(1f),
-                            maxLines = 5,
-                            textStyle = CoreHubTextStyles.input.copy(color = palette.textPrimary, textDirection = TextDirection.Content),
-                            shape = RoundedCornerShape(CoreHubTokens.Radius.card),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = palette.accent, unfocusedBorderColor = palette.inputBorder, cursorColor = palette.accent),
-                        )
+                        // Same rule as the chat composer: the field follows the
+                        // draft's own direction. The weight stays on a wrapper
+                        // because the provider is not a Row child itself.
+                        Box(modifier = Modifier.weight(1f)) {
+                            ContentDirectionBox(draft) {
+                                OutlinedTextField(
+                                    value = draft,
+                                    onValueChange = { draft = it },
+                                    placeholder = { Text(stringResource(R.string.room_hint), color = palette.textMuted) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 5,
+                                    textStyle = CoreHubTextStyles.input.copy(color = palette.textPrimary, textDirection = TextDirection.Content),
+                                    shape = RoundedCornerShape(CoreHubTokens.Radius.card),
+                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = palette.accent, unfocusedBorderColor = palette.inputBorder, cursorColor = palette.accent),
+                                )
+                            }
+                        }
                         val canSend = (draft.isNotBlank() || state.roomAttachments.isNotEmpty()) && state.roomUploads.isEmpty()
                         Box(
                             modifier = Modifier.padding(bottom = 4.dp).size(CoreHubTokens.Metrics.composerButton).clip(CircleShape)

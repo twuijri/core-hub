@@ -132,9 +132,26 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
     `EXTRA_ENABLE_LANGUAGE_SWITCH` over the languages the app ships plus the phone's own
     locale, intersected with what the engine says it has, and the engine reports what it
     heard through `RecognitionListener.onLanguageDetection`. No audio goes to Core Hub
-    for it. Those extras are **Android 14 (API 34)** and later; on an older phone, or an
-    engine that will not confirm support, the take runs in the app language and a notice
-    says so by name rather than transcribing the wrong language quietly
+    for it. Those extras are **Android 14 (API 34)** and later
+  - **The app reports what it found, it does not assume.** The support query now carries
+    the detection extras, so "this engine accepted a request to detect" is answered
+    separately from "this engine can hear speech" — the two used to be conflated, and a
+    plain probe was being read as proof of detection. When detection is not running the
+    recording row names the reason it is not: the Android release and API level this
+    phone reports, an engine that never answered, an engine that refused a detecting
+    intent, or fewer than two of your languages having a model installed. The same
+    sentence appears under *Detect automatically* in the language sheet
+  - **A take in the wrong language never looks like a success.** When automatic could not
+    run, when the engine was detecting and never named a language, or when the locale had
+    to be moved, the composer keeps a warning above the text it produced until you
+    dismiss it — not a notice that disappears while the text stays
+  - **A locale the engine does not have is replaced, by name.** `en-SA` — an English
+    phone in Saudi Arabia, which is what the owner's device reports — is a real Android
+    locale and almost no engine has a model for it. The take runs in a variant of the
+    same language that the engine did list, and the recording row says which one it left
+  - **The microphone's long press is mentioned occasionally.** A light line above the
+    composer on the first three recordings of a profile and then every fifth to tenth,
+    and never again once the long press has been used. The counter is per profile
 - **Settings → Voice** picks who reads a reply aloud, per profile: *Core Hub default*
   (whatever the server has active), any TTS provider Core Hub has configured for that
   profile, or *Device voice* (the Android engine, nothing leaves the phone). Picking a
@@ -153,6 +170,14 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   (`ui/theme/CoreHubTokens.kt`), following the system or the setting; RTL-aware
   layout with per-string direction (Arabic titles and messages read correctly, code
   and model ids stay left-to-right)
+- **Content direction is the content's, not the interface's** (`docs/CONTENT-DIRECTION.md`).
+  `ContentDirection.kt` is the Android half of the web's `dir="auto"` +
+  `unicode-bidi: plaintext`: first strong character, per paragraph, isolated runs
+  skipped, digits and punctuation not treated as evidence. The chat composer, the group
+  composer and the clarification answer field take their own direction from what was
+  typed, so Arabic in an English app starts at the right edge of the card — the composer
+  used to measure its text at content width inside a box pinned to the interface's start,
+  which left a right-aligned Arabic line beginning in the middle of the composer
 
 ## Changed in M1 (Core Hub mobile branch)
 
@@ -280,7 +305,12 @@ app/src/main/java/us/i3u/hermesstudio/
   SpeechLanguage.kt       the dictation-language rules: the stored preference, the
                           device's reported languages, and where a take runs
   SpeechInput.kt          the recognizer itself, the detection/switch extras, and the
-                          two ways to ask the engine which languages it has
+                          two ways to ask the engine which languages it has — the
+                          support probe carries the detection extras, so refusing them
+                          is reported rather than assumed away
+  ContentDirection.kt     per-paragraph first-strong content direction, the Android
+                          half of docs/CONTENT-DIRECTION.md
+  DictationHint.kt        how often the mic long-press is worth mentioning
   ProfileScope.kt         the one rule for which profile a screen acts under
   ui/chat/                conversation screen, chat header, message rows (bubbles, tool
                           card, thinking block, action row, media), run cards
