@@ -3,9 +3,13 @@ package us.i3u.hermesstudio.ui.chat
 import android.Manifest
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -83,7 +87,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import java.io.File
 import java.util.Locale
+import kotlinx.coroutines.delay
 import us.i3u.hermesstudio.AppViewModel
+import us.i3u.hermesstudio.ContentDirectionBox
+import us.i3u.hermesstudio.DetectionBlock
+import us.i3u.hermesstudio.DictationHint
 import us.i3u.hermesstudio.R
 import us.i3u.hermesstudio.Store
 import us.i3u.hermesstudio.chatProfile
@@ -94,6 +102,7 @@ import us.i3u.hermesstudio.VoiceOutput
 import us.i3u.hermesstudio.VoiceSegmentKind
 import us.i3u.hermesstudio.VoiceStatus
 import us.i3u.hermesstudio.applyVoiceSegment
+import us.i3u.hermesstudio.detectionReasonRes
 import us.i3u.hermesstudio.ui.theme.CoreHub
 import us.i3u.hermesstudio.ui.theme.CoreHubIcons
 import us.i3u.hermesstudio.ui.theme.CoreHubTextStyles
@@ -215,6 +224,16 @@ internal fun Composer(
         ComposerSheet.Options, null -> Unit
     }
 
+    // The hint fades on its own; nothing to tap, nothing to dismiss, no modal.
+    LaunchedEffect(state.dictationHint) {
+        if (!state.dictationHint) return@LaunchedEffect
+        delay(DictationHint.VISIBLE_MILLIS)
+        viewModel.dismissDictationHint()
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+    DictationHintPopup(visible = state.dictationHint) { viewModel.dismissDictationHint() }
+
     Surface(
         modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 7.dp),
         shape = RoundedCornerShape(CoreHubTokens.Radius.composer),
@@ -253,30 +272,58 @@ internal fun Composer(
                 }
 
                 if (state.voice != VoiceStatus.Idle) VoiceStatusRow(state, viewModel)
+                state.dictationWarning?.let { warning ->
+                    DictationWarningRow(warning) { viewModel.dismissDictationWarning() }
+                }
 
-                BasicTextField(
-                    value = field,
-                    onValueChange = { value ->
-                        field = value
-                        if (value.text != draft) onDraftChange(value.text)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .onFocusChanged { fieldFocused = it.isFocused },
-                    // Never below 16 sp on phones; dir=auto per DESIGN-SPEC.
-                    textStyle = CoreHubTextStyles.input.copy(color = palette.textPrimary, textDirection = TextDirection.Content),
-                    cursorBrush = SolidColor(palette.accent),
-                    maxLines = 6,
-                    decorationBox = { inner ->
-                        Box(modifier = Modifier.padding(vertical = 6.dp)) {
-                            if (field.text.isEmpty()) {
-                                Text(stringResource(R.string.composer_hint), style = CoreHubTextStyles.input, color = palette.textMuted)
+                // The field runs in the direction of what was typed, not of
+                // the interface: docs/CONTENT-DIRECTION.md, the same rule the
+                // web gets from dir="auto" on the textarea. Without it an
+                // Arabic draft in an English app is laid out inside an
+                // LTR-anchored box and starts wherever the text happens to
+                // end, rather than at the right edge.
+                ContentDirectionBox(field.text) {
+                    BasicTextField(
+                        value = field,
+                        onValueChange = { value ->
+                            field = value
+                            if (value.text != draft) onDraftChange(value.text)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .onFocusChanged { fieldFocused = it.isFocused },
+                        // Never below 16 sp on phones; dir=auto per DESIGN-SPEC.
+                        // Content is the platform's per-paragraph first-strong
+                        // pass, resolved against the direction provided above.
+                        textStyle = CoreHubTextStyles.input.copy(color = palette.textPrimary, textDirection = TextDirection.Content),
+                        cursorBrush = SolidColor(palette.accent),
+                        maxLines = 6,
+                        decorationBox = { inner ->
+                            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                                if (field.text.isEmpty()) {
+                                    Text(
+                                        stringResource(R.string.composer_hint),
+                                        style = CoreHubTextStyles.input,
+                                        color = palette.textMuted,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                }
+                                // propagateMinConstraints is the fix, not a
+                                // tidy-up. A Box drops the incoming minimum
+                                // width, so the text field inside was only ever
+                                // as wide as its own glyphs, pinned to the
+                                // layout's start; a right-aligned Arabic
+                                // paragraph then began at the end of that narrow
+                                // run — the middle of the composer — instead of
+                                // at the card's edge. Only the width is
+                                // propagated: the height stays loose, so the
+                                // field does not grow to its 48 dp minimum.
+                                Box(modifier = Modifier.fillMaxWidth(), propagateMinConstraints = true) { inner() }
                             }
-                            inner()
-                        }
-                    },
-                )
+                        },
+                    )
+                }
                 }
 
                 Row(
@@ -352,6 +399,9 @@ internal fun Composer(
                         viewModel = viewModel,
                         onRecord = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
                         onPickLanguage = {
+                            // The gesture the hint exists to teach has now been
+                            // used, so this profile never sees the hint again.
+                            viewModel.noteDictationLongPress()
                             viewModel.loadSpeechLanguages()
                             speechLanguageSheet = true
                         },
@@ -359,6 +409,76 @@ internal fun Composer(
                     ComposerActionButton(state, draft, onSend, viewModel)
                 }
             }
+        }
+    }
+    }
+}
+
+/**
+ * The occasional reminder that the microphone has a long press.
+ *
+ * Deliberately not a dialog and not a snackbar: a low-contrast line on the
+ * composer's own surface, above the card, that fades in and out by itself and
+ * takes no decision from anyone. [DictationHint] decides how often it appears;
+ * this only draws it.
+ */
+@Composable
+private fun DictationHintPopup(visible: Boolean, onDismiss: () -> Unit) {
+    val palette = CoreHub.palette
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(),
+        exit = fadeOut(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 2.dp)
+                .clip(RoundedCornerShape(CoreHubTokens.Radius.pill))
+                .background(palette.segmentTrack)
+                .clickable(onClickLabel = stringResource(R.string.composer_dictation_hint_dismiss), onClick = onDismiss)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(Icons.Filled.Mic, contentDescription = null, tint = palette.textMuted, modifier = Modifier.size(13.dp))
+            Text(
+                stringResource(R.string.composer_dictation_hint),
+                style = CoreHubTextStyles.meta.copy(textDirection = TextDirection.Content),
+                color = palette.textSecondary,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+/**
+ * What the finished take has to admit: it ran in a language the owner did not
+ * choose. Error-coloured because the text sitting in the composer is very
+ * likely nonsense, and dismissible because the owner may not care this time.
+ */
+@Composable
+private fun DictationWarningRow(warning: String, onDismiss: () -> Unit) {
+    val palette = CoreHub.palette
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(Icons.Filled.ErrorOutline, contentDescription = null, tint = palette.error, modifier = Modifier.size(14.dp))
+        Text(
+            warning,
+            style = CoreHubTextStyles.meta.copy(textDirection = TextDirection.Content),
+            color = palette.error,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(onClick = onDismiss, modifier = Modifier.size(22.dp)) {
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = stringResource(R.string.composer_dictation_warning_dismiss),
+                tint = palette.textMuted,
+                modifier = Modifier.size(14.dp),
+            )
         }
     }
 }
@@ -387,11 +507,41 @@ internal fun takeLanguageLabel(state: UiState): String = when {
     state.detectedLanguage.isNotBlank() ->
         stringResource(R.string.composer_take_detected, SpeechLanguages.isolatedEndonym(state.detectedLanguage))
     state.takeDetecting && state.voiceViaServer -> stringResource(R.string.composer_take_server_auto)
-    state.takeDetecting -> stringResource(R.string.composer_take_detecting)
+    // Detecting, and the engine has not named a language yet. Naming the
+    // languages it was handed is the difference between "it is working on it"
+    // and a strip that says "detecting" while nothing was ever requested.
+    state.takeDetecting -> when {
+        state.speechDetection.allowed.size >= 2 -> stringResource(
+            R.string.composer_take_detecting_among,
+            SpeechLanguages.nameList(state.speechDetection.allowed, stringResource(R.string.speech_language_separator)),
+        )
+        else -> stringResource(R.string.composer_take_detecting)
+    }
+    // Automatic was asked for and is not running: the strip says so and says
+    // why, so a transcript in the wrong language never looks successful.
+    state.takeDetectionBlock != DetectionBlock.None -> stringResource(
+        R.string.composer_take_detect_off,
+        SpeechLanguages.isolatedEndonym(state.takeLanguage),
+        detectionReasonLabel(state.takeDetectionBlock),
+    )
+    // The engine has no model for the locale that was asked for.
+    state.takeFallbackFrom.isNotBlank() -> stringResource(
+        R.string.composer_take_fallback,
+        SpeechLanguages.isolatedEndonym(state.takeFallbackFrom),
+        SpeechLanguages.isolatedEndonym(state.takeLanguage),
+    )
     state.takeLanguage.isNotBlank() ->
         stringResource(R.string.composer_take_language, SpeechLanguages.isolatedEndonym(state.takeLanguage))
     else -> stringResource(R.string.composer_take_language_unknown)
 }
+
+/** One [DetectionBlock] in words, with the phone's own Android version in it. */
+@Composable
+internal fun detectionReasonLabel(block: DetectionBlock): String = stringResource(
+    detectionReasonRes(block),
+    Build.VERSION.RELEASE.orEmpty(),
+    Build.VERSION.SDK_INT,
+)
 
 @Composable
 private fun VoiceStatusRow(state: UiState, viewModel: AppViewModel) {
@@ -727,7 +877,8 @@ internal fun speechLanguageRows(
                 detail = if (detection.usable) {
                     stringResource(R.string.speech_language_automatic_note, allowedNames)
                 } else {
-                    stringResource(R.string.speech_language_automatic_unavailable)
+                    // Not "this device cannot": the reason this device gave.
+                    detectionReasonLabel(detection.block)
                 },
                 selected = choice == SpeechLanguages.AUTOMATIC,
             ) { onPick(SpeechLanguages.AUTOMATIC) },

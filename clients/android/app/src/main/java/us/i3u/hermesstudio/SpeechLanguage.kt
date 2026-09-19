@@ -1,5 +1,6 @@
 package us.i3u.hermesstudio
 
+import androidx.annotation.StringRes
 import java.util.Locale
 
 /**
@@ -29,6 +30,24 @@ import java.util.Locale
  * phone; the Android-side queries live in [SpeechInput].
  */
 
+/**
+ * The sentence for one [DetectionBlock], in the app's own words.
+ *
+ * Lives next to the enum so a new reason cannot be added without a string to
+ * explain it. Every one of these takes the phone's Android release (`%1$s`)
+ * and API level (`%2$d`) as arguments whether it uses them or not, so callers
+ * need not know which reason names the platform.
+ */
+@StringRes
+fun detectionReasonRes(block: DetectionBlock): Int = when (block) {
+    DetectionBlock.None -> R.string.speech_detect_on
+    DetectionBlock.NotChecked -> R.string.speech_detect_off_pending
+    DetectionBlock.PlatformTooOld -> R.string.speech_detect_off_platform
+    DetectionBlock.EngineSilent -> R.string.speech_detect_off_unknown
+    DetectionBlock.EngineRefused -> R.string.speech_detect_off_engine
+    DetectionBlock.NoModels -> R.string.speech_detect_off_models
+}
+
 /** One language dictation can run in, named the way its own speakers name it. */
 data class SpeechLanguageOption(
     val tag: String,
@@ -42,24 +61,73 @@ data class SpeechLanguageOption(
 )
 
 /**
+ * Why automatic detection is not running on this device.
+ *
+ * Every value is something the app was told, never something it assumed, and
+ * every value has a sentence of its own on the recording strip. [None] is the
+ * only one that means detection is actually live.
+ */
+enum class DetectionBlock {
+    /** Detection is on: the engine was asked, and it agreed. */
+    None,
+
+    /** The device was never asked yet, so nothing may be claimed either way. */
+    NotChecked,
+
+    /** Older than Android 14: the detection extras do not exist here. */
+    PlatformTooOld,
+
+    /** `checkRecognitionSupport` (or the broadcast) never answered at all. */
+    EngineSilent,
+
+    /** The engine answered, but refused an intent that asked for detection. */
+    EngineRefused,
+
+    /** Fewer than two of the owner's languages have a model on this phone. */
+    NoModels,
+}
+
+/**
  * What this device can actually do about working the language out for itself.
  *
- * Nothing here is assumed. [platform] is the API level the extras and the
- * `onLanguageDetection` callback were added in (34), [engineConfirmed] means
- * the installed recognition service answered `checkRecognitionSupport` for an
- * intent that asked for detection, and [allowed] is the list of languages that
- * engine reported — not a list this app made up.
+ * Nothing here is assumed. [sdkInt] is the API level the phone reported (the
+ * extras and the `onLanguageDetection` callback arrived in 34), [engineAnswered]
+ * means the installed recognition service replied to a support query at all,
+ * [detectionAccepted] means it replied to a query for an intent that **asked
+ * for detection** — which is a different question, and the one the app used to
+ * skip — and [allowed] is the list of languages that engine reported, not a
+ * list this app made up.
+ *
+ * [checked] separates "we asked and this is the answer" from "we have not
+ * asked yet", so a take started before the query returned is never described
+ * as a device limitation.
  */
 data class DetectionSupport(
-    val platform: Boolean = false,
-    val engineConfirmed: Boolean = false,
+    val checked: Boolean = false,
+    val sdkInt: Int = 0,
+    val engineAnswered: Boolean = false,
+    val detectionAccepted: Boolean = false,
     val allowed: List<String> = emptyList(),
 ) {
+    /** Android 14 or later: the detection extras exist at all. */
+    val platform: Boolean get() = sdkInt >= SpeechLanguages.DETECTION_SDK
+
     /**
-     * Detecting between fewer than two languages is not detection, so a device
-     * that reported one language (or none) counts as unable.
+     * The first thing standing in the way, in the order the owner would meet
+     * them. Detecting between fewer than two languages is not detection, so a
+     * device that reported one language (or none) counts as unable.
      */
-    val usable: Boolean get() = platform && engineConfirmed && allowed.size >= 2
+    val block: DetectionBlock
+        get() = when {
+            !checked -> DetectionBlock.NotChecked
+            !platform -> DetectionBlock.PlatformTooOld
+            !engineAnswered -> DetectionBlock.EngineSilent
+            !detectionAccepted -> DetectionBlock.EngineRefused
+            allowed.size < 2 -> DetectionBlock.NoModels
+            else -> DetectionBlock.None
+        }
+
+    val usable: Boolean get() = block == DetectionBlock.None
 }
 
 /**
@@ -75,19 +143,35 @@ data class RecognizerLanguages(
     /** The engine's own default language, if it named one. */
     val preferred: String? = null,
     val answered: Boolean = false,
+    /**
+     * The engine answered a support query for an intent that carried
+     * `EXTRA_ENABLE_LANGUAGE_DETECTION`. False on a platform too old to have
+     * the extra, and false when the engine refused that intent but answered a
+     * plain one.
+     */
+    val detectionAccepted: Boolean = false,
 )
 
 /** Where one dictation take runs, and in which language. */
 sealed interface SpeechPlan {
     /**
-     * Android's recognizer in one fixed language. [detectionUnavailable] is
-     * true when the owner asked for automatic and this device cannot do it, so
-     * the caller can say which language it fell back to instead of pretending.
+     * Android's recognizer in one fixed language.
+     *
+     * [detectionBlock] is anything other than [DetectionBlock.None] when the
+     * owner asked for automatic and this device cannot do it, so the caller
+     * can name the concrete reason instead of pretending. [requestedTag] is
+     * the language that was asked for but which the engine does not serve —
+     * blank when [languageTag] is exactly what was wanted — so a take that had
+     * to move from `en-SA` to `en-US` says which, rather than failing or
+     * silently running somewhere else.
      */
     data class OnDevice(
         val languageTag: String,
-        val detectionUnavailable: Boolean = false,
-    ) : SpeechPlan
+        val detectionBlock: DetectionBlock = DetectionBlock.None,
+        val requestedTag: String = "",
+    ) : SpeechPlan {
+        val detectionUnavailable: Boolean get() = detectionBlock != DetectionBlock.None
+    }
 
     /**
      * Android's recognizer with detection and switching turned on. [seed] is
@@ -184,10 +268,35 @@ object SpeechLanguages {
     fun serverHint(tag: String): String? = baseLanguage(tag).takeIf { it.isNotEmpty() }
 
     /**
+     * The tag the engine will actually serve for [tag].
+     *
+     * `en-SA` is a real Android locale — an English phone in Saudi Arabia —
+     * and almost no recognition engine has a model for it. Handing it to the
+     * recognizer buys `ERROR_LANGUAGE_NOT_SUPPORTED` at best and, on an engine
+     * that shrugs and picks its own, a transcript in a language nobody asked
+     * for. So the region is dropped onto a variant the engine did list.
+     *
+     * Only within the same base language: there is no honest fallback from a
+     * language the engine simply does not have, and [supported] being empty
+     * means the engine said nothing, which is not permission to guess.
+     */
+    fun supportedTag(tag: String, supported: List<String>): String {
+        val clean = normalizeTag(tag)
+        if (clean.isEmpty()) return clean
+        val available = supported.mapNotNull { normalizeTag(it).takeIf(String::isNotEmpty) }
+        if (available.isEmpty()) return clean
+        available.firstOrNull { it.equals(clean, ignoreCase = true) }?.let { return it }
+        available.firstOrNull { baseLanguage(it) == baseLanguage(clean) }?.let { return it }
+        return clean
+    }
+
+    /**
      * Where this take runs. [inputMode] is Settings → Voice input, [choice] the
      * per-profile language preference, [appLanguageTag] the language on screen,
      * [recognizerAvailable] whether this device has on-device recognition at
-     * all, and [detection] what its engine reported about detecting.
+     * all, [detection] what its engine reported about detecting, and
+     * [supported] every language that engine listed — used to move a tag it
+     * cannot serve onto one it can.
      */
     fun plan(
         inputMode: String,
@@ -195,6 +304,7 @@ object SpeechLanguages {
         appLanguageTag: String,
         recognizerAvailable: Boolean,
         detection: DetectionSupport = DetectionSupport(),
+        supported: List<String> = emptyList(),
     ): SpeechPlan {
         val clean = normalize(choice)
         // Core Hub is the deliberate alternative, and the only path left on a
@@ -203,15 +313,19 @@ object SpeechLanguages {
             val hint = if (clean == AUTOMATIC) null else serverHint(deviceTag(clean, appLanguageTag))
             return SpeechPlan.OnServer(hint)
         }
-        if (clean == AUTOMATIC) {
-            if (!detection.usable) {
-                // No audio is sent anywhere for this; the take simply runs in
-                // the app's language and the caller says detection is off.
-                return SpeechPlan.OnDevice(normalizeTag(appLanguageTag), detectionUnavailable = true)
-            }
+        if (clean == AUTOMATIC && detection.usable) {
             return SpeechPlan.Detect(seed = seedFor(appLanguageTag, detection.allowed), allowed = detection.allowed)
         }
-        return SpeechPlan.OnDevice(deviceTag(clean, appLanguageTag))
+        // Either a named language, or automatic on a device that cannot do it:
+        // no audio is sent anywhere, the take runs in one language, and the
+        // caller is handed everything it needs to say which and why.
+        val wanted = deviceTag(clean, appLanguageTag)
+        val served = supportedTag(wanted, supported)
+        return SpeechPlan.OnDevice(
+            languageTag = served,
+            detectionBlock = if (clean == AUTOMATIC) detection.block else DetectionBlock.None,
+            requestedTag = if (served.equals(wanted, ignoreCase = true)) "" else wanted,
+        )
     }
 
     /**

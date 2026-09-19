@@ -118,6 +118,29 @@ class Store(context: Context) {
             .apply()
     }
 
+    /**
+     * How many dictation takes this profile has started, and whether the mic
+     * long-press has ever been used.
+     *
+     * Only [DictationHint] reads them, and only to decide whether to mention
+     * the gesture again. Per profile like every other voice preference, so a
+     * profile the owner never dictates in does not spend another profile's
+     * budget of reminders.
+     */
+    fun dictationCount(profile: String): Int =
+        prefs.getInt("$KEY_DICTATION_COUNT_PREFIX${profile.ifBlank { "default" }}", 0)
+
+    fun setDictationCount(profile: String, value: Int) {
+        prefs.edit().putInt("$KEY_DICTATION_COUNT_PREFIX${profile.ifBlank { "default" }}", value.coerceAtLeast(0)).apply()
+    }
+
+    fun dictationLongPressUsed(profile: String): Boolean =
+        prefs.getBoolean("$KEY_DICTATION_LONG_PRESS_PREFIX${profile.ifBlank { "default" }}", false)
+
+    fun setDictationLongPressUsed(profile: String, value: Boolean) {
+        prefs.edit().putBoolean("$KEY_DICTATION_LONG_PRESS_PREFIX${profile.ifBlank { "default" }}", value).apply()
+    }
+
     fun sessionFor(profile: String): String =
         prefs.getString(sessionKey(profile), "").orEmpty()
 
@@ -210,6 +233,8 @@ class Store(context: Context) {
         private const val KEY_VOICE_INPUT = "voice_input"
         private const val KEY_VOICE_OUTPUT_PREFIX = "voice_output_"
         private const val KEY_SPEECH_LANGUAGE_PREFIX = "speech_language_"
+        private const val KEY_DICTATION_COUNT_PREFIX = "dictation_count_"
+        private const val KEY_DICTATION_LONG_PRESS_PREFIX = "dictation_long_press_"
         private const val KEY_PROFILE = "profile"
         private const val KEY_SESSION_PREFIX = "session_"
         private const val KEY_REASONING = "reasoning_effort"

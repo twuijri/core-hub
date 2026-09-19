@@ -1108,12 +1108,29 @@
     <string name="speech_language_follow_app_note">Dictate in %1$s, the language the app is showing</string>
     <string name="speech_language_automatic">Detect automatically</string>
     <string name="speech_language_automatic_note">The phone\'s own speech engine works out the language and may switch mid-sentence between %1$s. Nothing extra is sent to Core Hub.</string>
-    <string name="speech_language_automatic_unavailable">This device\'s speech engine cannot detect the language; Android 14 or later and an engine that reports support are needed</string>
     <string name="speech_language_confirmed">Supported by this device</string>
     <string name="speech_language_unconfirmed">Not confirmed by this device</string>
     <string name="speech_language_unconfirmed_all">This device did not report the languages it supports, so the list below is a guess; a language it cannot hear will report an error.</string>
     <string name="speech_language_server_note">Voice input is set to the Core Hub server. The server transcribes with the language stored for the profile\'s STT provider in Studio, so this choice only applies to dictation on the device.</string>
-    <string name="notice_speech_detection_unavailable">This device cannot detect the dictation language, so it is listening in %1$s. Pick a language in Settings, or switch voice input to the Core Hub server.</string>
+    <!-- What the app found out about automatic detection on this device. Every
+         one of these is something the phone or its speech engine reported. The
+         Android release (%1$s) and API level (%2$d) are passed to all of them so
+         a caller need not know which one names the platform. -->
+    <string name="speech_detect_on">Automatic detection is active on this device</string>
+    <string name="speech_detect_off_pending">This device has not answered yet about automatic detection</string>
+    <string name="speech_detect_off_platform">Detection needs Android 14 or later; this phone reports Android %1$s (API %2$d)</string>
+    <string name="speech_detect_off_unknown">This phone\'s speech engine did not answer when asked which languages it has</string>
+    <string name="speech_detect_off_engine">This phone\'s speech engine refused a request that asked it to detect the language</string>
+    <string name="speech_detect_off_models">Fewer than two of your languages have a speech model installed on this phone</string>
+    <string name="notice_speech_detect_off">Automatic detection did not run, so this text was transcribed as %1$s. %2$s. Long-press the microphone to pick a language.</string>
+    <string name="notice_speech_detect_silent">The engine was asked to detect the language but never named one, so this text was transcribed as %1$s. Long-press the microphone to pick a language.</string>
+    <string name="notice_speech_language_fallback">This phone\'s speech engine has no model for %1$s, so this text was transcribed as %2$s.</string>
+    <string name="composer_take_detect_off">Not detecting — listening in %1$s (%2$s)</string>
+    <string name="composer_take_detecting_among">Detecting the language between %1$s</string>
+    <string name="composer_take_fallback">%1$s is not available here — listening in %2$s</string>
+    <string name="composer_dictation_warning_dismiss">Dismiss the dictation language warning</string>
+    <string name="composer_dictation_hint">Long-press the microphone to change the dictation language</string>
+    <string name="composer_dictation_hint_dismiss">Dismiss the hint</string>
     <string name="composer_take_language">Listening in %1$s</string>
     <string name="composer_take_detecting">Detecting the language</string>
     <string name="composer_take_detected">Detected %1$s</string>

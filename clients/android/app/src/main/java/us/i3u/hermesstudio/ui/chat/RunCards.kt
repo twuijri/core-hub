@@ -45,6 +45,7 @@ import us.i3u.hermesstudio.CompressionStatus
 import us.i3u.hermesstudio.LocationRequest
 import us.i3u.hermesstudio.PendingRunAction
 import us.i3u.hermesstudio.QueuedRun
+import us.i3u.hermesstudio.ContentDirectionBox
 import us.i3u.hermesstudio.R
 import us.i3u.hermesstudio.RequiredAction
 import us.i3u.hermesstudio.ui.theme.CoreHub
@@ -102,20 +103,24 @@ fun RunActionCard(action: PendingRunAction, onRespond: (String) -> Unit) {
                         action.options.forEach { choice -> ChoicePill(label = choice, primary = answer == choice) { answer = choice } }
                     }
                 }
-                OutlinedTextField(
-                    value = answer,
-                    onValueChange = { answer = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text(stringResource(R.string.run_clarification_answer), color = palette.textMuted) },
-                    textStyle = CoreHubTextStyles.input.copy(color = palette.textPrimary, textDirection = TextDirection.Content),
-                    shape = RoundedCornerShape(CoreHubTokens.Radius.bubble),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = palette.accent,
-                        unfocusedBorderColor = palette.inputBorder,
-                        cursorColor = palette.accent,
-                    ),
-                    maxLines = 4,
-                )
+                // The answer is the owner's own text: its direction comes from
+                // what was typed, not from the interface language.
+                ContentDirectionBox(answer) {
+                    OutlinedTextField(
+                        value = answer,
+                        onValueChange = { answer = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text(stringResource(R.string.run_clarification_answer), color = palette.textMuted) },
+                        textStyle = CoreHubTextStyles.input.copy(color = palette.textPrimary, textDirection = TextDirection.Content),
+                        shape = RoundedCornerShape(CoreHubTokens.Radius.bubble),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = palette.accent,
+                            unfocusedBorderColor = palette.inputBorder,
+                            cursorColor = palette.accent,
+                        ),
+                        maxLines = 4,
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                     ChoicePill(label = stringResource(R.string.action_send), primary = true, enabled = answer.isNotBlank()) { onRespond(answer.trim()) }
                 }

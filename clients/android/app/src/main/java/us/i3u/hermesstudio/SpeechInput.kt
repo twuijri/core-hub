@@ -164,23 +164,68 @@ class SpeechInput(private val context: Context) {
          * option is the [RecognizerIntent.ACTION_GET_LANGUAGE_DETAILS] ordered
          * broadcast, which reports one flat list.
          *
+         * On Android 14 and later the first query carries the language
+         * detection extras, so [RecognizerLanguages.detectionAccepted] records
+         * whether this engine tolerates being asked to detect at all. An
+         * engine that refuses is asked again without them, because its
+         * language list is still worth having.
+         *
          * [onResult] always runs, on the main thread, even when nothing
          * answered: [RecognizerLanguages.answered] is then false and the caller
          * offers its curated guess instead of inventing support.
          */
         fun queryLanguages(context: Context, onResult: (RecognizerLanguages) -> Unit) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && isAvailable(context)) {
-                querySupport(context) { support ->
-                    if (support != null) onResult(support) else queryLanguageDetails(context, onResult)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !isAvailable(context)) {
+                queryLanguageDetails(context, onResult)
+                return
+            }
+            // Android 14 and later: ask first with the detection extras
+            // attached, because "this engine can recognise speech" and "this
+            // engine will accept an intent that asks it to detect the
+            // language" are different questions and only the second one
+            // justifies showing "detecting" on the recording strip.
+            if (Build.VERSION.SDK_INT >= SpeechLanguages.DETECTION_SDK) {
+                querySupport(context, detectAmong = detectionProbeLanguages(context)) { detecting ->
+                    if (detecting != null) {
+                        onResult(detecting.copy(detectionAccepted = true))
+                        return@querySupport
+                    }
+                    // It refused that intent. It may still answer a plain one,
+                    // and the language list is worth having either way.
+                    querySupport(context, detectAmong = emptyList()) { plain ->
+                        if (plain != null) onResult(plain) else queryLanguageDetails(context, onResult)
+                    }
                 }
                 return
             }
-            queryLanguageDetails(context, onResult)
+            querySupport(context, detectAmong = emptyList()) { support ->
+                if (support != null) onResult(support) else queryLanguageDetails(context, onResult)
+            }
+        }
+
+        /**
+         * Two languages for the detection probe, which needs at least two to
+         * carry the extras at all. The phone's own locale and US English are
+         * the safest pair to ask about; this is a question, not a claim, and
+         * the answer only decides whether the engine tolerates the extras.
+         */
+        private fun detectionProbeLanguages(context: Context): List<String> {
+            val device = SpeechLanguages.normalizeTag(Locale.getDefault().toLanguageTag())
+            val app = SpeechLanguages.normalizeTag(
+                runCatching { context.resources.configuration.locales[0].toLanguageTag() }.getOrDefault(""),
+            )
+            val probe = LinkedHashSet<String>()
+            listOf(device, app, "en-US", "ar-SA").forEach { if (it.isNotEmpty()) probe.add(it) }
+            return probe.take(2).toList()
         }
 
         /** `SpeechRecognizer.checkRecognitionSupport`, Android 13 and later. */
         @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-        private fun querySupport(context: Context, onResult: (RecognizerLanguages?) -> Unit) {
+        private fun querySupport(
+            context: Context,
+            detectAmong: List<String>,
+            onResult: (RecognizerLanguages?) -> Unit,
+        ) {
             val recognizer = runCatching { SpeechRecognizer.createSpeechRecognizer(context) }.getOrNull()
             if (recognizer == null) {
                 onResult(null)
@@ -193,7 +238,7 @@ class SpeechInput(private val context: Context) {
                 runCatching { recognizer.destroy() }
                 onResult(result)
             }
-            val probe = recognitionIntent(context, Locale.getDefault().toLanguageTag())
+            val probe = recognitionIntent(context, Locale.getDefault().toLanguageTag(), detectAmong)
             runCatching {
                 recognizer.checkRecognitionSupport(
                     probe,
