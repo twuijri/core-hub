@@ -3,7 +3,7 @@
   "info": {
     "title": "Ekko Studio API",
     "description": "Ekko Studio API — chat sessions, scheduled jobs, platform channels, model management, skills, memory, logs, file browser, group chat, and terminal.",
-    "version": "0.7.21"
+    "version": "1.0.2"
   },
   "servers": [
     {
@@ -191,6 +191,10 @@
     {
       "name": "App Relay",
       "description": "Mobile App cloud relay route and connection management"
+    },
+    {
+      "name": "App Updates",
+      "description": "Mobile in-app update check, artifact download, and update source settings"
     },
     {
       "name": "Devices",
@@ -622,6 +626,32 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/auth/app-refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Create app-refresh",
+        "description": "POST /api/auth/app-refresh",
+        "operationId": "appRefresh",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           }
         }
       }
@@ -4109,6 +4139,32 @@
         }
       }
     },
+    "/api/devices/bindings": {
+      "get": {
+        "tags": [
+          "Devices"
+        ],
+        "summary": "Get bindings",
+        "description": "GET /api/devices/bindings",
+        "operationId": "listDeviceBindingsController",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
     "/api/devices/link-info": {
       "get": {
         "tags": [
@@ -4451,6 +4507,112 @@
                     "type": "string"
                   },
                   "cwd": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices/peer-connections/{connectionId}/screen": {
+      "get": {
+        "tags": [
+          "Devices"
+        ],
+        "summary": "Get screen",
+        "description": "GET /api/devices/peer-connections/:connectionId/screen",
+        "operationId": "capturePeerScreen",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "parameters": [
+          {
+            "name": "connectionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "display_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "string"
+              ]
+            }
+          },
+          {
+            "name": "max_width",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/devices/peer-connections/{connectionId}/screen/action": {
+      "post": {
+        "tags": [
+          "Devices"
+        ],
+        "summary": "Create action",
+        "description": "POST /api/devices/peer-connections/:connectionId/screen/action",
+        "operationId": "performPeerScreenAction",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "parameters": [
+          {
+            "name": "connectionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
                     "type": "string"
                   }
                 }
@@ -4829,6 +4991,42 @@
         "summary": "Create approve",
         "description": "POST /api/devices/:id/approve",
         "operationId": "approveDevice",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/devices/{id}/bindings": {
+      "put": {
+        "tags": [
+          "Devices"
+        ],
+        "summary": "Update bindings",
+        "description": "PUT /api/devices/:id/bindings",
+        "operationId": "updateDeviceBindingController",
         "security": [
           {
             "BearerAuth": []
@@ -13035,6 +13233,178 @@
         ]
       }
     },
+    "/api/studio/app-updates/mobile": {
+      "get": {
+        "tags": [
+          "App Updates"
+        ],
+        "summary": "Get mobile",
+        "description": "GET /api/studio/app-updates/mobile",
+        "operationId": "checkMobile",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/studio/app-updates/mobile/download": {
+      "get": {
+        "tags": [
+          "App Updates"
+        ],
+        "summary": "Get download",
+        "description": "GET /api/studio/app-updates/mobile/download",
+        "operationId": "downloadMobile",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ios"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "/api/studio/app-updates/settings": {
+      "get": {
+        "tags": [
+          "App Updates"
+        ],
+        "summary": "Get settings",
+        "description": "GET /api/studio/app-updates/settings",
+        "operationId": "getSettings",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "App Updates"
+        ],
+        "summary": "Update settings",
+        "description": "PUT /api/studio/app-updates/settings",
+        "operationId": "saveSettings",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "githubToken": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "releaseTag": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "repository": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/studio/app-updates/settings/token": {
+      "delete": {
+        "tags": [
+          "App Updates"
+        ],
+        "summary": "Delete token",
+        "description": "DELETE /api/studio/app-updates/settings/token",
+        "operationId": "deleteToken",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
     "/api/studio/app-uploads": {
       "post": {
         "tags": [
@@ -13521,6 +13891,17 @@
           }
         },
         "parameters": [
+          {
+            "name": "device",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "string"
+              ]
+            }
+          },
           {
             "name": "name",
             "in": "query",

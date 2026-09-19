@@ -616,6 +616,19 @@ export const APP_AUTHORIZATION_CODES_INDEXES = {
   idx_app_authorization_codes_created_by_user: 'CREATE INDEX IF NOT EXISTS idx_app_authorization_codes_created_by_user ON app_authorization_codes(created_by_user_id)',
 }
 
+// Owner-configured source for mobile in-app updates. One row per update
+// channel; the GitHub token lives in secrets_json and is never returned to a
+// client, exactly like the STT/TTS provider secrets below.
+export const APP_UPDATE_SETTINGS_TABLE = 'app_update_settings'
+
+export const APP_UPDATE_SETTINGS_SCHEMA: Record<string, string> = {
+  channel: "TEXT PRIMARY KEY DEFAULT 'test'",
+  settings_json: `TEXT NOT NULL DEFAULT '{}'`,
+  secrets_json: `TEXT NOT NULL DEFAULT '{}'`,
+  created_at: `INTEGER NOT NULL DEFAULT (strftime('%s','now'))`,
+  updated_at: `INTEGER NOT NULL DEFAULT (strftime('%s','now'))`,
+}
+
 export const STT_PROVIDER_SETTINGS_TABLE = 'stt_provider_settings'
 
 export const STT_PROVIDER_SETTINGS_SCHEMA: Record<string, string> = {
@@ -1621,6 +1634,9 @@ export function initAllHermesTables(): void {
     syncTable(APP_AUTHORIZATION_CODES_TABLE, APP_AUTHORIZATION_CODES_SCHEMA, {
       indexes: APP_AUTHORIZATION_CODES_INDEXES,
     })
+
+    // Mobile in-app update source (repository, release tag, GitHub token)
+    syncTable(APP_UPDATE_SETTINGS_TABLE, APP_UPDATE_SETTINGS_SCHEMA)
 
     syncTable(STT_PROVIDER_SETTINGS_TABLE, STT_PROVIDER_SETTINGS_SCHEMA, {
       indexes: STT_PROVIDER_SETTINGS_INDEXES,

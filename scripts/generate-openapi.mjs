@@ -92,6 +92,7 @@ const tagMappings = {
   'modules/studio/routes/auth.ts': { name: 'Auth', description: 'Authentication management' },
   'modules/studio/routes/app-connections.ts': { name: 'App Connections', description: 'Mobile App authorization and connection management' },
   'modules/studio/routes/app-relay.ts': { name: 'App Relay', description: 'Mobile App cloud relay route and connection management' },
+  'modules/studio/routes/app-updates.ts': { name: 'App Updates', description: 'Mobile in-app update check, artifact download, and update source settings' },
   'modules/studio/routes/devices.ts': { name: 'Devices', description: 'Device pairing and LAN peer operations' },
   'modules/studio/routes/mcu-devices.ts': { name: 'MCU Devices', description: 'Microcontroller device management' },
   'modules/studio/routes/mcu-firmware.ts': { name: 'MCU Firmware', description: 'Microcontroller firmware distribution' },

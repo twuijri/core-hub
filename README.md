@@ -132,6 +132,8 @@ npm run build             # client, server, and type checks
 - [docs/TEAM-RULES.md](./docs/TEAM-RULES.md) — contribution policy (Arabic): task branches, change
   records under `docs/changes/`, the `test` integration branch, and owner-only merges to `main`.
 - [docs/KNOWLEDGE-WORKFLOW.md](./docs/KNOWLEDGE-WORKFLOW.md) — durable decisions and code knowledge.
+- [docs/mobile-app-updates.md](./docs/mobile-app-updates.md) — server-side in-app updates for the
+  Android test build: endpoints, error codes, and the update source settings.
 - [docs/PERSONAL-FORK.md](./docs/PERSONAL-FORK.md) — fork rules and the upstream update procedure.
 
 Updates from upstream are merged through a review branch with a license guard

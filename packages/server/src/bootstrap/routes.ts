@@ -46,6 +46,7 @@ import { minimaxAuthRoutes } from '../modules/hermes/routes/minimax-auth'
 import { weixinRoutes } from '../modules/hermes/routes/weixin'
 import { fileRoutes } from '../modules/studio/routes/files'
 import { downloadRoutes } from '../modules/studio/routes/download'
+import { appUpdateRoutes } from '../modules/studio/routes/app-updates'
 import { jobRoutes } from '../modules/hermes/routes/jobs'
 import { cronHistoryRoutes } from '../modules/hermes/routes/cron-history'
 import { kanbanRoutes } from '../modules/hermes/routes/kanban'
@@ -136,6 +137,7 @@ export function registerRoutes(app: any, authMiddleware: Array<(ctx: Context, ne
   app.use(groupChatRoutes.routes())
   app.use(fileRoutes.routes())
   app.use(downloadRoutes.routes())
+  app.use(appUpdateRoutes.routes())   // Mobile in-app updates; before the proxy catch-all
   app.use(jobRoutes.routes())
   app.use(cronHistoryRoutes.routes())
   app.use(kanbanRoutes.routes())

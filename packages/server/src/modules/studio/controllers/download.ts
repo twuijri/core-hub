@@ -10,6 +10,7 @@ import {
 } from '../services/files/file-provider'
 import { getActiveProfileName } from '../public/profile-config'
 import { createAppImagePreview } from '../services/files/app-image-preview'
+import { parseByteRange } from '../services/files/http-range'
 import { getLanPeerSocketManager } from '../services/network/lan-peer-socket'
 import { isDeviceAllowedForProfile } from '../services/devices/device-bindings'
 
@@ -73,23 +74,6 @@ function isStreamableMedia(mime: string): boolean {
   return mime.startsWith('video/') || mime.startsWith('audio/')
 }
 
-function parseRange(header: string | undefined, size: number): { start: number; end: number } | null | 'invalid' {
-  if (!header) return null
-  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim())
-  if (!match || (match[1] === '' && match[2] === '')) return 'invalid'
-  let start = match[1] === '' ? NaN : Number(match[1])
-  let end = match[2] === '' ? size - 1 : Number(match[2])
-  if (Number.isNaN(start)) {
-    // suffix range: last N bytes
-    const suffix = Number(match[2])
-    if (!Number.isFinite(suffix) || suffix <= 0) return 'invalid'
-    start = Math.max(0, size - suffix)
-    end = size - 1
-  }
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start >= size) return 'invalid'
-  return { start, end: Math.min(end, size - 1) }
-}
-
 /**
  * Local files are streamed straight from disk with HTTP range support instead
  * of being buffered: media players need 206 responses to seek and to start
@@ -105,7 +89,7 @@ async function streamLocalFile(ctx: any, filePath: string, name: string, mime: s
   ctx.set('Accept-Ranges', 'bytes')
   ctx.set('Cache-Control', 'no-cache')
   ctx.set('X-Content-Type-Options', 'nosniff')
-  const range = parseRange(ctx.get('range'), info.size)
+  const range = parseByteRange(ctx.get('range'), info.size)
   if (range === 'invalid') {
     ctx.status = 416
     ctx.set('Content-Range', `bytes */${info.size}`)
