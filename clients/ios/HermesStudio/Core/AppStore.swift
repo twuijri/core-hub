@@ -32,6 +32,8 @@ final class AppStore: ObservableObject {
     @Published var selectedRoom: Room?
     @Published var selectedWorkflow: WorkflowItem?
     @Published var shellDestination: ShellDestination?
+    /// Room sheets requested from the drawer (create / join by code).
+    @Published var roomAction: RoomAction?
     /// Bumped whenever a session is created, renamed, archived or deleted so
     /// the drawer list reloads.
     @Published private(set) var sessionListVersion = 0
@@ -50,6 +52,7 @@ final class AppStore: ObservableObject {
     let api: APIClient
 
     enum Phase { case launching, signedOut, signedIn }
+    enum RoomAction: String, Identifiable { case create, join; var id: String { rawValue } }
     enum DrawerPage { case navigation, settings }
 
     var isSuperAdmin: Bool { currentUser?.isSuperAdmin == true }
@@ -311,6 +314,9 @@ final class AppStore: ObservableObject {
         selectedRoom = room
         drawerOpen = false
     }
+
+    /// Rooms changed (created, renamed, deleted): the drawer list reloads.
+    func roomsChanged() { sessionListVersion &+= 1 }
 
     func open(_ workflow: WorkflowItem) {
         shellDestination = nil

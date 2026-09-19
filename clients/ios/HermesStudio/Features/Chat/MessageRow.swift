@@ -16,6 +16,10 @@ struct MessageRowContext {
     let onFork: (ChatLine) -> Void
     /// Approval choice or clarification answer.
     let onRespond: (ChatInteraction, String) -> Void
+    /// Group rooms: the avatar of the agent that produced a given line.
+    var agentFor: ((ChatLine) -> AgentAvatarAsset)? = nil
+    /// Group rooms: files resolve through `/rooms/{roomId}/attachments`.
+    var roomID: String? = nil
 
     var userMaxWidth: CGFloat { max(120, availableWidth * CoreHubTokens.Layout.userBubbleMaxFraction) }
     var assistantMaxWidth: CGFloat { max(160, availableWidth * CoreHubTokens.Layout.assistantBubbleMaxFraction) }
@@ -72,10 +76,11 @@ struct AssistantMessageRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            AgentAvatarView(asset: context.agent, size: CoreHubTokens.Layout.assistantAvatar, streaming: line.isStreaming)
+            let asset = context.agentFor?(line) ?? context.agent
+            AgentAvatarView(asset: asset, size: CoreHubTokens.Layout.assistantAvatar, streaming: line.isStreaming)
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 8) {
-                Text(line.sender?.nilIfEmpty ?? context.agent.label)
+                Text(line.sender?.nilIfEmpty ?? asset.label)
                     .font(CoreHubTokens.Typography.font(CoreHubTokens.Typography.author, weight: .medium))
                     .foregroundStyle(CoreHubTokens.Palette.textSecondary)
                 AssistantBubbleBody(line: line, context: context)
@@ -217,7 +222,7 @@ struct MessageFiles: View {
 
     var body: some View {
         ForEach(files) { link in
-            MediaAttachmentView(link: link, api: context.api, profile: context.session.profile)
+            MediaAttachmentView(link: link, api: context.api, profile: context.session.profile, roomID: context.roomID)
         }
     }
 }

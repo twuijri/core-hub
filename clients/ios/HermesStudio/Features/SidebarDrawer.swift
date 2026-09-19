@@ -155,18 +155,24 @@ struct DrawerRoomList: View {
                 if !loading && rooms.isEmpty { Text("No groups").font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.textMuted) }
                 ForEach(rooms) { room in
                     Button { store.open(room) } label: {
-                        HStack(spacing: 8) {
-                            CoreHubIconView(icon: .group, size: 16).foregroundStyle(CoreHubTokens.Palette.textSecondary)
-                            DirectionalText(text: room.name, font: CoreHubTokens.Typography.sessionTitleFont)
-                            Text("\(room.agentCount)").font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.textMuted)
-                        }
-                        .padding(.vertical, 6)
-                        .contentShape(Rectangle())
+                        RoomRowView(room: room, selected: store.selectedRoom?.id == room.id, time: SessionTimeFormatter.string(for: room.updatedAt ?? "", locale: store.locale))
                     }
                     .buttonStyle(.plain)
-                    .listRowBackground(store.selectedRoom?.id == room.id ? CoreHubTokens.Palette.selected : Color.clear)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
-            } header: { GroupHeaderLabel(title: String(localized: "Group Chat"), count: rooms.count) }
+            } header: {
+                HStack(spacing: 4) {
+                    GroupHeaderLabel(title: String(localized: "Group Chat"), count: rooms.count)
+                    Button { store.roomAction = .create } label: { CoreHubIconView(icon: .plus, size: 14).foregroundStyle(CoreHubTokens.Palette.textMuted).frame(width: 24, height: 24).contentShape(Rectangle()) }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("New room")
+                    Button { store.roomAction = .join } label: { Image(systemName: "link").font(.system(size: 12)).foregroundStyle(CoreHubTokens.Palette.textMuted).frame(width: 24, height: 24).contentShape(Rectangle()) }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Join by code")
+                }
+            }
         }
         .drawerListStyle()
         .task(id: store.sessionListVersion) { await load() }

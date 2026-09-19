@@ -25,18 +25,32 @@ struct MediaAttachmentView: View {
     let link: DownloadLink
     let api: APIClient
     let profile: String
+    /// Group-room files are served by `/rooms/{roomId}/attachments/{file}`.
+    var roomID: String? = nil
 
     private var fileName: String { ChatFiles.fileName(for: link) }
+
+    private var asset: AVURLAsset? {
+        if let roomID, let url = try? api.roomAttachmentRequest(roomID: roomID, path: link.path, name: fileName).url {
+            return AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": api.bearerHeaders])
+        }
+        return try? api.mediaAsset(path: link.path, name: fileName, profile: profile)
+    }
+
+    private func download() async throws -> URL {
+        if let roomID { return try await api.downloadRoomAttachment(roomID: roomID, path: link.path, name: fileName) }
+        return try await api.downloadFile(path: link.path, name: fileName, profile: profile)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             switch link.mediaKind {
             case .video:
-                InlineVideoPlayer(asset: try? api.mediaAsset(path: link.path, name: fileName, profile: profile), title: link.label)
+                InlineVideoPlayer(asset: asset, title: link.label)
             case .audio:
-                InlineAudioPlayer(asset: try? api.mediaAsset(path: link.path, name: fileName, profile: profile), title: link.label)
+                InlineAudioPlayer(asset: asset, title: link.label)
             case .image, .file:
-                FileDownloadCard(link: link, fetch: { try await api.downloadFile(path: link.path, name: fileName, profile: profile) })
+                FileDownloadCard(link: link, fetch: { try await download() })
             }
             if link.isDeviceFile { DeviceFileBadge() }
         }
