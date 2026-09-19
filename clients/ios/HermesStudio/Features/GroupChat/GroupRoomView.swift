@@ -43,6 +43,9 @@ struct GroupRoomView: View {
         .task(id: "\(room.id)#\(connectionGeneration)") { await runStream() }
         .onChange(of: scenePhase) { _, phase in if phase == .active && !state.connected { connectionGeneration += 1 } }
         .onChange(of: input) { _, value in signalTyping(!value.isEmpty) }
+        // The drawer opens over the composer: drop focus with it so the
+        // keyboard does not stay up covering the drawer.
+        .onChange(of: store.drawerOpen) { _, open in if open { inputFocused = false } }
     }
 
     // MARK: - Transcript

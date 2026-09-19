@@ -307,24 +307,47 @@ final class ChatSocket: @unchecked Sendable {
     private var connection: SocketIOConnection?
     private var sessionID = ""
     private(set) var isConnected = false
+    /// Whether the server already knows this session id.
+    ///
+    /// Every per-session event (`app.resume`, `abort`, the queue events…)
+    /// is answered with `run.failed: Session not found` when it does not,
+    /// which is the case for a brand-new chat — its id is minted on the
+    /// phone and only the first `run` persists it — and for a session that
+    /// was deleted on the server. `app.resume` is emitted on every connect
+    /// and on every reconnect, so sending it blind is what stacked the red
+    /// rows on Android.
+    private(set) var sessionExists = false
 
-    func abort(sessionID: String) { connection?.emit("abort", payload: ["session_id": sessionID]) }
-    func resumeApp(sessionID: String) { connection?.emit("app.resume", payload: ["session_id": sessionID, "id": Self.cachedResumeID(sessionID)]) }
+    /// The first accepted `run` persists the session, so from then on the
+    /// per-session events are safe.
+    func markSessionExists() { sessionExists = true }
+    /// The server reported the session gone; stop talking about it.
+    func markSessionGone() { sessionExists = false }
+
+    /// Per-session events are pointless — and answered with an error —
+    /// without a live connection and a session the server knows.
+    private func emitForSession(_ event: String, _ payload: JSON) {
+        guard let id = payload["session_id"] as? String, !id.isEmpty, sessionExists else { return }
+        connection?.emit(event, payload: payload)
+    }
+
+    func abort(sessionID: String) { emitForSession("abort", ["session_id": sessionID]) }
+    func resumeApp(sessionID: String) { emitForSession("app.resume", ["session_id": sessionID, "id": Self.cachedResumeID(sessionID)]) }
     func respondToApproval(sessionID: String, approvalID: String, choice: String) {
-        connection?.emit("approval.respond", payload: ["session_id": sessionID, "approval_id": approvalID, "choice": choice])
+        emitForSession("approval.respond", ["session_id": sessionID, "approval_id": approvalID, "choice": choice])
     }
     func respondToClarification(sessionID: String, clarificationID: String, answer: String) {
-        connection?.emit("clarify.respond", payload: Self.clarificationPayload(sessionID: sessionID, clarificationID: clarificationID, answer: answer))
+        emitForSession("clarify.respond", Self.clarificationPayload(sessionID: sessionID, clarificationID: clarificationID, answer: answer))
     }
     static func clarificationPayload(sessionID: String, clarificationID: String, answer: String) -> JSON { ["session_id": sessionID, "clarify_id": clarificationID, "response": answer] }
-    func cancelQueued(sessionID: String, queueID: String) { connection?.emit("cancel_queued_run", payload: ["session_id": sessionID, "queue_id": queueID]) }
-    func insertQueued(sessionID: String, queueID: String) { connection?.emit("insert_queued_run", payload: ["session_id": sessionID, "queue_id": queueID]) }
-    func steerQueued(sessionID: String, queueID: String) { connection?.emit("steer_queued_run", payload: ["session_id": sessionID, "queue_id": queueID]) }
+    func cancelQueued(sessionID: String, queueID: String) { emitForSession("cancel_queued_run", ["session_id": sessionID, "queue_id": queueID]) }
+    func insertQueued(sessionID: String, queueID: String) { emitForSession("insert_queued_run", ["session_id": sessionID, "queue_id": queueID]) }
+    func steerQueued(sessionID: String, queueID: String) { emitForSession("steer_queued_run", ["session_id": sessionID, "queue_id": queueID]) }
     func respondToLocation(_ payload: JSON) { connection?.emit("location.respond", payload: payload) }
     /// Calendar / reminder / health requests are answered `denied` until the
     /// native integrations land (see docs/mobile/PLAN.md).
     func denyDeviceRequest(kind: String, sessionID: String, requestID: String) {
-        connection?.emit("\(kind).respond", payload: ["session_id": sessionID, "\(kind)_request_id": requestID, "status": "denied"])
+        emitForSession("\(kind).respond", ["session_id": sessionID, "\(kind)_request_id": requestID, "status": "denied"])
     }
 
     /// Emits `run`. Returns false when the socket is not connected so the
@@ -332,7 +355,11 @@ final class ChatSocket: @unchecked Sendable {
     @discardableResult
     func run(_ payload: JSON) -> Bool {
         guard let connection, connection.isConnected else { return false }
+        guard let id = payload["session_id"] as? String, !id.isEmpty else { return false }
         connection.emit("run", payload: payload)
+        // `run` is the one event that creates the session when the id is
+        // unknown, so after it the session exists.
+        sessionExists = true
         return true
     }
 
@@ -345,9 +372,10 @@ final class ChatSocket: @unchecked Sendable {
     func close() { connection?.close(); connection = nil; isConnected = false }
 
     /// Opens the connection and streams every session event until `close()`.
-    func open(baseURL: String, token: String, profile: String, sessionID: String) -> AsyncStream<LiveRunEvent> {
+    func open(baseURL: String, token: String, profile: String, sessionID: String, sessionExists: Bool) -> AsyncStream<LiveRunEvent> {
         close()
         self.sessionID = sessionID
+        self.sessionExists = sessionExists && !sessionID.isEmpty
         return AsyncStream { continuation in
             let live = SocketIOConnection(baseURL: baseURL, token: token, namespace: "/chat-run", profile: profile, platform: "ios")
             self.connection = live
@@ -371,7 +399,11 @@ final class ChatSocket: @unchecked Sendable {
                     retryTask.attempt = 0
                     self?.isConnected = true
                     continuation.yield(.connected)
-                    live.emit("app.resume", payload: ["session_id": sessionID, "id": Self.cachedResumeID(sessionID)])
+                    // Resuming a session the server never stored answers
+                    // `run.failed: Session not found`, once per reconnect.
+                    if self?.sessionExists == true {
+                        live.emit("app.resume", payload: ["session_id": sessionID, "id": Self.cachedResumeID(sessionID)])
+                    }
                     return
                 }
                 if packet == "__disconnected__" || packet.hasPrefix("__error__:") {

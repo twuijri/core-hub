@@ -25,6 +25,10 @@ struct ConversationView: View {
     @State var contextWindow = 0
     @State var loadingContext = false
     @State var socket = ChatSocket()
+    /// Whether the server knows this session id yet; `nil` until something
+    /// proves it either way. A local draft starts unknown so no per-session
+    /// event is fired before the first run.
+    @State var sessionKnown: Bool?
     /// Bumped to reopen the socket (foreground after a long background).
     @State var connectionGeneration = 0
     @State var hasConnectedOnce = false
@@ -85,6 +89,9 @@ struct ConversationView: View {
                 Task { await reload() }
             }
         }
+        // The drawer opens over the composer: drop focus with it so the
+        // keyboard does not stay up covering the drawer.
+        .onChange(of: store.drawerOpen) { _, open in if open { inputFocused = false } }
         .onDisappear { speaker.stop(); speech.cancel(); if recorder.isRecording { _ = recorder.stop() }; voiceState = .idle }
     }
 
@@ -96,6 +103,7 @@ struct ConversationView: View {
                 ScrollView {
                     LazyVStack(spacing: 14) {
                         if loading && stream.lines.isEmpty { ProgressView().padding(.top, 40) }
+                        if stream.sessionMissing && stream.lines.isEmpty { MissingSessionNotice() }
                         if let offset = historyOffset, offset > 0 {
                             Button { Task { await loadEarlier() } } label: {
                                 HStack(spacing: 6) {
@@ -209,8 +217,17 @@ struct ConversationView: View {
 
     // MARK: - Stream
 
+    /// The server knows this id unless it is a fresh local draft or it just
+    /// told us the session is gone.
+    var sessionExistsOnServer: Bool { sessionKnown ?? !session.isLocalDraft }
+
+    private func setSessionKnown(_ known: Bool) {
+        sessionKnown = known
+        if known { socket.markSessionExists() } else { socket.markSessionGone() }
+    }
+
     private func runStream() async {
-        for await event in socket.open(baseURL: store.baseURL, token: store.token, profile: session.profile, sessionID: session.id) {
+        for await event in socket.open(baseURL: store.baseURL, token: store.token, profile: session.profile, sessionID: session.id, sessionExists: sessionExistsOnServer) {
             handle(event)
         }
     }
@@ -231,7 +248,16 @@ struct ConversationView: View {
         case let .deviceRequested(kind, id):
             socket.denyDeviceRequest(kind: kind, sessionID: session.id, requestID: id)
         case let .failed(message, _):
-            store.errorMessage = message
+            if ChatRunReducer.isSessionGone(message) {
+                // Not an error the user can act on: the stored id points at a
+                // session the server no longer has. Forget it, leave the
+                // neutral empty state, and let the next send create one.
+                setSessionKnown(false)
+                Preferences.setSession("", profile: session.profile)
+                store.sessionsChanged()
+            } else {
+                store.errorMessage = message
+            }
         default:
             break
         }
@@ -270,7 +296,7 @@ struct ConversationView: View {
         input = ""; uploads = []; inputFocused = false
         let payload = ChatSocket.runPayload(profile: session.profile, sessionID: session.id, input: text, attachments: files, reasoningEffort: (stream.reasoningEffort ?? store.reasoningEffort).nilIfEmpty, model: selectedModel.nilIfEmpty, provider: selectedProvider.nilIfEmpty, session: session, pushEnabled: stream.pushEnabled)
         ChatRunReducer.beginRun(&stream, text: text.isEmpty ? files.map(\.name).joined(separator: ", ") : text, attachments: files.map { ChatAttachmentRef(name: $0.name, path: $0.path, mime: $0.mime) }, sender: agentLabel)
-        if !socket.run(payload) { Task { await restFallback(text: text, files: files) } }
+        if socket.run(payload) { setSessionKnown(true) } else { Task { await restFallback(text: text, files: files) } }
     }
 
     func sendCommand(_ command: String) {
@@ -293,6 +319,7 @@ struct ConversationView: View {
     private func restFallback(text: String, files: [Upload]) async {
         do {
             let result = try await store.api.runChatREST(profile: session.profile, sessionID: session.id, input: text, attachments: files, reasoningEffort: (stream.reasoningEffort ?? store.reasoningEffort).nilIfEmpty, model: selectedModel.nilIfEmpty, provider: selectedProvider.nilIfEmpty)
+            setSessionKnown(true)
             handle(.completed(output: result.0, reasoning: result.1, interrupted: false))
         } catch {
             handle(.failed(error.localizedDescription, retryable: false))
@@ -350,25 +377,54 @@ struct ConversationView: View {
             let probe = try await store.api.messagePage(sessionID: session.id, offset: 0, limit: 1, profile: session.profile)
             let offset = MessagePaging.lastPageOffset(total: probe.total)
             let page = probe.total <= 1 ? probe : try await store.api.messagePage(sessionID: session.id, offset: offset, limit: MessagePaging.pageSize, profile: session.profile)
+            setSessionKnown(true)
+            stream.sessionMissing = false
             if !stream.isRunning {
-                stream.lines = page.messages.map(historyLine)
+                stream.lines = Message.transcriptRows(page.messages).map(historyLine)
                 stream.activeReplyID = nil
                 historyOffset = probe.total <= 1 ? 0 : offset
             }
         } catch {
             do {
                 let history = try await store.api.conversationHistory(sessionID: session.id)
+                setSessionKnown(true)
+                stream.sessionMissing = false
                 if !stream.isRunning {
-                    stream.lines = history.messages.map(historyLine)
+                    stream.lines = Message.transcriptRows(history.messages).map(historyLine)
                     stream.activeReplyID = nil
                     historyOffset = nil
                 }
                 if let tokens = history.contextTokens { stream.contextTokens = tokens }
             } catch {
+                guard !Self.isMissingSession(error) else {
+                    // The id is not on the server: a draft that has never
+                    // been sent, or a session deleted elsewhere. Stop every
+                    // per-session event and show one neutral empty state
+                    // instead of an error per attempt. A run in flight has
+                    // just created the session, so it is never demoted.
+                    if !stream.isRunning {
+                        setSessionKnown(false)
+                        stream.sessionMissing = !session.isLocalDraft
+                    }
+                    historyOffset = nil
+                    loading = false
+                    return
+                }
                 if stream.lines.isEmpty && session.title != String(localized: "New conversation") { store.errorMessage = error.localizedDescription }
             }
         }
         loading = false
+    }
+
+    /// A session the server cannot resolve: the paginated route answers 404
+    /// ("Conversation not found"), the socket "Session not found".
+    static func isMissingSession(_ error: Error) -> Bool {
+        guard let hermes = error as? HermesError else { return false }
+        switch hermes {
+        case let .http(code, detail): return code == 404 || ChatRunReducer.isSessionGone(detail)
+        case let .server(message): return ChatRunReducer.isSessionGone(message)
+        default: return false
+        }
     }
 
     /// Prepends the previous page of history (infinite scroll upwards).
@@ -378,13 +434,13 @@ struct ConversationView: View {
         defer { loadingEarlier = false }
         guard let page = await store.attempt({ try await store.api.messagePage(sessionID: session.id, offset: window.offset, limit: window.limit, profile: session.profile) }) else { return }
         let known = Set(stream.lines.compactMap(\.remoteID))
-        let earlier = page.messages.filter { !known.contains($0.id) }.map(historyLine)
+        let earlier = Message.transcriptRows(page.messages.filter { !known.contains($0.id) }).map(historyLine)
         stream.lines.insert(contentsOf: earlier, at: 0)
         historyOffset = window.offset
     }
 
-    private func historyLine(_ message: Message) -> ChatLine {
-        let kind = ChatLine.kind(forRole: message.role)
+    private func historyLine(_ row: (message: Message, kind: ChatLineKind)) -> ChatLine {
+        let (message, kind) = row
         return ChatLine(id: StableID.uuid("history:\(session.id):\(message.id)"), text: message.content, fromUser: kind == .user, timestamp: message.sentAt, sender: kind == .assistant ? agentLabel : nil, reasoning: message.reasoning, kind: kind, attachments: message.attachments, remoteID: message.id)
     }
 

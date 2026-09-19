@@ -31,6 +31,10 @@ struct ChatStreamState: Equatable {
     var pendingLocation: LocationRequest?
     var connected = false
     var connectionError: String?
+    /// The server answered that this session no longer exists. The
+    /// transcript shows one neutral empty state instead of a red row, and
+    /// the next send creates the session again.
+    var sessionMissing = false
 
     var activeIndex: Int? {
         guard let id = activeReplyID else { return nil }
@@ -183,6 +187,20 @@ enum ChatRunReducer {
         case let .workspaceDiff(summary):
             state.workspaceChanges.append(summary)
         case let .failed(message, _):
+            guard !isSessionGone(message) else {
+                // `app.resume`, `abort` and the queue events all answer with
+                // this for an id the server does not know, and they are
+                // re-sent on every reconnect. One empty state, never a stack
+                // of red rows.
+                state.sessionMissing = true
+                if let index = state.activeIndex, state.lines[index].isStreaming,
+                   state.lines[index].text.isEmpty, state.lines[index].tools.isEmpty, state.lines[index].reasoning.isEmpty {
+                    state.lines.remove(at: index)
+                    state.activeReplyID = nil
+                }
+                state.isRunning = false
+                return
+            }
             if let index = state.activeIndex, state.lines[index].isStreaming {
                 if state.lines[index].text.isEmpty && state.lines[index].tools.isEmpty {
                     state.lines[index].text = message
@@ -193,11 +211,25 @@ enum ChatRunReducer {
                     markRunningTools(&state.lines[index], as: .error)
                     state.lines.append(ChatLine(text: message, fromUser: false, timestamp: now, kind: .error))
                 }
-            } else {
+            } else if !repeatsLastError(message, in: state) {
                 state.lines.append(ChatLine(text: message, fromUser: false, timestamp: now, kind: .error))
             }
             state.isRunning = false
         }
+    }
+
+    /// The server's wording for an id it cannot resolve (`chat-run`
+    /// `requireSocketSessionAccess`, and the 404 of the session routes).
+    static func isSessionGone(_ message: String) -> Bool {
+        let text = message.lowercased()
+        return text.contains("session not found") || text.contains("conversation not found")
+    }
+
+    /// A reconnect loop can deliver the same failure again and again; one
+    /// row is enough.
+    private static func repeatsLastError(_ message: String, in state: ChatStreamState) -> Bool {
+        guard let last = state.lines.last else { return false }
+        return last.kind == .error && last.text == message
     }
 
     /// Appends the user's message and an empty streaming reply.
@@ -210,6 +242,8 @@ enum ChatRunReducer {
         state.activeReplyID = reply.id
         state.isRunning = true
         state.abortPhase = nil
+        // This run re-creates the session on the server.
+        state.sessionMissing = false
         if state.compression?.phase == "completed" { state.compression = nil }
     }
 

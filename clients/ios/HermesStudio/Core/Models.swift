@@ -50,6 +50,19 @@ extension Dictionary where Key == String, Value == Any {
         return fallback
     }
 
+    /// First key that carries a value, with an absent field and a JSON
+    /// `null` both read as `nil`. `JSONSerialization` decodes `null` as
+    /// `NSNull`, which is not `nil`, so a plain `self[key] ?? self[other]`
+    /// stops at the null and never reaches the fallback — the bug that made
+    /// every history row render blank.
+    func value(_ keys: String...) -> Any? {
+        for key in keys {
+            guard let value = self[key], !(value is NSNull) else { continue }
+            return value
+        }
+        return nil
+    }
+
     func object(_ key: String) -> JSON { self[key] as? JSON ?? [:] }
     func array(_ key: String) -> [Any] { self[key] as? [Any] ?? [] }
     func objects(_ key: String) -> [JSON] { array(key).compactMap { $0 as? JSON } }
@@ -129,6 +142,10 @@ struct SessionSummary: Identifiable, Hashable {
     var outputTokens: Int
     var estimatedCost: Double
     var parentSessionID: String
+    /// A "New chat" whose id was minted on the phone: the server learns it
+    /// only when the first run is sent, so the per-session socket events
+    /// would be answered with "Session not found" until then.
+    var isLocalDraft: Bool
 
     init(_ json: JSON, profile fallbackProfile: String = "") {
         id = json.string("id", "session_id", "sessionId")
@@ -155,9 +172,25 @@ struct SessionSummary: Identifiable, Hashable {
         outputTokens = json.int("output_tokens")
         estimatedCost = json.double("estimated_cost_usd")
         parentSessionID = json.string("parent_session_id")
+        isLocalDraft = json.bool("local_draft")
     }
 
     var agentDisplayName: String { AgentIdentity.displayName(for: agentID) }
+
+    /// A "New chat": the id is minted on the phone and the server learns it
+    /// only when the first run is sent, so the session is flagged as a local
+    /// draft until then (see `isLocalDraft`).
+    static func draft(agent: String, profile: String, model: String, id: String = UUID().uuidString) -> SessionSummary {
+        SessionSummary([
+            "id": id,
+            "title": String(localized: "New conversation"),
+            "profile": profile,
+            "agent": agent,
+            "source": AgentIdentity.canonicalID(agent) == "hermes" ? "cli" : "coding_agent",
+            "model": model,
+            "local_draft": true,
+        ], profile: profile)
+    }
 }
 
 struct SessionCategory: Identifiable, Hashable {
@@ -365,6 +398,9 @@ struct PeerConnection: Identifiable, Hashable { let id: String; var name: String
 struct Message: Identifiable, Hashable {
     let id: String
     let role: String
+    /// `display_role` first, then `role` — the web's
+    /// `msg.display_role || msg.role`.
+    let displayRole: String
     let content: String
     let reasoning: String
     let timestamp: String?
@@ -374,7 +410,10 @@ struct Message: Identifiable, Hashable {
         id = json.string("id", "message_id").nilIfEmpty ?? UUID().uuidString
         role = json.string("role", "sender")
         var files: [ChatAttachmentRef] = []
-        let raw = json["display_content"] ?? json["content"]
+        displayRole = json.string("display_role", "role", "sender")
+        // `display_content ?? content` like the web; `display_content` is
+        // nullable on the server (`mapMessageRow`).
+        let raw = json.value("display_content", "content")
         if let text = raw as? String { content = text }
         else if let blocks = raw as? [Any] {
             content = blocks.compactMap { block -> String? in
@@ -392,6 +431,31 @@ struct Message: Identifiable, Hashable {
     }
 
     var sentAt: Date? { StudioTimestamp.date(from: timestamp) }
+
+    /// The line kind the transcript draws this row as, or `nil` when the row
+    /// is not a bubble at all. Mirrors the web
+    /// (`packages/client/src/stores/hermes/chat.ts`):
+    ///
+    /// - `tool` rows are tool cards there, never bubbles, and their `content`
+    ///   is the raw runtime payload; the iOS transcript gets its tool steps
+    ///   from the live stream, so a persisted tool row is dropped.
+    /// - `moa` is shown as a system note.
+    /// - a row with nothing to show would be an empty bubble, so it is
+    ///   dropped instead of being drawn blank.
+    var transcriptKind: ChatLineKind? {
+        let shown = displayRole.lowercased()
+        guard shown != "tool" else { return nil }
+        guard content.nilIfEmpty != nil || !reasoning.isEmpty || !attachments.isEmpty else { return nil }
+        return shown == "moa" ? .system : ChatLine.kind(forRole: shown)
+    }
+
+    /// The rows of a history page the transcript can draw, each with its kind.
+    static func transcriptRows(_ messages: [Message]) -> [(message: Message, kind: ChatLineKind)] {
+        messages.compactMap { message -> (message: Message, kind: ChatLineKind)? in
+            guard let kind = message.transcriptKind else { return nil }
+            return (message: message, kind: kind)
+        }
+    }
 }
 
 enum ToolStatus: String, Hashable { case running, done, error, interrupted }

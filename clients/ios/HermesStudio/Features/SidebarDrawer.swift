@@ -4,6 +4,10 @@ import SwiftUI
 /// the current mode, and the footer (web `PageSidebarNav` + `AppSidebar`).
 struct SidebarDrawer: View {
     @EnvironmentObject private var store: AppStore
+    /// Opening the drawer dismisses the keyboard; if one is still up (a
+    /// sheet, an external keyboard docking) the drawer reserves its height
+    /// instead of letting it cover the lower half.
+    @StateObject private var keyboard = KeyboardObserver()
     let close: () -> Void
 
     var body: some View {
@@ -22,8 +26,12 @@ struct SidebarDrawer: View {
                 DrawerFooter()
             }
         }
+        .padding(.bottom, keyboard.overlap)
         .background(CoreHubTokens.Palette.bgSidebar.ignoresSafeArea())
         .overlay(alignment: .trailing) { Rectangle().fill(CoreHubTokens.Palette.border).frame(width: 1).ignoresSafeArea() }
+        // One explicit inset (above) instead of SwiftUI's automatic one,
+        // which does not reach this branch of the shell's ZStack.
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .onChange(of: store.drawerOpen) { _, open in if open { Task { await store.checkHealth() } } }
     }
 
