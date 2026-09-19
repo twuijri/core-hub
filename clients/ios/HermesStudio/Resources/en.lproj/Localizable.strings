@@ -677,3 +677,7 @@
 "Saved" = "Saved";
 "Failed" = "Failed";
 "More" = "More";
+
+/* A stored session id the server no longer has */
+"This conversation is no longer on the server." = "This conversation is no longer on the server.";
+"Send a message to start a new one." = "Send a message to start a new one.";

@@ -65,7 +65,7 @@ struct RootShell: View {
     private var openGesture: some Gesture {
         DragGesture(minimumDistance: 10)
             .onEnded { value in
-                if value.translation.width * sign > 24 { store.drawerOpen = true }
+                if value.translation.width * sign > 24 { store.openDrawer() }
             }
     }
 
@@ -160,7 +160,7 @@ struct DrawerButton: View {
     @EnvironmentObject private var store: AppStore
 
     var body: some View {
-        Button { store.drawerPage = .navigation; store.drawerOpen = true } label: {
+        Button { store.openDrawer() } label: {
             CoreHubIconView(icon: .menu, size: 22)
                 .foregroundStyle(CoreHubTokens.Palette.textPrimary)
                 .frame(width: 38, height: 38)

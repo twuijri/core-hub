@@ -291,15 +291,7 @@ final class AppStore: ObservableObject {
 
     /// Opens a local, not-yet-persisted conversation (web "New Chat").
     func startNewChat(agent: String = "hermes") {
-        let session = SessionSummary([
-            "id": UUID().uuidString,
-            "title": String(localized: "New conversation"),
-            "profile": selectedProfile,
-            "agent": agent,
-            "source": AgentIdentity.canonicalID(agent) == "hermes" ? "cli" : "coding_agent",
-            "model": preferredModel,
-        ], profile: selectedProfile)
-        open(session)
+        open(SessionSummary.draft(agent: agent, profile: selectedProfile, model: preferredModel))
     }
 
     func open(_ session: SessionSummary) {
@@ -325,6 +317,15 @@ final class AppStore: ObservableObject {
         conversationMode = .workflow
         selectedWorkflow = workflow
         drawerOpen = false
+    }
+
+    /// Opens the drawer. The keyboard goes with it: a focused composer
+    /// otherwise keeps the keyboard over the drawer's lower half. Focus is
+    /// dropped as part of the same transition, without a delay.
+    func openDrawer(page: DrawerPage = .navigation) {
+        Keyboard.dismiss()
+        drawerPage = page
+        drawerOpen = true
     }
 
     func show(_ destination: ShellDestination) {

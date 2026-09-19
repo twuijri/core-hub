@@ -906,3 +906,7 @@
 "Saved" = "تم الحفظ";
 "Failed" = "فشل";
 "More" = "المزيد";
+
+/* جلسة محفوظة لم تعد موجودة على الخادم */
+"This conversation is no longer on the server." = "لم تعد هذه المحادثة موجودة على الخادم.";
+"Send a message to start a new one." = "أرسل رسالة لبدء محادثة جديدة.";

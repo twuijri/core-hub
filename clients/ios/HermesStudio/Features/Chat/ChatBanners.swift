@@ -41,6 +41,28 @@ private struct QueuedRunChip: View {
     }
 }
 
+/// The stored session id is not on the server any more (deleted there, or
+/// an id from an older install). One neutral notice instead of a red row per
+/// failed attempt; the next message starts a new conversation.
+struct MissingSessionNotice: View {
+    var body: some View {
+        VStack(spacing: 8) {
+            CoreHubIconView(icon: .newChat, size: 22)
+            Text("This conversation is no longer on the server.")
+                .font(CoreHubTokens.Typography.bodyFont)
+                .foregroundStyle(CoreHubTokens.Palette.textPrimary)
+            Text("Send a message to start a new one.")
+                .font(CoreHubTokens.Typography.metaFont)
+                .foregroundStyle(CoreHubTokens.Palette.textSecondary)
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+        .padding(.horizontal, 24)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// "Compressing context…" while the summariser runs, then "Context compressed".
 struct CompressionBanner: View {
     let compression: ChatStreamState.Compression
