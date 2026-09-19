@@ -1,11 +1,17 @@
 package us.i3u.hermesstudio
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.speech.RecognitionListener
+import android.speech.RecognitionSupport
+import android.speech.RecognitionSupportCallback
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import androidx.annotation.RequiresApi
+import java.util.Locale
 
 /**
  * On-device dictation through Android's [SpeechRecognizer].
@@ -22,18 +28,47 @@ class SpeechInput(private val context: Context) {
         fun onPartial(text: String)
         fun onFinal(text: String)
         fun onError(code: Int)
+
+        /**
+         * The engine worked the language out for itself. Only reached when the
+         * take was started with a [detectAmong] list on Android 14 or later,
+         * and only for a guess the engine itself calls confident.
+         */
+        fun onLanguageDetected(tag: String) = Unit
     }
 
     private var recognizer: SpeechRecognizer? = null
 
     val isListening: Boolean get() = recognizer != null
 
-    /** Returns false when the device has no recognition service; the caller then uses the server. */
-    fun start(languageTag: String, listener: Listener): Boolean {
+    /**
+     * Returns false when the device has no recognition service; the caller
+     * then uses the server.
+     *
+     * [languageTag] is the language the take runs in — with [detectAmong]
+     * non-empty it is only the language the take *opens* in, and the engine
+     * may settle on any entry of that list instead. Detection needs Android 14
+     * (`EXTRA_ENABLE_LANGUAGE_DETECTION`, API 34), so on anything older the
+     * list is ignored and the take simply runs in [languageTag]; the caller
+     * decides that in [SpeechLanguages.plan] rather than discovering it here.
+     */
+    fun start(languageTag: String, detectAmong: List<String> = emptyList(), listener: Listener): Boolean {
         if (recognizer != null) return true
         if (!isAvailable(context)) return false
         val instance = SpeechRecognizer.createSpeechRecognizer(context)
         instance.setRecognitionListener(object : RecognitionListener {
+            override fun onLanguageDetection(results: Bundle) {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+                val detected = SpeechLanguages.readDetected(
+                    results.getString(SpeechRecognizer.DETECTED_LANGUAGE),
+                    results.getInt(
+                        SpeechRecognizer.LANGUAGE_DETECTION_CONFIDENCE_LEVEL,
+                        SpeechRecognizer.LANGUAGE_DETECTION_CONFIDENCE_LEVEL_UNKNOWN,
+                    ),
+                )
+                if (detected != null) listener.onLanguageDetected(detected)
+            }
+
             override fun onPartialResults(partialResults: Bundle?) {
                 firstResult(partialResults)?.let(listener::onPartial)
             }
@@ -55,13 +90,7 @@ class SpeechInput(private val context: Context) {
             override fun onEndOfSpeech() = Unit
             override fun onEvent(eventType: Int, params: Bundle?) = Unit
         })
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
-            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
-        }
+        val intent = recognitionIntent(context, languageTag, detectAmong)
         recognizer = instance
         instance.startListening(intent)
         return true
@@ -92,6 +121,152 @@ class SpeechInput(private val context: Context) {
         /** The recognizer gave up before any text: the user simply said nothing it could use. */
         fun isNoSpeech(code: Int): Boolean =
             code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+
+        /**
+         * The intent one take runs with. Detection and switching are only
+         * attached on Android 14 and later, where the extras exist at all;
+         * `EXTRA_LANGUAGE` is always set, because the platform requires the
+         * take to open in some language even when it may switch away from it.
+         */
+        fun recognitionIntent(
+            context: Context,
+            languageTag: String,
+            detectAmong: List<String> = emptyList(),
+        ): Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+            if (detectAmong.size < 2 || Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return@apply
+            val allowed = ArrayList(detectAmong)
+            putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_DETECTION, true)
+            putStringArrayListExtra(RecognizerIntent.EXTRA_LANGUAGE_DETECTION_ALLOWED_LANGUAGES, allowed)
+            // Balanced is the platform's own middle setting: it lets the engine
+            // change language mid-take without the latency of high precision.
+            putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_SWITCH, RecognizerIntent.LANGUAGE_SWITCH_BALANCED)
+            putStringArrayListExtra(RecognizerIntent.EXTRA_LANGUAGE_SWITCH_ALLOWED_LANGUAGES, allowed)
+            // API 35 only; a cap keeps one noisy take from thrashing between models.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_SWITCH_MAX_SWITCHES, MAX_LANGUAGE_SWITCHES)
+            }
+        }
+
+        private const val MAX_LANGUAGE_SWITCHES = 2
+
+        /**
+         * What this device's recognition service says about languages.
+         *
+         * Two sources, in order of how much they prove. `checkRecognitionSupport`
+         * (Android 13+) is the engine answering for itself, and separates the
+         * models that are installed now from the ones it could fetch — only the
+         * installed ones are worth handing to detection. Below that the only
+         * option is the [RecognizerIntent.ACTION_GET_LANGUAGE_DETAILS] ordered
+         * broadcast, which reports one flat list.
+         *
+         * [onResult] always runs, on the main thread, even when nothing
+         * answered: [RecognizerLanguages.answered] is then false and the caller
+         * offers its curated guess instead of inventing support.
+         */
+        fun queryLanguages(context: Context, onResult: (RecognizerLanguages) -> Unit) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && isAvailable(context)) {
+                querySupport(context) { support ->
+                    if (support != null) onResult(support) else queryLanguageDetails(context, onResult)
+                }
+                return
+            }
+            queryLanguageDetails(context, onResult)
+        }
+
+        /** `SpeechRecognizer.checkRecognitionSupport`, Android 13 and later. */
+        @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+        private fun querySupport(context: Context, onResult: (RecognizerLanguages?) -> Unit) {
+            val recognizer = runCatching { SpeechRecognizer.createSpeechRecognizer(context) }.getOrNull()
+            if (recognizer == null) {
+                onResult(null)
+                return
+            }
+            var answered = false
+            fun finish(result: RecognizerLanguages?) {
+                if (answered) return
+                answered = true
+                runCatching { recognizer.destroy() }
+                onResult(result)
+            }
+            val probe = recognitionIntent(context, Locale.getDefault().toLanguageTag())
+            runCatching {
+                recognizer.checkRecognitionSupport(
+                    probe,
+                    context.mainExecutor,
+                    object : RecognitionSupportCallback {
+                        override fun onSupportResult(support: RecognitionSupport) {
+                            val installed = support.installedOnDeviceLanguages
+                            val onDevice = (installed + support.supportedOnDeviceLanguages).distinct()
+                            finish(
+                                RecognizerLanguages(
+                                    all = (onDevice + support.onlineLanguages).distinct(),
+                                    // Detection runs against models that are
+                                    // actually present, so "supported" alone
+                                    // is not enough to promise it.
+                                    onDevice = installed.ifEmpty { support.supportedOnDeviceLanguages },
+                                    preferred = null,
+                                    answered = true,
+                                ),
+                            )
+                        }
+
+                        // ERROR_CANNOT_CHECK_SUPPORT among others: the engine
+                        // will not say, so nothing is assumed about it.
+                        override fun onError(error: Int) = finish(null)
+                    },
+                )
+            }.onFailure { finish(null) }
+        }
+
+        /** The pre-Android-13 broadcast; also the fallback when the engine refuses to answer. */
+        private fun queryLanguageDetails(context: Context, onResult: (RecognizerLanguages) -> Unit) {
+            val intent = Intent(RecognizerIntent.ACTION_GET_LANGUAGE_DETAILS)
+            runCatching {
+                context.packageManager.queryBroadcastReceivers(intent, 0)
+                    .firstOrNull()?.activityInfo?.packageName
+            }.getOrNull()?.let(intent::setPackage)
+            var answered = false
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(received: Context?, broadcast: Intent?) {
+                    if (answered) return
+                    answered = true
+                    val extras: Bundle? = runCatching { getResultExtras(true) }.getOrNull()
+                    val supported = extras?.getStringArrayList(RecognizerIntent.EXTRA_SUPPORTED_LANGUAGES)
+                    onResult(
+                        RecognizerLanguages(
+                            all = supported.orEmpty(),
+                            // The broadcast does not say which models are on
+                            // the device, so detection gets the same list and
+                            // the engine rejects what it cannot serve.
+                            onDevice = supported.orEmpty(),
+                            preferred = extras?.getString(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE),
+                            answered = !supported.isNullOrEmpty(),
+                        ),
+                    )
+                }
+            }
+            runCatching {
+                context.sendOrderedBroadcast(
+                    intent,
+                    null,
+                    receiver,
+                    null,
+                    android.app.Activity.RESULT_OK,
+                    null,
+                    null,
+                )
+            }.onFailure {
+                if (!answered) {
+                    answered = true
+                    onResult(RecognizerLanguages())
+                }
+            }
+        }
     }
 }
 

@@ -3,6 +3,7 @@ package us.i3u.hermesstudio
 import java.io.File
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -97,6 +98,32 @@ class MockStudioVoiceTest {
 
         assertEquals(400, failure.statusCode)
         assertTrue(failure.message, failure.message!!.contains("unknown TTS provider"))
+    }
+
+    // ── dictation language, against the same mock ────────────────────────
+
+    @Test
+    fun `the phone asks whether the profile can transcribe before it uploads`() {
+        val status = api.sttProfileStatus("manager")
+
+        assertEquals(true, status.configured)
+        assertEquals("openai", status.activeProvider)
+    }
+
+    @Test
+    fun `the chosen language reaches the request, and the server ignores it`() {
+        val result = api.transcribe("manager", WavFormat.wrap(ByteArray(3_200)), language = "ar")
+
+        // That the hint is on the wire is proved byte for byte in
+        // SpeechRequestTest. What this proves is the other half, verified in
+        // packages/server/.../controllers/stt.ts: the route reads only
+        // `provider` and `audio`, so the hint changes nothing. The profile
+        // stores no language, so no language comes back and the provider
+        // detected it — which is exactly why "automatic" is an on-device
+        // feature here and not a server round trip.
+        assertNull("the server does not echo a language it never read", result.language)
+        assertEquals("openai", result.provider)
+        assertTrue(result.text.isNotBlank())
     }
 
     @Test

@@ -2145,6 +2145,11 @@ class HermesApi(
             filename = "voice.wav",
             mime = "audio/wav",
             fields = fields,
+            // Both, like every other voice call: the query is what this
+            // controller reads, and the header is what the auth middleware
+            // validates the profile from. Sending only one made transcription
+            // the odd call out.
+            profile = profile,
         )
         val text = firstNonBlank(result, "text") ?: throw HermesException("The provider returned no text")
         return Transcription(

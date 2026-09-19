@@ -1101,4 +1101,24 @@
     <string name="model_context">نافذة السياق</string>
     <string name="model_context_hint">عدد الرموز، لمؤشر السياق</string>
     <string name="model_remove_custom">إزالة</string>
+    <string name="settings_speech_language">لغة الإملاء</string>
+    <string name="settings_speech_language_note">اللغة التي يستمع إليها الميكروفون، وتُحفظ لهذا الملف. اضغط مطوّلًا على الميكروفون في محرّر الرسالة لتغييرها لرسالة واحدة. اللغات المعروضة هي ما أبلغ عنه محرّك النطق في هذا الجهاز، والكشف التلقائي يعمل داخل الجهاز ويحتاج أندرويد ١٤ أو أحدث.</string>
+    <string name="speech_language_follow_app">اتّبع لغة التطبيق</string>
+    <string name="speech_language_follow_app_note">الإملاء بـ%1$s، وهي اللغة التي يعرض بها التطبيق</string>
+    <string name="speech_language_automatic">اكتشاف تلقائي</string>
+    <string name="speech_language_automatic_note">محرّك النطق في الهاتف نفسه يستنتج اللغة وقد ينتقل بينها أثناء الجملة ضمن: %1$s. ولا يُرسَل شيء إضافي إلى Core Hub.</string>
+    <string name="speech_language_automatic_unavailable">محرّك النطق في هذا الجهاز لا يستطيع اكتشاف اللغة؛ يلزم أندرويد ١٤ أو أحدث ومحرّك يُصرّح بدعمه</string>
+    <string name="speech_language_confirmed">مدعومة في هذا الجهاز</string>
+    <string name="speech_language_unconfirmed">غير مؤكَّدة في هذا الجهاز</string>
+    <string name="speech_language_unconfirmed_all">لم يُبلغ هذا الجهاز عن اللغات التي يدعمها، فالقائمة أدناه تخمين؛ واللغة التي لا يسمعها ستُظهر خطأ.</string>
+    <string name="speech_language_server_note">إدخال الصوت مضبوط على خادم Core Hub. والخادم يفرّغ النص باللغة المخزّنة لمزوّد STT في هذا الملف داخل Studio، لذا ينطبق هذا الاختيار على الإملاء داخل الجهاز فقط.</string>
+    <string name="notice_speech_detection_unavailable">هذا الجهاز لا يستطيع اكتشاف لغة الإملاء، فهو يستمع بـ%1$s. اختر لغة من الإعدادات، أو حوّل إدخال الصوت إلى خادم Core Hub.</string>
+    <string name="composer_take_language">يستمع بـ%1$s</string>
+    <string name="composer_take_detecting">يكتشف اللغة</string>
+    <string name="composer_take_detected">اكتُشفت %1$s</string>
+    <string name="composer_take_server_auto">خادم Core Hub هو من يحدّد اللغة</string>
+    <string name="composer_take_language_unknown">بلا لغة محدَّدة</string>
+    <string name="sheet_speech_language">لغة الإملاء</string>
+    <string name="speech_language_separator">، </string>
+    <string name="speech_language_follow_app_value">%1$s (لغة التطبيق)</string>
 </resources>

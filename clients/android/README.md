@@ -63,7 +63,7 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   Profiles (super-admin) and Settings; the Settings page carries the web's tabs in
   order — Current Account, Account Management, Webhooks, Display, Proxy, Compression,
   Privacy, Models — plus *This device* (appearance, language, reasoning, voice input,
-  logo) and *About*. Agent, session and compression configuration sits in the Agent
+  dictation language, voice, logo) and *About*. Agent, session and compression configuration sits in the Agent
   Manager. Every native value is read from and saved to the active profile through
   the same contracts as the web UI
 - **Agent settings**: max turns, gateway timeout, restart drain timeout, tool
@@ -113,11 +113,28 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
 - Attachments upload to your server and ride along with the message as proper
   content blocks
 - **Voice, on the device by default**: tap the microphone and the words appear in the
-  composer as you speak (Android speech recognition in the app language, inserted at
-  the caret); nothing is sent until you press send. Settings → Voice switches to the
-  **Core Hub server** path instead, which records a 16 kHz WAV and transcribes it with
-  the STT provider configured in Studio. The mic shows idle, listening, transcribing
-  and error states, and every failure is shown in words
+  composer as you speak (Android speech recognition, inserted at the caret); nothing is
+  sent until you press send. Settings → Voice switches to the **Core Hub server** path
+  instead, which records a 16 kHz WAV and transcribes it with the STT provider
+  configured in Studio. The mic shows idle, listening, transcribing and error states,
+  and every failure is shown in words
+- **Dictation language, per profile**: *Settings → Dictation language* chooses what the
+  microphone listens for — *follow the app language* (the default, and what earlier
+  builds always did), a specific language, or *detect automatically*. **Long-press the
+  microphone** in the composer to open the same list without leaving the conversation,
+  and the recording row names the language the take is actually running in.
+  - The languages offered are the ones this device reports, through
+    `SpeechRecognizer.checkRecognitionSupport` on Android 13+ and the
+    `RecognizerIntent.ACTION_GET_LANGUAGE_DETAILS` broadcast below that, shown by their
+    endonyms (`العربية`, `Français`). A device that reports nothing gets a short curated
+    list, clearly marked *not confirmed by this device*
+  - *Detect automatically* runs **on the phone**: `EXTRA_ENABLE_LANGUAGE_DETECTION` and
+    `EXTRA_ENABLE_LANGUAGE_SWITCH` over the languages the app ships plus the phone's own
+    locale, intersected with what the engine says it has, and the engine reports what it
+    heard through `RecognitionListener.onLanguageDetection`. No audio goes to Core Hub
+    for it. Those extras are **Android 14 (API 34)** and later; on an older phone, or an
+    engine that will not confirm support, the take runs in the app language and a notice
+    says so by name rather than transcribing the wrong language quietly
 - **Settings → Voice** picks who reads a reply aloud, per profile: *Core Hub default*
   (whatever the server has active), any TTS provider Core Hub has configured for that
   profile, or *Device voice* (the Android engine, nothing leaves the phone). Picking a
@@ -260,6 +277,11 @@ app/src/main/java/us/i3u/hermesstudio/
   ui/navigation/          drawer host + content, HomeShell (hamburger), settings drawer
   ui/sessions/            session grouping, list rows and menus, History, time format,
                           agent avatars
+  SpeechLanguage.kt       the dictation-language rules: the stored preference, the
+                          device's reported languages, and where a take runs
+  SpeechInput.kt          the recognizer itself, the detection/switch extras, and the
+                          two ways to ask the engine which languages it has
+  ProfileScope.kt         the one rule for which profile a screen acts under
   ui/chat/                conversation screen, chat header, message rows (bubbles, tool
                           card, thinking block, action row, media), run cards
                           (approvals, queue, banners, location consent), composer,
@@ -330,6 +352,7 @@ the installation and to allow this app as an update source once.
 | Room detail and messages | `GET /api/studio/group-chat/rooms/{id}` |
 | Upload an attachment | `POST /upload?profile=…` |
 | Transcribe a recording (server voice input) | `GET /api/studio/stt/profile-status` · `POST /api/studio/stt/transcribe` |
+| STT providers of a profile | `GET /api/studio/stt/settings` |
 | Spoken replies | `POST /api/studio/tts/synthesize` (always with `provider`) |
 | Voice providers of a profile | `GET /api/studio/tts/settings` · `PUT /api/studio/tts/settings/active` |
 | Generated files | `GET /api/studio/files/download` |
@@ -365,6 +388,18 @@ server's own REST wrapper around `/chat-run`: the app uses it whenever the socke
 cannot connect, which is why the app still works behind a proxy that drops
 WebSocket upgrades.
 
+Two notes on the voice endpoints, both verified against this repository's server:
+
+- `POST /api/studio/tts/synthesize` resolves a provider on its own when the request
+  names none, and that resolution answers `edge` whenever the profile has no stored
+  active provider. This client always names the provider, so the voice you picked is
+  the voice you get on every device, whatever each one had stored
+- `POST /api/studio/stt/transcribe` reads only `provider` and `audio`; its transcription
+  language comes from the profile's stored STT provider settings, and a multipart
+  `language` field is accepted and then discarded. The field is still sent — it is the
+  documented one and the web client sends it too — but nothing in this app promises it
+  changes the result, and automatic language detection runs on the phone instead
+
 All traffic goes to the address you enter (or the one inside the QR code), over HTTPS.
 Nothing is sent anywhere else and there is no analytics. The app asks for `INTERNET`,
 plus `RECORD_AUDIO` and `CAMERA` only at the moment you first use the microphone, the
@@ -397,12 +432,16 @@ push, so a local SDK is optional.
 
 `tools/mock-studio.py` answers the REST endpoints the app calls, with sample profiles,
 conversations, accounts, settings, model providers, a room, scheduled jobs, Kanban,
-skills, plugins, MCP servers, TTS providers, and Petdex — enough
+skills, plugins, MCP servers, TTS and STT providers, and Petdex — enough
 to open and edit every screen. Its TTS routes reproduce the fallback bug on purpose:
 a synthesize call that names no provider is resolved to `edge` and answered with a
 502, `groq` answers a JSON error as HTTP 200, and `elevenlabs` (the profile's active
-Arabic voice) answers real WAV bytes. `MockStudioVoiceTest` drives all of that through
-the real `HermesApi`. It does not
+Arabic voice) answers real WAV bytes. Its STT routes reproduce the server's real
+contract, which is easy to get wrong: `POST /api/studio/stt/transcribe` reads only
+`provider` and `audio`, and the transcription language comes from the profile's stored
+STT provider settings — a multipart `language` field is accepted and then ignored. That
+is why *detect automatically* is an on-device feature in this client and not a round
+trip. `MockStudioVoiceTest` drives all of that through the real `HermesApi`. It does not
 speak Socket.IO, which makes it a good way to exercise the REST fallback: messages
 still get answered, just not word by word.
 

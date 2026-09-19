@@ -10,6 +10,19 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
+    <!-- Android 11 package visibility: without these the speech engine is
+         invisible to us, so isRecognitionAvailable, checkRecognitionSupport
+         and the ACTION_GET_LANGUAGE_DETAILS broadcast all answer nothing and
+         the dictation-language list would silently fall back to a guess. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.GET_LANGUAGE_DETAILS" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"

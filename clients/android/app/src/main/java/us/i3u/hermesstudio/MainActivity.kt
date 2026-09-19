@@ -90,6 +90,7 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.RestartAlt
@@ -1441,11 +1442,17 @@ internal fun DeviceSettings(state: UiState, viewModel: AppViewModel) {
     var reasoningSheet by remember { mutableStateOf(false) }
     var voiceSheet by remember { mutableStateOf(false) }
     var voiceOutputSheet by remember { mutableStateOf(false) }
+    var speechLanguageSheet by remember { mutableStateOf(false) }
     val language = APP_LANGUAGES.firstOrNull { it.tag == state.language } ?: APP_LANGUAGES.first()
 
     // Core Hub keeps TTS settings per profile, so the row has to show this
-    // profile's voice before the sheet is ever opened.
-    LaunchedEffect(state.activeProfile) { viewModel.loadVoiceSettings() }
+    // profile's voice before the sheet is ever opened — and the profile that
+    // matters is the one the chat runs under, which an open conversation can
+    // set without the drawer's active profile moving at all.
+    LaunchedEffect(state.chatProfile) {
+        viewModel.loadVoiceSettings()
+        viewModel.loadSpeechLanguages()
+    }
 
     val pickLogo = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
@@ -1507,6 +1514,7 @@ internal fun DeviceSettings(state: UiState, viewModel: AppViewModel) {
             )
         }
     }
+    if (speechLanguageSheet) SpeechLanguageSheet(state, viewModel) { speechLanguageSheet = false }
     if (voiceOutputSheet) {
         ModalBottomSheet(onDismissRequest = { voiceOutputSheet = false }, sheetState = rememberModalBottomSheetState()) {
             PickerSheet(
@@ -1560,6 +1568,21 @@ internal fun DeviceSettings(state: UiState, viewModel: AppViewModel) {
     )
     Text(
         stringResource(R.string.settings_voice_input_note),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+    )
+    SettingsRow(
+        icon = Icons.Filled.Translate,
+        label = stringResource(R.string.settings_speech_language),
+        value = speechLanguageLabel(state, Locale.getDefault().toLanguageTag()),
+        onClick = {
+            viewModel.loadSpeechLanguages()
+            speechLanguageSheet = true
+        },
+    )
+    Text(
+        stringResource(R.string.settings_speech_language_note),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
