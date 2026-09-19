@@ -681,3 +681,19 @@
 /* A stored session id the server no longer has */
 "This conversation is no longer on the server." = "This conversation is no longer on the server.";
 "Send a message to start a new one." = "Send a message to start a new one.";
+
+/* Voice for the spoken reply: the profile's Core Hub provider, or this iPhone */
+"Spoken replies" = "Spoken replies";
+"This iPhone's voice" = "This iPhone's voice";
+"The built-in iOS voice. Nothing is sent to Core Hub." = "The built-in iOS voice. Nothing is sent to Core Hub.";
+"The spoken reply uses the voice provider configured for this profile in Core Hub. This iPhone's voice speaks only when you pick it here, or when the server voice fails." = "The spoken reply uses the voice provider configured for this profile in Core Hub. This iPhone's voice speaks only when you pick it here, or when the server voice fails.";
+"No voice provider is configured for this profile. Add one under Studio → Voice." = "No voice provider is configured for this profile. Add one under Studio → Voice.";
+"Active on the server" = "Active on the server";
+"Written to the profile: %@" = "Written to the profile: %@";
+"The voice provider returned no audio." = "The voice provider returned no audio.";
+"the server voice" = "the server voice";
+"%1$@ failed" = "%1$@ failed";
+"%1$@ failed: %2$@" = "%1$@ failed: %2$@";
+"%1$@ failed (HTTP %2$lld)" = "%1$@ failed (HTTP %2$lld)";
+"%1$@ failed (HTTP %2$lld): %3$@" = "%1$@ failed (HTTP %2$lld): %3$@";
+"Server voice unavailable (%@); the device voice was used instead." = "Server voice unavailable (%@); the device voice was used instead.";

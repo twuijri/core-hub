@@ -80,7 +80,14 @@ struct ConversationView: View {
         .toolbar { toolbarContent }
         .modifier(ConversationSheets(view: self, showingNewSession: $showingNewSession, showingSessionSettings: $showingSessionSettings, showingRename: $showingRename, renameText: $renameText, importing: $importing, showingPhotos: $showingPhotos, showingCamera: $showingCamera, photoItems: $photoItems))
         .task(id: "\(session.id)#\(connectionGeneration)") { await runStream() }
-        .task(id: session.id) { await reload(); await loadModels() }
+        .task(id: session.id) { await reload(); await loadModels(); await VoiceOutputStore.shared.load(profile: session.profile, api: store.api) }
+        // A failed server voice already fell back to the iPhone voice; the
+        // banner says which provider failed and why.
+        .onChange(of: speaker.failure) { _, message in
+            guard let message else { return }
+            store.errorMessage = message
+            speaker.clearFailure()
+        }
         .onChange(of: scenePhase) { _, phase in
             // Studio keeps running after the app is backgrounded: reconnect at
             // once instead of waiting for the backoff timer, and pull history.
@@ -340,10 +347,19 @@ struct ConversationView: View {
         Task { await store.attempt { try await store.api.setSessionPush(session.id, enabled: next) } }
     }
 
+    /// The spoken reply follows the profile's server voice (Settings → Voice),
+    /// which loads the TTS settings and sends `provider` plus that provider's
+    /// stored options. Only the explicit "This device" choice skips the
+    /// server; a failure falls back to the iPhone voice *and* says why.
     func speak(_ line: ChatLine) {
         let profile = session.profile
         let api = store.api
-        speaker.toggle(lineID: line.id, text: line.text, languageCode: store.speechLocaleIdentifier) { try await api.synthesize(text: line.text, profile: profile) }
+        let voice = VoiceOutputStore.shared
+        var synthesize: (() async throws -> Data)?
+        if voice.choice(for: profile) != .device {
+            synthesize = { try await voice.synthesize(text: line.text, profile: profile, api: api) }
+        }
+        speaker.toggle(lineID: line.id, text: line.text, languageCode: store.speechLocaleIdentifier, synthesize: synthesize)
     }
 
     // MARK: - Session management

@@ -631,21 +631,59 @@ final class APIClient: @unchecked Sendable {
         return result
     }
 
-    func synthesize(text: String, profile: String) async throws -> Data {
+    /// `GET /api/studio/tts/settings` → `{ settings | providers, activeProvider }`.
+    func ttsSettings(profile: String) async throws -> TtsSettings {
+        TtsSettings(try await object("/api/studio/tts/settings", profile: profile))
+    }
+
+    /// `PUT /api/studio/tts/settings/active`. Called only when the owner picks
+    /// a server voice in Settings → Voice; speaking a message never writes it.
+    @discardableResult
+    func setActiveTtsProvider(_ provider: String, profile: String) async throws -> String {
+        let json = try await object("/api/studio/tts/settings/active", method: "PUT",
+                                    body: ["provider": provider], profile: profile)
+        return json.string("activeProvider", "active_provider")
+    }
+
+    /// `POST /api/studio/tts/synthesize`. `provider` and that provider's
+    /// stored options are sent exactly like the web client: without them the
+    /// server resolves a provider itself and falls back to `edge`, so the
+    /// phone spoke with Microsoft's free voice instead of the profile's.
+    /// Every failure carries the status, the server's error text and the
+    /// provider name; nothing is swallowed into a silent device-voice fallback.
+    func synthesize(text: String, provider: String?, options: [String: String], profile: String) async throws -> SynthesizedSpeech {
         var request = URLRequest(url: try url("/api/studio/tts/synthesize"))
         request.httpMethod = "POST"
         request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
         // Let Studio negotiate the active provider's native audio format.
         request.setValue("audio/*", forHTTPHeaderField: "Accept")
         request.setValue(profile, forHTTPHeaderField: "X-Hermes-Profile")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["text": text, "options": [:]])
-        let (data, http) = try await checkedSend(request)
-        guard !data.isEmpty else { throw HermesError.malformedResponse }
-        let contentType = http.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
-        if contentType.contains("json") || data.first == Character("{").asciiValue {
-            throw HermesError.server(Self.errorDetail(data))
+        request.httpBody = try JSONSerialization.data(
+            withJSONObject: TtsRequest.body(text: text, provider: provider, options: options))
+
+        let response: (Data, HTTPURLResponse)
+        do {
+            response = try await send(request)
+        } catch {
+            throw TtsFailure(provider: provider ?? "", status: 0, detail: error.localizedDescription)
         }
-        return data
+        let data = response.0
+        let http = response.1
+
+        let usedProvider = http.value(forHTTPHeaderField: "X-TTS-Provider")?.nilIfEmpty ?? provider ?? ""
+        guard (200..<300).contains(http.statusCode) else {
+            throw TtsFailure(provider: usedProvider, status: http.statusCode, detail: TtsErrorBody.detail(data))
+        }
+        guard !data.isEmpty else {
+            throw TtsFailure(provider: usedProvider, status: http.statusCode,
+                             detail: String(localized: "The voice provider returned no audio."))
+        }
+        // A JSON body with HTTP 200 is a provider failure in disguise.
+        if TtsErrorBody.looksLikeJSON(contentType: http.value(forHTTPHeaderField: "Content-Type") ?? "", data: data) {
+            throw TtsFailure(provider: usedProvider, status: http.statusCode, detail: TtsErrorBody.detail(data))
+        }
+        return SynthesizedSpeech(audio: data, provider: usedProvider,
+                                 engine: http.value(forHTTPHeaderField: "X-TTS-Engine") ?? "")
     }
 
     func runChatREST(profile: String, sessionID: String, input: String, attachments: [Upload], reasoningEffort: String?, model: String?, provider: String?) async throws -> (String, String) {

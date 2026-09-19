@@ -86,6 +86,17 @@ enum Preferences {
         get { let value = UserDefaults.standard.double(forKey: "textScale"); return value > 0 ? value : 1 }
         set { UserDefaults.standard.set(newValue, forKey: "textScale") }
     }
+    /// Voice that speaks the assistant's reply, stored per profile:
+    /// `device` for this iPhone's voice, a Studio provider id for a server
+    /// voice, empty until the owner picks one — which means "follow the
+    /// profile's active provider", the same default as the web client.
+    static func ttsVoice(for profile: String) -> String {
+        UserDefaults.standard.string(forKey: "ttsVoice.\(profile)") ?? ""
+    }
+    static func setTtsVoice(_ value: String, profile: String) {
+        UserDefaults.standard.set(value, forKey: "ttsVoice.\(profile)")
+    }
+
     static func session(for profile: String) -> String { UserDefaults.standard.string(forKey: "session.\(profile)") ?? "" }
     static func setSession(_ id: String, profile: String) { UserDefaults.standard.set(id, forKey: "session.\(profile)") }
 }

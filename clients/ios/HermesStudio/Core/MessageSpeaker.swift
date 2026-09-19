@@ -12,6 +12,10 @@ final class MessageSpeaker: NSObject, ObservableObject, AVAudioPlayerDelegate, A
     @Published private(set) var state: State = .idle
     /// Set when the server voice failed and the device voice was used.
     @Published private(set) var usedFallback = false
+    /// Why the server voice failed, naming the provider and the status, so
+    /// the owner is told instead of quietly hearing the iPhone voice.
+    /// Reset when a new message starts playing.
+    @Published private(set) var failure: String?
 
     private var player: AVAudioPlayer?
     private let synthesizer = AVSpeechSynthesizer()
@@ -25,8 +29,10 @@ final class MessageSpeaker: NSObject, ObservableObject, AVAudioPlayerDelegate, A
     func isActive(_ id: UUID) -> Bool { lineID == id && state != .idle }
     func isPlaying(_ id: UUID) -> Bool { lineID == id && (state == .playing || state == .loading) }
 
-    /// Play / pause / resume toggle for one message.
-    func toggle(lineID id: UUID, text: String, languageCode: String?, synthesize: @escaping () async throws -> Data) {
+    /// Play / pause / resume toggle for one message. A `nil` `synthesize`
+    /// means the owner chose this iPhone's voice, so no server call is made
+    /// and no failure is reported.
+    func toggle(lineID id: UUID, text: String, languageCode: String?, synthesize: (() async throws -> Data)?) {
         if lineID == id {
             switch state {
             case .playing: pause(); return
@@ -38,10 +44,11 @@ final class MessageSpeaker: NSObject, ObservableObject, AVAudioPlayerDelegate, A
         play(lineID: id, text: text, languageCode: languageCode, synthesize: synthesize)
     }
 
-    func play(lineID id: UUID, text: String, languageCode: String?, synthesize: @escaping () async throws -> Data) {
+    func play(lineID id: UUID, text: String, languageCode: String?, synthesize: (() async throws -> Data)?) {
         stop()
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        lineID = id; state = .loading; usedFallback = false
+        lineID = id; state = .loading; usedFallback = false; failure = nil
+        guard let synthesize else { startFallback(text, languageCode: languageCode); return }
         loadTask = Task { [weak self] in
             guard let self else { return }
             do {
@@ -51,10 +58,16 @@ final class MessageSpeaker: NSObject, ObservableObject, AVAudioPlayerDelegate, A
             } catch {
                 guard !Task.isCancelled, self.lineID == id else { return }
                 self.usedFallback = true
+                // Name the provider and the status before the device voice
+                // takes over, so a broken server voice is visible.
+                self.failure = VoiceFallbackNotice.message(for: error)
                 self.startFallback(text, languageCode: languageCode)
             }
         }
     }
+
+    /// Clears the reported failure once it has been shown.
+    func clearFailure() { failure = nil }
 
     func pause() {
         if let player { player.pause(); state = .paused; return }
