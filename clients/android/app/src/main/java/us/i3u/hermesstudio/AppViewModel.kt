@@ -192,6 +192,18 @@ data class UiState(
     val voiceSegment: VoiceSegment? = null,
     /** Store.VOICE_INPUT_DEVICE or Store.VOICE_INPUT_SERVER, from Settings → Voice. */
     val voiceInput: String = Store.VOICE_INPUT_DEVICE,
+    /**
+     * Settings → Voice, for the active profile: [VoiceOutput.DEVICE], a Core
+     * Hub provider id, or [VoiceOutput.FOLLOW_SERVER] for the server's choice.
+     */
+    val voiceOutput: String = VoiceOutput.FOLLOW_SERVER,
+    /** The profile's TTS providers as Core Hub reports them. */
+    val voiceSettings: VoiceSettings = VoiceSettings(),
+    /** Profile [voiceSettings] belongs to; blank before the first read. */
+    val voiceSettingsProfile: String = "",
+    val loadingVoiceSettings: Boolean = false,
+    /** Why the voice list is empty, when Core Hub refused to hand it over. */
+    val voiceSettingsError: String? = null,
     /** The next submitted draft came from STT and should receive a spoken reply. */
     val voiceReplyPending: Boolean = false,
     val speaking: Boolean = false,
@@ -2242,6 +2254,77 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * Settings → Voice: reads the profile's TTS providers from Core Hub so the
+     * owner can see which voice answers and pick another one.
+     */
+    fun loadVoiceSettings(force: Boolean = false) {
+        val profile = currentProfile()
+        val current = _state.value
+        _state.update { it.copy(voiceOutput = store.voiceOutput(profile)) }
+        if (!force && current.voiceSettingsProfile == profile && current.voiceSettings.providers.isNotEmpty()) return
+        if (current.loadingVoiceSettings) return
+        _state.update { it.copy(loadingVoiceSettings = true, voiceSettingsError = null) }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.ttsSettings(profile) } }
+                .onSuccess { settings ->
+                    voiceSettingsCache[profile] = settings
+                    _state.update {
+                        it.copy(
+                            loadingVoiceSettings = false,
+                            voiceSettings = settings,
+                            voiceSettingsProfile = profile,
+                            voiceSettingsError = null,
+                        )
+                    }
+                }
+                .onFailure { failure ->
+                    _state.update {
+                        it.copy(
+                            loadingVoiceSettings = false,
+                            voiceSettingsProfile = profile,
+                            voiceSettingsError = failure.readableMessage(localized),
+                        )
+                    }
+                }
+        }
+    }
+
+    /**
+     * Settings → Voice: stores the owner's choice for this profile.
+     *
+     * Picking a Core Hub provider is an explicit decision, so it is also sent
+     * to `PUT /api/studio/tts/settings/active` — the same endpoint the web's
+     * voice connections screen writes. Nothing else on this screen, and no
+     * spoken reply, ever writes the server's active provider.
+     */
+    fun setVoiceOutput(choice: String) {
+        val profile = currentProfile()
+        val clean = when {
+            choice == VoiceOutput.DEVICE -> VoiceOutput.DEVICE
+            VoiceOutput.isProvider(choice) -> choice
+            else -> VoiceOutput.FOLLOW_SERVER
+        }
+        store.setVoiceOutput(profile, clean)
+        _state.update { it.copy(voiceOutput = clean) }
+        if (!VoiceOutput.isProvider(clean)) return
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.setActiveTtsProvider(profile, clean) } }
+                .onSuccess { active ->
+                    val settings = _state.value.voiceSettings.copy(activeProvider = active)
+                    voiceSettingsCache[profile] = settings
+                    _state.update { it.copy(voiceSettings = settings) }
+                }
+                .onFailure { failure ->
+                    // The phone still speaks with the picked provider; only the
+                    // shared default could not be written.
+                    _state.update {
+                        it.copy(notice = str(R.string.voice_active_save_failed, failure.readableMessage(localized)))
+                    }
+                }
+        }
+    }
+
+    /**
      * Starts dictation. On-device recognition is the default and streams text
      * live; the Core Hub server path records a WAV and transcribes it after the
      * take. When the device has no recognizer the server path is used and the
@@ -2442,20 +2525,37 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun speak(text: String, profile: String) = speakText(text, null, profile)
 
+    /** The profile's TTS settings, read once per profile and reused while the app lives. */
+    private val voiceSettingsCache = java.util.concurrent.ConcurrentHashMap<String, VoiceSettings>()
+
     /**
-     * Reads [text] aloud: `POST /api/studio/tts/synthesize` on the server first;
-     * when that fails (no provider, network, bad audio) the Android
-     * TextToSpeech engine reads the same text so the reply is still heard.
+     * Reads [text] aloud: `POST /api/studio/tts/synthesize` on the server
+     * first, naming the provider the owner chose; when that fails the Android
+     * TextToSpeech engine reads the same text so the reply is still heard, and
+     * the banner says which provider failed and why.
      */
     private fun speakText(text: String, key: String?, profile: String) {
         stopSpeaking()
         val spoken = plainSpeechText(text)
         if (spoken.isBlank()) return
+        val choice = store.voiceOutput(profile)
+        // The owner asked for the phone's own voice; nothing failed, so say nothing.
+        if (choice == VoiceOutput.DEVICE) {
+            speakOnDevice(spoken, key, null)
+            return
+        }
         _state.update { it.copy(speechLoadingKey = key) }
         speechJob = viewModelScope.launch {
+            // Held outside the IO block so a failure can still name the voice.
+            var asked = ""
             val synthesized = runCatching {
                 withContext(Dispatchers.IO) {
-                    val audio = api.synthesize(profile, spoken)
+                    val settings = voiceSettingsCache.getOrPut(profile) { api.ttsSettings(profile) }
+                    val target = VoiceOutput.resolve(choice, settings) as? VoiceTarget.Server
+                        ?: return@withContext null
+                    asked = target.provider
+                    val audio = api.synthesize(profile, spoken, target.provider, target.options)
+                    if (audio.provider.isNotBlank()) asked = audio.provider
                     val file = java.io.File.createTempFile("hermes-reply-", audio.extension, getApplication<Application>().cacheDir)
                     file.writeBytes(audio.bytes)
                     file
@@ -2464,10 +2564,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val file = synthesized.getOrNull()
             if (file == null) {
                 val serverProblem = synthesized.exceptionOrNull()?.takeUnless { it is kotlinx.coroutines.CancellationException }
-                if (serverProblem == null) return@launch
-                speakOnDevice(spoken, key, serverProblem.readableMessage(localized))
+                if (serverProblem == null) {
+                    if (synthesized.isSuccess) speakOnDevice(spoken, key, null)
+                    return@launch
+                }
+                speakOnDevice(spoken, key, voiceFailureReason(serverProblem, asked))
                 return@launch
             }
+            // A provider that answered with bytes the phone cannot decode is
+            // still that provider's failure, so the banner names it here too.
+            val playbackFailed = voiceFailureReason(null, asked)
             runCatching {
                 MediaPlayer().also { player ->
                     speechPlayer = player
@@ -2475,7 +2581,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     player.setOnPreparedListener { ready ->
                         runCatching { ready.start() }
                             .onSuccess { _state.update { it.copy(speaking = true, speakingKey = key, speechPaused = false, speechLoadingKey = null) } }
-                            .onFailure { stopSpeaking(); file.delete(); speakOnDevice(spoken, key, str(R.string.voice_playback_failed)) }
+                            .onFailure { stopSpeaking(); file.delete(); speakOnDevice(spoken, key, playbackFailed) }
                     }
                     player.setOnCompletionListener { finished ->
                         runCatching { finished.release() }
@@ -2487,7 +2593,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         runCatching { failed.release() }
                         if (speechPlayer === failed) speechPlayer = null
                         file.delete()
-                        speakOnDevice(spoken, key, str(R.string.voice_playback_failed))
+                        speakOnDevice(spoken, key, playbackFailed)
                         true
                     }
                     player.prepareAsync()
@@ -2495,13 +2601,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }.onFailure {
                 stopSpeaking()
                 file.delete()
-                speakOnDevice(spoken, key, str(R.string.voice_playback_failed))
+                speakOnDevice(spoken, key, playbackFailed)
             }
         }
     }
 
-    /** Fallback: the platform engine. [reason] is shown as a notice so the user knows why. */
-    private fun speakOnDevice(text: String, key: String?, reason: String) {
+    /**
+     * What the fallback banner says. [asked] is the provider Core Hub was told
+     * to use, so a bare "could not be played" always carries a name; a null
+     * [error] is the playback-side failure.
+     */
+    private fun voiceFailureReason(error: Throwable?, asked: String): String {
+        val detail = when {
+            error == null -> str(R.string.voice_playback_failed)
+            error is TtsSynthesisException -> when (error.code) {
+                "tts_empty_audio" -> str(R.string.voice_server_no_audio, error.statusCode ?: 0)
+                else -> error.message.orEmpty().ifBlank { str(R.string.voice_playback_failed) }
+            }
+            else -> error.readableMessage(localized)
+        }
+        val provider = (error as? TtsSynthesisException)?.provider?.ifBlank { asked } ?: asked
+        if (provider.isBlank()) return str(R.string.voice_settings_unavailable, detail)
+        return str(R.string.voice_provider_failed, VoiceOutput.label(provider), detail)
+    }
+
+    /**
+     * Fallback: the platform engine. A non-null [reason] is shown as a notice
+     * so the owner knows which voice failed; null means the owner picked the
+     * device voice themselves and there is nothing to explain.
+     */
+    private fun speakOnDevice(text: String, key: String?, reason: String?) {
         val app = getApplication<Application>()
         fun start(engine: android.speech.tts.TextToSpeech) {
             val id = "core-hub-${System.currentTimeMillis()}"
@@ -2518,7 +2647,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             })
             val queued = engine.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, id)
             if (queued == android.speech.tts.TextToSpeech.SUCCESS) {
-                _state.update { it.copy(speaking = true, speakingKey = key, speechPaused = false, speechLoadingKey = null, notice = str(R.string.voice_device_fallback, reason)) }
+                val notice = reason?.let { str(R.string.voice_device_fallback, it) }
+                _state.update { it.copy(speaking = true, speakingKey = key, speechPaused = false, speechLoadingKey = null, notice = notice ?: it.notice) }
             } else {
                 _state.update { it.copy(speaking = false, speakingKey = null, speechLoadingKey = null, error = str(R.string.voice_playback_failed)) }
             }
@@ -4644,6 +4774,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         leaveRoom()
         stopListeningToWorkflows()
         store.clearCredentials()
+        // Another account's providers must not decide what the next one hears.
+        voiceSettingsCache.clear()
         _state.update {
             UiState(
                 screen = Screen.Login,

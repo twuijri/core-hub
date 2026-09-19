@@ -827,6 +827,18 @@
     <string name="voice_input_device_note">Android speech recognition, live text</string>
     <string name="voice_input_server">Core Hub server</string>
     <string name="voice_input_server_note">Studio STT provider, transcribed after the take</string>
+    <!-- Settings › Voice: which voice reads a reply aloud, per profile. -->
+    <string name="settings_voice_output">Voice</string>
+    <string name="settings_voice_output_note">Which voice reads a reply aloud. The providers below are the ones Core Hub has configured for this profile; the app names the provider in every request instead of letting the server guess. Picking one here also makes it this profile\'s voice in Core Hub.</string>
+    <string name="voice_output_follow_server">Core Hub default</string>
+    <string name="voice_output_follow_server_value">Core Hub default (%1$s)</string>
+    <string name="voice_output_follow_server_note">Whatever Core Hub has active for this profile: %1$s</string>
+    <string name="voice_output_device">Device voice</string>
+    <string name="voice_output_device_note">The Android engine; no text is sent to Core Hub</string>
+    <string name="voice_output_active">Active in Core Hub</string>
+    <string name="voice_output_stored">Configured in Core Hub</string>
+    <string name="voice_output_builtin">Built-in free Microsoft voice; used when nothing else is set</string>
+    <string name="voice_output_unreadable">Providers could not be read: %1$s</string>
     <string name="composer_listening">Listening…</string>
     <string name="composer_stop_listening">Stop listening</string>
     <string name="composer_voice_failed">Voice input failed</string>
@@ -932,6 +944,11 @@
     <string name="location_failed_notice">Could not read the location; the agent was told.</string>
     <string name="location_reply_lost">The run ended before the location could be sent.</string>
     <string name="voice_device_fallback">Server voice unavailable (%1$s); using the device voice instead.</string>
+    <!-- Named voice failures: the banner must say which provider failed and why. -->
+    <string name="voice_provider_failed">%1$s: %2$s</string>
+    <string name="voice_settings_unavailable">Core Hub voice settings could not be read: %1$s</string>
+    <string name="voice_server_no_audio">the provider answered HTTP %1$d with no audio</string>
+    <string name="voice_active_save_failed">The voice was set on this phone, but Core Hub could not be updated: %1$s</string>
 
     <!-- ── M4: sessions, group chat, workflows ───────────────────────── -->
     <!-- M4: sessions parity -->

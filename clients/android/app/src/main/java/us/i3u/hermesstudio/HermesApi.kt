@@ -2166,24 +2166,81 @@ class HermesApi(
         )
     }
 
-    /** Turns an assistant reply into audio using the profile's Studio TTS settings. */
-    fun synthesize(profile: String, text: String): SynthesizedAudio {
+    /**
+     * GET /api/studio/tts/settings — the profile's stored TTS providers and the
+     * one Core Hub treats as active, the same envelope the web reads before it
+     * speaks.
+     */
+    fun ttsSettings(profile: String): VoiceSettings =
+        VoiceOutput.parse(call("/api/studio/tts/settings", profile = profile))
+
+    /**
+     * PUT /api/studio/tts/settings/active — makes [provider] the profile's
+     * active voice for every client. Only called when the owner picks a server
+     * provider in Settings; reading a reply aloud never writes it.
+     */
+    fun setActiveTtsProvider(profile: String, provider: String): String {
+        val body = JSONObject().put("provider", provider)
+        val result = call("/api/studio/tts/settings/active", "PUT", body, profile)
+        return result.optString("activeProvider").ifBlank { provider }
+    }
+
+    /**
+     * Turns an assistant reply into audio.
+     *
+     * [provider] and [options] are sent explicitly, the way `useSpeech` does on
+     * the web. Leaving them out makes the server fall back to its own
+     * `resolveActiveTtsProvider`, which answers `edge` whenever the profile has
+     * no stored active provider — the free Microsoft voice, not the one the
+     * owner configured.
+     */
+    fun synthesize(
+        profile: String,
+        text: String,
+        provider: String = "",
+        options: Map<String, String> = emptyMap(),
+    ): SynthesizedAudio {
         // Do not force a codec: Studio negotiates the format supported by the
         // active provider (for example WAV for Groq Orpheus), while the client
         // identifies the returned bytes before choosing the local extension.
-        val body = JSONObject().put("text", text).put("options", JSONObject())
+        val stored = JSONObject()
+        // An empty value would override a stored setting with nothing, and the
+        // API key stays on the server: `secrets` never carries its value.
+        options.forEach { (key, value) -> if (key != "apiKey" && value.isNotBlank()) stored.put(key, value) }
+        val body = JSONObject().put("text", text).put("options", stored)
+        if (provider.isNotBlank()) body.put("provider", provider)
         val builder = request("/api/studio/tts/synthesize", "POST", body, profile).newBuilder()
             .header("Accept", "audio/*")
         client.newCall(builder.build()).execute().use { response ->
             val bytes = response.body?.bytes() ?: byteArrayOf()
-            if (!response.isSuccessful) throw HermesException("HTTP ${response.code}", response.code)
-            if (bytes.isEmpty()) throw HermesException("The voice provider returned no audio")
+            // X-TTS-Provider names whoever actually answered; on an error body
+            // the server sets no such header and the requested name is all the
+            // owner can be told.
+            val served = response.header("X-TTS-Provider")?.takeIf { it.isNotBlank() }
+                ?: provider.ifBlank { VoiceOutput.BUILT_IN }
+            if (!response.isSuccessful) {
+                val detail = runCatching { ttsErrorDetail(bytes.toString(Charsets.UTF_8)) }.getOrNull()
+                throw TtsSynthesisException(
+                    provider = served,
+                    statusCode = response.code,
+                    code = "tts_http_error",
+                    message = if (detail.isNullOrBlank()) "HTTP ${response.code}" else "HTTP ${response.code}: $detail",
+                )
+            }
+            if (bytes.isEmpty()) {
+                throw TtsSynthesisException(served, response.code, "tts_empty_audio", "HTTP ${response.code}: no audio")
+            }
             // Some Studio/provider failures arrive as a JSON body with HTTP 200.
             // Passing that body to MediaPlayer used to throw during prepare().
             val contentType = response.header("Content-Type").orEmpty().lowercase()
             if (contentType.contains("json") || bytes.firstOrNull()?.toInt()?.toChar() == '{') {
-                val detail = runCatching { errorDetail(bytes.toString(Charsets.UTF_8)) }.getOrNull()
-                throw HermesException(detail?.takeIf { it.isNotBlank() } ?: "The voice provider returned invalid audio")
+                val detail = runCatching { ttsErrorDetail(bytes.toString(Charsets.UTF_8)) }.getOrNull()
+                throw TtsSynthesisException(
+                    provider = served,
+                    statusCode = response.code,
+                    code = "tts_not_audio",
+                    message = if (detail.isNullOrBlank()) "HTTP ${response.code}" else "HTTP ${response.code}: $detail",
+                )
             }
             val declaredMime = contentType.substringBefore(';')
             val detectedMime = when {
@@ -2195,7 +2252,12 @@ class HermesApi(
                 bytes.size >= 2 && (bytes[0].toInt() and 0xff) == 0xff && (bytes[1].toInt() and 0xf0) == 0xf0 -> "audio/aac"
                 else -> declaredMime.takeIf { it.startsWith("audio/") } ?: "audio/mpeg"
             }
-            return SynthesizedAudio(bytes, detectedMime)
+            return SynthesizedAudio(
+                bytes = bytes,
+                mime = detectedMime,
+                provider = served,
+                engine = response.header("X-TTS-Engine").orEmpty(),
+            )
         }
     }
 
@@ -2391,6 +2453,19 @@ class HermesApi(
         }
     }.getOrNull()
 
+    /**
+     * The TTS controller answers `{error, detail}`; the web joins both so the
+     * reader sees the provider's own words and not just "TTS synthesis failed".
+     * A body that is not JSON at all is returned trimmed rather than dropped.
+     */
+    private fun ttsErrorDetail(raw: String): String? {
+        val json = runCatching { JSONObject(raw) }.getOrNull()
+            ?: return raw.trim().replace(Regex("\\s+"), " ").take(300).takeIf { it.isNotBlank() }
+        val error = errorDetail(raw)
+        val detail = firstNonBlank(json, "detail")
+        return listOfNotNull(error, detail).distinct().joinToString(": ").takeIf { it.isNotBlank() }
+    }
+
     /** Machine-readable `code` some Studio errors carry next to `error`. */
     private fun errorCode(text: String): String? = runCatching {
         val root = JSONObject(text)
@@ -2421,6 +2496,22 @@ open class HermesException(
     /** Studio's machine-readable error code when the body carried one, e.g. `no_speech_detected`. */
     val code: String? = null,
 ) : Exception(message)
+
+/**
+ * A `POST /api/studio/tts/synthesize` that produced no playable audio.
+ *
+ * [provider] is the voice that failed, so the fallback banner can name it
+ * instead of leaving the owner to guess which of the configured providers
+ * Core Hub actually tried. [code] separates the three shapes of failure:
+ * `tts_http_error` (Studio answered 4xx/5xx), `tts_not_audio` (a JSON error
+ * body arrived with HTTP 200) and `tts_empty_audio` (no bytes at all).
+ */
+class TtsSynthesisException(
+    val provider: String,
+    statusCode: Int?,
+    code: String,
+    message: String,
+) : HermesException(message, statusCode, code)
 
 /** The profile has no server-backed STT provider; [reason] is the server's explanation, if any. */
 class SttNotConfiguredException(val reason: String?) :
@@ -2600,7 +2691,14 @@ data class Upload(
     val mime: String,
 )
 
-data class SynthesizedAudio(val bytes: ByteArray, val mime: String) {
+data class SynthesizedAudio(
+    val bytes: ByteArray,
+    val mime: String,
+    /** `X-TTS-Provider`: who actually spoke, which can differ from who was asked. */
+    val provider: String = "",
+    /** `X-TTS-Engine`: the provider's own engine name, for diagnostics. */
+    val engine: String = "",
+) {
     val extension: String get() = when (mime.lowercase()) {
         "audio/wav", "audio/x-wav" -> ".wav"
         "audio/ogg", "audio/opus" -> ".ogg"

@@ -83,6 +83,7 @@ import us.i3u.hermesstudio.AppViewModel
 import us.i3u.hermesstudio.R
 import us.i3u.hermesstudio.Store
 import us.i3u.hermesstudio.UiState
+import us.i3u.hermesstudio.VoiceOutput
 import us.i3u.hermesstudio.VoiceSegmentKind
 import us.i3u.hermesstudio.VoiceStatus
 import us.i3u.hermesstudio.applyVoiceSegment
@@ -557,6 +558,59 @@ internal val VOICE_INPUT_MODES = listOf(
 internal fun voiceInputLabel(mode: String): String = stringResource(
     VOICE_INPUT_MODES.firstOrNull { it.first == mode }?.second ?: R.string.voice_input_device,
 )
+
+/** Settings › Voice: the voice the owner picked, or the one Core Hub would pick. */
+@Composable
+internal fun voiceOutputLabel(state: UiState): String = when {
+    state.voiceOutput == VoiceOutput.DEVICE -> stringResource(R.string.voice_output_device)
+    VoiceOutput.isProvider(state.voiceOutput) -> VoiceOutput.label(state.voiceOutput)
+    else -> stringResource(
+        R.string.voice_output_follow_server_value,
+        VoiceOutput.label(VoiceOutput.effectiveProvider(state.voiceSettings)),
+    )
+}
+
+/**
+ * The Voice sheet: Core Hub's own choice, every provider it has configured for
+ * the profile, and the device engine. The provider Core Hub calls active is
+ * marked, so the owner can see what the phone will ask for.
+ */
+@Composable
+internal fun voiceOutputRows(state: UiState, onPick: (String) -> Unit): List<PickerRow> {
+    val settings = state.voiceSettings
+    val effective = VoiceOutput.label(VoiceOutput.effectiveProvider(settings))
+    val stored = settings.providers.map { it.id }.toSet()
+    return buildList {
+        add(
+            PickerRow(
+                label = stringResource(R.string.voice_output_follow_server),
+                detail = stringResource(R.string.voice_output_follow_server_note, effective),
+                selected = state.voiceOutput == VoiceOutput.FOLLOW_SERVER,
+            ) { onPick(VoiceOutput.FOLLOW_SERVER) },
+        )
+        VoiceOutput.listedProviders(settings).forEach { provider ->
+            add(
+                PickerRow(
+                    label = VoiceOutput.label(provider.id),
+                    detail = when {
+                        provider.id == settings.activeProvider -> stringResource(R.string.voice_output_active)
+                        provider.id == VoiceOutput.BUILT_IN && provider.id !in stored ->
+                            stringResource(R.string.voice_output_builtin)
+                        else -> stringResource(R.string.voice_output_stored)
+                    },
+                    selected = state.voiceOutput == provider.id,
+                ) { onPick(provider.id) },
+            )
+        }
+        add(
+            PickerRow(
+                label = stringResource(R.string.voice_output_device),
+                detail = stringResource(R.string.voice_output_device_note),
+                selected = state.voiceOutput == VoiceOutput.DEVICE,
+            ) { onPick(VoiceOutput.DEVICE) },
+        )
+    }
+}
 
 internal val APPEARANCE_LEVELS = listOf(
     "system" to R.string.appearance_system,

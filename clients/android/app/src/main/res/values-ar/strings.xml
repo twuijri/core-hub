@@ -826,6 +826,18 @@
     <string name="voice_input_device_note">التعرف على الكلام في أندرويد، نص مباشر</string>
     <string name="voice_input_server">سيرفر Core Hub</string>
     <string name="voice_input_server_note">مزوّد التحويل في الاستديو، يُفرَّغ بعد انتهاء التسجيل</string>
+    <!-- الإعدادات › الصوت: أي صوت يقرأ الرد، لكل ملف على حدة. -->
+    <string name="settings_voice_output">الصوت</string>
+    <string name="settings_voice_output_note">أي صوت يقرأ الرد بصوت مسموع. المزوّدات أدناه هي المضبوطة في Core Hub لهذا الملف، والتطبيق يذكر اسم المزوّد في كل طلب بدل أن يترك السيرفر يخمّن. واختيار مزوّد هنا يجعله كذلك صوت هذا الملف في Core Hub.</string>
+    <string name="voice_output_follow_server">إعداد Core Hub</string>
+    <string name="voice_output_follow_server_value">إعداد Core Hub (%1$s)</string>
+    <string name="voice_output_follow_server_note">ما يعتبره Core Hub نشطًا لهذا الملف: %1$s</string>
+    <string name="voice_output_device">صوت الجهاز</string>
+    <string name="voice_output_device_note">محرّك أندرويد؛ لا يُرسل أي نص إلى Core Hub</string>
+    <string name="voice_output_active">نشط في Core Hub</string>
+    <string name="voice_output_stored">مضبوط في Core Hub</string>
+    <string name="voice_output_builtin">الصوت المجاني المدمج من مايكروسوفت؛ يُستخدم حين لا يوجد غيره</string>
+    <string name="voice_output_unreadable">تعذّرت قراءة المزوّدات: %1$s</string>
     <string name="composer_listening">جارٍ الاستماع…</string>
     <string name="composer_stop_listening">إيقاف الاستماع</string>
     <string name="composer_voice_failed">تعذّر الإدخال الصوتي</string>
@@ -931,6 +943,11 @@
     <string name="location_failed_notice">تعذّرت قراءة الموقع؛ أُبلغ الوكيل بذلك.</string>
     <string name="location_reply_lost">انتهى التشغيل قبل إرسال الموقع.</string>
     <string name="voice_device_fallback">صوت السيرفر غير متاح (%1$s)؛ يُستخدم صوت الجهاز بدلًا منه.</string>
+    <!-- أعطال الصوت المسمّاة: لا بد أن يذكر التنبيه أي مزوّد فشل ولماذا. -->
+    <string name="voice_provider_failed">المزوّد %1$s: %2$s</string>
+    <string name="voice_settings_unavailable">تعذّرت قراءة إعدادات الصوت من Core Hub: %1$s</string>
+    <string name="voice_server_no_audio">ردّ المزوّد بالحالة %1$d بلا صوت</string>
+    <string name="voice_active_save_failed">ضُبط الصوت على هذا الجهاز، لكن تعذّر تحديث Core Hub: %1$s</string>
 
     <!-- ── M4: sessions, group chat, workflows ───────────────────────── -->
     <!-- M4: sessions parity -->

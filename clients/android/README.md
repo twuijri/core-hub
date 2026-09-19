@@ -118,6 +118,12 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   **Core Hub server** path instead, which records a 16 kHz WAV and transcribes it with
   the STT provider configured in Studio. The mic shows idle, listening, transcribing
   and error states, and every failure is shown in words
+- **Settings → Voice** picks who reads a reply aloud, per profile: *Core Hub default*
+  (whatever the server has active), any TTS provider Core Hub has configured for that
+  profile, or *Device voice* (the Android engine, nothing leaves the phone). Picking a
+  server provider also writes it with `PUT /api/studio/tts/settings/active`, the same
+  endpoint the web's voice connections screen uses; nothing else on the phone ever
+  changes the server's active provider
 - **Sign in by scanning the QR code** Core Hub shows under Device connections → App →
   Direct connection: the server address comes from the code and the phone appears as
   a named device on the server. Username and password remain as the second option
@@ -178,6 +184,14 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
 - **Action row under every message**: play/pause voice (server TTS through
   `POST /api/studio/tts/synthesize`, falling back to Android TextToSpeech when the
   server cannot), copy, reference (quotes into the composer), fork (`/fork`), time
+- **Spoken replies name their provider**, exactly like the web client: the app reads
+  `GET /api/studio/tts/settings` for the active profile and sends `provider` plus that
+  provider's stored options on every synthesize call. Leaving them out let the server
+  resolve a provider on its own, which is `edge` (Microsoft's free voice) whenever the
+  profile has no stored active provider and more than one is configured — the wrong
+  voice, and often a failing one. When synthesis does fail, the banner now quotes the
+  provider, the HTTP status and the server's own error body instead of a bare
+  "could not be played" before it falls back to the device engine
 - **Composer per the spec**: radius-18 card, 150 dp minimum, context indicator
   "{used} / {limit} · remaining {rest}" top-end (amber above 80 %), a borderless 16 sp
   textarea that never auto-focuses, and the toolbar [+ camera / gallery / files]
@@ -316,7 +330,8 @@ the installation and to allow this app as an update source once.
 | Room detail and messages | `GET /api/studio/group-chat/rooms/{id}` |
 | Upload an attachment | `POST /upload?profile=…` |
 | Transcribe a recording (server voice input) | `GET /api/studio/stt/profile-status` · `POST /api/studio/stt/transcribe` |
-| Spoken replies | `POST /api/studio/tts/synthesize` |
+| Spoken replies | `POST /api/studio/tts/synthesize` (always with `provider`) |
+| Voice providers of a profile | `GET /api/studio/tts/settings` · `PUT /api/studio/tts/settings/active` |
 | Generated files | `GET /api/studio/files/download` |
 | Usage and performance | `GET /api/studio/usage/stats` · `GET /api/studio/performance/runtime` |
 | Available models | `GET /api/hermes/available-models?profile=…` |
@@ -362,7 +377,8 @@ are written to the app cache, uploaded, and deleted immediately.
 
 - Editing the workflow graph itself (the phone lists it; the editor is desktop-only)
 - Editing a profile's avatar from the app, not only reading it
-- Voice settings (STT and TTS providers) from the app
+- STT provider settings from the app (the TTS provider can already be chosen in
+  Settings → Voice; editing a provider's own keys and models is still web-only)
 - Native push notifications for finished runs, approvals, and scheduled reports
   after the Studio server implements the capability-gated APNs/FCM contract in
   [`../docs/push-notifications.md`](../docs/push-notifications.md)
@@ -381,13 +397,17 @@ push, so a local SDK is optional.
 
 `tools/mock-studio.py` answers the REST endpoints the app calls, with sample profiles,
 conversations, accounts, settings, model providers, a room, scheduled jobs, Kanban,
-skills, plugins, MCP servers, and Petdex — enough
-to open and edit every screen. It does not
+skills, plugins, MCP servers, TTS providers, and Petdex — enough
+to open and edit every screen. Its TTS routes reproduce the fallback bug on purpose:
+a synthesize call that names no provider is resolved to `edge` and answered with a
+502, `groq` answers a JSON error as HTTP 200, and `elevenlabs` (the profile's active
+Arabic voice) answers real WAV bytes. `MockStudioVoiceTest` drives all of that through
+the real `HermesApi`. It does not
 speak Socket.IO, which makes it a good way to exercise the REST fallback: messages
 still get answered, just not word by word.
 
 ```bash
-python3 tools/mock-studio.py
+python3 tools/mock-studio.py        # or: python3 tools/mock-studio.py 0
 ```
 
 Sign in from a debug build at `http://10.0.2.2:8099` on an emulator, with any
