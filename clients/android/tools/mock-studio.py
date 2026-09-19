@@ -39,7 +39,61 @@ MESSAGES = [
     {"id": "m1", "role": "user", "content": "وش وضع التقرير؟", "timestamp": "2026-07-30T18:19:00"},
     {"id": "m2", "role": "assistant", "content": "خلصت الجزء الأول ورفعته على السيرفر. باقي المراجعة النهائية.", "timestamp": "2026-07-30T18:20:00"},
 ]
-ROOMS = [{"id": "r1", "name": "غرفة التطوير", "agentCount": 3, "memberCount": 2, "updatedAt": "2026-07-30T12:00:00"}]
+ROOM_AGENTS = [
+    {"id": "seat-1", "agentId": "seat-1", "agent": "hermes", "agentMode": "scoped", "profile": "manager",
+     "provider": "anthropic", "model": "claude-opus-5", "apiMode": "", "reasoningEffort": "high",
+     "name": "برق", "description": "يراجع الكود", "avatar": None, "connectionStatus": "online"},
+    {"id": "seat-2", "agentId": "seat-2", "agent": "claude", "agentMode": "global", "profile": "barq",
+     "provider": "anthropic", "model": "claude-sonnet-5", "apiMode": "responses", "reasoningEffort": "",
+     "name": "Ada", "description": "writes the tests", "avatar": None, "connectionStatus": "online"},
+]
+ROOM_MEMBERS = [{"id": "u1", "userId": "1", "name": "owner", "description": "", "avatar": None, "connectionStatus": "online"}]
+ROOMS = [{
+    "id": "r1", "name": "غرفة التطوير", "inviteCode": "ABC234", "canManage": True,
+    "workspace": "/home/agent/projects/core-hub", "totalTokens": 18432,
+    "summaryProfile": "manager", "summaryProvider": "", "summaryModel": "", "summaryApiMode": "", "summaryEveryTurns": 10,
+    "agentHandoffEnabled": True, "agentHandoffMaxDepth": 3, "agentHandoffUnlimited": False,
+    "lastActiveAt": 1785000000000, "createdAt": 1784000000000, "agents": ROOM_AGENTS,
+}]
+ROOM_MESSAGES = [
+    {"id": "g1", "roomId": "r1", "senderId": "1", "senderName": "owner", "senderType": "member",
+     "role": "user", "content": "وش وضع المراجعة؟", "timestamp": 1785000000000},
+    {"id": "g2", "roomId": "r1", "senderId": "seat-1", "senderName": "برق", "senderType": "agent",
+     "role": "tool", "run_id": "run-1", "toolName": "Bash", "toolStatus": "done",
+     "toolPreview": "git status", "content": "clean", "timestamp": 1785000001000},
+    {"id": "g3", "roomId": "r1", "senderId": "seat-1", "senderName": "برق", "senderType": "agent",
+     "role": "assistant", "run_id": "run-1", "content": "راجعت الفرع وكل شيء نظيف.", "timestamp": 1785000002000},
+]
+ROOM_SUMMARY = {"summary": "الفريق يراجع فرع الجوال.", "status": "ready", "summarizedTurnCount": 4, "updatedAt": 1785000000000, "lastError": None}
+HANDOFFS = [{"chainId": "ch-1", "roomId": "r1", "targetAgentId": "seat-2", "status": "stopped",
+             "stopReason": "depth_reached", "currentDepth": 3, "maxDepth": 3, "unlimited": False,
+             "continueUsed": False, "lastError": None, "updatedAt": 1785000000000}]
+AGENT_PRESETS = [{"id": "p1", "name": "مراجع الكود", "description": "يقرأ الفروقات", "agent": "claude",
+                  "agentMode": "scoped", "profile": "manager", "provider": "anthropic", "model": "claude-opus-5",
+                  "apiMode": "", "reasoningEffort": "high", "avatar": None, "available": True, "validationError": ""}]
+SESSION_CATEGORIES = [{"id": 1, "name": "العمل"}, {"id": 2, "name": "شخصي"}]
+WORKFLOWS = [{
+    "id": "wf-1", "name": "تقرير الليل", "profile": "manager", "workspace": "/home/agent/projects/core-hub",
+    "updated_at": 1785000000000,
+    "nodes": [
+        {"id": "n1", "data": {"title": "اجمع الأخبار", "agent": "hermes", "model": "claude-opus-5", "input": "اجمع آخر الأخبار"}},
+        {"id": "n2", "data": {"title": "اكتب التقرير", "agent": "claude", "model": "claude-sonnet-5", "approvalRequired": True}},
+        {"id": "n3", "data": {"title": "أرسل", "agent": "hermes", "model": "claude-opus-5"}},
+    ],
+    "edges": [{"id": "e1", "source": "n1", "target": "n2"}, {"id": "e2", "source": "n2", "target": "n3"}],
+}]
+WORKFLOW_RUNS = [{
+    "id": "run-1", "workflow_id": "wf-1", "status": "running", "created_at": 1785000000000,
+    "started_at": 1785000000000, "trigger_source": "manual", "profile": "manager", "error": None,
+    "node_sessions": [
+        {"id": "ns1", "node_id": "n1", "execution_id": "x1", "status": "completed", "session_id": "s1",
+         "profile": "manager", "agent": "hermes", "sequence": 0, "started_at": 1785000000000, "finished_at": 1785000004000},
+        {"id": "ns2", "node_id": "n2", "execution_id": "x2", "status": "blocked", "session_id": "s2",
+         "profile": "manager", "agent": "claude", "sequence": 1, "started_at": 1785000004000},
+    ],
+}]
+WORKFLOW_SCHEDULES = [{"id": "sch-1", "workflow_id": "wf-1", "schedule": "0 9 * * *",
+                       "timezone": "Asia/Riyadh", "enabled": True, "next_run_at": 1785086400000}]
 JOBS = [
     {
         "job_id": "morning-brief",
@@ -184,6 +238,47 @@ class Handler(BaseHTTPRequestHandler):
     def find_job(self, job_id):
         return next((job for job in JOBS if job['job_id'] == job_id), None)
 
+    def m4_write(self, path, body):
+        """
+        One writer for the M4 routes (rooms, presets, workflows, sessions).
+        The mock keeps no real state machine; it answers with the envelope the
+        app parses so every screen can show a saved state instead of an error.
+        """
+        if path.endswith('/config') or path.endswith('/workspace'):
+            ROOMS[0].update({k: v for k, v in body.items() if k in ROOMS[0] or k.startswith('agentHandoff')})
+            return {"room": ROOMS[0]}
+        if path.endswith('/clone'):
+            return {"room": dict(ROOMS[0], id="r2", name=body.get('name') or 'نسخة')}
+        if path.endswith('/invite-code'):
+            ROOMS[0]['inviteCode'] = body.get('inviteCode', ROOMS[0]['inviteCode'])
+            return {"ok": True}
+        if path.endswith('/summary'):
+            ROOM_SUMMARY['summary'] = body.get('summary', ROOM_SUMMARY['summary'])
+            return {"summary": ROOM_SUMMARY}
+        if re.fullmatch(r'/api/studio/group-chat/rooms/[^/]+/agents', path):
+            return {"agent": dict(ROOM_AGENTS[0], id="seat-3", name=body.get('name') or body.get('profile', 'seat'))}
+        if re.fullmatch(r'/api/studio/group-chat/rooms/[^/]+/agents/[^/]+', path):
+            return {"agents": ROOM_AGENTS}
+        if re.fullmatch(r'/api/studio/group-chat/rooms/[^/]+/members/[^/]+', path):
+            return {"members": ROOM_MEMBERS}
+        if path.endswith('/continue'):
+            return {"chain": dict(HANDOFFS[0], status="running", continueUsed=True)}
+        if path.startswith('/api/studio/group-chat/agent-presets'):
+            return {"preset": dict(AGENT_PRESETS[0], name=body.get('name', AGENT_PRESETS[0]['name']))}
+        if path == '/api/studio/session-categories':
+            new_id = max([item['id'] for item in SESSION_CATEGORIES] + [0]) + 1
+            SESSION_CATEGORIES.append({"id": new_id, "name": body.get('name', f'فئة {new_id}')})
+            return {"category": SESSION_CATEGORIES[-1]}
+        if path.startswith('/api/studio/workflows/import'):
+            return {"preview": {"token": "tok", "summary": {"name": WORKFLOWS[0]['name']}}, "ok": True}
+        if path.endswith('/schedules'):
+            WORKFLOW_SCHEDULES.append(dict(WORKFLOW_SCHEDULES[0], id=f"sch-{len(WORKFLOW_SCHEDULES) + 1}",
+                                           schedule=body.get('schedule', '0 9 * * *')))
+            return {"ok": True}
+        if 'batch' in path:
+            return {"updated": len(body.get('ids', [])), "failed": 0}
+        return {"ok": True, "success": True}
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
@@ -201,10 +296,29 @@ class Handler(BaseHTTPRequestHandler):
         elif path == '/api/hermes/profiles': self.send({"profiles": PROFILES})
         elif path == '/api/studio/sessions': self.send({"sessions": SESSIONS})
         elif re.match(r'/api/studio/sessions/conversations/.+/messages', path): self.send({"messages": MESSAGES})
+        elif path == '/api/studio/sessions/search':
+            needle = parse_qs(parsed.query).get('q', [''])[0]
+            hits = [dict(item, snippet=needle) for item in SESSIONS if needle in item['title']] or SESSIONS[:1]
+            self.send({"sessions": hits})
+        elif path == '/api/studio/session-categories': self.send({"categories": SESSION_CATEGORIES})
+        elif path == '/api/studio/sessions/hermes':
+            self.send({"sessions": SESSIONS + [dict(SESSIONS[0], id='s9', title='محادثة مؤرشفة', is_archived=True)]})
         elif path == '/api/studio/group-chat/rooms': self.send({"rooms": ROOMS})
+        elif path == '/api/studio/group-chat/agent-presets': self.send({"presets": AGENT_PRESETS})
+        elif re.fullmatch(r'/api/studio/group-chat/rooms/join/[^/]+', path): self.send({"room": ROOMS[0]})
+        elif re.fullmatch(r'/api/studio/group-chat/rooms/[^/]+/summary', path): self.send({"summary": ROOM_SUMMARY})
+        elif re.fullmatch(r'/api/studio/group-chat/rooms/[^/]+/handoffs', path): self.send({"chains": HANDOFFS})
+        elif re.fullmatch(r'/api/studio/group-chat/rooms/[^/]+/agents', path): self.send({"agents": ROOM_AGENTS})
         elif re.match(r'/api/studio/group-chat/rooms/.+', path):
-            self.send({"room": ROOMS[0], "agents": [{"name": "barq"}], "members": [], "messages": [
-                {"id": "g1", "role": "assistant", "senderName": "barq", "content": "جاهز.", "timestamp": "2026-07-30T12:00:00"}]})
+            self.send({"room": ROOMS[0], "agents": ROOM_AGENTS, "members": ROOM_MEMBERS,
+                       "messages": ROOM_MESSAGES, "total": len(ROOM_MESSAGES), "hasMore": False,
+                       "handoffChains": HANDOFFS, "roomSummary": ROOM_SUMMARY, "executionQueue": [],
+                       "pendingApprovals": [], "pendingClarifies": [], "activities": []})
+        elif path == '/api/studio/workflows': self.send({"workflows": WORKFLOWS})
+        elif re.fullmatch(r'/api/studio/workflows/[^/]+/runs', path): self.send({"runs": WORKFLOW_RUNS})
+        elif re.fullmatch(r'/api/studio/workflows/[^/]+/runs/[^/]+', path): self.send({"run": WORKFLOW_RUNS[0]})
+        elif re.fullmatch(r'/api/studio/workflows/[^/]+/schedules', path): self.send({"schedules": WORKFLOW_SCHEDULES})
+        elif re.fullmatch(r'/api/studio/workflows/[^/]+', path): self.send({"workflow": WORKFLOWS[0]})
         elif path == '/api/hermes/config':
             section = parse_qs(parsed.query).get('section', [None])[0]
             self.send({section: CONFIG.get(section, {})} if section else CONFIG)
@@ -259,6 +373,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send({"name": "imported-skill"})
             return
         body = self.json_body()
+        if path.startswith('/api/studio/group-chat/') or path.startswith('/api/studio/workflows') or path.startswith('/api/studio/sessions'):
+            self.send(self.m4_write(path, body))
+            return
         if path == '/api/auth/login': self.send({"token": "mock-token"})
         elif path in ('/api/auth/change-password', '/api/auth/change-username'):
             if path.endswith('change-username') and body.get('newUsername'):
@@ -344,6 +461,9 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         body = self.json_body()
+        if path.startswith('/api/studio/group-chat/') or path.startswith('/api/studio/workflows'):
+            self.send(self.m4_write(path, body))
+            return
         if path == '/api/hermes/config':
             section = body.get('section')
             if section:
@@ -388,6 +508,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_PATCH(self):
         path = urlparse(self.path).path
         body = self.json_body()
+        if path.startswith('/api/studio/workflows'):
+            self.send(self.m4_write(path, body))
+            return
         if re.fullmatch(r'/api/hermes/mcp/servers/[^/]+', path):
             name = unquote(path.rsplit('/', 1)[1])
             server = next((item for item in MCP_SERVERS if item['name'] == name), None)
@@ -415,6 +538,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         parsed = urlparse(self.path)
         path = parsed.path
+        if path.startswith('/api/studio/group-chat/') or path.startswith('/api/studio/workflows') or path.startswith('/api/studio/session'):
+            self.send(self.m4_write(path, {}))
+            return
         if path == '/api/auth/locked-ips':
             ip = parse_qs(parsed.query).get('ip', [None])[0]
             before = len(LOCKS)

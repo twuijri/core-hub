@@ -49,10 +49,17 @@ class ChannelSchemaTest {
      */
     @Test
     fun nestedAndroidPagesLeaveTheDrawerToTheRootSections() {
-        val files = listOf("MainActivity.kt", "AgentToolScreens.kt", "CronJobs.kt", "KanbanScreens.kt", "StudioOperationsScreens.kt", "ui/chat/ConversationScreen.kt", "ui/sessions/HistoryScreen.kt")
+        val files = listOf(
+            "MainActivity.kt", "AgentToolScreens.kt", "CronJobs.kt", "KanbanScreens.kt",
+            "ui/chat/ConversationScreen.kt", "ui/sessions/HistoryScreen.kt",
+            "ui/groups/GroupsScreen.kt", "ui/groups/RoomScreen.kt",
+            "ui/workflows/WorkflowsScreen.kt", "ui/workflows/WorkflowScreen.kt",
+        )
             .associateWith { File("src/main/java/us/i3u/hermesstudio/$it").readText() }
         val nestedScreens = listOf(
-            "RoomScreen" to "MainActivity.kt",
+            "RoomScreen" to "ui/groups/RoomScreen.kt",
+            "WorkflowScreen" to "ui/workflows/WorkflowScreen.kt",
+            "WorkflowRunScreen" to "ui/workflows/WorkflowScreen.kt",
             "ProfilesScreen" to "MainActivity.kt",
             "SettingsGroupScreen" to "MainActivity.kt",
             "ChannelsScreen" to "MainActivity.kt",
@@ -73,8 +80,8 @@ class ChannelSchemaTest {
             assertFalse("$screen must not mount a bottom tab bar", body.contains("StudioTabs("))
         }
         listOf(
-            "MainActivity.kt" to "fun GroupsScreen",
-            "StudioOperationsScreens.kt" to "fun WorkflowsScreen",
+            "ui/groups/GroupsScreen.kt" to "fun GroupsScreen",
+            "ui/workflows/WorkflowsScreen.kt" to "fun WorkflowsScreen",
             "ui/chat/ConversationScreen.kt" to "fun ChatHeader",
             "ui/sessions/HistoryScreen.kt" to "fun HistoryScreen",
         ).forEach { (file, screen) ->

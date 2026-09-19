@@ -330,13 +330,19 @@ class HermesApiContractTest {
     }
 
     @Test
-    fun `room list does not invent zero counts absent from Studio`() {
-        enqueue("""{"rooms":[{"id":"room-1","name":"Planning","inviteCode":"ABC234"}]}""")
+    fun `room list keeps the seats Studio sends and invents none`() {
+        enqueue("""{"rooms":[{"id":"room-1","name":"Planning","inviteCode":"ABC234"},{"id":"room-2","name":"Build","agents":[{"id":"seat-1","agent":"claude","profile":"manager","name":"Ada"}],"canManage":true,"totalTokens":4096}]}""")
 
-        val room = api.rooms().single()
+        val rooms = api.rooms()
 
-        assertNull(room.agentCount)
-        assertNull(room.memberCount)
+        assertEquals(listOf("room-1", "room-2"), rooms.map { it.id })
+        assertEquals(emptyList<String>(), rooms[0].agents.map { it.id })
+        assertFalse(rooms[0].canManage)
+        assertEquals("ABC234", rooms[0].inviteCode)
+        assertEquals(listOf("Ada"), rooms[1].agents.map { it.name })
+        assertEquals("claude", rooms[1].agents.single().agent)
+        assertTrue(rooms[1].canManage)
+        assertEquals(4096L, rooms[1].totalTokens)
     }
 
     @Test
@@ -448,7 +454,7 @@ class HermesApiContractTest {
         assertEquals("/api/studio/group-chat/rooms/room-1?limit=80&offset=0", server.takeRequest().path)
 
         enqueue("""{"room":{"id":"room-2","name":"New"}}""")
-        api.createRoom("New", "ABC234", listOf("manager"))
+        api.createRoom("New", "ABC234", listOf(RoomAgentDraft(profile = "manager")), "manager")
         assertEquals("/api/studio/group-chat/rooms", server.takeRequest().path)
 
         enqueue("""{"ok":true}""")
@@ -975,6 +981,153 @@ class HermesApiContractTest {
         assertTrue(HermesException("Forbidden", 403).invalidatesSavedSession())
         assertFalse(HermesException("Server error", 500).invalidatesSavedSession())
         assertFalse(java.net.SocketTimeoutException().invalidatesSavedSession())
+    }
+
+    @Test
+    fun `every M4 group-chat route is the canonical studio one`() {
+        enqueue("""{"room":{"id":"room-1","name":"Copy"}}""")
+        api.cloneRoom("room-1", "Copy", "XYZ789")
+        assertEquals("/api/studio/group-chat/rooms/room-1/clone", server.takeRequest().path)
+
+        enqueue("""{"room":{"id":"room-1","name":"Renamed"}}""")
+        assertEquals("Renamed", api.updateRoomConfig("room-1", org.json.JSONObject().put("name", "Renamed")).name)
+        server.takeRequest().let {
+            assertEquals("/api/studio/group-chat/rooms/room-1/config", it.path)
+            assertEquals("PUT", it.method)
+        }
+
+        enqueue("""{"room":{"id":"room-1","name":"R","workspace":"/w"}}""")
+        assertEquals("/w", api.updateRoomWorkspace("room-1", "/w").workspace)
+        assertEquals("/api/studio/group-chat/rooms/room-1/workspace", server.takeRequest().path)
+
+        enqueue("""{"ok":true}""")
+        api.updateRoomInviteCode("room-1", "ABC234")
+        assertEquals("/api/studio/group-chat/rooms/room-1/invite-code", server.takeRequest().path)
+
+        enqueue("""{"room":{"id":"room-7","name":"Shared"}}""")
+        assertEquals("room-7", api.joinRoomByCode("ABC234").id)
+        assertEquals("/api/studio/group-chat/rooms/join/ABC234", server.takeRequest().path)
+
+        enqueue("""{"agent":{"id":"seat-1","name":"Ada","profile":"manager"}}""")
+        assertEquals("Ada", api.addRoomAgent("room-1", RoomAgentDraft(profile = "manager", name = "Ada")).name)
+        assertEquals("/api/studio/group-chat/rooms/room-1/agents", server.takeRequest().path)
+
+        enqueue("""{"agents":[{"id":"seat-1","name":"Ada","profile":"manager"}]}""")
+        api.updateRoomAgent("room-1", "seat-1", RoomAgentDraft(profile = "manager"))
+        server.takeRequest().let {
+            assertEquals("/api/studio/group-chat/rooms/room-1/agents/seat-1", it.path)
+            assertEquals("PUT", it.method)
+        }
+
+        enqueue("""{"agents":[]}""")
+        api.removeRoomAgent("room-1", "seat-1")
+        server.takeRequest().let {
+            assertEquals("/api/studio/group-chat/rooms/room-1/agents/seat-1", it.path)
+            assertEquals("DELETE", it.method)
+        }
+
+        enqueue("""{"members":[]}""")
+        api.removeRoomMember("room-1", "u7")
+        assertEquals("/api/studio/group-chat/rooms/room-1/members/u7", server.takeRequest().path)
+
+        enqueue("""{"ok":true}""")
+        api.clearRoomContext("room-1")
+        assertEquals("/api/studio/group-chat/rooms/room-1/clear-context", server.takeRequest().path)
+
+        // The REST route says "summary", the socket snapshot says "roomSummary".
+        enqueue("""{"summary":{"summary":"so far","status":"ready"}}""")
+        assertEquals("so far", api.roomSummary("room-1")?.summary)
+        assertEquals("/api/studio/group-chat/rooms/room-1/summary", server.takeRequest().path)
+
+        enqueue("""{"roomSummary":{"summary":"later","status":"ready"}}""")
+        assertEquals("later", api.updateRoomSummary("room-1", "later")?.summary)
+        server.takeRequest().let {
+            assertEquals("/api/studio/group-chat/rooms/room-1/summary", it.path)
+            assertEquals("PUT", it.method)
+        }
+
+        enqueue("""{"chains":[{"chainId":"ch-1","status":"stopped"}]}""")
+        assertEquals("ch-1", api.roomHandoffs("room-1").single().chainId)
+        assertEquals("/api/studio/group-chat/rooms/room-1/handoffs", server.takeRequest().path)
+
+        enqueue("""{"chain":{"chainId":"ch-1","status":"running"}}""")
+        assertEquals("running", api.continueRoomHandoff("room-1", "ch-1")?.status)
+        assertEquals("/api/studio/group-chat/rooms/room-1/handoffs/ch-1/continue", server.takeRequest().path)
+
+        enqueue("""{"presets":[{"id":"p1","name":"Reviewer","profile":"manager"}]}""")
+        assertEquals("Reviewer", api.agentPresets(null).single().name)
+        assertEquals("/api/studio/group-chat/agent-presets", server.takeRequest().path)
+
+        enqueue("""{"preset":{"id":"p1","name":"Reviewer","profile":"manager"}}""")
+        api.createAgentPreset(RoomAgentDraft(profile = "manager", name = "Reviewer"))
+        assertEquals("/api/studio/group-chat/agent-presets", server.takeRequest().path)
+
+        enqueue("""{"ok":true}""")
+        api.deleteAgentPreset("p1")
+        server.takeRequest().let {
+            assertEquals("/api/studio/group-chat/agent-presets/p1", it.path)
+            assertEquals("DELETE", it.method)
+        }
+    }
+
+    @Test
+    fun `every M4 workflow route is the canonical studio one`() {
+        enqueue("""{"workflows":[{"id":"wf-1","name":"Nightly","profile":"manager","nodes":[{"id":"a","data":{"title":"Plan"}}],"edges":[]}]}""")
+        val workflow = api.workflows("manager").single()
+        assertEquals("Nightly", workflow.name)
+        assertEquals(listOf("Plan"), workflow.nodes.map { it.title })
+        assertEquals("/api/studio/workflows?profile=manager", server.takeRequest().path)
+
+        enqueue("""{"runs":[{"id":"run-1","workflow_id":"wf-1","status":"completed"}]}""")
+        assertEquals("run-1", api.workflowRuns("wf-1").single().id)
+        assertEquals("/api/studio/workflows/wf-1/runs?limit=30", server.takeRequest().path)
+
+        enqueue("""{"run":{"id":"run-1","workflow_id":"wf-1","status":"running","node_sessions":[{"node_id":"a","status":"blocked","sequence":0}]}}""")
+        assertEquals("a", api.workflowRun("wf-1", "run-1").run.pendingNodeId)
+        assertEquals("/api/studio/workflows/wf-1/runs/run-1", server.takeRequest().path)
+
+        enqueue("""{"ok":true}""")
+        api.runWorkflow("wf-1", "go")
+        assertEquals("/api/studio/workflows/wf-1/run", server.takeRequest().path)
+
+        enqueue("""{"ok":true}""")
+        api.stopWorkflowRun("wf-1", "run-1")
+        assertEquals("/api/studio/workflows/wf-1/runs/run-1/stop", server.takeRequest().path)
+
+        enqueue("""{"ok":true}""")
+        api.approveWorkflowNode("wf-1", "run-1", "a", approved = true, executionId = "exec-2")
+        assertEquals("/api/studio/workflows/wf-1/runs/run-1/nodes/a/approval", server.takeRequest().path)
+
+        enqueue("""{"ok":true}""")
+        api.rerunWorkflow("wf-1", "run-1", "a")
+        assertEquals("/api/studio/workflows/wf-1/runs/run-1/rerun-from-node", server.takeRequest().path)
+
+        enqueue("""{"ok":true}""")
+        api.deleteWorkflowRun("wf-1", "run-1")
+        server.takeRequest().let {
+            assertEquals("/api/studio/workflows/wf-1/runs/run-1", it.path)
+            assertEquals("DELETE", it.method)
+        }
+
+        enqueue("""{"schedules":[{"id":"s1","workflow_id":"wf-1","schedule":"0 9 * * *","timezone":"Asia/Riyadh","enabled":true}]}""")
+        val schedule = api.workflowSchedules("wf-1").single()
+        assertTrue(schedule.enabled)
+        assertEquals("/api/studio/workflows/wf-1/schedules", server.takeRequest().path)
+
+        enqueue("""{"ok":true}""")
+        api.updateWorkflowSchedule(schedule, "0 8 * * *", "Asia/Riyadh", false)
+        server.takeRequest().let {
+            assertEquals("/api/studio/workflows/wf-1/schedules/s1", it.path)
+            assertEquals("PATCH", it.method)
+        }
+
+        enqueue("""{"preview":{"token":"tok-1","summary":{"name":"Nightly"}}}""")
+        enqueue("""{"ok":true}""")
+        assertEquals("Nightly", api.importWorkflow("{}", "manager"))
+        assertEquals("/api/studio/workflows/import/preview", server.takeRequest().path)
+        assertEquals("/api/studio/workflows/import/confirm", server.takeRequest().path)
+
+        assertTrue(api.workflowExportUrl("wf-1").contains("/api/studio/workflows/wf-1/export?token="))
     }
 
     private fun enqueue(body: String, code: Int = 200) {

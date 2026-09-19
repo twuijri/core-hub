@@ -135,6 +135,16 @@ class Store(context: Context) {
         get() = prefs.getInt(KEY_RECENT_COUNT, 10).coerceIn(1, 100)
         set(value) = prefs.edit().putInt(KEY_RECENT_COUNT, value.coerceIn(1, 100)).apply()
 
+    /** Drawer "All profiles": list every profile's sessions, like the web's sidebar toggle. */
+    var allProfiles: Boolean
+        get() = prefs.getBoolean(KEY_ALL_PROFILES, false)
+        set(value) = prefs.edit().putBoolean(KEY_ALL_PROFILES, value).apply()
+
+    /** Settings › Display › Text size, a device preference (0.85–1.3, default 1). */
+    var textScale: Float
+        get() = prefs.getFloat(KEY_TEXT_SCALE, 1f).coerceIn(TEXT_SCALE_MIN, TEXT_SCALE_MAX)
+        set(value) = prefs.edit().putFloat(KEY_TEXT_SCALE, value.coerceIn(TEXT_SCALE_MIN, TEXT_SCALE_MAX)).apply()
+
     fun clearCredentials() {
         prefs.edit()
             .remove(KEY_TOKEN)
@@ -152,6 +162,10 @@ class Store(context: Context) {
     companion object {
         const val VOICE_INPUT_DEVICE = "device"
         const val VOICE_INPUT_SERVER = "server"
+        const val TEXT_SCALE_MIN = 0.85f
+        const val TEXT_SCALE_MAX = 1.3f
+        private const val KEY_ALL_PROFILES = "sessions_all_profiles"
+        private const val KEY_TEXT_SCALE = "text_scale"
 
         private const val KEY_URL = "base_url"
         private const val KEY_TOKEN = "token"

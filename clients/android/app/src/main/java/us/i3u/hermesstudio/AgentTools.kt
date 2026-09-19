@@ -180,6 +180,10 @@ data class StudioWorkflow(
     val edgeCount: Int,
     val nodesJson: String = "[]",
     val edgesJson: String = "[]",
+    /** Read-only graph summary for the phone (no editor on mobile). */
+    val nodes: List<WorkflowNodeSummary> = emptyList(),
+    val edges: List<WorkflowEdgeSummary> = emptyList(),
+    val updatedAt: Long = 0L,
 )
 data class WorkflowSchedule(val id: String, val workflowId: String, val schedule: String, val timezone: String, val enabled: Boolean, val nextRunAt: Long?)
 
@@ -204,7 +208,13 @@ data class StudioWorkflowRun(
     val createdAt: Long,
     val error: String?,
     val pendingNodeId: String?,
-)
+    val startedAt: Long? = null,
+    val finishedAt: Long? = null,
+    val triggerSource: String = "manual",
+    val profile: String = "",
+) {
+    val active: Boolean get() = status == "running" || status == "queued"
+}
 
 data class EkkoMemory(val id: String, val title: String, val content: String, val status: String, val revision: Int, val tags: List<String>)
 data class EkkoMcpServer(val name: String, val enabled: Boolean, val transport: String, val config: String)

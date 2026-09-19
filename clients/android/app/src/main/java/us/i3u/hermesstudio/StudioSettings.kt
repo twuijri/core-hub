@@ -26,8 +26,10 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.ModelTraining
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.PrivacyTip
@@ -436,6 +438,34 @@ private fun ManagedUserDialog(
 
 @Composable
 internal fun ModelProvidersSettings(state: UiState, viewModel: AppViewModel) {
+    var addingProvider by remember { mutableStateOf(false) }
+    var pickingDefault by remember { mutableStateOf(false) }
+    var removingProvider by remember { mutableStateOf<ModelProvider?>(null) }
+
+    if (addingProvider) CustomProviderDialog(onDismiss = { addingProvider = false }) { name, baseUrl, key, apiMode ->
+        viewModel.addCustomProvider(name, baseUrl, key, apiMode)
+        addingProvider = false
+    }
+    if (pickingDefault) DefaultModelDialog(state, onDismiss = { pickingDefault = false }) { provider, model ->
+        viewModel.setDefaultModelFromCatalog(provider, model)
+        pickingDefault = false
+    }
+    removingProvider?.let { provider ->
+        ConfirmDialog(
+            title = stringResource(R.string.models_remove_provider),
+            body = provider.label,
+            action = stringResource(R.string.action_remove),
+            onConfirm = { viewModel.removeProvider(provider); removingProvider = null },
+            onDismiss = { removingProvider = null },
+        )
+    }
+
+    SettingsRow(
+        icon = Icons.Filled.ModelTraining,
+        label = stringResource(R.string.models_default_model),
+        value = state.modelCatalog?.defaultModel?.takeIf { it.isNotBlank() } ?: stringResource(R.string.models_default_none),
+        onClick = { pickingDefault = true },
+    )
     Text(
         stringResource(R.string.models_keys_description),
         style = MaterialTheme.typography.bodySmall,
@@ -506,13 +536,167 @@ internal fun ModelProvidersSettings(state: UiState, viewModel: AppViewModel) {
                     OutlinedButton(onClick = { viewModel.testProvider(provider.id) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.action_test)) }
                     OutlinedButton(onClick = { viewModel.refreshProviderModels(provider.id) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.models_refresh)) }
                 }
+                ProviderModels(provider, state, viewModel)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (provider.restoreAvailable) TextButton(onClick = { viewModel.restoreProviderModels(provider.id) }) { Text(stringResource(R.string.models_restore)) }
+                    if (provider.deletable) TextButton(onClick = { removingProvider = provider }) { Text(stringResource(R.string.models_remove_provider), color = MaterialTheme.colorScheme.error) }
+                }
             }
         }
     }
+    Button(
+        onClick = { addingProvider = true },
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+    ) { Text(stringResource(R.string.models_add_provider)) }
+}
+
+/**
+ * One provider's models: alias, visibility, context limit and custom entries.
+ * Collapsed by default because a pool provider can list hundreds of them.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ProviderModels(provider: ModelProvider, state: UiState, viewModel: AppViewModel) {
+    var expanded by remember(provider.id) { mutableStateOf(false) }
+    var addingModel by remember(provider.id) { mutableStateOf(false) }
+    var editing by remember(provider.id) { mutableStateOf<ModelEntry?>(null) }
+    var contextFor by remember(provider.id) { mutableStateOf<ModelEntry?>(null) }
+
+    if (addingModel) {
+        TextPromptDialog(
+            title = stringResource(R.string.models_add_custom),
+            initial = "",
+            hint = stringResource(R.string.models_custom_model_hint),
+            action = stringResource(R.string.action_add),
+            onConfirm = { viewModel.addCustomModel(provider.id, it); addingModel = false },
+            onDismiss = { addingModel = false },
+        )
+    }
+    editing?.let { entry ->
+        TextPromptDialog(
+            title = stringResource(R.string.model_alias),
+            initial = entry.alias,
+            hint = stringResource(R.string.model_alias_hint),
+            action = stringResource(R.string.action_save),
+            onConfirm = { viewModel.setModelAlias(provider.id, entry.id, it); editing = null },
+            onDismiss = { editing = null },
+        )
+    }
+    contextFor?.let { entry ->
+        TextPromptDialog(
+            title = stringResource(R.string.model_context),
+            initial = "",
+            hint = stringResource(R.string.model_context_hint),
+            action = stringResource(R.string.action_save),
+            onConfirm = { value -> value.filter(Char::isDigit).toLongOrNull()?.let { viewModel.setModelContextLimit(provider.id, entry.id, it) }; contextFor = null },
+            onDismiss = { contextFor = null },
+        )
+    }
+
+    TextButton(onClick = { expanded = !expanded }) {
+        Text(stringResource(if (expanded) R.string.models_hide_models else R.string.models_show_models, provider.models.size))
+    }
+    if (!expanded) return
+    provider.models.forEach { entry ->
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text(entry.alias.ifBlank { entry.id }, style = MaterialTheme.typography.bodyMedium)
+                if (entry.alias.isNotBlank()) Text(entry.id, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(checked = entry.visible, enabled = !state.savingSetting, onCheckedChange = { viewModel.setModelVisible(provider, entry.id, it) })
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = { editing = entry }) { Text(stringResource(R.string.model_alias)) }
+            TextButton(onClick = { contextFor = entry }) { Text(stringResource(R.string.model_context)) }
+            if (entry.custom) TextButton(onClick = { viewModel.removeCustomModel(provider.id, entry.id) }) { Text(stringResource(R.string.model_remove_custom), color = MaterialTheme.colorScheme.error) }
+        }
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        TextButton(onClick = { addingModel = true }) { Text(stringResource(R.string.models_add_custom)) }
+        TextButton(onClick = { viewModel.showAllProviderModels(provider) }) { Text(stringResource(R.string.models_show_all)) }
+    }
+}
+
+/** The catalog entry that becomes the profile default (PUT /api/hermes/config/model). */
+@Composable
+private fun DefaultModelDialog(state: UiState, onDismiss: () -> Unit, onPick: (String, String) -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.models_pick_default)) },
+        text = {
+            Column(Modifier.padding(top = 4.dp)) {
+                state.modelProviders.forEach { provider ->
+                    Text(provider.label, style = MaterialTheme.typography.labelLarge)
+                    provider.models.filter { it.visible && !it.disabled }.forEach { entry ->
+                        TextButton(onClick = { onPick(provider.id, entry.id) }, modifier = Modifier.fillMaxWidth()) {
+                            Text(entry.alias.ifBlank { entry.id }, modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+    )
+}
+
+/** A provider the pool does not ship: name, base URL, key and API mode. */
+@Composable
+private fun CustomProviderDialog(onDismiss: () -> Unit, onSave: (String, String, String, String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var baseUrl by remember { mutableStateOf("") }
+    var key by remember { mutableStateOf("") }
+    var apiMode by remember { mutableStateOf("chat_completions") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.models_add_provider)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.models_provider_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(baseUrl, { baseUrl = it }, label = { Text(stringResource(R.string.models_provider_base_url)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(key, { key = it }, label = { Text(stringResource(R.string.models_api_key)) }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("chat_completions", "responses").forEach { mode ->
+                        AssistChip(onClick = { apiMode = mode }, label = { Text(mode) }, leadingIcon = { if (apiMode == mode) Icon(Icons.Filled.Check, contentDescription = null) })
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = name.isNotBlank() && baseUrl.isNotBlank(), onClick = { onSave(name, baseUrl, key, apiMode) }) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+    )
 }
 
 @Composable
 internal fun DisplayStudioSettings(state: UiState, viewModel: AppViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var languageSheet by remember { mutableStateOf(false) }
+    if (languageSheet) LanguageSheet(state, viewModel) { languageSheet = false }
+    val language = APP_LANGUAGES.firstOrNull { it.tag == state.language } ?: APP_LANGUAGES.first()
+
+    SettingsRow(
+        icon = Icons.Filled.Palette,
+        label = stringResource(R.string.display_theme_open),
+        value = state.themeSettings?.accentColor?.takeIf { it.isNotBlank() } ?: stringResource(R.string.settings_entry_theme),
+        onClick = { viewModel.openAppearance() },
+    )
+    SettingsRow(
+        icon = Icons.Filled.Language,
+        label = stringResource(R.string.settings_language),
+        value = AppLocale.labelFor(context, language),
+        onClick = { languageSheet = true },
+    )
+    StudioNumber(
+        Icons.Filled.TextFields,
+        R.string.display_text_scale,
+        R.string.display_text_scale_note,
+        state.textScale.toDouble(),
+        0.85,
+        1.3,
+        true,
+    ) { viewModel.setTextScale(it.toFloat()) }
+
     val display = state.studioSettings?.display ?: return
     StudioHint(R.string.display_studio_note)
     StudioToggle(Icons.Filled.PlayCircle, R.string.display_streaming, R.string.display_streaming_note, display.streaming) {

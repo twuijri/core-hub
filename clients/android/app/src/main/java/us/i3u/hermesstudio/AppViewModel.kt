@@ -23,7 +23,7 @@ import kotlinx.coroutines.withContext
 enum class Screen {
     Loading, Onboarding, Login, Chats, Groups, AgentHub, Conversation, Room, Profiles,
     Settings, SettingsPage, SettingsGroup, History, Channels, Channel, CronJobs, CronJob, CronHistory,
-    Kanban, KanbanTask, Skills, Skill, Plugins, Mcp, Pets, Insights, AgentRuntimes, Workflows, GlobalAgent, EkkoHub, Files, Logs, Connections, Journey, Webhooks, RuntimeVersions, Appearance,
+    Kanban, KanbanTask, Skills, Skill, Plugins, Mcp, Pets, Insights, AgentRuntimes, Workflows, Workflow, WorkflowRun, GlobalAgent, EkkoHub, Files, Logs, Connections, Journey, Webhooks, RuntimeVersions, Appearance,
 }
 
 /** Settings is a short list of these; each opens its own screen. */
@@ -148,9 +148,38 @@ data class UiState(
     val sessions: List<SessionSummary> = emptyList(),
     /** Drives both the toolbar refresh and the pull-to-refresh indicator. */
     val refreshingSessions: Boolean = false,
-    val rooms: List<Room> = emptyList(),
+    /** Drawer "All profiles": list every profile's sessions instead of the active one's. */
+    val allProfiles: Boolean = false,
+    /** History › Archived: the archived conversations of the current filter. */
+    val archivedSessions: List<SessionSummary> = emptyList(),
+    val showArchived: Boolean = false,
+    val loadingArchived: Boolean = false,
+    /** Batch selection on the History page. */
+    val sessionSelection: Set<String> = emptySet(),
+    val sessionSelectionMode: Boolean = false,
+    /** Paginated transcript: index of the oldest loaded message and whether older ones exist. */
+    val historyOffset: Int = 0,
+    val historyTotal: Int = 0,
+    val historyHasMore: Boolean = false,
+    val loadingOlderHistory: Boolean = false,
+    val rooms: List<RoomInfo> = emptyList(),
+    val loadingRooms: Boolean = false,
     val openSession: SessionSummary? = null,
-    val openRoom: RoomDetail? = null,
+    val openRoom: RoomState? = null,
+    /** Files attached to the next room message, and the ones still uploading. */
+    val roomAttachments: List<Upload> = emptyList(),
+    val roomUploads: List<UploadProgress> = emptyList(),
+    val loadingOlderRoom: Boolean = false,
+    val agentPresets: List<AgentPreset> = emptyList(),
+    val loadingPresets: Boolean = false,
+    /** Live `/workflow` statuses by workflow id. */
+    val workflowStatuses: Map<String, WorkflowLiveStatus> = emptyMap(),
+    val openWorkflow: StudioWorkflow? = null,
+    val openWorkflowRun: WorkflowRunDetail? = null,
+    val loadingWorkflowRun: Boolean = false,
+    val modelCatalog: ModelCatalog? = null,
+    /** Device-side text scale (Settings › Display), 0.85–1.3. */
+    val textScale: Float = 1f,
     val lines: List<ChatLine> = emptyList(),
     val loadingHistory: Boolean = false,
     val sending: Boolean = false,
@@ -362,9 +391,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             voiceInput = store.voiceInput,
             showToolCalls = store.showToolCalls,
             speakReplies = store.speakReplies,
+            allProfiles = store.allProfiles,
+            textScale = store.textScale,
         ),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
+    private val workflowSocket = WorkflowSocket(store.baseUrl, store.token)
+    private var workflowJob: Job? = null
+    private val roomUploadJobs = mutableMapOf<String, Job>()
 
     init {
         viewModelScope.launch {
@@ -401,9 +435,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             api.update(store.baseUrl, store.token)
             chat.update(store.baseUrl, store.token)
             group.update(store.baseUrl, store.token)
+            workflowSocket.update(store.baseUrl, store.token)
             val warning = refreshAppTokenIfDue()
             val user = api.currentUser()
-            SessionBootstrap(user, api.profiles(), api.sessions(null), warning, runCatching { api.serverVersion() }.getOrNull())
+            val profiles = api.profiles()
+            api.activeProfile = pickProfile(profiles)
+            SessionBootstrap(user, profiles, api.sessions(if (store.allProfiles) null else api.activeProfile), warning, runCatching { api.serverVersion() }.getOrNull())
         },
         onSuccess = { bootstrap ->
             val (user, profiles, sessions, warning) = bootstrap
@@ -471,6 +508,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 api.update(normalized, token)
                 chat.update(normalized, token)
                 group.update(normalized, token)
+                workflowSocket.update(normalized, token)
                 val user = api.currentUser()
                 SessionBootstrap(user, api.profiles(), api.sessions(null), version = runCatching { api.serverVersion() }.getOrNull())
             },
@@ -512,6 +550,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 api.update(payload.backendUrl, result.token)
                 chat.update(payload.backendUrl, result.token)
                 group.update(payload.backendUrl, result.token)
+                workflowSocket.update(payload.backendUrl, result.token)
                 val user = api.currentUser()
                 SessionBootstrap(user, api.profiles(), api.sessions(null), version = runCatching { api.serverVersion() }.getOrNull())
             },
@@ -606,6 +645,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         api.update(store.baseUrl, refreshed.token)
         chat.update(store.baseUrl, refreshed.token)
         group.update(store.baseUrl, refreshed.token)
+        workflowSocket.update(store.baseUrl, refreshed.token)
         return refreshed
     }
 
@@ -655,8 +695,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** The drawer's conversation switch: Chat, Group Chat, Workflow, History. */
     fun showTab(tab: Tab) {
         if (_state.value.screen == Screen.Conversation && tab != Tab.Chat) cancelActiveRun(abort = false)
+        if (tab != Tab.Workflow) stopListeningToWorkflows()
         navigationHistory.clear()
-        _state.update { it.copy(tab = tab, error = null) }
+        _state.update { it.copy(tab = tab, error = null, sessionSelection = emptySet(), sessionSelectionMode = false) }
         when (tab) {
             Tab.Chat -> {
                 _state.update { it.copy(screen = Tab.Chat.rootScreen(it.openSession)) }
@@ -684,12 +725,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshSessions() {
         if (_state.value.refreshingSessions) return
-        val profile = _state.value.profileFilter.ifBlank { null }
+        val profile = sessionsProfile()
         _state.update { it.copy(refreshingSessions = true, error = null) }
         viewModelScope.launch {
             runCatching { withContext(Dispatchers.IO) { api.sessions(profile, _state.value.sessionLimit) } }
                 .onSuccess { sessions ->
-                    _state.update { it.copy(sessions = sessions, refreshingSessions = false, connected = true) }
+                    _state.update {
+                        it.copy(
+                            sessions = sessions,
+                            refreshingSessions = false,
+                            connected = true,
+                            sessionSelection = it.sessionSelection.filterTo(HashSet()) { id -> sessions.any { s -> s.id == id } || it.archivedSessions.any { s -> s.id == id } },
+                        )
+                    }
                 }
                 .onFailure { failure ->
                     _state.update {
@@ -704,16 +752,129 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun loadMoreSessions() { _state.update { it.copy(sessionLimit = it.sessionLimit + 80) }; refreshSessions() }
 
+    private var searchJob: Job? = null
+
+    /** Titles and message text, debounced; results carry the matching snippet. */
     fun searchSessions(query: String) {
+        searchJob?.cancel()
         if (query.isBlank()) { _state.update { it.copy(sessionSearchResults = null) }; return }
-        val profile = _state.value.profileFilter.ifBlank { null }
-        viewModelScope.launch {
+        val profile = sessionsProfile()
+        searchJob = viewModelScope.launch {
             delay(250)
             runCatching { withContext(Dispatchers.IO) { api.searchSessions(query.trim(), profile) } }
                 .onSuccess { results -> _state.update { it.copy(sessionSearchResults = results) } }
-                .onFailure { failure -> _state.update { it.copy(sessionSearchResults = emptyList(), error = failure.readableMessage(localized)) } }
+                .onFailure { failure ->
+                    if (failure is kotlinx.coroutines.CancellationException) return@onFailure
+                    _state.update { it.copy(sessionSearchResults = emptyList(), error = failure.readableMessage(localized)) }
+                }
         }
     }
+
+    // ── History: archive view and batch selection ─────────────────────────
+
+    fun setShowArchived(show: Boolean) {
+        _state.update { it.copy(showArchived = show, sessionSelection = emptySet(), sessionSelectionMode = false) }
+        if (show) loadArchivedSessions()
+    }
+
+    fun loadArchivedSessions() {
+        val profile = sessionsProfile()
+        _state.update { it.copy(loadingArchived = true, error = null) }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.archivedSessions(profile) } }
+                .onSuccess { archived -> _state.update { it.copy(archivedSessions = archived, loadingArchived = false, connected = true) } }
+                .onFailure { failure -> _state.update { it.copy(loadingArchived = false, connected = failure !is java.io.IOException, error = failure.readableMessage(localized)) } }
+        }
+    }
+
+    fun setSessionSelectionMode(enabled: Boolean) = _state.update {
+        it.copy(sessionSelectionMode = enabled, sessionSelection = if (enabled) it.sessionSelection else emptySet())
+    }
+
+    fun toggleSessionSelected(session: SessionSummary) = _state.update {
+        val next = it.sessionSelection.toMutableSet().apply { if (!add(session.id)) remove(session.id) }
+        it.copy(sessionSelection = next, sessionSelectionMode = true)
+    }
+
+    fun selectAllVisibleSessions(visible: List<SessionSummary>) = _state.update {
+        val ids = visible.map { s -> s.id }.toSet()
+        it.copy(sessionSelection = if (it.sessionSelection.containsAll(ids)) it.sessionSelection - ids else it.sessionSelection + ids, sessionSelectionMode = true)
+    }
+
+    private fun afterBatch(result: BatchResult, success: Int, partial: Int) {
+        _state.update {
+            it.copy(
+                sessionSelection = emptySet(),
+                sessionSelectionMode = false,
+                sessionSearchResults = null,
+                notice = if (result.failed == 0) str(success, result.updated) else str(partial, result.updated, result.failed),
+                error = result.firstError?.takeIf { result.failed > 0 },
+            )
+        }
+        refreshSessions()
+        if (_state.value.showArchived) loadArchivedSessions()
+    }
+
+    /** POST /sessions/batch-archive for the selection (archive or restore). */
+    fun batchArchiveSelected(archived: Boolean) {
+        val ids = _state.value.sessionSelection.toList()
+        if (ids.isEmpty()) return
+        launchWork(
+            work = { api.batchArchiveSessions(ids, archived) },
+            onSuccess = { result ->
+                afterBatch(
+                    result,
+                    if (archived) R.string.session_batch_archived else R.string.session_batch_unarchived,
+                    if (archived) R.string.session_batch_archive_partial else R.string.session_batch_unarchive_partial,
+                )
+            },
+        )
+    }
+
+    /** POST /sessions/batch-delete for the selection. */
+    fun batchDeleteSelected() {
+        val ids = _state.value.sessionSelection.toList()
+        if (ids.isEmpty()) return
+        launchWork(
+            work = { api.batchDeleteSessions(ids); ids },
+            onSuccess = { deleted ->
+                deleted.forEach { id -> _state.value.profiles.forEach { p -> if (store.sessionFor(p.name) == id) store.setSessionFor(p.name, "") } }
+                afterBatch(BatchResult(deleted.size, 0, null), R.string.session_batch_deleted, R.string.session_batch_deleted)
+            },
+        )
+    }
+
+    /** Moves every selected session into [categoryId] (null = uncategorized); one call per session, as the web does. */
+    fun batchMoveSelected(categoryId: Int?) {
+        val ids = _state.value.sessionSelection.toList()
+        if (ids.isEmpty()) return
+        launchWork(
+            work = {
+                var failed = 0
+                var firstError: String? = null
+                ids.forEach { id -> runCatching { api.setSessionCategory(id, categoryId) }.onFailure { failed++; if (firstError == null) firstError = it.message } }
+                BatchResult(ids.size - failed, failed, firstError)
+            },
+            onSuccess = { result -> afterBatch(result, R.string.session_batch_moved, R.string.session_batch_move_partial) },
+        )
+    }
+
+    /** Category ⋯ → "Move sessions": every member of [category] goes to [targetId]. */
+    fun moveCategorySessions(category: SessionCategory, targetId: Int?) {
+        val ids = _state.value.sessions.filter { it.categoryId == category.id }.map { it.id }
+        if (ids.isEmpty()) return
+        _state.update { it.copy(sessionSelection = ids.toSet()) }
+        batchMoveSelected(targetId)
+    }
+
+    /** History › Archived → Unarchive one row. */
+    fun unarchiveSession(session: SessionSummary) = launchWork(
+        work = { api.archiveSession(session.id, false) },
+        onSuccess = {
+            _state.update { it.copy(archivedSessions = it.archivedSessions.filterNot { s -> s.id == session.id }, notice = str(R.string.session_unarchived)) }
+            refreshSessions()
+        },
+    )
 
     fun loadSessionCategories() {
         viewModelScope.launch {
@@ -743,43 +904,156 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun exportSession(session: SessionSummary) { val safe = session.title.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { session.id }; val request = DownloadManager.Request(Uri.parse(api.sessionExportUrl(session.id))).setTitle("$safe.json").setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED).setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "$safe.json"); store.token.takeIf(String::isNotBlank)?.let { request.addRequestHeader("Authorization", "Bearer $it") }; getApplication<Application>().getSystemService(DownloadManager::class.java)?.enqueue(request) }
     fun batchDeleteVisibleSessions() { val ids = (_state.value.sessionSearchResults ?: _state.value.sessions).map { it.id }; if (ids.isEmpty()) return; launchWork(work = { api.batchDeleteSessions(ids) }, onSuccess = { refreshSessions() }) }
 
+    /** The Workflow section: the list, its runs and schedules, plus the live `/workflow` subscription. */
     fun openWorkflows() {
         _state.update { it.copy(screen = Screen.Workflows, loadingWorkflows = true, error = null) }
         viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { api.workflows(_state.value.profileFilter.ifBlank { null }) } }
+            runCatching { withContext(Dispatchers.IO) { api.workflows(sessionsProfile()) } }
                 .onSuccess { workflows ->
                     val problems = mutableListOf<Throwable>()
                     val runs = withContext(Dispatchers.IO) { workflows.associate { it.id to runCatching { api.workflowRuns(it.id) }.onFailure(problems::add).getOrDefault(emptyList()) } }
                     val schedules = withContext(Dispatchers.IO) { workflows.associate { it.id to runCatching { api.workflowSchedules(it.id) }.onFailure(problems::add).getOrDefault(emptyList()) } }
-                    _state.update { it.copy(workflows = workflows, workflowRuns = runs, workflowSchedules = schedules, loadingWorkflows = false, error = problems.firstOrNull()?.readableMessage(localized)) }
+                    _state.update { state ->
+                        state.copy(
+                            workflows = workflows,
+                            workflowRuns = runs,
+                            workflowSchedules = schedules,
+                            loadingWorkflows = false,
+                            error = problems.firstOrNull()?.readableMessage(localized),
+                            openWorkflow = state.openWorkflow?.let { open -> workflows.firstOrNull { it.id == open.id } ?: open },
+                        )
+                    }
                 }.onFailure { failure -> _state.update { it.copy(loadingWorkflows = false, error = failure.readableMessage(localized)) } }
+        }
+        listenToWorkflows()
+    }
+
+    /** Keeps [UiState.workflowStatuses] live while a workflow screen is open. */
+    private fun listenToWorkflows() {
+        if (workflowJob?.isActive == true) return
+        val profile = _state.value.activeProfile.ifBlank { "default" }
+        workflowJob = viewModelScope.launch {
+            workflowSocket.subscribe(profile).collect { event ->
+                when (event) {
+                    is WorkflowEvent.Statuses -> {
+                        _state.update { state ->
+                            val merged = state.workflowStatuses + event.statuses.associateBy { it.workflowId }
+                            val openRun = state.openWorkflowRun
+                            val liveRun = event.statuses.firstOrNull { it.runId != null && it.runId == openRun?.run?.id }?.run
+                            state.copy(workflowStatuses = merged, openWorkflowRun = liveRun ?: openRun)
+                        }
+                        // A run that just finished changes the run list of its workflow.
+                        val finished = event.statuses.filter { it.status == "completed" || it.status == "failed" || it.status == "canceled" }
+                        if (finished.isNotEmpty()) refreshWorkflowRuns(finished.map { it.workflowId })
+                    }
+                    is WorkflowEvent.StatusError -> _state.update { it.copy(error = event.error) }
+                    is WorkflowEvent.Failed -> _state.update { it.copy(error = event.error) }
+                    WorkflowEvent.Connected, WorkflowEvent.Dropped -> Unit
+                }
+            }
+        }
+    }
+
+    private fun stopListeningToWorkflows() {
+        workflowJob?.cancel()
+        workflowJob = null
+    }
+
+    private fun refreshWorkflowRuns(ids: List<String>) {
+        viewModelScope.launch {
+            val runs = withContext(Dispatchers.IO) { ids.associateWith { id -> runCatching { api.workflowRuns(id) }.getOrNull() } }
+            _state.update { state -> state.copy(workflowRuns = state.workflowRuns + runs.filterValues { it != null }.mapValues { it.value!! }) }
+        }
+    }
+
+    /** The workflow screen: read-only graph summary, runs and schedules. */
+    fun openWorkflow(workflow: StudioWorkflow) {
+        _state.update { it.copy(screen = Screen.Workflow, openWorkflow = workflow, error = null) }
+        listenToWorkflows()
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { Triple(api.workflow(workflow.id), api.workflowRuns(workflow.id), api.workflowSchedules(workflow.id)) } }
+                .onSuccess { (detail, runs, schedules) ->
+                    _state.update { state ->
+                        state.copy(
+                            openWorkflow = if (state.openWorkflow?.id == workflow.id) detail else state.openWorkflow,
+                            workflows = state.workflows.map { if (it.id == detail.id) detail else it },
+                            workflowRuns = state.workflowRuns + (workflow.id to runs),
+                            workflowSchedules = state.workflowSchedules + (workflow.id to schedules),
+                        )
+                    }
+                }
+                .onFailure { failure -> _state.update { it.copy(error = failure.readableMessage(localized)) } }
+        }
+    }
+
+    /** The run screen: node timeline with outputs and inline approvals. */
+    fun openWorkflowRun(run: StudioWorkflowRun) {
+        val workflow = _state.value.workflows.firstOrNull { it.id == run.workflowId } ?: _state.value.openWorkflow ?: return
+        _state.update { it.copy(screen = Screen.WorkflowRun, openWorkflow = workflow, openWorkflowRun = null, loadingWorkflowRun = true, error = null) }
+        listenToWorkflows()
+        refreshWorkflowRun(run.workflowId, run.id)
+    }
+
+    fun refreshWorkflowRun(workflowId: String, runId: String) {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.workflowRun(workflowId, runId) } }
+                .onSuccess { detail -> _state.update { if (it.screen == Screen.WorkflowRun) it.copy(openWorkflowRun = detail, loadingWorkflowRun = false) else it } }
+                .onFailure { failure -> _state.update { it.copy(loadingWorkflowRun = false, error = failure.readableMessage(localized)) } }
+        }
+    }
+
+    /** Approve or reject the node waiting in [run]; [executionId] comes from the live status when known. */
+    fun approveWorkflowNode(run: StudioWorkflowRun, nodeId: String, approved: Boolean, executionId: String? = null) = launchWork(
+        work = { api.approveWorkflowNode(run.workflowId, run.id, nodeId, approved, executionId) },
+        onSuccess = {
+            _state.update { it.copy(notice = str(if (approved) R.string.workflow_node_approved else R.string.workflow_node_rejected)) }
+            refreshWorkflowRun(run.workflowId, run.id)
+            refreshWorkflowRuns(listOf(run.workflowId))
+        },
+    )
+
+    fun rerunWorkflowFromNode(run: StudioWorkflowRun, nodeId: String) = launchWork(
+        work = { api.rerunWorkflow(run.workflowId, run.id, nodeId) },
+        onSuccess = { _state.update { it.copy(notice = str(R.string.workflow_rerun_started)) }; refreshWorkflowRuns(listOf(run.workflowId)) },
+    )
+
+    fun updateWorkflowSchedule(item: WorkflowSchedule, schedule: String, timezone: String, enabled: Boolean) = launchWork(
+        work = { api.updateWorkflowSchedule(item, schedule, timezone, enabled) },
+        onSuccess = { refreshWorkflowSchedules(item.workflowId) },
+    )
+
+    private fun refreshWorkflowSchedules(workflowId: String) {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.workflowSchedules(workflowId) } }
+                .onSuccess { schedules -> _state.update { it.copy(workflowSchedules = it.workflowSchedules + (workflowId to schedules)) } }
+                .onFailure { failure -> _state.update { it.copy(error = failure.readableMessage(localized)) } }
         }
     }
 
     fun runWorkflow(workflow: StudioWorkflow, input: String?) = launchWork(
         work = { api.runWorkflow(workflow.id, input) },
-        onSuccess = { openWorkflows() },
+        onSuccess = { _state.update { it.copy(notice = str(R.string.workflow_run_started, workflow.name)) }; refreshWorkflowRuns(listOf(workflow.id)) },
     )
 
     fun stopWorkflowRun(run: StudioWorkflowRun) = launchWork(
         work = { api.stopWorkflowRun(run.workflowId, run.id) },
-        onSuccess = { openWorkflows() },
+        onSuccess = { _state.update { it.copy(notice = str(R.string.workflow_run_stopped)) }; refreshWorkflowRuns(listOf(run.workflowId)); if (_state.value.openWorkflowRun?.run?.id == run.id) refreshWorkflowRun(run.workflowId, run.id) },
     )
 
+    /** Backwards-compatible approval of whichever node the run reports as blocked. */
     fun approveWorkflowNode(run: StudioWorkflowRun, approved: Boolean) {
-        val node = run.pendingNodeId ?: return
-        launchWork(work = { api.approveWorkflowNode(run.workflowId, run.id, node, approved) }, onSuccess = { openWorkflows() })
+        val node = run.pendingNodeId ?: _state.value.workflowStatuses[run.workflowId]?.pendingApprovals?.firstOrNull()?.first ?: return
+        approveWorkflowNode(run, node, approved, _state.value.workflowStatuses[run.workflowId]?.pendingApprovals?.firstOrNull { it.first == node }?.second)
     }
-    fun saveWorkflow(item: StudioWorkflow?, name: String, workspace: String, nodes: String, edges: String) = launchWork(work = { if (item == null) api.createWorkflow(name, _state.value.profileFilter.ifBlank { null }, workspace, nodes, edges) else api.updateWorkflow(item.id, name, workspace, nodes, edges) }, onSuccess = { openWorkflows() })
-    fun deleteWorkflow(item: StudioWorkflow) = launchWork(work = { api.deleteWorkflow(item.id) }, onSuccess = { openWorkflows() })
+    fun deleteWorkflow(item: StudioWorkflow) = launchWork(work = { api.deleteWorkflow(item.id) }, onSuccess = { if (_state.value.openWorkflow?.id == item.id) _state.update { it.copy(openWorkflow = null, openWorkflowRun = null) }; openWorkflows() })
     fun deleteAllWorkflows() = launchWork(work = { api.batchDeleteWorkflows(_state.value.workflows.map { it.id }) }, onSuccess = { openWorkflows() })
-    fun importWorkflow(document: String) = launchWork(work = { api.importWorkflow(document, _state.value.profileFilter.ifBlank { null }) }, onSuccess = { openWorkflows() })
-    fun exportWorkflow(item: StudioWorkflow) { val request = DownloadManager.Request(Uri.parse(api.workflowExportUrl(item.id))).setTitle("${item.name}.hermes-workflow.json").setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED).setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "${item.name.replace(Regex("[^A-Za-z0-9._-]"), "_")}.hermes-workflow.json"); store.token.takeIf(String::isNotBlank)?.let { request.addRequestHeader("Authorization", "Bearer $it") }; getApplication<Application>().getSystemService(DownloadManager::class.java)?.enqueue(request) }
-    fun deleteWorkflowRun(run: StudioWorkflowRun) = launchWork(work = { api.deleteWorkflowRun(run.workflowId, run.id) }, onSuccess = { openWorkflows() })
-    fun rerunWorkflow(run: StudioWorkflowRun) { val node = run.pendingNodeId ?: return; launchWork(work = { api.rerunWorkflow(run.workflowId, run.id, node) }, onSuccess = { openWorkflows() }) }
-    fun createWorkflowSchedule(item: StudioWorkflow, expression: String, timezone: String) = launchWork(work = { api.createWorkflowSchedule(item.id, expression, timezone) }, onSuccess = { openWorkflows() })
-    fun toggleWorkflowSchedule(item: WorkflowSchedule) = launchWork(work = { api.toggleWorkflowSchedule(item) }, onSuccess = { openWorkflows() })
-    fun deleteWorkflowSchedule(item: WorkflowSchedule) = launchWork(work = { api.deleteWorkflowSchedule(item) }, onSuccess = { openWorkflows() })
+    fun importWorkflow(document: String) = launchWork(work = { api.importWorkflow(document, sessionsProfile()) }, onSuccess = { name -> _state.update { it.copy(notice = str(R.string.workflow_imported, name)) }; openWorkflows() })
+    fun exportWorkflow(item: StudioWorkflow) { val request = DownloadManager.Request(Uri.parse(api.workflowExportUrl(item.id))).setTitle("${item.name}.hermes-workflow.json").setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED).setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "${item.name.replace(Regex("[^A-Za-z0-9._-]"), "_")}.hermes-workflow.json"); store.token.takeIf(String::isNotBlank)?.let { request.addRequestHeader("Authorization", "Bearer $it") }; getApplication<Application>().getSystemService(DownloadManager::class.java)?.enqueue(request); _state.update { it.copy(notice = str(R.string.workflow_export_started)) } }
+    fun deleteWorkflowRun(run: StudioWorkflowRun) = launchWork(work = { api.deleteWorkflowRun(run.workflowId, run.id) }, onSuccess = { if (_state.value.openWorkflowRun?.run?.id == run.id) back(); refreshWorkflowRuns(listOf(run.workflowId)) })
+    fun rerunWorkflow(run: StudioWorkflowRun) { val node = run.pendingNodeId ?: return; rerunWorkflowFromNode(run, node) }
+    fun createWorkflowSchedule(item: StudioWorkflow, expression: String, timezone: String) = launchWork(work = { api.createWorkflowSchedule(item.id, expression, timezone) }, onSuccess = { refreshWorkflowSchedules(item.id) })
+    fun toggleWorkflowSchedule(item: WorkflowSchedule) = launchWork(work = { api.toggleWorkflowSchedule(item) }, onSuccess = { refreshWorkflowSchedules(item.workflowId) })
+    fun deleteWorkflowSchedule(item: WorkflowSchedule) = launchWork(work = { api.deleteWorkflowSchedule(item) }, onSuccess = { refreshWorkflowSchedules(item.workflowId) })
 
     fun openGlobalAgent() = _state.update { it.copy(screen = Screen.GlobalAgent, error = null) }
 
@@ -884,10 +1158,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         startNewConversation(AgentRuntimeSelection("ekko-agent", "ekko", "Global Agent", globalAgent = true))
     }
 
-    fun refreshRooms() = launchWork(
-        work = { api.rooms() },
-        onSuccess = { rooms -> _state.update { it.copy(rooms = rooms) } },
-    )
+    fun refreshRooms() {
+        _state.update { it.copy(loadingRooms = true, error = null) }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.rooms() } }
+                .onSuccess { rooms -> _state.update { it.copy(rooms = rooms, loadingRooms = false, connected = true) } }
+                .onFailure { failure -> _state.update { it.copy(loadingRooms = false, connected = failure !is java.io.IOException, error = failure.readableMessage(localized)) } }
+        }
+    }
 
     fun setProfileFilter(profile: String) {
         _state.update { it.copy(profileFilter = profile) }
@@ -918,6 +1196,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         historyJob?.cancel()
         historyJob = null
         store.profile = name
+        api.activeProfile = name
         _state.update {
             it.copy(
                 activeProfile = name,
@@ -934,10 +1213,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 serverConfig = null,
                 agentSettings = null,
                 autoStart = null,
+                sessionSelection = emptySet(),
+                sessionSelectionMode = false,
+                archivedSessions = emptyList(),
+                workflowStatuses = emptyMap(),
+                modelCatalog = null,
             )
         }
         applySessionPrefs(null)
+        refreshSessions()
     }
+
+    /** Drawer toggle: every profile's sessions, or only the active profile's (the web's sidebar switch). */
+    fun setAllProfiles(enabled: Boolean) {
+        store.allProfiles = enabled
+        _state.update { it.copy(allProfiles = enabled, sessionSearchResults = null, archivedSessions = emptyList()) }
+        refreshSessions()
+        if (_state.value.showArchived) loadArchivedSessions()
+    }
+
+    /** The profile the session lists are filtered by; null = all profiles. */
+    private fun sessionsProfile(): String? =
+        if (_state.value.allProfiles) _state.value.profileFilter.ifBlank { null } else _state.value.activeProfile.ifBlank { "default" }
 
     // ── conversation ──────────────────────────────────────────────────────
 
@@ -975,46 +1272,95 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
 
-        historyJob = viewModelScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    val history = api.conversationHistory(session.id)
-                    val window = runCatching { api.contextLength(profile, session.provider, session.model) }
-                    Triple(history, window.getOrDefault(0), window.exceptionOrNull())
+        historyJob = viewModelScope.launch { loadLatestPage(session, profile) }
+    }
+
+    /**
+     * The newest [HISTORY_PAGE] messages through the paginated endpoint: one
+     * call tells the total, a second one (long sessions only) fetches the tail.
+     * Older pages arrive through [loadOlderHistory] as the list is scrolled up.
+     */
+    private suspend fun loadLatestPage(session: SessionSummary, profile: String) {
+        runCatching {
+            withContext(Dispatchers.IO) {
+                var page = api.conversationPage(session.id, 0, HISTORY_PAGE, profile)
+                if (page.total > HISTORY_PAGE) page = api.conversationPage(session.id, page.total - HISTORY_PAGE, HISTORY_PAGE, profile)
+                val window = runCatching { api.contextLength(profile, session.provider, session.model) }
+                Triple(page, window.getOrDefault(0), window.exceptionOrNull())
+            }
+        }
+            .onSuccess { (page, window, problem) ->
+                _state.update { state ->
+                    if (state.screen != Screen.Conversation || state.openSession?.id != session.id) {
+                        return@update state
+                    }
+                    state.copy(
+                        loadingHistory = false,
+                        loadingContext = false,
+                        error = problem?.readableMessage(localized),
+                        // Live context arrives with `usage.updated`; the transcript alone does not carry it.
+                        contextTokens = 0,
+                        contextWindow = window,
+                        historyOffset = page.offset,
+                        historyTotal = page.total,
+                        historyHasMore = page.offset > 0,
+                        sessionPushEnabled = page.pushEnabled,
+                        openSession = state.openSession?.copy(
+                            title = page.title ?: state.openSession.title,
+                            model = page.model ?: state.openSession.model,
+                            workspace = page.workspace ?: state.openSession.workspace,
+                            categoryId = page.categoryId ?: state.openSession.categoryId,
+                        ),
+                        lines = page.messages.map(::lineOf),
+                    )
                 }
             }
-                .onSuccess { (history, window, problem) ->
-                    _state.update { state ->
-                        if (state.screen != Screen.Conversation || state.openSession?.id != session.id) {
-                            return@update state
-                        }
-                        state.copy(
-                            loadingHistory = false,
-                            loadingContext = false,
-                            error = problem?.readableMessage(localized),
-                            contextTokens = history.contextTokens ?: 0,
-                            contextWindow = window,
-                            lines = history.messages.map { message ->
-                                ChatLine(
-                                    text = message.content,
-                                    fromUser = message.fromUser,
-                                    timestamp = message.timestamp,
-                                    messageId = message.id,
-                                )
-                            },
+            .onFailure { failure ->
+                if (failure is kotlinx.coroutines.CancellationException) return@onFailure
+                _state.update {
+                    if (it.screen == Screen.Conversation && it.openSession?.id == session.id) {
+                        it.copy(loadingHistory = false, loadingContext = false, error = failure.readableMessage(localized))
+                    } else {
+                        it
+                    }
+                }
+            }
+    }
+
+    private fun lineOf(message: Message) = ChatLine(
+        text = message.content,
+        fromUser = message.fromUser,
+        timestamp = message.timestamp,
+        messageId = message.id,
+        reasoning = message.reasoning,
+        system = message.role == "system",
+        command = message.role == "command",
+    )
+
+    /** Infinite scroll towards older messages: the page before [UiState.historyOffset]. */
+    fun loadOlderHistory() {
+        val session = _state.value.openSession ?: return
+        val state = _state.value
+        if (state.loadingOlderHistory || state.loadingHistory || !state.historyHasMore || state.historyOffset <= 0) return
+        val profile = session.profile?.ifBlank { null } ?: currentProfile()
+        val offset = (state.historyOffset - HISTORY_PAGE).coerceAtLeast(0)
+        val limit = state.historyOffset - offset
+        _state.update { it.copy(loadingOlderHistory = true) }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.conversationPage(session.id, offset, limit, profile) } }
+                .onSuccess { page ->
+                    _state.update { current ->
+                        if (current.openSession?.id != session.id) return@update current.copy(loadingOlderHistory = false)
+                        val known = current.lines.mapNotNull { it.messageId }.toSet()
+                        current.copy(
+                            loadingOlderHistory = false,
+                            historyOffset = page.offset,
+                            historyHasMore = page.offset > 0,
+                            lines = page.messages.filter { it.id !in known }.map(::lineOf) + current.lines,
                         )
                     }
                 }
-                .onFailure { failure ->
-                    if (failure is kotlinx.coroutines.CancellationException) return@onFailure
-                    _state.update {
-                        if (it.screen == Screen.Conversation && it.openSession?.id == session.id) {
-                            it.copy(loadingHistory = false, loadingContext = false, error = failure.readableMessage(localized))
-                        } else {
-                            it
-                        }
-                    }
-                }
+                .onFailure { failure -> _state.update { it.copy(loadingOlderHistory = false, error = failure.readableMessage(localized)) } }
         }
     }
 
@@ -1024,46 +1370,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         historyJob?.cancel()
         _state.update { it.copy(loadingHistory = true, loadingContext = true, error = null) }
         historyJob = viewModelScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    val profile = session.profile?.ifBlank { null } ?: currentProfile()
-                    val history = api.conversationHistory(session.id)
-                    val window = runCatching { api.contextLength(profile, session.provider, session.model) }
-                    Triple(history, window.getOrDefault(0), window.exceptionOrNull())
-                }
-            }
-                .onSuccess { (history, window, problem) ->
-                    _state.update { state ->
-                        if (state.screen != Screen.Conversation || state.openSession?.id != session.id) {
-                            return@update state
-                        }
-                        state.copy(
-                            loadingHistory = false,
-                            loadingContext = false,
-                            error = problem?.readableMessage(localized),
-                            contextTokens = history.contextTokens ?: state.contextTokens,
-                            contextWindow = window.takeIf { it > 0 } ?: state.contextWindow,
-                            lines = history.messages.map { message ->
-                                ChatLine(
-                                    text = message.content,
-                                    fromUser = message.fromUser,
-                                    timestamp = message.timestamp,
-                                    messageId = message.id,
-                                )
-                            },
-                        )
-                    }
-                }
-                .onFailure { failure ->
-                    if (failure is kotlinx.coroutines.CancellationException) return@onFailure
-                    _state.update {
-                        if (it.screen == Screen.Conversation && it.openSession?.id == session.id) {
-                            it.copy(loadingHistory = false, loadingContext = false, error = failure.readableMessage(localized))
-                        } else {
-                            it
-                        }
-                    }
-                }
+            val profile = session.profile?.ifBlank { null } ?: currentProfile()
+            val previousContext = _state.value.contextTokens
+            loadLatestPage(session, profile)
+            // A reload must not wipe the live context figure the socket reported.
+            _state.update { if (it.openSession?.id == session.id && it.contextTokens == 0L) it.copy(contextTokens = previousContext) else it }
         }
     }
 
@@ -2223,24 +2534,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** The 🧠 pill: the device default, and — when a conversation is open — the session's own setting on the server. */
     fun setReasoningEffort(effort: String) {
         store.reasoningEffort = effort
         _state.update { it.copy(reasoningEffort = effort) }
+        val session = _state.value.openSession ?: return
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.setSessionReasoningEffort(session.id, effort) } }
+                .onFailure { failure -> _state.update { it.copy(error = failure.readableMessage(localized)) } }
+        }
     }
 
     // ── group room ────────────────────────────────────────────────────────
 
-    fun openRoom(room: Room) {
+    /** Opens a room: REST snapshot first (history), then the socket takes over. */
+    fun openRoom(room: RoomInfo) {
         leaveRoom()
         openingRoomId = room.id
         _state.update {
-            it.copy(screen = Screen.Room, openRoom = null, loadingHistory = true, error = null, roomLive = false)
+            it.copy(screen = Screen.Room, openRoom = RoomState(room = room), loadingHistory = true, error = null, roomLive = false, roomAttachments = emptyList(), roomUploads = emptyList())
         }
         roomLoadJob = viewModelScope.launch {
             runCatching { withContext(Dispatchers.IO) { api.room(room.id) } }
-                .onSuccess { detail ->
+                .onSuccess { snapshot ->
                     if (_state.value.screen != Screen.Room || openingRoomId != room.id) return@onSuccess
-                    _state.update { it.copy(openRoom = detail, loadingHistory = false) }
+                    _state.update { it.copy(openRoom = GroupRoomReducer.reduce(RoomState(room = snapshot.room), RoomEvent.Joined(snapshot)).copy(live = false), loadingHistory = false) }
                     listenToRoom(room.id)
                 }
                 .onFailure { failure ->
@@ -2256,30 +2574,54 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Re-opens the room by id after a settings change (agents, workspace, name…). */
+    private fun reopenRoom(roomId: String) {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.room(roomId, limit = 1) } }
+                .onSuccess { snapshot ->
+                    _state.update { state ->
+                        val open = state.openRoom?.takeIf { it.room.id == roomId } ?: return@update state
+                        state.copy(openRoom = open.copy(room = snapshot.room.copy(agents = snapshot.agents), agents = snapshot.agents, members = snapshot.members, handoffs = snapshot.handoffs))
+                    }
+                    refreshRooms()
+                }
+                .onFailure { failure -> _state.update { it.copy(error = failure.readableMessage(localized)) } }
+        }
+    }
+
     /** Keeps the open room current, and is what makes posting possible. */
     private fun listenToRoom(roomId: String) {
         roomJob?.cancel()
+        val profile = _state.value.activeProfile.ifBlank { "default" }
+        val name = _state.value.account ?: "phone"
         roomJob = viewModelScope.launch {
             runCatching {
-                group.join(roomId, _state.value.account ?: "phone").collect { event ->
-                    when (event) {
-                        is RoomEvent.Connected -> _state.update { it.copy(roomLive = true) }
-                        is RoomEvent.Dropped -> _state.update { it.copy(roomLive = false) }
-                        is RoomEvent.Failed -> {
-                            _state.update {
-                                it.copy(roomLive = false, error = event.error)
-                            }
-                        }
-                        is RoomEvent.Posted -> _state.update { state ->
-                            val room = state.openRoom ?: return@update state
-                            if (room.id != roomId) return@update state
-                            if (room.messages.any { it.id == event.message.id }) return@update state
-                            state.copy(openRoom = room.copy(messages = room.messages + event.message))
-                        }
+                group.join(roomId, name, profile, _state.value.currentUser?.id).collect { event ->
+                    _state.update { state ->
+                        val open = state.openRoom?.takeIf { it.room.id == roomId } ?: return@update state
+                        val next = GroupRoomReducer.reduce(open, event)
+                        state.copy(
+                            openRoom = next,
+                            roomLive = next.live,
+                            loadingOlderRoom = if (event is RoomEvent.HistoryLoaded || event is RoomEvent.Failed) false else state.loadingOlderRoom,
+                            error = when (event) {
+                                is RoomEvent.Failed -> event.error
+                                RoomEvent.Kicked -> str(R.string.room_kicked)
+                                else -> state.error
+                            },
+                        )
+                    }
+                    if (event is RoomEvent.Posted && event.message.isAgent && _state.value.speakReplies && event.message.content.isNotBlank()) {
+                        speakRoomMessage(event.message)
                     }
                 }
             }
         }
+    }
+
+    private fun speakRoomMessage(message: GroupMessage) {
+        val line = ChatLine(text = message.content, fromUser = false, sender = message.senderName, messageId = message.id, timestamp = message.timestamp.toString())
+        toggleSpeech(line, message.senderAgentProfile ?: _state.value.activeProfile.ifBlank { "default" })
     }
 
     fun leaveRoom() {
@@ -2288,7 +2630,296 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         roomLoadJob = null
         roomJob?.cancel()
         roomJob = null
-        _state.update { it.copy(roomLive = false) }
+        roomUploadJobs.values.forEach { it.cancel() }
+        roomUploadJobs.clear()
+        _state.update { it.copy(roomLive = false, roomAttachments = emptyList(), roomUploads = emptyList(), loadingOlderRoom = false) }
+    }
+
+    /** Infinite scroll: the page before the oldest loaded message (socket when live, REST otherwise). */
+    fun loadOlderRoomMessages() {
+        val open = _state.value.openRoom ?: return
+        if (_state.value.loadingOlderRoom || !open.hasMore) return
+        val before = open.messages.firstOrNull()?.id ?: return
+        _state.update { it.copy(loadingOlderRoom = true) }
+        if (open.live && group.loadOlder(open.room.id, before)) return
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.room(open.room.id, before = before) } }
+                .onSuccess { page ->
+                    _state.update { state ->
+                        val current = state.openRoom?.takeIf { it.room.id == open.room.id } ?: return@update state.copy(loadingOlderRoom = false)
+                        state.copy(openRoom = GroupRoomReducer.reduce(current, RoomEvent.HistoryLoaded(page.messages, page.hasMore)), loadingOlderRoom = false)
+                    }
+                }
+                .onFailure { failure -> _state.update { it.copy(loadingOlderRoom = false, error = failure.readableMessage(localized)) } }
+        }
+    }
+
+    fun roomTyping(typing: Boolean) {
+        val room = _state.value.openRoom ?: return
+        group.typing(room.room.id, typing)
+    }
+
+    /** ⏹ next to a busy agent: `interrupt_agent`. */
+    fun interruptRoomAgent(agentName: String) {
+        val room = _state.value.openRoom ?: return
+        if (!group.interrupt(room.room.id, agentName) { error -> if (error != null) _state.update { it.copy(error = error) } }) {
+            _state.update { it.copy(error = str(R.string.error_room_offline)) }
+        }
+    }
+
+    /** Answers an agent's approval or clarification card in the room. */
+    fun respondRoomInteraction(interaction: RoomInteraction, response: String) {
+        val room = _state.value.openRoom ?: return
+        val sent = when (interaction.kind) {
+            RequiredAction.Approval -> group.respondApproval(room.room.id, interaction.id, response) { error -> afterInteraction(interaction, error) }
+            RequiredAction.Clarification -> group.respondClarify(room.room.id, interaction.id, response) { error -> afterInteraction(interaction, error) }
+        }
+        if (!sent) _state.update { it.copy(error = str(R.string.error_room_offline)) }
+    }
+
+    private fun afterInteraction(interaction: RoomInteraction, error: String?) {
+        _state.update { state ->
+            if (error != null) return@update state.copy(error = error)
+            val open = state.openRoom ?: return@update state
+            state.copy(openRoom = GroupRoomReducer.reduce(open, RoomEvent.InteractionResolved(interaction.kind, interaction.id)))
+        }
+    }
+
+    fun cancelRoomQueueItem(item: QueueItem) {
+        val room = _state.value.openRoom ?: return
+        if (!group.cancelQueueItem(room.room.id, item.id) { error -> if (error != null) _state.update { it.copy(error = error) } }) {
+            _state.update { it.copy(error = str(R.string.error_room_offline)) }
+        }
+    }
+
+    // ── room settings ─────────────────────────────────────────────────────
+
+    fun loadAgentPresets() {
+        _state.update { it.copy(loadingPresets = true) }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.agentPresets(null) } }
+                .onSuccess { presets -> _state.update { it.copy(agentPresets = presets, loadingPresets = false) } }
+                .onFailure { failure -> _state.update { it.copy(loadingPresets = false, error = failure.readableMessage(localized)) } }
+        }
+    }
+
+    fun saveAgentPreset(id: String?, draft: RoomAgentDraft) = launchWork(
+        work = { if (id == null) api.createAgentPreset(draft) else api.updateAgentPreset(id, draft) },
+        onSuccess = { _state.update { it.copy(notice = str(R.string.preset_saved)) }; loadAgentPresets() },
+    )
+
+    fun deleteAgentPreset(preset: AgentPreset) = launchWork(
+        work = { api.deleteAgentPreset(preset.id) },
+        onSuccess = { _state.update { it.copy(agentPresets = it.agentPresets.filterNot { p -> p.id == preset.id }, notice = str(R.string.preset_deleted)) } },
+    )
+
+    fun addRoomAgent(draft: RoomAgentDraft) {
+        val room = _state.value.openRoom ?: return
+        launchWork(
+            work = { api.addRoomAgent(room.room.id, draft) },
+            onSuccess = { agent -> _state.update { it.copy(notice = str(R.string.room_agent_added, agent.name)) }; reopenRoom(room.room.id) },
+        )
+    }
+
+    fun updateRoomAgent(agent: RoomAgent, draft: RoomAgentDraft) {
+        val room = _state.value.openRoom ?: return
+        launchWork(
+            work = { api.updateRoomAgent(room.room.id, agent.id, draft) },
+            onSuccess = { agents -> _state.update { it.copy(openRoom = it.openRoom?.copy(agents = agents), notice = str(R.string.notice_saved)) } },
+        )
+    }
+
+    fun removeRoomAgent(agent: RoomAgent) {
+        val room = _state.value.openRoom ?: return
+        launchWork(
+            work = { api.removeRoomAgent(room.room.id, agent.id) },
+            onSuccess = { agents -> _state.update { it.copy(openRoom = it.openRoom?.copy(agents = agents), notice = str(R.string.room_agent_removed, agent.name)) }; refreshRooms() },
+        )
+    }
+
+    fun removeRoomMember(member: RoomMember) {
+        val room = _state.value.openRoom ?: return
+        launchWork(
+            work = { api.removeRoomMember(room.room.id, member.userId) },
+            onSuccess = { members -> _state.update { it.copy(openRoom = it.openRoom?.copy(members = members), notice = str(R.string.room_member_removed, member.name)) } },
+        )
+    }
+
+    fun renameRoom(name: String) {
+        val room = _state.value.openRoom ?: return
+        val clean = name.trim()
+        if (clean.isBlank()) return
+        launchWork(
+            work = { api.updateRoomConfig(room.room.id, org.json.JSONObject().put("name", clean)) },
+            onSuccess = { updated -> _state.update { it.copy(openRoom = it.openRoom?.copy(room = updated.copy(agents = it.openRoom?.agents.orEmpty())), notice = str(R.string.notice_saved)) }; refreshRooms() },
+        )
+    }
+
+    /** Agent handoff settings (PUT /rooms/{id}/config). */
+    fun setRoomHandoff(enabled: Boolean, maxDepth: Int?, unlimited: Boolean) {
+        val room = _state.value.openRoom ?: return
+        val body = org.json.JSONObject().put("agentHandoffEnabled", enabled).put("agentHandoffUnlimited", unlimited)
+            .put("agentHandoffMaxDepth", maxDepth ?: org.json.JSONObject.NULL)
+        launchWork(
+            work = { api.updateRoomConfig(room.room.id, body) },
+            onSuccess = { updated -> _state.update { it.copy(openRoom = it.openRoom?.copy(room = updated.copy(agents = it.openRoom?.agents.orEmpty())), notice = str(R.string.notice_saved)) } },
+        )
+    }
+
+    fun setRoomWorkspace(workspace: String) {
+        val room = _state.value.openRoom ?: return
+        launchWork(
+            work = { api.updateRoomWorkspace(room.room.id, workspace.trim()) },
+            onSuccess = { updated -> _state.update { it.copy(openRoom = it.openRoom?.copy(room = updated.copy(agents = it.openRoom?.agents.orEmpty())), notice = str(R.string.notice_saved)) } },
+        )
+    }
+
+    fun rotateRoomInviteCode() {
+        val room = _state.value.openRoom ?: return
+        val code = (1..6).map { INVITE_ALPHABET.random() }.joinToString("")
+        launchWork(
+            work = { api.updateRoomInviteCode(room.room.id, code) },
+            onSuccess = { _state.update { it.copy(openRoom = it.openRoom?.copy(room = it.openRoom!!.room.copy(inviteCode = code)), notice = str(R.string.room_invite_updated)) } },
+        )
+    }
+
+    /** The invite link the web shares: `{server}/group-chat/join/{code}`. */
+    fun roomInviteLink(code: String): String = store.baseUrl.trimEnd('/') + "/group-chat/join/" + code
+
+    fun clearRoomContext() {
+        val room = _state.value.openRoom ?: return
+        launchWork(
+            work = { api.clearRoomContext(room.room.id) },
+            onSuccess = { _state.update { it.copy(openRoom = it.openRoom?.let { open -> GroupRoomReducer.reduce(open, RoomEvent.RoomCleared(0L)) }, notice = str(R.string.room_context_cleared)) } },
+        )
+    }
+
+    fun loadRoomSummary() {
+        val room = _state.value.openRoom ?: return
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.roomSummary(room.room.id) } }
+                .onSuccess { summary -> _state.update { it.copy(openRoom = it.openRoom?.copy(summary = summary)) } }
+                .onFailure { failure -> _state.update { it.copy(error = failure.readableMessage(localized)) } }
+        }
+    }
+
+    fun saveRoomSummary(text: String) {
+        val room = _state.value.openRoom ?: return
+        launchWork(
+            work = { api.updateRoomSummary(room.room.id, text) },
+            onSuccess = { summary -> _state.update { it.copy(openRoom = it.openRoom?.copy(summary = summary ?: it.openRoom?.summary), notice = str(R.string.notice_saved)) } },
+        )
+    }
+
+    fun continueRoomHandoff(chain: HandoffChain) {
+        val room = _state.value.openRoom ?: return
+        launchWork(
+            work = { api.continueRoomHandoff(room.room.id, chain.chainId) },
+            onSuccess = { updated ->
+                _state.update { state ->
+                    val open = state.openRoom ?: return@update state
+                    state.copy(openRoom = updated?.let { GroupRoomReducer.reduce(open, RoomEvent.HandoffUpdated(it)) } ?: open, notice = str(R.string.room_handoff_continued))
+                }
+            },
+        )
+    }
+
+    fun cloneRoom(room: RoomInfo, name: String?) {
+        val code = (1..6).map { INVITE_ALPHABET.random() }.joinToString("")
+        launchWork(
+            work = { api.cloneRoom(room.id, name, code) },
+            onSuccess = { created -> _state.update { it.copy(notice = str(R.string.room_cloned, created.name)) }; refreshRooms() },
+        )
+    }
+
+    /** Join by code: resolve the room, then open it. */
+    fun joinRoomByCode(code: String) {
+        val clean = code.trim().substringAfterLast('/')
+        if (clean.isBlank()) return
+        launchWork(
+            work = { api.joinRoomByCode(clean) },
+            onSuccess = { room -> refreshRooms(); openRoom(room) },
+        )
+    }
+
+    /** Attaches a file to the next room message through the room's chunked upload. */
+    fun attachToRoom(bytes: ByteArray, filename: String, mime: String) {
+        val room = _state.value.openRoom ?: return
+        if (bytes.size.toLong() > AppUploads.MAX_BYTES) {
+            _state.update { it.copy(error = str(R.string.upload_too_large, filename)) }
+            return
+        }
+        val id = AppUploads.newId()
+        val roomId = room.room.id
+        _state.update { it.copy(error = null, roomUploads = it.roomUploads + UploadProgress(id, filename, 0, bytes.size.toLong())) }
+        roomUploadJobs[id] = viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val session = try {
+                        api.openRoomUpload(roomId, id, filename, bytes.size.toLong())
+                    } catch (failure: HermesException) {
+                        if (failure.statusCode == 404) return@withContext api.uploadRoomAttachment(roomId, bytes, filename, mime)
+                        throw failure
+                    }
+                    var offset = session.nextOffset
+                    for (chunk in planUploadChunks(bytes.size.toLong(), session.maxChunkBytes, session.nextOffset)) {
+                        ensureActive()
+                        val start = chunk.offset.toInt()
+                        offset = api.appendRoomUploadChunk(roomId, id, chunk.offset, bytes.copyOfRange(start, start + chunk.length))
+                        _state.update { state -> state.copy(roomUploads = state.roomUploads.map { u -> if (u.id == id) u.copy(sent = offset) else u }) }
+                    }
+                    api.completeRoomUpload(roomId, id, mime, filename)
+                }
+            }.onSuccess { upload ->
+                _state.update { it.copy(roomUploads = it.roomUploads.filterNot { u -> u.id == id }, roomAttachments = it.roomAttachments + upload) }
+            }.onFailure { failure ->
+                if (failure is kotlinx.coroutines.CancellationException) {
+                    viewModelScope.launch(Dispatchers.IO) { runCatching { api.abortRoomUpload(roomId, id) } }
+                    _state.update { it.copy(roomUploads = it.roomUploads.filterNot { u -> u.id == id }) }
+                    return@onFailure
+                }
+                _state.update { it.copy(roomUploads = it.roomUploads.filterNot { u -> u.id == id }, error = failure.readableMessage(localized)) }
+            }
+            roomUploadJobs.remove(id)
+        }
+    }
+
+    fun cancelRoomUpload(id: String) { roomUploadJobs.remove(id)?.cancel() }
+
+    fun removeRoomAttachment(upload: Upload) = _state.update { it.copy(roomAttachments = it.roomAttachments.filterNot { u -> u.path == upload.path }) }
+
+    /** Stream URL and headers for a room attachment card. */
+    fun roomAttachmentSource(attachment: GroupAttachment): Pair<String, Map<String, String>> {
+        val room = _state.value.openRoom
+        val url = when {
+            attachment.url.startsWith("http") -> attachment.url
+            attachment.url.startsWith("/") -> store.baseUrl.trimEnd('/') + attachment.url
+            room != null -> api.roomAttachmentUrl(room.room.id, attachment.url.ifBlank { attachment.name })
+            else -> attachment.url
+        }
+        return url to api.mediaHeaders(_state.value.activeProfile.ifBlank { null })
+    }
+
+    /** Saves a room attachment through DownloadManager, with the room's bearer token. */
+    fun downloadRoomAttachment(attachment: GroupAttachment) {
+        val (url, headers) = roomAttachmentSource(attachment)
+        val destinationName = uniqueQueuedDownloadName(attachment.name.ifBlank { attachment.id })
+        runCatching {
+            val request = DownloadManager.Request(Uri.parse(url))
+                .setTitle(destinationName)
+                .setMimeType(attachment.type.ifBlank { "application/octet-stream" })
+                .setAllowedOverMetered(true)
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, destinationName)
+            headers.forEach { (name, value) -> request.addRequestHeader(name, value) }
+            getApplication<Application>().getSystemService(DownloadManager::class.java)?.enqueue(request)
+                ?: error("DownloadManager unavailable")
+        }.onSuccess {
+            _state.update { it.copy(notice = str(R.string.download_started, destinationName), error = null) }
+        }.onFailure { failure ->
+            queuedDownloadNames.remove(destinationName)
+            _state.update { it.copy(error = str(R.string.download_failed, failure.readableMessage(localized)), notice = null) }
+        }
     }
 
     // ── conversations ─────────────────────────────────────────────────────
@@ -2360,18 +2991,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── rooms ─────────────────────────────────────────────────────────────
 
-    fun createRoom(name: String, agents: List<String>) {
+    /** Creates a room with the given seats (the same body the web's CreateRoomForm posts) and opens it. */
+    fun createRoom(name: String, agents: List<RoomAgentDraft>, workspace: String?) {
         val clean = name.trim()
         if (clean.isBlank()) return
         // Studio requires an invite code; one the user never has to think about
-        // is better than a field they have to fill in.
+        // is better than a field they have to fill in. It can be rotated later.
         val code = (1..6).map { INVITE_ALPHABET.random() }.joinToString("")
+        val summaryProfile = _state.value.activeProfile.ifBlank { "default" }
         _state.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { api.createRoom(clean, code, agents) } }
-                .onSuccess {
-                    _state.update { it.copy(busy = false, notice = str(R.string.notice_room_created, clean)) }
+            runCatching { withContext(Dispatchers.IO) { api.createRoom(clean, code, agents, summaryProfile, workspace) } }
+                .onSuccess { created ->
+                    _state.update {
+                        it.copy(
+                            busy = false,
+                            notice = str(R.string.notice_room_created, clean),
+                            error = created.agentFailures.takeIf { f -> f.isNotEmpty() }?.let { f -> str(R.string.room_agents_failed, f.joinToString("، ")) },
+                        )
+                    }
                     refreshRooms()
+                    openRoom(created.room)
                 }
                 .onFailure { failure ->
                     _state.update { it.copy(busy = false, error = failure.readableMessage(localized)) }
@@ -2379,41 +3019,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun deleteRoom(room: Room) {
+    fun deleteRoom(room: RoomInfo) {
         viewModelScope.launch {
             runCatching { withContext(Dispatchers.IO) { api.deleteRoom(room.id) } }
                 .onSuccess {
-                    _state.update { state -> state.copy(rooms = state.rooms.filterNot { it.id == room.id }) }
+                    _state.update { state ->
+                        state.copy(
+                            rooms = state.rooms.filterNot { it.id == room.id },
+                            notice = str(R.string.room_deleted, room.name),
+                            openRoom = state.openRoom?.takeUnless { it.room.id == room.id },
+                        )
+                    }
+                    if (_state.value.screen == Screen.Room && _state.value.openRoom == null) back()
                 }
                 .onFailure { failure -> _state.update { it.copy(error = failure.readableMessage(localized)) } }
         }
     }
 
-    fun addRoomAgent(roomId: String, profile: String) {
-        viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { api.addRoomAgent(roomId, profile) } }
-                .onSuccess { reopenRoom(roomId) }
-                .onFailure { failure -> _state.update { it.copy(error = failure.readableMessage(localized)) } }
-        }
-    }
-
-    private fun reopenRoom(roomId: String) {
-        viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { api.room(roomId) } }
-                .onSuccess { detail -> _state.update { it.copy(openRoom = detail) } }
-        }
-    }
-
-    /** Sends into the open room over the socket the room screen holds. */
-    fun postToRoom(text: String): Boolean {
+    /** Sends into the open room over the socket the room screen holds, with any attached files. */
+    fun postToRoom(text: String, mentionAll: Boolean = false): Boolean {
         val room = _state.value.openRoom ?: return false
         val clean = text.trim()
-        if (clean.isBlank()) return false
-        val sent = group.post(room.id, clean, _state.value.account ?: "phone") { error ->
+        val attachments = _state.value.roomAttachments
+        if (clean.isBlank() && attachments.isEmpty()) return false
+        val sent = group.post(room.room.id, clean, attachments, mentionAll) { error ->
             if (error != null) _state.update { it.copy(error = error) }
         }
         if (!sent) {
             _state.update { it.copy(error = str(R.string.error_room_offline)) }
+        } else {
+            _state.update { it.copy(roomAttachments = emptyList()) }
         }
         return sent
     }
@@ -3178,9 +3813,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val profile = currentProfile()
         _state.update { it.copy(loadingModelProviders = true) }
         viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { api.modelProviders(profile) } }
-                .onSuccess { providers ->
-                    _state.update { it.copy(modelProviders = providers, loadingModelProviders = false) }
+            runCatching { withContext(Dispatchers.IO) { api.modelCatalog(profile) } }
+                .onSuccess { catalog ->
+                    _state.update { it.copy(modelProviders = catalog.providers, modelCatalog = catalog, defaultModel = catalog.defaultModel.ifBlank { it.defaultModel }, loadingModelProviders = false) }
                 }
                 .onFailure { failure ->
                     _state.update {
@@ -3190,19 +3825,42 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun saveProviderKey(provider: String, key: String) {
-        val profile = currentProfile()
+    fun saveProviderKey(provider: String, key: String) = modelsWork { api.updateProviderApiKey(currentProfile(), provider, key.trim()) }
+
+    /** One Models-tab mutation: saves, reports, and reloads the catalog so the tab shows the saved state. */
+    private fun modelsWork(block: suspend () -> Unit) {
         _state.update { it.copy(savingSetting = true, error = null, notice = null) }
         viewModelScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) { api.updateProviderApiKey(profile, provider, key.trim()) }
-            }.onSuccess {
-                _state.update { it.copy(savingSetting = false, notice = str(R.string.notice_saved)) }
-                loadModelProviders()
-            }.onFailure { failure ->
-                _state.update { it.copy(savingSetting = false, error = failure.readableMessage(localized)) }
-            }
+            runCatching { withContext(Dispatchers.IO) { block() } }
+                .onSuccess {
+                    _state.update { it.copy(savingSetting = false, notice = str(R.string.notice_saved)) }
+                    loadModelProviders()
+                }
+                .onFailure { failure -> _state.update { it.copy(savingSetting = false, error = failure.readableMessage(localized)) } }
         }
+    }
+
+    fun setDefaultModelFromCatalog(provider: String, model: String) = modelsWork {
+        api.setDefaultModel(currentProfile(), model, provider)
+        _state.update { it.copy(defaultModel = model) }
+    }
+    fun setModelAlias(provider: String, model: String, alias: String) = modelsWork { api.updateModelAlias(currentProfile(), provider, model, alias.trim()) }
+    fun setModelVisible(provider: ModelProvider, model: String, visible: Boolean) = modelsWork {
+        val next = provider.models.filter { if (it.id == model) visible else it.visible }.map { it.id }
+        api.updateModelVisibility(currentProfile(), provider.id, if (next.size == provider.models.size) null else next)
+    }
+    fun showAllProviderModels(provider: ModelProvider) = modelsWork { api.updateModelVisibility(currentProfile(), provider.id, null) }
+    fun addCustomModel(provider: String, model: String) = modelsWork { api.addCustomModel(currentProfile(), provider, model.trim()) }
+    fun removeCustomModel(provider: String, model: String) = modelsWork { api.removeCustomModel(currentProfile(), provider, model) }
+    fun setModelContextLimit(provider: String, model: String, limit: Long) = modelsWork { api.updateModelContext(currentProfile(), provider, model, limit) }
+    fun addCustomProvider(name: String, baseUrl: String, apiKey: String, apiMode: String) = modelsWork { api.addCustomProvider(currentProfile(), name.trim(), baseUrl.trim(), apiKey.trim(), apiMode) }
+    fun removeProvider(provider: ModelProvider) = modelsWork { api.removeProvider(currentProfile(), provider) }
+    fun restoreProviderModels(provider: String) = modelsWork { api.restoreProviderModels(currentProfile(), provider) }
+
+    /** Settings › Display › Text size, applied to every screen through the theme. */
+    fun setTextScale(scale: Float) {
+        store.textScale = scale
+        _state.update { it.copy(textScale = store.textScale) }
     }
 
     private fun loadAgentSettings() {
@@ -3834,6 +4492,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             // stop button is the action that aborts an agent run on Studio.
             Screen.Conversation -> cancelActiveRun(abort = false)
             Screen.Room -> leaveRoom()
+            Screen.Workflows -> stopListeningToWorkflows()
             else -> Unit
         }
         _state.update { state ->
@@ -3844,6 +4503,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 Screen.CronJob, Screen.CronHistory -> Screen.CronJobs
                 Screen.KanbanTask -> Screen.Kanban
                 Screen.Skill -> Screen.Skills
+                Screen.Workflow -> Screen.Workflows
+                Screen.WorkflowRun -> Screen.Workflow
                 Screen.Kanban, Screen.Skills, Screen.Plugins, Screen.Mcp, Screen.AgentRuntimes, Screen.GlobalAgent, Screen.EkkoHub, Screen.Files, Screen.Connections, Screen.Webhooks, Screen.RuntimeVersions -> Screen.AgentHub
                 Screen.Pets, Screen.Insights, Screen.Logs, Screen.Journey, Screen.Appearance, Screen.SettingsPage -> Screen.Settings
                 Screen.Channels, Screen.SettingsGroup, Screen.CronJobs -> state.toolReturnScreen
@@ -3863,6 +4524,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 editingCronJob = state.editingCronJob.takeUnless { state.screen == Screen.CronJob },
                 cronEditorJobId = state.cronEditorJobId.takeUnless { state.screen == Screen.CronJob },
                 openCronRun = null,
+                openWorkflowRun = state.openWorkflowRun.takeUnless { state.screen == Screen.WorkflowRun },
+                openWorkflow = state.openWorkflow.takeUnless { state.screen == Screen.Workflow },
                 kanban = state.kanban.copy(
                     openTask = state.kanban.openTask.takeUnless { state.screen == Screen.KanbanTask },
                 ),
@@ -3885,6 +4548,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun signOut() {
         cancelActiveRun(abort = true)
         leaveRoom()
+        stopListeningToWorkflows()
         store.clearCredentials()
         _state.update {
             UiState(
@@ -3995,6 +4659,9 @@ private fun List<CronJob>.upsert(job: CronJob): List<CronJob> =
     (filterNot { it.id == job.id } + job).sortedBy { it.name.lowercase() }
 
 private val INVITE_ALPHABET = ('A'..'Z') + ('2'..'9')
+
+/** Messages per page of the paginated transcript (the web uses 150 on the History page). */
+internal const val HISTORY_PAGE = 60
 
 internal fun Throwable.invalidatesSavedSession(): Boolean =
     (this as? HermesException)?.statusCode in setOf(401, 403)

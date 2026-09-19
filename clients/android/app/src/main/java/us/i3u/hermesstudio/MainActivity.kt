@@ -185,9 +185,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import us.i3u.hermesstudio.ui.chat.*
+import us.i3u.hermesstudio.ui.groups.*
 import us.i3u.hermesstudio.ui.navigation.*
 import us.i3u.hermesstudio.ui.sessions.*
 import us.i3u.hermesstudio.ui.settings.*
+import us.i3u.hermesstudio.ui.workflows.*
 import us.i3u.hermesstudio.ui.theme.*
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
@@ -283,6 +285,7 @@ private fun AppContent(state: UiState, viewModel: AppViewModel) {
         Screen.Kanban, Screen.KanbanTask, Screen.Skills, Screen.Skill, Screen.Plugins, Screen.Mcp, Screen.Pets,
         Screen.Insights, Screen.AgentRuntimes, Screen.AgentHub, Screen.GlobalAgent, Screen.EkkoHub, Screen.Files,
         Screen.Logs, Screen.Connections, Screen.Journey, Screen.Webhooks, Screen.RuntimeVersions, Screen.Appearance,
+        Screen.Workflow, Screen.WorkflowRun,
         -> BackHandler { viewModel.back() }
         Screen.Groups, Screen.Workflows, Screen.History -> BackHandler { viewModel.showTab(Tab.Chat) }
         else -> Unit
@@ -334,6 +337,8 @@ private fun AppContent(state: UiState, viewModel: AppViewModel) {
         Screen.History -> HomeShell(state, viewModel) { openDrawer -> HistoryScreen(state, viewModel, onMenu = openDrawer) }
         Screen.AgentHub -> AgentHubScreen(state, viewModel)
         Screen.Room -> RoomScreen(state, viewModel)
+        Screen.Workflow -> WorkflowScreen(state, viewModel)
+        Screen.WorkflowRun -> WorkflowRunScreen(state, viewModel)
         Screen.Profiles -> ProfilesScreen(state, viewModel)
     }
 }
@@ -440,276 +445,6 @@ private fun LoginScreen(state: UiState, viewModel: AppViewModel) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-    }
-}
-
-// ── group rooms ──────────────────────────────────────────────────────────
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
-@Composable
-private fun GroupsScreen(state: UiState, viewModel: AppViewModel, onMenu: () -> Unit) {
-    var creating by remember { mutableStateOf(false) }
-    var confirmDelete by remember { mutableStateOf<Room?>(null) }
-
-    if (creating) {
-        NewRoomDialog(
-            profiles = state.profiles.map { it.name },
-            onCreate = { name, agents -> viewModel.createRoom(name, agents) },
-            onDismiss = { creating = false },
-        )
-    }
-    confirmDelete?.let { room ->
-        ConfirmDialog(
-            title = stringResource(R.string.groups_delete_title),
-            body = stringResource(R.string.groups_delete_body),
-            action = stringResource(R.string.action_delete),
-            onConfirm = { viewModel.deleteRoom(room) },
-            onDismiss = { confirmDelete = null },
-        )
-    }
-
-    Scaffold(
-        topBar = {
-            StudioLargeTopBar(
-                title = stringResource(R.string.groups_title),
-                navigationIcon = { MenuButton(onMenu) },
-                actions = {
-                    IconButton(onClick = { viewModel.refreshRooms() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.action_refresh), tint = MaterialTheme.colorScheme.primary)
-                    }
-                    IconButton(onClick = { creating = true }) {
-                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.groups_new), tint = MaterialTheme.colorScheme.primary)
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(start = StudioHorizontalPadding, end = StudioHorizontalPadding, top = 8.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (state.busy) item { LoadingRow() }
-            state.error?.let { message -> item { ErrorNote(message) { viewModel.dismissError() } } }
-            if (!state.busy && state.rooms.isEmpty()) {
-                item { EmptyNote(stringResource(R.string.groups_empty)) }
-            } else if (state.rooms.isNotEmpty()) {
-                item {
-                    StudioGroupedCard {
-                        state.rooms.forEachIndexed { index, room ->
-                            RoomRow(
-                                room = room,
-                                onClick = { viewModel.openRoom(room) },
-                                onLongClick = { confirmDelete = room },
-                            )
-                            if (index != state.rooms.lastIndex) StudioCardDivider(startIndent = 78)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun RoomRow(room: Room, onClick: () -> Unit, onLongClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 14.dp, vertical = 13.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier.size(50.dp).clip(RoundedCornerShape(15.dp)).background(
-                Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, Color(0xFF4389FF))),
-            ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Filled.Groups, contentDescription = null, tint = Color.White)
-        }
-        Spacer(Modifier.width(13.dp))
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(room.name, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-                formatStamp(room.updatedAt).takeIf { it.isNotBlank() }?.let { stamp ->
-                    Text(stamp, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            if (room.agentCount != null && room.memberCount != null) {
-                Text(
-                    stringResource(R.string.groups_counts, room.agentCount, room.memberCount),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
-    }
-}
-
-/** Name the room, and choose which agents are in it. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun NewRoomDialog(
-    profiles: List<String>,
-    onCreate: (String, List<String>) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var name by remember { mutableStateOf("") }
-    val chosen = remember { mutableStateListOf<String>() }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.groups_new)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    placeholder = { Text(stringResource(R.string.groups_new_hint)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text(
-                    stringResource(R.string.groups_pick_agents),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    profiles.forEach { profile ->
-                        val selected = profile in chosen
-                        AssistChip(
-                            onClick = { if (selected) chosen.remove(profile) else chosen.add(profile) },
-                            label = { Text(profile) },
-                            leadingIcon = if (selected) {
-                                { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                            } else {
-                                null
-                            },
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = name.isNotBlank(),
-                onClick = {
-                    onDismiss()
-                    onCreate(name.trim(), chosen.toList())
-                },
-            ) { Text(stringResource(R.string.action_create)) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun RoomScreen(state: UiState, viewModel: AppViewModel) {
-    val room = state.openRoom
-    var draft by rememberSaveable { mutableStateOf("") }
-    val listState = rememberLazyListState()
-
-    LaunchedEffect(room?.messages?.size) {
-        val count = room?.messages?.size ?: 0
-        if (count > 0) listState.animateScrollToItem(count - 1)
-    }
-
-    Scaffold(
-        topBar = {
-            StudioTopBar(
-                title = room?.name ?: stringResource(R.string.room_title),
-                subtitle = listOfNotNull(
-                    room?.agents?.takeIf { it.isNotEmpty() }?.joinToString(", "),
-                    stringResource(if (state.roomLive) R.string.room_live else R.string.room_offline),
-                ).joinToString(" · "),
-                onBack = { viewModel.back() },
-            )
-        },
-    ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).imePadding()) {
-            if (state.loadingHistory) LoadingRow()
-            state.error?.let { ErrorNote(it) { viewModel.dismissError() } }
-            val messages = room?.messages.orEmpty()
-            if (!state.loadingHistory && messages.isEmpty()) {
-                Box(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        stringResource(R.string.room_empty),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            LazyColumn(
-                state = listState,
-                modifier = (if (messages.isEmpty()) Modifier else Modifier.weight(1f)).fillMaxWidth(),
-                contentPadding = PaddingValues(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(messages) { message ->
-                    MessageBubble(
-                        ChatLine(
-                            text = message.content,
-                            fromUser = !message.isAgent && message.sender == state.account,
-                            timestamp = message.timestamp,
-                            sender = message.sender,
-                        ),
-                        profile = message.sender.takeIf { message.isAgent },
-                        avatar = state.avatarOf(message.sender.takeIf { message.isAgent }),
-                    )
-                }
-            }
-
-            // Rooms have no REST endpoint for posting: this rides the socket.
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    placeholder = { Text(stringResource(R.string.room_hint)) },
-                    modifier = Modifier.weight(1f),
-                    maxLines = 4,
-                    shape = RoundedCornerShape(20.dp),
-                )
-                Box(
-                    modifier = Modifier
-                        .padding(bottom = 4.dp)
-                        .size(46.dp)
-                        .clip(RoundedCornerShape(23.dp))
-                        .background(
-                            if (draft.isNotBlank()) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant
-                            },
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    IconButton(
-                        onClick = {
-                            if (viewModel.postToRoom(draft)) draft = ""
-                        },
-                        enabled = draft.isNotBlank(),
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Send,
-                            contentDescription = stringResource(R.string.composer_send),
-                            tint = if (draft.isNotBlank()) {
-                                MaterialTheme.colorScheme.onPrimary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                        )
-                    }
-                }
-            }
         }
     }
 }

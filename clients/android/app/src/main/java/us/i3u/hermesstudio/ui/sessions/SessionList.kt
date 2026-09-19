@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -83,6 +84,8 @@ fun SessionListPane(
     showSearch: Boolean = false,
     focusSearch: Boolean = false,
     contentPadding: PaddingValues = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+    /** History only: long-press starts a batch selection and the archived list is shown. */
+    selectable: Boolean = false,
     /** Items rendered above the groups inside the same scroll (the drawer's rail and switch). */
     header: (LazyListScope.() -> Unit)? = null,
     onOpen: (SessionSummary) -> Unit,
@@ -96,18 +99,25 @@ fun SessionListPane(
     var editCategory by remember { mutableStateOf<SessionCategory?>(null) }
     var deleteCategory by remember { mutableStateOf<SessionCategory?>(null) }
     var recentCountDialog by remember { mutableStateOf(false) }
+    var moveCategory by remember { mutableStateOf<SessionCategory?>(null) }
     val collapsed = remember { mutableStateMapOf<String, Boolean>() }
+    val selecting = selectable && state.sessionSelectionMode
 
     LaunchedEffect(query) { if (showSearch) viewModel.searchSessions(query) }
     LaunchedEffect(Unit) { if (state.sessionCategories.isEmpty()) viewModel.loadSessionCategories() }
 
     val searching = showSearch && query.isNotBlank()
-    val visible = if (searching) state.sessionSearchResults.orEmpty() else state.sessions
+    val archived = selectable && state.showArchived
+    val visible = when {
+        archived -> state.archivedSessions
+        searching -> state.sessionSearchResults.orEmpty()
+        else -> state.sessions
+    }
     val recentLabel = stringResource(R.string.sessions_recent)
     val pinnedLabel = stringResource(R.string.sessions_pinned)
     val uncategorizedLabel = stringResource(R.string.sessions_uncategorized)
-    val groups = remember(visible, state.sessionCategories, state.pinnedSessionIds, state.recentCount, searching) {
-        if (searching) {
+    val groups = remember(visible, state.sessionCategories, state.pinnedSessionIds, state.recentCount, searching, archived) {
+        if (searching || archived) {
             listOf(SessionGroup("search", "", SessionGroupKind.Uncategorized, visible))
         } else {
             buildSessionGroups(
@@ -173,6 +183,15 @@ fun SessionListPane(
             onDismiss = { deleteCategory = null },
         )
     }
+    moveCategory?.let { category ->
+        CategoryPickerDialog(
+            categories = state.sessionCategories.filterNot { it.id == category.id },
+            current = category.id,
+            onPick = { id -> viewModel.moveCategorySessions(category, id); moveCategory = null },
+            onNew = { moveCategory = null; newCategory = true },
+            onDismiss = { moveCategory = null },
+        )
+    }
     if (recentCountDialog) {
         RecentCountDialog(
             current = state.recentCount,
@@ -198,10 +217,11 @@ fun SessionListPane(
             }
         }
         if (state.busy && visible.isEmpty()) item { Text(stringResource(R.string.intro_restoring), style = CoreHubTextStyles.meta, color = palette.textMuted, modifier = Modifier.padding(10.dp)) }
-        if (!state.busy && visible.isEmpty()) {
+        if (state.loadingArchived && archived) item { Text(stringResource(R.string.intro_restoring), style = CoreHubTextStyles.meta, color = palette.textMuted, modifier = Modifier.padding(10.dp)) }
+        if (!state.busy && !state.loadingArchived && visible.isEmpty()) {
             item {
                 Text(
-                    stringResource(R.string.chats_empty),
+                    stringResource(if (archived) R.string.sessions_archived_empty else R.string.chats_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = palette.textMuted,
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -219,6 +239,7 @@ fun SessionListPane(
                         onRecentCount = { recentCountDialog = true },
                         onRenameCategory = { editCategory = it },
                         onDeleteCategory = { deleteCategory = it },
+                        onMoveCategory = { moveCategory = it },
                     )
                 }
             }
@@ -234,17 +255,21 @@ fun SessionListPane(
                         categoryLabel = if (group.kind == SessionGroupKind.Recent) {
                             state.sessionCategories.firstOrNull { it.id == session.categoryId }?.name
                         } else null,
-                        onClick = { onOpen(session) },
+                        selectionMode = selecting,
+                        checked = session.id in state.sessionSelection,
+                        onClick = { if (selecting) viewModel.toggleSessionSelected(session) else onOpen(session) },
                         onDelete = { confirmDelete = session },
                         onRename = { rename = session },
                         onCategory = { categoryFor = session },
-                        onArchive = { viewModel.archiveSession(session) },
+                        onArchive = { if (archived) viewModel.unarchiveSession(session) else viewModel.archiveSession(session) },
                         onPin = { viewModel.togglePinnedSession(session) },
+                        onExport = { viewModel.exportSession(session) },
+                        onSelect = if (selectable) ({ viewModel.toggleSessionSelected(session) }) else null,
                     )
                 }
             }
         }
-        if (showSearch && !searching && visible.isNotEmpty()) {
+        if (showSearch && !searching && !archived && visible.isNotEmpty()) {
             item { TextButton(onClick = viewModel::loadMoreSessions, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.load_more)) } }
         }
     }
@@ -259,6 +284,7 @@ private fun SessionGroupHeader(
     onRecentCount: () -> Unit,
     onRenameCategory: (SessionCategory) -> Unit,
     onDeleteCategory: (SessionCategory) -> Unit,
+    onMoveCategory: (SessionCategory) -> Unit,
 ) {
     val palette = CoreHub.palette
     val rotation by animateFloatAsState(if (expanded) 90f else 0f, tween(CoreHubTokens.Metrics.transitionFastMs), label = "chevron")
@@ -299,6 +325,7 @@ private fun SessionGroupHeader(
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text(stringResource(R.string.action_rename)) }, onClick = { menu = false; group.category?.let(onRenameCategory) })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.session_category_move)) }, onClick = { menu = false; group.category?.let(onMoveCategory) })
                     DropdownMenuItem(text = { Text(stringResource(R.string.action_delete)) }, onClick = { menu = false; group.category?.let(onDeleteCategory) })
                 }
             }
@@ -327,6 +354,11 @@ fun SessionRow(
     onCategory: () -> Unit,
     onArchive: () -> Unit,
     onPin: () -> Unit,
+    onExport: () -> Unit = {},
+    /** Non-null on the History page: long-press also offers "Select". */
+    onSelect: (() -> Unit)? = null,
+    selectionMode: Boolean = false,
+    checked: Boolean = false,
 ) {
     val palette = CoreHub.palette
     var menu by remember { mutableStateOf(false) }
@@ -347,6 +379,10 @@ fun SessionRow(
                     .padding(horizontal = CoreHubTokens.Metrics.sessionRowPaddingH, vertical = CoreHubTokens.Metrics.sessionRowPaddingV),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (selectionMode) {
+                    Checkbox(checked = checked, onCheckedChange = { onSelect?.invoke() }, modifier = Modifier.size(28.dp))
+                    Spacer(Modifier.width(6.dp))
+                }
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (pinned) {
@@ -401,15 +437,21 @@ fun SessionRow(
                         }
                     }
                 }
-                IconButton(onClick = onDelete, modifier = Modifier.size(24.dp).alpha(CoreHubTokens.Alpha.DELETE_AFFORDANCE)) {
-                    Icon(CoreHubIcons.Close, contentDescription = stringResource(R.string.action_delete), tint = palette.textSecondary, modifier = Modifier.size(14.dp))
+                if (!selectionMode) {
+                    IconButton(onClick = onDelete, modifier = Modifier.size(24.dp).alpha(CoreHubTokens.Alpha.DELETE_AFFORDANCE)) {
+                        Icon(CoreHubIcons.Close, contentDescription = stringResource(R.string.action_delete), tint = palette.textSecondary, modifier = Modifier.size(14.dp))
+                    }
                 }
             }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                onSelect?.let { select ->
+                    DropdownMenuItem(text = { Text(stringResource(R.string.session_select)) }, onClick = { menu = false; select() })
+                }
                 DropdownMenuItem(text = { Text(stringResource(R.string.action_rename)) }, onClick = { menu = false; onRename() })
                 DropdownMenuItem(text = { Text(stringResource(if (pinned) R.string.session_unpin else R.string.session_pin)) }, onClick = { menu = false; onPin() })
                 DropdownMenuItem(text = { Text(stringResource(R.string.session_category)) }, onClick = { menu = false; onCategory() })
                 DropdownMenuItem(text = { Text(stringResource(if (session.archived) R.string.session_unarchive else R.string.session_archive)) }, onClick = { menu = false; onArchive() })
+                DropdownMenuItem(text = { Text(stringResource(R.string.session_export)) }, onClick = { menu = false; onExport() })
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.action_delete), color = palette.error) },
                     onClick = { menu = false; onDelete() },

@@ -15,10 +15,21 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   reverse proxy that blocks WebSockets costs you the streaming, not the answer
 - **The reasoning is kept**, folded under the reply, and the composer says which
   tool the agent is running while it works
-- **Manage conversations**: long-press to rename or delete one
+- **Manage conversations**: long-press to rename, pin, categorise, archive, export
+  or delete one; the History page adds search over titles and message text, an
+  "All profiles" and an "Archived" filter, and a batch selection that archives,
+  restores, moves or deletes many at once
 - **Manage profiles**: create, rename and delete them from the profiles screen
-- **Group chat is writable**: create a room, choose which agents are in it, post
-  into it over the room socket and watch replies arrive, or delete the room
+- **Group chat is a room, not a list**: create or duplicate a room, join one by
+  its invite code, fill its seats from agent presets, and watch replies stream in
+  with per-agent activity, typing, the execution queue and inline approvals. Room
+  settings carry the workspace, the members, the invite link with its QR, agent
+  handoff and its chains, the running summary, and "clear the context"
+- **Workflows run from the phone**: the list shows a live status chip per workflow,
+  a workflow shows its graph in execution order (read-only — the editor stays on
+  the desktop), its schedules with enable/disable, and its runs. A run opens a node
+  timeline with each node's status, timing, output, an inline approve/reject for a
+  node that waits on a person, and rerun-from-node
 - **Navigation is the web app's** (M2): the app bar hamburger opens an off-canvas
   drawer with the primary rail (New Chat, Search, Device connections, Agent Manager
   for super-admins, Models), the four-segment switch (Chat, Group Chat, Workflow,
@@ -188,6 +199,34 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   the platform `LocationManager` answers `location.respond` (WGS84, accuracy, timestamp).
   Calendar, reminder and health requests are declined until those integrations exist
 
+## Changed in M4 (sessions, group chat, workflows, settings)
+
+- **Sessions reach web parity**: pinned sessions and the RECENT count are device
+  preferences per profile, category groups carry a ⋯ menu (rename, move every
+  session, delete), the long-press menu adds pin, category, archive and export,
+  and search asks the server (`/sessions/search?q=`) so it matches message text
+  and not only titles. History adds the "All profiles" and "Archived" filters,
+  unarchiving from the archived list, and a batch selection wired to
+  `POST /sessions/batch-archive` and `/sessions/batch-delete`
+- **Group chat**: `GET/POST /group-chat/rooms`, clone, config, workspace, invite
+  code, the agent seats and presets, member removal, clear-context, the summary
+  and the handoff chains, with attachments through the room's chunked upload. The
+  `/group-chat` socket carries `message`, `message_stream_start/delta/end`,
+  `message_reasoning_delta`, member and agent changes, typing, `room_agent_activity`,
+  `execution_queue_updated`, `approval.*`, `clarify.*`, `room_updated` and
+  `room_cleared`; the reducer that turns them into screen state is unit-tested
+- **Workflows**: list, run with an optional input, stop, delete, import and export,
+  schedules (create, edit, enable/disable, delete), a run's node sessions, inline
+  node approvals and rerun-from-node — with the `/workflow` socket subscription
+  keeping the chips and the timeline moving
+- **Settings finish the web's tab order**: Models now shows the default model and
+  changes it from the catalog, lists a provider's models with alias, visibility,
+  context window and custom entries, restores a provider list and adds or removes
+  a custom provider; Display carries the theme and background screen, the app
+  language and the device text scale beside the server's display options
+- **Every new string is in English and Arabic**, content text follows its own
+  direction and paths, ids, models and cron expressions stay LTR
+
 ## Project structure
 
 ```
@@ -196,7 +235,11 @@ app/src/main/java/us/i3u/hermesstudio/
   MainActivity.kt         app entry, login, groups/rooms, profiles, Agent Manager,
                           settings group bodies, channels, shared pieces
   HermesApi.kt            the HTTP contract (/api/studio/*, /api/hermes/*, /health)
-  ChatSocket.kt, GroupSocket.kt   Socket.IO /chat-run and /group-chat
+  ChatSocket.kt, GroupSocket.kt, WorkflowSocket.kt
+                          Socket.IO /chat-run, /group-chat and /workflow
+  GroupModels.kt          room, seat, member, message and preset parsing
+  GroupRoomState.kt       the room reducer and the transcript builder
+  WorkflowModels.kt       workflow parsing, graph ordering, the run timeline
   AppUploads.kt           chunked App upload planning (/api/studio/app-uploads)
   MobileLocation.kt       location consent → LocationManager → location.respond
   ui/theme/               CoreHubTokens, CoreHubTheme (Material mapping), CoreHubIcons
@@ -207,11 +250,15 @@ app/src/main/java/us/i3u/hermesstudio/
                           card, thinking block, action row, media), run cards
                           (approvals, queue, banners, location consent), composer,
                           chat formatters
+  ui/groups/              the room list, a room, the settings sheet, seat/preset
+                          dialogs
+  ui/workflows/           the workflow list, one workflow, a run timeline, status
   ui/settings/            the tabbed Settings page
   AgentToolScreens.kt, CronJobs.kt, KanbanScreens.kt, Studio*Screens.kt   agent tools
 app/src/main/res/         strings (values, values-ar), Core Hub drawables, launcher
 app/src/test/             JVM tests (contract, translations, RTL, navigation structure,
-                          session grouping, chat formatters, chunked uploads, run events)
+                          session grouping, chat formatters, chunked uploads, run
+                          events, the group-room reducer, the workflow timeline)
 tools/mock-studio.py      a REST stand-in for a Core Hub server
 ```
 
@@ -313,7 +360,7 @@ are written to the app cache, uploaded, and deleted immediately.
 
 ## Roadmap
 
-- Answering an approval request the agent raises mid-run
+- Editing the workflow graph itself (the phone lists it; the editor is desktop-only)
 - Editing a profile's avatar from the app, not only reading it
 - Voice settings (STT and TTS providers) from the app
 - Native push notifications for finished runs, approvals, and scheduled reports
