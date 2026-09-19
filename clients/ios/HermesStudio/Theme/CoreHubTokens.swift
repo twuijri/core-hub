@@ -120,6 +120,11 @@ enum CoreHubTokens {
     // MARK: Typography (system sans / system mono)
 
     enum Typography {
+        /// Device-local text scale (Settings › Display › Text size). Every
+        /// token font is multiplied by it; `AppStore` keeps it in step with
+        /// the stored preference and rebuilds the shell when it changes.
+        static var scale: CGFloat = 1
+
         static let base: CGFloat = 14
         static let baseMinimum: CGFloat = 12
         static let baseMaximum: CGFloat = 20
@@ -144,11 +149,14 @@ enum CoreHubTokens {
         static let inputMinimum: CGFloat = 16
         static let workspaceChip: CGFloat = 11
 
+        /// Clamped so a large scale never breaks the 16 pt input minimum.
+        static func scaled(_ size: CGFloat) -> CGFloat { (size * max(0.85, min(1.45, scale))).rounded() }
+
         static func font(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-            .system(size: size, weight: weight)
+            .system(size: scaled(size), weight: weight)
         }
         static func mono(_ size: CGFloat = code, weight: Font.Weight = .regular) -> Font {
-            .system(size: size, weight: weight, design: .monospaced)
+            .system(size: scaled(size), weight: weight, design: .monospaced)
         }
 
         static var titleFont: Font { font(title, weight: titleWeight) }

@@ -27,6 +27,11 @@ final class APIClient: @unchecked Sendable {
     /// Returns the new token, or `nil` when no refresh is possible.
     var tokenRefresher: (@Sendable () async -> String?)?
 
+    /// Profile sent as `X-Hermes-Profile` when a call does not name one, so
+    /// every Studio request is scoped like the web client's axios default.
+    /// `AppStore` keeps it in step with the selected profile.
+    var activeProfile = ""
+
     /// Paths that must never trigger a silent refresh (they are the auth
     /// endpoints themselves).
     private static let authPaths = ["/api/auth/login", "/api/auth/app-login", "/api/auth/app-refresh"]
@@ -81,7 +86,7 @@ final class APIClient: @unchecked Sendable {
         var request = URLRequest(url: try url(path))
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let profile, !profile.isEmpty { request.setValue(profile, forHTTPHeaderField: "X-Hermes-Profile") }
+        if let header = (profile?.nilIfEmpty ?? activeProfile.nilIfEmpty) { request.setValue(header, forHTTPHeaderField: "X-Hermes-Profile") }
         if let body {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
             request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
@@ -411,20 +416,6 @@ final class APIClient: @unchecked Sendable {
     func renameProfile(_ name: String, to newName: String) async throws { _ = try await object("/api/hermes/profiles/\(name.urlEncoded)/rename", method: "POST", body: ["new_name": newName]) }
     func deleteProfile(_ name: String) async throws { _ = try await object("/api/hermes/profiles/\(name.urlEncoded)", method: "DELETE") }
     func restartGateway(profile: String) async throws { _ = try await object("/api/hermes/profiles/\(profile.urlEncoded)/gateway/restart", method: "POST") }
-
-    func rooms() async throws -> [Room] { try await array("/api/studio/group-chat/rooms", keys: ["rooms"]).map(Room.init).filter { !$0.id.isEmpty } }
-    func room(_ id: String) async throws -> (Room, [RoomMessage]) {
-        let root = try await object("/api/studio/group-chat/rooms/\(id.urlEncoded)?limit=80&offset=0")
-        let roomJSON = root.object("room").isEmpty ? root : root.object("room")
-        return (Room(roomJSON), root.objects("messages").map(RoomMessage.init))
-    }
-    func createRoom(name: String, inviteCode: String, agents: [String]) async throws -> Room {
-        let body: JSON = ["name": name, "inviteCode": inviteCode, "agents": agents.map { ["profile": $0] }]
-        let root = try await object("/api/studio/group-chat/rooms", method: "POST", body: body)
-        return Room(root.object("room"))
-    }
-    func deleteRoom(_ id: String) async throws { _ = try await object("/api/studio/group-chat/rooms/\(id.urlEncoded)", method: "DELETE") }
-    func addRoomAgent(_ id: String, profile: String) async throws { _ = try await object("/api/studio/group-chat/rooms/\(id.urlEncoded)/agents", method: "POST", body: ["profile": profile]) }
 
     func boards() async throws -> [KanbanBoard] {
         var rows = try await array("/api/hermes/kanban/boards", keys: ["boards"])

@@ -124,6 +124,11 @@ struct SessionSummary: Identifiable, Hashable {
     var baseURL: String
     var apiKey: String
     var pushEnabled: Bool
+    var reasoningEffort: String
+    var inputTokens: Int
+    var outputTokens: Int
+    var estimatedCost: Double
+    var parentSessionID: String
 
     init(_ json: JSON, profile fallbackProfile: String = "") {
         id = json.string("id", "session_id", "sessionId")
@@ -145,6 +150,11 @@ struct SessionSummary: Identifiable, Hashable {
         baseURL = json.string("base_url", "baseUrl")
         apiKey = json.string("api_key", "apiKey")
         pushEnabled = json["push_enabled"] == nil ? json.bool("pushEnabled", default: true) : json.bool("push_enabled", default: true)
+        reasoningEffort = json.string("reasoning_effort", "reasoningEffort")
+        inputTokens = json.int("input_tokens")
+        outputTokens = json.int("output_tokens")
+        estimatedCost = json.double("estimated_cost_usd")
+        parentSessionID = json.string("parent_session_id")
     }
 
     var agentDisplayName: String { AgentIdentity.displayName(for: agentID) }
@@ -156,13 +166,16 @@ struct SessionCategory: Identifiable, Hashable {
     init(_ json: JSON) { id = json.int("id"); name = json.string("name") }
 }
 
-struct WorkflowItem: Identifiable {
+struct WorkflowItem: Identifiable, Hashable {
+    static func == (lhs: WorkflowItem, rhs: WorkflowItem) -> Bool { lhs.id == rhs.id && lhs.updatedAt == rhs.updatedAt && lhs.name == rhs.name }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
     let id: String
     var name: String
     var profile: String
     var workspace: String
     var nodeCount: Int
     var updatedAt: Int64
+    var createdAt: Int64
     var nodes: [JSON]
     var edges: [JSON]
     var viewport: JSON
@@ -173,6 +186,7 @@ struct WorkflowItem: Identifiable {
         workspace = json.string("workspace")
         nodeCount = json.array("nodes").count
         updatedAt = (json["updated_at"] as? NSNumber)?.int64Value ?? 0
+        createdAt = (json["created_at"] as? NSNumber)?.int64Value ?? 0
         nodes = json.objects("nodes")
         edges = json.objects("edges")
         viewport = json.object("viewport")
@@ -186,8 +200,9 @@ struct WorkflowSchedule: Identifiable {
     var enabled: Bool
     var input: String
     var nextRun: Int64?
+    var lastRun: Int64?
     var error: String
-    init(_ json: JSON) { id = json.string("id"); schedule = json.string("schedule"); timezone = json.string("timezone"); enabled = json.bool("enabled"); input = json.string("input"); nextRun = (json["next_run_at"] as? NSNumber)?.int64Value; error = json.string("last_error") }
+    init(_ json: JSON) { id = json.string("id"); schedule = json.string("schedule"); timezone = json.string("timezone"); enabled = json.bool("enabled"); input = json.string("input"); nextRun = (json["next_run_at"] as? NSNumber)?.int64Value; lastRun = (json["last_run_at"] as? NSNumber)?.int64Value; error = json.string("last_error") }
 }
 
 struct WorkflowRun: Identifiable, Hashable {
@@ -196,6 +211,11 @@ struct WorkflowRun: Identifiable, Hashable {
     var status: String
     var error: String
     var createdAt: Int64
+    var startedAt: Int64?
+    var finishedAt: Int64?
+    var triggerSource: String
+    var profile: String
+    var workspace: String
     var nodes: [WorkflowRunNode]
     init(_ json: JSON) {
         id = json.string("id")
@@ -203,8 +223,15 @@ struct WorkflowRun: Identifiable, Hashable {
         status = json.string("status")
         error = json.string("error")
         createdAt = (json["created_at"] as? NSNumber)?.int64Value ?? 0
+        startedAt = (json["started_at"] as? NSNumber)?.int64Value
+        finishedAt = (json["finished_at"] as? NSNumber)?.int64Value
+        triggerSource = json.string("trigger_source").nilIfEmpty ?? "manual"
+        profile = json.string("profile")
+        workspace = json.string("workspace")
         nodes = json.objects("node_sessions").map(WorkflowRunNode.init)
     }
+
+    var isActive: Bool { status == "running" || status == "queued" }
 }
 
 struct WorkflowRunNode: Identifiable, Hashable {
@@ -214,6 +241,10 @@ struct WorkflowRunNode: Identifiable, Hashable {
     var status: String
     var error: String
     var executionID: String
+    var sessionID: String
+    var startedAt: Int64?
+    var finishedAt: Int64?
+    var sequence: Int
     init(_ json: JSON) {
         id = json.string("id").nilIfEmpty ?? json.string("node_id")
         nodeID = json.string("node_id", "nodeId")
@@ -221,6 +252,10 @@ struct WorkflowRunNode: Identifiable, Hashable {
         status = json.string("status")
         error = json.string("error")
         executionID = json.string("execution_id", "executionId")
+        sessionID = json.string("session_id", "sessionId")
+        startedAt = (json["started_at"] as? NSNumber)?.int64Value
+        finishedAt = (json["finished_at"] as? NSNumber)?.int64Value
+        sequence = json.int("sequence")
     }
 }
 
@@ -359,38 +394,6 @@ struct Message: Identifiable, Hashable {
     var sentAt: Date? { StudioTimestamp.date(from: timestamp) }
 }
 
-struct Room: Identifiable, Hashable {
-    let id: String
-    var name: String
-    var agentCount: Int
-    var memberCount: Int
-    var updatedAt: String?
-
-    init(_ json: JSON) {
-        id = json.string("id", "roomId", "room_id")
-        name = json.string("name", "title").nilIfEmpty ?? String(localized: "Group")
-        agentCount = json.int("agentCount", default: json.int("agent_count"))
-        memberCount = json.int("memberCount", default: json.int("member_count"))
-        updatedAt = json.string("updatedAt", "updated_at").nilIfEmpty
-    }
-}
-
-struct RoomMessage: Identifiable, Hashable {
-    let id: String
-    let sender: String
-    let content: String
-    let isAgent: Bool
-    let timestamp: String?
-
-    init(_ json: JSON) {
-        id = json.string("id").nilIfEmpty ?? UUID().uuidString
-        sender = json.string("senderName", "sender_name", "senderId", "sender_id", "name")
-        content = json.string("content", "text", "message")
-        isAgent = json.string("role") == "assistant" || json.bool("isAgent") || json.bool("is_agent")
-        timestamp = json.string("timestamp", "createdAt", "created_at").nilIfEmpty
-    }
-}
-
 enum ToolStatus: String, Hashable { case running, done, error, interrupted }
 
 /// One tool call inside an assistant turn (or a subagent progress row).
@@ -491,8 +494,8 @@ struct ChatLine: Identifiable, Hashable {
     var fromUser: Bool { kind == .user }
     var isError: Bool { kind == .error }
 
-    init(text: String, fromUser: Bool, isError: Bool = false, timestamp: Date? = Date(), sender: String? = nil, reasoning: String = "", isStreaming: Bool = false, tools: [ToolStep] = [], kind: ChatLineKind? = nil, attachments: [ChatAttachmentRef] = [], remoteID: String? = nil) {
-        id = UUID()
+    init(id: UUID = UUID(), text: String, fromUser: Bool, isError: Bool = false, timestamp: Date? = Date(), sender: String? = nil, reasoning: String = "", isStreaming: Bool = false, tools: [ToolStep] = [], kind: ChatLineKind? = nil, attachments: [ChatAttachmentRef] = [], remoteID: String? = nil) {
+        self.id = id
         self.kind = kind ?? (isError ? .error : (fromUser ? .user : .assistant))
         self.text = text; self.interim = ""; self.timestamp = timestamp
         self.sender = sender; self.reasoning = reasoning; self.isStreaming = isStreaming; self.tools = tools
@@ -500,8 +503,8 @@ struct ChatLine: Identifiable, Hashable {
         startedAt = isStreaming ? (timestamp ?? .now) : nil; finishedAt = isStreaming ? nil : timestamp
     }
 
-    init(interaction: ChatInteraction, timestamp: Date = .now) {
-        id = UUID(); kind = .interaction; text = ""; interim = ""; self.timestamp = timestamp; sender = nil; reasoning = ""
+    init(id: UUID = UUID(), interaction: ChatInteraction, timestamp: Date = .now) {
+        self.id = id; kind = .interaction; text = ""; interim = ""; self.timestamp = timestamp; sender = nil; reasoning = ""
         isStreaming = false; tools = []; attachments = []; self.interaction = interaction
     }
 

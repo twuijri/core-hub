@@ -17,6 +17,8 @@ final class AppStore: ObservableObject {
     @Published var voiceInput = Preferences.voiceInput
     @Published var showToolCalls = Preferences.showToolCalls
     @Published var autoSpeakReplies = Preferences.autoSpeakReplies
+    @Published var allProfilesSessions = Preferences.allProfilesSessions
+    @Published var textScale = Preferences.textScale
     @Published var errorMessage: String?
     @Published var successMessage: String?
     @Published var busy = false
@@ -30,6 +32,8 @@ final class AppStore: ObservableObject {
     @Published var selectedRoom: Room?
     @Published var selectedWorkflow: WorkflowItem?
     @Published var shellDestination: ShellDestination?
+    /// Room sheets requested from the drawer (create / join by code).
+    @Published var roomAction: RoomAction?
     /// Bumped whenever a session is created, renamed, archived or deleted so
     /// the drawer list reloads.
     @Published private(set) var sessionListVersion = 0
@@ -48,6 +52,7 @@ final class AppStore: ObservableObject {
     let api: APIClient
 
     enum Phase { case launching, signedOut, signedIn }
+    enum RoomAction: String, Identifiable { case create, join; var id: String { rawValue } }
     enum DrawerPage { case navigation, settings }
 
     var isSuperAdmin: Bool { currentUser?.isSuperAdmin == true }
@@ -55,6 +60,8 @@ final class AppStore: ObservableObject {
     init() {
         api = APIClient(baseURL: Preferences.baseURL, token: "")
         api.update(baseURL: baseURL, token: token)
+        api.activeProfile = selectedProfile
+        CoreHubTokens.Typography.scale = CGFloat(textScale)
         api.tokenRefresher = { [weak self] in
             guard let self else { return nil }
             return await self.refreshAppToken(force: true)
@@ -252,7 +259,7 @@ final class AppStore: ObservableObject {
     }
 
     func chooseProfile(_ name: String) {
-        selectedProfile = name; Preferences.profile = name
+        selectedProfile = name; Preferences.profile = name; api.activeProfile = name
     }
 
     func setPreferredModel(_ model: String) { preferredModel = model; Preferences.preferredModel = model }
@@ -309,6 +316,9 @@ final class AppStore: ObservableObject {
         selectedRoom = room
         drawerOpen = false
     }
+
+    /// Rooms changed (created, renamed, deleted): the drawer list reloads.
+    func roomsChanged() { sessionListVersion &+= 1 }
 
     func open(_ workflow: WorkflowItem) {
         shellDestination = nil
@@ -367,6 +377,18 @@ final class AppStore: ObservableObject {
     func setVoiceInput(_ value: String) { voiceInput = value; Preferences.voiceInput = value }
     func setShowToolCalls(_ value: Bool) { showToolCalls = value; Preferences.showToolCalls = value }
     func setAutoSpeakReplies(_ value: Bool) { autoSpeakReplies = value; Preferences.autoSpeakReplies = value }
+    func setAllProfilesSessions(_ value: Bool) { allProfilesSessions = value; Preferences.allProfilesSessions = value; sessionsChanged() }
+    func setTextScale(_ value: Double) {
+        let clamped = min(1.45, max(0.85, value))
+        textScale = clamped
+        Preferences.textScale = clamped
+        CoreHubTokens.Typography.scale = CGFloat(clamped)
+        // Token fonts are computed, not observed: rebuild the shell so every
+        // cached row picks up the new size.
+        languageRefresh &+= 1
+    }
+    /// Profile filter for session lists: `nil` = every profile.
+    var sessionListProfile: String? { allProfilesSessions ? nil : selectedProfile.nilIfEmpty }
 
     func notify(_ text: String) { successMessage = text; Task { try? await Task.sleep(for: .seconds(2)); if self.successMessage == text { self.successMessage = nil } } }
 
@@ -379,6 +401,7 @@ final class AppStore: ObservableObject {
     }
 
     private func selectProfileIfNeeded() {
+        defer { api.activeProfile = selectedProfile }
         if profiles.contains(where: { $0.name == selectedProfile }) { return }
         selectedProfile = profiles.first(where: \.active)?.name ?? profiles.first?.name ?? "default"
         Preferences.profile = selectedProfile
