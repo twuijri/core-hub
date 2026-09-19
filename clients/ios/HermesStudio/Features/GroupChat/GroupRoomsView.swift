@@ -115,7 +115,10 @@ struct CreateRoomView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(saving ? "Creating…" : "Create") { Task { await create() } }.disabled(saving)
+                    Button { Task { await create() } } label: {
+                        if saving { Text("Creating…") } else { Text("Create") }
+                    }
+                    .disabled(saving)
                 }
             }
             .sheet(isPresented: $addingAgent) {

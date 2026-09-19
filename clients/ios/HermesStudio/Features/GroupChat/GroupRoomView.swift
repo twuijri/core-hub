@@ -77,8 +77,8 @@ struct GroupRoomView: View {
     private var loadEarlierButton: some View {
         Button { Task { await loadEarlier() } } label: {
             HStack(spacing: 6) {
-                if loadingEarlier { ProgressView().controlSize(.small) }
-                Text(loadingEarlier ? "Loading…" : "Load earlier messages").font(CoreHubTokens.Typography.metaFont)
+                if loadingEarlier { ProgressView().controlSize(.small); Text("Loading…").font(CoreHubTokens.Typography.metaFont) }
+                else { Text("Load earlier messages").font(CoreHubTokens.Typography.metaFont) }
             }
             .foregroundStyle(CoreHubTokens.Palette.textSecondary)
             .frame(maxWidth: .infinity)
