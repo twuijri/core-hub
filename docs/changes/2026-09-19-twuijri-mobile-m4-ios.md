@@ -81,6 +81,10 @@
   `member_joined/left`، `agents_updated`، `execution_queue_updated`،
   `room_agent_activity`، `room_updated`، `room_cleared`، `getTypingUsers`)،
   و`packages/client/src/api/studio/group-chat.ts` و`workflows.ts`.
+- نُفِّذ فعلًا: `node --test tests/personal/*.test.mjs` → 8/8 ناجحة (حارس الرخصة
+  وإرشادات الفريق). لم يُنفَّذ `npm run harness:check` لأن الاعتماديات غير
+  مثبّتة في نسخة العمل هذه (`scripts/server-module-boundaries.mjs` يحتاج
+  `typescript`)، والتغيير كله داخل `clients/ios` و`docs/`.
 - لم يُشغَّل CI (لا دفع)؛ لم يُجرَّب على جهاز.
 
 ## المخاطر والرجوع
