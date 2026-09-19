@@ -1,5 +1,21 @@
 import Foundation
 
+/// One entry of the join snapshot's `typingUsers` (`{ userId, userName }`).
+struct RoomTypingUser: Equatable {
+    let userID: String
+    let name: String
+
+    init?(_ raw: Any) {
+        if let text = raw as? String { userID = text; name = text; return }
+        guard let json = raw as? JSON else { return nil }
+        let id = json.string("userId", "user_id", "id")
+        let label = json.string("userName", "name")
+        guard !id.isEmpty || !label.isEmpty else { return nil }
+        userID = id.nilIfEmpty ?? label
+        name = label.nilIfEmpty ?? id
+    }
+}
+
 /// What the `join` acknowledgement carries (`handleJoin` in
 /// `packages/server/src/modules/studio/sockets/group-chat.ts`).
 struct RoomJoinSnapshot: Equatable {
@@ -8,7 +24,7 @@ struct RoomJoinSnapshot: Equatable {
     let members: [RoomMember]
     let messages: [GroupMessage]
     let agents: [RoomAgent]
-    let typingUsers: [String]
+    let typingUsers: [RoomTypingUser]
     let executionQueue: [GroupQueueItem]
     let pendingApprovals: [GroupPendingInteraction]
     let pendingClarifies: [GroupPendingInteraction]
@@ -23,7 +39,7 @@ struct RoomJoinSnapshot: Equatable {
         members = json.objects("members").map(RoomMember.init)
         messages = json.objects("messages").map(GroupMessage.init)
         agents = json.objects("agents").map(RoomAgent.init)
-        typingUsers = json.array("typingUsers").compactMap { ($0 as? String) ?? ($0 as? JSON)?.string("userName", "name") }
+        typingUsers = json.array("typingUsers").compactMap(RoomTypingUser.init)
         executionQueue = json.objects("executionQueue").map(GroupQueueItem.init)
         pendingApprovals = json.objects("pendingApprovals").map { GroupPendingInteraction(event: "approval.requested", payload: $0) }
         pendingClarifies = json.objects("pendingClarifies").map { GroupPendingInteraction(event: "clarify.requested", payload: $0) }

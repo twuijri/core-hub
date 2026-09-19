@@ -27,6 +27,11 @@ final class APIClient: @unchecked Sendable {
     /// Returns the new token, or `nil` when no refresh is possible.
     var tokenRefresher: (@Sendable () async -> String?)?
 
+    /// Profile sent as `X-Hermes-Profile` when a call does not name one, so
+    /// every Studio request is scoped like the web client's axios default.
+    /// `AppStore` keeps it in step with the selected profile.
+    var activeProfile = ""
+
     /// Paths that must never trigger a silent refresh (they are the auth
     /// endpoints themselves).
     private static let authPaths = ["/api/auth/login", "/api/auth/app-login", "/api/auth/app-refresh"]
@@ -81,7 +86,7 @@ final class APIClient: @unchecked Sendable {
         var request = URLRequest(url: try url(path))
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let profile, !profile.isEmpty { request.setValue(profile, forHTTPHeaderField: "X-Hermes-Profile") }
+        if let header = (profile?.nilIfEmpty ?? activeProfile.nilIfEmpty) { request.setValue(header, forHTTPHeaderField: "X-Hermes-Profile") }
         if let body {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
             request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")

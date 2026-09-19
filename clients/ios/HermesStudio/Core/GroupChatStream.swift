@@ -57,7 +57,7 @@ enum GroupRoomReducer {
             state.hasMore = snapshot.hasMore
             state.historyTruncated = snapshot.historyTruncated
             state.typingUsers = [:]
-            for name in snapshot.typingUsers { state.typingUsers[name] = name }
+            for entry in snapshot.typingUsers { state.typingUsers[entry.userID] = entry.name }
             // Rejoin after a reconnect: keep messages that arrived before the
             // snapshot but merge in server order without duplicates.
             var merged = snapshot.messages

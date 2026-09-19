@@ -60,6 +60,7 @@ final class AppStore: ObservableObject {
     init() {
         api = APIClient(baseURL: Preferences.baseURL, token: "")
         api.update(baseURL: baseURL, token: token)
+        api.activeProfile = selectedProfile
         api.tokenRefresher = { [weak self] in
             guard let self else { return nil }
             return await self.refreshAppToken(force: true)
@@ -257,7 +258,7 @@ final class AppStore: ObservableObject {
     }
 
     func chooseProfile(_ name: String) {
-        selectedProfile = name; Preferences.profile = name
+        selectedProfile = name; Preferences.profile = name; api.activeProfile = name
     }
 
     func setPreferredModel(_ model: String) { preferredModel = model; Preferences.preferredModel = model }
@@ -391,6 +392,7 @@ final class AppStore: ObservableObject {
     }
 
     private func selectProfileIfNeeded() {
+        defer { api.activeProfile = selectedProfile }
         if profiles.contains(where: { $0.name == selectedProfile }) { return }
         selectedProfile = profiles.first(where: \.active)?.name ?? profiles.first?.name ?? "default"
         Preferences.profile = selectedProfile

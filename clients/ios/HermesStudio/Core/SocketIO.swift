@@ -221,7 +221,7 @@ final class SocketIOConnection: @unchecked Sendable {
         nextAckID += 1
         acks[id] = completion
         ackLock.unlock()
-        emit(event, payload, ackID: id)
+        emit(event, payload: payload, ackID: id)
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { [weak self] in
             guard let self else { return }
             self.ackLock.lock()

@@ -80,7 +80,7 @@ struct RootShell: View {
                 }
             case .group:
                 if let room = store.selectedRoom {
-                    GroupRoomView(room: room).id(room.id).shellToolbar()
+                    GroupRoomView(room: room).id(room.id)
                 } else {
                     GroupsView().shellToolbar()
                 }
@@ -98,6 +98,12 @@ struct RootShell: View {
         .toolbarBackground(CoreHubTokens.Palette.bgPrimary, for: .navigationBar)
         .navigationDestination(item: $store.shellDestination) { destination in
             ShellDestinationView(destination: destination)
+        }
+        .sheet(item: $store.roomAction) { action in
+            switch action {
+            case .create: CreateRoomView().environmentObject(store)
+            case .join: JoinRoomView().environmentObject(store)
+            }
         }
     }
 }

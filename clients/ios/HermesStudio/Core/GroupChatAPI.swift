@@ -169,6 +169,7 @@ extension APIClient {
                 request.httpBody = data.subdata(in: range)
                 request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
                 request.setValue("application/json", forHTTPHeaderField: "Accept")
+                if let header = activeProfile.nilIfEmpty { request.setValue(header, forHTTPHeaderField: "X-Hermes-Profile") }
                 let (responseData, http) = try await send(request)
                 guard (200..<300).contains(http.statusCode) else { throw HermesError.http(http.statusCode, Self.errorDetailText(responseData)) }
                 let json = (try? JSONSerialization.jsonObject(with: responseData) as? JSON) ?? [:]
@@ -195,6 +196,7 @@ extension APIClient {
         guard let url = components?.url else { throw HermesError.invalidServer }
         var request = URLRequest(url: url)
         if !token.isEmpty { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        if let header = activeProfile.nilIfEmpty { request.setValue(header, forHTTPHeaderField: "X-Hermes-Profile") }
         return request
     }
 
@@ -219,6 +221,7 @@ extension APIClient {
         request.httpBody = body
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let header = activeProfile.nilIfEmpty { request.setValue(header, forHTTPHeaderField: "X-Hermes-Profile") }
         let (responseData, http) = try await send(request)
         guard (200..<300).contains(http.statusCode) else { throw HermesError.http(http.statusCode, Self.errorDetailText(responseData)) }
         guard let json = try JSONSerialization.jsonObject(with: responseData) as? JSON else { throw HermesError.malformedResponse }
