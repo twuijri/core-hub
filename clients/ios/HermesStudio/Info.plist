@@ -54,6 +54,10 @@
 			</array>
 		</dict>
 	</dict>
+	<!-- The app only uses HTTPS/TLS provided by the OS, which is exempt from
+	     export compliance; this key stops TestFlight asking on every build. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
 	<key>LSRequiresIPhoneOS</key>
