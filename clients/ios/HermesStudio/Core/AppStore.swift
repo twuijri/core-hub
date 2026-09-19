@@ -17,6 +17,8 @@ final class AppStore: ObservableObject {
     @Published var voiceInput = Preferences.voiceInput
     @Published var showToolCalls = Preferences.showToolCalls
     @Published var autoSpeakReplies = Preferences.autoSpeakReplies
+    @Published var allProfilesSessions = Preferences.allProfilesSessions
+    @Published var textScale = Preferences.textScale
     @Published var errorMessage: String?
     @Published var successMessage: String?
     @Published var busy = false
@@ -367,6 +369,10 @@ final class AppStore: ObservableObject {
     func setVoiceInput(_ value: String) { voiceInput = value; Preferences.voiceInput = value }
     func setShowToolCalls(_ value: Bool) { showToolCalls = value; Preferences.showToolCalls = value }
     func setAutoSpeakReplies(_ value: Bool) { autoSpeakReplies = value; Preferences.autoSpeakReplies = value }
+    func setAllProfilesSessions(_ value: Bool) { allProfilesSessions = value; Preferences.allProfilesSessions = value; sessionsChanged() }
+    func setTextScale(_ value: Double) { let clamped = min(1.45, max(0.85, value)); textScale = clamped; Preferences.textScale = clamped }
+    /// Profile filter for session lists: `nil` = every profile.
+    var sessionListProfile: String? { allProfilesSessions ? nil : selectedProfile.nilIfEmpty }
 
     func notify(_ text: String) { successMessage = text; Task { try? await Task.sleep(for: .seconds(2)); if self.successMessage == text { self.successMessage = nil } } }
 

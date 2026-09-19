@@ -75,6 +75,17 @@ enum Preferences {
         get { UserDefaults.standard.bool(forKey: "autoSpeakReplies") }
         set { UserDefaults.standard.set(newValue, forKey: "autoSpeakReplies") }
     }
+    /// Session lists show every profile (web "All profiles") instead of the
+    /// selected one.
+    static var allProfilesSessions: Bool {
+        get { UserDefaults.standard.bool(forKey: "allProfilesSessions") }
+        set { UserDefaults.standard.set(newValue, forKey: "allProfilesSessions") }
+    }
+    /// Local text scale (web font size 12–20 → 0.85…1.45 multiplier).
+    static var textScale: Double {
+        get { let value = UserDefaults.standard.double(forKey: "textScale"); return value > 0 ? value : 1 }
+        set { UserDefaults.standard.set(newValue, forKey: "textScale") }
+    }
     static func session(for profile: String) -> String { UserDefaults.standard.string(forKey: "session.\(profile)") ?? "" }
     static func setSession(_ id: String, profile: String) { UserDefaults.standard.set(id, forKey: "session.\(profile)") }
 }

@@ -28,6 +28,9 @@ struct ConversationView: View {
     /// Bumped to reopen the socket (foreground after a long background).
     @State var connectionGeneration = 0
     @State var hasConnectedOnce = false
+    /// Offset of the oldest loaded page (`messages/paginated`); nil = whole history loaded.
+    @State var historyOffset: Int?
+    @State var loadingEarlier = false
     @StateObject var recorder = VoiceRecorder()
     @StateObject var speech = OnDeviceSpeechRecognizer()
     @StateObject var speaker = MessageSpeaker()
@@ -93,6 +96,20 @@ struct ConversationView: View {
                 ScrollView {
                     LazyVStack(spacing: 14) {
                         if loading && stream.lines.isEmpty { ProgressView().padding(.top, 40) }
+                        if let offset = historyOffset, offset > 0 {
+                            Button { Task { await loadEarlier() } } label: {
+                                HStack(spacing: 6) {
+                                    if loadingEarlier { ProgressView().controlSize(.small) }
+                                    Text(loadingEarlier ? "Loading…" : "Load earlier messages").font(CoreHubTokens.Typography.metaFont)
+                                }
+                                .foregroundStyle(CoreHubTokens.Palette.textSecondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(loadingEarlier)
+                            .onAppear { if !loadingEarlier { Task { await loadEarlier() } } }
+                        }
                         ForEach(stream.lines) { line in
                             MessageRow(line: line, context: rowContext(width: width - 24)).id(line.id)
                         }
@@ -328,20 +345,47 @@ struct ConversationView: View {
     func reload() async {
         loading = true
         do {
-            let history = try await store.api.conversationHistory(sessionID: session.id)
-            // Never replace a live stream; the socket owns those lines.
+            // Newest page first (`messages/paginated`), older pages on demand;
+            // the flat history endpoint remains the fallback.
+            let probe = try await store.api.messagePage(sessionID: session.id, offset: 0, limit: 1, profile: session.profile)
+            let offset = MessagePaging.lastPageOffset(total: probe.total)
+            let page = probe.total <= 1 ? probe : try await store.api.messagePage(sessionID: session.id, offset: offset, limit: MessagePaging.pageSize, profile: session.profile)
             if !stream.isRunning {
-                stream.lines = history.messages.map { message in
-                    let kind = ChatLine.kind(forRole: message.role)
-                    return ChatLine(text: message.content, fromUser: kind == .user, timestamp: message.sentAt, sender: kind == .assistant ? agentLabel : nil, reasoning: message.reasoning, kind: kind, attachments: message.attachments, remoteID: message.id)
-                }
+                stream.lines = page.messages.map(historyLine)
                 stream.activeReplyID = nil
+                historyOffset = probe.total <= 1 ? 0 : offset
             }
-            if let tokens = history.contextTokens { stream.contextTokens = tokens }
         } catch {
-            if stream.lines.isEmpty && session.title != String(localized: "New conversation") { store.errorMessage = error.localizedDescription }
+            do {
+                let history = try await store.api.conversationHistory(sessionID: session.id)
+                if !stream.isRunning {
+                    stream.lines = history.messages.map(historyLine)
+                    stream.activeReplyID = nil
+                    historyOffset = nil
+                }
+                if let tokens = history.contextTokens { stream.contextTokens = tokens }
+            } catch {
+                if stream.lines.isEmpty && session.title != String(localized: "New conversation") { store.errorMessage = error.localizedDescription }
+            }
         }
         loading = false
+    }
+
+    /// Prepends the previous page of history (infinite scroll upwards).
+    func loadEarlier() async {
+        guard !loadingEarlier, let current = historyOffset, let window = MessagePaging.earlierWindow(currentOffset: current) else { return }
+        loadingEarlier = true
+        defer { loadingEarlier = false }
+        guard let page = await store.attempt({ try await store.api.messagePage(sessionID: session.id, offset: window.offset, limit: window.limit, profile: session.profile) }) else { return }
+        let known = Set(stream.lines.compactMap(\.remoteID))
+        let earlier = page.messages.filter { !known.contains($0.id) }.map(historyLine)
+        stream.lines.insert(contentsOf: earlier, at: 0)
+        historyOffset = window.offset
+    }
+
+    private func historyLine(_ message: Message) -> ChatLine {
+        let kind = ChatLine.kind(forRole: message.role)
+        return ChatLine(id: StableID.uuid("history:\(session.id):\(message.id)"), text: message.content, fromUser: kind == .user, timestamp: message.sentAt, sender: kind == .assistant ? agentLabel : nil, reasoning: message.reasoning, kind: kind, attachments: message.attachments, remoteID: message.id)
     }
 
     private func loadModels() async {

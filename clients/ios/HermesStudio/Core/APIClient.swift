@@ -412,20 +412,6 @@ final class APIClient: @unchecked Sendable {
     func deleteProfile(_ name: String) async throws { _ = try await object("/api/hermes/profiles/\(name.urlEncoded)", method: "DELETE") }
     func restartGateway(profile: String) async throws { _ = try await object("/api/hermes/profiles/\(profile.urlEncoded)/gateway/restart", method: "POST") }
 
-    func rooms() async throws -> [Room] { try await array("/api/studio/group-chat/rooms", keys: ["rooms"]).map(Room.init).filter { !$0.id.isEmpty } }
-    func room(_ id: String) async throws -> (Room, [RoomMessage]) {
-        let root = try await object("/api/studio/group-chat/rooms/\(id.urlEncoded)?limit=80&offset=0")
-        let roomJSON = root.object("room").isEmpty ? root : root.object("room")
-        return (Room(roomJSON), root.objects("messages").map(RoomMessage.init))
-    }
-    func createRoom(name: String, inviteCode: String, agents: [String]) async throws -> Room {
-        let body: JSON = ["name": name, "inviteCode": inviteCode, "agents": agents.map { ["profile": $0] }]
-        let root = try await object("/api/studio/group-chat/rooms", method: "POST", body: body)
-        return Room(root.object("room"))
-    }
-    func deleteRoom(_ id: String) async throws { _ = try await object("/api/studio/group-chat/rooms/\(id.urlEncoded)", method: "DELETE") }
-    func addRoomAgent(_ id: String, profile: String) async throws { _ = try await object("/api/studio/group-chat/rooms/\(id.urlEncoded)/agents", method: "POST", body: ["profile": profile]) }
-
     func boards() async throws -> [KanbanBoard] {
         var rows = try await array("/api/hermes/kanban/boards", keys: ["boards"])
         if rows.isEmpty { rows = [["id": "default", "name": String(localized: "Default")]] }

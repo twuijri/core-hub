@@ -157,13 +157,6 @@ struct QueuedRun: Identifiable, Hashable {
     init(_ json: JSON) { id = json.string("id", "queue_id"); text = json.string("content", "input", "text") }
 }
 
-enum LiveRoomEvent {
-    case connected
-    case message(RoomMessage)
-    case disconnected
-    case failed(String)
-}
-
 private final class ChatReconnectTask: @unchecked Sendable {
     var value: Task<Void, Never>?
     var closed = false
@@ -216,11 +209,63 @@ final class SocketIOConnection: @unchecked Sendable {
         send("42\(namespace),\(ack)\(json)")
     }
 
+    private var nextAckID = 1
+    private var acks: [Int: (Any?) -> Void] = [:]
+    private let ackLock = NSLock()
+
+    /// Emits with a Socket.IO acknowledgement (`42{ns},{id}[...]` →
+    /// `43{ns},{id}[response]`). The callback receives the first ack argument.
+    func emitWithAck(_ event: String, payload: Any, timeout: TimeInterval = 30, completion: @escaping (Any?) -> Void) {
+        ackLock.lock()
+        let id = nextAckID
+        nextAckID += 1
+        acks[id] = completion
+        ackLock.unlock()
+        emit(event, payload, ackID: id)
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { [weak self] in
+            guard let self else { return }
+            self.ackLock.lock()
+            let pending = self.acks.removeValue(forKey: id)
+            self.ackLock.unlock()
+            pending?(["error": "timeout"])
+        }
+    }
+
+    /// Async wrapper around `emitWithAck`.
+    func request(_ event: String, payload: Any, timeout: TimeInterval = 30) async -> JSON {
+        await withCheckedContinuation { continuation in
+            emitWithAck(event, payload: payload, timeout: timeout) { response in
+                continuation.resume(returning: (response as? JSON) ?? [:])
+            }
+        }
+    }
+
+    /// Handles `43{ns},{id}[...]`. Returns true when the packet was an ack.
+    private func handleAck(_ packet: String) -> Bool {
+        let prefix = "43\(namespace),"
+        guard packet.hasPrefix(prefix), let bracket = packet.firstIndex(of: "[") else { return false }
+        let idText = packet[packet.index(packet.startIndex, offsetBy: prefix.count)..<bracket]
+        guard let id = Int(idText) else { return false }
+        ackLock.lock()
+        let pending = acks.removeValue(forKey: id)
+        ackLock.unlock()
+        guard let pending else { return true }
+        let jsonText = String(packet[bracket...])
+        let array = jsonText.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [Any] } ?? []
+        pending(array.first)
+        return true
+    }
+
     func close() {
         readTask?.cancel(); readTask = nil
         socket?.cancel(with: .goingAway, reason: nil); socket = nil
         isConnected = false
         onPacket = nil
+        ackLock.lock()
+        let pending = acks
+        acks = [:]
+        ackLock.unlock()
+        for (_, callback) in pending { callback(["error": "disconnected"]) }
     }
 
     private func send(_ text: String) { socket?.send(.string(text)) { [weak self] error in if let error { self?.onPacket?("__error__:\(error.localizedDescription)") } } }
@@ -249,6 +294,7 @@ final class SocketIOConnection: @unchecked Sendable {
         }
         if packet.hasPrefix("40\(namespace)") { isConnected = true; onPacket?("__connected__"); return }
         if packet.hasPrefix("41\(namespace)") { isConnected = false; onPacket?("__disconnected__"); return }
+        if handleAck(packet) { return }
         onPacket?(packet)
     }
 }
@@ -492,32 +538,4 @@ final class ChatSocket: @unchecked Sendable {
         guard let data = jsonText.data(using: .utf8), let array = try? JSONSerialization.jsonObject(with: data) as? [Any], let event = array.first as? String else { return nil }
         return (event, array.count > 1 ? (array[1] as? JSON ?? [:]) : [:])
     }
-}
-
-final class GroupSocket: @unchecked Sendable {
-    private var connection: SocketIOConnection?
-    private var roomID: String?
-
-    func join(baseURL: String, token: String, roomID: String, memberName: String) -> AsyncStream<LiveRoomEvent> {
-        close(); self.roomID = roomID
-        return AsyncStream { continuation in
-            let live = SocketIOConnection(baseURL: baseURL, token: token, namespace: "/group-chat")
-            self.connection = live
-            live.connect { packet in
-                if packet == "__connected__" { live.emit("join", payload: ["roomId": roomID, "name": memberName], ackID: 0); continuation.yield(.connected); return }
-                if packet == "__disconnected__" { continuation.yield(.disconnected); continuation.finish(); return }
-                if packet.hasPrefix("__error__:") { continuation.yield(.failed(String(packet.dropFirst(10)))); continuation.finish(); return }
-                guard let (event, json) = ChatSocket.event(packet, namespace: "/group-chat") else { return }
-                if event == "message", !json.string("content").isEmpty { continuation.yield(.message(RoomMessage(json))) }
-            }
-            continuation.onTermination = { [weak self] _ in self?.close() }
-        }
-    }
-
-    func post(_ text: String, senderName: String) -> Bool {
-        guard let connection, connection.isConnected, let roomID else { return false }
-        connection.emit("message", payload: ["roomId": roomID, "content": text, "senderName": senderName], ackID: 1)
-        return true
-    }
-    func close() { connection?.close(); connection = nil; roomID = nil }
 }
