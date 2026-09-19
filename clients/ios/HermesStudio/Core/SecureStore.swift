@@ -97,6 +97,24 @@ enum Preferences {
         UserDefaults.standard.set(value, forKey: "ttsVoice.\(profile)")
     }
 
+    /// Which language dictation listens for, stored per profile like the
+    /// spoken-reply voice: empty means "follow my keyboard languages" (the
+    /// default), `app` means the app language, `server` means Core Hub
+    /// detection, anything else is a BCP-47 identifier the recogniser supports.
+    static func speechLanguage(for profile: String) -> String {
+        UserDefaults.standard.string(forKey: "speechLanguage.\(profile)") ?? ""
+    }
+    static func setSpeechLanguage(_ value: String, profile: String) {
+        UserDefaults.standard.set(value, forKey: "speechLanguage.\(profile)")
+    }
+    /// The last dictation languages picked for this profile, most recent first.
+    static func recentSpeechLanguages(for profile: String) -> [String] {
+        UserDefaults.standard.stringArray(forKey: "speechLanguageRecent.\(profile)") ?? []
+    }
+    static func setRecentSpeechLanguages(_ value: [String], profile: String) {
+        UserDefaults.standard.set(value, forKey: "speechLanguageRecent.\(profile)")
+    }
+
     static func session(for profile: String) -> String { UserDefaults.standard.string(forKey: "session.\(profile)") ?? "" }
     static func setSession(_ id: String, profile: String) { UserDefaults.standard.set(id, forKey: "session.\(profile)") }
 }

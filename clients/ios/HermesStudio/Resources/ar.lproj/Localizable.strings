@@ -548,7 +548,6 @@
 "Tap the microphone to finish" = "اضغط على الميكروفون للإنهاء";
 "Transcribing…" = "جارٍ التفريغ…";
 "Voice input failed. Tap the microphone to try again." = "فشل الإدخال الصوتي. اضغط على الميكروفون للمحاولة مجددًا.";
-"On-device speech is unavailable; using the Core Hub server" = "التعرّف على الكلام داخل الجهاز غير متاح؛ سيُستخدم خادم Core Hub";
 "Speech permission was not granted; using the Core Hub server" = "لم يُمنح إذن التعرّف على الكلام؛ سيُستخدم خادم Core Hub";
 "Microphone access is required for voice input. Enable it in Settings → Core Hub → Microphone." = "الوصول إلى الميكروفون مطلوب للإدخال الصوتي. فعّله من الإعدادات ← Core Hub ← الميكروفون.";
 "The microphone could not start recording." = "تعذّر بدء التسجيل من الميكروفون.";
@@ -563,6 +562,27 @@
 "The server's local speech model is not downloaded yet. Download it under Studio → Voice." = "نموذج التعرّف المحلي في الخادم لم يُنزَّل بعد. نزّله من Studio ← الصوت.";
 "The server's speech provider has no API key. Add it under Studio → Voice." = "مزوّد التعرّف في الخادم بلا مفتاح API. أضفه من Studio ← الصوت.";
 "Speech transcription is not configured on the Core Hub server." = "تفريغ الكلام غير مُعد في خادم Core Hub.";
+/* لغة الإملاء لكل بروفايل: الافتراضي من لغات لوحات المفاتيح، القائمة، الضغط المطوّل على الميكروفون */
+"Dictation language" = "لغة الإملاء";
+"Dictation stays on this iPhone and follows the languages of your keyboards. Only languages this iPhone can recognise are listed." = "يبقى الإملاء داخل هذا الآيفون ويتبع لغات لوحات المفاتيح لديك. لا تُعرض إلا اللغات التي يستطيع هذا الآيفون التعرّف عليها.";
+"Choose for me" = "اختر عني";
+"Follow my keyboard languages" = "اتبع لغات لوحات المفاتيح";
+"Dictate in %@. Add a keyboard in iOS Settings to change this." = "الإملاء بلغة %@. أضف لوحة مفاتيح من إعدادات iOS لتغيير ذلك.";
+"Follow the app language" = "اتبع لغة التطبيق";
+"Dictate in %@." = "الإملاء بلغة %@.";
+"Languages this iPhone can recognise" = "اللغات التي يتعرّف عليها هذا الآيفون";
+"This iPhone reports no speech recognition languages." = "لا يعلن هذا الآيفون عن أي لغة للتعرّف على الكلام.";
+"Stored on this iPhone for the profile: %@" = "محفوظ في هذا الآيفون للبروفايل: %@";
+"Detection across languages" = "الكشف عبر عدة لغات";
+"Let the Core Hub server detect it" = "دع خادم Core Hub يكتشف اللغة";
+"Apple's recogniser listens for one language at a time and cannot detect across languages. Only this choice sends the recording to your Core Hub server, which detects the language itself. It needs a speech provider configured for this profile." = "محرّك التعرّف من Apple يستمع للغة واحدة في كل مرة ولا يستطيع الكشف عبر عدة لغات. هذا الخيار وحده يرسل التسجيل إلى خادم Core Hub الخاص بك ليكتشف اللغة بنفسه، ويحتاج مزوّد تعرّف على الكلام مُعدًّا لهذا البروفايل.";
+"Keyboard languages (%@)" = "لغات لوحات المفاتيح (%@)";
+"App language (%@)" = "لغة التطبيق (%@)";
+"Detected by the Core Hub server" = "يكتشفها خادم Core Hub";
+"Touch and hold to choose the dictation language" = "اضغط مطوّلًا لاختيار لغة الإملاء";
+"On-device speech is unavailable for %@; using the Core Hub server" = "التعرّف على الكلام داخل الجهاز غير متاح للغة %@؛ سيُستخدم خادم Core Hub";
+"The Core Hub server cannot transcribe right now (%1$@). Dictating in %2$@ on this iPhone instead." = "تعذّر التفريغ في خادم Core Hub حاليًا (%1$@). سيجري الإملاء بلغة %2$@ على هذا الآيفون بدلًا من ذلك.";
+
 "Download" = "تنزيل";
 "Open with Quick Look" = "فتح بالمعاينة السريعة";
 "Downloading…" = "جارٍ التنزيل…";

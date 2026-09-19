@@ -262,7 +262,6 @@
 "Tap the microphone to finish" = "Tap the microphone to finish";
 "Transcribing…" = "Transcribing…";
 "Voice input failed. Tap the microphone to try again." = "Voice input failed. Tap the microphone to try again.";
-"On-device speech is unavailable; using the Core Hub server" = "On-device speech is unavailable; using the Core Hub server";
 "Speech permission was not granted; using the Core Hub server" = "Speech permission was not granted; using the Core Hub server";
 "Microphone access is required for voice input. Enable it in Settings → Core Hub → Microphone." = "Microphone access is required for voice input. Enable it in Settings → Core Hub → Microphone.";
 "The microphone could not start recording." = "The microphone could not start recording.";
@@ -277,6 +276,27 @@
 "The server's local speech model is not downloaded yet. Download it under Studio → Voice." = "The server's local speech model is not downloaded yet. Download it under Studio → Voice.";
 "The server's speech provider has no API key. Add it under Studio → Voice." = "The server's speech provider has no API key. Add it under Studio → Voice.";
 "Speech transcription is not configured on the Core Hub server." = "Speech transcription is not configured on the Core Hub server.";
+/* Dictation language (per profile): keyboard-derived default, picker, mic long press */
+"Dictation language" = "Dictation language";
+"Dictation stays on this iPhone and follows the languages of your keyboards. Only languages this iPhone can recognise are listed." = "Dictation stays on this iPhone and follows the languages of your keyboards. Only languages this iPhone can recognise are listed.";
+"Choose for me" = "Choose for me";
+"Follow my keyboard languages" = "Follow my keyboard languages";
+"Dictate in %@. Add a keyboard in iOS Settings to change this." = "Dictate in %@. Add a keyboard in iOS Settings to change this.";
+"Follow the app language" = "Follow the app language";
+"Dictate in %@." = "Dictate in %@.";
+"Languages this iPhone can recognise" = "Languages this iPhone can recognise";
+"This iPhone reports no speech recognition languages." = "This iPhone reports no speech recognition languages.";
+"Stored on this iPhone for the profile: %@" = "Stored on this iPhone for the profile: %@";
+"Detection across languages" = "Detection across languages";
+"Let the Core Hub server detect it" = "Let the Core Hub server detect it";
+"Apple's recogniser listens for one language at a time and cannot detect across languages. Only this choice sends the recording to your Core Hub server, which detects the language itself. It needs a speech provider configured for this profile." = "Apple's recogniser listens for one language at a time and cannot detect across languages. Only this choice sends the recording to your Core Hub server, which detects the language itself. It needs a speech provider configured for this profile.";
+"Keyboard languages (%@)" = "Keyboard languages (%@)";
+"App language (%@)" = "App language (%@)";
+"Detected by the Core Hub server" = "Detected by the Core Hub server";
+"Touch and hold to choose the dictation language" = "Touch and hold to choose the dictation language";
+"On-device speech is unavailable for %@; using the Core Hub server" = "On-device speech is unavailable for %@; using the Core Hub server";
+"The Core Hub server cannot transcribe right now (%1$@). Dictating in %2$@ on this iPhone instead." = "The Core Hub server cannot transcribe right now (%1$@). Dictating in %2$@ on this iPhone instead.";
+
 "Download" = "Download";
 "Open with Quick Look" = "Open with Quick Look";
 "Downloading…" = "Downloading…";

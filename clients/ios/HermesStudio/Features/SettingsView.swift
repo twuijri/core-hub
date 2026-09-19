@@ -38,6 +38,7 @@ struct SettingsView: View {
             }
             Section("Voice") {
                 VoiceOutputSettingsRow()
+                SpeechInputLanguageRow()
             }
             Section("This device") {
                 NavigationLink { ServerView() } label: { SettingsRow(icon: "server.rack", color: CoreHubTokens.Palette.success, title: "Core Hub connection", subtitle: store.baseURL) }
