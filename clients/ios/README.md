@@ -81,7 +81,7 @@ Required Info.plist strings: `NSCameraUsageDescription`, `NSMicrophoneUsageDescr
 
 Display name **Core Hub** (`CFBundleDisplayName`, both locales). The app icon is the Core Hub mark (`packages/client/public/core-hub-mark.svg`, #101010) at 60 % width on the splash colour #f7f7f4: `swift Scripts/generate_app_icons.swift HermesStudio/Resources Design/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png` regenerates every size on macOS (the checked-in PNGs were rasterised from the same geometry with PIL on Linux). `AppIcon.svg` is a copy of the vector master. The in-app logo (`AppMark`) prefers the server's custom logo and otherwise draws the mark; `CoreHubLogo` holds `logo.png`.
 
-The install target includes every iPhone and iPad icon size directly; the App Store asset catalog is retained in `Design/Assets.xcassets`. When preparing an App Store archive, add that catalog to the app target and select `AppIcon` as the App Icons Source.
+The app target carries the icon as an asset catalog set, `HermesStudio/Resources/Assets.xcassets/AppIcon.appiconset`, holding the single 1024 px master that Xcode downsizes for every device. `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon` and `CFBundleIconName` in `Info.plist` are what App Store Connect checks; loose `CFBundleIconFiles` entries are not accepted for uploads and were removed. `Design/Assets.xcassets` keeps the same master for design work.
 
 ## Arabic / RTL
 
