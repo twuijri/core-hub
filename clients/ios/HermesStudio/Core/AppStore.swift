@@ -15,6 +15,8 @@ final class AppStore: ObservableObject {
     @Published var appearance = Preferences.appearance
     @Published var reasoningEffort = Preferences.reasoningEffort
     @Published var voiceInput = Preferences.voiceInput
+    /// Bumped after a dictation-language pick so views re-read `Preferences`.
+    @Published private(set) var speechLanguageRevision = 0
     @Published var showToolCalls = Preferences.showToolCalls
     @Published var autoSpeakReplies = Preferences.autoSpeakReplies
     @Published var allProfilesSessions = Preferences.allProfilesSessions
@@ -75,16 +77,71 @@ final class AppStore: ObservableObject {
     var preferredColorScheme: ColorScheme? { appearance == "dark" ? .dark : (appearance == "light" ? .light : nil) }
     var profile: Profile? { profiles.first { $0.name == selectedProfile } }
     var isConfigured: Bool { !baseURL.isEmpty && !token.isEmpty }
-    /// BCP-47 locale used for on-device speech recognition.
+    /// BCP-47 locale derived from the app language. It is the spoken-reply
+    /// locale and the default dictation language, not the dictation language
+    /// itself — that is per profile, see `speechPlan(for:)`.
     var speechLocaleIdentifier: String {
-        if language == "ar" { return "ar-SA" }
-        if language == "en" { return "en-US" }
-        return Locale.autoupdatingCurrent.identifier
+        SpeechLanguageResolver.appLocaleIdentifier(appLanguage: language,
+                                                   systemLocaleIdentifier: Locale.autoupdatingCurrent.identifier)
     }
-    /// Two-letter language hint sent to the server transcription endpoint.
-    var speechLanguageHint: String? {
-        if language == "ar" || language == "en" { return language }
-        return Locale.autoupdatingCurrent.language.languageCode?.identifier
+    /// Two-letter hint for the server transcription endpoint when nothing
+    /// profile-specific was chosen.
+    var speechLanguageHint: String? { SpeechLanguageResolver.languageCode(of: speechLocaleIdentifier) }
+
+    /// The profile's dictation-language choice, ignoring a stored locale this
+    /// iPhone's recogniser cannot serve.
+    func speechChoice(for profile: String) -> SpeechInputChoice {
+        SpeechLanguageResolver.choice(stored: Preferences.speechLanguage(for: profile),
+                                      supported: DeviceSpeechLocales.identifiers)
+    }
+
+    /// What that choice means for the on-device recogniser and the server hint.
+    /// The enabled keyboards are read here, not cached, because the owner can
+    /// add or remove one at any time.
+    func speechPlan(for profile: String) -> SpeechLanguagePlan {
+        SpeechLanguageResolver.plan(for: speechChoice(for: profile),
+                                    appLanguage: language,
+                                    systemLocaleIdentifier: Locale.autoupdatingCurrent.identifier,
+                                    keyboardLanguages: KeyboardLanguages.current,
+                                    supported: DeviceSpeechLocales.identifiers)
+    }
+
+    /// What "follow my keyboard languages" resolves to right now, so the
+    /// picker can name it without the view touching UIKit itself.
+    var keyboardSpeechLocaleIdentifier: String {
+        SpeechLanguageResolver.plan(for: .keyboards,
+                                    appLanguage: language,
+                                    systemLocaleIdentifier: Locale.autoupdatingCurrent.identifier,
+                                    keyboardLanguages: KeyboardLanguages.current,
+                                    supported: DeviceSpeechLocales.identifiers)
+            .deviceLocaleIdentifier ?? speechLocaleIdentifier
+    }
+
+    /// Label for the Settings row (names the language a follow-mode resolves to).
+    func speechLanguageLabel(for profile: String) -> String {
+        SpeechLanguageLabel.summary(for: speechChoice(for: profile),
+                                    resolvedLocaleIdentifier: speechPlan(for: profile).deviceLocaleIdentifier)
+    }
+
+    /// Label for the recording strip: the language actually listening.
+    func activeSpeechLanguageLabel(for profile: String) -> String {
+        SpeechLanguageLabel.active(for: speechChoice(for: profile), plan: speechPlan(for: profile))
+    }
+
+    /// Languages recently dictated with in this profile, most recent first.
+    func recentSpeechLocales(for profile: String) -> [String] {
+        SpeechLanguageHistory.visible(Preferences.recentSpeechLanguages(for: profile),
+                                      supported: DeviceSpeechLocales.identifiers)
+    }
+
+    func setSpeechChoice(_ choice: SpeechInputChoice, profile: String) {
+        Preferences.setSpeechLanguage(SpeechLanguageResolver.stored(for: choice), profile: profile)
+        if case let .locale(identifier) = choice {
+            let history = SpeechLanguageHistory.updated(Preferences.recentSpeechLanguages(for: profile),
+                                                        picking: identifier)
+            Preferences.setRecentSpeechLanguages(history, profile: profile)
+        }
+        speechLanguageRevision += 1
     }
 
     func boot() async {

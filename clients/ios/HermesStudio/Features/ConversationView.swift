@@ -42,6 +42,9 @@ struct ConversationView: View {
     /// Composer text captured when dictation started; live partial results are appended after it.
     @State var voiceBase = ""
     @State var serverSttProvider = ""
+    /// `language` sent with the current server upload; `nil` when the owner
+    /// asked the server to detect the language itself.
+    @State var serverLanguageHint: String?
     @State var voiceReplyPending = false
     @State private var bottomVisible = true
     @State private var showingNewSession = false
@@ -52,6 +55,7 @@ struct ConversationView: View {
     @State private var showingPhotos = false
     @State private var showingCamera = false
     @State private var photoItems: [PhotosPickerItem] = []
+    @State private var showingSpeechLanguage = false
     @FocusState var inputFocused: Bool
 
     var body: some View {
@@ -78,7 +82,7 @@ struct ConversationView: View {
         .toolbarBackground(CoreHubTokens.Palette.bgPrimary, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar { toolbarContent }
-        .modifier(ConversationSheets(view: self, showingNewSession: $showingNewSession, showingSessionSettings: $showingSessionSettings, showingRename: $showingRename, renameText: $renameText, importing: $importing, showingPhotos: $showingPhotos, showingCamera: $showingCamera, photoItems: $photoItems))
+        .modifier(ConversationSheets(view: self, showingNewSession: $showingNewSession, showingSessionSettings: $showingSessionSettings, showingRename: $showingRename, renameText: $renameText, importing: $importing, showingPhotos: $showingPhotos, showingCamera: $showingCamera, photoItems: $photoItems, showingSpeechLanguage: $showingSpeechLanguage))
         .task(id: "\(session.id)#\(connectionGeneration)") { await runStream() }
         .task(id: session.id) { await reload(); await loadModels(); await VoiceOutputStore.shared.load(profile: session.profile, api: store.api) }
         // A failed server voice already fell back to the iPhone voice; the
@@ -199,7 +203,8 @@ struct ConversationView: View {
             loadingContext: loadingContext, models: models, selectedModel: selectedModel,
             reasoningEffort: stream.reasoningEffort ?? store.reasoningEffort, showToolCalls: store.showToolCalls, voiceMode: store.autoSpeakReplies,
             pushEnabled: stream.pushEnabled ?? session.pushEnabled, profile: session.profile,
-            voiceState: voiceState, isRecording: recorder.isRecording, recordingElapsed: recorder.elapsed
+            voiceState: voiceState, isRecording: recorder.isRecording, recordingElapsed: recorder.elapsed,
+            speechLanguage: store.activeSpeechLanguageLabel(for: session.profile)
         )
     }
 
@@ -209,6 +214,7 @@ struct ConversationView: View {
         actions.stop = { socket.abort(sessionID: session.id); if !socket.isConnected { finishLocally() } }
         actions.queue = { queueCurrentMessage() }
         actions.mic = { Task { await voice() } }
+        actions.micLanguage = { showingSpeechLanguage = true }
         actions.attachCamera = { if CameraPicker.isAvailable { showingCamera = true } else { store.errorMessage = String(localized: "No camera is available on this device.") } }
         actions.attachPhotos = { showingPhotos = true }
         actions.attachFiles = { importing = true }
@@ -548,10 +554,12 @@ private struct ConversationSheets: ViewModifier {
     @Binding var showingPhotos: Bool
     @Binding var showingCamera: Bool
     @Binding var photoItems: [PhotosPickerItem]
+    @Binding var showingSpeechLanguage: Bool
     @EnvironmentObject private var store: AppStore
 
     func body(content: Content) -> some View {
         content
+            .sheet(isPresented: $showingSpeechLanguage) { SpeechInputLanguageSheet(profile: view.session.profile).environmentObject(store) }
             .sheet(isPresented: $showingNewSession) { NewCodingSessionView(categories: []).environmentObject(store) }
             .sheet(isPresented: $showingSessionSettings) { SessionManagementView(session: view.session, categories: []) { store.sessionsChanged() }.environmentObject(store) }
             .alert("Rename conversation", isPresented: $showingRename) {
@@ -650,18 +658,27 @@ extension ConversationView {
         case .idle, .error: break
         }
         store.errorMessage = nil
-        if store.voiceInput == Preferences.voiceInputServer { await startServerVoice(); return }
-        guard OnDeviceSpeechRecognizer.isAvailable(localeIdentifier: store.speechLocaleIdentifier) else {
-            store.notify(String(localized: "On-device speech is unavailable; using the Core Hub server"))
-            await startServerVoice(); return
+        // The dictation language is per profile and decides both paths: the
+        // recogniser's locale here, and the `language` hint on the server.
+        let plan = store.speechPlan(for: session.profile)
+        if plan.requiresServer || store.voiceInput == Preferences.voiceInputServer {
+            await startServerVoice(plan: plan); return
         }
-        await startDeviceVoice()
+        guard let locale = plan.deviceLocaleIdentifier,
+              OnDeviceSpeechRecognizer.isAvailable(localeIdentifier: locale) else {
+            store.notify(String(format: String(localized: "On-device speech is unavailable for %@; using the Core Hub server"),
+                                SpeechLocaleCatalog.endonym(for: plan.fallbackLocaleIdentifier)))
+            await startServerVoice(plan: plan); return
+        }
+        await startDeviceVoice(localeIdentifier: locale)
     }
 
-    private func startDeviceVoice() async {
+    /// `allowServerFallback` is false when the device path is itself already
+    /// the fallback from a failed server attempt, so the two cannot bounce.
+    private func startDeviceVoice(localeIdentifier: String, allowServerFallback: Bool = true) async {
         voiceBase = input
         do {
-            try await speech.start(localeIdentifier: store.speechLocaleIdentifier) { text, isFinal in
+            try await speech.start(localeIdentifier: localeIdentifier) { text, isFinal in
                 applyDictation(text)
                 guard isFinal else { return }
                 if let failure = speech.lastError, text.isEmpty {
@@ -672,30 +689,48 @@ extension ConversationView {
                 inputFocused = true
             }
             voiceState = .listening
-        } catch OnDeviceSpeechRecognizer.Failure.notAuthorized {
+        } catch OnDeviceSpeechRecognizer.Failure.notAuthorized where allowServerFallback {
             store.notify(String(localized: "Speech permission was not granted; using the Core Hub server"))
-            await startServerVoice()
-        } catch OnDeviceSpeechRecognizer.Failure.unavailable {
-            store.notify(String(localized: "On-device speech is unavailable; using the Core Hub server"))
-            await startServerVoice()
+            await startServerVoice(plan: store.speechPlan(for: session.profile))
+        } catch OnDeviceSpeechRecognizer.Failure.unavailable where allowServerFallback {
+            store.notify(String(format: String(localized: "On-device speech is unavailable for %@; using the Core Hub server"),
+                                SpeechLocaleCatalog.endonym(for: localeIdentifier)))
+            await startServerVoice(plan: store.speechPlan(for: session.profile))
         } catch {
             store.errorMessage = error.localizedDescription; voiceState = .error
         }
     }
 
-    /// Server path: check `/api/studio/stt/profile-status` first, then record 16 kHz WAV.
-    private func startServerVoice() async {
+    /// Server path: check `/api/studio/stt/profile-status` first, then record
+    /// 16 kHz WAV. The plan's hint travels with the upload; server detection
+    /// sends no hint at all.
+    private func startServerVoice(plan: SpeechLanguagePlan) async {
         do {
             let status = try await store.api.sttProfileStatus(profile: session.profile)
             guard status.configured, !status.activeProvider.isEmpty else {
-                store.errorMessage = status.message; voiceState = .error; return
+                await serverUnavailable(plan: plan, reason: status.message); return
             }
             serverSttProvider = status.activeProvider
+            serverLanguageHint = plan.serverLanguageHint
             try await recorder.start()
             voiceState = .listening
         } catch {
-            store.errorMessage = error.localizedDescription; voiceState = .error
+            await serverUnavailable(plan: plan, reason: error.localizedDescription)
         }
+    }
+
+    /// The server cannot transcribe. Dictation is never dropped silently: the
+    /// chosen (or keyboard-derived) language takes over on the device and the
+    /// banner says why, and only a language the recogniser cannot serve either
+    /// leaves the owner with an error.
+    private func serverUnavailable(plan: SpeechLanguagePlan, reason: String) async {
+        let fallback = plan.fallbackLocaleIdentifier
+        guard OnDeviceSpeechRecognizer.isAvailable(localeIdentifier: fallback) else {
+            store.errorMessage = reason; voiceState = .error; return
+        }
+        store.errorMessage = String(format: String(localized: "The Core Hub server cannot transcribe right now (%1$@). Dictating in %2$@ on this iPhone instead."),
+                                    reason, SpeechLocaleCatalog.endonym(for: fallback))
+        await startDeviceVoice(localeIdentifier: fallback, allowServerFallback: false)
     }
 
     private func stopVoice() {
@@ -709,7 +744,7 @@ extension ConversationView {
         defer { try? FileManager.default.removeItem(at: url) }
         do {
             let data = try Data(contentsOf: url)
-            let result = try await store.api.transcribe(wav: data, provider: serverSttProvider, language: store.speechLanguageHint, profile: session.profile)
+            let result = try await store.api.transcribe(wav: data, provider: serverSttProvider, language: serverLanguageHint, profile: session.profile)
             voiceBase = input
             applyDictation(result.text)
             voiceState = .idle; voiceReplyPending = true; inputFocused = true

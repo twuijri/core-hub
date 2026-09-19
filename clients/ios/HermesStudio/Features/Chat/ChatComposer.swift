@@ -18,6 +18,8 @@ struct ChatComposerState {
     var voiceState: ComposerVoiceState = .idle
     var isRecording = false
     var recordingElapsed: TimeInterval = 0
+    /// Dictation language of the active profile, shown while the mic is open.
+    var speechLanguage = ""
 }
 
 struct ChatComposerActions {
@@ -25,6 +27,8 @@ struct ChatComposerActions {
     var stop: () -> Void = {}
     var queue: () -> Void = {}
     var mic: () -> Void = {}
+    /// Long press on the mic: pick the dictation language without leaving the chat.
+    var micLanguage: () -> Void = {}
     var attachCamera: () -> Void = {}
     var attachPhotos: () -> Void = {}
     var attachFiles: () -> Void = {}
@@ -132,7 +136,7 @@ private struct ComposerToolbar: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Queue message")
             }
-            MicButton(state: state, action: actions.mic)
+            MicButton(state: state, action: actions.mic, longPress: actions.micLanguage)
             SendButton(isRunning: state.isRunning, canSend: canSend, send: actions.send, stop: actions.stop)
         }
     }
@@ -224,6 +228,7 @@ struct MenuChoice: View {
 private struct MicButton: View {
     let state: ChatComposerState
     let action: () -> Void
+    let longPress: () -> Void
 
     private var symbol: String {
         switch state.voiceState {
@@ -241,18 +246,25 @@ private struct MicButton: View {
         }
     }
     private var background: Color { state.voiceState == .listening ? CoreHubTokens.Palette.error : CoreHubTokens.Palette.bgSecondary }
+    private var isDisabled: Bool { state.voiceState == .transcribing }
 
+    /// A plain `Button` plus `simultaneousGesture` fires both callbacks on a
+    /// long press, so tap and long press are separate gestures here.
     var body: some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(foreground)
-                .frame(width: CoreHubTokens.Layout.composerButton, height: CoreHubTokens.Layout.composerButton)
-                .background(background, in: Circle())
-        }
-        .buttonStyle(.plain)
-        .disabled(state.voiceState == .transcribing)
-        .accessibilityLabel(state.voiceState == .listening ? "Stop" : "Voice input")
+        Image(systemName: symbol)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(foreground)
+            .frame(width: CoreHubTokens.Layout.composerButton, height: CoreHubTokens.Layout.composerButton)
+            .background(background, in: Circle())
+            .opacity(isDisabled ? 0.55 : 1)
+            .contentShape(Circle())
+            .onTapGesture { if !isDisabled { action() } }
+            .onLongPressGesture(minimumDuration: 0.45) { longPress() }
+            .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(state.voiceState == .listening ? "Stop" : "Voice input")
+            .accessibilityHint("Touch and hold to choose the dictation language")
+            .accessibilityAction(named: Text("Dictation language")) { longPress() }
     }
 }
 
@@ -383,6 +395,28 @@ private struct AttachmentChip: View {
     }
 }
 
+/// Which language the mic is listening for, so a wrong language is visible
+/// before the words come back wrong. Its own direction: an Arabic endonym must
+/// not be reordered by an English layout.
+private struct SpeechLanguageChip: View {
+    let label: String
+
+    var body: some View {
+        if !label.isEmpty {
+            Text(label)
+                .font(CoreHubTokens.Typography.metaFont)
+                .foregroundStyle(CoreHubTokens.Palette.textMuted)
+                .lineLimit(1)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(CoreHubTokens.Palette.bgSecondary, in: Capsule())
+                .environment(\.layoutDirection, MarkdownText.layoutDirection(for: label))
+                .accessibilityLabel(Text("Dictation language"))
+                .accessibilityValue(Text(label))
+        }
+    }
+}
+
 private struct VoiceStatusRow: View {
     let state: ChatComposerState
 
@@ -396,11 +430,13 @@ private struct VoiceStatusRow: View {
                 } else {
                     Text("Listening…").font(CoreHubTokens.Typography.metaFont)
                 }
-                Spacer()
-                Text("Tap the microphone to finish").font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.textMuted)
+                SpeechLanguageChip(label: state.speechLanguage)
+                Spacer(minLength: 6)
+                Text("Tap the microphone to finish").font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.textMuted).lineLimit(1)
             case .transcribing:
                 ProgressView().controlSize(.mini)
                 Text("Transcribing…").font(CoreHubTokens.Typography.metaFont)
+                SpeechLanguageChip(label: state.speechLanguage)
                 Spacer()
             case .error:
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(CoreHubTokens.Palette.error)
