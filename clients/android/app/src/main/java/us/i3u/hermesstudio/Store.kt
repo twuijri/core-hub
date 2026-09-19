@@ -202,6 +202,33 @@ class Store(context: Context) {
         get() = prefs.getFloat(KEY_TEXT_SCALE, 1f).coerceIn(TEXT_SCALE_MIN, TEXT_SCALE_MAX)
         set(value) = prefs.edit().putFloat(KEY_TEXT_SCALE, value.coerceIn(TEXT_SCALE_MIN, TEXT_SCALE_MAX)).apply()
 
+    /**
+     * In-app update bookkeeping. The throttle has to survive a restart —
+     * otherwise every cold start is a fresh check — and so does the last
+     * result, because Settings shows it before any new check has run.
+     */
+    var updateCheckedAt: Long
+        get() = prefs.getLong(KEY_UPDATE_CHECKED_AT, 0L)
+        set(value) = prefs.edit().putLong(KEY_UPDATE_CHECKED_AT, value).apply()
+
+    /** The name of the last [UpdateOutcome]; blank before the first check. */
+    var updateOutcome: String
+        get() = prefs.getString(KEY_UPDATE_OUTCOME, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_UPDATE_OUTCOME, value).apply()
+
+    /** Whatever the outcome needs to name — a version, or a server's own words. */
+    var updateOutcomeDetail: String
+        get() = prefs.getString(KEY_UPDATE_OUTCOME_DETAIL, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_UPDATE_OUTCOME_DETAIL, value).apply()
+
+    /**
+     * The build whose notice the owner has already waved away. Without it the
+     * same offer comes back on the next resume, which is a modal by other means.
+     */
+    var updateDismissedBuild: Int
+        get() = prefs.getInt(KEY_UPDATE_DISMISSED_BUILD, 0)
+        set(value) = prefs.edit().putInt(KEY_UPDATE_DISMISSED_BUILD, value).apply()
+
     fun clearCredentials() {
         prefs.edit()
             .remove(KEY_TOKEN)
@@ -245,5 +272,9 @@ class Store(context: Context) {
         private const val KEY_RECENT_COUNT = "recent_session_count"
         private const val KEY_SHOW_TOOL_CALLS = "show_tool_calls"
         private const val KEY_SPEAK_REPLIES = "speak_replies"
+        private const val KEY_UPDATE_CHECKED_AT = "update_checked_at"
+        private const val KEY_UPDATE_OUTCOME = "update_outcome"
+        private const val KEY_UPDATE_OUTCOME_DETAIL = "update_outcome_detail"
+        private const val KEY_UPDATE_DISMISSED_BUILD = "update_dismissed_build"
     }
 }

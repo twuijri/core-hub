@@ -78,6 +78,7 @@ import us.i3u.hermesstudio.NoticeNote
 import us.i3u.hermesstudio.R
 import us.i3u.hermesstudio.TextPromptDialog
 import us.i3u.hermesstudio.UiState
+import us.i3u.hermesstudio.UpdateNote
 import us.i3u.hermesstudio.chatProfile
 import us.i3u.hermesstudio.ui.navigation.MenuButton
 import us.i3u.hermesstudio.ui.sessions.workspaceChipLabel
@@ -308,6 +309,9 @@ fun ConversationScreen(state: UiState, viewModel: AppViewModel, onMenu: () -> Un
             state.abortPhase?.let { AbortBanner(it) }
             state.error?.let { ErrorNote(it) { viewModel.dismissError() } }
             state.notice?.let { NoticeNote(it) { viewModel.dismissNotice() } }
+            // A new test build joins the same quiet stack as every other
+            // notice, rather than opening a dialog over the conversation.
+            if (state.update.showNotice) UpdateNote(state.update, viewModel)
 
             replyingTo?.let { quoted ->
                 Surface(

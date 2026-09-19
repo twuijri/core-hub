@@ -180,6 +180,10 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   typed, so Arabic in an English app starts at the right edge of the card — the composer
   used to measure its text at content width inside a box pinned to the interface's start,
   which left a right-aligned Arabic line beginning in the middle of the composer
+- **It updates itself from your own server**: the app asks your Core Hub whether a
+  newer test build exists, shows a quiet notice with the version and what changed,
+  downloads it with resumable progress and hands it to Android's installer — no
+  GitHub account or token on the phone. See [Updating from inside the app](#updating-from-inside-the-app)
 
 ## Changed in M1 (Core Hub mobile branch)
 
@@ -306,6 +310,10 @@ app/src/main/java/us/i3u/hermesstudio/
   GroupRoomState.kt       the room reducer and the transcript builder
   WorkflowModels.kt       workflow parsing, graph ordering, the run timeline
   AppUploads.kt           chunked App upload planning (/api/studio/app-uploads)
+  AppUpdates.kt           in-app update arithmetic: build comparison, the check
+                          throttle, response parsing, resume offsets, outcomes
+  AppUpdater.kt           the Android half: the APK cache, metered detection, the
+                          install-source permission and the installer intent
   MobileLocation.kt       location consent → LocationManager → location.respond
   ui/theme/               CoreHubTokens, CoreHubTheme (Material mapping), CoreHubIcons
   ui/navigation/          drawer host + content, HomeShell (hamburger), settings drawer
@@ -333,7 +341,9 @@ app/src/main/java/us/i3u/hermesstudio/
 app/src/main/res/         strings (values, values-ar), Core Hub drawables, launcher
 app/src/test/             JVM tests (contract, translations, RTL, navigation structure,
                           session grouping, chat formatters, chunked uploads, run
-                          events, the group-room reducer, the workflow timeline)
+                          events, the group-room reducer, the workflow timeline,
+                          the in-app update — version order, throttle, parsing and
+                          resume, plus the whole path against mock-studio.py)
 tools/mock-studio.py      a REST stand-in for a Core Hub server
 ```
 
@@ -362,10 +372,36 @@ Every push to `main` rebuilds that release, so the link always points at the new
 build, and each build is signed with the same project key so it installs straight over
 the previous version.
 
-GitHub-built copies also check that rolling release at launch. When its published
-commit differs from the installed build, the app offers to download the APK and
-hands it to Android's package installer. Android still requires the user to approve
-the installation and to allow this app as an update source once.
+### Updating from inside the app
+
+The app can update itself, without a GitHub account or token on the phone. It asks
+your **own Core Hub** — `GET /api/studio/app-updates/mobile?platform=android&channel=test`,
+with the same bearer token and `X-Hermes-Profile` header as every other call — and
+your server proxies the private release.
+
+- **When it checks.** On start and on every resume, at most once every six hours, and
+  never on a metered connection. Settings › About › **App updates** checks straight
+  away and ignores both rules; that row also shows the installed build and the result
+  of the last check, including "you are up to date" and every failure with its reason.
+- **How it compares builds.** Test builds are named `<core version>-test.<run>`. The
+  release is compared segment by segment as numbers and the run as a number, so
+  `1.0.2-test.22` is correctly newer than `1.0.2-test.9`. An identical or older build
+  is never offered.
+- **What you see.** A quiet card in the same notice stack as everything else above the
+  composer — never a dialog over your conversation — with the version, the size and
+  what changed, and a **Later** that keeps that build quiet until a newer one appears.
+- **The download.** It streams into the app's own cache with visible progress, can be
+  cancelled, and resumes with an HTTP `Range` request if it is interrupted. The file is
+  checked against the length the server promised before it is offered for install; a
+  short file is reported, never installed.
+- **The install.** The APK is handed to Android's package installer through a
+  `FileProvider` content URI. Android asks you to approve the installation, and the
+  first time it also needs Core Hub Mobile allowed as an install source — the card says
+  so and opens the right settings screen rather than failing silently.
+
+If your server has no release configured it answers `{"available": false,
+"reason": "not_configured"}`, and the app says exactly that instead of reporting a
+failure.
 
 > Installed a build from before 2026-07-30? Uninstall the old app once, then install
 > this one. Those builds were signed with a throwaway key that CI regenerated on every
@@ -419,6 +455,8 @@ the installation and to allow this app as an update source once.
 | Plugins | `GET /api/hermes/plugins` · `POST /api/hermes/plugins/{key}/enable` · `disable` |
 | MCP servers | `GET` · `POST /api/hermes/mcp/servers` · `PATCH` / `DELETE /api/hermes/mcp/servers/{name}` · `POST /api/hermes/mcp/reload` |
 | Petdex and active pet | `GET /api/hermes/petdex/manifest` · `GET` / `PATCH /api/hermes/pets/active` · `POST /api/hermes/pets/adopt` |
+| Check for a new mobile build | `GET /api/studio/app-updates/mobile?platform=android&channel=<channel>` |
+| Download that build (supports `Range`, 206) | the `downloadPath` the check returned |
 | App mark | `GET /logo.png` (static, cached on the device) |
 
 Both sockets authenticate with the same bearer token, passed in the Socket.IO
