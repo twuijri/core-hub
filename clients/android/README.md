@@ -105,8 +105,10 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
 - **Composer laid out like Studio's**: a full-width field with a `+` button and
   context chips underneath, and a single trailing button that is the microphone until
   you type, then becomes send
-- **The `+` sheet** carries everything the conversation needs: Camera, Gallery and File
-  tiles, plus the model and the reasoning effort — new controls become one more row
+- **The `+` opens a bottom sheet**, not a menu hanging off the button: a drag handle, the
+  title *Attach files* over a muted line, then PHOTOS — *Take photo* · *Photo library* — a
+  divider, DOCUMENTS — *Files* — and a full-width *Close*. One comfortable row per action
+  (icon tile, label, caption, chevron), mirrored in Arabic. A new action is one more row
 - **Change the model** per conversation, applied with `POST /api/studio/sessions/{id}/model`
 - **Change reasoning effort** (default, low, medium, high), sent as `reasoning_effort`
   on every run, the same field the web composer sets
@@ -182,6 +184,13 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   the settings drawer and the tabbed Settings page follow the web's order
 - The session list, chat header, message bubbles and composer surfaces use the tokens
   (bubble radius 10, composer card 18 with the spec shadow, 16 sp input, pill buttons)
+- Bottom sheets use the same tokens: `ui/chat/AttachmentSheet.kt` (the composer's `+`) is a
+  `ModalBottomSheet` on `bg.card` with a 40 % scrim, radius-18 top corners, a 36 × 4 handle at
+  accent @ 18 %, 20 dp gutters, rows at least 56 dp tall, a 40 dp icon tile (accent @ 6 %,
+  border-light hairline, radius 10) around a 20 dp Core Hub line icon, a 14/600 label over an
+  11 sp caption, and an auto-mirrored chevron. Sheet metrics live in
+  `CoreHubTokens.Metrics.sheet*`; `AttachmentSheetTest` fails the build if a colour, radius or
+  size is written into the sheet instead, or if iOS drifts out of order
 - Branding: the app is "Core Hub", the launcher icon is the vector mark on the splash
   colour, the bundled logo is the in-app mark until the server's is fetched, and the
   coding-agent avatars are bundled
@@ -211,7 +220,7 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   "could not be played" before it falls back to the device engine
 - **Composer per the spec**: radius-18 card, 150 dp minimum, context indicator
   "{used} / {limit} · remaining {rest}" top-end (amber above 80 %), a borderless 16 sp
-  textarea that never auto-focuses, and the toolbar [+ camera / gallery / files]
+  textarea that never auto-focuses, and the toolbar [+ attach]
   [🧠 reasoning] [⚙ Voice mode · Show tool calls · Push] [model] … [mic] [send / stop].
   Pill labels collapse to icons on narrow phones. Attachments go through the chunked
   `POST /api/studio/app-uploads` (256 KiB PUTs, 50 MB max) with a progress chip that can

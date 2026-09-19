@@ -273,6 +273,22 @@ object CoreHubTokens {
         val contextBarHeight: Dp = 4.dp
         val workspaceIcon: Dp = 12.dp
 
+        /**
+         * Bottom sheets (the composer's attachment sheet first): a 36 × 4
+         * handle, a 20 dp gutter, rows at least 56 dp tall so a thumb never
+         * misses, a 40 dp icon tile holding a 20 dp icon, and an 18 dp
+         * trailing chevron.
+         */
+        val sheetHandleWidth: Dp = 36.dp
+        val sheetHandleHeight: Dp = 4.dp
+        val sheetPadding: Dp = 20.dp
+        val sheetRowMinHeight: Dp = 56.dp
+        val sheetRowGap: Dp = 14.dp
+        val sheetIconTile: Dp = 40.dp
+        val sheetIcon: Dp = 20.dp
+        val sheetTrailingIcon: Dp = 18.dp
+        val sheetButtonHeight: Dp = 44.dp
+
         /** Long-press before the session context menu opens. */
         const val longPressMs = 500L
 

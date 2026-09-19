@@ -255,6 +255,26 @@ enum CoreHubTokens {
         static let modelPillMaxWidth: CGFloat = 190
         static let toolSummaryMaxWidth: CGFloat = 520
         static let toolSummaryHeader: CGFloat = 30
+        /// Bottom sheets (the composer's attachment sheet first): a 36 × 4
+        /// handle, a 20 pt gutter, rows at least 56 pt tall so a thumb never
+        /// misses, a 40 pt icon tile holding a 20 pt icon, and an 18 pt
+        /// trailing chevron.
+        static let sheetHandleWidth: CGFloat = 36
+        static let sheetHandleHeight: CGFloat = 4
+        static let sheetPadding: CGFloat = 20
+        static let sheetRowMinHeight: CGFloat = 56
+        static let sheetRowGap: CGFloat = 14
+        static let sheetIconTile: CGFloat = 40
+        static let sheetIcon: CGFloat = 20
+        static let sheetTrailingIcon: CGFloat = 18
+        static let sheetButtonHeight: CGFloat = 44
+        /// Detent estimate: handle strip, header block, one group header,
+        /// one row and the footer with the Close button.
+        static let sheetHandleArea: CGFloat = 26
+        static let sheetHeaderHeight: CGFloat = 60
+        static let sheetGroupHeaderHeight: CGFloat = 30
+        static let sheetFooterHeight: CGFloat = 84
+
         static let longPress: Double = 0.5
         static let recentDefault = 10
         static let recentMinimum = 1

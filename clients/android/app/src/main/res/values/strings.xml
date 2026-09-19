@@ -128,9 +128,16 @@
 
     <!-- The + sheet -->
     <string name="sheet_add">Add</string>
-    <string name="sheet_camera">Camera</string>
-    <string name="sheet_gallery">Gallery</string>
-    <string name="sheet_file">File</string>
+    <string name="sheet_camera">Take photo</string>
+    <string name="sheet_gallery">Photo library</string>
+    <string name="sheet_file">Files</string>
+    <string name="attach_sheet_title">Attach files</string>
+    <string name="attach_sheet_subtitle">Choose what to add to this message</string>
+    <string name="attach_group_photos">Photos</string>
+    <string name="attach_group_documents">Documents</string>
+    <string name="attach_camera_caption">Open the camera now</string>
+    <string name="attach_gallery_caption">Choose from your photos</string>
+    <string name="attach_file_caption">Any file from this device</string>
     <string name="sheet_conversation">Conversation</string>
     <string name="sheet_model">Model</string>
     <string name="sheet_reasoning">Reasoning effort</string>

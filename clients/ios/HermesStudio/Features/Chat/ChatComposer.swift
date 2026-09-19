@@ -116,7 +116,8 @@ private struct ComposerToolbar: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 6) {
-            AttachMenu(actions: actions)
+            // The "+" opens the attachment sheet (Chat/AttachmentSheet.swift).
+            AttachmentSheetButton(onCamera: actions.attachCamera, onPhotos: actions.attachPhotos, onFiles: actions.attachFiles)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     ReasoningPill(value: state.reasoningEffort, compact: compact, select: actions.selectReasoning)
@@ -139,25 +140,6 @@ private struct ComposerToolbar: View {
             MicButton(state: state, action: actions.mic, longPress: actions.micLanguage)
             SendButton(isRunning: state.isRunning, canSend: canSend, send: actions.send, stop: actions.stop)
         }
-    }
-}
-
-private struct AttachMenu: View {
-    let actions: ChatComposerActions
-
-    var body: some View {
-        Menu {
-            Button(action: actions.attachCamera) { Label("Take photo", systemImage: "camera") }
-            Button(action: actions.attachPhotos) { Label("Photo library", systemImage: "photo.on.rectangle") }
-            Button(action: actions.attachFiles) { Label("Attach files", systemImage: "paperclip") }
-        } label: {
-            CoreHubIconView(icon: .plus, size: 18)
-                .foregroundStyle(CoreHubTokens.Palette.textSecondary)
-                .frame(width: CoreHubTokens.Layout.composerButton, height: CoreHubTokens.Layout.composerButton)
-                .background(CoreHubTokens.Palette.bgCard, in: Circle())
-                .overlay(Circle().stroke(CoreHubTokens.Palette.inputBorderIdle))
-        }
-        .accessibilityLabel("Attach")
     }
 }
 

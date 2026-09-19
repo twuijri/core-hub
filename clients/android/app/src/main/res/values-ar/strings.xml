@@ -127,9 +127,16 @@
 
     <!-- قائمة زر + -->
     <string name="sheet_add">إضافة</string>
-    <string name="sheet_camera">الكاميرا</string>
-    <string name="sheet_gallery">المعرض</string>
-    <string name="sheet_file">ملف</string>
+    <string name="sheet_camera">التقاط صورة</string>
+    <string name="sheet_gallery">مكتبة الصور</string>
+    <string name="sheet_file">الملفات</string>
+    <string name="attach_sheet_title">إرفاق ملفات</string>
+    <string name="attach_sheet_subtitle">اختر ما تضيفه إلى هذه الرسالة</string>
+    <string name="attach_group_photos">الصور</string>
+    <string name="attach_group_documents">المستندات</string>
+    <string name="attach_camera_caption">افتح الكاميرا الآن</string>
+    <string name="attach_gallery_caption">اختر من صورك</string>
+    <string name="attach_file_caption">أي ملف من هذا الجهاز</string>
     <string name="sheet_conversation">المحادثة</string>
     <string name="sheet_model">الموديل</string>
     <string name="sheet_reasoning">قوة التفكير</string>
