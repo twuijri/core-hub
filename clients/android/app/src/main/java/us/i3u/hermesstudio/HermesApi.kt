@@ -430,10 +430,21 @@ class HermesApi(
 
     /**
      * The body of [conversationPage], split out so the transcript mapping can
-     * be unit tested. `display_content` is nullable on the server, and
-     * `JSONObject.opt` hands back [JSONObject.NULL] rather than Kotlin's
-     * `null` for it, so every lookup has to reject that sentinel or the row
-     * renders as the literal text "null".
+     * be unit tested. It mirrors the web's `msg.display_content ?? msg.content`
+     * (packages/client/src/stores/hermes/chat.ts): the value is handed to the
+     * renderer as the server wrote it.
+     *
+     * `display_content` is nullable on the server, and `JSONObject.opt` hands
+     * back [JSONObject.NULL] rather than Kotlin's `null` for it, so every
+     * lookup has to reject that sentinel or the row renders as the literal
+     * text "null".
+     *
+     * The string is deliberately *not* pre-flattened here. Flattening it with
+     * the group-room block helper threw away upload blocks that
+     * [parseChatMessage] draws as download cards, and — because
+     * `JSONArray("[التقرير](/path) …")` parses leniently — silently emptied
+     * any ordinary message whose text merely begins with "[", which then hit
+     * the blank guard and vanished from the transcript.
      */
     internal fun parseConversationPage(root: JSONObject, offset: Int): MessagePage {
         val array = root.optJSONArray("messages") ?: JSONArray()
@@ -443,12 +454,15 @@ class HermesApi(
             if (role == "tool" || role == "moa") return@mapNotNull null
             val raw = jsonValue(item, "display_content") ?: jsonValue(item, "content")
             val content = when (raw) {
-                is JSONArray -> GroupJson.blocksToText(raw)
-                is String -> if (raw.startsWith("[")) runCatching { GroupJson.blocksToText(JSONArray(raw)) }.getOrDefault(raw) else raw
+                // The server always sends a string; an array can only come
+                // from a hand-written fixture, so keep its JSON text and let
+                // the one block parser in ChatFiles read it.
+                is JSONArray -> raw.toString()
+                is String -> raw
                 null -> ""
                 else -> raw.toString()
             }
-            if (content.isBlank()) return@mapNotNull null
+            if (!hasRenderableChatContent(content)) return@mapNotNull null
             Message(
                 id = item.optString("id"),
                 role = role,
@@ -458,11 +472,17 @@ class HermesApi(
             )
         }
         val session = root.optJSONObject("session") ?: JSONObject()
+        val fetched = array.length()
+        val total = root.optInt("total", fetched)
+        val pageOffset = root.optInt("offset", offset)
         return MessagePage(
             messages = messages,
-            total = root.optInt("total", messages.size),
-            offset = root.optInt("offset", offset),
-            hasMore = root.optBoolean("hasMore", false),
+            fetched = fetched,
+            total = total,
+            offset = pageOffset,
+            // The server sends hasMore; the same rule is applied when it does
+            // not, so an older Studio build still pages.
+            hasMore = if (root.has("hasMore")) root.optBoolean("hasMore") else pageOffset + fetched < total,
             title = firstNonBlank(session, "title"),
             model = firstNonBlank(session, "model"),
             workspace = firstNonBlank(session, "workspace"),
@@ -2548,6 +2568,12 @@ data class SessionSummary(
 /** One window of a transcript from the paginated messages endpoint. */
 data class MessagePage(
     val messages: List<Message>,
+    /**
+     * How many rows the server returned for this window, before tool rows and
+     * empty rows were filtered out. `offset` is counted backwards from the
+     * newest message, so this is what the next, older request has to skip.
+     */
+    val fetched: Int,
     val total: Int,
     val offset: Int,
     val hasMore: Boolean,

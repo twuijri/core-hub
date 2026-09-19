@@ -95,6 +95,7 @@
 
     <!-- Conversation -->
     <string name="conversation_empty">Send a message to %1$s</string>
+    <string name="conversation_session_gone">That conversation is no longer on the server. Your next message starts a new one.</string>
     <string name="run_requires_approval">This run is waiting for approval. Open Studio to respond.</string>
     <string name="run_requires_clarification">This run needs an answer before it can continue. Open Studio to respond.</string>
     <string name="conversation_your_agent">your agent</string>

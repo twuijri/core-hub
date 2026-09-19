@@ -193,7 +193,12 @@ class GroupRoomTest {
     fun `content blocks become text and named attachments`() {
         val payload = JSONObject("""{"id":"m1","role":"user","content":[{"type":"text","text":"look"},{"type":"file","name":"plan.pdf"}],"mentions":[{"type":"all"}]}""")
         val parsed = requireNotNull(GroupJson.message(payload))
-        assertEquals("look\n📎 plan.pdf", parsed.content)
+        // The blocks reach the row untouched; parseChatMessage is the single
+        // place that reads them, so an upload with a server-local path can
+        // still become a download card instead of paperclip text.
+        val rendered = parseChatMessage(parsed.content)
+        assertEquals("look\n\n📎 plan.pdf", rendered.text)
+        assertTrue(rendered.files.isEmpty())
         assertTrue(parsed.mentionsAll)
         assertNull(parsed.runId)
     }

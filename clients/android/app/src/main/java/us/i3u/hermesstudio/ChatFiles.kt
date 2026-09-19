@@ -66,6 +66,11 @@ fun parseChatMessage(content: String): ParsedChatMessage {
  * The web client turns those blocks back into attachment cards; doing the same
  * here prevents an audio note or document from appearing as raw JSON after a
  * history refresh.
+ *
+ * Returns null when the value is not a block array *or* when the blocks carry
+ * nothing this client can draw. An empty [ParsedChatMessage] would otherwise
+ * reach the row and paint an avatar, an author label and a timestamp with no
+ * text at all; falling back to the original string always shows something.
  */
 private fun parseStudioContentBlocks(content: String): ParsedChatMessage? {
     val trimmed = content.trim()
@@ -73,31 +78,47 @@ private fun parseStudioContentBlocks(content: String): ParsedChatMessage? {
     val array = runCatching { JSONArray(trimmed) }.getOrNull() ?: return null
     val text = mutableListOf<String>()
     val files = mutableListOf<ChatFileLink>()
-    var recognized = false
 
     for (index in 0 until array.length()) {
         val block = array.optJSONObject(index) ?: continue
         when (block.optString("type")) {
-            "text" -> {
-                recognized = true
-                block.optString("text").trim().takeIf(String::isNotEmpty)?.let(text::add)
-            }
+            "text" -> block.optString("text").trim().takeIf(String::isNotEmpty)?.let(text::add)
 
             "file", "image" -> {
-                recognized = true
                 val path = block.optString("path").trim()
-                if (path.isBlank() || !isStudioLocalFile(path)) continue
-                val name = block.optString("name").trim().ifBlank { inferDownloadFileName(path) }
-                files += ChatFileLink(
-                    label = name,
-                    path = path,
-                    fileName = inferDownloadFileName(path, name),
-                )
+                val name = block.optString("name").trim()
+                if (path.isNotBlank() && isStudioLocalFile(path)) {
+                    val label = name.ifBlank { inferDownloadFileName(path) }
+                    files += ChatFileLink(
+                        label = label,
+                        path = path,
+                        fileName = inferDownloadFileName(path, label),
+                    )
+                } else {
+                    // A remote or relative attachment cannot become a download
+                    // card, but the reader still has to see that a file rode
+                    // along — the web shows its name too.
+                    name.ifBlank { path }.takeIf(String::isNotBlank)?.let { text += "📎 $it" }
+                }
             }
         }
     }
 
-    return if (recognized) ParsedChatMessage(text.joinToString("\n\n"), files.distinctBy { it.path }) else null
+    val body = text.joinToString("\n\n")
+    val links = files.distinctBy { it.path }
+    return if (body.isNotBlank() || links.isNotEmpty()) ParsedChatMessage(body, links) else null
+}
+
+/**
+ * True when [content] would draw something: body text or an attachment card.
+ * The transcript uses it instead of a bare `isBlank()` so a message is dropped
+ * only when it is genuinely empty, never because its text happens to start
+ * with "[" or because it is a block array this client reads differently.
+ */
+fun hasRenderableChatContent(content: String): Boolean {
+    if (content.isBlank()) return false
+    val parsed = parseChatMessage(content)
+    return parsed.text.isNotBlank() || parsed.files.isNotEmpty()
 }
 
 fun inferDownloadFileName(path: String, label: String? = null): String {

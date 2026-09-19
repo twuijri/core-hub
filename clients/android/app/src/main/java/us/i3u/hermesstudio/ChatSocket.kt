@@ -83,6 +83,35 @@ sealed interface RunEvent {
         val workspaceChanges: List<WorkspaceRunChange>,
     ) : RunEvent
     data class Failed(val error: String, val retryableTransport: Boolean) : RunEvent
+
+    /**
+     * The server has no such session any more: `run`, `resume` and
+     * `app.resume` all answer `run.failed` with "Session not found" when the
+     * id was never created or has since been deleted
+     * (`requireSocketSessionAccess` in modules/studio/sockets/chat-run.ts).
+     * It is a state problem, not a run failure, so it must clear the stored
+     * id instead of stacking a red row into the transcript on every retry.
+     */
+    data object SessionGone : RunEvent
+}
+
+/**
+ * Whether a server error means the session itself is gone. The socket and the
+ * REST controllers both use the literal "Session not found"
+ * (modules/studio/controllers/chat-run.ts maps it to HTTP 404).
+ */
+internal fun isSessionGoneError(message: String?): Boolean {
+    val text = message?.trim().orEmpty()
+    if (text.isEmpty()) return false
+    return text.contains("session not found", ignoreCase = true) ||
+        text.contains("conversation not found", ignoreCase = true)
+}
+
+/** `run.failed` → the event the transcript should get. */
+internal fun runFailureEvent(event: JSONObject?): RunEvent {
+    val message = event?.optString("error").orEmpty()
+    if (isSessionGoneError(message)) return RunEvent.SessionGone
+    return RunEvent.Failed(message.ifBlank { "run failed" }, retryableTransport = false)
 }
 
 enum class ToolRunStatus { Running, Done, Error }
@@ -124,31 +153,35 @@ class ChatSocket(
         this.token = token
     }
 
+    /**
+     * Every per-session action the server rejects with "Session not found"
+     * when the id is empty. Emitting one anyway only produces a `run.failed`
+     * the transcript then has to explain away, so an empty id is dropped here.
+     */
+    private fun emitForSession(event: String, sessionId: String, build: JSONObject.() -> Unit = {}) {
+        if (sessionId.isBlank()) return
+        val live = socket ?: return
+        runCatching { live.emit(event, JSONObject().put("session_id", sessionId).apply(build)) }
+    }
+
     /** Stops the run the server is streaming for this session. */
-    fun abort(sessionId: String) {
-        runCatching { socket?.emit("abort", JSONObject().put("session_id", sessionId)) }
-    }
+    fun abort(sessionId: String) = emitForSession("abort", sessionId)
 
-    fun respondToApproval(sessionId: String, approvalId: String, choice: String) {
-        socket?.emit("approval.respond", JSONObject().put("session_id", sessionId).put("approval_id", approvalId).put("choice", choice))
-    }
+    fun respondToApproval(sessionId: String, approvalId: String, choice: String) =
+        emitForSession("approval.respond", sessionId) { put("approval_id", approvalId); put("choice", choice) }
 
-    fun respondToClarification(sessionId: String, clarifyId: String, response: String) {
-        socket?.emit("clarify.respond", JSONObject().put("session_id", sessionId).put("clarify_id", clarifyId).put("response", response))
-    }
+    fun respondToClarification(sessionId: String, clarifyId: String, response: String) =
+        emitForSession("clarify.respond", sessionId) { put("clarify_id", clarifyId); put("response", response) }
 
-    fun insertQueuedRun(sessionId: String, queueId: String) {
-        socket?.emit("insert_queued_run", JSONObject().put("session_id", sessionId).put("queue_id", queueId))
-    }
+    fun insertQueuedRun(sessionId: String, queueId: String) =
+        emitForSession("insert_queued_run", sessionId) { put("queue_id", queueId) }
 
-    fun cancelQueuedRun(sessionId: String, queueId: String) {
-        socket?.emit("cancel_queued_run", JSONObject().put("session_id", sessionId).put("queue_id", queueId))
-    }
+    fun cancelQueuedRun(sessionId: String, queueId: String) =
+        emitForSession("cancel_queued_run", sessionId) { put("queue_id", queueId) }
 
     /** Interrupts the current turn with the queued message instead of waiting for it. */
-    fun steerQueuedRun(sessionId: String, queueId: String) {
-        socket?.emit("steer_queued_run", JSONObject().put("session_id", sessionId).put("queue_id", queueId))
-    }
+    fun steerQueuedRun(sessionId: String, queueId: String) =
+        emitForSession("steer_queued_run", sessionId) { put("queue_id", queueId) }
 
     /** Answers `location.requested`; [payload] comes from [locationResponsePayload]. */
     fun respondToLocation(payload: JSONObject): Boolean {
@@ -158,12 +191,8 @@ class ChatSocket(
     }
 
     /** Declines a calendar / reminder / health request the phone cannot fulfil yet. */
-    fun denyMobileConsent(sessionId: String, capability: String, requestId: String, idKey: String) {
-        socket?.emit(
-            "$capability.respond",
-            JSONObject().put("session_id", sessionId).put(idKey, requestId).put("status", "denied"),
-        )
-    }
+    fun denyMobileConsent(sessionId: String, capability: String, requestId: String, idKey: String) =
+        emitForSession("$capability.respond", sessionId) { put(idKey, requestId); put("status", "denied") }
 
     fun run(
         profile: String,
@@ -217,10 +246,11 @@ class ChatSocket(
             if (!submitted) {
                 submitted = true
                 live.emit("run", payload)
-            } else {
+            } else if (sessionId.isNotBlank()) {
                 // A mobile network can change while an agent is working. Join
                 // the existing session again instead of submitting the turn a
-                // second time or showing a false "disconnected" reply.
+                // second time or showing a false "disconnected" reply. An
+                // empty id would only earn a "Session not found" rejection.
                 val resume = JSONObject().put("session_id", sessionId).put("profile", profile)
                 live.emit("app.resume", resume.put("id", resumePageId.orEmpty()))
             }
@@ -364,8 +394,15 @@ class ChatSocket(
         }
         live.on("run.failed") { args ->
             val event = args.firstOrNull() as? JSONObject
-            val message = event?.optString("error").orEmpty()
-            trySend(RunEvent.Failed(message.ifBlank { "run failed" }, retryableTransport = false))
+            val failure = runFailureEvent(event)
+            trySend(failure)
+            // A missing session never recovers by reconnecting, and every
+            // reconnect would emit the same rejection again.
+            if (failure is RunEvent.SessionGone) {
+                terminal = true
+                close()
+                return@on
+            }
             if ((event?.optInt("queue_remaining", 0) ?: 0) == 0 && (event?.optInt("background_pending", 0) ?: 0) == 0) {
                 terminal = true
                 close()
