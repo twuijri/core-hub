@@ -7,6 +7,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
@@ -2359,6 +2360,91 @@ class HermesApi(
             token.takeIf { it.isNotBlank() }?.let { add("token=${enc(it)}") }
         }
         return url("/api/studio/files/download?${params.joinToString("&")}")
+    }
+
+    // ── in-app update ────────────────────────────────────────────────────
+
+    /**
+     * `GET /api/studio/app-updates/mobile` — what this platform and channel
+     * have on the owner's own Core Hub.
+     *
+     * The route always answers 200: `{available:false, reason:'not_configured'}`
+     * when the owner has not pointed the server at a release, so a server that
+     * simply has nothing to offer is not reported as a failure. Everything
+     * else (401, 403, 5xx) comes back as a [HermesException] through the same
+     * path as every other call, token refresh included.
+     */
+    fun mobileUpdate(channel: String, platform: String = "android"): JSONObject =
+        call("/api/studio/app-updates/mobile?platform=${enc(platform)}&channel=${enc(channel)}")
+
+    /**
+     * Streams the APK the check named into [destination], resuming from
+     * whatever is already cached there.
+     *
+     * The route supports `Range`, so an interrupted download continues instead
+     * of starting again; a server that answers 200 to a ranged request is
+     * taken at its word and the file is rewritten from the top. The download
+     * carries the same `Authorization` and `X-Hermes-Profile` headers as every
+     * other call, because it is the same server.
+     *
+     * Returns the number of bytes on disk when the stream ended. Verifying
+     * that against the release's size is the caller's job — a short file is a
+     * failure, not an APK.
+     */
+    fun downloadMobileUpdate(
+        downloadPath: String,
+        destination: File,
+        declaredSize: Long,
+        onProgress: (downloaded: Long, total: Long) -> Unit = { _, _ -> },
+        isCancelled: () -> Boolean = { false },
+    ): Long {
+        val cached = if (destination.isFile) destination.length() else 0L
+        val offset = UpdateDownload.startOffset(cached, declaredSize)
+        if (UpdateDownload.isComplete(offset, declaredSize)) {
+            onProgress(offset, declaredSize)
+            return offset
+        }
+        val builder = Request.Builder().url(url(downloadPath))
+        if (token.isNotBlank()) builder.header("Authorization", "Bearer $token")
+        if (activeProfile.isNotBlank()) builder.header("X-Hermes-Profile", activeProfile)
+        builder.header("Accept", "application/vnd.android.package-archive")
+        UpdateDownload.rangeHeader(offset)?.let { builder.header("Range", it) }
+
+        client.newCall(builder.build()).execute().use { response ->
+            if (!response.isSuccessful) {
+                val text = response.body?.string().orEmpty()
+                val detail = errorDetail(text)
+                throw HermesException(
+                    if (detail.isNullOrBlank()) "HTTP ${response.code}" else "HTTP ${response.code}: $detail",
+                    statusCode = response.code,
+                    code = errorCode(text),
+                )
+            }
+            val body = response.body ?: throw HermesException("The update download returned no body")
+            val writeAt = UpdateDownload.writeOffset(response.code, offset)
+            val total = UpdateDownload.expectedTotal(declaredSize, response.code, body.contentLength(), offset)
+            destination.parentFile?.mkdirs()
+            var written = writeAt
+            // `append = false` truncates, which is exactly what a 200 to a
+            // ranged request must do: the cached prefix is not part of this body.
+            java.io.RandomAccessFile(destination, "rw").use { file ->
+                if (writeAt == 0L) file.setLength(0L)
+                file.seek(writeAt)
+                onProgress(written, total)
+                val buffer = ByteArray(64 * 1024)
+                body.byteStream().use { input ->
+                    while (true) {
+                        if (isCancelled()) return written
+                        val read = input.read(buffer)
+                        if (read <= 0) break
+                        file.write(buffer, 0, read)
+                        written += read
+                        onProgress(written, total)
+                    }
+                }
+            }
+            return written
+        }
     }
 
     private fun cronJobAction(profile: String, jobId: String, action: String): CronJob {

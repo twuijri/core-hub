@@ -322,6 +322,8 @@ data class UiState(
     val runtimePerformance: RuntimePerformance? = null,
     val loadingInsights: Boolean = false,
     val notice: String? = null,
+    /** The in-app update: the quiet notice above the composer, and the Settings row. */
+    val update: UpdateUiState = UpdateUiState(),
     val agentRuntimes: List<AgentRuntimeStatus> = emptyList(),
     val loadingAgentRuntimes: Boolean = false,
     val selectedRuntime: AgentRuntimeSelection = AgentRuntimeSelection(),
@@ -461,6 +463,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             speakReplies = store.speakReplies,
             allProfiles = store.allProfiles,
             textScale = store.textScale,
+            // Settings must be able to say what the last check found before
+            // this run has made one.
+            update = UpdateUiState(
+                outcome = UpdateOutcome.named(store.updateOutcome),
+                outcomeDetail = store.updateOutcomeDetail,
+                checkedAt = store.updateCheckedAt,
+            ),
         ),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -5106,6 +5115,239 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (queuedDownloadNames.add(candidate)) return candidate
             suffix += 1
         }
+    }
+
+    // ── in-app update ────────────────────────────────────────────────────
+
+    private var updateDownloadJob: Job? = null
+
+    @Volatile
+    private var updateDownloadCancelled = false
+
+    /** Only re-render the progress bar when the whole number changes. */
+    private var lastReportedUpdatePercent = -1
+
+    /**
+     * Asks the owner's Core Hub whether a newer test build exists.
+     *
+     * Called on every resume (which covers app start). [manual] is the
+     * Settings row: it ignores both the six-hour throttle and the metered
+     * rule, because the owner asking for a check is the whole point of them.
+     */
+    fun checkForUpdates(manual: Boolean = false) {
+        if (!store.isConfigured) return
+        val current = _state.value.update
+        if (current.checking || current.downloading) return
+        val app = getApplication<Application>()
+        val metered = AppUpdater.isMetered(app)
+        if (!UpdateThrottle.shouldCheck(System.currentTimeMillis(), store.updateCheckedAt, metered, manual)) {
+            // A throttled check is silent; a metered one says why, because
+            // otherwise the Settings row looks stuck for no visible reason.
+            if (metered) recordUpdateOutcome(UpdateOutcome.SkippedMetered, "", stamp = false)
+            return
+        }
+        if (AppUpdater.isOffline(app)) {
+            recordUpdateOutcome(UpdateOutcome.NoNetwork, "")
+            return
+        }
+        _state.update { it.copy(update = it.update.copy(checking = true)) }
+        viewModelScope.launch {
+            val installed = AppBuild.installed()
+            val verdict = withContext(Dispatchers.IO) {
+                runCatching { api.mobileUpdate(channel = installed.channel) }
+            }.fold(
+                onSuccess = { body ->
+                    runCatching { parseMobileUpdate(body, installed) }
+                        .getOrElse { UpdateCheckResult.Unavailable(UpdateProblem.Malformed) }
+                },
+                onFailure = { failure -> failure.asUpdateFailure() },
+            )
+            applyUpdateVerdict(verdict)
+        }
+    }
+
+    private fun applyUpdateVerdict(verdict: UpdateCheckResult) {
+        _state.update { it.copy(update = it.update.copy(checking = false)) }
+        when (verdict) {
+            is UpdateCheckResult.Available -> {
+                val release = verdict.release
+                // A build the owner already waved away stays waved away.
+                val dismissed = store.updateDismissedBuild == release.build.buildNumber
+                val cached = AppUpdater.cacheFile(getApplication(), release)
+                val onDisk = if (cached.isFile) cached.length() else 0L
+                recordUpdateOutcome(UpdateOutcome.UpdateFound, release.versionName) { state ->
+                    state.copy(
+                        release = release,
+                        dismissed = dismissed,
+                        downloadedBytes = UpdateDownload.startOffset(onDisk, release.sizeBytes),
+                        totalBytes = release.sizeBytes,
+                        readyApkPath = cached.absolutePath
+                            .takeIf { UpdateDownload.isComplete(onDisk, release.sizeBytes) },
+                    )
+                }
+            }
+            UpdateCheckResult.UpToDate -> {
+                AppUpdater.pruneCache(getApplication(), null)
+                recordUpdateOutcome(UpdateOutcome.UpToDate, "") { state ->
+                    state.copy(release = null, readyApkPath = null, downloadedBytes = 0L, totalBytes = 0L)
+                }
+            }
+            is UpdateCheckResult.Unavailable ->
+                recordUpdateOutcome(verdict.problem.outcome(), verdict.detail.orEmpty()) { state ->
+                    state.copy(release = null, readyApkPath = null)
+                }
+        }
+    }
+
+    /**
+     * Downloads the offered build into the app's own cache, resuming whatever
+     * is already there, and verifies its length before it is offered for
+     * install. A short file is reported, never handed to the installer.
+     */
+    fun downloadUpdate() {
+        val release = _state.value.update.release ?: return
+        if (_state.value.update.downloading) return
+        val app = getApplication<Application>()
+        val target = AppUpdater.cacheFile(app, release)
+        AppUpdater.pruneCache(app, target)
+        updateDownloadCancelled = false
+        lastReportedUpdatePercent = -1
+        _state.update {
+            it.copy(
+                update = it.update.copy(
+                    downloading = true,
+                    readyApkPath = null,
+                    needsInstallPermission = false,
+                    totalBytes = maxOf(release.sizeBytes, it.update.totalBytes),
+                ),
+            )
+        }
+        updateDownloadJob = viewModelScope.launch {
+            val attempt = withContext(Dispatchers.IO) {
+                runCatching {
+                    api.downloadMobileUpdate(
+                        downloadPath = release.downloadPath,
+                        destination = target,
+                        declaredSize = release.sizeBytes,
+                        onProgress = ::reportUpdateProgress,
+                        isCancelled = { updateDownloadCancelled },
+                    )
+                }
+            }
+            _state.update { it.copy(update = it.update.copy(downloading = false)) }
+            if (updateDownloadCancelled) {
+                // The partial file stays: the next attempt resumes from it.
+                recordUpdateOutcome(UpdateOutcome.Cancelled, "")
+                return@launch
+            }
+            attempt
+                .onSuccess { written ->
+                    val expected = if (release.sizeBytes > 0L) release.sizeBytes else _state.value.update.totalBytes
+                    if (expected <= 0L) {
+                        // Nothing to verify against; an unverifiable APK is not
+                        // an APK we hand to the installer.
+                        AppUpdater.discard(target)
+                        recordUpdateOutcome(UpdateOutcome.Malformed, "")
+                    } else if (!UpdateDownload.isComplete(target.length(), expected)) {
+                        recordUpdateOutcome(UpdateOutcome.DownloadIncomplete, "") { state ->
+                            state.copy(downloadedBytes = written, totalBytes = expected)
+                        }
+                    } else {
+                        recordUpdateOutcome(UpdateOutcome.UpdateFound, release.versionName, stamp = false) { state ->
+                            state.copy(
+                                downloadedBytes = written,
+                                totalBytes = expected,
+                                readyApkPath = target.absolutePath,
+                            )
+                        }
+                    }
+                }
+                .onFailure { failure ->
+                    val reported = failure.asUpdateFailure()
+                    recordUpdateOutcome(reported.problem.outcome(), reported.detail.orEmpty())
+                }
+        }
+    }
+
+    private fun reportUpdateProgress(downloaded: Long, total: Long) {
+        val percent = UpdateDownload.percent(downloaded, total)
+        if (percent == lastReportedUpdatePercent && downloaded < total) return
+        lastReportedUpdatePercent = percent
+        _state.update { it.copy(update = it.update.copy(downloadedBytes = downloaded, totalBytes = total)) }
+    }
+
+    /** Stops an in-flight download; what has arrived stays for the next attempt. */
+    fun cancelUpdateDownload() {
+        if (!_state.value.update.downloading) return
+        updateDownloadCancelled = true
+        updateDownloadJob?.cancel()
+    }
+
+    /** "Later": this build's notice does not come back until a newer one does. */
+    fun dismissUpdateNotice() {
+        val release = _state.value.update.release ?: return
+        store.updateDismissedBuild = release.build.buildNumber
+        _state.update { it.copy(update = it.update.copy(dismissed = true)) }
+    }
+
+    /** Android will not let this app install packages yet; the UI opens settings. */
+    fun reportInstallPermissionNeeded() {
+        recordUpdateOutcome(UpdateOutcome.InstallPermission, "", stamp = false) { state ->
+            state.copy(needsInstallPermission = true)
+        }
+    }
+
+    /**
+     * What Android's package installer came back with. A cancelled install is
+     * reported as one — the build stays downloaded so a second attempt costs
+     * nothing — and a successful one clears the offer and the cache.
+     */
+    fun reportInstallResult(installed: Boolean) {
+        if (installed) {
+            AppUpdater.pruneCache(getApplication(), null)
+            recordUpdateOutcome(UpdateOutcome.UpToDate, "", stamp = false) { state ->
+                state.copy(release = null, readyApkPath = null, downloadedBytes = 0L, totalBytes = 0L, needsInstallPermission = false)
+            }
+        } else {
+            recordUpdateOutcome(UpdateOutcome.InstallCancelled, "", stamp = false)
+        }
+    }
+
+    /**
+     * Writes an outcome to state and to disk in one place, so Settings can
+     * never show a result the next launch has forgotten. [stamp] is false for
+     * outcomes that are not the end of a check — an install result, say — and
+     * must not restart the six-hour throttle.
+     */
+    private fun recordUpdateOutcome(
+        outcome: UpdateOutcome,
+        detail: String,
+        stamp: Boolean = true,
+        extra: (UpdateUiState) -> UpdateUiState = { it },
+    ) {
+        val at = if (stamp) System.currentTimeMillis() else store.updateCheckedAt
+        store.updateOutcome = outcome.name
+        store.updateOutcomeDetail = detail
+        if (stamp) store.updateCheckedAt = at
+        _state.update {
+            it.copy(
+                update = extra(
+                    it.update.copy(
+                        checking = false,
+                        outcome = outcome,
+                        outcomeDetail = detail,
+                        checkedAt = at,
+                    ),
+                ),
+            )
+        }
+    }
+
+    /** A failed update call, as the verdict the UI already knows how to read. */
+    private fun Throwable.asUpdateFailure(): UpdateCheckResult.Unavailable {
+        val hermes = this as? HermesException
+        val problem = updateProblemFor(hermes?.statusCode, hermes?.code, this is java.io.IOException)
+        return UpdateCheckResult.Unavailable(problem, message?.takeIf { problem == UpdateProblem.ServerError })
     }
 
     private fun pickProfile(profiles: List<Profile>): String {

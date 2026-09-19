@@ -50,6 +50,16 @@ Two fixtures reproduce reported bugs without a real server:
       `GET /api/studio/stt/settings` answer the two reads the phone makes
       before it uploads anything.
 
+  UPDATE  in-app updates. `GET /api/studio/app-updates/mobile` answers an
+      offer for `platform=android&channel=test` and
+      `{"available": false, "reason": "not_configured"}` for anything else,
+      both as HTTP 200 — the owner who has not configured a release is not a
+      failure. The download route streams a stand-in APK with a real
+      `Content-Length`, honours `Range: bytes=<start>-` with 206 and a
+      `Content-Range` so a resumed download can be proved, answers 416 for a
+      range past the end, and 409 `{"code": "updates_not_configured"}` for a
+      channel with nothing in it.
+
 A port can be given on the command line (default 8099) so a test can run this
 on a free one:
 
@@ -338,6 +348,48 @@ STT_CONFIGURED = True
 STT_REASON = "active_stt_provider_secret_missing"
 
 
+# GET /api/studio/app-updates/mobile — the in-app update contract.
+#
+# The phone never talks to GitHub: the release is private, and a token has no
+# business on a phone. It asks the owner's own Core Hub, which proxies the
+# build. Two cases have to be reachable without a real server:
+#
+#   platform=android&channel=test  → an offer, and a download that honours
+#                                    `Range` so a resumed download can be
+#                                    proved rather than assumed
+#   any other platform or channel  → HTTP 200 {"available": false,
+#                                    "reason": "not_configured"} on the check,
+#                                    and HTTP 409 {"code":
+#                                    "updates_not_configured"} on the download,
+#                                    which is the owner who has not pointed his
+#                                    server at a release yet.
+#
+# The build number is deliberately far above anything CI will mint, so the
+# mock always looks newer than whatever is installed.
+# A quarter of a megabyte, so a download really does arrive in several reads
+# and an interrupted one has somewhere to be interrupted.
+APK_BYTES = b'PK\x03\x04' + bytes(range(256)) * 1024
+MOBILE_UPDATES = {
+    ('android', 'test'): {
+        "available": True,
+        "version": "1.0.2-test.999",
+        "buildNumber": 999,
+        "notes": "إصلاح تنبيهات المحادثة الجماعية\nfaster cold start",
+        "sizeBytes": len(APK_BYTES),
+        "publishedAt": "2026-09-19T08:00:00Z",
+        "downloadPath": "/api/studio/app-updates/mobile/download?platform=android&channel=test",
+    },
+}
+
+
+def mobile_update_for(query):
+    """The release for a platform/channel pair, or None when none is stocked."""
+    params = parse_qs(query)
+    platform = (params.get('platform', ['android'])[0] or 'android').strip()
+    channel = (params.get('channel', ['test'])[0] or 'test').strip()
+    return MOBILE_UPDATES.get((platform, channel))
+
+
 def stt_stored_language():
     """The language the server would really use, or '' for auto-detect."""
     for row in STT_SETTINGS:
@@ -390,6 +442,50 @@ class Handler(BaseHTTPRequestHandler):
             self.send({"error": "unknown TTS provider"}, 400)
         else:
             self.send_audio(wav_bytes(), provider, 'mock-tts')
+
+    def send_mobile_apk(self, query):
+        """
+        GET /api/studio/app-updates/mobile/download.
+
+        Streams the APK with a real `Content-Length`, and honours a
+        `Range: bytes=<start>-` with HTTP 206 and a `Content-Range`, which is
+        the whole point of the route: a download that dies half way has to be
+        able to carry on instead of starting again. A range past the end is a
+        416, the same as any well-behaved static server.
+        """
+        if not (self.headers.get('Authorization') or '').strip():
+            # The release is private; the route is as authenticated as the rest.
+            self.send({"error": "Unauthorized"}, 401)
+            return
+        release = mobile_update_for(query)
+        if not release:
+            self.send({"code": "updates_not_configured",
+                       "error": "no mobile release is configured for this platform and channel"}, 409)
+            return
+        total = len(APK_BYTES)
+        requested = (self.headers.get('Range') or '').strip()
+        match = re.fullmatch(r'bytes=(\d+)-(\d*)', requested) if requested else None
+        if match:
+            start = int(match.group(1))
+            end = int(match.group(2)) if match.group(2) else total - 1
+            if start >= total or end < start:
+                self.send_response(416)
+                self.send_header('Content-Range', f'bytes */{total}')
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+                return
+            end = min(end, total - 1)
+            body = APK_BYTES[start:end + 1]
+            self.send_response(206)
+            self.send_header('Content-Range', f'bytes {start}-{end}/{total}')
+        else:
+            body = APK_BYTES
+            self.send_response(200)
+        self.send_header('Content-Type', 'application/vnd.android.package-archive')
+        self.send_header('Accept-Ranges', 'bytes')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def transcribe(self):
         """
@@ -615,6 +711,16 @@ class Handler(BaseHTTPRequestHandler):
                       "activeProvider": STT_ACTIVE_PROVIDER if STT_CONFIGURED else None,
                       "reason": None if STT_CONFIGURED else STT_REASON}
             self.send(status)
+        elif path == '/api/studio/app-updates/mobile':
+            release = mobile_update_for(parsed.query)
+            answer = dict(release) if release else {"available": False, "reason": "not_configured"}
+            # Echoed so a test can prove the phone sent the same headers it
+            # sends on every other call, rather than assuming it did.
+            answer['mockAuthorization'] = self.headers.get('Authorization') or ''
+            answer['mockProfile'] = self.headers.get('X-Hermes-Profile') or ''
+            self.send(answer)
+        elif path == '/api/studio/app-updates/mobile/download':
+            self.send_mobile_apk(parsed.query)
         elif path == '/api/cron-history':
             job_id = parse_qs(parsed.query).get('jobId', ['morning-brief'])[0]
             self.send({"runs": [{"jobId": job_id, "fileName": "2026-07-31T09-00-00.md", "runTime": "2026-07-31 09:00:00", "size": len(RUN_OUTPUT.encode()), "hasOutput": True, "status": "ok"}]})

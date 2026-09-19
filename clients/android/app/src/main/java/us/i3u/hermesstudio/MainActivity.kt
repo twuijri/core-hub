@@ -220,58 +220,22 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun App(viewModel: AppViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var availableUpdate by remember { mutableStateOf<AvailableUpdate?>(null) }
-    var downloadingUpdate by remember { mutableStateOf(false) }
-    var updateError by remember { mutableStateOf<Int?>(null) }
+    val lifecycleOwner = LocalLifecycleOwner.current
 
-    LaunchedEffect(Unit) { availableUpdate = runCatching { AppUpdater.check() }.getOrNull() }
+    // Start and resume are the same moment to Android, so one observer covers
+    // both. The throttle and the metered rule live in the view model, which is
+    // where they can be tested; here the app only says "we are visible again".
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.checkForUpdates()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     CoreHubTheme(appearance = state.appearance) {
         Surface(modifier = Modifier.fillMaxSize()) {
             AppContent(state, viewModel)
-        }
-        availableUpdate?.let { update ->
-            AlertDialog(
-                onDismissRequest = { if (!downloadingUpdate) availableUpdate = null },
-                title = { Text(stringResource(R.string.update_available_title)) },
-                text = {
-                    Text(
-                        stringResource(
-                            updateError ?: if (downloadingUpdate) R.string.update_downloading else R.string.update_available_body,
-                        ),
-                    )
-                },
-                confirmButton = {
-                    TextButton(
-                        enabled = !downloadingUpdate,
-                        onClick = {
-                            scope.launch {
-                                downloadingUpdate = true
-                                updateError = null
-                                runCatching { AppUpdater.download(context, update) }
-                                    .onSuccess { apk ->
-                                        downloadingUpdate = false
-                                        if (AppUpdater.install(context, apk) == InstallResult.PermissionRequired) {
-                                            updateError = R.string.update_permission
-                                        }
-                                    }
-                                    .onFailure {
-                                        downloadingUpdate = false
-                                        updateError = R.string.update_failed
-                                    }
-                            }
-                        },
-                    ) { Text(stringResource(R.string.update_install)) }
-                },
-                dismissButton = {
-                    TextButton(
-                        enabled = !downloadingUpdate,
-                        onClick = { availableUpdate = null },
-                    ) { Text(stringResource(R.string.update_later)) }
-                },
-            )
         }
     }
 }
@@ -1134,7 +1098,7 @@ private fun SettingsGroupScreen(state: UiState, viewModel: AppViewModel) {
                     SettingsGroup.Proxy -> ProxyStudioSettings(state, viewModel)
                     SettingsGroup.Display -> DisplayStudioSettings(state, viewModel)
                     SettingsGroup.Device -> DeviceSettings(state, viewModel)
-                    SettingsGroup.About -> AboutSettings(state)
+                    SettingsGroup.About -> AboutSettings(state, viewModel)
                 }
             }
         }
@@ -1630,12 +1594,44 @@ internal fun DeviceSettings(state: UiState, viewModel: AppViewModel) {
 }
 
 @Composable
-internal fun AboutSettings(state: UiState) {
+internal fun AboutSettings(state: UiState, viewModel: AppViewModel) {
     val context = LocalContext.current
     SettingsRow(
         icon = Icons.Filled.PhoneAndroid,
         label = stringResource(R.string.settings_phone_name),
         value = BuildConfig.VERSION_NAME,
+    )
+    // "Check for updates", with the installed build above it and the result of
+    // the last check — including "you are up to date" and every failure with
+    // its own reason — as the row's own value.
+    SettingsRow(
+        icon = Icons.Filled.SystemUpdate,
+        label = stringResource(R.string.settings_update),
+        value = if (state.update.checking) {
+            stringResource(R.string.update_checking)
+        } else {
+            val outcome = updateOutcomeText(state.update)
+            if (state.update.checkedAt > 0L) {
+                stringResource(
+                    R.string.update_last_checked,
+                    outcome,
+                    android.text.format.DateUtils.getRelativeTimeSpanString(
+                        state.update.checkedAt,
+                        System.currentTimeMillis(),
+                        android.text.format.DateUtils.MINUTE_IN_MILLIS,
+                    ).toString(),
+                )
+            } else {
+                outcome
+            }
+        },
+        onClick = { viewModel.checkForUpdates(manual = true) },
+    )
+    Text(
+        stringResource(R.string.settings_update_note),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
     )
     SettingsRow(
         icon = Icons.Filled.Info,
@@ -2109,6 +2105,159 @@ internal fun NoticeNote(message: String, onDismiss: () -> Unit) {
         }
     }
 }
+
+/**
+ * The in-app update, as a card in the same stack as the other notices above
+ * the composer.
+ *
+ * Deliberately not a dialog: a new test build is never urgent enough to stand
+ * between the owner and the conversation he opened the app for. It names the
+ * version and what changed, downloads with visible progress that can be
+ * cancelled, and only then offers to install. When Android has not allowed
+ * this app to install packages, it says so and opens the right settings screen
+ * instead of failing quietly.
+ */
+@Composable
+internal fun UpdateNote(update: UpdateUiState, viewModel: AppViewModel) {
+    val release = update.release ?: return
+    val context = LocalContext.current
+    val palette = CoreHub.palette
+    val installer = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        viewModel.reportInstallResult(result.resultCode == Activity.RESULT_OK)
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(CoreHubTokens.Radius.card),
+        colors = CardDefaults.cardColors(containerColor = palette.bgSecondary),
+    ) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.SystemUpdate,
+                    contentDescription = null,
+                    tint = palette.accent,
+                    modifier = Modifier.size(CoreHubTokens.Metrics.actionButton),
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.update_available_title),
+                        style = CoreHubTextStyles.sessionTitle.copy(fontWeight = CoreHubTokens.Type.titleWeight),
+                        color = palette.textPrimary,
+                    )
+                    Text(
+                        if (release.sizeBytes > 0L) {
+                            stringResource(
+                                R.string.update_notice_version,
+                                release.versionName,
+                                android.text.format.Formatter.formatShortFileSize(context, release.sizeBytes),
+                            )
+                        } else {
+                            stringResource(R.string.update_notice_version_only, release.versionName)
+                        },
+                        style = CoreHubTextStyles.meta,
+                        color = palette.textSecondary,
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                release.notes.ifBlank { stringResource(R.string.update_notice_no_notes) },
+                // Release notes are content, not UI chrome: they follow their
+                // own direction so an Arabic note reads correctly in an English
+                // interface and the other way round.
+                style = CoreHubTextStyles.meta.copy(textDirection = TextDirection.Content),
+                color = palette.textSecondary,
+                maxLines = 6,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            if (update.downloading) {
+                Spacer(Modifier.height(10.dp))
+                LinearProgressIndicator(
+                    progress = { update.percent / 100f },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = palette.accent,
+                    trackColor = palette.segmentTrack,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    stringResource(R.string.update_progress, update.percent),
+                    style = CoreHubTextStyles.meta,
+                    color = palette.textMuted,
+                )
+            } else if (update.readyApkPath != null) {
+                Spacer(Modifier.height(6.dp))
+                Text(stringResource(R.string.update_ready), style = CoreHubTextStyles.meta, color = palette.textMuted)
+            } else if (update.outcome.isUpdateFailure) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    updateOutcomeText(update),
+                    style = CoreHubTextStyles.meta,
+                    color = palette.error,
+                )
+            }
+            if (update.needsInstallPermission) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    stringResource(R.string.update_permission_explain),
+                    style = CoreHubTextStyles.meta,
+                    color = palette.textSecondary,
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.weight(1f))
+                when {
+                    update.downloading -> TextButton(onClick = { viewModel.cancelUpdateDownload() }) {
+                        Text(stringResource(R.string.action_cancel))
+                    }
+                    update.needsInstallPermission -> TextButton(
+                        onClick = { context.startActivity(AppUpdater.unknownSourcesIntent(context)) },
+                    ) { Text(stringResource(R.string.update_open_settings)) }
+                    else -> TextButton(onClick = { viewModel.dismissUpdateNotice() }) {
+                        Text(stringResource(R.string.update_later))
+                    }
+                }
+                val ready = update.readyApkPath
+                if (ready != null) {
+                    Button(
+                        enabled = !update.downloading,
+                        onClick = {
+                            if (!AppUpdater.canInstall(context)) {
+                                viewModel.reportInstallPermissionNeeded()
+                            } else {
+                                installer.launch(AppUpdater.installIntent(context, File(ready)))
+                            }
+                        },
+                    ) { Text(stringResource(R.string.update_install)) }
+                } else {
+                    Button(enabled = !update.downloading, onClick = { viewModel.downloadUpdate() }) {
+                        Text(stringResource(R.string.update_download))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** True for the outcomes that are a failure rather than a result. */
+internal val UpdateOutcome.isUpdateFailure: Boolean
+    get() = this !in setOf(UpdateOutcome.Never, UpdateOutcome.UpToDate, UpdateOutcome.UpdateFound)
+
+/** The last outcome in words, with whatever detail it carries. */
+@Composable
+internal fun updateOutcomeText(update: UpdateUiState): String =
+    if (update.outcome.takesDetail && update.outcomeDetail.isNotBlank()) {
+        stringResource(update.outcome.messageRes, update.outcomeDetail)
+    } else if (update.outcome.takesDetail) {
+        // A detail-taking outcome with nothing to say still has to render.
+        stringResource(update.outcome.messageRes, "—")
+    } else {
+        stringResource(update.outcome.messageRes)
+    }
 
 // ── shared pieces ────────────────────────────────────────────────────────
 

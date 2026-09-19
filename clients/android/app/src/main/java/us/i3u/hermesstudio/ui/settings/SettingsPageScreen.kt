@@ -38,6 +38,7 @@ import us.i3u.hermesstudio.R
 import us.i3u.hermesstudio.SettingsGroup
 import us.i3u.hermesstudio.StudioTopBar
 import us.i3u.hermesstudio.UiState
+import us.i3u.hermesstudio.UpdateNote
 import us.i3u.hermesstudio.isSuperAdmin
 import us.i3u.hermesstudio.ui.theme.CoreHub
 
@@ -107,6 +108,9 @@ fun SettingsPageScreen(state: UiState, viewModel: AppViewModel) {
                 if (state.savingSetting) LoadingRow()
                 state.error?.let { ErrorNote(it) { viewModel.dismissError() } }
                 state.notice?.let { NoticeNote(it) { viewModel.dismissNotice() } }
+                // The manual check lives on the About tab, so its answer has
+                // to be visible here too, not only above the composer.
+                if (state.update.showNotice) UpdateNote(state.update, viewModel)
                 val loading = state.loadingAgentSettings || state.loadingStudioSettings ||
                     state.loadingAccountSettings || state.loadingManagedUsers || state.loadingModelProviders
                 if (loading) {
@@ -122,7 +126,7 @@ fun SettingsPageScreen(state: UiState, viewModel: AppViewModel) {
                         SettingsGroup.Privacy -> PrivacyStudioSettings(state, viewModel)
                         SettingsGroup.Models -> ModelProvidersSettings(state, viewModel)
                         SettingsGroup.Device -> DeviceSettings(state, viewModel)
-                        SettingsGroup.About -> AboutSettings(state)
+                        SettingsGroup.About -> AboutSettings(state, viewModel)
                         else -> AccountStudioSettings(state, viewModel)
                     }
                 }

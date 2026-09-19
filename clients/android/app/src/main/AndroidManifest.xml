@@ -7,6 +7,11 @@
     <!-- Only used after the user accepts an agent's location request in chat. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- In-app updates: the app downloads a new test build from the owner's own
+         Core Hub and hands it to Android's package installer. This permission is
+         only half of it — since Oreo the owner must also allow this app as an
+         install source once, per app, which AppUpdater.canInstall checks and
+         AppUpdater.unknownSourcesIntent opens. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
@@ -44,7 +49,9 @@
         </activity>
 
         <!-- Lets the camera app write a capture into our cache without needing
-             storage permissions. -->
+             storage permissions, and lets the package installer read a
+             downloaded update out of it through a one-time content URI. Both
+             cache paths are declared in res/xml/file_paths.xml. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

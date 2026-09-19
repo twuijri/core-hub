@@ -4,6 +4,8 @@
          provider, then read back and deleted. -->
     <cache-path name="captures" path="captures/" />
     <!-- A downloaded release is kept private until Android's package installer
-         receives this one-time content URI. -->
+         receives this one-time content URI. The APK never leaves the app's own
+         cache: AppUpdater.cacheFile writes it here, one file per build, and
+         AppUpdater.pruneCache clears the rest. -->
     <cache-path name="updates" path="updates/" />
 </paths>
