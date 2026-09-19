@@ -99,6 +99,25 @@ class Store(context: Context) {
         prefs.edit().putString("$KEY_VOICE_OUTPUT_PREFIX${profile.ifBlank { "default" }}", value).apply()
     }
 
+    /**
+     * Settings → Dictation language, per profile: which language the
+     * microphone listens for.
+     *
+     * [SpeechLanguages.FOLLOW_APP] (the default, blank) is the app's own
+     * display language, [SpeechLanguages.AUTOMATIC] lets the recognizer work
+     * it out, and anything else is a BCP-47 tag. Kept per profile so a work
+     * profile the owner writes English in and a personal one he speaks Arabic
+     * in do not fight over one setting.
+     */
+    fun speechLanguage(profile: String): String =
+        SpeechLanguages.normalize(prefs.getString("$KEY_SPEECH_LANGUAGE_PREFIX${profile.ifBlank { "default" }}", ""))
+
+    fun setSpeechLanguage(profile: String, value: String) {
+        prefs.edit()
+            .putString("$KEY_SPEECH_LANGUAGE_PREFIX${profile.ifBlank { "default" }}", SpeechLanguages.normalize(value))
+            .apply()
+    }
+
     fun sessionFor(profile: String): String =
         prefs.getString(sessionKey(profile), "").orEmpty()
 
@@ -190,6 +209,7 @@ class Store(context: Context) {
         private const val KEY_APP_CONNECTION_ID = "app_connection_id"
         private const val KEY_VOICE_INPUT = "voice_input"
         private const val KEY_VOICE_OUTPUT_PREFIX = "voice_output_"
+        private const val KEY_SPEECH_LANGUAGE_PREFIX = "speech_language_"
         private const val KEY_PROFILE = "profile"
         private const val KEY_SESSION_PREFIX = "session_"
         private const val KEY_REASONING = "reasoning_effort"

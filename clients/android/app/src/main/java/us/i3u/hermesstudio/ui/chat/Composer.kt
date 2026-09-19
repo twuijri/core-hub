@@ -7,6 +7,8 @@ import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -69,6 +71,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
@@ -82,7 +86,10 @@ import java.util.Locale
 import us.i3u.hermesstudio.AppViewModel
 import us.i3u.hermesstudio.R
 import us.i3u.hermesstudio.Store
+import us.i3u.hermesstudio.chatProfile
 import us.i3u.hermesstudio.UiState
+import us.i3u.hermesstudio.SpeechLanguageOption
+import us.i3u.hermesstudio.SpeechLanguages
 import us.i3u.hermesstudio.VoiceOutput
 import us.i3u.hermesstudio.VoiceSegmentKind
 import us.i3u.hermesstudio.VoiceStatus
@@ -115,6 +122,7 @@ internal fun Composer(
     var fieldFocused by remember { mutableStateOf(false) }
     var attachMenu by remember { mutableStateOf(false) }
     var settingsMenu by remember { mutableStateOf(false) }
+    var speechLanguageSheet by remember { mutableStateOf(false) }
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { readAndAttach(context, it, viewModel) }
@@ -167,6 +175,11 @@ internal fun Composer(
             voiceLength = 0
         }
     }
+
+    // The choice is per profile, so opening another profile's conversation has
+    // to re-read it before the sheet or the next take uses it.
+    LaunchedEffect(state.chatProfile) { viewModel.loadSpeechLanguages() }
+    if (speechLanguageSheet) SpeechLanguageSheet(state, viewModel) { speechLanguageSheet = false }
 
     when (sheet) {
         ComposerSheet.Model -> ModalBottomSheet(onDismissRequest = { sheet = null }, sheetState = rememberModalBottomSheetState()) {
@@ -334,7 +347,15 @@ internal fun Composer(
                             sheet = ComposerSheet.Model
                         }
                     }
-                    MicButton(state, viewModel) { askMic.launch(Manifest.permission.RECORD_AUDIO) }
+                    MicButton(
+                        state = state,
+                        viewModel = viewModel,
+                        onRecord = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
+                        onPickLanguage = {
+                            viewModel.loadSpeechLanguages()
+                            speechLanguageSheet = true
+                        },
+                    )
                     ComposerActionButton(state, draft, onSend, viewModel)
                 }
             }
@@ -355,11 +376,29 @@ private fun SettingsMenuItem(label: String, checked: Boolean, onClick: () -> Uni
     )
 }
 
+/**
+ * What the running take is actually listening for.
+ *
+ * Never a claim: a detecting take says only that it is detecting until the
+ * engine reports a language, and a take that named none says so.
+ */
+@Composable
+internal fun takeLanguageLabel(state: UiState): String = when {
+    state.detectedLanguage.isNotBlank() ->
+        stringResource(R.string.composer_take_detected, SpeechLanguages.isolatedEndonym(state.detectedLanguage))
+    state.takeDetecting && state.voiceViaServer -> stringResource(R.string.composer_take_server_auto)
+    state.takeDetecting -> stringResource(R.string.composer_take_detecting)
+    state.takeLanguage.isNotBlank() ->
+        stringResource(R.string.composer_take_language, SpeechLanguages.isolatedEndonym(state.takeLanguage))
+    else -> stringResource(R.string.composer_take_language_unknown)
+}
+
 @Composable
 private fun VoiceStatusRow(state: UiState, viewModel: AppViewModel) {
     val palette = CoreHub.palette
+    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -389,6 +428,16 @@ private fun VoiceStatusRow(state: UiState, viewModel: AppViewModel) {
                 TextButton(onClick = { viewModel.resetVoice() }) { Text(stringResource(R.string.action_dismiss)) }
             }
             VoiceStatus.Idle -> Unit
+        }
+    }
+        if (state.voice == VoiceStatus.Listening || state.voice == VoiceStatus.Transcribing) {
+            Text(
+                takeLanguageLabel(state),
+                style = CoreHubTextStyles.meta.copy(textDirection = TextDirection.Content),
+                color = palette.textMuted,
+                maxLines = 1,
+                modifier = Modifier.padding(start = 24.dp),
+            )
         }
     }
 }
@@ -474,19 +523,34 @@ private fun RoundToolbarButton(
     }
 }
 
-/** The M1 voice input, 30 dp: idle mic / stop while listening / spinner while transcribing. */
+/**
+ * The M1 voice input, 30 dp: idle mic / stop while listening / spinner while
+ * transcribing. A long press opens the dictation-language sheet, so a single
+ * Arabic message on an English phone costs one gesture instead of a trip to
+ * Settings.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MicButton(state: UiState, viewModel: AppViewModel, onRecord: () -> Unit) {
+private fun MicButton(
+    state: UiState,
+    viewModel: AppViewModel,
+    onRecord: () -> Unit,
+    onPickLanguage: () -> Unit,
+) {
     val palette = CoreHub.palette
     val listening = state.voice == VoiceStatus.Listening
+    val languageHint = stringResource(R.string.sheet_speech_language)
     Box(
         modifier = Modifier
             .size(CoreHubTokens.Metrics.composerButton)
             .clip(CircleShape)
             .background(if (listening) palette.accent else Color.Transparent)
-            .clickable(enabled = state.voice != VoiceStatus.Transcribing) {
-                if (listening) viewModel.stopVoiceInput() else onRecord()
-            },
+            .semantics { onLongClick(label = languageHint) { onPickLanguage(); true } }
+            .combinedClickable(
+                enabled = state.voice != VoiceStatus.Transcribing,
+                onLongClick = onPickLanguage,
+                onClick = { if (listening) viewModel.stopVoiceInput() else onRecord() },
+            ),
         contentAlignment = Alignment.Center,
     ) {
         when (state.voice) {
@@ -610,6 +674,113 @@ internal fun voiceOutputRows(state: UiState, onPick: (String) -> Unit): List<Pic
             ) { onPick(VoiceOutput.DEVICE) },
         )
     }
+}
+
+/** Settings › Dictation language, and the mic long-press: the current choice. */
+@Composable
+internal fun speechLanguageLabel(state: UiState, appLanguageTag: String): String = when (val choice = SpeechLanguages.normalize(state.speechLanguage)) {
+    SpeechLanguages.AUTOMATIC -> stringResource(R.string.speech_language_automatic)
+    SpeechLanguages.FOLLOW_APP -> stringResource(
+        R.string.speech_language_follow_app_value,
+        SpeechLanguages.isolatedEndonym(SpeechLanguages.normalizeTag(appLanguageTag)),
+    )
+    else -> SpeechLanguages.endonym(choice)
+}
+
+/**
+ * The rows of the dictation-language sheet: follow the app, detect
+ * automatically, then every language the device reported.
+ *
+ * The automatic row is offered whatever the device can do, but its subtitle
+ * tells the truth either way — the languages the engine will choose between,
+ * or why it cannot choose at all.
+ */
+@Composable
+internal fun speechLanguageRows(
+    state: UiState,
+    appLanguageTag: String,
+    onPick: (String) -> Unit,
+): List<PickerRow> {
+    val choice = SpeechLanguages.normalize(state.speechLanguage)
+    val options = SpeechLanguages.options(state.speechLanguages, choice)
+    val detection = state.speechDetection
+    val allowedNames = SpeechLanguages.nameList(
+        detection.allowed,
+        stringResource(R.string.speech_language_separator),
+    )
+    val confirmedLabel = stringResource(R.string.speech_language_confirmed)
+    val unconfirmedLabel = stringResource(R.string.speech_language_unconfirmed)
+    return buildList {
+        add(
+            PickerRow(
+                label = stringResource(R.string.speech_language_follow_app),
+                detail = stringResource(
+                    R.string.speech_language_follow_app_note,
+                    SpeechLanguages.isolatedEndonym(SpeechLanguages.normalizeTag(appLanguageTag)),
+                ),
+                selected = choice == SpeechLanguages.FOLLOW_APP,
+            ) { onPick(SpeechLanguages.FOLLOW_APP) },
+        )
+        add(
+            PickerRow(
+                label = stringResource(R.string.speech_language_automatic),
+                detail = if (detection.usable) {
+                    stringResource(R.string.speech_language_automatic_note, allowedNames)
+                } else {
+                    stringResource(R.string.speech_language_automatic_unavailable)
+                },
+                selected = choice == SpeechLanguages.AUTOMATIC,
+            ) { onPick(SpeechLanguages.AUTOMATIC) },
+        )
+        options.forEach { option: SpeechLanguageOption ->
+            add(
+                PickerRow(
+                    label = option.endonym,
+                    detail = if (option.confirmed) confirmedLabel else unconfirmedLabel,
+                    selected = choice.equals(option.tag, ignoreCase = true),
+                ) { onPick(option.tag) },
+            )
+        }
+    }
+}
+
+/**
+ * The dictation-language sheet, shared by Settings and the mic long-press so
+ * the two can never drift apart.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SpeechLanguageSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit) {
+    val palette = CoreHub.palette
+    val appLanguageTag = Locale.getDefault().toLanguageTag()
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
+        PickerSheet(
+            title = stringResource(R.string.sheet_speech_language),
+            loading = false,
+            rows = speechLanguageRows(state, appLanguageTag) { choice ->
+                onDismiss()
+                viewModel.setSpeechLanguage(choice)
+            },
+        )
+        // Two honest footnotes: a list nobody confirmed, and a setting that
+        // sends the take somewhere this choice cannot reach.
+        if (state.speechLanguages.isEmpty()) {
+            SheetNote(stringResource(R.string.speech_language_unconfirmed_all), palette.textMuted)
+        }
+        if (state.voiceInput == Store.VOICE_INPUT_SERVER) {
+            SheetNote(stringResource(R.string.speech_language_server_note), palette.textMuted)
+        }
+    }
+}
+
+@Composable
+private fun SheetNote(text: String, color: Color) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelSmall.copy(textDirection = TextDirection.Content),
+        color = color,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+    )
 }
 
 internal val APPEARANCE_LEVELS = listOf(

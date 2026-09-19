@@ -78,6 +78,7 @@ import us.i3u.hermesstudio.NoticeNote
 import us.i3u.hermesstudio.R
 import us.i3u.hermesstudio.TextPromptDialog
 import us.i3u.hermesstudio.UiState
+import us.i3u.hermesstudio.chatProfile
 import us.i3u.hermesstudio.ui.navigation.MenuButton
 import us.i3u.hermesstudio.ui.sessions.workspaceChipLabel
 import us.i3u.hermesstudio.ui.theme.CoreHub
@@ -153,9 +154,12 @@ fun ConversationScreen(state: UiState, viewModel: AppViewModel, onMenu: () -> Un
         }
     }
 
-    val profile = state.openSession?.profile ?: state.activeProfile
-    val avatar = state.avatarOf(profile)
-    val profileName = profile.ifBlank { "default" }
+    // The one rule, so the speak button asks Core Hub for the voice of the
+    // profile this conversation is actually running under. A blank profile on
+    // the session used to fall straight to "default" here and skip the active
+    // profile the rest of the app was using.
+    val profileName = state.chatProfile
+    val avatar = state.avatarOf(profileName)
     val pullRefreshState = rememberPullRefreshState(
         refreshing = state.loadingHistory,
         onRefresh = { viewModel.refreshConversation() },
@@ -196,7 +200,7 @@ fun ConversationScreen(state: UiState, viewModel: AppViewModel, onMenu: () -> Un
                     Text(
                         stringResource(
                             R.string.conversation_empty,
-                            profile.ifBlank { stringResource(R.string.conversation_your_agent) },
+                            profileName.ifBlank { stringResource(R.string.conversation_your_agent) },
                         ),
                         color = palette.textSecondary,
                         modifier = Modifier.align(Alignment.Center),

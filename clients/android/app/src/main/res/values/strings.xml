@@ -1102,4 +1102,24 @@
     <string name="model_context">Context window</string>
     <string name="model_context_hint">Tokens, for the context indicator</string>
     <string name="model_remove_custom">Remove</string>
+    <string name="settings_speech_language">Dictation language</string>
+    <string name="settings_speech_language_note">Which language the microphone listens for, saved for this profile. Long-press the microphone in the composer to change it for one message. The languages listed are the ones this device\'s speech engine reported; automatic detection runs on the device and needs Android 14 or later.</string>
+    <string name="speech_language_follow_app">Follow the app language</string>
+    <string name="speech_language_follow_app_note">Dictate in %1$s, the language the app is showing</string>
+    <string name="speech_language_automatic">Detect automatically</string>
+    <string name="speech_language_automatic_note">The phone\'s own speech engine works out the language and may switch mid-sentence between %1$s. Nothing extra is sent to Core Hub.</string>
+    <string name="speech_language_automatic_unavailable">This device\'s speech engine cannot detect the language; Android 14 or later and an engine that reports support are needed</string>
+    <string name="speech_language_confirmed">Supported by this device</string>
+    <string name="speech_language_unconfirmed">Not confirmed by this device</string>
+    <string name="speech_language_unconfirmed_all">This device did not report the languages it supports, so the list below is a guess; a language it cannot hear will report an error.</string>
+    <string name="speech_language_server_note">Voice input is set to the Core Hub server. The server transcribes with the language stored for the profile\'s STT provider in Studio, so this choice only applies to dictation on the device.</string>
+    <string name="notice_speech_detection_unavailable">This device cannot detect the dictation language, so it is listening in %1$s. Pick a language in Settings, or switch voice input to the Core Hub server.</string>
+    <string name="composer_take_language">Listening in %1$s</string>
+    <string name="composer_take_detecting">Detecting the language</string>
+    <string name="composer_take_detected">Detected %1$s</string>
+    <string name="composer_take_server_auto">The Core Hub server decides the language</string>
+    <string name="composer_take_language_unknown">No language named</string>
+    <string name="sheet_speech_language">Dictation language</string>
+    <string name="speech_language_separator">, </string>
+    <string name="speech_language_follow_app_value">%1$s (app language)</string>
 </resources>

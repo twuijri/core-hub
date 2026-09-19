@@ -40,6 +40,16 @@ Two fixtures reproduce reported bugs without a real server:
         gemini              → HTTP 400, a provider that is not configured
         elevenlabs          → real WAV bytes with X-TTS-Provider
 
+  STT  dictation was locked to the phone's language. The STT routes here
+      reproduce the server's real contract, which is easy to get wrong:
+      `POST /api/studio/stt/transcribe` reads only `provider` and `audio`,
+      and the language comes from the profile's stored provider settings —
+      a multipart `language` field is accepted and then ignored. The reply
+      echoes it back as `mockReceivedLanguage` so a test can prove exactly
+      that. `GET /api/studio/stt/profile-status` and
+      `GET /api/studio/stt/settings` answer the two reads the phone makes
+      before it uploads anything.
+
 A port can be given on the command line (default 8099) so a test can run this
 on a free one:
 
@@ -310,6 +320,31 @@ TTS_ACTIVE_PROVIDER = "elevenlabs"
 # with nothing stored and more than one provider configured).
 TTS_UNNAMED_PROVIDER = "edge"
 
+# GET /api/studio/stt/settings — the same envelope shape as the TTS one. The
+# `language` stored here is the one that actually decides the transcription:
+# verified in packages/server/src/modules/studio/controllers/stt.ts, the
+# transcribe route reads only `provider` and `audio` from the multipart body
+# and passes `runtimeSetting.settings` to the provider. A multipart `language`
+# field is accepted and dropped. Leave STT_SETTINGS[0]['settings']['language']
+# blank and the provider detects the language itself.
+STT_SETTINGS = [
+    {"provider": "openai",
+     "settings": {"baseUrl": "https://api.openai.com/v1", "model": "gpt-4o-transcribe", "language": ""},
+     "secrets": {"apiKey": "[stored]"}, "createdAt": 1785000000000, "updatedAt": 1785000000000},
+]
+STT_ACTIVE_PROVIDER = "openai"
+# Flip to False from a test to reproduce a profile that cannot transcribe.
+STT_CONFIGURED = True
+STT_REASON = "active_stt_provider_secret_missing"
+
+
+def stt_stored_language():
+    """The language the server would really use, or '' for auto-detect."""
+    for row in STT_SETTINGS:
+        if row['provider'] == STT_ACTIVE_PROVIDER:
+            return (row['settings'].get('language') or '').strip()
+    return ''
+
 
 def wav_bytes(milliseconds=200, rate=8000):
     """A real, tiny, silent WAV so the app's format sniffing has something to read."""
@@ -355,6 +390,54 @@ class Handler(BaseHTTPRequestHandler):
             self.send({"error": "unknown TTS provider"}, 400)
         else:
             self.send_audio(wav_bytes(), provider, 'mock-tts')
+
+    def transcribe(self):
+        """
+        POST /api/studio/stt/transcribe.
+
+        Mirrors the real controller rather than being convenient: `provider`
+        is required, `audio` is required, and the multipart `language` field is
+        read only so the reply can prove it was ignored. The language of the
+        result is whatever the profile has stored — blank meaning the provider
+        detected it.
+        """
+        length = int(self.headers.get('Content-Length') or 0)
+        raw = self.rfile.read(length)
+        content_type = self.headers.get('Content-Type') or ''
+        if not content_type.startswith('multipart/form-data'):
+            self.send({"error": "Expected multipart/form-data"}, 400)
+            return
+        # A part can carry more headers between the disposition and its body
+        # (OkHttp writes a per-part Content-Length), and the file part's
+        # disposition continues with `; filename=`, so it never matches here —
+        # which is what keeps binary audio out of `fields`.
+        fields = dict(re.findall(
+            rb'name="([^"]+)"\r\n(?:[^\r\n]+\r\n)*\r\n(.*?)\r\n--',
+            raw, re.S,
+        ))
+        provider = fields.get(b'provider', b'').decode().strip()
+        sent_language = fields.get(b'language', b'').decode().strip()
+        if provider not in {row['provider'] for row in STT_SETTINGS}:
+            self.send({"error": "unknown STT provider"}, 400)
+            return
+        if b'name="audio"' not in raw:
+            self.send({"error": "audio is required"}, 400)
+            return
+        stored = stt_stored_language()
+        # No audio here, so the text is a fixture; which one depends only on
+        # the stored language, never on `sent_language`.
+        text = {"ar": "السلام عليكم", "en": "hello there"}.get(stored, "السلام عليكم ورحمة الله")
+        self.send({
+            "text": text,
+            "provider": provider,
+            "model": "gpt-4o-transcribe",
+            # Absent when the provider detected it, exactly like the real one.
+            **({"language": stored} if stored else {}),
+            "durationMs": 1400,
+            # Not a server field: a marker so a test can assert the hint was
+            # received and then ignored.
+            "mockReceivedLanguage": sent_language,
+        })
 
     def json_body(self):
         length = int(self.headers.get('Content-Length') or 0)
@@ -524,6 +607,14 @@ class Handler(BaseHTTPRequestHandler):
         elif path == '/api/hermes/pets/active': self.send({"pet": ACTIVE_PET})
         elif path == '/api/studio/tts/settings':
             self.send({"settings": TTS_SETTINGS, "activeProvider": TTS_ACTIVE_PROVIDER})
+        elif path == '/api/studio/stt/settings':
+            self.send({"settings": STT_SETTINGS, "activeProvider": STT_ACTIVE_PROVIDER})
+        elif path == '/api/studio/stt/profile-status':
+            profile = parse_qs(parsed.query).get('profile', ['default'])[0]
+            status = {"profile": profile, "configured": STT_CONFIGURED,
+                      "activeProvider": STT_ACTIVE_PROVIDER if STT_CONFIGURED else None,
+                      "reason": None if STT_CONFIGURED else STT_REASON}
+            self.send(status)
         elif path == '/api/cron-history':
             job_id = parse_qs(parsed.query).get('jobId', ['morning-brief'])[0]
             self.send({"runs": [{"jobId": job_id, "fileName": "2026-07-31T09-00-00.md", "runTime": "2026-07-31 09:00:00", "size": len(RUN_OUTPUT.encode()), "hasOutput": True, "status": "ok"}]})
@@ -534,6 +625,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split('?')[0]
+        if path == '/api/studio/stt/transcribe':
+            self.transcribe()
+            return
         if path == '/api/hermes/skills/import':
             length = int(self.headers.get('Content-Length') or 0)
             self.rfile.read(length)

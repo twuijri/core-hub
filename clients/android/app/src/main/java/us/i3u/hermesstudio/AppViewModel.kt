@@ -206,6 +206,32 @@ data class UiState(
     val voiceSettingsError: String? = null,
     /** The next submitted draft came from STT and should receive a spoken reply. */
     val voiceReplyPending: Boolean = false,
+    /**
+     * Settings → Dictation language, for the profile the chat runs under:
+     * [SpeechLanguages.FOLLOW_APP], [SpeechLanguages.AUTOMATIC] or a BCP-47 tag.
+     */
+    val speechLanguage: String = SpeechLanguages.FOLLOW_APP,
+    /** Profile [speechLanguage] was read for; blank before the first read. */
+    val speechLanguageProfile: String = "",
+    /** The languages this device's recognizer reported; empty until it answers. */
+    val speechLanguages: List<SpeechLanguageOption> = emptyList(),
+    /** What the engine said about detecting the language for itself. */
+    val speechDetection: DetectionSupport = DetectionSupport(),
+    /** True once the recognizer has been asked, whatever it answered. */
+    val speechLanguagesAsked: Boolean = false,
+    /**
+     * The language the running take settled on, once the engine reported one.
+     * Only set for a detecting take, and only for a confident guess.
+     */
+    val detectedLanguage: String = "",
+    /**
+     * The language the running take was actually started with — the tag given
+     * to the recognizer, or the hint sent with a server recording. Blank means
+     * no language was named at all.
+     */
+    val takeLanguage: String = "",
+    /** True when the running take was allowed to work the language out itself. */
+    val takeDetecting: Boolean = false,
     val speaking: Boolean = false,
     val models: List<ModelOption> = emptyList(),
     /** Profile whose entries are currently in [models]. */
@@ -358,6 +384,14 @@ data class WeixinQrUi(
 
 /** Super-admin gates the Agent Manager, Performance, Profiles and the admin settings tabs. */
 val UiState.isSuperAdmin: Boolean get() = currentUser?.role == "super_admin"
+
+/**
+ * The profile the open conversation runs under, and therefore the only profile
+ * whose voice settings apply to it — the one that goes into `X-Hermes-Profile`
+ * on the chat run, on `GET /api/studio/tts/settings` and on every
+ * `POST /api/studio/tts/synthesize` for a reply in that conversation.
+ */
+val UiState.chatProfile: String get() = ProfileScope.of(openSession?.profile, activeProfile)
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -1496,8 +1530,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val files = _state.value.attachments
         if ((text.isEmpty() && files.isEmpty()) || _state.value.sending) return
         val session = _state.value.openSession
-        val profile = session?.profile?.ifBlank { null }
-            ?: _state.value.activeProfile.ifBlank { "default" }
+        val profile = ProfileScope.of(session?.profile, _state.value.activeProfile)
         val selectedModel = _state.value.sessionModel
         val selectedProvider = _state.value.sessionProvider
         val reasoningEffort = _state.value.reasoningEffort
@@ -2253,6 +2286,74 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(voiceInput = clean) }
     }
 
+    /** The language the app itself is showing, which dictation follows by default. */
+    private fun appLanguageTag(): String =
+        localized.resources.configuration.locales[0].toLanguageTag()
+
+    /**
+     * Settings → Dictation language, and the same sheet the mic long-press
+     * opens. Stored for the profile the chat is running under, because Core
+     * Hub keeps its voice settings per profile too.
+     */
+    fun setSpeechLanguage(choice: String) {
+        val profile = currentProfile()
+        val clean = SpeechLanguages.normalize(choice)
+        store.setSpeechLanguage(profile, clean)
+        _state.update { it.copy(speechLanguage = clean, speechLanguageProfile = profile, detectedLanguage = "") }
+    }
+
+    /**
+     * Reads this profile's stored choice and, once per app run, asks the
+     * device's recognition service which languages it actually has.
+     *
+     * Nothing here guesses: [SpeechLanguages.options] offers the curated list
+     * only when the engine answered nothing at all, and detection is only
+     * offered as usable when the engine confirmed it on a platform that has
+     * the extras.
+     */
+    fun loadSpeechLanguages(force: Boolean = false) {
+        val profile = currentProfile()
+        val current = _state.value
+        if (current.speechLanguageProfile != profile) {
+            _state.update {
+                it.copy(speechLanguage = store.speechLanguage(profile), speechLanguageProfile = profile)
+            }
+        }
+        if (current.speechLanguagesAsked && !force) return
+        _state.update { it.copy(speechLanguagesAsked = true) }
+        SpeechInput.queryLanguages(getApplication()) { reported ->
+            val supported = SpeechLanguages.fromSupported(reported.all, reported.preferred)
+            val allowed = SpeechLanguages.detectionCandidates(
+                wanted = detectionWishlist(),
+                supported = reported.onDevice,
+            )
+            _state.update {
+                it.copy(
+                    speechLanguages = supported,
+                    speechDetection = DetectionSupport(
+                        platform = android.os.Build.VERSION.SDK_INT >= SpeechLanguages.DETECTION_SDK,
+                        engineConfirmed = reported.answered,
+                        allowed = allowed,
+                    ),
+                )
+            }
+        }
+    }
+
+    /**
+     * The languages worth asking the engine to choose between: the ones this
+     * app ships — so an Arabic-and-English build offers exactly those — plus
+     * the phone's own locale and any language the owner has pinned. Not a
+     * hardcoded list of one person's languages, and every entry still has to
+     * survive the intersection with what the engine reported.
+     */
+    private fun detectionWishlist(): List<String> = buildList {
+        SpeechLanguages.specificTag(_state.value.speechLanguage)?.let(::add)
+        add(appLanguageTag())
+        add(getApplication<Application>().resources.configuration.locales[0].toLanguageTag())
+        APP_LANGUAGES.mapNotNull { it.tag.ifBlank { null } }.forEach(::add)
+    }
+
     /**
      * Settings → Voice: reads the profile's TTS providers from Core Hub so the
      * owner can see which voice answers and pick another one.
@@ -2325,22 +2426,52 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Starts dictation. On-device recognition is the default and streams text
-     * live; the Core Hub server path records a WAV and transcribes it after the
-     * take. When the device has no recognizer the server path is used and the
-     * user is told so.
+     * Starts dictation in the language this profile asked for.
+     *
+     * [SpeechLanguages.plan] decides where the take runs; nothing about the
+     * language is worked out here, so the rule can be read in a test. The one
+     * thing this function adds is honesty: when the owner asked the recognizer
+     * to detect the language and this device cannot, the fallback language is
+     * named in a notice rather than applied quietly.
      */
     fun startVoiceInput() {
         val current = _state.value.voice
         if (current == VoiceStatus.Listening || current == VoiceStatus.Transcribing) return
         val app = getApplication<Application>()
-        val wantsServer = _state.value.voiceInput == Store.VOICE_INPUT_SERVER
+        val state = _state.value
         val available = SpeechInput.isAvailable(app)
-        if (wantsServer || !available) {
-            if (!wantsServer) _state.update { it.copy(notice = str(R.string.notice_voice_fallback_server)) }
-            startServerRecording()
-        } else {
-            startDeviceListening()
+        val plan = SpeechLanguages.plan(
+            inputMode = state.voiceInput,
+            choice = state.speechLanguage,
+            appLanguageTag = appLanguageTag(),
+            recognizerAvailable = available,
+            detection = state.speechDetection,
+        )
+        when (plan) {
+            is SpeechPlan.OnServer -> {
+                if (state.voiceInput != Store.VOICE_INPUT_SERVER) {
+                    _state.update { it.copy(notice = str(R.string.notice_voice_fallback_server)) }
+                }
+                startServerRecording(plan.hint)
+            }
+
+            is SpeechPlan.Detect -> startDeviceListening(plan.seed, plan.allowed)
+
+            is SpeechPlan.OnDevice -> {
+                if (plan.detectionUnavailable) {
+                    // The owner picked automatic; this engine cannot do it, and
+                    // saying nothing would leave the wrong language unexplained.
+                    _state.update {
+                        it.copy(
+                            notice = str(
+                                R.string.notice_speech_detection_unavailable,
+                                SpeechLanguages.isolatedEndonym(plan.languageTag),
+                            ),
+                        )
+                    }
+                }
+                startDeviceListening(plan.languageTag, emptyList())
+            }
         }
     }
 
@@ -2369,12 +2500,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (it.voiceSegment?.serial == serial) it.copy(voiceSegment = null) else it
     }
 
-    private fun startDeviceListening() {
-        val languageTag = localized.resources.configuration.locales[0].toLanguageTag()
+    /**
+     * One on-device take. [detectAmong] non-empty turns on the platform's own
+     * language detection and switching; the engine then reports what it
+     * settled on through `onLanguageDetected`, and that is the only thing the
+     * recording sheet will claim was detected.
+     */
+    private fun startDeviceListening(languageTag: String, detectAmong: List<String>) {
         lastPartial = null
         val started = speech.start(
             languageTag,
+            detectAmong,
             object : SpeechInput.Listener {
+                override fun onLanguageDetected(tag: String) {
+                    _state.update { it.copy(detectedLanguage = tag) }
+                }
+
                 override fun onPartial(text: String) {
                     lastPartial = text
                     emitVoiceSegment(text, VoiceSegmentKind.Partial)
@@ -2410,13 +2551,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         )
         if (!started) {
             _state.update { it.copy(notice = str(R.string.notice_voice_fallback_server)) }
-            startServerRecording()
+            startServerRecording(SpeechLanguages.serverHint(languageTag))
             return
         }
-        _state.update { it.copy(voice = VoiceStatus.Listening, voiceViaServer = false, voiceSegment = null, error = null) }
+        _state.update {
+            it.copy(
+                voice = VoiceStatus.Listening,
+                voiceViaServer = false,
+                voiceSegment = null,
+                error = null,
+                detectedLanguage = "",
+                // What this take is actually listening for, so the recording
+                // sheet never names a language the engine was not given.
+                takeLanguage = languageTag,
+                takeDetecting = detectAmong.isNotEmpty(),
+            )
+        }
     }
 
-    private fun startServerRecording() {
+    /** The language hint the pending server take will carry; null for none. */
+    private var pendingServerHint: String? = null
+
+    private fun startServerRecording(hint: String?) {
         try {
             recorder.start()
         } catch (failure: Exception) {
@@ -2425,7 +2581,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             return
         }
-        _state.update { it.copy(voice = VoiceStatus.Listening, voiceViaServer = true, voiceSegment = null, error = null) }
+        pendingServerHint = hint
+        _state.update {
+            it.copy(
+                voice = VoiceStatus.Listening,
+                voiceViaServer = true,
+                voiceSegment = null,
+                error = null,
+                detectedLanguage = "",
+                takeLanguage = hint.orEmpty(),
+                takeDetecting = hint == null,
+            )
+        }
     }
 
     /** Stops the take and turns it into text with the profile's STT provider. */
@@ -2436,7 +2603,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val profile = currentProfile()
-        val language = localized.resources.configuration.locales[0].language.takeIf { it.isNotBlank() }
+        val language = pendingServerHint
+        pendingServerHint = null
         _state.update { it.copy(voice = VoiceStatus.Transcribing, error = null) }
         viewModelScope.launch {
             runCatching {
@@ -2845,7 +3013,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun speakRoomMessage(message: GroupMessage) {
         val line = ChatLine(text = message.content, fromUser = false, sender = message.senderName, messageId = message.id, timestamp = message.timestamp.toString())
-        toggleSpeech(line, message.senderAgentProfile ?: _state.value.activeProfile.ifBlank { "default" })
+        // A seat speaks with its own agent's profile; the room's own profile is
+        // the fallback, through the one rule the rest of the app uses.
+        toggleSpeech(line, ProfileScope.of(message.senderAgentProfile, _state.value.activeProfile))
     }
 
     fun leaveRoom() {
@@ -4801,9 +4971,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun str(id: Int, vararg args: Any): String = localized.getString(id, *args)
 
-    private fun currentProfile(): String =
-        _state.value.openSession?.profile?.ifBlank { null }
-            ?: _state.value.activeProfile.ifBlank { "default" }
+    /**
+     * The profile every per-profile call on the chat screen must carry, voice
+     * included. One rule, in [ProfileScope], so the spoken reply, the Voice
+     * section and the chat run can never disagree about whose settings apply.
+     */
+    private fun currentProfile(): String = _state.value.chatProfile
 
     private fun uniqueQueuedDownloadName(requested: String): String {
         val clean = inferDownloadFileName(requested, requested)
