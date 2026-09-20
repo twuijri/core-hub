@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/devices/device.updated.schema.json",
+  "title": "/rt/devices · device.updated",
+  "description": "User-level. Emitted by: devices module (rename, capabilities, push registration, token renewal).",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "device.updated"
+    },
+    "namespace": {
+      "const": "/rt/devices"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["device"],
+      "properties": {
+        "device": {
+          "$ref": "#/$defs/Device"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "device.updated",
+      "namespace": "/rt/devices",
+      "profile": null,
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "device": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0DV",
+          "user_id": "01J8QK3ZR2W7M5N4P6T8V9X0HM",
+          "device_key": "3d5b0f2e-9c1a-4e7b-8f6d-2a1b3c4d5e6f",
+          "name": "هاتف طارق",
+          "platform": "android",
+          "kind": "phone",
+          "brand": "Google",
+          "model": "Pixel 9",
+          "app_version": "1.0.2-test.22",
+          "connection": "lan",
+          "online": true,
+          "last_seen_at": "2026-09-21T13:00:00Z",
+          "app_token_id": "01J8QK3ZR2W7M5N4P6T8V9X0AK",
+          "capabilities": [
+            {
+              "kind": "location",
+              "enabled": true,
+              "consent_at": null
+            }
+          ],
+          "push": null,
+          "this_device": false,
+          "created_at": "2026-09-21T11:16:00Z",
+          "updated_at": "2026-09-21T13:00:00Z"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "CapabilityKind": {
+      "type": "string",
+      "description": "What a device can do for an agent. Unsupported kinds are simply absent.",
+      "enum": [
+        "location",
+        "camera",
+        "microphone",
+        "notifications",
+        "clipboard",
+        "screen",
+        "files",
+        "apps",
+        "calendar",
+        "reminders",
+        "health"
+      ]
+    },
+    "Device": {
+      "type": "object",
+      "required": [
+        "id",
+        "user_id",
+        "device_key",
+        "name",
+        "platform",
+        "kind",
+        "brand",
+        "model",
+        "app_version",
+        "connection",
+        "online",
+        "last_seen_at",
+        "app_token_id",
+        "capabilities",
+        "push",
+        "this_device",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "user_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "device_key": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "platform": {
+          "$ref": "#/$defs/DevicePlatform"
+        },
+        "kind": {
+          "$ref": "#/$defs/DeviceKind"
+        },
+        "brand": {
+          "type": ["string", "null"]
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "app_version": {
+          "type": ["string", "null"]
+        },
+        "connection": {
+          "$ref": "#/$defs/PairingConnection"
+        },
+        "online": {
+          "type": "boolean",
+          "description": "Has a live `/rt/devices` socket."
+        },
+        "last_seen_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "app_token_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DeviceCapability"
+          }
+        },
+        "push": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PushStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "this_device": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "DeviceCapability": {
+      "type": "object",
+      "required": ["kind", "enabled", "consent_at"],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/CapabilityKind"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "consent_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "When the person granted the OS permission, if the device reports it."
+        }
+      }
+    },
+    "DeviceKind": {
+      "type": "string",
+      "enum": ["phone", "tablet", "computer", "browser"]
+    },
+    "DevicePlatform": {
+      "type": "string",
+      "enum": ["android", "ios", "web", "macos", "windows", "linux"]
+    },
+    "Locale": {
+      "type": "string",
+      "enum": ["ar", "en"],
+      "description": "UI language. Content direction is decided per string by the client, never by this value."
+    },
+    "PairingConnection": {
+      "type": "string",
+      "enum": ["lan", "relay"],
+      "description": "`lan` when the device reaches the hub directly; `relay` when it goes through the message relay."
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "PushStatus": {
+      "type": "object",
+      "required": ["provider", "locale", "registered_at"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["fcm", "apns", "webpush"]
+        },
+        "locale": {
+          "$ref": "#/$defs/Locale"
+        },
+        "registered_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}

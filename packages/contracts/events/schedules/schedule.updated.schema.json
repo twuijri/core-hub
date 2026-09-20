@@ -1,0 +1,369 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/schedules/schedule.updated.schema.json",
+  "title": "/rt/schedules · schedule.updated",
+  "description": "Profile-wide. Emitted by: schedules module (patch, state changes, next_run_at recomputed, repeat exhausted).",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "schedule.updated"
+    },
+    "namespace": {
+      "const": "/rt/schedules"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["schedule"],
+      "properties": {
+        "schedule": {
+          "$ref": "#/$defs/Schedule"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "schedule.updated",
+      "namespace": "/rt/schedules",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "schedule": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0SC",
+          "profile": "work",
+          "owner_id": "01J8QK3ZR2W7M5N4P6T8V9X0HM",
+          "created_at": "2026-09-15T00:00:00Z",
+          "updated_at": "2026-09-21T09:00:00Z",
+          "name": "اجتماع الصباح",
+          "trigger": {
+            "kind": "cron",
+            "expression": "0 9 * * 1-5",
+            "every_minutes": null,
+            "run_at": null,
+            "timezone": "Asia/Riyadh",
+            "display": "كل يوم عمل الساعة 09:00"
+          },
+          "target": {
+            "kind": "agent_prompt",
+            "agent_id": "01J8QK3ZR2W7M5N4P6T8V9X0AG",
+            "prompt": "لخّص ما أُنجز أمس.",
+            "model": null,
+            "provider": null,
+            "skills": [],
+            "workflow_id": null,
+            "input": null
+          },
+          "delivery": {
+            "kind": "room",
+            "room_id": "01J8QK3ZR2W7M5N4P6T8V9X0RM",
+            "channel": null,
+            "address": null
+          },
+          "repeat": {
+            "limit": null,
+            "completed": 5
+          },
+          "enabled": true,
+          "state": "running",
+          "next_run_at": "2026-09-22T06:00:00Z",
+          "last_run_at": "2026-09-21T06:00:00Z",
+          "last_status": "succeeded",
+          "last_error": null,
+          "last_delivery_error": null
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "DeliveryTarget": {
+      "type": "object",
+      "description": "Where the output goes. `none` keeps it in history only.",
+      "required": ["kind", "room_id", "channel", "address"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["none", "notice", "room", "channel"]
+        },
+        "label": {
+          "type": "string",
+          "description": "Display label (read-only in listings)."
+        },
+        "room_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "channel": {
+          "type": ["string", "null"],
+          "description": "Messaging platform slug when `kind = channel`."
+        },
+        "address": {
+          "type": ["string", "null"],
+          "description": "Chat/channel id on that platform."
+        }
+      }
+    },
+    "JobStatus": {
+      "type": "string",
+      "enum": ["queued", "running", "succeeded", "failed", "cancelled"]
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "Schedule": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "trigger",
+            "target",
+            "delivery",
+            "repeat",
+            "enabled",
+            "state",
+            "next_run_at",
+            "last_run_at",
+            "last_status",
+            "last_error",
+            "last_delivery_error"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "trigger": {
+              "$ref": "#/$defs/ScheduleTrigger"
+            },
+            "target": {
+              "$ref": "#/$defs/ScheduleTarget"
+            },
+            "delivery": {
+              "$ref": "#/$defs/DeliveryTarget"
+            },
+            "repeat": {
+              "type": "object",
+              "required": ["limit", "completed"],
+              "properties": {
+                "limit": {
+                  "type": ["integer", "null"],
+                  "minimum": 1,
+                  "description": "`null` = unlimited."
+                },
+                "completed": {
+                  "type": "integer"
+                }
+              }
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "state": {
+              "type": "string",
+              "enum": ["scheduled", "running", "paused", "exhausted"]
+            },
+            "next_run_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "last_run_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "last_status": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/JobStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "last_error": {
+              "type": ["string", "null"]
+            },
+            "last_delivery_error": {
+              "type": ["string", "null"]
+            }
+          }
+        }
+      ]
+    },
+    "ScheduleTarget": {
+      "type": "object",
+      "description": "What to run — a prompt to an agent, or a workflow.",
+      "required": [
+        "kind",
+        "agent_id",
+        "prompt",
+        "model",
+        "provider",
+        "skills",
+        "workflow_id",
+        "input"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["agent_prompt", "workflow"]
+        },
+        "agent_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "prompt": {
+          "type": ["string", "null"]
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "provider": {
+          "type": ["string", "null"]
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "workflow_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "ScheduleTrigger": {
+      "type": "object",
+      "description": "When to fire. `expression` for `cron` (5 fields), `every_minutes` for `interval`, `run_at` for `once`.",
+      "required": ["kind", "expression", "every_minutes", "run_at", "timezone"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["cron", "interval", "once"]
+        },
+        "expression": {
+          "type": ["string", "null"]
+        },
+        "every_minutes": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "run_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timezone": {
+          "type": "string",
+          "description": "IANA zone the expression is evaluated in."
+        },
+        "display": {
+          "type": "string",
+          "description": "Server-rendered, localized description (read-only)."
+        }
+      }
+    },
+    "Scoped": {
+      "type": "object",
+      "description": "Fields every row a client can show carries (ARCHITECTURE §Data ownership).",
+      "required": ["id", "profile", "owner_id", "created_at", "updated_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "owner_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}

@@ -1,0 +1,15 @@
+.git
+.github
+node_modules
+**/node_modules
+**/dist
+packages/contracts/generated/kotlin
+packages/contracts/generated/swift
+data
+.env
+.env.*
+docs
+*.md
+!packages/**/README.md
+coverage
+.eslintcache

@@ -1,0 +1,393 @@
+{
+  "$comment": "Machine-readable navigation contract for every Core Hub client (web, desktop, android, ios). docs/clients/NAVIGATION.md explains it; scripts/navigation-check.mjs validates it; each client's parity test reads it.",
+  "version": 1,
+  "surfaces": ["web", "desktop", "android", "ios"],
+  "terms": {
+    "new_chat": { "en": "New chat", "ar": "محادثة جديدة" },
+    "search": { "en": "Search", "ar": "بحث" },
+    "device_connections": { "en": "Device connections", "ar": "اتصالات الأجهزة" },
+    "agent_manager": { "en": "Agent Manager", "ar": "مدير الوكلاء" },
+    "models": { "en": "Models", "ar": "النماذج" },
+    "knowledge": { "en": "Knowledge", "ar": "المعرفة" },
+    "chat": { "en": "Chat", "ar": "محادثة" },
+    "rooms": { "en": "Rooms", "ar": "الغرف" },
+    "board": { "en": "Board", "ar": "اللوحة" },
+    "schedules": { "en": "Schedules", "ar": "الجدولة" },
+    "history": { "en": "History", "ar": "السجل" },
+    "settings": { "en": "Settings", "ar": "الإعدادات" },
+    "account": { "en": "Account", "ar": "الحساب" },
+    "users": { "en": "Users", "ar": "المستخدمون" },
+    "webhooks": { "en": "Webhooks", "ar": "خطافات الويب" },
+    "display": { "en": "Display", "ar": "العرض" },
+    "notifications": { "en": "Notifications", "ar": "الإشعارات" },
+    "privacy": { "en": "Privacy", "ar": "الخصوصية" },
+    "this_device": { "en": "This device", "ar": "هذا الجهاز" },
+    "about": { "en": "About", "ar": "حول" },
+    "logs": { "en": "Logs", "ar": "السجلات" },
+    "usage": { "en": "Usage", "ar": "الاستخدام" },
+    "performance": { "en": "Performance", "ar": "الأداء" },
+    "theme": { "en": "Theme", "ar": "السمة" },
+    "workspaces": { "en": "Workspaces", "ar": "مساحات العمل" },
+    "updates": { "en": "Updates", "ar": "التحديثات" },
+    "plugins": { "en": "Plugins", "ar": "الإضافات" },
+    "skills": { "en": "Skills", "ar": "المهارات" },
+    "mcp": { "en": "MCP", "ar": "MCP" },
+    "memory": { "en": "Memory", "ar": "الذاكرة" },
+    "jobs": { "en": "Jobs", "ar": "المهام المجدولة" },
+    "channels": { "en": "Channels", "ar": "القنوات" },
+    "agent_settings": { "en": "Settings", "ar": "الإعدادات" },
+    "global_agent": { "en": "Global agent", "ar": "الوكيل العام" },
+    "new_room": { "en": "New room", "ar": "غرفة جديدة" },
+    "join_by_code": { "en": "Join by code", "ar": "انضمام برمز" },
+    "sign_out": { "en": "Sign out", "ar": "تسجيل الخروج" }
+  },
+  "destinations": [
+    {
+      "id": "new_chat",
+      "title": "new_chat",
+      "module": "sessions",
+      "level": "app",
+      "entry": { "kind": "rail" },
+      "roles": ["member"],
+      "note": "Opens a draft session and closes the menu."
+    },
+    {
+      "id": "search",
+      "title": "search",
+      "module": "sessions",
+      "level": "app",
+      "entry": { "kind": "rail" },
+      "roles": ["member"],
+      "note": "A search sheet over sessions with the field focused; not History. A result from the global agent opens global_agent."
+    },
+    {
+      "id": "device_connections",
+      "title": "device_connections",
+      "module": "devices",
+      "level": "app",
+      "entry": { "kind": "rail" },
+      "roles": ["member"],
+      "tabs": ["app", "devices"],
+      "note": "Tab devices is admin-only."
+    },
+    {
+      "id": "agent_manager",
+      "title": "agent_manager",
+      "module": "agents",
+      "level": "app",
+      "entry": { "kind": "rail" },
+      "roles": ["admin"],
+      "note": "The registry from the server; each agent card enters the agent level."
+    },
+    {
+      "id": "models",
+      "title": "models",
+      "module": "models",
+      "level": "app",
+      "entry": { "kind": "rail" },
+      "roles": ["member"],
+      "tabs": ["general", "auxiliary", "ensembles", "stt_providers", "tts_providers"],
+      "note": "Providers, keys and voice providers live here, never in Settings."
+    },
+    {
+      "id": "knowledge",
+      "title": "knowledge",
+      "module": "knowledge",
+      "level": "app",
+      "entry": { "kind": "rail" },
+      "roles": ["member"],
+      "note": "Journal, notes/memory browser, files, search (Phase 4)."
+    },
+    {
+      "id": "chat",
+      "title": "chat",
+      "module": "sessions",
+      "level": "app",
+      "entry": { "kind": "segment" },
+      "roles": ["member"],
+      "note": "Session list: pinned, recent with counter, categories, workspace filter."
+    },
+    {
+      "id": "rooms",
+      "title": "rooms",
+      "module": "rooms",
+      "level": "app",
+      "entry": { "kind": "segment" },
+      "roles": ["member"],
+      "actions": ["new_room", "join_by_code"]
+    },
+    {
+      "id": "board",
+      "title": "board",
+      "module": "board",
+      "level": "app",
+      "entry": { "kind": "segment" },
+      "roles": ["member"],
+      "note": "Projects and tasks (kanban) with agent assignment."
+    },
+    {
+      "id": "schedules",
+      "title": "schedules",
+      "module": "schedules",
+      "level": "app",
+      "entry": { "kind": "segment" },
+      "roles": ["member"],
+      "note": "Cron jobs and workflows with status badges."
+    },
+    {
+      "id": "history",
+      "title": "history",
+      "module": "sessions",
+      "level": "app",
+      "entry": { "kind": "segment" },
+      "roles": ["member"],
+      "note": "A page: pinned, collapsible groups by source, multi-select (archive/cancel/delete), archive. Opening a session does not change the selected segment."
+    },
+    {
+      "id": "settings",
+      "title": "settings",
+      "module": "auth",
+      "level": "app",
+      "entry": { "kind": "footer" },
+      "roles": ["member"],
+      "note": "One screen with tabs and a Tools section; no settings inside settings."
+    },
+    {
+      "id": "account",
+      "title": "account",
+      "module": "auth",
+      "level": "settings",
+      "entry": { "kind": "settings-tab" },
+      "roles": ["member"]
+    },
+    {
+      "id": "users",
+      "title": "users",
+      "module": "auth",
+      "level": "settings",
+      "entry": { "kind": "settings-tab" },
+      "roles": ["admin"],
+      "global": true
+    },
+    {
+      "id": "webhooks",
+      "title": "webhooks",
+      "module": "notify",
+      "level": "settings",
+      "entry": { "kind": "settings-tab" },
+      "roles": ["admin"]
+    },
+    {
+      "id": "display",
+      "title": "display",
+      "module": "auth",
+      "level": "settings",
+      "entry": { "kind": "settings-tab" },
+      "roles": ["member"],
+      "note": "Connection mode, link target, input behaviour while busy, theme and background from the server, app language, text size."
+    },
+    {
+      "id": "notifications",
+      "title": "notifications",
+      "module": "notify",
+      "level": "settings",
+      "entry": { "kind": "settings-tab" },
+      "roles": ["member"]
+    },
+    {
+      "id": "privacy",
+      "title": "privacy",
+      "module": "auth",
+      "level": "settings",
+      "entry": { "kind": "settings-tab" },
+      "roles": ["member"]
+    },
+    {
+      "id": "this_device",
+      "title": "this_device",
+      "module": "devices",
+      "level": "settings",
+      "entry": { "kind": "settings-tab" },
+      "roles": ["member"],
+      "surfaces": ["desktop", "android", "ios"],
+      "note": "Hub connection, voice input mode, dictation language, spoken replies, self-update where the platform allows it."
+    },
+    {
+      "id": "about",
+      "title": "about",
+      "module": "updates",
+      "level": "settings",
+      "entry": { "kind": "settings-tab" },
+      "roles": ["member"]
+    },
+    {
+      "id": "logs",
+      "title": "logs",
+      "module": "audit",
+      "level": "settings",
+      "entry": { "kind": "settings-tool" },
+      "roles": ["member"]
+    },
+    {
+      "id": "usage",
+      "title": "usage",
+      "module": "audit",
+      "level": "settings",
+      "entry": { "kind": "settings-tool" },
+      "roles": ["member"],
+      "note": "Tokens and costs."
+    },
+    {
+      "id": "performance",
+      "title": "performance",
+      "module": "audit",
+      "level": "settings",
+      "entry": { "kind": "settings-tool" },
+      "roles": ["admin"],
+      "global": true,
+      "note": "Runtime processes and snapshots."
+    },
+    {
+      "id": "theme",
+      "title": "theme",
+      "module": "auth",
+      "level": "settings",
+      "entry": { "kind": "settings-tool" },
+      "roles": ["member"],
+      "note": "Theme and background. The footer theme chip is a local preference, not an entry."
+    },
+    {
+      "id": "workspaces",
+      "title": "workspaces",
+      "module": "auth",
+      "level": "settings",
+      "entry": { "kind": "settings-tool" },
+      "roles": ["admin"],
+      "note": "Manage workspaces (ADR 0005). The footer workspace chip only switches the X-Hub-Profile scope."
+    },
+    {
+      "id": "updates",
+      "title": "updates",
+      "module": "updates",
+      "level": "settings",
+      "entry": { "kind": "settings-tool" },
+      "roles": ["admin"],
+      "global": true
+    },
+    {
+      "id": "plugins",
+      "title": "plugins",
+      "module": "plugins",
+      "level": "settings",
+      "entry": { "kind": "settings-tool" },
+      "roles": ["admin"]
+    },
+    {
+      "id": "agent_skills",
+      "title": "skills",
+      "module": "agents",
+      "level": "agent",
+      "capability": "skills",
+      "entry": { "kind": "agent" },
+      "roles": ["admin"]
+    },
+    {
+      "id": "agent_mcp",
+      "title": "mcp",
+      "module": "agents",
+      "level": "agent",
+      "capability": "mcp",
+      "entry": { "kind": "agent" },
+      "roles": ["admin"]
+    },
+    {
+      "id": "agent_memory",
+      "title": "memory",
+      "module": "agents",
+      "level": "agent",
+      "capability": "memory",
+      "entry": { "kind": "agent" },
+      "roles": ["admin"]
+    },
+    {
+      "id": "agent_jobs",
+      "title": "jobs",
+      "module": "agents",
+      "level": "agent",
+      "capability": "jobs",
+      "entry": { "kind": "agent" },
+      "roles": ["admin"]
+    },
+    {
+      "id": "agent_channels",
+      "title": "channels",
+      "module": "agents",
+      "level": "agent",
+      "capability": "channels",
+      "entry": { "kind": "agent" },
+      "roles": ["admin"]
+    },
+    {
+      "id": "agent_plugins",
+      "title": "plugins",
+      "module": "agents",
+      "level": "agent",
+      "capability": "plugins",
+      "entry": { "kind": "agent" },
+      "roles": ["admin"]
+    },
+    {
+      "id": "agent_settings",
+      "title": "agent_settings",
+      "module": "agents",
+      "level": "agent",
+      "capability": "settings",
+      "entry": { "kind": "agent" },
+      "roles": ["admin"],
+      "note": "Always last. Tabs come from the adapter's settings descriptor (ADR 0002)."
+    },
+    {
+      "id": "global_agent",
+      "title": "global_agent",
+      "module": "sessions",
+      "level": "app",
+      "entry": { "kind": "secondary-only", "reachedFrom": ["search"] },
+      "roles": ["member"],
+      "note": "No menu entry; reached from search results and the pending-actions bar."
+    }
+  ],
+  "rail": ["new_chat", "search", "device_connections", "agent_manager", "models", "knowledge"],
+  "segments": ["chat", "rooms", "board", "schedules", "history"],
+  "footer": ["settings"],
+  "settingsTabs": [
+    "account",
+    "users",
+    "webhooks",
+    "display",
+    "notifications",
+    "privacy",
+    "this_device",
+    "about"
+  ],
+  "settingsTools": ["logs", "usage", "performance", "theme", "workspaces", "updates", "plugins"],
+  "agentLevel": [
+    "agent_skills",
+    "agent_mcp",
+    "agent_memory",
+    "agent_jobs",
+    "agent_channels",
+    "agent_plugins",
+    "agent_settings"
+  ],
+  "secondaryEntries": {
+    "chat": ["history", "search"],
+    "global_agent": ["search"]
+  },
+  "footerChips": {
+    "$comment": "Not destinations: they switch state in place and never navigate.",
+    "workspace": "Switches X-Hub-Profile and refetches (ADR 0005).",
+    "model": "Default model for new sessions.",
+    "language": "UI language (ar/en); content direction is per message.",
+    "theme": "Local preference mirrored by the Theme tool."
+  }
+}

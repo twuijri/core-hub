@@ -1,0 +1,25 @@
+# One-box install of Core Hub. Copy .env.example to .env, set HUB_ADMIN_PASSWORD, then:
+#   docker compose up -d
+# Upgrades replace only the image; /data (SQLite + secrets) lives in the named volume.
+services:
+  hub:
+    image: ghcr.io/twuijri/corehub:latest
+    build:
+      context: .
+      dockerfile: packages/server/Dockerfile
+    container_name: corehub
+    restart: unless-stopped
+    ports:
+      - '${HUB_PORT:-8080}:8080'
+    environment:
+      DATA_DIR: /data
+      PORT: '8080'
+      # First boot only: creates the owner account, then ignored.
+      HUB_ADMIN_PASSWORD: ${HUB_ADMIN_PASSWORD:?set HUB_ADMIN_PASSWORD in .env}
+      # Optional: shared installs on PostgreSQL instead of the SQLite file under /data.
+      # DATABASE_URL: postgres://hub:password@db:5432/hub
+    volumes:
+      - hub-data:/data
+
+volumes:
+  hub-data:

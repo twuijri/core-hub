@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/devices/notice.updated.schema.json",
+  "title": "/rt/devices · notice.updated",
+  "description": "Read state changed on another client. User-level. Emitted by: notify module (read/unread, mark-all).",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "notice.updated"
+    },
+    "namespace": {
+      "const": "/rt/devices"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["notice", "unread_count"],
+      "properties": {
+        "notice": {
+          "$ref": "#/$defs/Notice"
+        },
+        "unread_count": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "notice.updated",
+      "namespace": "/rt/devices",
+      "profile": null,
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "notice": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0NT",
+          "user_id": "01J8QK3ZR2W7M5N4P6T8V9X0HM",
+          "profile": "work",
+          "kind": "run_completed",
+          "title": "انتهى الوكيل من الرد",
+          "body": "خطة إطلاق التطبيق",
+          "resource": {
+            "kind": "session",
+            "id": "01J8QK3ZR2W7M5N4P6T8V9X0YA"
+          },
+          "read_at": "2026-09-21T13:10:00Z",
+          "created_at": "2026-09-21T10:15:40Z"
+        },
+        "unread_count": 2
+      }
+    }
+  ],
+  "$defs": {
+    "Notice": {
+      "type": "object",
+      "required": [
+        "id",
+        "user_id",
+        "profile",
+        "kind",
+        "title",
+        "body",
+        "resource",
+        "read_at",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "user_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "profile": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ProfileSlug"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/NoticeKind"
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": ["string", "null"]
+        },
+        "resource": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ResourceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What to open when tapped."
+        },
+        "read_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "NoticeKind": {
+      "type": "string",
+      "enum": [
+        "run_completed",
+        "approval_requested",
+        "room_mention",
+        "task_moved",
+        "schedule_failed",
+        "update_available",
+        "system"
+      ]
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "ResourceRef": {
+      "type": "object",
+      "description": "Reference to the entity a job or event is about.",
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "agent",
+            "session",
+            "run",
+            "message",
+            "room",
+            "seat",
+            "project",
+            "task",
+            "subtask",
+            "worktree",
+            "schedule",
+            "schedule_run",
+            "workflow",
+            "workflow_run",
+            "step",
+            "provider",
+            "device",
+            "device_request",
+            "webhook",
+            "approval",
+            "notice"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        }
+      }
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}

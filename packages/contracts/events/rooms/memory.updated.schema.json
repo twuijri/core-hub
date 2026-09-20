@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/rooms/memory.updated.schema.json",
+  "title": "/rt/rooms · memory.updated",
+  "description": "The rolling summary changed. Members. Emitted by: rooms module (summarizer job, manual edit).",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "memory.updated"
+    },
+    "namespace": {
+      "const": "/rt/rooms"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["room_id", "memory"],
+      "properties": {
+        "room_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "memory": {
+          "$ref": "#/$defs/RoomMemory"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "memory.updated",
+      "namespace": "/rt/rooms",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "room_id": "01J8QK3ZR2W7M5N4P6T8V9X0RM",
+        "memory": {
+          "summary": "اتفق الفريق على إطلاق تجريبي في أكتوبر.",
+          "status": "idle",
+          "summarized_turn_count": 40,
+          "error": null,
+          "updated_at": "2026-09-21T09:50:00Z"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "RoomMemory": {
+      "type": "object",
+      "required": ["summary", "status", "summarized_turn_count", "error", "updated_at"],
+      "properties": {
+        "summary": {
+          "type": ["string", "null"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["idle", "summarizing", "error"]
+        },
+        "summarized_turn_count": {
+          "type": "integer"
+        },
+        "error": {
+          "type": ["string", "null"]
+        },
+        "updated_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}

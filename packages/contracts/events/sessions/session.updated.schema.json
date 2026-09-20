@@ -1,0 +1,445 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/sessions/session.updated.schema.json",
+  "title": "/rt/sessions · session.updated",
+  "description": "Any field of a session changed (title, pinned, archived, category, model, status, usage). Profile-wide. Emitted by: sessions module (patch, bulk patch, title generation, model change, status change).",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "session.updated"
+    },
+    "namespace": {
+      "const": "/rt/sessions"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["session"],
+      "properties": {
+        "session": {
+          "$ref": "#/$defs/Session"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "session.updated",
+      "namespace": "/rt/sessions",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "session": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0YA",
+          "profile": "work",
+          "owner_id": "01J8QK3ZR2W7M5N4P6T8V9X0HM",
+          "created_at": "2026-09-21T09:00:00Z",
+          "updated_at": "2026-09-21T10:15:04Z",
+          "agent_id": "01J8QK3ZR2W7M5N4P6T8V9X0AG",
+          "title": "خطة إطلاق التطبيق",
+          "source": "chat",
+          "origin": null,
+          "channel": null,
+          "model": "claude-sonnet-4-5",
+          "provider": "anthropic",
+          "reasoning_effort": "medium",
+          "working_dir": "/home/agent/projects/corehub",
+          "pinned": true,
+          "archived": false,
+          "category_id": null,
+          "preview": "إليك الخطة في ثلاث مراحل…",
+          "message_count": 14,
+          "usage": null,
+          "context": {
+            "used_tokens": 45000,
+            "window_tokens": 256000
+          },
+          "status": "running",
+          "active_run_id": "01J8QK3ZR2W7M5N4P6T8V9X0RN",
+          "parent_session_id": null,
+          "notify": true,
+          "last_message_at": "2026-09-21T10:15:04Z",
+          "match": null
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "ContextUsage": {
+      "type": "object",
+      "required": ["used_tokens", "window_tokens"],
+      "properties": {
+        "used_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "window_tokens": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "`null` when the model's window is unknown."
+        }
+      }
+    },
+    "Money": {
+      "type": "object",
+      "description": "Decimal amount as a string plus ISO-4217 currency.",
+      "required": ["amount", "currency"],
+      "properties": {
+        "amount": {
+          "type": "string",
+          "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3
+        }
+      },
+      "examples": [
+        {
+          "amount": "0.0123",
+          "currency": "USD"
+        }
+      ]
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "ReasoningEffort": {
+      "type": "string",
+      "enum": ["none", "minimal", "low", "medium", "high", "max"]
+    },
+    "ResourceRef": {
+      "type": "object",
+      "description": "Reference to the entity a job or event is about.",
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "agent",
+            "session",
+            "run",
+            "message",
+            "room",
+            "seat",
+            "project",
+            "task",
+            "subtask",
+            "worktree",
+            "schedule",
+            "schedule_run",
+            "workflow",
+            "workflow_run",
+            "step",
+            "provider",
+            "device",
+            "device_request",
+            "webhook",
+            "approval",
+            "notice"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        }
+      }
+    },
+    "Scoped": {
+      "type": "object",
+      "description": "Fields every row a client can show carries (ARCHITECTURE §Data ownership).",
+      "required": ["id", "profile", "owner_id", "created_at", "updated_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "owner_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Session": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "agent_id",
+            "title",
+            "source",
+            "origin",
+            "channel",
+            "model",
+            "provider",
+            "reasoning_effort",
+            "working_dir",
+            "pinned",
+            "archived",
+            "category_id",
+            "preview",
+            "message_count",
+            "usage",
+            "context",
+            "status",
+            "active_run_id",
+            "parent_session_id",
+            "notify",
+            "last_message_at",
+            "match"
+          ],
+          "properties": {
+            "agent_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "title": {
+              "type": ["string", "null"],
+              "maxLength": 200,
+              "description": "`null` until the user or the server names it; clients show \"New chat\"."
+            },
+            "source": {
+              "$ref": "#/$defs/SessionSource"
+            },
+            "origin": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ResourceRef"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The room, task, schedule or workflow run this session serves."
+            },
+            "channel": {
+              "type": ["string", "null"],
+              "description": "Messaging platform slug when `source = channel` (e.g. `telegram`)."
+            },
+            "model": {
+              "type": ["string", "null"]
+            },
+            "provider": {
+              "type": ["string", "null"]
+            },
+            "reasoning_effort": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ReasoningEffort"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "working_dir": {
+              "type": ["string", "null"],
+              "description": "Absolute path on the hub host the agent works in."
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "archived": {
+              "type": "boolean"
+            },
+            "category_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "preview": {
+              "type": ["string", "null"],
+              "maxLength": 300
+            },
+            "message_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "usage": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Usage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "context": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ContextUsage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "status": {
+              "$ref": "#/$defs/SessionStatus"
+            },
+            "active_run_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "parent_session_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "notify": {
+              "type": "boolean",
+              "description": "Push a notice to the user's devices when a run in this session finishes."
+            },
+            "last_message_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "match": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/SessionMatch"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "SessionMatch": {
+      "type": "object",
+      "description": "Present only on search results.",
+      "required": ["message_id", "snippet"],
+      "properties": {
+        "message_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "snippet": {
+          "type": "string"
+        }
+      }
+    },
+    "SessionSource": {
+      "type": "string",
+      "description": "Where a session came from. `channel` sessions carry the platform in `channel`.",
+      "enum": [
+        "chat",
+        "global_agent",
+        "room",
+        "task",
+        "schedule",
+        "workflow",
+        "channel",
+        "cli",
+        "api"
+      ]
+    },
+    "SessionStatus": {
+      "type": "string",
+      "enum": ["idle", "running", "waiting"],
+      "description": "`waiting` means a run is blocked on an approval or question."
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    },
+    "Usage": {
+      "type": "object",
+      "required": ["input_tokens", "output_tokens", "cost"],
+      "properties": {
+        "input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cost": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Money"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

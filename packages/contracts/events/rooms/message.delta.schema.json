@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/rooms/message.delta.schema.json",
+  "title": "/rt/rooms · message.delta",
+  "description": "Same payload as `/rt/sessions`; `message.room_id` / `run.room_id` and `seat_id` are set. Members of the room receive it without subscribing to seat sessions. Emitted by: sessions module, re-emitted to the room.",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "message.delta"
+    },
+    "namespace": {
+      "const": "/rt/rooms"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["session_id", "message_id", "run_id", "delta"],
+      "properties": {
+        "session_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "message_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "run_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "delta": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "message.delta",
+      "namespace": "/rt/rooms",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "session_id": "01J8QK3ZR2W7M5N4P6T8V9X0YA",
+        "message_id": "01J8QK3ZR2W7M5N4P6T8V9X0MB",
+        "run_id": "01J8QK3ZR2W7M5N4P6T8V9X0RN",
+        "delta": "سأشغّل "
+      }
+    }
+  ],
+  "$defs": {
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}

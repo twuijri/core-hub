@@ -1,0 +1,347 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/rooms/approval.requested.schema.json",
+  "title": "/rt/rooms · approval.requested",
+  "description": "Same payload as `/rt/sessions`; `message.room_id` / `run.room_id` and `seat_id` are set. Members of the room receive it without subscribing to seat sessions. Emitted by: sessions module, re-emitted to the room.",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "approval.requested"
+    },
+    "namespace": {
+      "const": "/rt/rooms"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["approval"],
+      "properties": {
+        "approval": {
+          "$ref": "#/$defs/Approval"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "approval.requested",
+      "namespace": "/rt/rooms",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "approval": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0AP",
+          "profile": "work",
+          "owner_id": "01J8QK3ZR2W7M5N4P6T8V9X0HM",
+          "created_at": "2026-09-21T10:15:04Z",
+          "updated_at": "2026-09-21T10:15:04Z",
+          "kind": "tool_call",
+          "status": "pending",
+          "session_id": "01J8QK3ZR2W7M5N4P6T8V9X0YA",
+          "run_id": "01J8QK3ZR2W7M5N4P6T8V9X0RN",
+          "message_id": "01J8QK3ZR2W7M5N4P6T8V9X0MB",
+          "room_id": "01J8QK3ZR2W7M5N4P6T8V9X0RM",
+          "workflow_run_id": null,
+          "node_id": null,
+          "agent": {
+            "id": "01J8QK3ZR2W7M5N4P6T8V9X0AG",
+            "name": "Hermes"
+          },
+          "title": "تنفيذ أمر",
+          "description": "يريد الوكيل تشغيل الأمر التالي",
+          "command": "pnpm test --filter server",
+          "choices": [
+            {
+              "value": "approve_once",
+              "label": "مرة واحدة"
+            },
+            {
+              "value": "deny",
+              "label": "رفض"
+            }
+          ],
+          "allow_always": true,
+          "answer_mode": "choice",
+          "response": null,
+          "expires_at": "2026-09-21T10:20:04Z"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "AgentRef": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "Approval": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "description": "A decision the agent is waiting for — a tool approval, a write approval, a question, a plan, or a workflow step gate.",
+          "required": [
+            "kind",
+            "status",
+            "session_id",
+            "run_id",
+            "message_id",
+            "room_id",
+            "workflow_run_id",
+            "node_id",
+            "agent",
+            "title",
+            "description",
+            "command",
+            "choices",
+            "allow_always",
+            "answer_mode",
+            "response",
+            "expires_at"
+          ],
+          "properties": {
+            "kind": {
+              "$ref": "#/$defs/ApprovalKind"
+            },
+            "status": {
+              "$ref": "#/$defs/ApprovalStatus"
+            },
+            "session_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "run_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "message_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "room_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "workflow_run_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "node_id": {
+              "type": ["string", "null"]
+            },
+            "agent": {
+              "$ref": "#/$defs/AgentRef"
+            },
+            "title": {
+              "type": "string"
+            },
+            "description": {
+              "type": ["string", "null"]
+            },
+            "command": {
+              "type": ["string", "null"],
+              "description": "The exact command or write the agent wants to perform."
+            },
+            "choices": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Choice"
+              }
+            },
+            "allow_always": {
+              "type": "boolean"
+            },
+            "answer_mode": {
+              "type": "string",
+              "enum": ["choice", "text", "both"]
+            },
+            "response": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ApprovalResponseRecord"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "expires_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ApprovalDecision": {
+      "type": "string",
+      "enum": ["approve_once", "approve_session", "approve_always", "deny"]
+    },
+    "ApprovalKind": {
+      "type": "string",
+      "enum": ["tool_call", "memory_write", "skill_write", "question", "plan", "workflow_step"]
+    },
+    "ApprovalResponse": {
+      "type": "object",
+      "description": "`decision` for approvals; `answer` (free text or a choice value) for questions; both allowed.",
+      "properties": {
+        "decision": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ApprovalDecision"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "answer": {
+          "type": ["string", "null"],
+          "maxLength": 4000
+        }
+      }
+    },
+    "ApprovalResponseRecord": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ApprovalResponse"
+        },
+        {
+          "type": "object",
+          "required": ["responded_by", "responded_at"],
+          "properties": {
+            "responded_by": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "responded_at": {
+              "$ref": "#/$defs/Timestamp"
+            }
+          }
+        }
+      ]
+    },
+    "ApprovalStatus": {
+      "type": "string",
+      "enum": ["pending", "approved", "denied", "answered", "expired", "cancelled"]
+    },
+    "Choice": {
+      "type": "object",
+      "required": ["value", "label"],
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "Scoped": {
+      "type": "object",
+      "description": "Fields every row a client can show carries (ARCHITECTURE §Data ownership).",
+      "required": ["id", "profile", "owner_id", "created_at", "updated_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "owner_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}

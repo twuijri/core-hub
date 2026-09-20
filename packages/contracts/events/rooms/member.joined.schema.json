@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/rooms/member.joined.schema.json",
+  "title": "/rt/rooms · member.joined",
+  "description": "A person joined. Members. Emitted by: rooms module.",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "member.joined"
+    },
+    "namespace": {
+      "const": "/rt/rooms"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["room_id", "member"],
+      "properties": {
+        "room_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "member": {
+          "$ref": "#/$defs/Member"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "member.joined",
+      "namespace": "/rt/rooms",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "room_id": "01J8QK3ZR2W7M5N4P6T8V9X0RM",
+        "member": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0MM",
+          "room_id": "01J8QK3ZR2W7M5N4P6T8V9X0RM",
+          "user_id": "01J8QK3ZR2W7M5N4P6T8V9X0H2",
+          "name": "سارة",
+          "avatar": {
+            "kind": "generated",
+            "url": null,
+            "seed": "sara"
+          },
+          "role": "member",
+          "online": true,
+          "joined_at": "2026-09-21T12:00:00Z"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "Avatar": {
+      "type": "object",
+      "description": "A picture for a person, agent or profile. `generated` avatars are drawn by the client from `seed`.",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["image", "generated"]
+        },
+        "url": {
+          "type": ["string", "null"],
+          "description": "Fetchable with the bearer token when `kind = image`."
+        },
+        "seed": {
+          "type": ["string", "null"],
+          "description": "Deterministic seed when `kind = generated`."
+        }
+      },
+      "examples": [
+        {
+          "kind": "generated",
+          "url": null,
+          "seed": "work"
+        }
+      ]
+    },
+    "Member": {
+      "type": "object",
+      "required": ["id", "room_id", "user_id", "name", "avatar", "role", "online", "joined_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "room_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "user_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "avatar": {
+          "$ref": "#/$defs/Avatar"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["owner", "manager", "member"]
+        },
+        "online": {
+          "type": "boolean"
+        },
+        "joined_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}

@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/schedules/schedule_run.started.schema.json",
+  "title": "/rt/schedules · schedule_run.started",
+  "description": "History entry state. Profile-wide. Emitted by: schedules module (job runner).",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "schedule_run.started"
+    },
+    "namespace": {
+      "const": "/rt/schedules"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["schedule_run"],
+      "properties": {
+        "schedule_run": {
+          "$ref": "#/$defs/ScheduleRun"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "schedule_run.started",
+      "namespace": "/rt/schedules",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "schedule_run": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0SR",
+          "schedule_id": "01J8QK3ZR2W7M5N4P6T8V9X0SC",
+          "job_id": "01J8QK3ZR2W7M5N4P6T8V9X0JX",
+          "run_id": "01J8QK3ZR2W7M5N4P6T8V9X0RT",
+          "session_id": "01J8QK3ZR2W7M5N4P6T8V9X0YF",
+          "workflow_run_id": null,
+          "status": "running",
+          "trigger": "schedule",
+          "output_preview": "أُنجز أمس: تبويب الحساب…",
+          "output": null,
+          "output_size_bytes": 1830,
+          "error": null,
+          "delivery_status": "delivered",
+          "delivery_error": null,
+          "started_at": "2026-09-21T06:00:00Z",
+          "finished_at": "2026-09-21T06:00:41Z"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "JobStatus": {
+      "type": "string",
+      "enum": ["queued", "running", "succeeded", "failed", "cancelled"]
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "ScheduleRun": {
+      "type": "object",
+      "required": [
+        "id",
+        "schedule_id",
+        "job_id",
+        "run_id",
+        "session_id",
+        "workflow_run_id",
+        "status",
+        "trigger",
+        "output_preview",
+        "output",
+        "output_size_bytes",
+        "error",
+        "delivery_status",
+        "delivery_error",
+        "started_at",
+        "finished_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "schedule_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "job_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "run_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "session_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "workflow_run_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/JobStatus"
+        },
+        "trigger": {
+          "type": "string",
+          "enum": ["schedule", "manual"]
+        },
+        "output_preview": {
+          "type": ["string", "null"]
+        },
+        "output": {
+          "type": ["string", "null"],
+          "description": "Full text; only on the single-run read."
+        },
+        "output_size_bytes": {
+          "type": "integer"
+        },
+        "error": {
+          "type": ["string", "null"]
+        },
+        "delivery_status": {
+          "type": "string",
+          "enum": ["none", "pending", "delivered", "failed"]
+        },
+        "delivery_error": {
+          "type": ["string", "null"]
+        },
+        "started_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finished_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}

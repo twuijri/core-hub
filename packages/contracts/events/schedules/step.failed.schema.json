@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/schedules/step.failed.schema.json",
+  "title": "/rt/schedules · step.failed",
+  "description": "A node failed or was cancelled/rejected. Emitted by: schedules module (workflow engine).",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "step.failed"
+    },
+    "namespace": {
+      "const": "/rt/schedules"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["workflow_run_id", "workflow_id", "step"],
+      "properties": {
+        "workflow_run_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "workflow_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "step": {
+          "$ref": "#/$defs/WorkflowStep"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "step.failed",
+      "namespace": "/rt/schedules",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "workflow_run_id": "01J8QK3ZR2W7M5N4P6T8V9X0WR",
+        "workflow_id": "01J8QK3ZR2W7M5N4P6T8V9X0WF",
+        "step": {
+          "node_id": "review",
+          "attempt": 1,
+          "status": "failed",
+          "session_id": "01J8QK3ZR2W7M5N4P6T8V9X0YG",
+          "run_id": "01J8QK3ZR2W7M5N4P6T8V9X0RV",
+          "approval_id": null,
+          "error": null,
+          "started_at": "2026-09-21T09:00:01Z",
+          "finished_at": "2026-09-21T09:04:00Z"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    },
+    "WorkflowStep": {
+      "type": "object",
+      "required": [
+        "node_id",
+        "attempt",
+        "status",
+        "session_id",
+        "run_id",
+        "approval_id",
+        "error",
+        "started_at",
+        "finished_at"
+      ],
+      "properties": {
+        "node_id": {
+          "type": "string"
+        },
+        "attempt": {
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/WorkflowStepStatus"
+        },
+        "session_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The session where the step's agent worked; its output is that session's last assistant message."
+        },
+        "run_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "approval_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "type": ["string", "null"]
+        },
+        "started_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finished_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "WorkflowStepStatus": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "queued",
+        "running",
+        "waiting_approval",
+        "succeeded",
+        "failed",
+        "skipped",
+        "cancelled",
+        "rejected"
+      ]
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "name": "@corehub/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Core Hub API contract: OpenAPI document, realtime event schemas, and the generated clients.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "openapi.yaml",
+    "events"
+  ],
+  "scripts": {
+    "lint": "node scripts/lint.mjs",
+    "generate": "pnpm generate:ts && pnpm generate:native",
+    "generate:ts": "node scripts/generate-ts.mjs",
+    "generate:native": "node scripts/generate-native.mjs",
+    "check-clients": "node scripts/check-clients.mjs",
+    "typecheck": "pnpm generate:ts && tsc --noEmit -p tsconfig.json",
+    "build": "pnpm generate:ts && tsc -p tsconfig.json",
+    "test": "pnpm generate:ts && vitest run"
+  },
+  "devDependencies": {
+    "@openapitools/openapi-generator-cli": "^2.41.0",
+    "@redocly/cli": "^2.53.3",
+    "@types/node": "^26.6.2",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
+  }
+}

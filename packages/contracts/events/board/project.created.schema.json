@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/board/project.created.schema.json",
+  "title": "/rt/board · project.created",
+  "description": "Profile-wide. Emitted by: board module.",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "project.created"
+    },
+    "namespace": {
+      "const": "/rt/board"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["project"],
+      "properties": {
+        "project": {
+          "$ref": "#/$defs/Project"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "project.created",
+      "namespace": "/rt/board",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "project": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0PJ",
+          "profile": "work",
+          "owner_id": "01J8QK3ZR2W7M5N4P6T8V9X0HM",
+          "created_at": "2026-09-10T00:00:00Z",
+          "updated_at": "2026-09-21T12:20:00Z",
+          "name": "Core Hub",
+          "description": null,
+          "status": "active",
+          "color": "#4a90d9",
+          "repo_url": null,
+          "working_dir": "/home/agent/projects/corehub",
+          "default_branch": "main",
+          "default_agent_id": null,
+          "report_room_id": null,
+          "auto_dispatch": true,
+          "counts": {
+            "total": 12,
+            "by_status": {
+              "todo": 3
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "Project": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "description",
+            "status",
+            "color",
+            "repo_url",
+            "working_dir",
+            "default_branch",
+            "default_agent_id",
+            "report_room_id",
+            "auto_dispatch",
+            "counts"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "description": {
+              "type": ["string", "null"]
+            },
+            "status": {
+              "$ref": "#/$defs/ProjectStatus"
+            },
+            "color": {
+              "type": ["string", "null"],
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "repo_url": {
+              "type": ["string", "null"]
+            },
+            "working_dir": {
+              "type": ["string", "null"],
+              "description": "Repository checkout on the hub host; worktrees are created beside it."
+            },
+            "default_branch": {
+              "type": ["string", "null"]
+            },
+            "default_agent_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "report_room_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Room where assigned agents post progress."
+            },
+            "auto_dispatch": {
+              "type": "boolean",
+              "description": "Assign `ready` tasks automatically (see `/board/dispatch`)."
+            },
+            "counts": {
+              "$ref": "#/$defs/StatusCounts"
+            }
+          }
+        }
+      ]
+    },
+    "ProjectStatus": {
+      "type": "string",
+      "enum": ["active", "paused", "archived"]
+    },
+    "Scoped": {
+      "type": "object",
+      "description": "Fields every row a client can show carries (ARCHITECTURE §Data ownership).",
+      "required": ["id", "profile", "owner_id", "created_at", "updated_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "owner_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "StatusCounts": {
+      "type": "object",
+      "required": ["total", "by_status"],
+      "properties": {
+        "total": {
+          "type": "integer"
+        },
+        "by_status": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}

@@ -1,0 +1,7954 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/common.schema.json",
+  "title": "Core Hub realtime — shared definitions",
+  "type": "object",
+  "description": "Entity shapes shared by every event payload. GENERATED from packages/contracts/openapi.yaml components.schemas by `pnpm contracts:generate` (rewriting #/components/schemas/X to #/$defs/X); do not edit by hand. Also defines the event envelope.",
+  "$defs": {
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Locale": {
+      "type": "string",
+      "enum": ["ar", "en"],
+      "description": "UI language. Content direction is decided per string by the client, never by this value."
+    },
+    "Money": {
+      "type": "object",
+      "description": "Decimal amount as a string plus ISO-4217 currency.",
+      "required": ["amount", "currency"],
+      "properties": {
+        "amount": {
+          "type": "string",
+          "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3
+        }
+      },
+      "examples": [
+        {
+          "amount": "0.0123",
+          "currency": "USD"
+        }
+      ]
+    },
+    "Error": {
+      "type": "object",
+      "description": "The one error envelope. Clients branch on `code`, show `error` verbatim.",
+      "required": ["error", "code"],
+      "properties": {
+        "error": {
+          "type": "string",
+          "description": "Human sentence in the request language (`Accept-Language`)."
+        },
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "details": {
+          "type": "object",
+          "description": "Code-specific structured details (see `docs/contracts/README.md` §4).",
+          "additionalProperties": true
+        }
+      },
+      "examples": [
+        {
+          "error": "الجلسة غير موجودة",
+          "code": "not_found",
+          "details": {
+            "resource": "session",
+            "id": "01J8QK3ZR2W7M5N4P6T8V9X0YA"
+          }
+        }
+      ]
+    },
+    "ErrorCode": {
+      "type": "string",
+      "description": "Fixed list. Adding a code is a contract change.",
+      "enum": [
+        "bad_request",
+        "validation_failed",
+        "profile_required",
+        "unauthorized",
+        "token_expired",
+        "forbidden",
+        "not_found",
+        "profile_not_found",
+        "conflict",
+        "state_invalid",
+        "already_running",
+        "payload_too_large",
+        "unsupported_media_type",
+        "agent_unavailable",
+        "agent_error",
+        "rate_limited",
+        "internal",
+        "not_implemented",
+        "service_unavailable"
+      ]
+    },
+    "Scoped": {
+      "type": "object",
+      "description": "Fields every row a client can show carries (ARCHITECTURE §Data ownership).",
+      "required": ["id", "profile", "owner_id", "created_at", "updated_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "owner_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Page": {
+      "type": "object",
+      "description": "Envelope of every list. `items` is typed per operation.",
+      "required": ["items", "next_cursor"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {}
+        },
+        "next_cursor": {
+          "type": ["string", "null"],
+          "description": "Pass as `cursor` to fetch the next page; `null` when there is none."
+        }
+      }
+    },
+    "Avatar": {
+      "type": "object",
+      "description": "A picture for a person, agent or profile. `generated` avatars are drawn by the client from `seed`.",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["image", "generated"]
+        },
+        "url": {
+          "type": ["string", "null"],
+          "description": "Fetchable with the bearer token when `kind = image`."
+        },
+        "seed": {
+          "type": ["string", "null"],
+          "description": "Deterministic seed when `kind = generated`."
+        }
+      },
+      "examples": [
+        {
+          "kind": "generated",
+          "url": null,
+          "seed": "work"
+        }
+      ]
+    },
+    "AvatarInput": {
+      "type": "object",
+      "description": "Set an avatar. `image` carries a data URL (≤ 512 KB); `generated` resets to the seed; `null` resets to default.",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["image", "generated"]
+        },
+        "data_url": {
+          "type": "string",
+          "description": "`data:image/png;base64,…` when `kind = image`."
+        },
+        "seed": {
+          "type": "string"
+        }
+      }
+    },
+    "LocalizedText": {
+      "type": "object",
+      "description": "A short text kept in both UI languages (release notes, notices generated by the server).",
+      "required": ["ar", "en"],
+      "properties": {
+        "ar": {
+          "type": "string"
+        },
+        "en": {
+          "type": "string"
+        }
+      },
+      "examples": [
+        {
+          "ar": "إصلاح انقطاع البث عند ضعف الشبكة",
+          "en": "Fix streaming drop on weak networks"
+        }
+      ]
+    },
+    "JobAccepted": {
+      "type": "object",
+      "description": "Body of every `202`. Operations add the ids of resources they created.",
+      "required": ["job_id"],
+      "properties": {
+        "job_id": {
+          "$ref": "#/$defs/Ulid"
+        }
+      },
+      "examples": [
+        {
+          "job_id": "01J8QK3ZR2W7M5N4P6T8V9X0JB"
+        }
+      ]
+    },
+    "Health": {
+      "type": "object",
+      "required": ["ok", "server_version", "uptime_seconds"],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "server_version": {
+          "type": "string"
+        },
+        "uptime_seconds": {
+          "type": "integer"
+        }
+      }
+    },
+    "Meta": {
+      "type": "object",
+      "required": [
+        "name",
+        "server_version",
+        "contract_version",
+        "api_versions",
+        "realtime_namespaces",
+        "locales",
+        "setup_required"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Display name the owner set (defaults to \"Core Hub\")."
+        },
+        "server_version": {
+          "type": "string"
+        },
+        "contract_version": {
+          "type": "string",
+          "description": "The `info.version` of the OpenAPI document the server implements."
+        },
+        "api_versions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "realtime_namespaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "locales": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Locale"
+          }
+        },
+        "setup_required": {
+          "type": "boolean",
+          "description": "True until the owner account exists (first boot)."
+        }
+      }
+    },
+    "JobKind": {
+      "type": "string",
+      "enum": [
+        "run",
+        "install",
+        "update",
+        "uninstall",
+        "restart",
+        "discover",
+        "refresh_catalogue",
+        "worktree",
+        "webhook_test",
+        "device_request",
+        "export",
+        "schedule_run",
+        "workflow_run"
+      ]
+    },
+    "JobStatus": {
+      "type": "string",
+      "enum": ["queued", "running", "succeeded", "failed", "cancelled"]
+    },
+    "JobProgress": {
+      "type": "object",
+      "required": ["percent", "message"],
+      "properties": {
+        "percent": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 100,
+          "description": "`null` when the work has no measurable progress (a run)."
+        },
+        "message": {
+          "type": ["string", "null"],
+          "description": "Human progress line in the requester's language."
+        }
+      }
+    },
+    "ResourceRef": {
+      "type": "object",
+      "description": "Reference to the entity a job or event is about.",
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "agent",
+            "session",
+            "run",
+            "message",
+            "room",
+            "seat",
+            "project",
+            "task",
+            "subtask",
+            "worktree",
+            "schedule",
+            "schedule_run",
+            "workflow",
+            "workflow_run",
+            "step",
+            "provider",
+            "device",
+            "device_request",
+            "webhook",
+            "approval",
+            "notice"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        }
+      }
+    },
+    "Job": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "status",
+            "progress",
+            "resource",
+            "result",
+            "error",
+            "started_at",
+            "finished_at"
+          ],
+          "properties": {
+            "kind": {
+              "$ref": "#/$defs/JobKind"
+            },
+            "status": {
+              "$ref": "#/$defs/JobStatus"
+            },
+            "progress": {
+              "$ref": "#/$defs/JobProgress"
+            },
+            "resource": {
+              "$ref": "#/$defs/ResourceRef"
+            },
+            "result": {
+              "type": ["object", "null"],
+              "description": "Kind-specific outcome (an install's `version`, an export's `attachment_id`).",
+              "additionalProperties": true
+            },
+            "error": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Error"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "started_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "finished_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Role": {
+      "type": "string",
+      "enum": ["owner", "admin", "member"]
+    },
+    "UserStatus": {
+      "type": "string",
+      "enum": ["active", "disabled"]
+    },
+    "User": {
+      "type": "object",
+      "required": [
+        "id",
+        "username",
+        "display_name",
+        "role",
+        "status",
+        "locale",
+        "avatar",
+        "profiles",
+        "default_profile",
+        "last_login_at",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "username": {
+          "type": "string",
+          "pattern": "^[a-z0-9._-]{2,40}$"
+        },
+        "display_name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        },
+        "status": {
+          "$ref": "#/$defs/UserStatus"
+        },
+        "locale": {
+          "$ref": "#/$defs/Locale"
+        },
+        "avatar": {
+          "$ref": "#/$defs/Avatar"
+        },
+        "profiles": {
+          "type": "array",
+          "description": "Slugs the user may enter. Owners and admins see every profile.",
+          "items": {
+            "$ref": "#/$defs/ProfileSlug"
+          }
+        },
+        "default_profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "last_login_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "LoginRequest": {
+      "type": "object",
+      "required": ["username", "password"],
+      "properties": {
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string",
+          "format": "password"
+        }
+      }
+    },
+    "RefreshRequest": {
+      "type": "object",
+      "required": ["refresh_token"],
+      "properties": {
+        "refresh_token": {
+          "type": "string"
+        }
+      }
+    },
+    "TokenPair": {
+      "type": "object",
+      "required": ["access_token", "refresh_token", "expires_in", "user"],
+      "properties": {
+        "access_token": {
+          "type": "string",
+          "description": "JWT, 15 minutes."
+        },
+        "refresh_token": {
+          "type": ["string", "null"],
+          "description": "Rotating; `null` when an app token was renewed instead."
+        },
+        "expires_in": {
+          "type": "integer",
+          "description": "Seconds until `access_token` expires."
+        },
+        "user": {
+          "$ref": "#/$defs/User"
+        }
+      }
+    },
+    "UserSelfPatch": {
+      "type": "object",
+      "properties": {
+        "display_name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "username": {
+          "type": "string",
+          "pattern": "^[a-z0-9._-]{2,40}$"
+        },
+        "current_password": {
+          "type": "string",
+          "format": "password",
+          "description": "Required when `username` changes."
+        },
+        "locale": {
+          "$ref": "#/$defs/Locale"
+        },
+        "avatar": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/AvatarInput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "default_profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        }
+      }
+    },
+    "PasswordChange": {
+      "type": "object",
+      "required": ["current_password", "new_password"],
+      "properties": {
+        "current_password": {
+          "type": "string",
+          "format": "password"
+        },
+        "new_password": {
+          "type": "string",
+          "format": "password",
+          "minLength": 8
+        }
+      }
+    },
+    "UserCreate": {
+      "type": "object",
+      "required": ["username", "password", "role"],
+      "properties": {
+        "username": {
+          "type": "string",
+          "pattern": "^[a-z0-9._-]{2,40}$"
+        },
+        "password": {
+          "type": "string",
+          "format": "password",
+          "minLength": 8
+        },
+        "display_name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "member"]
+        },
+        "profiles": {
+          "type": "array",
+          "description": "Empty means every profile.",
+          "items": {
+            "$ref": "#/$defs/ProfileSlug"
+          }
+        },
+        "default_profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "locale": {
+          "$ref": "#/$defs/Locale"
+        }
+      }
+    },
+    "UserAdminPatch": {
+      "type": "object",
+      "properties": {
+        "display_name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "member"]
+        },
+        "status": {
+          "$ref": "#/$defs/UserStatus"
+        },
+        "profiles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProfileSlug"
+          }
+        },
+        "default_profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "password": {
+          "type": "string",
+          "format": "password",
+          "minLength": 8
+        }
+      }
+    },
+    "Preferences": {
+      "type": "object",
+      "description": "Human-owned settings, global to the user (not per workspace).",
+      "required": [
+        "theme",
+        "locale",
+        "text_scale",
+        "link_target",
+        "busy_input_mode",
+        "streaming",
+        "compact",
+        "show_reasoning",
+        "show_tool_calls",
+        "show_cost",
+        "inline_diffs",
+        "sound_on_complete",
+        "notify_on_complete",
+        "notify_on_approval",
+        "reasoning_effort",
+        "voice"
+      ],
+      "properties": {
+        "theme": {
+          "type": "string",
+          "enum": ["system", "light", "dark"]
+        },
+        "locale": {
+          "$ref": "#/$defs/Locale"
+        },
+        "text_scale": {
+          "type": "number",
+          "minimum": 0.85,
+          "maximum": 1.45
+        },
+        "link_target": {
+          "type": "string",
+          "enum": ["in_app", "browser"]
+        },
+        "busy_input_mode": {
+          "type": "string",
+          "enum": ["queue", "next", "interrupt"],
+          "description": "What \"send\" does while a run is active (maps to `RunCreate.when`)."
+        },
+        "streaming": {
+          "type": "boolean"
+        },
+        "compact": {
+          "type": "boolean"
+        },
+        "show_reasoning": {
+          "type": "boolean"
+        },
+        "show_tool_calls": {
+          "type": "boolean"
+        },
+        "show_cost": {
+          "type": "boolean"
+        },
+        "inline_diffs": {
+          "type": "boolean"
+        },
+        "sound_on_complete": {
+          "type": "boolean"
+        },
+        "notify_on_complete": {
+          "type": "boolean"
+        },
+        "notify_on_approval": {
+          "type": "boolean"
+        },
+        "reasoning_effort": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ReasoningEffort"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Default for new sessions; `null` lets the agent decide."
+        },
+        "voice": {
+          "type": "object",
+          "required": ["input_mode", "dictation_language", "output_mode", "auto_speak"],
+          "properties": {
+            "input_mode": {
+              "type": "string",
+              "enum": ["device", "server"]
+            },
+            "dictation_language": {
+              "type": "string",
+              "description": "`auto`, `app` (follow the UI locale) or a BCP-47 tag."
+            },
+            "output_mode": {
+              "type": "string",
+              "enum": ["device", "server"]
+            },
+            "auto_speak": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "Lockout": {
+      "type": "object",
+      "required": ["ip", "kind", "failures", "locked_until"],
+      "properties": {
+        "ip": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["password", "token", "pairing"]
+        },
+        "failures": {
+          "type": "integer"
+        },
+        "locked_until": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "TokenScope": {
+      "type": "string",
+      "enum": ["read", "write", "device", "admin"]
+    },
+    "AppToken": {
+      "type": "object",
+      "required": ["id", "name", "scopes", "device_id", "last_used_at", "expires_at", "created_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TokenScope"
+          }
+        },
+        "device_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "last_used_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expires_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "AppTokenCreate": {
+      "type": "object",
+      "required": ["name", "scopes"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "scopes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/TokenScope"
+          }
+        },
+        "expires_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "AppTokenCreated": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/AppToken"
+        },
+        {
+          "type": "object",
+          "required": ["token"],
+          "properties": {
+            "token": {
+              "type": "string",
+              "description": "Shown exactly once."
+            }
+          }
+        }
+      ]
+    },
+    "PairingConnection": {
+      "type": "string",
+      "enum": ["lan", "relay"],
+      "description": "`lan` when the device reaches the hub directly; `relay` when it goes through the message relay."
+    },
+    "PairingCreate": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "$ref": "#/$defs/PairingConnection"
+        },
+        "ttl_seconds": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 900,
+          "default": 300
+        }
+      }
+    },
+    "Pairing": {
+      "type": "object",
+      "required": [
+        "id",
+        "status",
+        "code",
+        "connection",
+        "qr_payload",
+        "expires_at",
+        "device_id",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "claimed", "expired", "cancelled"]
+        },
+        "code": {
+          "type": "string",
+          "description": "Human-typeable one-time code."
+        },
+        "connection": {
+          "$ref": "#/$defs/PairingConnection"
+        },
+        "qr_payload": {
+          "type": "string",
+          "description": "JSON to encode in the QR: `{ type: \"corehub.pairing\", hub_url, pairing_id, code, expires_at }`."
+        },
+        "expires_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "device_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "PairingClaim": {
+      "type": "object",
+      "required": ["code", "device"],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "device": {
+          "$ref": "#/$defs/DeviceRegistration"
+        }
+      }
+    },
+    "PairingResult": {
+      "type": "object",
+      "required": ["app_token", "token_id", "expires_at", "device", "user", "server"],
+      "properties": {
+        "app_token": {
+          "type": "string"
+        },
+        "token_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "expires_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "device": {
+          "$ref": "#/$defs/Device"
+        },
+        "user": {
+          "$ref": "#/$defs/User"
+        },
+        "server": {
+          "$ref": "#/$defs/Meta"
+        }
+      }
+    },
+    "ModelRef": {
+      "type": "object",
+      "required": ["provider_id", "model"],
+      "properties": {
+        "provider_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "model": {
+          "type": "string"
+        }
+      }
+    },
+    "Profile": {
+      "type": "object",
+      "required": [
+        "id",
+        "slug",
+        "name",
+        "avatar",
+        "default_model",
+        "agent_count",
+        "session_count",
+        "owner_id",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "slug": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "avatar": {
+          "$ref": "#/$defs/Avatar"
+        },
+        "default_model": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ModelRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "agent_count": {
+          "type": "integer"
+        },
+        "session_count": {
+          "type": "integer"
+        },
+        "owner_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "ProfileCreate": {
+      "type": "object",
+      "required": ["slug", "name"],
+      "properties": {
+        "slug": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "clone_from": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ProfileSlug"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Copy agent settings, models and defaults from this profile (not sessions)."
+        }
+      }
+    },
+    "ProfilePatch": {
+      "type": "object",
+      "properties": {
+        "slug": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "avatar": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/AvatarInput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "default_model": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ModelRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ProfileSettings": {
+      "type": "object",
+      "required": ["proxy", "compression", "privacy", "appearance"],
+      "properties": {
+        "proxy": {
+          "type": "object",
+          "required": ["https_proxy", "http_proxy", "all_proxy", "no_proxy"],
+          "properties": {
+            "https_proxy": {
+              "type": ["string", "null"]
+            },
+            "http_proxy": {
+              "type": ["string", "null"]
+            },
+            "all_proxy": {
+              "type": ["string", "null"]
+            },
+            "no_proxy": {
+              "type": ["string", "null"]
+            }
+          }
+        },
+        "compression": {
+          "type": "object",
+          "description": "Context compression applied to long sessions.",
+          "required": ["enabled", "threshold", "target_ratio", "protect_first", "protect_last"],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "threshold": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "target_ratio": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "protect_first": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "protect_last": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "privacy": {
+          "type": "object",
+          "required": ["redact_pii"],
+          "properties": {
+            "redact_pii": {
+              "type": "boolean"
+            }
+          }
+        },
+        "appearance": {
+          "type": "object",
+          "description": "The server-side theme shown on the `Theme` screen.",
+          "required": ["font_size", "text_color", "accent_color", "background_attachment_id"],
+          "properties": {
+            "font_size": {
+              "type": "integer",
+              "minimum": 12,
+              "maximum": 20
+            },
+            "text_color": {
+              "type": ["string", "null"],
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "accent_color": {
+              "type": ["string", "null"],
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "background_attachment_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "An attachment uploaded with `purpose: background`."
+            }
+          }
+        }
+      }
+    },
+    "ProfileSettingsPatch": {
+      "type": "object",
+      "description": "Any subset of the sections; each section is merge-patched.",
+      "properties": {
+        "proxy": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "compression": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "privacy": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "appearance": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ProfileSettingsResult": {
+      "type": "object",
+      "required": ["settings", "restart_job_id"],
+      "properties": {
+        "settings": {
+          "$ref": "#/$defs/ProfileSettings"
+        },
+        "restart_job_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ProfileImport": {
+      "type": "object",
+      "required": ["attachment_id", "slug"],
+      "properties": {
+        "attachment_id": {
+          "$ref": "#/$defs/Ulid",
+          "description": "The archive, uploaded with `purpose: import`."
+        },
+        "slug": {
+          "$ref": "#/$defs/ProfileSlug"
+        }
+      }
+    },
+    "SessionSource": {
+      "type": "string",
+      "description": "Where a session came from. `channel` sessions carry the platform in `channel`.",
+      "enum": [
+        "chat",
+        "global_agent",
+        "room",
+        "task",
+        "schedule",
+        "workflow",
+        "channel",
+        "cli",
+        "api"
+      ]
+    },
+    "SessionStatus": {
+      "type": "string",
+      "enum": ["idle", "running", "waiting"],
+      "description": "`waiting` means a run is blocked on an approval or question."
+    },
+    "ReasoningEffort": {
+      "type": "string",
+      "enum": ["none", "minimal", "low", "medium", "high", "max"]
+    },
+    "Usage": {
+      "type": "object",
+      "required": ["input_tokens", "output_tokens", "cost"],
+      "properties": {
+        "input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cost": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Money"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ContextUsage": {
+      "type": "object",
+      "required": ["used_tokens", "window_tokens"],
+      "properties": {
+        "used_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "window_tokens": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "`null` when the model's window is unknown."
+        }
+      }
+    },
+    "SessionMatch": {
+      "type": "object",
+      "description": "Present only on search results.",
+      "required": ["message_id", "snippet"],
+      "properties": {
+        "message_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "snippet": {
+          "type": "string"
+        }
+      }
+    },
+    "Session": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "agent_id",
+            "title",
+            "source",
+            "origin",
+            "channel",
+            "model",
+            "provider",
+            "reasoning_effort",
+            "working_dir",
+            "pinned",
+            "archived",
+            "category_id",
+            "preview",
+            "message_count",
+            "usage",
+            "context",
+            "status",
+            "active_run_id",
+            "parent_session_id",
+            "notify",
+            "last_message_at",
+            "match"
+          ],
+          "properties": {
+            "agent_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "title": {
+              "type": ["string", "null"],
+              "maxLength": 200,
+              "description": "`null` until the user or the server names it; clients show \"New chat\"."
+            },
+            "source": {
+              "$ref": "#/$defs/SessionSource"
+            },
+            "origin": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ResourceRef"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The room, task, schedule or workflow run this session serves."
+            },
+            "channel": {
+              "type": ["string", "null"],
+              "description": "Messaging platform slug when `source = channel` (e.g. `telegram`)."
+            },
+            "model": {
+              "type": ["string", "null"]
+            },
+            "provider": {
+              "type": ["string", "null"]
+            },
+            "reasoning_effort": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ReasoningEffort"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "working_dir": {
+              "type": ["string", "null"],
+              "description": "Absolute path on the hub host the agent works in."
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "archived": {
+              "type": "boolean"
+            },
+            "category_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "preview": {
+              "type": ["string", "null"],
+              "maxLength": 300
+            },
+            "message_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "usage": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Usage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "context": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ContextUsage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "status": {
+              "$ref": "#/$defs/SessionStatus"
+            },
+            "active_run_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "parent_session_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "notify": {
+              "type": "boolean",
+              "description": "Push a notice to the user's devices when a run in this session finishes."
+            },
+            "last_message_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "match": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/SessionMatch"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "SessionDetail": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Session"
+        },
+        {
+          "type": "object",
+          "required": ["runs", "pending_approvals"],
+          "properties": {
+            "runs": {
+              "type": "array",
+              "description": "Active and queued runs, in execution order.",
+              "items": {
+                "$ref": "#/$defs/Run"
+              }
+            },
+            "pending_approvals": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Approval"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "SessionCreate": {
+      "type": "object",
+      "required": ["agent_id"],
+      "properties": {
+        "agent_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "title": {
+          "type": ["string", "null"],
+          "maxLength": 200
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "provider": {
+          "type": ["string", "null"]
+        },
+        "reasoning_effort": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ReasoningEffort"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "working_dir": {
+          "type": ["string", "null"]
+        },
+        "category_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "SessionPatch": {
+      "type": "object",
+      "description": "JSON merge-patch; every field optional, `null` clears.",
+      "properties": {
+        "title": {
+          "type": ["string", "null"],
+          "maxLength": 200
+        },
+        "pinned": {
+          "type": "boolean"
+        },
+        "archived": {
+          "type": "boolean"
+        },
+        "category_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "provider": {
+          "type": ["string", "null"]
+        },
+        "reasoning_effort": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ReasoningEffort"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "working_dir": {
+          "type": ["string", "null"]
+        },
+        "notify": {
+          "type": "boolean"
+        }
+      }
+    },
+    "SessionBulkUpdate": {
+      "type": "object",
+      "required": ["session_ids", "patch"],
+      "properties": {
+        "session_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/Ulid"
+          }
+        },
+        "patch": {
+          "type": "object",
+          "properties": {
+            "pinned": {
+              "type": "boolean"
+            },
+            "archived": {
+              "type": "boolean"
+            },
+            "category_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "SessionForkRequest": {
+      "type": "object",
+      "properties": {
+        "at_message_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Copy history up to and including this message; default the whole session."
+        },
+        "title": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "BulkResult": {
+      "type": "object",
+      "required": ["results"],
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "ok", "error"],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/Ulid"
+              },
+              "ok": {
+                "type": "boolean"
+              },
+              "error": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/Error"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "SessionCategory": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": ["name", "color", "position", "session_count"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 60
+            },
+            "color": {
+              "type": ["string", "null"],
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "position": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "session_count": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      ]
+    },
+    "SessionCategoryInput": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "color": {
+          "type": ["string", "null"],
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "position": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "Author": {
+      "type": "object",
+      "description": "Who wrote a message. Agents in rooms are identified by their seat, see `Message.seat_id`.",
+      "required": ["kind", "id", "name", "avatar"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["user", "agent", "system"]
+        },
+        "id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "avatar": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Avatar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ContentBlock": {
+      "description": "One block of message content. Attachments are referenced by id; bytes come from `url`.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TextBlock"
+        },
+        {
+          "$ref": "#/$defs/ImageBlock"
+        },
+        {
+          "$ref": "#/$defs/FileBlock"
+        },
+        {
+          "$ref": "#/$defs/AudioBlock"
+        },
+        {
+          "$ref": "#/$defs/LocationBlock"
+        }
+      ]
+    },
+    "TextBlock": {
+      "type": "object",
+      "required": ["type", "text"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["text"]
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "AttachmentBlockFields": {
+      "type": "object",
+      "required": ["attachment_id"],
+      "properties": {
+        "attachment_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "mime": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "url": {
+          "type": "string",
+          "description": "Filled by the server on read; ignored on write."
+        }
+      }
+    },
+    "ImageBlock": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/AttachmentBlockFields"
+        },
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["image"]
+            }
+          }
+        }
+      ]
+    },
+    "FileBlock": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/AttachmentBlockFields"
+        },
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["file"]
+            }
+          }
+        }
+      ]
+    },
+    "AudioBlock": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/AttachmentBlockFields"
+        },
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["audio"]
+            },
+            "duration_ms": {
+              "type": ["integer", "null"]
+            },
+            "transcript": {
+              "type": ["string", "null"],
+              "description": "Filled when the hub transcribed the note before sending it to the agent."
+            }
+          }
+        }
+      ]
+    },
+    "LocationBlock": {
+      "type": "object",
+      "required": ["type", "latitude", "longitude"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["location"]
+        },
+        "latitude": {
+          "type": "number"
+        },
+        "longitude": {
+          "type": "number"
+        },
+        "accuracy_m": {
+          "type": ["number", "null"]
+        },
+        "captured_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Reasoning": {
+      "type": "object",
+      "required": ["text", "duration_ms"],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "duration_ms": {
+          "type": ["integer", "null"]
+        }
+      }
+    },
+    "ToolCallStatus": {
+      "type": "string",
+      "enum": ["running", "succeeded", "failed", "interrupted", "awaiting_approval"]
+    },
+    "ToolCall": {
+      "type": "object",
+      "description": "One tool invocation inside an assistant message. Tool output lives here, not in a separate message.",
+      "required": [
+        "id",
+        "name",
+        "status",
+        "preview",
+        "arguments",
+        "output",
+        "output_truncated",
+        "duration_ms",
+        "subagent_id",
+        "started_at",
+        "finished_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ToolCallStatus"
+        },
+        "preview": {
+          "type": ["string", "null"],
+          "description": "One-line summary for the tool card (a command, a path)."
+        },
+        "arguments": {
+          "type": ["object", "null"],
+          "additionalProperties": true
+        },
+        "output": {
+          "type": ["string", "null"],
+          "description": "Truncated to 16 KB; `output_truncated` says so."
+        },
+        "output_truncated": {
+          "type": "boolean"
+        },
+        "duration_ms": {
+          "type": ["integer", "null"]
+        },
+        "subagent_id": {
+          "type": ["string", "null"],
+          "description": "Set when the call was made by a delegated subagent."
+        },
+        "started_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finished_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "MessageRole": {
+      "type": "string",
+      "enum": ["user", "assistant", "system", "command"],
+      "description": "`command` is a user message that starts with `/`; there is no `tool` role — tool output lives in `tool_calls`."
+    },
+    "MessageStatus": {
+      "type": "string",
+      "enum": ["complete", "streaming", "failed", "interrupted"]
+    },
+    "Mention": {
+      "type": "object",
+      "required": ["kind", "seat_id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["seat", "all"]
+        },
+        "seat_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Handoff": {
+      "type": "object",
+      "description": "Set on a room message that hands the turn to another seat.",
+      "required": ["to_seat_id", "chain_id", "depth"],
+      "properties": {
+        "to_seat_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "chain_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "Message": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "description": "The one message shape for sessions and rooms (see DECISIONS.md).",
+          "required": [
+            "session_id",
+            "room_id",
+            "seq",
+            "role",
+            "author",
+            "content",
+            "reasoning",
+            "tool_calls",
+            "run_id",
+            "status",
+            "mentions",
+            "handoff",
+            "usage",
+            "reply_to_message_id"
+          ],
+          "properties": {
+            "session_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "room_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "seat_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The room seat that wrote an agent message."
+            },
+            "seq": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Position in the session; gaps mean deleted messages."
+            },
+            "role": {
+              "$ref": "#/$defs/MessageRole"
+            },
+            "author": {
+              "$ref": "#/$defs/Author"
+            },
+            "content": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContentBlock"
+              }
+            },
+            "reasoning": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Reasoning"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "tool_calls": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ToolCall"
+              }
+            },
+            "run_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Stable across the user message, the assistant reply and its tool calls, so clients fold them into one run card."
+            },
+            "status": {
+              "$ref": "#/$defs/MessageStatus"
+            },
+            "mentions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Mention"
+              }
+            },
+            "handoff": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Handoff"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usage": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Usage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "reply_to_message_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "MessagePage": {
+      "type": "object",
+      "required": ["items", "has_more"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Message"
+          }
+        },
+        "has_more": {
+          "type": "boolean",
+          "description": "Whether messages older than `items[0]` exist."
+        }
+      }
+    },
+    "RunStatus": {
+      "type": "string",
+      "enum": ["queued", "running", "waiting", "succeeded", "failed", "cancelled"]
+    },
+    "RunTrigger": {
+      "type": "object",
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["user", "room", "task", "schedule", "workflow", "handoff", "api"]
+        },
+        "id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The user, seat, task, schedule, workflow run or chain that caused the run."
+        }
+      }
+    },
+    "Run": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "description": "One turn of an agent, executed as a job. Every run belongs to a session.",
+          "required": [
+            "session_id",
+            "room_id",
+            "seat_id",
+            "job_id",
+            "status",
+            "queue_position",
+            "trigger",
+            "input_message_id",
+            "output_message_id",
+            "model",
+            "provider",
+            "reasoning_effort",
+            "interrupted",
+            "error",
+            "usage",
+            "started_at",
+            "finished_at"
+          ],
+          "properties": {
+            "session_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "room_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "seat_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "job_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "status": {
+              "$ref": "#/$defs/RunStatus"
+            },
+            "queue_position": {
+              "type": ["integer", "null"],
+              "minimum": 1,
+              "description": "1-based position while `queued`."
+            },
+            "trigger": {
+              "$ref": "#/$defs/RunTrigger"
+            },
+            "input_message_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "output_message_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "model": {
+              "type": ["string", "null"]
+            },
+            "provider": {
+              "type": ["string", "null"]
+            },
+            "reasoning_effort": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ReasoningEffort"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "interrupted": {
+              "type": "boolean"
+            },
+            "error": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Error"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usage": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Usage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "started_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "finished_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "RunCreate": {
+      "type": "object",
+      "required": ["content"],
+      "properties": {
+        "content": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/ContentBlock"
+          }
+        },
+        "model": {
+          "type": ["string", "null"],
+          "description": "One-off override; the session's model is unchanged."
+        },
+        "provider": {
+          "type": ["string", "null"]
+        },
+        "reasoning_effort": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ReasoningEffort"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "when": {
+          "type": "string",
+          "enum": ["queue", "next", "interrupt"],
+          "default": "queue",
+          "description": "What to do if a run is active — append to the queue, jump the queue, or interrupt the active run with this message."
+        },
+        "reply_to_message_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "RunAccepted": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/JobAccepted"
+        },
+        {
+          "type": "object",
+          "required": ["run_id", "message_id", "queue_position"],
+          "properties": {
+            "run_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "message_id": {
+              "$ref": "#/$defs/Ulid",
+              "description": "The stored user message."
+            },
+            "queue_position": {
+              "type": ["integer", "null"]
+            }
+          }
+        }
+      ]
+    },
+    "ApprovalKind": {
+      "type": "string",
+      "enum": ["tool_call", "memory_write", "skill_write", "question", "plan", "workflow_step"]
+    },
+    "ApprovalStatus": {
+      "type": "string",
+      "enum": ["pending", "approved", "denied", "answered", "expired", "cancelled"]
+    },
+    "ApprovalDecision": {
+      "type": "string",
+      "enum": ["approve_once", "approve_session", "approve_always", "deny"]
+    },
+    "Choice": {
+      "type": "object",
+      "required": ["value", "label"],
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "AgentRef": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "Approval": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "description": "A decision the agent is waiting for — a tool approval, a write approval, a question, a plan, or a workflow step gate.",
+          "required": [
+            "kind",
+            "status",
+            "session_id",
+            "run_id",
+            "message_id",
+            "room_id",
+            "workflow_run_id",
+            "node_id",
+            "agent",
+            "title",
+            "description",
+            "command",
+            "choices",
+            "allow_always",
+            "answer_mode",
+            "response",
+            "expires_at"
+          ],
+          "properties": {
+            "kind": {
+              "$ref": "#/$defs/ApprovalKind"
+            },
+            "status": {
+              "$ref": "#/$defs/ApprovalStatus"
+            },
+            "session_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "run_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "message_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "room_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "workflow_run_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "node_id": {
+              "type": ["string", "null"]
+            },
+            "agent": {
+              "$ref": "#/$defs/AgentRef"
+            },
+            "title": {
+              "type": "string"
+            },
+            "description": {
+              "type": ["string", "null"]
+            },
+            "command": {
+              "type": ["string", "null"],
+              "description": "The exact command or write the agent wants to perform."
+            },
+            "choices": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Choice"
+              }
+            },
+            "allow_always": {
+              "type": "boolean"
+            },
+            "answer_mode": {
+              "type": "string",
+              "enum": ["choice", "text", "both"]
+            },
+            "response": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ApprovalResponseRecord"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "expires_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ApprovalResponse": {
+      "type": "object",
+      "description": "`decision` for approvals; `answer` (free text or a choice value) for questions; both allowed.",
+      "properties": {
+        "decision": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ApprovalDecision"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "answer": {
+          "type": ["string", "null"],
+          "maxLength": 4000
+        }
+      }
+    },
+    "ApprovalResponseRecord": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ApprovalResponse"
+        },
+        {
+          "type": "object",
+          "required": ["responded_by", "responded_at"],
+          "properties": {
+            "responded_by": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "responded_at": {
+              "$ref": "#/$defs/Timestamp"
+            }
+          }
+        }
+      ]
+    },
+    "AttachmentPurpose": {
+      "type": "string",
+      "enum": ["message", "avatar", "task", "import", "background", "skill", "release"],
+      "default": "message"
+    },
+    "Attachment": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "mime",
+            "size_bytes",
+            "kind",
+            "url",
+            "purpose",
+            "width",
+            "height",
+            "duration_ms",
+            "sha256"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "mime": {
+              "type": "string"
+            },
+            "size_bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "enum": ["image", "audio", "video", "file"]
+            },
+            "url": {
+              "type": "string",
+              "description": "Path of the bytes; fetch with the bearer header."
+            },
+            "purpose": {
+              "$ref": "#/$defs/AttachmentPurpose"
+            },
+            "width": {
+              "type": ["integer", "null"]
+            },
+            "height": {
+              "type": ["integer", "null"]
+            },
+            "duration_ms": {
+              "type": ["integer", "null"]
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
+      ]
+    },
+    "UploadStart": {
+      "type": "object",
+      "required": ["name", "mime", "size_bytes"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "mime": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 52428800
+        },
+        "purpose": {
+          "$ref": "#/$defs/AttachmentPurpose"
+        }
+      }
+    },
+    "Upload": {
+      "type": "object",
+      "required": ["id", "name", "mime", "size_bytes", "chunk_bytes", "next_offset", "expires_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "mime": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer"
+        },
+        "chunk_bytes": {
+          "type": "integer",
+          "description": "Maximum bytes per `PUT`."
+        },
+        "next_offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expires_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "AgentKind": {
+      "type": "string",
+      "enum": ["hermes", "acp", "harness", "builtin"],
+      "description": "Which adapter drives the agent (ADR 0002). `builtin` is the hub's own lightweight agent."
+    },
+    "AgentStatus": {
+      "type": "string",
+      "enum": [
+        "available",
+        "not_installed",
+        "installing",
+        "updating",
+        "error",
+        "limited",
+        "disabled"
+      ]
+    },
+    "AgentCapability": {
+      "type": "string",
+      "enum": [
+        "streaming",
+        "tools",
+        "approvals",
+        "mcp",
+        "skills",
+        "memory",
+        "channels",
+        "worktrees",
+        "resume",
+        "vision",
+        "audio",
+        "plugins",
+        "presets",
+        "journey",
+        "jobs",
+        "kanban"
+      ]
+    },
+    "AgentSection": {
+      "type": "string",
+      "description": "The rows shown under the agent's card, in order (NAVIGATION §4).",
+      "enum": [
+        "jobs",
+        "kanban",
+        "channels",
+        "skills",
+        "plugins",
+        "presets",
+        "mcp",
+        "memory",
+        "journey",
+        "settings"
+      ]
+    },
+    "AgentInstall": {
+      "type": "object",
+      "required": [
+        "source",
+        "path",
+        "package",
+        "command",
+        "version",
+        "latest_version",
+        "update_available",
+        "auto_update",
+        "auto_update_supported",
+        "checked_at",
+        "error"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": ["managed", "user_cli", "builtin", "none"]
+        },
+        "path": {
+          "type": ["string", "null"]
+        },
+        "package": {
+          "type": ["string", "null"],
+          "description": "npm/pip package the hub installs."
+        },
+        "command": {
+          "type": ["string", "null"]
+        },
+        "version": {
+          "type": ["string", "null"]
+        },
+        "latest_version": {
+          "type": ["string", "null"]
+        },
+        "update_available": {
+          "type": "boolean"
+        },
+        "auto_update": {
+          "type": "boolean"
+        },
+        "auto_update_supported": {
+          "type": "boolean"
+        },
+        "checked_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "AgentRuntime": {
+      "type": "object",
+      "required": ["state", "url", "error"],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": ["running", "stopped", "starting", "error", "not_applicable"]
+        },
+        "url": {
+          "type": ["string", "null"]
+        },
+        "error": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "Agent": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "slug",
+            "name",
+            "vendor",
+            "kind",
+            "avatar",
+            "status",
+            "enabled",
+            "install",
+            "runtime",
+            "capabilities",
+            "sections",
+            "default_model",
+            "limited"
+          ],
+          "properties": {
+            "slug": {
+              "type": "string",
+              "pattern": "^[a-z0-9-]{2,40}$"
+            },
+            "name": {
+              "type": "string"
+            },
+            "vendor": {
+              "type": ["string", "null"]
+            },
+            "kind": {
+              "$ref": "#/$defs/AgentKind"
+            },
+            "avatar": {
+              "$ref": "#/$defs/Avatar"
+            },
+            "status": {
+              "$ref": "#/$defs/AgentStatus"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "install": {
+              "$ref": "#/$defs/AgentInstall"
+            },
+            "runtime": {
+              "$ref": "#/$defs/AgentRuntime"
+            },
+            "capabilities": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AgentCapability"
+              }
+            },
+            "sections": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AgentSection"
+              }
+            },
+            "default_model": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ModelRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "limited": {
+              "type": "boolean",
+              "description": "True for the process harness — the UI marks the agent \"limited\"."
+            }
+          }
+        }
+      ]
+    },
+    "AgentPatch": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "avatar": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/AvatarInput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "auto_update": {
+          "type": "boolean"
+        },
+        "default_model": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ModelRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "SettingsField": {
+      "type": "object",
+      "required": ["key", "label", "kind", "value", "options", "min", "max", "hint"],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["text", "secret", "integer", "number", "toggle", "choice", "list", "json"]
+        },
+        "value": {},
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Choice"
+          }
+        },
+        "min": {
+          "type": ["number", "null"]
+        },
+        "max": {
+          "type": ["number", "null"]
+        },
+        "hint": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "SettingsSection": {
+      "type": "object",
+      "required": ["key", "title", "restart_required", "fields"],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "title": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "restart_required": {
+          "type": "boolean"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SettingsField"
+          }
+        }
+      }
+    },
+    "AgentSettings": {
+      "type": "object",
+      "required": ["sections"],
+      "properties": {
+        "sections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SettingsSection"
+          }
+        }
+      }
+    },
+    "AgentSettingsPatch": {
+      "type": "object",
+      "required": ["section", "values"],
+      "properties": {
+        "section": {
+          "type": "string"
+        },
+        "values": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "AgentSettingsResult": {
+      "type": "object",
+      "required": ["section", "restart_job_id"],
+      "properties": {
+        "section": {
+          "$ref": "#/$defs/SettingsSection"
+        },
+        "restart_job_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ConfigFile": {
+      "type": "object",
+      "required": [
+        "key",
+        "label",
+        "path",
+        "language",
+        "exists",
+        "size_bytes",
+        "revision",
+        "updated_at",
+        "content"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "path": {
+          "type": "string",
+          "description": "Display path (may start with `~`); never a hub-internal absolute path."
+        },
+        "language": {
+          "type": "string",
+          "enum": ["markdown", "json", "yaml", "toml", "text"]
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "size_bytes": {
+          "type": "integer"
+        },
+        "revision": {
+          "type": ["string", "null"]
+        },
+        "updated_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "content": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "ConfigFileWrite": {
+      "type": "object",
+      "required": ["content"],
+      "properties": {
+        "content": {
+          "type": "string",
+          "maxLength": 1048576
+        },
+        "revision": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "SkillSource": {
+      "type": "string",
+      "enum": ["builtin", "user", "external"]
+    },
+    "Skill": {
+      "type": "object",
+      "required": [
+        "key",
+        "name",
+        "description",
+        "enabled",
+        "pinned",
+        "source",
+        "use_count",
+        "updated_at",
+        "content"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": ["string", "null"]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "pinned": {
+          "type": "boolean"
+        },
+        "source": {
+          "$ref": "#/$defs/SkillSource"
+        },
+        "use_count": {
+          "type": "integer"
+        },
+        "updated_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "content": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "SkillCategory": {
+      "type": "object",
+      "required": ["key", "name", "description", "skills"],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": ["string", "null"]
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Skill"
+          }
+        }
+      }
+    },
+    "SkillWrite": {
+      "type": "object",
+      "required": ["content"],
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 262144
+        }
+      }
+    },
+    "SkillPatch": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "pinned": {
+          "type": "boolean"
+        }
+      }
+    },
+    "SkillImport": {
+      "type": "object",
+      "required": ["category", "attachment_ids"],
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "attachment_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/Ulid"
+          }
+        }
+      }
+    },
+    "McpTool": {
+      "type": "object",
+      "required": ["name", "description"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "McpServer": {
+      "type": "object",
+      "required": [
+        "name",
+        "transport",
+        "enabled",
+        "connected",
+        "tools",
+        "error",
+        "config",
+        "updated_at"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "transport": {
+          "type": "string",
+          "enum": ["stdio", "http", "sse"]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "connected": {
+          "type": "boolean"
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/McpTool"
+          }
+        },
+        "error": {
+          "type": ["string", "null"]
+        },
+        "config": {
+          "type": "object",
+          "description": "Stored verbatim; secret-looking values read as `[stored]`.",
+          "additionalProperties": true
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "McpServerWrite": {
+      "type": "object",
+      "required": ["name", "transport", "config"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]{1,60}$"
+        },
+        "transport": {
+          "type": "string",
+          "enum": ["stdio", "http", "sse"]
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "McpServerPatch": {
+      "type": "object",
+      "properties": {
+        "transport": {
+          "type": "string",
+          "enum": ["stdio", "http", "sse"]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "McpTestResult": {
+      "type": "object",
+      "required": ["ok", "tools", "error", "duration_ms"],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/McpTool"
+          }
+        },
+        "error": {
+          "type": ["string", "null"]
+        },
+        "duration_ms": {
+          "type": "integer"
+        }
+      }
+    },
+    "MemoryItem": {
+      "type": "object",
+      "required": ["id", "kind", "title", "content", "tags", "revision", "updated_at"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["document", "entry"]
+        },
+        "title": {
+          "type": "string"
+        },
+        "content": {
+          "type": ["string", "null"]
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "revision": {
+          "type": "integer"
+        },
+        "updated_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "MemoryItemWrite": {
+      "type": "object",
+      "required": ["content"],
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "revision": {
+          "type": ["integer", "null"]
+        }
+      }
+    },
+    "Journey": {
+      "type": "object",
+      "required": ["nodes", "edges", "clusters"],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "label", "kind", "category", "use_count", "pinned"],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["skill", "tool", "plugin"]
+              },
+              "category": {
+                "type": ["string", "null"]
+              },
+              "use_count": {
+                "type": "integer"
+              },
+              "pinned": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["source", "target"],
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "target": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "clusters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["category", "count"],
+            "properties": {
+              "category": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    },
+    "AgentPlugin": {
+      "type": "object",
+      "required": [
+        "key",
+        "name",
+        "kind",
+        "source",
+        "version",
+        "description",
+        "author",
+        "configured",
+        "enabled",
+        "manageable",
+        "provides_tools",
+        "provides_hooks",
+        "requires_env",
+        "entries"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["standalone", "bundled", "preset"]
+        },
+        "source": {
+          "type": "string",
+          "enum": ["bundled", "user", "external"]
+        },
+        "version": {
+          "type": ["string", "null"]
+        },
+        "description": {
+          "type": ["string", "null"]
+        },
+        "author": {
+          "type": ["string", "null"]
+        },
+        "configured": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "manageable": {
+          "type": "boolean",
+          "description": "Whether `PATCH` may toggle it (false for bundled plugins)."
+        },
+        "provides_tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "provides_hooks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "requires_env": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "entries": {
+          "type": "array",
+          "description": "Sub-entries of preset-style plugins; `enabled` may be `conditional`.",
+          "items": {
+            "type": "object",
+            "required": ["id", "title", "enabled"],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": ["string", "null"]
+              },
+              "enabled": {
+                "type": "string",
+                "enum": ["true", "false", "conditional"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "AgentPreset": {
+      "type": "object",
+      "required": ["id", "name", "description", "trust", "is_default", "broken", "content"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": ["string", "null"]
+        },
+        "trust": {
+          "type": "string",
+          "enum": ["system", "user"]
+        },
+        "is_default": {
+          "type": "boolean"
+        },
+        "broken": {
+          "type": "boolean"
+        },
+        "content": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "ChannelField": {
+      "type": "object",
+      "required": ["key", "label", "kind", "target", "value", "hint"],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["text", "secret", "toggle", "list"]
+        },
+        "target": {
+          "type": "string",
+          "enum": ["credentials", "configuration"]
+        },
+        "value": {},
+        "hint": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "Channel": {
+      "type": "object",
+      "required": [
+        "platform",
+        "label",
+        "enabled",
+        "configured",
+        "exclusive",
+        "status",
+        "error",
+        "login",
+        "fields"
+      ],
+      "properties": {
+        "platform": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "configured": {
+          "type": "boolean"
+        },
+        "exclusive": {
+          "type": "boolean",
+          "description": "One identity may belong to a single workspace."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["online", "offline", "error", "unknown"]
+        },
+        "error": {
+          "type": ["string", "null"]
+        },
+        "login": {
+          "type": ["string", "null"],
+          "enum": ["qr", null],
+          "description": "Set when the platform pairs interactively via `/login` instead of fields."
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ChannelField"
+          }
+        }
+      }
+    },
+    "ChannelWrite": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "credentials": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "SummaryPolicy": {
+      "type": "object",
+      "required": ["every_turns", "model", "provider"],
+      "properties": {
+        "every_turns": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Re-summarize the room every N turns; 0 disables."
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "provider": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "HandoffPolicy": {
+      "type": "object",
+      "required": ["enabled", "max_depth"],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "max_depth": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "`null` = unlimited."
+        }
+      }
+    },
+    "SeatStatus": {
+      "type": "string",
+      "enum": ["idle", "queued", "thinking", "running", "waiting_approval", "offline"]
+    },
+    "SeatExecutor": {
+      "type": "object",
+      "description": "Where the seat's agent runs — on the hub or on a linked device (Phase 3).",
+      "required": ["kind", "device_id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["server", "device"]
+        },
+        "device_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "SeatConfig": {
+      "type": "object",
+      "description": "The editable part of a seat; also the body of a seat preset.",
+      "required": ["agent_id", "name"],
+      "properties": {
+        "agent_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "Unique per room; `all` is reserved."
+        },
+        "description": {
+          "type": ["string", "null"],
+          "maxLength": 300
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "provider": {
+          "type": ["string", "null"]
+        },
+        "reasoning_effort": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ReasoningEffort"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "instructions": {
+          "type": ["string", "null"],
+          "maxLength": 8000,
+          "description": "Seat-specific system instructions."
+        },
+        "preset_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "avatar": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/AvatarInput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Seat": {
+      "type": "object",
+      "required": [
+        "id",
+        "room_id",
+        "agent_id",
+        "name",
+        "description",
+        "avatar",
+        "model",
+        "provider",
+        "reasoning_effort",
+        "instructions",
+        "preset_id",
+        "status",
+        "executor",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "room_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "agent_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": ["string", "null"]
+        },
+        "avatar": {
+          "$ref": "#/$defs/Avatar"
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "provider": {
+          "type": ["string", "null"]
+        },
+        "reasoning_effort": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ReasoningEffort"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "instructions": {
+          "type": ["string", "null"]
+        },
+        "preset_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/SeatStatus"
+        },
+        "executor": {
+          "$ref": "#/$defs/SeatExecutor"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "SeatWrite": {
+      "$ref": "#/$defs/SeatConfig"
+    },
+    "SeatPatch": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "description": {
+          "type": ["string", "null"]
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "provider": {
+          "type": ["string", "null"]
+        },
+        "reasoning_effort": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ReasoningEffort"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "instructions": {
+          "type": ["string", "null"]
+        },
+        "preset_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "avatar": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/AvatarInput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Member": {
+      "type": "object",
+      "required": ["id", "room_id", "user_id", "name", "avatar", "role", "online", "joined_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "room_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "user_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "avatar": {
+          "$ref": "#/$defs/Avatar"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["owner", "manager", "member"]
+        },
+        "online": {
+          "type": "boolean"
+        },
+        "joined_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Room": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "working_dir",
+            "invite_code",
+            "can_manage",
+            "can_mention_all",
+            "member_count",
+            "total_tokens",
+            "summary_policy",
+            "handoff",
+            "seats",
+            "last_active_at"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "working_dir": {
+              "type": ["string", "null"]
+            },
+            "invite_code": {
+              "type": ["string", "null"],
+              "description": "Only managers see it; others get `null`."
+            },
+            "can_manage": {
+              "type": "boolean",
+              "description": "Whether the caller may edit the room."
+            },
+            "can_mention_all": {
+              "type": "boolean"
+            },
+            "member_count": {
+              "type": "integer"
+            },
+            "total_tokens": {
+              "type": "integer"
+            },
+            "summary_policy": {
+              "$ref": "#/$defs/SummaryPolicy"
+            },
+            "handoff": {
+              "$ref": "#/$defs/HandoffPolicy"
+            },
+            "seats": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Seat"
+              }
+            },
+            "last_active_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "RoomMemory": {
+      "type": "object",
+      "required": ["summary", "status", "summarized_turn_count", "error", "updated_at"],
+      "properties": {
+        "summary": {
+          "type": ["string", "null"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["idle", "summarizing", "error"]
+        },
+        "summarized_turn_count": {
+          "type": "integer"
+        },
+        "error": {
+          "type": ["string", "null"]
+        },
+        "updated_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "HandoffChain": {
+      "type": "object",
+      "required": [
+        "id",
+        "room_id",
+        "from_seat_id",
+        "to_seat_id",
+        "status",
+        "stop_reason",
+        "depth",
+        "max_depth",
+        "continue_used",
+        "error",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "room_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "from_seat_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "to_seat_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "stopped", "completed", "failed"]
+        },
+        "stop_reason": {
+          "type": ["string", "null"],
+          "enum": ["max_depth", "loop_detected", "interrupted", "error", null]
+        },
+        "depth": {
+          "type": "integer"
+        },
+        "max_depth": {
+          "type": ["integer", "null"]
+        },
+        "continue_used": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": ["string", "null"]
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "TypingIndicator": {
+      "type": "object",
+      "required": ["member_id", "name"],
+      "properties": {
+        "member_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "RoomDetail": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Room"
+        },
+        {
+          "type": "object",
+          "required": [
+            "members",
+            "runs",
+            "pending_approvals",
+            "handoff_chains",
+            "memory",
+            "typing"
+          ],
+          "properties": {
+            "members": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Member"
+              }
+            },
+            "runs": {
+              "type": "array",
+              "description": "Active and queued runs across seats.",
+              "items": {
+                "$ref": "#/$defs/Run"
+              }
+            },
+            "pending_approvals": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Approval"
+              }
+            },
+            "handoff_chains": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/HandoffChain"
+              }
+            },
+            "memory": {
+              "$ref": "#/$defs/RoomMemory"
+            },
+            "typing": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/TypingIndicator"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "RoomCreate": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "working_dir": {
+          "type": ["string", "null"]
+        },
+        "seats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SeatConfig"
+          }
+        },
+        "summary_policy": {
+          "$ref": "#/$defs/SummaryPolicy"
+        },
+        "handoff": {
+          "$ref": "#/$defs/HandoffPolicy"
+        }
+      }
+    },
+    "RoomCreated": {
+      "type": "object",
+      "required": ["room", "seat_results"],
+      "properties": {
+        "room": {
+          "$ref": "#/$defs/Room"
+        },
+        "seat_results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "ok", "error"],
+            "properties": {
+              "id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/Ulid"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "ok": {
+                "type": "boolean"
+              },
+              "error": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/Error"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "RoomPatch": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "working_dir": {
+          "type": ["string", "null"]
+        },
+        "summary_policy": {
+          "$ref": "#/$defs/SummaryPolicy"
+        },
+        "handoff": {
+          "$ref": "#/$defs/HandoffPolicy"
+        }
+      }
+    },
+    "RoomInvite": {
+      "type": "object",
+      "required": ["invite_code", "join_url"],
+      "properties": {
+        "invite_code": {
+          "type": "string"
+        },
+        "join_url": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "RoomInvitePreview": {
+      "type": "object",
+      "required": ["room_id", "profile", "name", "seat_count", "member_count", "already_member"],
+      "properties": {
+        "room_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "name": {
+          "type": "string"
+        },
+        "seat_count": {
+          "type": "integer"
+        },
+        "member_count": {
+          "type": "integer"
+        },
+        "already_member": {
+          "type": "boolean"
+        }
+      }
+    },
+    "RoomMessageCreate": {
+      "type": "object",
+      "required": ["content"],
+      "properties": {
+        "content": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/ContentBlock"
+          }
+        },
+        "mentions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Mention"
+          }
+        },
+        "reply_to_message_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "RoomMessageAccepted": {
+      "type": "object",
+      "required": ["message_id", "runs"],
+      "properties": {
+        "message_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["seat_id", "run_id", "job_id", "queue_position"],
+            "properties": {
+              "seat_id": {
+                "$ref": "#/$defs/Ulid"
+              },
+              "run_id": {
+                "$ref": "#/$defs/Ulid"
+              },
+              "job_id": {
+                "$ref": "#/$defs/Ulid"
+              },
+              "queue_position": {
+                "type": ["integer", "null"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "SeatPreset": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": ["name", "agent_id", "seat", "available", "validation_error"],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "agent_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "seat": {
+              "$ref": "#/$defs/SeatConfig"
+            },
+            "available": {
+              "type": "boolean",
+              "description": "False when the agent or model it names is no longer usable."
+            },
+            "validation_error": {
+              "type": ["string", "null"]
+            }
+          }
+        }
+      ]
+    },
+    "SeatPresetWrite": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "seat": {
+          "$ref": "#/$defs/SeatConfig"
+        }
+      }
+    },
+    "ProjectStatus": {
+      "type": "string",
+      "enum": ["active", "paused", "archived"]
+    },
+    "StatusCounts": {
+      "type": "object",
+      "required": ["total", "by_status"],
+      "properties": {
+        "total": {
+          "type": "integer"
+        },
+        "by_status": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "Project": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "description",
+            "status",
+            "color",
+            "repo_url",
+            "working_dir",
+            "default_branch",
+            "default_agent_id",
+            "report_room_id",
+            "auto_dispatch",
+            "counts"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "description": {
+              "type": ["string", "null"]
+            },
+            "status": {
+              "$ref": "#/$defs/ProjectStatus"
+            },
+            "color": {
+              "type": ["string", "null"],
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "repo_url": {
+              "type": ["string", "null"]
+            },
+            "working_dir": {
+              "type": ["string", "null"],
+              "description": "Repository checkout on the hub host; worktrees are created beside it."
+            },
+            "default_branch": {
+              "type": ["string", "null"]
+            },
+            "default_agent_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "report_room_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Room where assigned agents post progress."
+            },
+            "auto_dispatch": {
+              "type": "boolean",
+              "description": "Assign `ready` tasks automatically (see `/board/dispatch`)."
+            },
+            "counts": {
+              "$ref": "#/$defs/StatusCounts"
+            }
+          }
+        }
+      ]
+    },
+    "ProjectWrite": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "description": {
+          "type": ["string", "null"]
+        },
+        "status": {
+          "$ref": "#/$defs/ProjectStatus"
+        },
+        "color": {
+          "type": ["string", "null"],
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "repo_url": {
+          "type": ["string", "null"]
+        },
+        "working_dir": {
+          "type": ["string", "null"]
+        },
+        "default_branch": {
+          "type": ["string", "null"]
+        },
+        "default_agent_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "report_room_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "auto_dispatch": {
+          "type": "boolean"
+        }
+      }
+    },
+    "TaskStatus": {
+      "type": "string",
+      "description": "The nine columns, in workflow order. `triage` is intake, `running` belongs to the worker.",
+      "enum": [
+        "triage",
+        "todo",
+        "ready",
+        "scheduled",
+        "running",
+        "blocked",
+        "review",
+        "done",
+        "archived"
+      ]
+    },
+    "TaskPriority": {
+      "type": "string",
+      "enum": ["low", "normal", "high", "urgent"]
+    },
+    "Assignee": {
+      "type": "object",
+      "required": ["kind", "id", "name"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["agent", "user"]
+        },
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "Worktree": {
+      "type": "object",
+      "required": [
+        "path",
+        "branch",
+        "base_branch",
+        "status",
+        "ahead",
+        "behind",
+        "changed_files",
+        "error",
+        "updated_at"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "base_branch": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["creating", "ready", "dirty", "merged", "removed", "error"]
+        },
+        "ahead": {
+          "type": "integer"
+        },
+        "behind": {
+          "type": "integer"
+        },
+        "changed_files": {
+          "type": "integer"
+        },
+        "error": {
+          "type": ["string", "null"]
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Task": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "project_id",
+            "title",
+            "description",
+            "status",
+            "priority",
+            "tags",
+            "assignee",
+            "auto_start",
+            "position",
+            "blocked_reason",
+            "status_reason",
+            "subtask_counts",
+            "depends_on",
+            "worktree",
+            "session_id",
+            "last_run",
+            "attempt_count",
+            "latest_summary",
+            "due_at",
+            "started_at",
+            "completed_at",
+            "archived_at",
+            "attachment_ids"
+          ],
+          "properties": {
+            "project_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "title": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "description": {
+              "type": ["string", "null"]
+            },
+            "status": {
+              "$ref": "#/$defs/TaskStatus"
+            },
+            "priority": {
+              "$ref": "#/$defs/TaskPriority"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "assignee": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Assignee"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "auto_start": {
+              "type": "boolean",
+              "description": "Start a run as soon as the task is `ready` and assigned."
+            },
+            "position": {
+              "type": "string",
+              "description": "Fractional index within the column; the server keeps it, clients never compute it."
+            },
+            "blocked_reason": {
+              "type": ["string", "null"]
+            },
+            "status_reason": {
+              "type": ["string", "null"]
+            },
+            "subtask_counts": {
+              "type": "object",
+              "required": ["total", "done"],
+              "properties": {
+                "total": {
+                  "type": "integer"
+                },
+                "done": {
+                  "type": "integer"
+                }
+              }
+            },
+            "depends_on": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Ulid"
+              }
+            },
+            "worktree": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Worktree"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "session_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The task session (source `task`) the assignee works in."
+            },
+            "last_run": {
+              "type": "object",
+              "required": ["id", "status", "finished_at"],
+              "properties": {
+                "id": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/Ulid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "status": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/RunStatus"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "finished_at": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/Timestamp"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            "attempt_count": {
+              "type": "integer"
+            },
+            "latest_summary": {
+              "type": ["string", "null"],
+              "description": "The assignee's last progress summary."
+            },
+            "due_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "started_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "completed_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "archived_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "attachment_ids": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Ulid"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Subtask": {
+      "type": "object",
+      "required": [
+        "id",
+        "task_id",
+        "index",
+        "title",
+        "status",
+        "note",
+        "blocked_reason",
+        "completed_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "task_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "index": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["todo", "in_progress", "review", "done", "blocked", "skipped"]
+        },
+        "note": {
+          "type": ["string", "null"]
+        },
+        "blocked_reason": {
+          "type": ["string", "null"]
+        },
+        "completed_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "SubtaskWrite": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "status": {
+          "type": "string",
+          "enum": ["todo", "in_progress", "review", "done", "blocked", "skipped"]
+        },
+        "note": {
+          "type": ["string", "null"]
+        },
+        "blocked_reason": {
+          "type": ["string", "null"]
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "Comment": {
+      "type": "object",
+      "required": ["id", "task_id", "author", "content", "created_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "task_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "author": {
+          "$ref": "#/$defs/Author"
+        },
+        "content": {
+          "type": "string"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Activity": {
+      "type": "object",
+      "required": ["id", "task_id", "kind", "actor", "data", "created_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "task_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "created",
+            "moved",
+            "updated",
+            "assigned",
+            "unassigned",
+            "run_started",
+            "run_finished",
+            "comment",
+            "subtask",
+            "worktree"
+          ]
+        },
+        "actor": {
+          "$ref": "#/$defs/Author"
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "TaskDetail": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Task"
+        },
+        {
+          "type": "object",
+          "required": ["subtasks", "comments", "runs"],
+          "properties": {
+            "subtasks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Subtask"
+              }
+            },
+            "comments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Comment"
+              }
+            },
+            "runs": {
+              "type": "array",
+              "description": "Recent runs, newest first (max 20; the rest via the task session).",
+              "items": {
+                "$ref": "#/$defs/Run"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "TaskCreate": {
+      "type": "object",
+      "required": ["project_id", "title"],
+      "properties": {
+        "project_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "description": {
+          "type": ["string", "null"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["triage", "todo", "ready"],
+          "default": "triage"
+        },
+        "priority": {
+          "$ref": "#/$defs/TaskPriority"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assignee_agent_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "auto_start": {
+          "type": "boolean",
+          "default": false
+        },
+        "due_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subtasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["title"],
+            "properties": {
+              "title": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "attachment_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Ulid"
+          }
+        }
+      }
+    },
+    "TaskPatch": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "description": {
+          "type": ["string", "null"]
+        },
+        "priority": {
+          "$ref": "#/$defs/TaskPriority"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "auto_start": {
+          "type": "boolean"
+        },
+        "due_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "project_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "attachment_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Ulid"
+          }
+        }
+      }
+    },
+    "TaskBulkUpdate": {
+      "type": "object",
+      "required": ["task_ids", "patch"],
+      "properties": {
+        "task_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/Ulid"
+          }
+        },
+        "patch": {
+          "type": "object",
+          "properties": {
+            "archived": {
+              "type": "boolean",
+              "description": "`true` moves `done` tasks to `archived`; `false` restores them to `done`."
+            },
+            "priority": {
+              "$ref": "#/$defs/TaskPriority"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "project_id": {
+              "$ref": "#/$defs/Ulid"
+            }
+          }
+        }
+      }
+    },
+    "TaskMove": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/TaskStatus"
+        },
+        "reason": {
+          "type": ["string", "null"],
+          "description": "Required for `blocked`; shown as `blocked_reason` / `status_reason`."
+        },
+        "summary": {
+          "type": ["string", "null"],
+          "description": "Optional note for `review` and `done`."
+        },
+        "after_task_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "TaskAssign": {
+      "type": "object",
+      "required": ["agent_id"],
+      "properties": {
+        "agent_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "provider": {
+          "type": ["string", "null"]
+        },
+        "instructions": {
+          "type": ["string", "null"],
+          "maxLength": 8000
+        },
+        "start": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "TaskAssigned": {
+      "type": "object",
+      "required": ["job_id", "run_id", "session_id", "task_id"],
+      "properties": {
+        "job_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "run_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "session_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "task_id": {
+          "$ref": "#/$defs/Ulid"
+        }
+      }
+    },
+    "DispatchRequest": {
+      "type": "object",
+      "required": ["project_id"],
+      "properties": {
+        "project_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 1
+        },
+        "dry_run": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "Board": {
+      "type": "object",
+      "required": ["project_id", "columns", "counts"],
+      "properties": {
+        "project_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["status", "count", "tasks"],
+            "properties": {
+              "status": {
+                "$ref": "#/$defs/TaskStatus"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "tasks": {
+                "type": "array",
+                "description": "In `position` order.",
+                "items": {
+                  "$ref": "#/$defs/Task"
+                }
+              }
+            }
+          }
+        },
+        "counts": {
+          "$ref": "#/$defs/StatusCounts"
+        }
+      }
+    },
+    "ScheduleTrigger": {
+      "type": "object",
+      "description": "When to fire. `expression` for `cron` (5 fields), `every_minutes` for `interval`, `run_at` for `once`.",
+      "required": ["kind", "expression", "every_minutes", "run_at", "timezone"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["cron", "interval", "once"]
+        },
+        "expression": {
+          "type": ["string", "null"]
+        },
+        "every_minutes": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "run_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timezone": {
+          "type": "string",
+          "description": "IANA zone the expression is evaluated in."
+        },
+        "display": {
+          "type": "string",
+          "description": "Server-rendered, localized description (read-only)."
+        }
+      }
+    },
+    "ScheduleTarget": {
+      "type": "object",
+      "description": "What to run — a prompt to an agent, or a workflow.",
+      "required": [
+        "kind",
+        "agent_id",
+        "prompt",
+        "model",
+        "provider",
+        "skills",
+        "workflow_id",
+        "input"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["agent_prompt", "workflow"]
+        },
+        "agent_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "prompt": {
+          "type": ["string", "null"]
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "provider": {
+          "type": ["string", "null"]
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "workflow_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "DeliveryTarget": {
+      "type": "object",
+      "description": "Where the output goes. `none` keeps it in history only.",
+      "required": ["kind", "room_id", "channel", "address"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["none", "notice", "room", "channel"]
+        },
+        "label": {
+          "type": "string",
+          "description": "Display label (read-only in listings)."
+        },
+        "room_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "channel": {
+          "type": ["string", "null"],
+          "description": "Messaging platform slug when `kind = channel`."
+        },
+        "address": {
+          "type": ["string", "null"],
+          "description": "Chat/channel id on that platform."
+        }
+      }
+    },
+    "Schedule": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "trigger",
+            "target",
+            "delivery",
+            "repeat",
+            "enabled",
+            "state",
+            "next_run_at",
+            "last_run_at",
+            "last_status",
+            "last_error",
+            "last_delivery_error"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "trigger": {
+              "$ref": "#/$defs/ScheduleTrigger"
+            },
+            "target": {
+              "$ref": "#/$defs/ScheduleTarget"
+            },
+            "delivery": {
+              "$ref": "#/$defs/DeliveryTarget"
+            },
+            "repeat": {
+              "type": "object",
+              "required": ["limit", "completed"],
+              "properties": {
+                "limit": {
+                  "type": ["integer", "null"],
+                  "minimum": 1,
+                  "description": "`null` = unlimited."
+                },
+                "completed": {
+                  "type": "integer"
+                }
+              }
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "state": {
+              "type": "string",
+              "enum": ["scheduled", "running", "paused", "exhausted"]
+            },
+            "next_run_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "last_run_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "last_status": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/JobStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "last_error": {
+              "type": ["string", "null"]
+            },
+            "last_delivery_error": {
+              "type": ["string", "null"]
+            }
+          }
+        }
+      ]
+    },
+    "ScheduleWrite": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "trigger": {
+          "$ref": "#/$defs/ScheduleTrigger"
+        },
+        "target": {
+          "$ref": "#/$defs/ScheduleTarget"
+        },
+        "delivery": {
+          "$ref": "#/$defs/DeliveryTarget"
+        },
+        "repeat": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": ["integer", "null"],
+              "minimum": 1
+            }
+          }
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ScheduleRun": {
+      "type": "object",
+      "required": [
+        "id",
+        "schedule_id",
+        "job_id",
+        "run_id",
+        "session_id",
+        "workflow_run_id",
+        "status",
+        "trigger",
+        "output_preview",
+        "output",
+        "output_size_bytes",
+        "error",
+        "delivery_status",
+        "delivery_error",
+        "started_at",
+        "finished_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "schedule_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "job_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "run_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "session_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "workflow_run_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/JobStatus"
+        },
+        "trigger": {
+          "type": "string",
+          "enum": ["schedule", "manual"]
+        },
+        "output_preview": {
+          "type": ["string", "null"]
+        },
+        "output": {
+          "type": ["string", "null"],
+          "description": "Full text; only on the single-run read."
+        },
+        "output_size_bytes": {
+          "type": "integer"
+        },
+        "error": {
+          "type": ["string", "null"]
+        },
+        "delivery_status": {
+          "type": "string",
+          "enum": ["none", "pending", "delivered", "failed"]
+        },
+        "delivery_error": {
+          "type": ["string", "null"]
+        },
+        "started_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finished_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ScheduleRunAccepted": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/JobAccepted"
+        },
+        {
+          "type": "object",
+          "required": ["schedule_run_id"],
+          "properties": {
+            "schedule_run_id": {
+              "$ref": "#/$defs/Ulid"
+            }
+          }
+        }
+      ]
+    },
+    "WorkflowNode": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "title",
+        "agent_id",
+        "model",
+        "provider",
+        "reasoning_effort",
+        "skills",
+        "input",
+        "approval_required",
+        "position"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,40}$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["agent", "approval", "condition", "delay", "notify"]
+        },
+        "title": {
+          "type": "string"
+        },
+        "agent_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "provider": {
+          "type": ["string", "null"]
+        },
+        "reasoning_effort": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ReasoningEffort"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "input": {
+          "type": ["string", "null"],
+          "description": "Prompt template; `{{input}}` and `{{steps.<id>.output}}` are substituted."
+        },
+        "approval_required": {
+          "type": "boolean",
+          "description": "Gate the node behind an approval (`kind: workflow_step`) before it runs."
+        },
+        "position": {
+          "type": "object",
+          "required": ["x", "y"],
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "WorkflowEdge": {
+      "type": "object",
+      "required": ["id", "from", "to", "route"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "route": {
+          "type": "string",
+          "enum": ["always", "success", "failure"]
+        }
+      }
+    },
+    "Workflow": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "description",
+            "working_dir",
+            "nodes",
+            "edges",
+            "status",
+            "active_run_id",
+            "run_count",
+            "schedule_count"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "description": {
+              "type": ["string", "null"]
+            },
+            "working_dir": {
+              "type": ["string", "null"]
+            },
+            "nodes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/WorkflowNode"
+              }
+            },
+            "edges": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/WorkflowEdge"
+              }
+            },
+            "status": {
+              "type": "string",
+              "enum": ["idle", "running", "waiting", "error"]
+            },
+            "active_run_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "run_count": {
+              "type": "integer"
+            },
+            "schedule_count": {
+              "type": "integer",
+              "description": "Enabled schedules targeting this workflow."
+            }
+          }
+        }
+      ]
+    },
+    "WorkflowWrite": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "description": {
+          "type": ["string", "null"]
+        },
+        "working_dir": {
+          "type": ["string", "null"]
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorkflowNode"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorkflowEdge"
+          }
+        }
+      }
+    },
+    "WorkflowStepStatus": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "queued",
+        "running",
+        "waiting_approval",
+        "succeeded",
+        "failed",
+        "skipped",
+        "cancelled",
+        "rejected"
+      ]
+    },
+    "WorkflowStep": {
+      "type": "object",
+      "required": [
+        "node_id",
+        "attempt",
+        "status",
+        "session_id",
+        "run_id",
+        "approval_id",
+        "error",
+        "started_at",
+        "finished_at"
+      ],
+      "properties": {
+        "node_id": {
+          "type": "string"
+        },
+        "attempt": {
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/WorkflowStepStatus"
+        },
+        "session_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The session where the step's agent worked; its output is that session's last assistant message."
+        },
+        "run_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "approval_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "type": ["string", "null"]
+        },
+        "started_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finished_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "WorkflowRun": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "workflow_id",
+            "job_id",
+            "status",
+            "trigger",
+            "input",
+            "steps",
+            "error",
+            "started_at",
+            "finished_at"
+          ],
+          "properties": {
+            "workflow_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "job_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "status": {
+              "type": "string",
+              "enum": ["queued", "running", "waiting", "succeeded", "failed", "cancelled"]
+            },
+            "trigger": {
+              "$ref": "#/$defs/RunTrigger"
+            },
+            "input": {
+              "type": ["string", "null"]
+            },
+            "steps": {
+              "type": "array",
+              "description": "Latest attempt per node, in execution order.",
+              "items": {
+                "$ref": "#/$defs/WorkflowStep"
+              }
+            },
+            "error": {
+              "type": ["string", "null"]
+            },
+            "started_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "finished_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "WorkflowRunRequest": {
+      "type": "object",
+      "properties": {
+        "input": {
+          "type": ["string", "null"]
+        },
+        "start_node_ids": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "string"
+          }
+        },
+        "timeout_ms": {
+          "type": ["integer", "null"]
+        }
+      }
+    },
+    "WorkflowRunAccepted": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/JobAccepted"
+        },
+        {
+          "type": "object",
+          "required": ["workflow_run_id"],
+          "properties": {
+            "workflow_run_id": {
+              "$ref": "#/$defs/Ulid"
+            }
+          }
+        }
+      ]
+    },
+    "WorkflowImportPreview": {
+      "type": "object",
+      "required": ["id", "name", "node_count", "edge_count", "warnings", "expires_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "node_count": {
+          "type": "integer"
+        },
+        "edge_count": {
+          "type": "integer"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expires_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "ProviderKind": {
+      "type": "string",
+      "enum": ["llm", "stt", "tts"]
+    },
+    "ModelKind": {
+      "type": "string",
+      "enum": ["chat", "embedding", "stt", "tts"]
+    },
+    "ModelCapability": {
+      "type": "string",
+      "enum": ["vision", "tools", "reasoning", "audio", "streaming"]
+    },
+    "ModelPricing": {
+      "type": "object",
+      "required": ["input_per_million", "output_per_million"],
+      "properties": {
+        "input_per_million": {
+          "$ref": "#/$defs/Money"
+        },
+        "output_per_million": {
+          "$ref": "#/$defs/Money"
+        }
+      }
+    },
+    "Model": {
+      "type": "object",
+      "required": [
+        "key",
+        "provider_id",
+        "provider",
+        "model",
+        "alias",
+        "kind",
+        "visible",
+        "custom",
+        "preview",
+        "disabled",
+        "context_window",
+        "capabilities",
+        "pricing"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "`<provider slug>/<model>` — the value stored in sessions and seats."
+        },
+        "provider_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "alias": {
+          "type": ["string", "null"]
+        },
+        "kind": {
+          "$ref": "#/$defs/ModelKind"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "custom": {
+          "type": "boolean"
+        },
+        "preview": {
+          "type": "boolean"
+        },
+        "disabled": {
+          "type": "boolean"
+        },
+        "context_window": {
+          "type": ["integer", "null"]
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ModelCapability"
+          }
+        },
+        "pricing": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ModelPatch": {
+      "type": "object",
+      "properties": {
+        "alias": {
+          "type": ["string", "null"]
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "context_window": {
+          "type": ["integer", "null"]
+        },
+        "custom": {
+          "type": "boolean",
+          "description": "`true` registers a model the catalogue does not list."
+        }
+      }
+    },
+    "Visibility": {
+      "type": "object",
+      "required": ["mode", "models"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["all", "include"]
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Provider": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "slug",
+            "label",
+            "kind",
+            "builtin",
+            "enabled",
+            "api_key",
+            "base_url",
+            "api_mode",
+            "auth",
+            "catalogue",
+            "visibility",
+            "models"
+          ],
+          "properties": {
+            "slug": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/ProviderKind"
+            },
+            "builtin": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "api_key": {
+              "type": ["string", "null"],
+              "enum": ["[stored]", null],
+              "description": "Never the value."
+            },
+            "base_url": {
+              "type": ["string", "null"]
+            },
+            "api_mode": {
+              "type": "string",
+              "enum": ["native", "chat_completions", "responses"]
+            },
+            "auth": {
+              "type": "object",
+              "required": ["kind", "signed_in"],
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["api_key", "oauth", "none"]
+                },
+                "signed_in": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "catalogue": {
+              "type": "object",
+              "required": ["status", "refreshed_at", "error", "refreshable"],
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": ["ready", "loading", "error", "unsupported"]
+                },
+                "refreshed_at": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/Timestamp"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "error": {
+                  "type": ["string", "null"]
+                },
+                "refreshable": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "visibility": {
+              "$ref": "#/$defs/Visibility"
+            },
+            "models": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Model"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "ProviderCreate": {
+      "type": "object",
+      "required": ["label", "kind"],
+      "properties": {
+        "label": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "kind": {
+          "$ref": "#/$defs/ProviderKind"
+        },
+        "base_url": {
+          "type": ["string", "null"]
+        },
+        "api_key": {
+          "type": ["string", "null"]
+        },
+        "api_mode": {
+          "type": "string",
+          "enum": ["chat_completions", "responses"],
+          "default": "chat_completions"
+        }
+      }
+    },
+    "ProviderPatch": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "api_key": {
+          "type": ["string", "null"],
+          "description": "A value sets the key; `\"\"` or `null` clears it."
+        },
+        "base_url": {
+          "type": ["string", "null"]
+        },
+        "api_mode": {
+          "type": "string",
+          "enum": ["native", "chat_completions", "responses"]
+        },
+        "visibility": {
+          "$ref": "#/$defs/Visibility"
+        }
+      }
+    },
+    "ProviderSignIn": {
+      "type": "object",
+      "required": ["id", "status", "user_code", "verification_url", "accepts_code", "expires_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "denied", "expired"]
+        },
+        "user_code": {
+          "type": ["string", "null"]
+        },
+        "verification_url": {
+          "type": "string"
+        },
+        "accepts_code": {
+          "type": "boolean",
+          "description": "Whether the provider hands the user a code to paste back."
+        },
+        "expires_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "ModelDefaults": {
+      "type": "object",
+      "required": ["default", "fallbacks", "auxiliary"],
+      "properties": {
+        "default": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ModelRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fallbacks": {
+          "type": "array",
+          "description": "Tried in order when the chosen model fails.",
+          "items": {
+            "$ref": "#/$defs/ModelRef"
+          }
+        },
+        "auxiliary": {
+          "type": "object",
+          "required": ["tasks", "assignments"],
+          "properties": {
+            "tasks": {
+              "type": "array",
+              "description": "Server-defined roles (title generation, summarization, embeddings…).",
+              "items": {
+                "type": "object",
+                "required": ["key", "label"],
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "$ref": "#/$defs/LocalizedText"
+                  }
+                }
+              }
+            },
+            "assignments": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/ModelRef"
+              }
+            }
+          }
+        }
+      }
+    },
+    "ModelDefaultsWrite": {
+      "type": "object",
+      "properties": {
+        "default": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ModelRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fallbacks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ModelRef"
+          }
+        },
+        "assignments": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ModelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "EnsembleMember": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ModelRef"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "reasoning_effort": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ReasoningEffort"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Ensemble": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": ["name", "enabled", "active", "members", "aggregator", "max_tokens"],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "active": {
+              "type": "boolean",
+              "description": "At most one ensemble is active per workspace."
+            },
+            "members": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/EnsembleMember"
+              }
+            },
+            "aggregator": {
+              "$ref": "#/$defs/EnsembleMember"
+            },
+            "max_tokens": {
+              "type": ["integer", "null"]
+            }
+          }
+        }
+      ]
+    },
+    "EnsembleWrite": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EnsembleMember"
+          }
+        },
+        "aggregator": {
+          "$ref": "#/$defs/EnsembleMember"
+        },
+        "max_tokens": {
+          "type": ["integer", "null"]
+        }
+      }
+    },
+    "SpeechProvider": {
+      "type": "object",
+      "required": ["id", "slug", "label", "kind", "configured", "api_key", "settings"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["stt", "tts"]
+        },
+        "configured": {
+          "type": "boolean"
+        },
+        "api_key": {
+          "type": ["string", "null"],
+          "enum": ["[stored]", null]
+        },
+        "settings": {
+          "type": "object",
+          "required": ["model", "language", "base_url", "voice"],
+          "properties": {
+            "model": {
+              "type": ["string", "null"]
+            },
+            "language": {
+              "type": ["string", "null"]
+            },
+            "base_url": {
+              "type": ["string", "null"]
+            },
+            "voice": {
+              "type": ["string", "null"]
+            }
+          }
+        }
+      }
+    },
+    "SpeechSide": {
+      "type": "object",
+      "required": ["active_provider_id", "ready", "reason", "providers"],
+      "properties": {
+        "active_provider_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ready": {
+          "type": "boolean",
+          "description": "Whether the hub can serve requests now (the phone's \"server dictation possible\" check)."
+        },
+        "reason": {
+          "type": ["string", "null"]
+        },
+        "providers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SpeechProvider"
+          }
+        }
+      }
+    },
+    "SpeechSettings": {
+      "type": "object",
+      "required": ["stt", "tts"],
+      "properties": {
+        "stt": {
+          "$ref": "#/$defs/SpeechSide"
+        },
+        "tts": {
+          "$ref": "#/$defs/SpeechSide"
+        }
+      }
+    },
+    "SpeechSettingsPatch": {
+      "type": "object",
+      "properties": {
+        "stt_provider_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tts_provider_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "providers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/Ulid"
+              },
+              "api_key": {
+                "type": ["string", "null"]
+              },
+              "settings": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "Voice": {
+      "type": "object",
+      "required": ["id", "name", "language", "gender"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "language": {
+          "type": ["string", "null"]
+        },
+        "gender": {
+          "type": ["string", "null"],
+          "enum": ["female", "male", "neutral", null]
+        }
+      }
+    },
+    "Transcription": {
+      "type": "object",
+      "required": ["text", "language", "duration_ms", "provider_id", "model"],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "language": {
+          "type": ["string", "null"],
+          "description": "Detected or requested language."
+        },
+        "duration_ms": {
+          "type": "integer"
+        },
+        "provider_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "model": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "SpeechRequest": {
+      "type": "object",
+      "required": ["text"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "language": {
+          "type": ["string", "null"]
+        },
+        "voice": {
+          "type": ["string", "null"],
+          "description": "Overrides the provider's default voice for this request."
+        },
+        "provider_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "DevicePlatform": {
+      "type": "string",
+      "enum": ["android", "ios", "web", "macos", "windows", "linux"]
+    },
+    "DeviceKind": {
+      "type": "string",
+      "enum": ["phone", "tablet", "computer", "browser"]
+    },
+    "CapabilityKind": {
+      "type": "string",
+      "description": "What a device can do for an agent. Unsupported kinds are simply absent.",
+      "enum": [
+        "location",
+        "camera",
+        "microphone",
+        "notifications",
+        "clipboard",
+        "screen",
+        "files",
+        "apps",
+        "calendar",
+        "reminders",
+        "health"
+      ]
+    },
+    "DeviceCapability": {
+      "type": "object",
+      "required": ["kind", "enabled", "consent_at"],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/CapabilityKind"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "consent_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "When the person granted the OS permission, if the device reports it."
+        }
+      }
+    },
+    "DeviceRegistration": {
+      "type": "object",
+      "description": "How a device describes itself when pairing.",
+      "required": ["device_key", "name", "platform", "kind"],
+      "properties": {
+        "device_key": {
+          "type": "string",
+          "description": "Stable id the device generates once and keeps, so re-pairing updates the same row.",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "platform": {
+          "$ref": "#/$defs/DevicePlatform"
+        },
+        "kind": {
+          "$ref": "#/$defs/DeviceKind"
+        },
+        "brand": {
+          "type": ["string", "null"]
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "app_version": {
+          "type": ["string", "null"]
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CapabilityKind"
+          }
+        }
+      }
+    },
+    "PushStatus": {
+      "type": "object",
+      "required": ["provider", "locale", "registered_at"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["fcm", "apns", "webpush"]
+        },
+        "locale": {
+          "$ref": "#/$defs/Locale"
+        },
+        "registered_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "PushRegistration": {
+      "type": "object",
+      "required": ["provider", "token"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["fcm", "apns", "webpush"]
+        },
+        "token": {
+          "type": "string"
+        },
+        "locale": {
+          "$ref": "#/$defs/Locale"
+        }
+      }
+    },
+    "Device": {
+      "type": "object",
+      "required": [
+        "id",
+        "user_id",
+        "device_key",
+        "name",
+        "platform",
+        "kind",
+        "brand",
+        "model",
+        "app_version",
+        "connection",
+        "online",
+        "last_seen_at",
+        "app_token_id",
+        "capabilities",
+        "push",
+        "this_device",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "user_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "device_key": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "platform": {
+          "$ref": "#/$defs/DevicePlatform"
+        },
+        "kind": {
+          "$ref": "#/$defs/DeviceKind"
+        },
+        "brand": {
+          "type": ["string", "null"]
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "app_version": {
+          "type": ["string", "null"]
+        },
+        "connection": {
+          "$ref": "#/$defs/PairingConnection"
+        },
+        "online": {
+          "type": "boolean",
+          "description": "Has a live `/rt/devices` socket."
+        },
+        "last_seen_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "app_token_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DeviceCapability"
+          }
+        },
+        "push": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PushStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "this_device": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "DevicePatch": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "app_version": {
+          "type": ["string", "null"]
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DeviceCapability"
+          }
+        }
+      }
+    },
+    "DeviceRequestStatus": {
+      "type": "string",
+      "enum": ["pending", "fulfilled", "denied", "failed", "expired", "cancelled"]
+    },
+    "DeviceRequest": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "device_id",
+            "session_id",
+            "run_id",
+            "job_id",
+            "capability",
+            "purpose",
+            "params",
+            "status",
+            "expires_at",
+            "result",
+            "error"
+          ],
+          "properties": {
+            "device_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "session_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "run_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "job_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "capability": {
+              "$ref": "#/$defs/CapabilityKind"
+            },
+            "purpose": {
+              "type": ["string", "null"],
+              "description": "Shown to the person in the consent sheet."
+            },
+            "params": {
+              "type": "object",
+              "description": "Capability-specific: `location` takes `accuracy: coarse | precise`.",
+              "additionalProperties": true
+            },
+            "status": {
+              "$ref": "#/$defs/DeviceRequestStatus"
+            },
+            "expires_at": {
+              "$ref": "#/$defs/Timestamp"
+            },
+            "result": {
+              "type": ["object", "null"],
+              "description": "Capability-specific: `location` returns `latitude, longitude, accuracy_m, captured_at`.",
+              "additionalProperties": true
+            },
+            "error": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/DeviceRequestError"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "DeviceRequestError": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Fixed list shared by all platforms.",
+          "enum": ["permission_denied", "unavailable", "timeout", "cancelled", "failed"]
+        },
+        "message": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "DeviceRequestCreate": {
+      "type": "object",
+      "required": ["device_id", "capability"],
+      "properties": {
+        "device_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "capability": {
+          "$ref": "#/$defs/CapabilityKind"
+        },
+        "purpose": {
+          "type": ["string", "null"]
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "session_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 300000,
+          "default": 30000
+        }
+      }
+    },
+    "DeviceRequestResponse": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["fulfilled", "denied", "failed"]
+        },
+        "result": {
+          "type": ["object", "null"],
+          "additionalProperties": true
+        },
+        "error": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/DeviceRequestError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Relay": {
+      "type": "object",
+      "required": ["enabled", "connected", "route", "relay_url", "hub_id", "error", "connected_at"],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "connected": {
+          "type": "boolean"
+        },
+        "route": {
+          "type": "string",
+          "enum": ["official", "cloudflare"]
+        },
+        "relay_url": {
+          "type": ["string", "null"]
+        },
+        "hub_id": {
+          "type": ["string", "null"]
+        },
+        "error": {
+          "type": ["string", "null"]
+        },
+        "connected_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Peer": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "url",
+        "version",
+        "online",
+        "inbound_status",
+        "outbound_status",
+        "last_seen_at",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "version": {
+          "type": ["string", "null"]
+        },
+        "online": {
+          "type": "boolean"
+        },
+        "inbound_status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected", "blocked"]
+        },
+        "outbound_status": {
+          "type": "string",
+          "enum": ["none", "requested", "connected", "rejected", "error"]
+        },
+        "last_seen_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "NoticeKind": {
+      "type": "string",
+      "enum": [
+        "run_completed",
+        "approval_requested",
+        "room_mention",
+        "task_moved",
+        "schedule_failed",
+        "update_available",
+        "system"
+      ]
+    },
+    "Notice": {
+      "type": "object",
+      "required": [
+        "id",
+        "user_id",
+        "profile",
+        "kind",
+        "title",
+        "body",
+        "resource",
+        "read_at",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "user_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "profile": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ProfileSlug"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/NoticeKind"
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": ["string", "null"]
+        },
+        "resource": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ResourceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What to open when tapped."
+        },
+        "read_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "NotifyPreferences": {
+      "type": "object",
+      "required": ["events", "quiet_hours"],
+      "properties": {
+        "events": {
+          "type": "object",
+          "description": "Keyed by `NoticeKind`; a missing key means both channels on.",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["in_app", "push"],
+            "properties": {
+              "in_app": {
+                "type": "boolean"
+              },
+              "push": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "quiet_hours": {
+          "type": "object",
+          "required": ["enabled", "from", "to", "timezone"],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "from": {
+              "type": "string",
+              "pattern": "^[0-2][0-9]:[0-5][0-9]$"
+            },
+            "to": {
+              "type": "string",
+              "pattern": "^[0-2][0-9]:[0-5][0-9]$"
+            },
+            "timezone": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "Webhook": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "url",
+        "events",
+        "profiles",
+        "enabled",
+        "secret",
+        "include_content",
+        "allow_private_network",
+        "max_retries",
+        "stats",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "profiles": {
+          "type": "array",
+          "description": "Empty means every workspace.",
+          "items": {
+            "$ref": "#/$defs/ProfileSlug"
+          }
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "secret": {
+          "type": ["string", "null"],
+          "enum": ["[stored]", null]
+        },
+        "include_content": {
+          "type": "boolean",
+          "description": "Include message text in payloads (off = ids only)."
+        },
+        "allow_private_network": {
+          "type": "boolean"
+        },
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "stats": {
+          "type": "object",
+          "required": ["delivered", "failed", "last_delivery_at", "last_error"],
+          "properties": {
+            "delivered": {
+              "type": "integer"
+            },
+            "failed": {
+              "type": "integer"
+            },
+            "last_delivery_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "last_error": {
+              "type": ["string", "null"]
+            }
+          }
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "WebhookWrite": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "profiles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProfileSlug"
+          }
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "secret": {
+          "type": ["string", "null"]
+        },
+        "include_content": {
+          "type": "boolean"
+        },
+        "allow_private_network": {
+          "type": "boolean"
+        },
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        }
+      }
+    },
+    "ClientPlatform": {
+      "type": "string",
+      "enum": ["android", "ios", "macos", "windows", "linux"]
+    },
+    "ReleaseChannel": {
+      "type": "string",
+      "enum": ["stable", "test"]
+    },
+    "Release": {
+      "type": "object",
+      "required": [
+        "id",
+        "platform",
+        "channel",
+        "version",
+        "build",
+        "notes",
+        "size_bytes",
+        "sha256",
+        "mandatory",
+        "download_url",
+        "published_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "platform": {
+          "$ref": "#/$defs/ClientPlatform"
+        },
+        "channel": {
+          "$ref": "#/$defs/ReleaseChannel"
+        },
+        "version": {
+          "type": "string",
+          "description": "Release segment, e.g. `1.0.3`. Clients compare release then `build`."
+        },
+        "build": {
+          "type": "integer"
+        },
+        "notes": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "size_bytes": {
+          "type": "integer"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "mandatory": {
+          "type": "boolean"
+        },
+        "download_url": {
+          "type": "string",
+          "description": "Path on this hub; never a third-party URL."
+        },
+        "published_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "ReleaseCreate": {
+      "type": "object",
+      "required": ["platform", "channel", "version", "build", "notes"],
+      "properties": {
+        "platform": {
+          "$ref": "#/$defs/ClientPlatform"
+        },
+        "channel": {
+          "$ref": "#/$defs/ReleaseChannel"
+        },
+        "version": {
+          "type": "string"
+        },
+        "build": {
+          "type": "integer"
+        },
+        "notes": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "attachment_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Uploaded with `purpose: release`."
+        },
+        "source_url": {
+          "type": ["string", "null"],
+          "description": "Fetched server-side with the configured source token; the phone never sees it."
+        },
+        "mandatory": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "UpdateCheck": {
+      "type": "object",
+      "required": ["available", "reason", "release"],
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": ["string", "null"],
+          "enum": ["not_configured", "up_to_date", null]
+        },
+        "release": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Release"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "UpdateSettings": {
+      "type": "object",
+      "required": ["default_channel", "source", "auto_publish"],
+      "properties": {
+        "default_channel": {
+          "$ref": "#/$defs/ReleaseChannel"
+        },
+        "source": {
+          "type": "object",
+          "required": ["kind", "repo", "token"],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["manual", "github_release"]
+            },
+            "repo": {
+              "type": ["string", "null"]
+            },
+            "token": {
+              "type": ["string", "null"],
+              "enum": ["[stored]", null]
+            }
+          }
+        },
+        "auto_publish": {
+          "type": "boolean",
+          "description": "Publish new source releases automatically to the `test` channel."
+        }
+      }
+    },
+    "UpdateSettingsWrite": {
+      "type": "object",
+      "properties": {
+        "default_channel": {
+          "$ref": "#/$defs/ReleaseChannel"
+        },
+        "source": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["manual", "github_release"]
+            },
+            "repo": {
+              "type": ["string", "null"]
+            },
+            "token": {
+              "type": ["string", "null"]
+            }
+          }
+        },
+        "auto_publish": {
+          "type": "boolean"
+        }
+      }
+    },
+    "KnowledgeItem": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": ["kind", "title", "content", "date", "mood", "tags", "attachment_ids"],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["journal", "note", "file"]
+            },
+            "title": {
+              "type": ["string", "null"]
+            },
+            "content": {
+              "type": ["string", "null"]
+            },
+            "date": {
+              "type": ["string", "null"],
+              "format": "date"
+            },
+            "mood": {
+              "type": ["string", "null"]
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "attachment_ids": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Ulid"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "AuditReport": {
+      "type": "object",
+      "required": ["kind", "period", "generated_at", "data"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["logs", "usage", "performance", "skills"]
+        },
+        "period": {
+          "type": "object",
+          "required": ["from", "to"],
+          "properties": {
+            "from": {
+              "type": "string",
+              "format": "date"
+            },
+            "to": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        },
+        "generated_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "data": {
+          "type": "object",
+          "description": "Kind-specific; fixed in Phase 4 (usage totals and breakdowns, runtime processes, skill counts, log entries with ISO timestamps and byte sizes).",
+          "additionalProperties": true
+        }
+      }
+    },
+    "HubPlugin": {
+      "type": "object",
+      "required": [
+        "id",
+        "slug",
+        "name",
+        "version",
+        "kind",
+        "status",
+        "url",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["docker", "mcp"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["running", "stopped", "error"]
+        },
+        "url": {
+          "type": ["string", "null"]
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Envelope": {
+      "type": "object",
+      "description": "Every event is wrapped in this envelope.",
+      "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+      "properties": {
+        "event": {
+          "type": "string",
+          "pattern": "^[a-z_]+\\.[a-z_]+$",
+          "description": "`<entity>.<verb>`"
+        },
+        "namespace": {
+          "type": "string",
+          "enum": [
+            "/rt/sessions",
+            "/rt/rooms",
+            "/rt/board",
+            "/rt/schedules",
+            "/rt/devices",
+            "/rt/jobs"
+          ]
+        },
+        "profile": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ProfileSlug"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`null` only for user-level events on /rt/devices (notices, device state)."
+        },
+        "ts": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Monotonic per namespace and profile; a gap means the client missed events and refetches."
+        },
+        "payload": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,403 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/rooms/run.started.schema.json",
+  "title": "/rt/rooms · run.started",
+  "description": "Same payload as `/rt/sessions`; `message.room_id` / `run.room_id` and `seat_id` are set. Members of the room receive it without subscribing to seat sessions. Emitted by: sessions module, re-emitted to the room.",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "run.started"
+    },
+    "namespace": {
+      "const": "/rt/rooms"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["run"],
+      "properties": {
+        "run": {
+          "$ref": "#/$defs/Run"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "run.started",
+      "namespace": "/rt/rooms",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "run": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0RN",
+          "profile": "work",
+          "owner_id": "01J8QK3ZR2W7M5N4P6T8V9X0HM",
+          "created_at": "2026-09-21T10:15:00Z",
+          "updated_at": "2026-09-21T10:15:04Z",
+          "session_id": "01J8QK3ZR2W7M5N4P6T8V9X0YA",
+          "room_id": "01J8QK3ZR2W7M5N4P6T8V9X0RM",
+          "seat_id": "01J8QK3ZR2W7M5N4P6T8V9X0ST",
+          "job_id": "01J8QK3ZR2W7M5N4P6T8V9X0JB",
+          "status": "running",
+          "queue_position": null,
+          "trigger": {
+            "kind": "user",
+            "id": "01J8QK3ZR2W7M5N4P6T8V9X0HM"
+          },
+          "input_message_id": "01J8QK3ZR2W7M5N4P6T8V9X0MA",
+          "output_message_id": "01J8QK3ZR2W7M5N4P6T8V9X0MB",
+          "model": "claude-sonnet-4-5",
+          "provider": "anthropic",
+          "reasoning_effort": "medium",
+          "interrupted": false,
+          "error": null,
+          "usage": null,
+          "started_at": "2026-09-21T10:15:01Z",
+          "finished_at": null
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "Error": {
+      "type": "object",
+      "description": "The one error envelope. Clients branch on `code`, show `error` verbatim.",
+      "required": ["error", "code"],
+      "properties": {
+        "error": {
+          "type": "string",
+          "description": "Human sentence in the request language (`Accept-Language`)."
+        },
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "details": {
+          "type": "object",
+          "description": "Code-specific structured details (see `docs/contracts/README.md` §4).",
+          "additionalProperties": true
+        }
+      },
+      "examples": [
+        {
+          "error": "الجلسة غير موجودة",
+          "code": "not_found",
+          "details": {
+            "resource": "session",
+            "id": "01J8QK3ZR2W7M5N4P6T8V9X0YA"
+          }
+        }
+      ]
+    },
+    "ErrorCode": {
+      "type": "string",
+      "description": "Fixed list. Adding a code is a contract change.",
+      "enum": [
+        "bad_request",
+        "validation_failed",
+        "profile_required",
+        "unauthorized",
+        "token_expired",
+        "forbidden",
+        "not_found",
+        "profile_not_found",
+        "conflict",
+        "state_invalid",
+        "already_running",
+        "payload_too_large",
+        "unsupported_media_type",
+        "agent_unavailable",
+        "agent_error",
+        "rate_limited",
+        "internal",
+        "not_implemented",
+        "service_unavailable"
+      ]
+    },
+    "Money": {
+      "type": "object",
+      "description": "Decimal amount as a string plus ISO-4217 currency.",
+      "required": ["amount", "currency"],
+      "properties": {
+        "amount": {
+          "type": "string",
+          "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3
+        }
+      },
+      "examples": [
+        {
+          "amount": "0.0123",
+          "currency": "USD"
+        }
+      ]
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "ReasoningEffort": {
+      "type": "string",
+      "enum": ["none", "minimal", "low", "medium", "high", "max"]
+    },
+    "Run": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "description": "One turn of an agent, executed as a job. Every run belongs to a session.",
+          "required": [
+            "session_id",
+            "room_id",
+            "seat_id",
+            "job_id",
+            "status",
+            "queue_position",
+            "trigger",
+            "input_message_id",
+            "output_message_id",
+            "model",
+            "provider",
+            "reasoning_effort",
+            "interrupted",
+            "error",
+            "usage",
+            "started_at",
+            "finished_at"
+          ],
+          "properties": {
+            "session_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "room_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "seat_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "job_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "status": {
+              "$ref": "#/$defs/RunStatus"
+            },
+            "queue_position": {
+              "type": ["integer", "null"],
+              "minimum": 1,
+              "description": "1-based position while `queued`."
+            },
+            "trigger": {
+              "$ref": "#/$defs/RunTrigger"
+            },
+            "input_message_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "output_message_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "model": {
+              "type": ["string", "null"]
+            },
+            "provider": {
+              "type": ["string", "null"]
+            },
+            "reasoning_effort": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ReasoningEffort"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "interrupted": {
+              "type": "boolean"
+            },
+            "error": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Error"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usage": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Usage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "started_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "finished_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "RunStatus": {
+      "type": "string",
+      "enum": ["queued", "running", "waiting", "succeeded", "failed", "cancelled"]
+    },
+    "RunTrigger": {
+      "type": "object",
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["user", "room", "task", "schedule", "workflow", "handoff", "api"]
+        },
+        "id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The user, seat, task, schedule, workflow run or chain that caused the run."
+        }
+      }
+    },
+    "Scoped": {
+      "type": "object",
+      "description": "Fields every row a client can show carries (ARCHITECTURE §Data ownership).",
+      "required": ["id", "profile", "owner_id", "created_at", "updated_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "owner_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    },
+    "Usage": {
+      "type": "object",
+      "required": ["input_tokens", "output_tokens", "cost"],
+      "properties": {
+        "input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cost": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Money"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
