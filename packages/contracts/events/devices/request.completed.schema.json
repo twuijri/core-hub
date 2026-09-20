@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/devices/request.completed.schema.json",
+  "title": "/rt/devices · request.completed",
+  "description": "The request was answered, expired or cancelled. To the device and to the session owner. Emitted by: devices module.",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "request.completed"
+    },
+    "namespace": {
+      "const": "/rt/devices"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["request"],
+      "properties": {
+        "request": {
+          "$ref": "#/$defs/DeviceRequest"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "request.completed",
+      "namespace": "/rt/devices",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "request": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0DR",
+          "profile": "work",
+          "owner_id": "01J8QK3ZR2W7M5N4P6T8V9X0HM",
+          "created_at": "2026-09-21T13:06:00Z",
+          "updated_at": "2026-09-21T13:06:00Z",
+          "device_id": "01J8QK3ZR2W7M5N4P6T8V9X0DV",
+          "session_id": "01J8QK3ZR2W7M5N4P6T8V9X0YA",
+          "run_id": "01J8QK3ZR2W7M5N4P6T8V9X0RN",
+          "job_id": "01J8QK3ZR2W7M5N4P6T8V9X0K3",
+          "capability": "location",
+          "purpose": "لاقتراح المطاعم القريبة",
+          "params": {
+            "accuracy": "coarse"
+          },
+          "status": "fulfilled",
+          "expires_at": "2026-09-21T13:06:30Z",
+          "result": {
+            "latitude": 24.7136,
+            "longitude": 46.6753,
+            "accuracy_m": 120,
+            "captured_at": "2026-09-21T13:06:10Z"
+          },
+          "error": null
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "CapabilityKind": {
+      "type": "string",
+      "description": "What a device can do for an agent. Unsupported kinds are simply absent.",
+      "enum": [
+        "location",
+        "camera",
+        "microphone",
+        "notifications",
+        "clipboard",
+        "screen",
+        "files",
+        "apps",
+        "calendar",
+        "reminders",
+        "health"
+      ]
+    },
+    "DeviceRequest": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "device_id",
+            "session_id",
+            "run_id",
+            "job_id",
+            "capability",
+            "purpose",
+            "params",
+            "status",
+            "expires_at",
+            "result",
+            "error"
+          ],
+          "properties": {
+            "device_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "session_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "run_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "job_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "capability": {
+              "$ref": "#/$defs/CapabilityKind"
+            },
+            "purpose": {
+              "type": ["string", "null"],
+              "description": "Shown to the person in the consent sheet."
+            },
+            "params": {
+              "type": "object",
+              "description": "Capability-specific: `location` takes `accuracy: coarse | precise`.",
+              "additionalProperties": true
+            },
+            "status": {
+              "$ref": "#/$defs/DeviceRequestStatus"
+            },
+            "expires_at": {
+              "$ref": "#/$defs/Timestamp"
+            },
+            "result": {
+              "type": ["object", "null"],
+              "description": "Capability-specific: `location` returns `latitude, longitude, accuracy_m, captured_at`.",
+              "additionalProperties": true
+            },
+            "error": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/DeviceRequestError"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "DeviceRequestError": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Fixed list shared by all platforms.",
+          "enum": ["permission_denied", "unavailable", "timeout", "cancelled", "failed"]
+        },
+        "message": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "DeviceRequestStatus": {
+      "type": "string",
+      "enum": ["pending", "fulfilled", "denied", "failed", "expired", "cancelled"]
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "Scoped": {
+      "type": "object",
+      "description": "Fields every row a client can show carries (ARCHITECTURE §Data ownership).",
+      "required": ["id", "profile", "owner_id", "created_at", "updated_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "owner_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}

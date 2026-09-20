@@ -1,0 +1,17 @@
+{
+  "errors": {
+    "bad_request": "The request could not be understood.",
+    "validation_failed": "The request did not match the expected shape.",
+    "unauthorized": "Sign in to continue.",
+    "forbidden": "You do not have permission to do this.",
+    "not_found": "The requested item does not exist.",
+    "conflict": "This conflicts with the current state.",
+    "profile_required": "A workspace scope (X-Hub-Profile) is required.",
+    "rate_limited": "Too many requests. Try again shortly.",
+    "not_implemented": "This operation is declared in the contract but not implemented yet.",
+    "internal_error": "Something went wrong on the hub."
+  },
+  "system": {
+    "healthy": "The hub is running."
+  }
+}

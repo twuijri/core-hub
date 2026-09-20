@@ -1,0 +1,14 @@
+# openapi-generator config for the Kotlin client (Android).
+generatorName: kotlin
+packageName: hub.core.client
+apiPackage: hub.core.client.api
+modelPackage: hub.core.client.model
+artifactId: corehub-client
+groupId: hub.core
+additionalProperties:
+  library: jvm-okhttp4
+  serializationLibrary: kotlinx_serialization
+  dateLibrary: java8
+  enumPropertyNaming: UPPERCASE
+  omitGradleWrapper: true
+  useCoroutines: true

@@ -1,0 +1,17 @@
+# Redocly CLI configuration for `pnpm contracts:lint`.
+extends:
+  - recommended
+apis:
+  hub@v1:
+    root: ./openapi.yaml
+rules:
+  operation-operationId: error
+  operation-operationId-unique: error
+  operation-summary: error
+  operation-4xx-response: off
+  no-unused-components: warn
+  no-ambiguous-paths: error
+  path-params-defined: error
+  tag-description: off
+  info-license: off
+  security-defined: off

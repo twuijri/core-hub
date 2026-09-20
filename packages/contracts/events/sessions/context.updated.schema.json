@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/sessions/context.updated.schema.json",
+  "title": "/rt/sessions · context.updated",
+  "description": "The context-window usage of a session changed. Emitted by: sessions module after each run and after compression.",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "context.updated"
+    },
+    "namespace": {
+      "const": "/rt/sessions"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["session_id", "context", "usage"],
+      "properties": {
+        "session_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "context": {
+          "$ref": "#/$defs/ContextUsage"
+        },
+        "usage": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "context.updated",
+      "namespace": "/rt/sessions",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "session_id": "01J8QK3ZR2W7M5N4P6T8V9X0YA",
+        "context": {
+          "used_tokens": 47210,
+          "window_tokens": 256000
+        },
+        "usage": {
+          "input_tokens": 20530,
+          "output_tokens": 4620,
+          "cost": {
+            "amount": "0.1043",
+            "currency": "USD"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "ContextUsage": {
+      "type": "object",
+      "required": ["used_tokens", "window_tokens"],
+      "properties": {
+        "used_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "window_tokens": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "`null` when the model's window is unknown."
+        }
+      }
+    },
+    "Money": {
+      "type": "object",
+      "description": "Decimal amount as a string plus ISO-4217 currency.",
+      "required": ["amount", "currency"],
+      "properties": {
+        "amount": {
+          "type": "string",
+          "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3
+        }
+      },
+      "examples": [
+        {
+          "amount": "0.0123",
+          "currency": "USD"
+        }
+      ]
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    },
+    "Usage": {
+      "type": "object",
+      "required": ["input_tokens", "output_tokens", "cost"],
+      "properties": {
+        "input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cost": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Money"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

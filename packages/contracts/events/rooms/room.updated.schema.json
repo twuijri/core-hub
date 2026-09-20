@@ -1,0 +1,387 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/rooms/room.updated.schema.json",
+  "title": "/rt/rooms · room.updated",
+  "description": "Room fields changed. Members of the room. Emitted by: rooms module (patch, invite rotation, token count changes).",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "room.updated"
+    },
+    "namespace": {
+      "const": "/rt/rooms"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["room"],
+      "properties": {
+        "room": {
+          "$ref": "#/$defs/Room"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "room.updated",
+      "namespace": "/rt/rooms",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "room": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0RM",
+          "profile": "work",
+          "owner_id": "01J8QK3ZR2W7M5N4P6T8V9X0HM",
+          "created_at": "2026-09-20T09:00:00Z",
+          "updated_at": "2026-09-21T10:00:00Z",
+          "name": "غرفة الإطلاق",
+          "working_dir": null,
+          "invite_code": null,
+          "can_manage": false,
+          "can_mention_all": true,
+          "member_count": 2,
+          "total_tokens": 48210,
+          "summary_policy": {
+            "every_turns": 20,
+            "model": null,
+            "provider": null
+          },
+          "handoff": {
+            "enabled": true,
+            "max_depth": 3
+          },
+          "seats": [
+            {
+              "id": "01J8QK3ZR2W7M5N4P6T8V9X0ST",
+              "room_id": "01J8QK3ZR2W7M5N4P6T8V9X0RM",
+              "agent_id": "01J8QK3ZR2W7M5N4P6T8V9X0AG",
+              "name": "المخطِّط",
+              "description": null,
+              "avatar": {
+                "kind": "generated",
+                "url": null,
+                "seed": "planner"
+              },
+              "model": null,
+              "provider": null,
+              "reasoning_effort": null,
+              "instructions": null,
+              "preset_id": null,
+              "status": "running",
+              "executor": {
+                "kind": "server",
+                "device_id": null
+              },
+              "created_at": "2026-09-20T09:00:00Z",
+              "updated_at": "2026-09-21T10:00:01Z"
+            }
+          ],
+          "last_active_at": "2026-09-21T10:00:00Z"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "Avatar": {
+      "type": "object",
+      "description": "A picture for a person, agent or profile. `generated` avatars are drawn by the client from `seed`.",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["image", "generated"]
+        },
+        "url": {
+          "type": ["string", "null"],
+          "description": "Fetchable with the bearer token when `kind = image`."
+        },
+        "seed": {
+          "type": ["string", "null"],
+          "description": "Deterministic seed when `kind = generated`."
+        }
+      },
+      "examples": [
+        {
+          "kind": "generated",
+          "url": null,
+          "seed": "work"
+        }
+      ]
+    },
+    "HandoffPolicy": {
+      "type": "object",
+      "required": ["enabled", "max_depth"],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "max_depth": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "`null` = unlimited."
+        }
+      }
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "ReasoningEffort": {
+      "type": "string",
+      "enum": ["none", "minimal", "low", "medium", "high", "max"]
+    },
+    "Room": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "working_dir",
+            "invite_code",
+            "can_manage",
+            "can_mention_all",
+            "member_count",
+            "total_tokens",
+            "summary_policy",
+            "handoff",
+            "seats",
+            "last_active_at"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "working_dir": {
+              "type": ["string", "null"]
+            },
+            "invite_code": {
+              "type": ["string", "null"],
+              "description": "Only managers see it; others get `null`."
+            },
+            "can_manage": {
+              "type": "boolean",
+              "description": "Whether the caller may edit the room."
+            },
+            "can_mention_all": {
+              "type": "boolean"
+            },
+            "member_count": {
+              "type": "integer"
+            },
+            "total_tokens": {
+              "type": "integer"
+            },
+            "summary_policy": {
+              "$ref": "#/$defs/SummaryPolicy"
+            },
+            "handoff": {
+              "$ref": "#/$defs/HandoffPolicy"
+            },
+            "seats": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Seat"
+              }
+            },
+            "last_active_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Scoped": {
+      "type": "object",
+      "description": "Fields every row a client can show carries (ARCHITECTURE §Data ownership).",
+      "required": ["id", "profile", "owner_id", "created_at", "updated_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "owner_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Seat": {
+      "type": "object",
+      "required": [
+        "id",
+        "room_id",
+        "agent_id",
+        "name",
+        "description",
+        "avatar",
+        "model",
+        "provider",
+        "reasoning_effort",
+        "instructions",
+        "preset_id",
+        "status",
+        "executor",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "room_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "agent_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": ["string", "null"]
+        },
+        "avatar": {
+          "$ref": "#/$defs/Avatar"
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "provider": {
+          "type": ["string", "null"]
+        },
+        "reasoning_effort": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ReasoningEffort"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "instructions": {
+          "type": ["string", "null"]
+        },
+        "preset_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/SeatStatus"
+        },
+        "executor": {
+          "$ref": "#/$defs/SeatExecutor"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "SeatExecutor": {
+      "type": "object",
+      "description": "Where the seat's agent runs — on the hub or on a linked device (Phase 3).",
+      "required": ["kind", "device_id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["server", "device"]
+        },
+        "device_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "SeatStatus": {
+      "type": "string",
+      "enum": ["idle", "queued", "thinking", "running", "waiting_approval", "offline"]
+    },
+    "SummaryPolicy": {
+      "type": "object",
+      "required": ["every_turns", "model", "provider"],
+      "properties": {
+        "every_turns": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Re-summarize the room every N turns; 0 disables."
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "provider": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}

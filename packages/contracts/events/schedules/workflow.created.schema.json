@@ -1,0 +1,285 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/schedules/workflow.created.schema.json",
+  "title": "/rt/schedules · workflow.created",
+  "description": "Profile-wide. Emitted by: schedules module.",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "workflow.created"
+    },
+    "namespace": {
+      "const": "/rt/schedules"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["workflow"],
+      "properties": {
+        "workflow": {
+          "$ref": "#/$defs/Workflow"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "workflow.created",
+      "namespace": "/rt/schedules",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "workflow": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0WF",
+          "profile": "work",
+          "owner_id": "01J8QK3ZR2W7M5N4P6T8V9X0HM",
+          "created_at": "2026-09-18T00:00:00Z",
+          "updated_at": "2026-09-21T09:00:00Z",
+          "name": "مراجعة ثم نشر",
+          "description": null,
+          "working_dir": null,
+          "nodes": [],
+          "edges": [],
+          "status": "running",
+          "active_run_id": "01J8QK3ZR2W7M5N4P6T8V9X0WR",
+          "run_count": 5,
+          "schedule_count": 1
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "ReasoningEffort": {
+      "type": "string",
+      "enum": ["none", "minimal", "low", "medium", "high", "max"]
+    },
+    "Scoped": {
+      "type": "object",
+      "description": "Fields every row a client can show carries (ARCHITECTURE §Data ownership).",
+      "required": ["id", "profile", "owner_id", "created_at", "updated_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "owner_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    },
+    "Workflow": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "description",
+            "working_dir",
+            "nodes",
+            "edges",
+            "status",
+            "active_run_id",
+            "run_count",
+            "schedule_count"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "description": {
+              "type": ["string", "null"]
+            },
+            "working_dir": {
+              "type": ["string", "null"]
+            },
+            "nodes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/WorkflowNode"
+              }
+            },
+            "edges": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/WorkflowEdge"
+              }
+            },
+            "status": {
+              "type": "string",
+              "enum": ["idle", "running", "waiting", "error"]
+            },
+            "active_run_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "run_count": {
+              "type": "integer"
+            },
+            "schedule_count": {
+              "type": "integer",
+              "description": "Enabled schedules targeting this workflow."
+            }
+          }
+        }
+      ]
+    },
+    "WorkflowEdge": {
+      "type": "object",
+      "required": ["id", "from", "to", "route"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "route": {
+          "type": "string",
+          "enum": ["always", "success", "failure"]
+        }
+      }
+    },
+    "WorkflowNode": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "title",
+        "agent_id",
+        "model",
+        "provider",
+        "reasoning_effort",
+        "skills",
+        "input",
+        "approval_required",
+        "position"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,40}$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["agent", "approval", "condition", "delay", "notify"]
+        },
+        "title": {
+          "type": "string"
+        },
+        "agent_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "provider": {
+          "type": ["string", "null"]
+        },
+        "reasoning_effort": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ReasoningEffort"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "input": {
+          "type": ["string", "null"],
+          "description": "Prompt template; `{{input}}` and `{{steps.<id>.output}}` are substituted."
+        },
+        "approval_required": {
+          "type": "boolean",
+          "description": "Gate the node behind an approval (`kind: workflow_step`) before it runs."
+        },
+        "position": {
+          "type": "object",
+          "required": ["x", "y"],
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    }
+  }
+}

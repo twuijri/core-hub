@@ -1,0 +1,241 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/rooms/seat.updated.schema.json",
+  "title": "/rt/rooms · seat.updated",
+  "description": "A seat changed — including its `status` (idle, queued, thinking, running, waiting_approval), which drives the activity strip. Members. Emitted by: rooms module.",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "seat.updated"
+    },
+    "namespace": {
+      "const": "/rt/rooms"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["room_id", "seat"],
+      "properties": {
+        "room_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "seat": {
+          "$ref": "#/$defs/Seat"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "seat.updated",
+      "namespace": "/rt/rooms",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "room_id": "01J8QK3ZR2W7M5N4P6T8V9X0RM",
+        "seat": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0ST",
+          "room_id": "01J8QK3ZR2W7M5N4P6T8V9X0RM",
+          "agent_id": "01J8QK3ZR2W7M5N4P6T8V9X0AG",
+          "name": "المخطِّط",
+          "description": null,
+          "avatar": {
+            "kind": "generated",
+            "url": null,
+            "seed": "planner"
+          },
+          "model": null,
+          "provider": null,
+          "reasoning_effort": null,
+          "instructions": null,
+          "preset_id": null,
+          "status": "running",
+          "executor": {
+            "kind": "server",
+            "device_id": null
+          },
+          "created_at": "2026-09-20T09:00:00Z",
+          "updated_at": "2026-09-21T10:00:01Z"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "Avatar": {
+      "type": "object",
+      "description": "A picture for a person, agent or profile. `generated` avatars are drawn by the client from `seed`.",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["image", "generated"]
+        },
+        "url": {
+          "type": ["string", "null"],
+          "description": "Fetchable with the bearer token when `kind = image`."
+        },
+        "seed": {
+          "type": ["string", "null"],
+          "description": "Deterministic seed when `kind = generated`."
+        }
+      },
+      "examples": [
+        {
+          "kind": "generated",
+          "url": null,
+          "seed": "work"
+        }
+      ]
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "ReasoningEffort": {
+      "type": "string",
+      "enum": ["none", "minimal", "low", "medium", "high", "max"]
+    },
+    "Seat": {
+      "type": "object",
+      "required": [
+        "id",
+        "room_id",
+        "agent_id",
+        "name",
+        "description",
+        "avatar",
+        "model",
+        "provider",
+        "reasoning_effort",
+        "instructions",
+        "preset_id",
+        "status",
+        "executor",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "room_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "agent_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": ["string", "null"]
+        },
+        "avatar": {
+          "$ref": "#/$defs/Avatar"
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "provider": {
+          "type": ["string", "null"]
+        },
+        "reasoning_effort": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ReasoningEffort"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "instructions": {
+          "type": ["string", "null"]
+        },
+        "preset_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/SeatStatus"
+        },
+        "executor": {
+          "$ref": "#/$defs/SeatExecutor"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "SeatExecutor": {
+      "type": "object",
+      "description": "Where the seat's agent runs — on the hub or on a linked device (Phase 3).",
+      "required": ["kind", "device_id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["server", "device"]
+        },
+        "device_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "SeatStatus": {
+      "type": "string",
+      "enum": ["idle", "queued", "thinking", "running", "waiting_approval", "offline"]
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}

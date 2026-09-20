@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/rooms/handoff.updated.schema.json",
+  "title": "/rt/rooms · handoff.updated",
+  "description": "A handoff chain advanced, stopped or completed. Members. Emitted by: rooms module.",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "handoff.updated"
+    },
+    "namespace": {
+      "const": "/rt/rooms"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["room_id", "chain"],
+      "properties": {
+        "room_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "chain": {
+          "$ref": "#/$defs/HandoffChain"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "handoff.updated",
+      "namespace": "/rt/rooms",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "room_id": "01J8QK3ZR2W7M5N4P6T8V9X0RM",
+        "chain": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0HC",
+          "room_id": "01J8QK3ZR2W7M5N4P6T8V9X0RM",
+          "from_seat_id": "01J8QK3ZR2W7M5N4P6T8V9X0ST",
+          "to_seat_id": "01J8QK3ZR2W7M5N4P6T8V9X0SV",
+          "status": "stopped",
+          "stop_reason": "max_depth",
+          "depth": 3,
+          "max_depth": 3,
+          "continue_used": false,
+          "error": null,
+          "updated_at": "2026-09-21T10:30:00Z"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "HandoffChain": {
+      "type": "object",
+      "required": [
+        "id",
+        "room_id",
+        "from_seat_id",
+        "to_seat_id",
+        "status",
+        "stop_reason",
+        "depth",
+        "max_depth",
+        "continue_used",
+        "error",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "room_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "from_seat_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "to_seat_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "stopped", "completed", "failed"]
+        },
+        "stop_reason": {
+          "type": ["string", "null"],
+          "enum": ["max_depth", "loop_detected", "interrupted", "error", null]
+        },
+        "depth": {
+          "type": "integer"
+        },
+        "max_depth": {
+          "type": ["integer", "null"]
+        },
+        "continue_used": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": ["string", "null"]
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}

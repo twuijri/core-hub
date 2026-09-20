@@ -1,0 +1,652 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/sessions/message.created.schema.json",
+  "title": "/rt/sessions · message.created",
+  "description": "A complete message (user, command, system) or the empty shell of a streaming assistant message. Subscribers of the session. Emitted by: sessions module (user message stored; assistant message shell when a run starts; peer clients in the same session).",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "message.created"
+    },
+    "namespace": {
+      "const": "/rt/sessions"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["message"],
+      "properties": {
+        "message": {
+          "$ref": "#/$defs/Message"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "message.created",
+      "namespace": "/rt/sessions",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "message": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0MB",
+          "profile": "work",
+          "owner_id": "01J8QK3ZR2W7M5N4P6T8V9X0HM",
+          "created_at": "2026-09-21T10:15:01Z",
+          "updated_at": "2026-09-21T10:15:04Z",
+          "session_id": "01J8QK3ZR2W7M5N4P6T8V9X0YA",
+          "room_id": null,
+          "seat_id": null,
+          "seq": 14,
+          "role": "assistant",
+          "author": {
+            "kind": "agent",
+            "id": "01J8QK3ZR2W7M5N4P6T8V9X0AG",
+            "name": "Hermes",
+            "avatar": {
+              "kind": "image",
+              "url": "/api/v1/agents/01J8QK3ZR2W7M5N4P6T8V9X0AG/avatar",
+              "seed": null
+            }
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "سأشغّل الاختبارات الآن."
+            }
+          ],
+          "reasoning": null,
+          "tool_calls": [],
+          "run_id": "01J8QK3ZR2W7M5N4P6T8V9X0RN",
+          "status": "streaming",
+          "mentions": [],
+          "handoff": null,
+          "usage": null,
+          "reply_to_message_id": null
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "AttachmentBlockFields": {
+      "type": "object",
+      "required": ["attachment_id"],
+      "properties": {
+        "attachment_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "mime": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "url": {
+          "type": "string",
+          "description": "Filled by the server on read; ignored on write."
+        }
+      }
+    },
+    "AudioBlock": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/AttachmentBlockFields"
+        },
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["audio"]
+            },
+            "duration_ms": {
+              "type": ["integer", "null"]
+            },
+            "transcript": {
+              "type": ["string", "null"],
+              "description": "Filled when the hub transcribed the note before sending it to the agent."
+            }
+          }
+        }
+      ]
+    },
+    "Author": {
+      "type": "object",
+      "description": "Who wrote a message. Agents in rooms are identified by their seat, see `Message.seat_id`.",
+      "required": ["kind", "id", "name", "avatar"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["user", "agent", "system"]
+        },
+        "id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "avatar": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Avatar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Avatar": {
+      "type": "object",
+      "description": "A picture for a person, agent or profile. `generated` avatars are drawn by the client from `seed`.",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["image", "generated"]
+        },
+        "url": {
+          "type": ["string", "null"],
+          "description": "Fetchable with the bearer token when `kind = image`."
+        },
+        "seed": {
+          "type": ["string", "null"],
+          "description": "Deterministic seed when `kind = generated`."
+        }
+      },
+      "examples": [
+        {
+          "kind": "generated",
+          "url": null,
+          "seed": "work"
+        }
+      ]
+    },
+    "ContentBlock": {
+      "description": "One block of message content. Attachments are referenced by id; bytes come from `url`.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TextBlock"
+        },
+        {
+          "$ref": "#/$defs/ImageBlock"
+        },
+        {
+          "$ref": "#/$defs/FileBlock"
+        },
+        {
+          "$ref": "#/$defs/AudioBlock"
+        },
+        {
+          "$ref": "#/$defs/LocationBlock"
+        }
+      ]
+    },
+    "FileBlock": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/AttachmentBlockFields"
+        },
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["file"]
+            }
+          }
+        }
+      ]
+    },
+    "Handoff": {
+      "type": "object",
+      "description": "Set on a room message that hands the turn to another seat.",
+      "required": ["to_seat_id", "chain_id", "depth"],
+      "properties": {
+        "to_seat_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "chain_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "ImageBlock": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/AttachmentBlockFields"
+        },
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["image"]
+            }
+          }
+        }
+      ]
+    },
+    "LocationBlock": {
+      "type": "object",
+      "required": ["type", "latitude", "longitude"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["location"]
+        },
+        "latitude": {
+          "type": "number"
+        },
+        "longitude": {
+          "type": "number"
+        },
+        "accuracy_m": {
+          "type": ["number", "null"]
+        },
+        "captured_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Mention": {
+      "type": "object",
+      "required": ["kind", "seat_id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["seat", "all"]
+        },
+        "seat_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Message": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "description": "The one message shape for sessions and rooms (see DECISIONS.md).",
+          "required": [
+            "session_id",
+            "room_id",
+            "seq",
+            "role",
+            "author",
+            "content",
+            "reasoning",
+            "tool_calls",
+            "run_id",
+            "status",
+            "mentions",
+            "handoff",
+            "usage",
+            "reply_to_message_id"
+          ],
+          "properties": {
+            "session_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "room_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "seat_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The room seat that wrote an agent message."
+            },
+            "seq": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Position in the session; gaps mean deleted messages."
+            },
+            "role": {
+              "$ref": "#/$defs/MessageRole"
+            },
+            "author": {
+              "$ref": "#/$defs/Author"
+            },
+            "content": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContentBlock"
+              }
+            },
+            "reasoning": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Reasoning"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "tool_calls": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ToolCall"
+              }
+            },
+            "run_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Stable across the user message, the assistant reply and its tool calls, so clients fold them into one run card."
+            },
+            "status": {
+              "$ref": "#/$defs/MessageStatus"
+            },
+            "mentions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Mention"
+              }
+            },
+            "handoff": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Handoff"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usage": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Usage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "reply_to_message_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "MessageRole": {
+      "type": "string",
+      "enum": ["user", "assistant", "system", "command"],
+      "description": "`command` is a user message that starts with `/`; there is no `tool` role — tool output lives in `tool_calls`."
+    },
+    "MessageStatus": {
+      "type": "string",
+      "enum": ["complete", "streaming", "failed", "interrupted"]
+    },
+    "Money": {
+      "type": "object",
+      "description": "Decimal amount as a string plus ISO-4217 currency.",
+      "required": ["amount", "currency"],
+      "properties": {
+        "amount": {
+          "type": "string",
+          "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3
+        }
+      },
+      "examples": [
+        {
+          "amount": "0.0123",
+          "currency": "USD"
+        }
+      ]
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "Reasoning": {
+      "type": "object",
+      "required": ["text", "duration_ms"],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "duration_ms": {
+          "type": ["integer", "null"]
+        }
+      }
+    },
+    "Scoped": {
+      "type": "object",
+      "description": "Fields every row a client can show carries (ARCHITECTURE §Data ownership).",
+      "required": ["id", "profile", "owner_id", "created_at", "updated_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "owner_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "TextBlock": {
+      "type": "object",
+      "required": ["type", "text"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["text"]
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "ToolCall": {
+      "type": "object",
+      "description": "One tool invocation inside an assistant message. Tool output lives here, not in a separate message.",
+      "required": [
+        "id",
+        "name",
+        "status",
+        "preview",
+        "arguments",
+        "output",
+        "output_truncated",
+        "duration_ms",
+        "subagent_id",
+        "started_at",
+        "finished_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ToolCallStatus"
+        },
+        "preview": {
+          "type": ["string", "null"],
+          "description": "One-line summary for the tool card (a command, a path)."
+        },
+        "arguments": {
+          "type": ["object", "null"],
+          "additionalProperties": true
+        },
+        "output": {
+          "type": ["string", "null"],
+          "description": "Truncated to 16 KB; `output_truncated` says so."
+        },
+        "output_truncated": {
+          "type": "boolean"
+        },
+        "duration_ms": {
+          "type": ["integer", "null"]
+        },
+        "subagent_id": {
+          "type": ["string", "null"],
+          "description": "Set when the call was made by a delegated subagent."
+        },
+        "started_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finished_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ToolCallStatus": {
+      "type": "string",
+      "enum": ["running", "succeeded", "failed", "interrupted", "awaiting_approval"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    },
+    "Usage": {
+      "type": "object",
+      "required": ["input_tokens", "output_tokens", "cost"],
+      "properties": {
+        "input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cost": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Money"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

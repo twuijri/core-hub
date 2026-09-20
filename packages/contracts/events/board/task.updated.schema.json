@@ -1,0 +1,434 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/board/task.updated.schema.json",
+  "title": "/rt/board · task.updated",
+  "description": "Any non-status field changed. Emitted by: board module (patch, bulk patch, summary from the assignee, dependency change).",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "task.updated"
+    },
+    "namespace": {
+      "const": "/rt/board"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["task"],
+      "properties": {
+        "task": {
+          "$ref": "#/$defs/Task"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "task.updated",
+      "namespace": "/rt/board",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "task": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0TK",
+          "profile": "work",
+          "owner_id": "01J8QK3ZR2W7M5N4P6T8V9X0HM",
+          "created_at": "2026-09-20T09:00:00Z",
+          "updated_at": "2026-09-21T12:30:00Z",
+          "project_id": "01J8QK3ZR2W7M5N4P6T8V9X0PJ",
+          "title": "إضافة صفحة الإعدادات للهاتف",
+          "description": null,
+          "status": "blocked",
+          "priority": "high",
+          "tags": ["mobile"],
+          "assignee": {
+            "kind": "agent",
+            "id": "01J8QK3ZR2W7M5N4P6T8V9X0AC",
+            "name": "Claude Code"
+          },
+          "auto_start": true,
+          "position": "a0",
+          "blocked_reason": "بانتظار مفتاح المزوّد",
+          "status_reason": null,
+          "subtask_counts": {
+            "total": 2,
+            "done": 1
+          },
+          "depends_on": [],
+          "worktree": null,
+          "session_id": "01J8QK3ZR2W7M5N4P6T8V9X0YE",
+          "last_run": {
+            "id": "01J8QK3ZR2W7M5N4P6T8V9X0RS",
+            "status": "cancelled",
+            "finished_at": "2026-09-21T12:30:00Z"
+          },
+          "attempt_count": 1,
+          "latest_summary": null,
+          "due_at": null,
+          "started_at": "2026-09-21T09:30:00Z",
+          "completed_at": null,
+          "archived_at": null,
+          "attachment_ids": []
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "Assignee": {
+      "type": "object",
+      "required": ["kind", "id", "name"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["agent", "user"]
+        },
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "RunStatus": {
+      "type": "string",
+      "enum": ["queued", "running", "waiting", "succeeded", "failed", "cancelled"]
+    },
+    "Scoped": {
+      "type": "object",
+      "description": "Fields every row a client can show carries (ARCHITECTURE §Data ownership).",
+      "required": ["id", "profile", "owner_id", "created_at", "updated_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "owner_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Task": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "project_id",
+            "title",
+            "description",
+            "status",
+            "priority",
+            "tags",
+            "assignee",
+            "auto_start",
+            "position",
+            "blocked_reason",
+            "status_reason",
+            "subtask_counts",
+            "depends_on",
+            "worktree",
+            "session_id",
+            "last_run",
+            "attempt_count",
+            "latest_summary",
+            "due_at",
+            "started_at",
+            "completed_at",
+            "archived_at",
+            "attachment_ids"
+          ],
+          "properties": {
+            "project_id": {
+              "$ref": "#/$defs/Ulid"
+            },
+            "title": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "description": {
+              "type": ["string", "null"]
+            },
+            "status": {
+              "$ref": "#/$defs/TaskStatus"
+            },
+            "priority": {
+              "$ref": "#/$defs/TaskPriority"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "assignee": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Assignee"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "auto_start": {
+              "type": "boolean",
+              "description": "Start a run as soon as the task is `ready` and assigned."
+            },
+            "position": {
+              "type": "string",
+              "description": "Fractional index within the column; the server keeps it, clients never compute it."
+            },
+            "blocked_reason": {
+              "type": ["string", "null"]
+            },
+            "status_reason": {
+              "type": ["string", "null"]
+            },
+            "subtask_counts": {
+              "type": "object",
+              "required": ["total", "done"],
+              "properties": {
+                "total": {
+                  "type": "integer"
+                },
+                "done": {
+                  "type": "integer"
+                }
+              }
+            },
+            "depends_on": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Ulid"
+              }
+            },
+            "worktree": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Worktree"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "session_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The task session (source `task`) the assignee works in."
+            },
+            "last_run": {
+              "type": "object",
+              "required": ["id", "status", "finished_at"],
+              "properties": {
+                "id": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/Ulid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "status": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/RunStatus"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "finished_at": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/Timestamp"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            "attempt_count": {
+              "type": "integer"
+            },
+            "latest_summary": {
+              "type": ["string", "null"],
+              "description": "The assignee's last progress summary."
+            },
+            "due_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "started_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "completed_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "archived_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "attachment_ids": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Ulid"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "TaskPriority": {
+      "type": "string",
+      "enum": ["low", "normal", "high", "urgent"]
+    },
+    "TaskStatus": {
+      "type": "string",
+      "description": "The nine columns, in workflow order. `triage` is intake, `running` belongs to the worker.",
+      "enum": [
+        "triage",
+        "todo",
+        "ready",
+        "scheduled",
+        "running",
+        "blocked",
+        "review",
+        "done",
+        "archived"
+      ]
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    },
+    "Worktree": {
+      "type": "object",
+      "required": [
+        "path",
+        "branch",
+        "base_branch",
+        "status",
+        "ahead",
+        "behind",
+        "changed_files",
+        "error",
+        "updated_at"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "base_branch": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["creating", "ready", "dirty", "merged", "removed", "error"]
+        },
+        "ahead": {
+          "type": "integer"
+        },
+        "behind": {
+          "type": "integer"
+        },
+        "changed_files": {
+          "type": "integer"
+        },
+        "error": {
+          "type": ["string", "null"]
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    }
+  }
+}

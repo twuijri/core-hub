@@ -1,0 +1,317 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/jobs/job.cancelled.schema.json",
+  "title": "/rt/jobs · job.cancelled",
+  "description": "The job was cancelled. Profile-wide. Emitted by: the jobs kernel module, for every job of the workspace.",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "job.cancelled"
+    },
+    "namespace": {
+      "const": "/rt/jobs"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["job"],
+      "properties": {
+        "job": {
+          "$ref": "#/$defs/Job"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "job.cancelled",
+      "namespace": "/rt/jobs",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "job": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0JB",
+          "profile": "work",
+          "owner_id": "01J8QK3ZR2W7M5N4P6T8V9X0HM",
+          "created_at": "2026-09-21T10:15:00Z",
+          "updated_at": "2026-09-21T10:15:04Z",
+          "kind": "run",
+          "status": "cancelled",
+          "progress": {
+            "percent": null,
+            "message": "يكتب الرد…"
+          },
+          "resource": {
+            "kind": "run",
+            "id": "01J8QK3ZR2W7M5N4P6T8V9X0RN"
+          },
+          "result": null,
+          "error": null,
+          "started_at": "2026-09-21T10:15:01Z",
+          "finished_at": "2026-09-21T10:15:40Z"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "Error": {
+      "type": "object",
+      "description": "The one error envelope. Clients branch on `code`, show `error` verbatim.",
+      "required": ["error", "code"],
+      "properties": {
+        "error": {
+          "type": "string",
+          "description": "Human sentence in the request language (`Accept-Language`)."
+        },
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "details": {
+          "type": "object",
+          "description": "Code-specific structured details (see `docs/contracts/README.md` §4).",
+          "additionalProperties": true
+        }
+      },
+      "examples": [
+        {
+          "error": "الجلسة غير موجودة",
+          "code": "not_found",
+          "details": {
+            "resource": "session",
+            "id": "01J8QK3ZR2W7M5N4P6T8V9X0YA"
+          }
+        }
+      ]
+    },
+    "ErrorCode": {
+      "type": "string",
+      "description": "Fixed list. Adding a code is a contract change.",
+      "enum": [
+        "bad_request",
+        "validation_failed",
+        "profile_required",
+        "unauthorized",
+        "token_expired",
+        "forbidden",
+        "not_found",
+        "profile_not_found",
+        "conflict",
+        "state_invalid",
+        "already_running",
+        "payload_too_large",
+        "unsupported_media_type",
+        "agent_unavailable",
+        "agent_error",
+        "rate_limited",
+        "internal",
+        "not_implemented",
+        "service_unavailable"
+      ]
+    },
+    "Job": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "status",
+            "progress",
+            "resource",
+            "result",
+            "error",
+            "started_at",
+            "finished_at"
+          ],
+          "properties": {
+            "kind": {
+              "$ref": "#/$defs/JobKind"
+            },
+            "status": {
+              "$ref": "#/$defs/JobStatus"
+            },
+            "progress": {
+              "$ref": "#/$defs/JobProgress"
+            },
+            "resource": {
+              "$ref": "#/$defs/ResourceRef"
+            },
+            "result": {
+              "type": ["object", "null"],
+              "description": "Kind-specific outcome (an install's `version`, an export's `attachment_id`).",
+              "additionalProperties": true
+            },
+            "error": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Error"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "started_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "finished_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "JobKind": {
+      "type": "string",
+      "enum": [
+        "run",
+        "install",
+        "update",
+        "uninstall",
+        "restart",
+        "discover",
+        "refresh_catalogue",
+        "worktree",
+        "webhook_test",
+        "device_request",
+        "export",
+        "schedule_run",
+        "workflow_run"
+      ]
+    },
+    "JobProgress": {
+      "type": "object",
+      "required": ["percent", "message"],
+      "properties": {
+        "percent": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 100,
+          "description": "`null` when the work has no measurable progress (a run)."
+        },
+        "message": {
+          "type": ["string", "null"],
+          "description": "Human progress line in the requester's language."
+        }
+      }
+    },
+    "JobStatus": {
+      "type": "string",
+      "enum": ["queued", "running", "succeeded", "failed", "cancelled"]
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "ResourceRef": {
+      "type": "object",
+      "description": "Reference to the entity a job or event is about.",
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "agent",
+            "session",
+            "run",
+            "message",
+            "room",
+            "seat",
+            "project",
+            "task",
+            "subtask",
+            "worktree",
+            "schedule",
+            "schedule_run",
+            "workflow",
+            "workflow_run",
+            "step",
+            "provider",
+            "device",
+            "device_request",
+            "webhook",
+            "approval",
+            "notice"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        }
+      }
+    },
+    "Scoped": {
+      "type": "object",
+      "description": "Fields every row a client can show carries (ARCHITECTURE §Data ownership).",
+      "required": ["id", "profile", "owner_id", "created_at", "updated_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "owner_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}

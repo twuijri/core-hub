@@ -1,0 +1,398 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/jobs/agent.updated.schema.json",
+  "title": "/rt/jobs · agent.updated",
+  "description": "The registry entry of an agent changed. Carried on /rt/jobs because it is always the outcome of hub-level work. Profile-wide. Emitted by: agents module (install/update/uninstall/restart jobs, discovery, settings, skills/MCP/memory/channel changes).",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "agent.updated"
+    },
+    "namespace": {
+      "const": "/rt/jobs"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["agent"],
+      "properties": {
+        "agent": {
+          "$ref": "#/$defs/Agent"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "agent.updated",
+      "namespace": "/rt/jobs",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "agent": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0AG",
+          "profile": "work",
+          "owner_id": "01J8QK3ZR2W7M5N4P6T8V9X0HM",
+          "created_at": "2026-09-01T00:00:00Z",
+          "updated_at": "2026-09-21T10:00:00Z",
+          "slug": "hermes",
+          "name": "Hermes",
+          "vendor": "Nous Research",
+          "kind": "hermes",
+          "avatar": {
+            "kind": "image",
+            "url": "/api/v1/agents/01J8QK3ZR2W7M5N4P6T8V9X0AG/avatar",
+            "seed": null
+          },
+          "status": "available",
+          "enabled": true,
+          "install": {
+            "source": "managed",
+            "path": null,
+            "package": null,
+            "command": "hermes",
+            "version": "0.21.3",
+            "latest_version": "0.21.3",
+            "update_available": false,
+            "auto_update": true,
+            "auto_update_supported": true,
+            "checked_at": null,
+            "error": null
+          },
+          "runtime": {
+            "state": "running",
+            "url": null,
+            "error": null
+          },
+          "capabilities": ["streaming", "tools"],
+          "sections": [
+            "jobs",
+            "kanban",
+            "channels",
+            "skills",
+            "plugins",
+            "mcp",
+            "memory",
+            "journey",
+            "settings"
+          ],
+          "default_model": null,
+          "limited": false
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "Agent": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Scoped"
+        },
+        {
+          "type": "object",
+          "required": [
+            "slug",
+            "name",
+            "vendor",
+            "kind",
+            "avatar",
+            "status",
+            "enabled",
+            "install",
+            "runtime",
+            "capabilities",
+            "sections",
+            "default_model",
+            "limited"
+          ],
+          "properties": {
+            "slug": {
+              "type": "string",
+              "pattern": "^[a-z0-9-]{2,40}$"
+            },
+            "name": {
+              "type": "string"
+            },
+            "vendor": {
+              "type": ["string", "null"]
+            },
+            "kind": {
+              "$ref": "#/$defs/AgentKind"
+            },
+            "avatar": {
+              "$ref": "#/$defs/Avatar"
+            },
+            "status": {
+              "$ref": "#/$defs/AgentStatus"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "install": {
+              "$ref": "#/$defs/AgentInstall"
+            },
+            "runtime": {
+              "$ref": "#/$defs/AgentRuntime"
+            },
+            "capabilities": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AgentCapability"
+              }
+            },
+            "sections": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AgentSection"
+              }
+            },
+            "default_model": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ModelRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "limited": {
+              "type": "boolean",
+              "description": "True for the process harness — the UI marks the agent \"limited\"."
+            }
+          }
+        }
+      ]
+    },
+    "AgentCapability": {
+      "type": "string",
+      "enum": [
+        "streaming",
+        "tools",
+        "approvals",
+        "mcp",
+        "skills",
+        "memory",
+        "channels",
+        "worktrees",
+        "resume",
+        "vision",
+        "audio",
+        "plugins",
+        "presets",
+        "journey",
+        "jobs",
+        "kanban"
+      ]
+    },
+    "AgentInstall": {
+      "type": "object",
+      "required": [
+        "source",
+        "path",
+        "package",
+        "command",
+        "version",
+        "latest_version",
+        "update_available",
+        "auto_update",
+        "auto_update_supported",
+        "checked_at",
+        "error"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": ["managed", "user_cli", "builtin", "none"]
+        },
+        "path": {
+          "type": ["string", "null"]
+        },
+        "package": {
+          "type": ["string", "null"],
+          "description": "npm/pip package the hub installs."
+        },
+        "command": {
+          "type": ["string", "null"]
+        },
+        "version": {
+          "type": ["string", "null"]
+        },
+        "latest_version": {
+          "type": ["string", "null"]
+        },
+        "update_available": {
+          "type": "boolean"
+        },
+        "auto_update": {
+          "type": "boolean"
+        },
+        "auto_update_supported": {
+          "type": "boolean"
+        },
+        "checked_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "AgentKind": {
+      "type": "string",
+      "enum": ["hermes", "acp", "harness", "builtin"],
+      "description": "Which adapter drives the agent (ADR 0002). `builtin` is the hub's own lightweight agent."
+    },
+    "AgentRuntime": {
+      "type": "object",
+      "required": ["state", "url", "error"],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": ["running", "stopped", "starting", "error", "not_applicable"]
+        },
+        "url": {
+          "type": ["string", "null"]
+        },
+        "error": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "AgentSection": {
+      "type": "string",
+      "description": "The rows shown under the agent's card, in order (NAVIGATION §4).",
+      "enum": [
+        "jobs",
+        "kanban",
+        "channels",
+        "skills",
+        "plugins",
+        "presets",
+        "mcp",
+        "memory",
+        "journey",
+        "settings"
+      ]
+    },
+    "AgentStatus": {
+      "type": "string",
+      "enum": [
+        "available",
+        "not_installed",
+        "installing",
+        "updating",
+        "error",
+        "limited",
+        "disabled"
+      ]
+    },
+    "Avatar": {
+      "type": "object",
+      "description": "A picture for a person, agent or profile. `generated` avatars are drawn by the client from `seed`.",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["image", "generated"]
+        },
+        "url": {
+          "type": ["string", "null"],
+          "description": "Fetchable with the bearer token when `kind = image`."
+        },
+        "seed": {
+          "type": ["string", "null"],
+          "description": "Deterministic seed when `kind = generated`."
+        }
+      },
+      "examples": [
+        {
+          "kind": "generated",
+          "url": null,
+          "seed": "work"
+        }
+      ]
+    },
+    "ModelRef": {
+      "type": "object",
+      "required": ["provider_id", "model"],
+      "properties": {
+        "provider_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "model": {
+          "type": "string"
+        }
+      }
+    },
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "Scoped": {
+      "type": "object",
+      "description": "Fields every row a client can show carries (ARCHITECTURE §Data ownership).",
+      "required": ["id", "profile", "owner_id", "created_at", "updated_at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "owner_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}

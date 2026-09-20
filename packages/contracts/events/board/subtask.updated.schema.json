@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corehub.dev/contracts/events/board/subtask.updated.schema.json",
+  "title": "/rt/board · subtask.updated",
+  "description": "A subtask was created, changed or deleted (`deleted: true`). Emitted by: board module (create, patch, delete, assignee progress).",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "subtask.updated"
+    },
+    "namespace": {
+      "const": "/rt/board"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["task_id", "subtask", "deleted"],
+      "properties": {
+        "task_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "subtask": {
+          "$ref": "#/$defs/Subtask"
+        },
+        "deleted": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "subtask.updated",
+      "namespace": "/rt/board",
+      "profile": "work",
+      "ts": "2026-09-21T10:15:04Z",
+      "seq": 8812,
+      "payload": {
+        "task_id": "01J8QK3ZR2W7M5N4P6T8V9X0TK",
+        "subtask": {
+          "id": "01J8QK3ZR2W7M5N4P6T8V9X0SD",
+          "task_id": "01J8QK3ZR2W7M5N4P6T8V9X0TK",
+          "index": 2,
+          "title": "تبويب الخصوصية",
+          "status": "done",
+          "note": null,
+          "blocked_reason": null,
+          "completed_at": "2026-09-21T12:40:00Z",
+          "updated_at": "2026-09-21T12:40:00Z"
+        },
+        "deleted": false
+      }
+    }
+  ],
+  "$defs": {
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "Subtask": {
+      "type": "object",
+      "required": [
+        "id",
+        "task_id",
+        "index",
+        "title",
+        "status",
+        "note",
+        "blocked_reason",
+        "completed_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "task_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "index": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["todo", "in_progress", "review", "done", "blocked", "skipped"]
+        },
+        "note": {
+          "type": ["string", "null"]
+        },
+        "blocked_reason": {
+          "type": ["string", "null"]
+        },
+        "completed_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}
