@@ -17,9 +17,11 @@
   },
   "dependencies": {
     "@majlis/contracts": "workspace:*",
+    "argon2": "0.45.1",
     "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.12.5",
+    "jose": "6.2.12",
     "pg": "^8.23.0",
     "pino": "^10.3.1",
     "socket.io": "^4.8.3",

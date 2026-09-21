@@ -54,6 +54,7 @@ export async function registerRoutes(
 
   app.setErrorHandler((error: unknown, request, reply) => {
     if (error instanceof HubError) {
+      if (error.headers) void reply.headers(error.headers);
       return reply.status(error.status).send(error.toEnvelope(request.language));
     }
     const fastifyError = error as { validation?: unknown; statusCode?: number; message?: string };

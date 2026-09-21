@@ -17,18 +17,27 @@ payload for the waiting run.
 
 | column | type | meaning |
 |---|---|---|
+| device_key | text(128) | stable id the device generated once; re-pairing updates the same row (unique with `owner_id`) |
 | name | text(120) | "Pixel 9", "Work laptop" |
-| platform | enum(android, ios, web, desktop, cli) | |
+| platform | enum(android, ios, web, macos, windows, linux) | the contract's `DevicePlatform` |
+| kind | enum(phone, tablet, computer, browser) | |
+| brand, model | text? | |
 | os_version, app_version | | shown in the devices screen; drives update checks |
+| connection | enum(lan, relay) | how the device reaches the hub |
 | push_provider | enum(none, fcm, apns, webpush) | |
 | push_token | text? | **ENCRYPTED**. Registration token; refreshed by the client |
-| capabilities | json<DeviceCapabilities> | camera, microphone, location, clipboard, notifications, tts, localApps |
+| push_locale, push_registered_at | | the contract's `PushStatus` |
+| capabilities | json<DeviceCapability[]> | `{ kind, enabled, consentAt }` per `CapabilityKind` (location, camera, microphone, notifications, clipboard, screen, files, apps, calendar, reminders, health) |
 | status | enum(paired, revoked) | |
 | app_token_id | ulid? → auth.app_token, unique | the device token issued at pairing |
 | paired_at, last_seen_at, revoked_at | | |
 
 `owner_id` is the user the device belongs to. Indexes: (owner_id, status);
-`app_token_id` unique.
+(owner_id, device_key) unique; `app_token_id` unique.
+
+Created by the auth module's pairing claim through this module's public
+`registerPairedDevice()`; revoked through `revokeDeviceByToken()` when the
+pairing token is revoked (`packages/server/src/modules/devices/index.ts`).
 
 Lifecycle: `paired → revoked` (terminal; revoking also revokes the app
 token). Deleting a revoked device is allowed.
