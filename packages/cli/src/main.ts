@@ -15,6 +15,7 @@ import {
   modelsListCommand,
   providersAddCommand,
   providersListCommand,
+  providersPresetsCommand,
   providersRemoveCommand,
   providersTestCommand,
 } from './commands/models.js';
@@ -53,6 +54,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   agentsInstallCommand,
   agentsRemoveCommand,
   providersListCommand,
+  providersPresetsCommand,
   providersAddCommand,
   providersTestCommand,
   providersRemoveCommand,

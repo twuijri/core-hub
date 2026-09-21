@@ -95,8 +95,18 @@ const ndjson = (text: string) =>
  * real HTTP calls by design (ADR 0010: a test that does not reach the provider proves
  * nothing), so the hub is built with a scripted `fetch` and never leaves the process.
  */
+const LOCAL_SERVER = 'http://127.0.0.1:4321/v1';
 const scriptedProviders: typeof fetch = (input) => {
   const url = String(input);
+  // A local, keyless model server — the case the owner cares about most.
+  if (url === `${LOCAL_SERVER}/models`) {
+    return Promise.resolve(
+      new Response(JSON.stringify({ data: [{ id: 'qwen2.5-coder-7b-instruct' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+  }
   const body = url.startsWith('https://api.anthropic.com/v1/models')
     ? { data: [{ id: 'claude-sonnet-4-5', display_name: 'Claude Sonnet 4.5' }], has_more: false }
     : { error: { message: 'this provider is not part of the test' } };
@@ -189,18 +199,32 @@ describe('the reference client against the hub', () => {
     expect(missing.stderr).toContain('not_found');
   });
 
-  it('adds a provider key from a prompt, tests it, and lists the models it unlocked', async () => {
+  it('adds a provider from a preset, with the key from a prompt, and lists its models', async () => {
+    // Nothing is configured until somebody adds it (contract decision §26).
     const before = await cli(['providers', 'list', '--json']);
     expect(before.code, before.stderr).toBe(0);
-    const providers = (
-      JSON.parse(before.stdout) as { items: { slug: string; api_key: string | null }[] }
+    expect((JSON.parse(before.stdout) as { items: unknown[] }).items).toEqual([]);
+
+    // What *can* be added is its own list, and it carries the local servers.
+    const presets = await cli(['providers', 'presets', '--json']);
+    expect(presets.code, presets.stderr).toBe(0);
+    const offered = (
+      JSON.parse(presets.stdout) as {
+        items: { id: string; key: string; base_url: string | null }[];
+      }
     ).items;
-    expect(providers.find((p) => p.slug === 'anthropic')?.api_key).toBeNull();
+    expect(offered.map((item) => item.id)).toEqual(
+      expect.arrayContaining(['anthropic', 'lmstudio', 'litellm', 'openai-compatible', 'ollama']),
+    );
+    expect(offered.find((item) => item.id === 'lmstudio')).toMatchObject({
+      key: 'optional',
+      base_url: 'http://127.0.0.1:1234/v1',
+    });
 
     // The key is never an argument: it is asked for, hidden, or piped in.
     const added = await cli(['providers', 'add', 'anthropic'], ['sk-ant-from-the-cli']);
     expect(added.code, added.stderr).toBe(0);
-    expect(added.stdout).toContain('Key stored for anthropic.');
+    expect(added.stdout).toContain('Provider anthropic added');
     expect(added.stdout).not.toContain('sk-ant-from-the-cli');
     expect(added.stderr).toContain('Every agent uses this key');
 
@@ -229,6 +253,60 @@ describe('the reference client against the hub', () => {
     const unknown = await cli(['providers', 'test', 'no-such-provider']);
     expect(unknown.code).toBe(1);
     expect(unknown.stderr).toContain('No provider "no-such-provider"');
+  });
+
+  it('adds a local model server with a base URL and no key, then takes a key for it', async () => {
+    const added = await cli([
+      'providers',
+      'add',
+      'lmstudio',
+      '--base-url',
+      LOCAL_SERVER,
+      '--no-key',
+    ]);
+    expect(added.code, added.stderr).toBe(0);
+    expect(added.stdout).toContain(`Provider lmstudio added at ${LOCAL_SERVER}`);
+
+    // No key, and nothing anywhere calls that a problem.
+    const listed = await cli(['providers', 'list']);
+    expect(listed.stdout).toMatch(/lmstudio.*optional/);
+    expect(listed.stdout).not.toContain('missing');
+
+    const tested = await cli(['providers', 'test', 'lmstudio']);
+    expect(tested.code, tested.stderr).toBe(0);
+    expect(tested.stdout).toContain('The provider answered.');
+    expect(tested.stdout).not.toContain('No API key');
+
+    await waitUntil(async () => {
+      const models = await cli(['models', 'list', '--json', '--provider', 'lmstudio']);
+      return models.stdout.includes('qwen2.5-coder-7b-instruct');
+    });
+
+    // And a key can still be given to it — "optional" never means "refused".
+    const keyed = await cli(['providers', 'add', 'lmstudio'], ['lm-studio-master-key']);
+    expect(keyed.code, keyed.stderr).toBe(0);
+    expect(keyed.stdout).toContain('Key stored for lmstudio.');
+    expect(keyed.stdout).not.toContain('lm-studio-master-key');
+    const after = await cli(['providers', 'list', '--json']);
+    const row = (
+      JSON.parse(after.stdout) as {
+        items: { slug: string; api_key: string | null; auth: { kind: string } }[];
+      }
+    ).items.find((item) => item.slug === 'lmstudio');
+    expect(row?.api_key).toBe('[stored]');
+    // Storing one does not turn it into a provider that demands one.
+    expect(row?.auth.kind).toBe('none');
+
+    // Clearing the credentials keeps the provider; removing it takes the row away.
+    const cleared = await cli(['providers', 'remove', 'lmstudio', '--clear-key']);
+    expect(cleared.code, cleared.stderr).toBe(0);
+    expect(cleared.stdout).toContain('Key removed from lmstudio.');
+    const removed = await cli(['providers', 'remove', 'lmstudio']);
+    expect(removed.code, removed.stderr).toBe(0);
+    const left = await cli(['providers', 'list', '--json']);
+    expect(
+      (JSON.parse(left.stdout) as { items: { slug: string }[] }).items.map((item) => item.slug),
+    ).not.toContain('lmstudio');
   });
 
   it('creates, lists and shows a session', async () => {
