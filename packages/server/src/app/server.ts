@@ -65,18 +65,15 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   const version = readVersion();
 
   const io = createSockets(app);
+  // Decorated before the modules register so a module can reach the database and the
+  // configuration while mounting (first-boot tasks); the report fields are filled below.
+  const hub: HubState = { config, database, io, modules: [], namespaces: [], stubs: [], version };
+  app.decorate('hub', hub);
   const events = await registerModuleEvents(io, modules);
   const routes: RoutesReport = await registerRoutes(app, { version, database, modules, contract });
-
-  app.decorate('hub', {
-    config,
-    database,
-    io,
-    modules: routes.modules.filter((name) => events.includes(name)),
-    namespaces: listNamespaces(io),
-    stubs: routes.stubs,
-    version,
-  } satisfies HubState);
+  hub.modules = routes.modules.filter((name) => events.includes(name));
+  hub.namespaces = listNamespaces(io);
+  hub.stubs = routes.stubs;
 
   app.addHook('onClose', async () => {
     await database.close();

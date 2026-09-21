@@ -20,8 +20,9 @@ The scope every request names in `X-Hub-Profile` (ADR 0005).
 | name | text(120) | display name |
 | description | text? | |
 | color, icon | text? | client chrome |
+| avatar_mime | text(64)? | MIME of the avatar file under `<DATA_DIR>/avatars/workspaces/<id>`; null = generated avatar |
 | is_default | bool | the workspace a new token or device opens first; exactly one row is true |
-| settings | json<WorkspaceSettings> | `defaultAgent`, `hermesProfile` (which Hermes profile this workspace drives) |
+| settings | json<WorkspaceSettings> | `defaultAgent`, `hermesProfile` (which Hermes profile this workspace drives), `defaultModel` (the contract's `Profile.default_model`), `hub` (the contract's `ProfileSettings`) |
 | archived_at | ms? | archive |
 
 Indexes: `workspaces_slug_uq`.
@@ -35,11 +36,11 @@ Indexes: `workspaces_slug_uq`.
 | role | enum(owner, admin, member) | one owner (created at first start, invariant 5) |
 | status | enum(active, disabled) | disabled users keep their rows and tokens are rejected |
 | password_hash | text | Argon2id. Never returned, never logged |
-| password_changed_at | ms? | tokens issued before it are rejected |
+| password_changed_at | ms? | informational; sessions are invalidated by revoking their `app_tokens` rows, which kills their access tokens at once |
 | locale | enum(ar, en) | server-side localisation of notifications |
-| avatar_attachment_id | ulid? → knowledge.attachment | |
+| avatar_mime | text(64)? | MIME of the avatar file under `<DATA_DIR>/avatars/users/<id>`; null = generated. Not a knowledge attachment: attachments are workspace-scoped, users are global |
 | default_workspace_id | ulid? → workspace (FK, set null) | |
-| preferences | json<UserPreferences> | theme, showReasoning, showCost, compact |
+| preferences | json<UserPreferences> | the contract's `Preferences` object as stored by `PUT /auth/me/preferences` |
 | last_login_at | ms? | shown in the users screen |
 
 Indexes: `users_username_uq`.
@@ -61,7 +62,7 @@ Bearer tokens for every client. The token is shown once at creation.
 | column | type | meaning |
 |---|---|---|
 | user_id | ulid → user (FK, cascade) | |
-| kind | enum(personal, device, web) | `device` tokens are issued by pairing and bound to a device |
+| kind | enum(personal, device, web) | `device` tokens are issued by pairing and bound to a device; `web` rows are the rotating refresh tokens of sign-in sessions (the access JWT's `sid` points at one) |
 | name | text(120) | label in the list |
 | token_hash | text(64), unique | SHA-256 of the bearer token |
 | token_prefix | text(8) | display only |
@@ -81,12 +82,16 @@ stored.
 | code | text(12), unique | short code, also typeable |
 | created_by_user_id | ulid → user (FK, cascade) | who showed the QR |
 | initial_workspace_id | ulid? → workspace (FK, set null) | what the phone opens first |
-| expires_at | ms | typically 5 minutes |
+| connection | enum(lan, relay) | how the device reaches the hub (the contract's `PairingConnection`) |
+| hub_url | text(512) | origin the web client used; the QR payload tells the phone to call it |
+| expires_at | ms | typically 5 minutes (60–900 s) |
 | consumed_at | ms? | set when a device redeems it |
+| cancelled_at | ms? | set by `DELETE /auth/pairings/{id}` while pending |
 | device_id | ulid? → devices.device | the device created on redeem |
 | app_token_id | ulid? → app_token (FK, set null) | the device token issued |
 
-Lifecycle: `open → consumed | expired`; expired rows are deleted by a sweeper.
+Lifecycle: `pending → claimed | expired | cancelled` (the contract's `Pairing.status`, computed
+from `consumed_at`, `cancelled_at`, `expires_at`); expired rows older than a day are deleted by a sweeper.
 
 ## login_lockout (global)
 
@@ -94,10 +99,11 @@ Lifecycle: `open → consumed | expired`; expired rows are deleted by a sweeper.
 |---|---|---|
 | subject_kind | enum(ip, user) | |
 | subject | text(128) | the IP or the user id |
-| failures | int | consecutive failures |
+| kind | enum(password, token, pairing) | which flow failed (the contract's `Lockout.kind`) |
+| failures | int | consecutive failures inside the window (15 min); 5 lock for 15 min |
 | last_failure_at, locked_until | ms? | |
 
-Indexes: unique (subject_kind, subject). Rows are deleted when unlocked.
+Indexes: unique (subject_kind, subject, kind). Rows are deleted when unlocked.
 
 ## Queries the clients need
 
