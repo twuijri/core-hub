@@ -455,7 +455,8 @@ describe('agents: reconciling the table with the data volume (ADR 0006)', () => 
     } finally {
       rmSync(dataDir, { recursive: true, force: true });
     }
-  });
+    // Three hub boots (argon2 owner hash + migrations each) exceed 5 s on a CI runner.
+  }, 30_000);
 });
 
 describe('agents: the curated catalog (ADR 0006)', () => {
