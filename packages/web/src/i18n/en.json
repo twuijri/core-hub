@@ -39,7 +39,9 @@
     "global_agent": "Global agent",
     "new_room": "New room",
     "join_by_code": "Join by code",
-    "sign_out": "Sign out"
+    "sign_out": "Sign out",
+    "login": "Sign in",
+    "setup": "First-run setup"
   },
   "common": {
     "loading": "Loading…",
@@ -55,11 +57,33 @@
   "login": {
     "title": "Sign in",
     "hub": "{name} · server {version}",
-    "setup_required": "This hub has no owner account yet. Set HUB_ADMIN_PASSWORD and restart it.",
     "username": "Username",
     "password": "Password",
     "submit": "Sign in",
-    "signing_in": "Signing in…"
+    "signing_in": "Signing in…",
+    "setup_unknown": "Could not ask this hub whether it still needs first-run setup. Sign in, or reload the page."
+  },
+  "setup": {
+    "title": "Create the owner account",
+    "intro": "This hub has no account yet. Create the owner here, with the setup token the hub wrote when it started.",
+    "checking": "Asking the hub…",
+    "where_title": "Where to find the setup token",
+    "where_body": "The hub printed it once in its log when it started, and wrote it to setup-token.txt inside the data directory. On the reference stack:",
+    "where_local": "Running the hub outside Docker: the file is in your DATA_DIR (./data/setup-token.txt by default). A new token is generated on every restart until this account exists.",
+    "token": "Setup token",
+    "token_hint": "Paste it exactly; it is compared as a whole and never stored in the browser.",
+    "username": "Username",
+    "username_hint": "Lowercase letters, digits, dot, dash or underscore — 2 to 40 characters.",
+    "display_name": "Display name (optional)",
+    "workspace_name": "Workspace name (optional)",
+    "workspace_hint": "The name of the first workspace; \"Default\" when left empty.",
+    "password": "Password",
+    "password_hint": "{min} characters or more. It is never shown, logged or stored anywhere but as a hash.",
+    "confirm": "Confirm the password",
+    "mismatch": "The two passwords are not the same.",
+    "submit": "Create the account and sign in",
+    "creating": "Creating the account…",
+    "unattended": "An unattended install can still set HUB_ADMIN_PASSWORD before the first boot; the hub then creates the owner itself and this screen never appears."
   },
   "shell": {
     "sidebar": "Main menu",

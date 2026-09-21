@@ -6,9 +6,10 @@ import { AuthProvider, useAuth } from './auth/context.js';
 import { SessionStore } from './auth/store.js';
 import { ThemeProvider, useTheme } from './design/theme.js';
 import { I18nProvider } from './i18n/context.js';
-import { HOME_PATH, LOGIN_PATH, routes } from './navigation/routes.js';
+import { HOME_PATH, LOGIN_PATH, SETUP_PATH, routes } from './navigation/routes.js';
 import { RealtimeProvider } from './realtime/context.js';
 import { LoginScreen } from './screens/LoginScreen.js';
+import { SetupScreen } from './screens/SetupScreen.js';
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { session } = useAuth();
@@ -49,6 +50,7 @@ export function App({ store, baseUrl, fetchImpl, router }: AppProps) {
   const tree = (
     <Routes>
       <Route path={LOGIN_PATH} element={<LoginScreen />} />
+      <Route path={SETUP_PATH} element={<SetupScreen />} />
       <Route path="/" element={<Navigate to={HOME_PATH} replace />} />
       {routes.map((route) => (
         <Route

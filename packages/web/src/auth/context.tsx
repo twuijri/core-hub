@@ -23,7 +23,17 @@ export interface AuthValue {
   client: HubClient;
   anonymous: HubClient;
   signIn(username: string, password: string): Promise<StoredSession>;
+  /** First run only (ADR 0011): trade the hub's setup token for the owner account. */
+  completeSetup(input: SetupInput): Promise<StoredSession>;
   signOut(): Promise<void>;
+}
+
+export interface SetupInput {
+  token: string;
+  username: string;
+  password: string;
+  displayName?: string;
+  workspaceName?: string;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -62,12 +72,14 @@ export function AuthProvider({
     [baseUrl, store, fetchImpl, queryClient],
   );
 
-  const signIn = useCallback(
-    async (username: string, password: string) => {
-      const { data } = await bundle.anonymous.request('post', '/auth/login', {
-        body: { username: username.trim(), password },
-        headers: { 'Accept-Language': languageRef.current },
-      });
+  /** `auth.login` and `auth.completeSetup` answer the same `TokenPair`; one place stores it. */
+  const remember = useCallback(
+    (data: {
+      access_token: string;
+      refresh_token: string | null;
+      expires_in: number;
+      user: { id: string; username: string; display_name: string; role: string; default_profile: string };
+    }) => {
       const next: StoredSession = {
         profile: data.user.default_profile,
         token: data.access_token,
@@ -83,7 +95,37 @@ export function AuthProvider({
       store.save(next);
       return next;
     },
-    [bundle, store],
+    [store],
+  );
+
+  const signIn = useCallback(
+    async (username: string, password: string) => {
+      const { data } = await bundle.anonymous.request('post', '/auth/login', {
+        body: { username: username.trim(), password },
+        headers: { 'Accept-Language': languageRef.current },
+      });
+      return remember(data);
+    },
+    [bundle, remember],
+  );
+
+  const completeSetup = useCallback(
+    async (input: SetupInput) => {
+      const { data } = await bundle.anonymous.request('post', '/auth/setup', {
+        body: {
+          token: input.token.trim(),
+          username: input.username.trim(),
+          password: input.password,
+          ...(input.displayName?.trim() ? { display_name: input.displayName.trim() } : {}),
+          ...(input.workspaceName?.trim() ? { workspace_name: input.workspaceName.trim() } : {}),
+        },
+        headers: { 'Accept-Language': languageRef.current },
+      });
+      // The hub is set up now: anything that cached "setup required" must ask again.
+      await queryClient.invalidateQueries();
+      return remember(data);
+    },
+    [bundle, remember, queryClient],
   );
 
   const signOut = useCallback(async () => {
@@ -118,9 +160,10 @@ export function AuthProvider({
       client: bundle.client,
       anonymous: bundle.anonymous,
       signIn,
+      completeSetup,
       signOut,
     }),
-    [baseUrl, session, setProfile, bundle, signIn, signOut],
+    [baseUrl, session, setProfile, bundle, signIn, completeSetup, signOut],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

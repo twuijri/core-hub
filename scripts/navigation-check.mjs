@@ -106,6 +106,33 @@ for (const [a, b] of Object.entries(manifest.secondaryEntries ?? {})) {
     if (!byId.has(target)) fail(`secondaryEntries: "${a}" -> "${target}" is not a destination`);
 }
 
+// preAuth: the screens a client shows before anyone is signed in (sign-in, first-run setup).
+// They are not destinations — no entry, no role, no place in any list — but the clients still
+// build their routes from the manifest, so the names and paths live here and not in code.
+const preAuth = manifest.preAuth ?? {};
+const preAuthRoutes = new Map();
+for (const [id, screen] of Object.entries(preAuth)) {
+  if (id.startsWith('$')) continue;
+  if (byId.has(id)) fail(`preAuth: "${id}" is also a destination; it must be one or the other`);
+  if (!terms[screen?.title]) fail(`preAuth "${id}": title term "${screen?.title}" is not in terms`);
+  for (const [surface, route] of Object.entries(screen?.routes ?? {})) {
+    if (!SURFACES.has(surface)) {
+      fail(`preAuth "${id}": unknown surface "${surface}"`);
+      continue;
+    }
+    if (typeof route !== 'string' || !route.startsWith('/'))
+      fail(`preAuth "${id}": route on ${surface} must be an absolute path`);
+    const key = `${surface} ${route}`;
+    if (preAuthRoutes.has(key))
+      fail(`preAuth: route "${route}" on ${surface} is used by "${preAuthRoutes.get(key)}" and "${id}"`);
+    preAuthRoutes.set(key, id);
+    const clash = Object.entries(manifest.surfaceRoutes?.[surface] ?? {}).find(
+      ([, value]) => value === route,
+    );
+    if (clash) fail(`preAuth "${id}": route "${route}" already belongs to destination "${clash[0]}"`);
+  }
+}
+
 // surfaceRoutes: a URL (web) or screen id per destination that exists on that surface — the
 // client's router is built from it, so it must be complete, exact and unique.
 for (const [surface, routes] of Object.entries(manifest.surfaceRoutes ?? {})) {
@@ -144,6 +171,7 @@ if (failures > 0) {
   process.exit(1);
 }
 const surfaces = Object.keys(manifest.surfaceRoutes ?? {}).filter((s) => !s.startsWith('$'));
+const preAuthIds = Object.keys(preAuth).filter((id) => !id.startsWith('$'));
 console.log(
-  `nav:check  OK — ${destinations.length} destinations, ${Object.keys(terms).length} terms, ar/en complete, routes for ${surfaces.join(', ') || 'no surface yet'}`,
+  `nav:check  OK — ${destinations.length} destinations, ${preAuthIds.length} pre-auth screens (${preAuthIds.join(', ')}), ${Object.keys(terms).length} terms, ar/en complete, routes for ${surfaces.join(', ') || 'no surface yet'}`,
 );

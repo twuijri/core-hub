@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router';
-import { useMeta } from '../hub/queries.js';
+import { useMeta, useSetupState } from '../hub/queries.js';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useTheme } from '../design/theme.js';
 import { useI18n } from '../i18n/context.js';
-import { routeOf } from '../navigation/manifest.js';
+import { HOME_PATH, SETUP_PATH } from '../navigation/routes.js';
 import { Notice } from '../ui/Notice.js';
 
 export function LoginScreen() {
@@ -13,13 +13,16 @@ export function LoginScreen() {
   const { session, signIn } = useAuth();
   const { update } = useTheme();
   const meta = useMeta();
+  const setup = useSetupState();
   const navigate = useNavigate();
   const location = useLocation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
-  if (session) return <Navigate to={routeOf('chat').split('/:')[0] ?? '/'} replace />;
+  if (session) return <Navigate to={HOME_PATH} replace />;
+  // A hub with no owner cannot be signed in to: first run happens on the setup screen (ADR 0011).
+  if (setup.data?.required) return <Navigate to={SETUP_PATH} replace />;
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -28,7 +31,7 @@ export function LoginScreen() {
     try {
       await signIn(username, password);
       const from = (location.state as { from?: string } | null)?.from;
-      navigate(from ?? routeOf('chat').split('/:')[0] ?? '/', { replace: true });
+      navigate(from ?? HOME_PATH, { replace: true });
     } catch (err) {
       setError(err);
     } finally {
@@ -61,7 +64,7 @@ export function LoginScreen() {
             {t('login.hub', { name: meta.data.name, version: meta.data.server_version })}
           </p>
         )}
-        {meta.data?.setup_required && <Notice tone="warning">{t('login.setup_required')}</Notice>}
+        {setup.isError && <Notice tone="warning">{t('login.setup_unknown')}</Notice>}
         <label className="flex flex-col gap-1 text-sm">
           {t('login.username')}
           <input
