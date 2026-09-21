@@ -410,38 +410,65 @@
   }
 }
 
-.composer-select {
+/* The one dropdown shape (src/ui/Select.tsx over Radix Select): a chip that opens a
+   token-painted listbox. Radix owns the behaviour and the RTL arrows; this owns the look. */
+.mj-select {
   display: inline-flex;
   align-items: center;
   gap: var(--mj-space-1);
   padding-inline: var(--mj-space-2);
   block-size: 2rem;
   border-radius: var(--mj-radius-full);
+  border: 1px solid transparent;
   background: var(--mj-color-surface-2);
   color: var(--mj-color-text-muted);
   font-size: var(--mj-font-size-xs);
   max-inline-size: 14rem;
+  transition-duration: var(--mj-motion-fast);
+  transition-timing-function: var(--mj-motion-ease);
+  transition-property: background-color, color;
 }
-.composer-select:hover:has(select:not(:disabled)) {
+.mj-select:hover:not(:disabled) {
   background: var(--mj-color-surface-3);
+  color: var(--mj-color-text);
 }
-.composer-select > select {
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font-size: inherit;
-  max-inline-size: 11rem;
-  text-overflow: ellipsis;
-}
-.composer-select > select:disabled {
+.mj-select:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
+.mj-select[data-state='open'] {
+  border-color: var(--mj-color-accent);
+  color: var(--mj-color-text);
+}
+.mj-select-menu {
+  z-index: var(--mj-z-popover);
+  min-inline-size: var(--radix-select-trigger-width);
+  max-block-size: var(--radix-select-content-available-height);
+  overflow-y: auto;
+  padding: var(--mj-space-1);
+  border-radius: var(--mj-radius-md);
+}
+.mj-select-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mj-space-3);
+  padding: var(--mj-space-2);
+  border-radius: var(--mj-radius-sm);
+  font-size: var(--mj-font-size-sm);
+  cursor: pointer;
+}
+.mj-select-item[data-highlighted] {
+  background: var(--mj-color-surface-2);
+  outline: none;
+}
+.mj-select-item[data-state='checked'] {
+  color: var(--mj-color-accent-soft-text);
+  font-weight: 500;
+}
 
-.composer-menu {
-  position: absolute;
-  inset-block-end: calc(100% + var(--mj-space-2));
-  inset-inline-start: 0;
+/* The one menu shape (src/ui/Menu.tsx over Radix DropdownMenu). */
+.mj-menu {
   z-index: var(--mj-z-popover);
   min-inline-size: 14rem;
   padding: var(--mj-space-1);
@@ -450,7 +477,7 @@
   flex-direction: column;
   gap: 2px;
 }
-.composer-menu > button {
+.mj-menu-item {
   display: flex;
   align-items: center;
   gap: var(--mj-space-2);
@@ -458,14 +485,28 @@
   border-radius: var(--mj-radius-sm);
   text-align: start;
   font-size: var(--mj-font-size-sm);
+  cursor: pointer;
 }
-.composer-menu > button:hover {
+.mj-menu-item[data-highlighted] {
   background: var(--mj-color-surface-2);
+  outline: none;
 }
-.composer-menu-note {
+.mj-menu-note {
   padding: var(--mj-space-1) var(--mj-space-2);
   font-size: var(--mj-font-size-xs);
   color: var(--mj-color-text-faint);
+}
+
+/* The one anchored sheet (src/ui/Popover.tsx over Radix Popover). */
+.mj-popover {
+  z-index: var(--mj-z-popover);
+  min-inline-size: 20rem;
+  max-inline-size: min(28rem, 90vw);
+  padding: var(--mj-space-3);
+  border-radius: var(--mj-radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--mj-space-2);
 }
 
 .composer-reason {
@@ -561,19 +602,6 @@
 .working-dir-chip:hover:not(:disabled) {
   background: var(--mj-color-surface-3);
   color: var(--mj-color-text);
-}
-.working-dir-sheet {
-  position: absolute;
-  inset-block-start: calc(100% + var(--mj-space-2));
-  inset-inline-start: 0;
-  z-index: var(--mj-z-popover);
-  min-inline-size: 20rem;
-  max-inline-size: min(28rem, 90vw);
-  padding: var(--mj-space-3);
-  border-radius: var(--mj-radius-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--mj-space-2);
 }
 .working-dir-root {
   font-family: var(--mj-font-mono);

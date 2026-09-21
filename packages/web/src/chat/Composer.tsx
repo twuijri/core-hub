@@ -22,7 +22,6 @@
  */
 import {
   useCallback,
-  useEffect,
   useId,
   useRef,
   useState,
@@ -45,7 +44,9 @@ import {
   IconStop,
   IconUpload,
 } from '../ui/icons.js';
+import { Menu, MenuItem, MenuNote } from '../ui/Menu.js';
 import { Notice } from '../ui/Notice.js';
+import { Select } from '../ui/Select.js';
 import { canSend, composerState } from './composer-state.js';
 
 interface Pending {
@@ -122,33 +123,14 @@ export function Composer({
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
-  const menuId = useId();
   const reasonId = useId();
 
   const hasContent = text.trim() !== '' || pending.some((p) => p.status === 'done');
   const input = { disabled, dragging, busy, sending, error: error !== null, hasContent };
   const state = composerState(input);
   const sendable = canSend(input);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const close = (event: MouseEvent) => {
-      if (!menu.current?.contains(event.target as Node)) setMenuOpen(false);
-    };
-    const escape = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', close);
-    document.addEventListener('keydown', escape);
-    return () => {
-      document.removeEventListener('mousedown', close);
-      document.removeEventListener('keydown', escape);
-    };
-  }, [menuOpen]);
 
   const upload = useCallback(
     async (files: FileList | File[]) => {
@@ -292,93 +274,57 @@ export function Composer({
             hidden
             onChange={(event) => event.target.files && void upload(event.target.files)}
           />
-          <div className="relative" ref={menu}>
-            <button
-              type="button"
-              className="composer-btn"
-              onClick={() => setMenuOpen((open) => !open)}
-              aria-label={t('composer.more')}
-              title={t('composer.more')}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              aria-controls={menuOpen ? menuId : undefined}
-              disabled={disabled}
-              data-testid="composer-plus"
-            >
-              <IconPlus />
-            </button>
-            {menuOpen && (
-              <div
-                id={menuId}
-                role="menu"
-                className="composer-menu glass"
-                data-testid="composer-menu"
+          <Menu
+            testId="composer-menu"
+            trigger={
+              <button
+                type="button"
+                className="composer-btn"
+                aria-label={t('composer.more')}
+                title={t('composer.more')}
+                disabled={disabled}
+                data-testid="composer-plus"
               >
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    fileInput.current?.click();
-                  }}
-                >
-                  <IconPaperclip size={16} />
-                  {t('composer.attach')}
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    fileInput.current?.click();
-                  }}
-                >
-                  <IconUpload size={16} />
-                  {t('composer.upload')}
-                </button>
-                <p className="composer-menu-note">{t('composer.drop_hint')}</p>
-              </div>
-            )}
-          </div>
-
-          <label className="composer-select" data-testid="composer-model">
-            <IconSpark size={14} aria-hidden />
-            <span className="sr-only">{t('composer.model')}</span>
-            <select
-              value={model ?? ''}
-              disabled={disabled || !onModel}
-              aria-label={t('composer.model')}
-              onChange={(event) => onModel?.(event.target.value === '' ? null : event.target.value)}
-            >
-              <option value="">{t('composer.model_default')}</option>
-              {models.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label
-            className="composer-select"
-            data-testid="composer-approval"
-            title={approvalDisabledReason ?? t('composer.approval')}
+                <IconPlus />
+              </button>
+            }
           >
-            <IconShield size={14} aria-hidden />
-            <span className="sr-only">{t('composer.approval')}</span>
-            <select
-              value={approvalMode ?? 'ask'}
-              disabled={disabled || !onApprovalMode || approvalDisabledReason !== null}
-              aria-label={t('composer.approval')}
-              onChange={(event) => onApprovalMode?.(event.target.value)}
+            <MenuItem
+              icon={<IconPaperclip size={16} />}
+              onSelect={() => fileInput.current?.click()}
             >
-              {APPROVAL_MODES.map((mode) => (
-                <option key={mode} value={mode}>
-                  {t(`composer.approval_mode.${mode}`)}
-                </option>
-              ))}
-            </select>
-          </label>
+              {t('composer.attach')}
+            </MenuItem>
+            <MenuItem icon={<IconUpload size={16} />} onSelect={() => fileInput.current?.click()}>
+              {t('composer.upload')}
+            </MenuItem>
+            <MenuNote>{t('composer.drop_hint')}</MenuNote>
+          </Menu>
+
+          <Select
+            value={model}
+            onValueChange={(value) => onModel?.(value)}
+            options={models}
+            label={t('composer.model')}
+            placeholder={t('composer.model_default')}
+            icon={<IconSpark size={14} />}
+            disabled={disabled || !onModel}
+            testId="composer-model"
+          />
+
+          <Select
+            value={approvalMode ?? 'ask'}
+            onValueChange={(value) => value && onApprovalMode?.(value)}
+            options={APPROVAL_MODES.map((mode) => ({
+              value: mode,
+              label: t(`composer.approval_mode.${mode}`),
+            }))}
+            label={t('composer.approval')}
+            title={approvalDisabledReason ?? t('composer.approval')}
+            icon={<IconShield size={14} />}
+            disabled={disabled || !onApprovalMode || approvalDisabledReason !== null}
+            testId="composer-approval"
+          />
 
           <span className="composer-spacer" />
 
