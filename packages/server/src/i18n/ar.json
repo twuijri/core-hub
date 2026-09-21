@@ -64,5 +64,19 @@
     "approval_choice_session": "لهذه الجلسة",
     "approval_choice_always": "دائمًا",
     "approval_choice_deny": "رفض"
+  },
+  "jobs": {
+    "queued": "في الانتظار.",
+    "cancelled": "أُوقف بطلب المستخدم.",
+    "install_started": "جارٍ التثبيت…",
+    "install_done": "اكتمل التثبيت.",
+    "uninstall_started": "جارٍ الإزالة…",
+    "uninstall_done": "تمت الإزالة.",
+    "update_started": "جارٍ التحديث…",
+    "update_done": "اكتمل التحديث.",
+    "check_started": "جارٍ مقارنة النسخة المثبّتة بالمعتمدة…",
+    "check_done": "انتهى فحص الإصدار.",
+    "discover_started": "جارٍ فحص الخادم بحثًا عن أدوات الوكلاء…",
+    "discover_done": "انتهى الفحص."
   }
 }

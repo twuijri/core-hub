@@ -20,15 +20,25 @@ export const MODULE_NAMES = [
 ] as const;
 export type ModuleName = (typeof MODULE_NAMES)[number];
 
-/** Socket.IO namespaces, mirroring the modules that stream (ARCHITECTURE §Realtime). */
+/**
+ * Socket.IO namespaces: the modules that stream (ARCHITECTURE §Realtime) plus `/rt/jobs`,
+ * the profile-wide "is it done" channel every `202` ends on
+ * (`packages/contracts/events/README.md`; `Meta.realtime_namespaces` in the contract).
+ */
 export const REALTIME_NAMESPACES = {
   sessions: '/rt/sessions',
   rooms: '/rt/rooms',
   board: '/rt/board',
   schedules: '/rt/schedules',
   devices: '/rt/devices',
-} as const satisfies Partial<Record<ModuleName, string>>;
+  // Not a module of its own: the jobs kernel lives in `audit`, but the namespace is named
+  // after what it carries, as the contract declares it.
+  jobs: '/rt/jobs',
+} as const satisfies Partial<Record<ModuleName | 'jobs', string>>;
 export type RealtimeNamespace = (typeof REALTIME_NAMESPACES)[keyof typeof REALTIME_NAMESPACES];
+
+/** Socket.IO engine path. Declared here so a module never has to import `app/`. */
+export const SOCKET_PATH = '/rt';
 
 export interface HubModule {
   readonly name: ModuleName;

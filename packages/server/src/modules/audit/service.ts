@@ -1,26 +1,33 @@
 /**
  * The write side of `audit`, used by other modules through `index.ts`.
  *
- * Two ledgers matter in Phase 0:
+ * Three ledgers, all owned here (docs/domain/audit.md):
  *
- * - **jobs** — every long piece of work is a job (invariant 4). `sessions`
- *   creates one per run so `Run.job_id` is a real row, not an invented id.
- *   There is no job *worker* yet: the module that owns the work drives the
- *   job's status through `startJob` / `finishJob`, and the `jobs.*` HTTP
- *   operations and the `/rt/jobs` namespace stay `501` until the jobs kernel
- *   lands (docs/domain/audit.md, DECISIONS §6).
- * - **usage_records** — the only place cost lives (docs/domain/audit.md
- *   §usage_record). One row per (run, model label); the run's origin is
- *   copied so roll-ups by task, schedule or room need no join.
+ * - **audit_events** — who did what. `auth` records sign-ins, pairings and user changes;
+ *   `agents` records installs. This replaces `auth/audit-stub.ts`, which wrote the same
+ *   rows with hand-built SQL while this module was empty.
+ * - **jobs** — every long piece of work is a job (invariant 4). A module that owns the
+ *   work drives it through `createJob` / `startJob` / `progressJob` / `finishJob`, and
+ *   `jobs.ts` wraps that in a runner for work that is a single async function.
+ * - **usage_records** — the only place cost lives. One row per (run, model label).
  *
- * Reads (`audit.getReport`) are Phase 4 and stay `501`.
+ * Every state change of a job is announced on `/rt/jobs` when a realtime emitter is
+ * attached, so a client polling `jobs.list` and a client on the socket see one history.
+ *
+ * The API is synchronous because the SQLite driver is (`lib/db.ts`); nothing here awaits.
  */
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import { newUlid } from '../../db/ids.js';
-import type { ModuleDatabase } from '../../db/handle.js';
+import type { ModuleDb } from '../../lib/db.js';
+import { clampLimit, decodeCursor, pageOf } from '../../lib/pagination.js';
+import { iso } from '../../lib/time.js';
+import type { ErrorCode } from '../../lib/errors.js';
 import {
+  auditEvents,
+  jobEvents,
   jobs,
   usageRecords,
+  type ACTOR_KINDS,
   type COST_SOURCES,
   type JOB_STATUSES,
   type USAGE_ORIGINS,
@@ -29,15 +36,59 @@ import {
 export type JobStatus = (typeof JOB_STATUSES)[number];
 export type CostSource = (typeof COST_SOURCES)[number];
 export type UsageOrigin = (typeof USAGE_ORIGINS)[number];
+export type ActorKind = (typeof ACTOR_KINDS)[number];
+
+export type JobRow = typeof jobs.$inferSelect;
+
+/** The contract's `JobKind`: the verb half of the stored `<module>.<verb>` kind. */
+export type ContractJobKind =
+  | 'run'
+  | 'install'
+  | 'update'
+  | 'uninstall'
+  | 'restart'
+  | 'check_update'
+  | 'discover'
+  | 'refresh_catalogue'
+  | 'worktree'
+  | 'webhook_test'
+  | 'device_request'
+  | 'export'
+  | 'schedule_run'
+  | 'workflow_run';
+
+export interface AuditEventInput {
+  actorKind: ActorKind;
+  actorId?: string | null;
+  /** `<entity>.<verb>`: `auth.login`, `agents.installed`. */
+  action: string;
+  workspace?: string | null;
+  entityKind?: string | null;
+  entityId?: string | null;
+  /** One English line; clients localise by `action`. Never a secret. */
+  summary?: string;
+  data?: Record<string, unknown>;
+  deviceId?: string | null;
+  requestId?: string | null;
+  /** The user the row is attributed to; the owner account for system actions. */
+  ownerId: string;
+}
 
 export interface JobCreate {
-  workspace: string;
+  /**
+   * Null only for work that has no workspace yet — importing a profile creates one. Such
+   * a job is invisible to `jobs.list`, which is workspace-scoped, and the contract's
+   * `Job.profile` is not nullable; the operation that needs it owns that gap.
+   */
+  workspace: string | null;
   ownerId: string;
   /** `<module>.<verb>` (docs/domain/audit.md); the contract's `JobKind` is the wire form. */
   kind: string;
-  entityKind: string;
-  entityId: string;
+  entityKind?: string | null;
+  entityId?: string | null;
   input?: Record<string, unknown>;
+  /** First progress line, already localised. */
+  message?: string;
 }
 
 export interface UsageWrite {
@@ -80,8 +131,52 @@ const ZERO: UsageTotals = {
   hasCost: false,
 };
 
+/**
+ * How a job reaches `/rt/jobs`. Injected rather than imported so `audit` does not depend
+ * on the socket layer; `index.ts` wires the real emitter at registration.
+ */
+export interface JobAnnouncer {
+  (event: string, profile: string, job: Record<string, unknown>): void;
+}
+
 export class AuditService {
-  constructor(private readonly db: ModuleDatabase) {}
+  private announcer: JobAnnouncer | null = null;
+
+  constructor(private readonly db: ModuleDb) {}
+
+  /** Attaches the `/rt/jobs` emitter. Without it the ledger still works, silently. */
+  announceWith(announcer: JobAnnouncer | null): void {
+    this.announcer = announcer;
+  }
+
+  // ------------------------------------------------------------ audit trail
+
+  record(event: AuditEventInput, now: number = Date.now()): string {
+    const id = newUlid(now);
+    const at = new Date(now);
+    this.db
+      .insert(auditEvents)
+      .values({
+        id,
+        ownerId: event.ownerId,
+        workspace: event.workspace ?? null,
+        actorKind: event.actorKind,
+        actorId: event.actorId ?? null,
+        action: event.action,
+        entityKind: event.entityKind ?? null,
+        entityId: event.entityId ?? null,
+        summary: event.summary ?? null,
+        data: event.data ?? {},
+        deviceId: event.deviceId ?? null,
+        requestId: event.requestId ?? null,
+        createdAt: at,
+        updatedAt: at,
+      })
+      .run();
+    return id;
+  }
+
+  // ------------------------------------------------------------------- jobs
 
   /** Create a `queued` job and return its id immediately (invariant 4). */
   createJob(input: JobCreate): string {
@@ -95,11 +190,13 @@ export class AuditService {
         kind: input.kind,
         status: 'queued',
         progress: -1,
-        entityKind: input.entityKind,
-        entityId: input.entityId,
+        progressMessage: input.message ?? null,
+        entityKind: input.entityKind ?? null,
+        entityId: input.entityId ?? null,
         input: input.input ?? {},
       })
       .run();
+    this.announce(id, 'job.queued');
     return id;
   }
 
@@ -109,30 +206,185 @@ export class AuditService {
       .set({ status: 'running', startedAt: new Date(), attempts: sql`${jobs.attempts} + 1` })
       .where(and(eq(jobs.id, jobId), inArray(jobs.status, ['queued', 'running'])))
       .run();
+    this.announce(jobId, 'job.started');
+  }
+
+  /** `percent` null means "no measurable progress"; the message is already localised. */
+  progressJob(jobId: string, percent: number | null, message: string | null): void {
+    const row = this.job(jobId);
+    if (
+      !row ||
+      row.status === 'succeeded' ||
+      row.status === 'failed' ||
+      row.status === 'cancelled'
+    ) {
+      return;
+    }
+    const now = new Date();
+    this.db
+      .update(jobs)
+      .set({ progress: percent ?? -1, progressMessage: message, heartbeatAt: now, updatedAt: now })
+      .where(eq(jobs.id, jobId))
+      .run();
+    if (message) this.appendJobEvent(jobId, message, 'progress');
+    this.announce(jobId, 'job.progress');
   }
 
   finishJob(
     jobId: string,
     status: Extract<JobStatus, 'succeeded' | 'failed' | 'cancelled'>,
-    outcome: { result?: Record<string, unknown>; errorCode?: string; errorMessage?: string } = {},
+    outcome: {
+      result?: Record<string, unknown>;
+      errorCode?: string;
+      errorMessage?: string;
+      message?: string;
+    } = {},
   ): void {
     this.db
       .update(jobs)
       .set({
         status,
         finishedAt: new Date(),
+        updatedAt: new Date(),
+        ...(status === 'succeeded' ? { progress: 100 } : {}),
+        ...(outcome.message !== undefined ? { progressMessage: outcome.message } : {}),
         result: outcome.result ?? null,
         errorCode: outcome.errorCode ?? null,
         errorMessage: outcome.errorMessage ?? null,
       })
       .where(eq(jobs.id, jobId))
       .run();
+    this.appendJobEvent(
+      jobId,
+      outcome.message ?? outcome.errorMessage ?? status,
+      status === 'failed' ? 'error' : 'info',
+    );
+    this.announce(
+      jobId,
+      status === 'succeeded'
+        ? 'job.completed'
+        : status === 'failed'
+          ? 'job.failed'
+          : 'job.cancelled',
+    );
+  }
+
+  /** Marks a job as asked to stop. A queued job dies at once; a running one winds down. */
+  requestCancel(jobId: string): JobRow | null {
+    const row = this.job(jobId);
+    if (!row) return null;
+    const now = new Date();
+    this.db
+      .update(jobs)
+      .set({ status: 'cancelling', cancelRequestedAt: now, updatedAt: now })
+      .where(eq(jobs.id, jobId))
+      .run();
+    this.announce(jobId, 'job.progress');
+    return this.job(jobId);
+  }
+
+  job(jobId: string): JobRow | null {
+    return this.db.select().from(jobs).where(eq(jobs.id, jobId)).get() ?? null;
+  }
+
+  jobIn(workspace: string, jobId: string): JobRow | null {
+    return (
+      this.db
+        .select()
+        .from(jobs)
+        .where(and(eq(jobs.id, jobId), eq(jobs.workspace, workspace)))
+        .get() ?? null
+    );
+  }
+
+  listJobs(query: {
+    workspace: string;
+    status?: string | undefined;
+    kind?: string | undefined;
+    cursor?: string | undefined;
+    limit?: number | undefined;
+  }): { items: JobRow[]; next_cursor: string | null } {
+    const limit = clampLimit(query.limit);
+    const before = decodeCursor(query.cursor);
+    const rows = this.db
+      .select()
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.workspace, query.workspace),
+          before ? lt(jobs.id, before) : undefined,
+          // `<module>.<verb>`: the contract sends the verb.
+          query.kind ? sql`${jobs.kind} like ${`%.${query.kind}`}` : undefined,
+          // `cancelling` is an internal state; the contract calls it `running`.
+          query.status === 'running'
+            ? inArray(jobs.status, ['running', 'cancelling'])
+            : query.status
+              ? eq(jobs.status, query.status as JobStatus)
+              : undefined,
+        ),
+      )
+      .orderBy(desc(jobs.id))
+      .limit(limit + 1)
+      .all();
+    return pageOf(rows, limit, (row) => row);
+  }
+
+  appendJobEvent(jobId: string, message: string, level: 'info' | 'error' | 'progress'): void {
+    const row = this.job(jobId);
+    if (!row) return;
+    const last = this.db
+      .select({ seq: jobEvents.seq })
+      .from(jobEvents)
+      .where(eq(jobEvents.jobId, jobId))
+      .orderBy(desc(jobEvents.seq))
+      .limit(1)
+      .get();
+    this.db
+      .insert(jobEvents)
+      .values({
+        id: newUlid(),
+        ownerId: row.ownerId,
+        workspace: row.workspace,
+        jobId,
+        seq: (last?.seq ?? 0) + 1,
+        level,
+        message,
+      })
+      .run();
+  }
+
+  private announce(jobId: string, event: string): void {
+    if (!this.announcer) return;
+    const row = this.job(jobId);
+    if (!row) return;
+    const profile = this.slugs.get(row.workspace ?? '');
+    // A job whose workspace slug nobody registered is still recorded; it just has no
+    // profile room to reach, and `Job.profile` in the contract is not nullable.
+    if (!profile) return;
+    this.announcer(event, profile, serializeJob(row, profile));
   }
 
   /**
-   * Record what a run cost. Idempotent per (run, model label): a second report
-   * for the same pair replaces the first, because adapters re-send cumulative
-   * totals rather than deltas.
+   * `Job.profile` is a workspace **slug** while the column holds the id, so an emitted
+   * job needs a translation. `auth` owns workspaces; rather than read its tables from
+   * here, every caller that already resolved `X-Hub-Profile` registers the pair.
+   */
+  private readonly slugs = new Map<string, string>();
+
+  rememberWorkspace(id: string, slug: string): void {
+    this.slugs.set(id, slug);
+  }
+
+  /** The slug registered for a workspace id, for callers that serialize a job themselves. */
+  slugFor(workspaceId: string): string | null {
+    return this.slugs.get(workspaceId) ?? null;
+  }
+
+  // ------------------------------------------------------------------ usage
+
+  /**
+   * Record what a run cost. Idempotent per (run, model label): a second report for the
+   * same pair replaces the first, because adapters re-send cumulative totals.
    */
   recordUsage(input: UsageWrite): void {
     const row = {
@@ -184,8 +436,7 @@ export class AuditService {
       .where(and(eq(usageRecords.workspace, workspace), inArray(usageRecords.runId, [...runIds])))
       .all();
     for (const row of rows) {
-      const current = out.get(row.runId) ?? { ...ZERO };
-      out.set(row.runId, add(current, row));
+      out.set(row.runId, add(out.get(row.runId) ?? { ...ZERO }, row));
     }
     return out;
   }
@@ -207,5 +458,32 @@ function add(acc: UsageTotals, row: UsageRow): UsageTotals {
     reasoningTokens: acc.reasoningTokens + row.reasoningTokens,
     costMicroUsd: acc.costMicroUsd + row.costMicroUsd,
     hasCost: acc.hasCost || row.costSource !== 'unknown',
+  };
+}
+
+/**
+ * Job row -> the contract's `Job`. Two shapes differ from the table on purpose:
+ * `kind` stores `<module>.<verb>` and the API sends the verb; the table's `cancelling`
+ * ("cancel asked, worker winding down") has no contract value and is reported as
+ * `running` until the worker stops.
+ */
+export function serializeJob(row: JobRow, profile: string): Record<string, unknown> {
+  const verb = row.kind.includes('.') ? row.kind.slice(row.kind.indexOf('.') + 1) : row.kind;
+  return {
+    id: row.id,
+    profile,
+    owner_id: row.ownerId,
+    created_at: iso(row.createdAt),
+    updated_at: iso(row.updatedAt),
+    kind: verb as ContractJobKind,
+    status: row.status === 'cancelling' ? 'running' : row.status,
+    progress: { percent: row.progress < 0 ? null : row.progress, message: row.progressMessage },
+    resource: row.entityKind && row.entityId ? { kind: row.entityKind, id: row.entityId } : null,
+    result: row.result ?? null,
+    error: row.errorCode
+      ? { error: row.errorMessage ?? row.errorCode, code: row.errorCode as ErrorCode }
+      : null,
+    started_at: iso(row.startedAt),
+    finished_at: iso(row.finishedAt),
   };
 }

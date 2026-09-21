@@ -5,8 +5,10 @@
 import type { Server as SocketServer, Socket } from 'socket.io';
 import { HubError } from '../../lib/errors.js';
 import { REALTIME_NAMESPACES } from '../../lib/module.js';
+import { profileRoom } from '../../lib/realtime.js';
 import type { AuthContext } from './context.js';
 import { resolvePrincipal, type Principal } from './principal.js';
+import { resolveWorkspaceFor } from './workspace.js';
 
 declare module 'socket.io' {
   interface SocketData {
@@ -24,10 +26,22 @@ export function registerSocketAuth(io: SocketServer, ctx: () => AuthContext | nu
       const context = ctx();
       if (!context) return next(new Error('unauthorized'));
       const ip = socket.handshake.address;
+      const profile = socket.handshake.auth?.profile;
       resolvePrincipal(context, token, ip).then(
         (principal) => {
           socket.data.principal = principal;
           void socket.join(userRoom(principal.user.id));
+          // Workspace-wide events (`/rt/jobs`, and the streaming namespaces) reach
+          // `profile:<slug>`; the handshake names the workspace the same way
+          // `X-Hub-Profile` does (packages/contracts/events/README.md §Connecting).
+          if (typeof profile === 'string' && profile.length > 0) {
+            try {
+              const scope = resolveWorkspaceFor(context.db, principal.user, profile);
+              void socket.join(profileRoom(scope.slug));
+            } catch (error) {
+              return next(new Error(error instanceof HubError ? error.code : 'profile_not_found'));
+            }
+          }
           next();
         },
         (error: unknown) => {

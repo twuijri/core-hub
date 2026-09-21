@@ -61,6 +61,25 @@ Indexes: unique (run_id, model_label); (workspace, recorded_at);
 | active_runs, queued_jobs, connected_clients | int | |
 | data | json | anything else the dashboard plots |
 
+## The jobs kernel
+
+Other modules never touch these tables: they take `AuditService` and `JobRunner` from
+`modules/audit/index.ts`. `record()` writes the audit trail;
+`createJob / startJob / progressJob / finishJob / requestCancel` drive a job, and every
+one of those transitions is announced on `/rt/jobs`, so a client polling `jobs.list` and a
+client on the socket see one history. `JobRunner.start()` wraps the common case — work
+that is a single async function — and hands it a handle for progress and cancellation; a
+module whose work is a stream drives `AuditService` directly.
+
+Two shapes differ from the contract on purpose: `kind` stores `<module>.<verb>` while the
+API sends the verb (the contract's `JobKind`), and the table's `cancelling` state ("cancel
+asked, worker still winding down") is reported as `running`, because the contract has no
+such value.
+
+A job with a null `workspace` (importing a profile creates the workspace it belongs to)
+is invisible to `jobs.list`, which is workspace-scoped, while the contract's `Job.profile`
+is not nullable; the operation that needs such a job owns that gap.
+
 ## job (global, workspace nullable)
 
 Lifecycle in `README.md` §job.

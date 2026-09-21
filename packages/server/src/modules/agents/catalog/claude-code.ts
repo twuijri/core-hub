@@ -1,0 +1,18 @@
+// Claude Code over ACP. The ACP bridge is a separate package from the CLI itself; it is
+// what speaks the protocol the hub drives (ADR 0002).
+import type { CatalogEntry } from './types.js';
+
+export const claudeCode: CatalogEntry = {
+  id: 'claude-code',
+  name: 'Claude Code',
+  vendor: 'Anthropic',
+  licence: 'Apache-2.0',
+  adapter: 'acp',
+  binary: 'claude-code-acp',
+  protocolArgs: [],
+  versionArgs: ['--version'],
+  install: { kind: 'npm', package: '@zed-industries/claude-code-acp', version: '0.6.1' },
+  health: { kind: 'command', args: ['--version'] },
+  capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'skills', 'worktrees', 'resume'],
+  sections: ['skills', 'mcp', 'settings'],
+};

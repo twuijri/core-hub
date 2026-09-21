@@ -23,6 +23,23 @@ const envSchema = z.object({
 
 export type DatabaseConfig = { kind: 'sqlite'; file: string } | { kind: 'postgres'; url: string };
 
+/**
+ * The host environment, as opposed to the hub's configuration: `PATH` for finding an
+ * installed agent CLI and the variables a spawned agent inherits. It is read here, and
+ * only here, so the rule "config.ts is the only file that touches `process.env`" still
+ * holds — a unit test enforces it.
+ */
+export interface HostEnv {
+  path: string | undefined;
+  pathExt: string | undefined;
+  /** What a child process inherits. Never logged; never sent to a client. */
+  inherited: NodeJS.ProcessEnv;
+}
+
+export function readHostEnv(env: NodeJS.ProcessEnv = process.env): HostEnv {
+  return { path: env.PATH, pathExt: env.PATHEXT, inherited: env };
+}
+
 export interface HubConfig {
   dataDir: string;
   port: number;
@@ -32,6 +49,8 @@ export interface HubConfig {
    * ignored afterwards; it is never logged and never stored in clear text.
    */
   bootstrapAdminPassword: string | undefined;
+  /** PATH and the variables spawned agents inherit (see `HostEnv`). */
+  hostEnv: HostEnv;
 }
 
 export class ConfigError extends Error {
@@ -41,7 +60,10 @@ export class ConfigError extends Error {
   }
 }
 
-export function loadConfig(source: EnvSource = pickEnv(process.env)): HubConfig {
+export function loadConfig(
+  source: EnvSource = pickEnv(process.env),
+  hostEnv: HostEnv = readHostEnv(),
+): HubConfig {
   const result = envSchema.safeParse(source);
   if (!result.success) {
     const lines = result.error.issues.map(
@@ -58,6 +80,7 @@ export function loadConfig(source: EnvSource = pickEnv(process.env)): HubConfig 
       ? { kind: 'postgres', url: env.DATABASE_URL }
       : { kind: 'sqlite', file: path.join(dataDir, 'hub.sqlite') },
     bootstrapAdminPassword: env.HUB_ADMIN_PASSWORD,
+    hostEnv,
   };
 }
 

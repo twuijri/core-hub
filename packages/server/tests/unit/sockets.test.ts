@@ -17,10 +17,11 @@ describe('realtime composition', () => {
     await hub.close();
   });
 
-  it('exposes exactly the namespaces from ARCHITECTURE §Realtime', () => {
+  it('exposes exactly the namespaces from ARCHITECTURE §Realtime plus /rt/jobs', () => {
     expect(hub.app.hub.namespaces).toEqual([
       '/rt/board',
       '/rt/devices',
+      '/rt/jobs',
       '/rt/rooms',
       '/rt/schedules',
       '/rt/sessions',

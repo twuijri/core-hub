@@ -14,7 +14,7 @@ import {
   revokeDeviceByToken,
   serializeDevice,
 } from '../devices/index.js';
-import { enqueueJob, recordAudit } from './audit-stub.js';
+import { AuditService } from '../audit/index.js';
 import { decodeAvatarDataUrl, deleteAvatar, readAvatar } from './avatars.js';
 import type { AuthContext } from './context.js';
 import {
@@ -257,6 +257,9 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
   const attributionId = (userId?: string | null) =>
     userId ?? ownerUser(db)?.id ?? '00000000000000000000000000';
 
+  // The audit trail and the job queue belong to `audit` (docs/domain/audit.md).
+  const ledger = new AuditService(db);
+
   const audit = (
     request: FastifyRequest,
     action: string,
@@ -265,8 +268,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     data: Record<string, unknown> = {},
   ) => {
     const principal = request.principal;
-    recordAudit(
-      db,
+    ledger.record(
       {
         actorKind: principal?.kind === 'app_token' && principal.deviceId ? 'device' : 'user',
         actorId: principal?.user.id ?? null,
@@ -376,8 +378,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     const ok = user ? await verifyPassword(user.passwordHash, body.password) : false;
     if (!user || !ok) {
       const locked = recordFailure(db, 'password', ip, now(), attributionId(user?.id));
-      recordAudit(
-        db,
+      ledger.record(
         {
           actorKind: 'system',
           action: 'auth.login_failed',
@@ -398,8 +399,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     touchLogin(db, user.id, now());
     const agent = String(request.headers['user-agent'] ?? 'web').slice(0, 80);
     const session = createSession(db, user, now(), `web · ${agent}`);
-    recordAudit(
-      db,
+    ledger.record(
       {
         actorKind: 'user',
         actorId: user.id,
@@ -772,8 +772,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
       { device },
       now(),
     );
-    recordAudit(
-      db,
+    ledger.record(
       {
         actorKind: 'device',
         actorId: result.user.id,
@@ -946,18 +945,14 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
 
   route('POST', '/profiles/:profile_id/export', admin, async (request, reply) => {
     const row = workspaceFor(request);
-    const jobId = enqueueJob(
-      db,
-      {
-        ownerId: principalOf(request).user.id,
-        workspace: row.id,
-        kind: 'auth.profile_export',
-        entityKind: 'profile',
-        entityId: row.id,
-        input: { slug: row.slug },
-      },
-      now(),
-    );
+    const jobId = ledger.createJob({
+      ownerId: principalOf(request).user.id,
+      workspace: row.id,
+      kind: 'auth.profile_export',
+      entityKind: 'profile',
+      entityId: row.id,
+      input: { slug: row.slug },
+    });
     return reply.code(202).send({ job_id: jobId });
   });
 
@@ -965,18 +960,14 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     const body = parse(ProfileImport, request.body);
     if (findWorkspace(db, body.slug))
       throw new HubError('conflict', { messageKey: 'auth.slug_taken' });
-    const jobId = enqueueJob(
-      db,
-      {
-        ownerId: principalOf(request).user.id,
-        workspace: null,
-        kind: 'auth.profile_import',
-        entityKind: 'attachment',
-        entityId: body.attachment_id,
-        input: { attachment_id: body.attachment_id, slug: body.slug },
-      },
-      now(),
-    );
+    const jobId = ledger.createJob({
+      ownerId: principalOf(request).user.id,
+      workspace: null,
+      kind: 'auth.profile_import',
+      entityKind: 'attachment',
+      entityId: body.attachment_id,
+      input: { attachment_id: body.attachment_id, slug: body.slug },
+    });
     return reply.code(202).send({ job_id: jobId });
   });
 }

@@ -1,8 +1,10 @@
 // The one error envelope every client sees: `{ error, code }` (TEAM-RULES §4).
 import { t, type Language } from '../i18n/index.js';
 
-/** The fixed list from `ErrorCode` in packages/contracts/openapi.yaml. Adding one is a
- * contract change; every code has an `errors.<code>` string in both locales. */
+/**
+ * The contract's `components.schemas.ErrorCode`, verbatim. A unit test compares the two
+ * lists, so the server can never answer a code no client knows how to branch on.
+ */
 export const ERROR_CODES = [
   'bad_request',
   'validation_failed',
@@ -24,8 +26,10 @@ export const ERROR_CODES = [
   'not_implemented',
   'service_unavailable',
 ] as const;
+
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
+/** The HTTP status each code is documented with in packages/contracts/openapi.yaml. */
 export const STATUS_BY_CODE: Record<ErrorCode, number> = {
   bad_request: 400,
   validation_failed: 400,
@@ -91,12 +95,11 @@ export class HubError extends Error {
   }
 }
 
-export const badRequest = (details?: unknown) => new HubError('bad_request', { details });
 export const notFound = (details?: unknown) => new HubError('not_found', { details });
-export const conflict = (
-  code: 'conflict' | 'state_invalid' | 'already_running',
-  details?: unknown,
-) => new HubError(code, { details });
 export const notImplemented = (details?: unknown) => new HubError('not_implemented', { details });
 export const validationFailed = (details?: unknown) =>
   new HubError('validation_failed', { details });
+export const conflict = (details?: unknown) => new HubError('conflict', { details });
+export const stateInvalid = (details?: unknown) => new HubError('state_invalid', { details });
+export const agentUnavailable = (details?: unknown) =>
+  new HubError('agent_unavailable', { details });
