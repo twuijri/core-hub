@@ -246,7 +246,8 @@ export function promptText(blocks: RunnerPromptBlock[]): string {
   const parts: string[] = [];
   for (const block of blocks) {
     if (block.type === 'text') parts.push(block.text);
-    else if (block.type === 'attachment') parts.push(`[attachment ${block.kind} ${block.attachmentId}]`);
+    else if (block.type === 'attachment')
+      parts.push(`[attachment ${block.kind} ${block.attachmentId}]`);
     else parts.push(`[location ${block.latitude},${block.longitude}]`);
   }
   return parts.join('\n\n');
@@ -380,7 +381,11 @@ export function toRunnerEvent(event: AgentEvent, ctx: TranslateContext): RunnerE
         costSource: 'unknown',
       };
     case 'context':
-      return { type: 'context', usedTokens: event.usedTokens, windowTokens: event.windowTokens ?? null };
+      return {
+        type: 'context',
+        usedTokens: event.usedTokens,
+        windowTokens: event.windowTokens ?? null,
+      };
     case 'run.completed':
       if (event.interrupted && !ctx.interruptRequested) {
         // The agent stopped on its own; the hub never asked. Not a success.

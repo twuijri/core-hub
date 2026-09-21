@@ -9,7 +9,12 @@ import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
 import { capturingLogger, unreachableFetch } from '../../../tests/unit/helpers.js';
-import { HermesRuntime, loadOrCreateHermesApiKey, type SpawnedProcess, type Spawner } from './hermes-runtime.js';
+import {
+  HermesRuntime,
+  loadOrCreateHermesApiKey,
+  type SpawnedProcess,
+  type Spawner,
+} from './hermes-runtime.js';
 
 const dirs: string[] = [];
 function tempDir(): string {
@@ -35,7 +40,13 @@ class FakeChild extends EventEmitter implements SpawnedProcess {
 }
 
 function fakeSpawner() {
-  const spawned: { command: string; args: string[]; env: NodeJS.ProcessEnv; cwd: string; child: FakeChild }[] = [];
+  const spawned: {
+    command: string;
+    args: string[];
+    env: NodeJS.ProcessEnv;
+    cwd: string;
+    child: FakeChild;
+  }[] = [];
   const spawnImpl: Spawner = (command, args, options) => {
     const child = new FakeChild();
     spawned.push({ command, args, env: options.env, cwd: options.cwd, child });

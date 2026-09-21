@@ -377,7 +377,10 @@ describe('Hermes adapter', () => {
   });
 
   it('needs the runner to name the conversation (ADR 0008 §Session continuity)', async () => {
-    const adapter = createHermesAdapter({ host: { pathValue: '/nowhere-at-all' }, apiKey: 'k'.repeat(32) });
+    const adapter = createHermesAdapter({
+      host: { pathValue: '/nowhere-at-all' },
+      apiKey: 'k'.repeat(32),
+    });
     await expect(adapter.start(target)).rejects.toMatchObject({ code: 'not_implemented' });
   });
 });

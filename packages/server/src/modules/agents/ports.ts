@@ -60,14 +60,7 @@ export interface RunnerRunAccepted {
 }
 
 export type RunnerToolKind =
-  | 'shell'
-  | 'file_read'
-  | 'file_write'
-  | 'search'
-  | 'web'
-  | 'mcp'
-  | 'device'
-  | 'custom';
+  'shell' | 'file_read' | 'file_write' | 'search' | 'web' | 'mcp' | 'device' | 'custom';
 
 export type RunnerApprovalKind = 'tool_call' | 'plan' | 'memory_write' | 'skill_write' | 'question';
 

@@ -52,7 +52,13 @@ describe.skipIf(!enabled)('Hermes for real (HERMES_E2E=1)', () => {
       socket.once('connect', () => resolve());
       socket.once('connect_error', reject);
     });
-    for (const name of ['message.delta', 'tool.started', 'tool.completed', 'run.completed', 'run.failed']) {
+    for (const name of [
+      'message.delta',
+      'tool.started',
+      'tool.completed',
+      'run.completed',
+      'run.failed',
+    ]) {
       socket.on(name, (envelope: Envelope) => events.push(envelope));
     }
   }, 30_000);
@@ -64,9 +70,9 @@ describe.skipIf(!enabled)('Hermes for real (HERMES_E2E=1)', () => {
 
   it('answers a greeting and the hub records the transcript and the usage', async () => {
     const agents = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/agents' });
-    const hermes = (agents.json() as { items: Array<{ id: string; slug: string; status: string }> }).items.find(
-      (a) => a.slug === 'hermes',
-    );
+    const hermes = (
+      agents.json() as { items: Array<{ id: string; slug: string; status: string }> }
+    ).items.find((a) => a.slug === 'hermes');
     expect(hermes?.status).toBe('available');
 
     const created = await authed(hub, hub.token, {
@@ -76,7 +82,9 @@ describe.skipIf(!enabled)('Hermes for real (HERMES_E2E=1)', () => {
     });
     expect(created.statusCode).toBe(201);
     const sessionId = (created.json() as { id: string }).id;
-    await new Promise<void>((resolve) => socket.emit('subscribe', { session_id: sessionId }, () => resolve()));
+    await new Promise<void>((resolve) =>
+      socket.emit('subscribe', { session_id: sessionId }, () => resolve()),
+    );
 
     const accepted = await authed(hub, hub.token, {
       method: 'POST',
