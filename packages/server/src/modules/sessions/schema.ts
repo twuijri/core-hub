@@ -34,7 +34,28 @@ import {
 } from '../../db/columns.js';
 
 export const SESSION_ORIGINS = ['user', 'task', 'schedule', 'workflow', 'room', 'api'] as const;
-export const MESSAGE_ROLES = ['user', 'assistant', 'system', 'tool', 'event'] as const;
+/**
+ * `Session.source` in the contract: where the session came from, as the clients group it.
+ * Wider than `origin_kind`, which says which *entity* owns the session.
+ */
+export const SESSION_SOURCES = [
+  'chat',
+  'global_agent',
+  'room',
+  'task',
+  'schedule',
+  'workflow',
+  'channel',
+  'cli',
+  'api',
+] as const;
+export const REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'max'] as const;
+/**
+ * `command` is a user message whose text starts with `/` (contract `MessageRole`).
+ * `tool` and `event` are hub-internal roles rendered as `system` on the wire; tool output
+ * itself lives on `tool_calls`, never in a message of its own.
+ */
+export const MESSAGE_ROLES = ['user', 'assistant', 'system', 'command', 'tool', 'event'] as const;
 export const AUTHOR_KINDS = ['user', 'agent', 'system'] as const;
 export const RUN_STATUSES = [
   'queued',
@@ -87,6 +108,8 @@ export type MessagePart =
   | { type: 'text'; text: string }
   | { type: 'image'; attachmentId: string; alt?: string }
   | { type: 'file'; attachmentId: string }
+  | { type: 'audio'; attachmentId: string; durationMs?: number | null; transcript?: string | null }
+  | { type: 'location'; latitude: number; longitude: number; accuracyM?: number | null }
   | { type: 'tool_call'; toolCallId: string }
   | { type: 'approval'; approvalId: string };
 
@@ -102,12 +125,20 @@ export const sessions = sqliteTable(
   {
     ...scopedColumns(),
     agentId: ulid('agent_id').notNull(),
-    title: text('title', { length: 200 }).notNull().default(''),
+    title: text('title', { length: 200 }),
+    /** Contract `Session.source`; drives the grouping on the history screen. */
+    source: text('source', { enum: SESSION_SOURCES }).notNull().default('chat'),
+    /** Messaging platform slug when `source = channel` (telegram, whatsapp, …). */
+    channel: text('channel', { length: 60 }),
     originKind: text('origin_kind', { enum: SESSION_ORIGINS }).notNull().default('user'),
     originId: ulid('origin_id'),
     modelId: ulid('model_id'),
     /** "provider/model" label frozen at creation; survives model deletion. */
     modelLabel: text('model_label', { length: 200 }),
+    /** Provider slug frozen next to `model_label` so a deleted provider still renders. */
+    provider: text('provider', { length: 120 }),
+    /** Per-session override of the profile default; null means "use the default". */
+    reasoningEffort: text('reasoning_effort', { enum: REASONING_EFFORTS }),
     /** The agent's own session identifier (ACP session id, Hermes session key). */
     agentSessionRef: text('agent_session_ref', { length: 200 }),
     workingDir: text('working_dir'),
@@ -115,7 +146,15 @@ export const sessions = sqliteTable(
     lastRunId: ulid('last_run_id'),
     lastMessageAt: timestampMs('last_message_at'),
     messageCount: integer('message_count').notNull().default(0),
+    /** First 300 characters of the newest message; the list shows it under the title. */
+    preview: text('preview', { length: 300 }),
     pinned: bool('pinned').notNull().default(false),
+    /** The session this one was forked from (`sessions.fork`). No FK: the parent may be purged. */
+    parentSessionId: ulid('parent_session_id'),
+    /** `session_categories` is a later phase; the column exists because the contract has it. */
+    categoryId: ulid('category_id'),
+    /** Push a notice to the user's devices when a run in this session finishes. */
+    notify: bool('notify').notNull().default(true),
     metadata: json<SessionMetadata>('metadata').notNull().default(EMPTY_OBJECT),
     archivedAt: timestampMs('archived_at'),
   },
@@ -123,7 +162,9 @@ export const sessions = sqliteTable(
     index('sessions_workspace_recent_idx').on(t.workspace, t.archivedAt, t.lastMessageAt),
     index('sessions_workspace_agent_idx').on(t.workspace, t.agentId),
     index('sessions_origin_idx').on(t.originKind, t.originId),
+    index('sessions_workspace_source_idx').on(t.workspace, t.source),
     check('sessions_origin_kind_check', inList(t.originKind, SESSION_ORIGINS)),
+    check('sessions_source_check', inList(t.source, SESSION_SOURCES)),
   ],
 );
 
@@ -177,11 +218,15 @@ export const runs = sqliteTable(
       onDelete: 'set null',
     }),
     status: text('status', { enum: RUN_STATUSES }).notNull().default('queued'),
+    /** The `audit.jobs` row this run is executed as (invariant 4; contract `Run.job_id`). */
+    jobId: ulid('job_id').notNull(),
     /** Retry counter for the same trigger (1 = first attempt). */
     attempt: integer('attempt').notNull().default(1),
     originKind: text('origin_kind', { enum: SESSION_ORIGINS }).notNull().default('user'),
     originId: ulid('origin_id'),
     modelLabel: text('model_label', { length: 200 }),
+    provider: text('provider', { length: 120 }),
+    reasoningEffort: text('reasoning_effort', { enum: REASONING_EFFORTS }),
     adapterKind: text('adapter_kind', { length: 16 }).notNull(),
     /** The agent's own turn/run id, if it has one. */
     agentRunRef: text('agent_run_ref', { length: 200 }),
@@ -220,7 +265,11 @@ export const toolCalls = sqliteTable(
     input: json<Record<string, unknown>>('input').notNull().default(EMPTY_OBJECT),
     /** Truncated to the configured limit; the full output is an attachment. */
     output: text('output'),
+    /** Contract `ToolCall.output_truncated`: `output` is a prefix of what the agent sent. */
+    outputTruncated: bool('output_truncated').notNull().default(false),
     outputAttachmentId: ulid('output_attachment_id'),
+    /** Set when a delegated subagent made the call (contract `ToolCall.subagent_id`). */
+    subagentId: text('subagent_id', { length: 120 }),
     status: text('status', { enum: TOOL_CALL_STATUSES }).notNull().default('pending'),
     approvalId: ulid('approval_id').references((): AnySQLiteColumn => approvals.id, {
       onDelete: 'set null',
