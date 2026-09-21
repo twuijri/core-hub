@@ -81,9 +81,12 @@ describe('sessions: create, read, rename, archive, delete', () => {
   it('mints the id and returns a complete Session document', async () => {
     const hub = await hubWithAgent();
     try {
-      const res = await create(hub.app, { title: 'خطة الإطلاق', working_dir: '/srv/project' });
+      // `working_dir` is a folder under the workspace root, which the hub creates
+      // (src/modules/sessions/working-dir.ts); an absolute path elsewhere is refused.
+      const res = await create(hub.app, { title: 'خطة الإطلاق', working_dir: 'project' });
       expect(res.status).toBe(201);
       const session = res.json() as Record<string, unknown>;
+      expect(session.working_dir).toMatch(/[/\\]workspaces[/\\]default[/\\]project$/);
       expect(session).toMatchObject({
         profile: 'default',
         agent_id: AGENT_ID,
@@ -91,7 +94,6 @@ describe('sessions: create, read, rename, archive, delete', () => {
         source: 'chat',
         model: 'hermes-4',
         provider: 'nous',
-        working_dir: '/srv/project',
         pinned: false,
         archived: false,
         message_count: 0,

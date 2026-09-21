@@ -178,6 +178,12 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     return deps.service(request).bulkDelete(scope, ids);
   });
 
+  // Before `/sessions/:session_id`: a static segment must never be read as an id.
+  app.get('/sessions/working-dirs', async (request) => {
+    const scope = await scopeOf(request);
+    return deps.service(request).workingDirs(scope);
+  });
+
   app.get('/sessions/:session_id', async (request) => {
     const scope = await scopeOf(request);
     const session_id = pathId(request.params, 'session_id', 'session');

@@ -9,6 +9,7 @@ import { HubError, notFound } from '../../lib/errors.js';
 import { t, type Language } from '../../i18n/index.js';
 import type { FastifyBaseLogger } from 'fastify';
 import { newUlid } from '../../db/ids.js';
+import { ensureWorkingDir, listWorkingDirs, workspaceRoot } from './working-dir.js';
 import type { AuditService } from '../audit/index.js';
 import { RunEngine, messageStatusOf, type EngineScope } from './engine.js';
 import {
@@ -88,6 +89,8 @@ export class SessionsService {
     private readonly realtime: SessionsRealtime,
     private readonly ports: SessionsPorts,
     private readonly log: FastifyBaseLogger,
+    /** `${DATA_DIR}`; every session works under `<dataDir>/workspaces/<profile>`. */
+    private readonly dataDir: string,
   ) {
     this.store = store;
     this.audit = audit;
@@ -96,8 +99,16 @@ export class SessionsService {
 
   // ------------------------------------------------------------- sessions
 
+  /** The root this workspace works in, and the folders already under it. */
+  workingDirs(scope: EngineScope): { root: string; items: Array<{ name: string; path: string }> } {
+    return listWorkingDirs(this.rootOf(scope));
+  }
+
   async create(scope: EngineScope, input: SessionCreateInput): Promise<Record<string, unknown>> {
     const agent = await this.requireAgent(scope, input.agent_id);
+    // Resolved before the row is minted: a refused path must not leave a session behind.
+    const root = this.rootOf(scope);
+    const asked = input.working_dir?.trim() ? input.working_dir.trim() : null;
     const row = this.store.createSession({
       workspace: scope.workspace,
       ownerId: scope.userId,
@@ -107,11 +118,24 @@ export class SessionsService {
       modelLabel: input.model ?? agent.defaultModel,
       provider: input.provider ?? agent.defaultProvider,
       reasoningEffort: input.reasoning_effort ?? null,
-      workingDir: input.working_dir ?? null,
+      // The folder is named after the session when nobody chose one, so it is
+      // unique by construction; the id exists only after the insert.
+      workingDir: null,
       categoryId: input.category_id ?? null,
       parentSessionId: null,
     });
-    const payload = this.sessionOf(scope, row);
+    let withDir = row;
+    try {
+      withDir =
+        this.store.updateSession(scope.workspace, row.id, {
+          workingDir: ensureWorkingDir(root, asked, row.id),
+        }) ?? row;
+    } catch (error) {
+      // A path we refuse (or a disk we cannot write) must not leave a half-made session.
+      this.store.deleteSession(scope.workspace, row.id);
+      throw error;
+    }
+    const payload = this.sessionOf(scope, withDir);
     this.realtime.emitToProfile(scope.profile, 'session.created', { session: payload });
     return payload;
   }
@@ -177,7 +201,20 @@ export class SessionsService {
     if (patch.provider !== undefined) changes.provider = patch.provider;
     if (patch.reasoning_effort !== undefined)
       changes.reasoningEffort = patch.reasoning_effort as SessionRow['reasoningEffort'];
-    if (patch.working_dir !== undefined) changes.workingDir = patch.working_dir;
+    if (patch.working_dir !== undefined) {
+      // Moving the ground under a conversation that has already run there would
+      // make its own transcript lie, so it is only free before the first run.
+      if (this.store.listRuns(scope.workspace, row.id, undefined, undefined, 1).items.length > 0) {
+        throw new HubError('state_invalid', {
+          details: { field: 'working_dir', reason: 'session_has_runs' },
+        });
+      }
+      changes.workingDir = ensureWorkingDir(
+        this.rootOf(scope),
+        patch.working_dir?.trim() ? patch.working_dir.trim() : null,
+        row.id,
+      );
+    }
     if (patch.notify !== undefined) changes.notify = patch.notify;
     if (patch.category_id === null) changes.categoryId = null;
 
@@ -536,6 +573,11 @@ export class SessionsService {
   }
 
   // ------------------------------------------------------------- internals
+
+  /** `${DATA_DIR}/workspaces/<profile>` — the slug is already validated by the route. */
+  private rootOf(scope: EngineScope): string {
+    return workspaceRoot(this.dataDir, scope.profile);
+  }
 
   private async requireAgent(scope: EngineScope, agentId: string) {
     const agent = await this.ports.agents.find(scope.workspace, agentId);
