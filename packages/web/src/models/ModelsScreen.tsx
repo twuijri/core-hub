@@ -23,6 +23,7 @@ import { useI18n } from '../i18n/context.js';
 import { navigation, routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import type { Agent, Model, Provider, ProviderHost } from '../types.js';
+import { SettingsBack } from '../settings/SettingsBack.js';
 import { Notice, Spinner } from '../ui/Notice.js';
 import { AddProviderDialog } from './AddProviderDialog.js';
 import { needsLoopbackWarning, suggestedHostUrl } from './loopback.js';

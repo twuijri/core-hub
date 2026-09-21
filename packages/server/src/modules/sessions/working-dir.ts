@@ -97,7 +97,7 @@ export function listWorkingDirs(root: string): { root: string; items: WorkingDir
     // `isDirectory()` is false for a link to one, and we do not follow links out.
     if (!entry.isDirectory()) continue;
     const full = path.join(realRoot, entry.name);
-    let at = 0;
+    let at: number;
     try {
       at = statSync(full).mtimeMs;
     } catch {

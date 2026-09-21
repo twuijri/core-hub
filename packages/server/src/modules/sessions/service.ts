@@ -124,7 +124,7 @@ export class SessionsService {
       categoryId: input.category_id ?? null,
       parentSessionId: null,
     });
-    let withDir = row;
+    let withDir: SessionRow;
     try {
       withDir =
         this.store.updateSession(scope.workspace, row.id, {

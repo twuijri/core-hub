@@ -65,6 +65,7 @@ describe('navigation parity (web)', () => {
     expect(ids(navigation.settingsTabs)).toEqual(
       raw.settingsTabs.filter((id) => id !== 'this_device'),
     );
+    expect(ids(navigation.settingsManagement)).toEqual(raw.settingsManagement);
     expect(ids(navigation.settingsTools)).toEqual(raw.settingsTools);
     expect(ids(navigation.agentLevel)).toEqual(raw.agentLevel);
   });
@@ -93,9 +94,19 @@ describe('navigation parity (web)', () => {
   });
 
   it('6. roles: admin entries are hidden from members', () => {
-    const memberRail = visibleEntries(navigation.rail, 'member').map((d) => d.id);
-    expect(memberRail).not.toContain('agent_manager');
-    expect(visibleEntries(navigation.rail, 'admin').map((d) => d.id)).toContain('agent_manager');
+    // The sidebar is slim (2026-09-22): the rail is `new_chat` and `search`, and the pages
+    // configured once are Settings pages — Agent Manager among them, admin-only as before.
+    expect(visibleEntries(navigation.rail, 'owner').map((d) => d.id)).toEqual([
+      'new_chat',
+      'search',
+    ]);
+    const memberManagement = visibleEntries(navigation.settingsManagement, 'member').map(
+      (d) => d.id,
+    );
+    expect(memberManagement).not.toContain('agent_manager');
+    expect(visibleEntries(navigation.settingsManagement, 'admin').map((d) => d.id)).toContain(
+      'agent_manager',
+    );
     const memberTabs = visibleEntries(navigation.settingsTabs, 'member').map((d) => d.id);
     expect(memberTabs).not.toContain('users');
     expect(memberTabs).not.toContain('webhooks');

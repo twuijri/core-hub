@@ -16,6 +16,9 @@ export const keys = {
   session: (profile: string, id: string) => ['session', profile, id] as const,
   messages: (profile: string, id: string) => ['messages', profile, id] as const,
   agents: (profile: string) => ['agents', profile] as const,
+  agentSettings: (profile: string, agentId: string) =>
+    ['agents', profile, agentId, 'settings'] as const,
+  workingDirs: (profile: string) => ['working-dirs', profile] as const,
   jobs: (profile: string) => ['jobs', profile] as const,
 };
 
@@ -170,9 +173,90 @@ export function useCreateSession() {
   const { client, profile } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { agent_id: string; title?: string | null }) =>
-      (await client.request('post', '/sessions', { body })).data,
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['sessions', profile] }),
+    mutationFn: async (body: {
+      agent_id: string;
+      title?: string | null;
+      model?: string | null;
+      working_dir?: string | null;
+    }) => (await client.request('post', '/sessions', { body })).data,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['sessions', profile] });
+      // The hub may have created the folder this session works in.
+      void queryClient.invalidateQueries({ queryKey: keys.workingDirs(profile) });
+    },
+  });
+}
+
+/** The hub's workspace root and the folders already under it (`sessions.listWorkingDirs`). */
+export function useWorkingDirs() {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: keys.workingDirs(profile),
+    queryFn: async () => (await client.request('get', '/sessions/working-dirs')).data,
+    enabled: !!session,
+    staleTime: 15_000,
+  });
+}
+
+/**
+ * One session's own fields: the model it runs on and the folder it works in. Separate from
+ * `useUpdateSession` (the list's pin/archive/rename) because it invalidates the open session.
+ */
+export function usePatchSession(sessionId: string) {
+  const { client, profile } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (patch: { model?: string | null; working_dir?: string | null }) =>
+      (
+        await client.request('patch', '/sessions/{session_id}', {
+          params: { session_id: sessionId },
+          body: patch,
+        })
+      ).data,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: keys.session(profile, sessionId) });
+      void queryClient.invalidateQueries({ queryKey: ['sessions', profile] });
+      void queryClient.invalidateQueries({ queryKey: keys.workingDirs(profile) });
+    },
+  });
+}
+
+/**
+ * `agent_settings` as the adapter describes them (ADR 0002). The composer reads one field
+ * out of them — `approval_mode` in the `session` section — and writes it back the same way;
+ * an adapter that does not declare it simply has no selector to offer.
+ */
+export function useAgentSettings(agentId: string | null) {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: keys.agentSettings(profile, agentId ?? 'none'),
+    queryFn: async () =>
+      (
+        await client.request('get', '/agents/{agent_id}/settings', {
+          params: { agent_id: agentId as string },
+        })
+      ).data,
+    enabled: !!session && !!agentId,
+    retry: false,
+    staleTime: 30_000,
+  });
+}
+
+export function useSaveAgentSetting(agentId: string | null) {
+  const { client, profile } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ section, values }: { section: string; values: Record<string, unknown> }) =>
+      (
+        await client.request('patch', '/agents/{agent_id}/settings', {
+          params: { agent_id: agentId as string },
+          body: { section, values },
+        })
+      ).data,
+    onSuccess: () =>
+      void queryClient.invalidateQueries({
+        queryKey: keys.agentSettings(profile, agentId ?? 'none'),
+      }),
   });
 }
 
