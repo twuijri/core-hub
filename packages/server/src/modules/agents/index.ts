@@ -81,20 +81,23 @@ export type {
 /**
  * The shared provider store (ADR 0010), registered by the `models` module at boot.
  *
- * A module-level slot rather than a constructor argument for the same reason
- * `auth.registerWorkspaceStatsProvider` is one: `agents` mounts before `models` in the
- * composition order, and inverting that order to pass a value would make the registry
- * depend on the provider store being up. Until it is registered, an agent starts with
- * its own settings only.
+ * A slot rather than a constructor argument because `agents` mounts before `models` in
+ * the composition order, and inverting that order would make the registry depend on the
+ * provider store being up. Until it is registered, an agent starts with its own settings
+ * only — never with a wrong key.
+ *
+ * Keyed to the app's own Socket.IO server, exactly like `contexts` below: two hubs in one
+ * process (the test suite builds dozens) must never share a port, or one hub's agents
+ * would resolve credentials out of another hub's database.
  */
-let modelsPort: AgentModelsPort | null = null;
+const modelsPorts = new WeakMap<SocketServer, AgentModelsPort>();
 
-export function registerAgentModelsPort(port: AgentModelsPort | null): void {
-  modelsPort = port;
+export function registerAgentModelsPort(io: SocketServer, port: AgentModelsPort): void {
+  modelsPorts.set(io, port);
 }
 
-export function agentModelsPort(): AgentModelsPort | null {
-  return modelsPort;
+export function agentModelsPort(io: SocketServer): AgentModelsPort | null {
+  return modelsPorts.get(io) ?? null;
 }
 export { AgentRunner, toRunnerEvent, toolKindOf, mintSessionRef } from './runner.js';
 export { HermesRuntime, loadOrCreateHermesApiKey } from './hermes-runtime.js';
@@ -192,7 +195,7 @@ function contextOf(app: FastifyInstance): AgentsContext {
     jobs: jobRunnerFor(app),
     adapters,
     installer: own.installer ?? createNpmInstaller({ dataDir: hub.config.dataDir, host }),
-    models: () => modelsPort,
+    models: () => modelsPorts.get(hub.io) ?? null,
   });
   const runner = new AgentRunner({ service, adapters, log: app.log });
   const created: AgentsContext = { service, adapters, runner, runtime };
