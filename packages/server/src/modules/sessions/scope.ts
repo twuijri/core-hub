@@ -52,14 +52,14 @@ export function derivedId(namespace: string, value: string): string {
   return ENCODING.charAt((digest[0] ?? 0) & 7) + out.slice(1);
 }
 
-export const LOCAL_OWNER_ID = derivedId('corehub.user', 'local-owner');
+export const LOCAL_OWNER_ID = derivedId('majlis.user', 'local-owner');
 export const LOCAL_OWNER_NAME = 'Owner';
 
 /** The placeholder resolver: every well-formed profile slug resolves. */
 export const derivedScopeResolver: ScopeResolver = {
   async resolve(profile: string): Promise<RequestScope | null> {
     return {
-      workspaceId: derivedId('corehub.workspace', profile),
+      workspaceId: derivedId('majlis.workspace', profile),
       profile,
       userId: LOCAL_OWNER_ID,
       userName: LOCAL_OWNER_NAME,
