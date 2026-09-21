@@ -10,6 +10,12 @@ export default defineConfig({
           name: 'unit',
           environment: 'node',
           include: ['src/**/*.test.ts', 'tests/unit/**/*.test.ts'],
+          // These are unit tests of modules, but most of them boot a whole hub: Fastify, a
+          // fresh SQLite file with every migration, and Argon2id at 19 MiB per password. On a
+          // loaded machine (or a CI runner) several of those in parallel routinely pass 5 s,
+          // vitest's default, which showed up as a different file timing out on every run.
+          testTimeout: 30_000,
+          hookTimeout: 30_000,
         },
       },
       {
