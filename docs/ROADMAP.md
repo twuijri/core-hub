@@ -32,7 +32,7 @@ that stack; the fork keeps running until Phase 5.
 ## Phase 3 — Phones and desktop
 - `apps/android`, `apps/ios`: new native clients from the contract and the
   navigation manifest (ADR 0007); `apps/desktop`: the web client in a shell
-  plus local capabilities.
+  plus local capabilities, in the two modes of ADR 0009 (never bundling Hermes).
 
 ## Phase 3b — Desktop details
 - `apps/desktop`: the web client in a shell plus local capabilities (local
@@ -44,3 +44,9 @@ that stack; the fork keeps running until Phase 5.
 ## Phase 5 — Replace the fork
 - Migrate the owner's data from the Hermes Studio fork (export/import tool),
   retire the fork.
+
+## Sizes (owner's rule, 2026-09-21)
+What people download is what matters: the Docker image (compressed pull
+size) and the desktop installer. Low hundreds of MB is fine; going above it
+is fine only when a real feature needs it, never by neglect. Report the
+compressed pull size as the headline number. Repository size is irrelevant.
