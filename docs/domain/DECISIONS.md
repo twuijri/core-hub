@@ -98,7 +98,7 @@ lists thirteen modules and adding one is an ADR, not a schema decision. If
 the owner prefers it, moving the two tables is one file and one line in
 `db/schema.ts`; the docs already treat jobs as their own section.
 
-**Rejected: jobs in `agents`** (the first user): plugins, board, knowledge
+**Rejected: jobs in `agents`** (the first user): plugins, tasks, knowledge
 and updates would depend on agents for something unrelated to agents.
 
 ## 7. Global tables omit `workspace`; three tables make it nullable

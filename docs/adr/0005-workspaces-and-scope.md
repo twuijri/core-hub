@@ -8,7 +8,7 @@ experiments. Ekko treats the profile as an ambient filter; that worked well.
 
 ## Decision
 A workspace is a named scope with its own agents' settings, models, sessions,
-rooms, board and schedules. Every request carries `X-Hub-Profile`; the server
+rooms, tasks and schedules. Every request carries `X-Hub-Profile`; the server
 filters everything by it. Switching workspace in a client changes the header
 and refetches; it never navigates.
 

@@ -17,13 +17,13 @@ the messaging channels, and the others are tools you add.
   registry lists what the hub knows (ACP-capable CLIs and harnessed CLIs),
   shows install state on the host, and installs/updates/removes on request.
   Uninstalled agents stay visible as "available", never hidden.
-- Rooms, the board and schedules can use any installed agent; defaults point
+- Rooms, tasks and schedules can use any installed agent; defaults point
   at Hermes.
 
 ## Alternatives rejected
 - All agents equal (Ekko): fragments memory/skills/jobs across runtimes and
   produced the inconsistent agent manager the owner disliked.
-- Hermes only: loses the coding agents that the board and rooms exist for.
+- Hermes only: loses the coding agents that tasks and rooms exist for.
 
 ## Consequences
 - The Docker image contains the hub and the Hermes runtime only, so it stays

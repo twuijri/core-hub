@@ -20,17 +20,17 @@
 |---|---|---|
 | «الواجهة ليست بابًا خاصًا»: كل شيء عبر OpenAPI موثّق + CLI | `packages/contracts` (ADR 0003) وكل الوحدات | العقد أولًا؛ عملاؤنا مولَّدون منه؛ لا مسار خارج العقد |
 | غلاف خطأ يحمل `code` و`suggestion` و`details` بالحقل | كل الوحدات (ثابت رقم 2 في ARCHITECTURE) | `{ error, code }` إلزامي، نضيف `details` للتحقق من المدخلات |
-| دورة حياة المهمة مع بوابة مراجعة، `successCriteria`، `maxRetries`، `reviewHistory` | `board` | حقول القبول على المهمة، ومراجعة بوكيل مختلف عن المنفّذ |
-| فصل «المنفّذ» عن «المراجع» (لا يشهد وكيل على عمله) | `board` + `rooms` | انتقال `review` يستدعي مقعد مراجعة في الغرفة |
-| `PATCH /tasks/batch` بنتائج لكل معرّف | `board` | عملية دفعة واحدة بنتيجة لكل عنصر (200 إن نجح واحد، 422 إن فشل الكل) |
+| دورة حياة المهمة مع بوابة مراجعة، `successCriteria`، `maxRetries`، `reviewHistory` | `tasks` | حقول القبول على المهمة، ومراجعة بوكيل مختلف عن المنفّذ |
+| فصل «المنفّذ» عن «المراجع» (لا يشهد وكيل على عمله) | `tasks` + `rooms` | انتقال `review` يستدعي مقعد مراجعة في الغرفة |
+| `PATCH /tasks/batch` بنتائج لكل معرّف | `tasks` | عملية دفعة واحدة بنتيجة لكل عنصر (200 إن نجح واحد، 422 إن فشل الكل) |
 | webhooks خارجية بأسماء أحداث `task.created/updated/deleted/archived` وتوقيع HMAC | `notify` | أحداثنا `<entity>.<verb>` نفسها تُبَثّ للـ webhooks، توقيع `sha256=` على الجسم الخام |
 | يوميات وتقارير ومعرفة ومرفقات | `knowledge` | المرحلة 4 |
 | إحصاءات، إنفاق، سجل تدقيق | `audit` | استخدام وتكلفة لكل جلسة ومهمة |
 | إضافات كحاويات Docker بمانيفست و`/health` ووكيل عكسي | `plugins` | المرحلة 4؛ المانيفست جزء من العقد |
 | تصنيف الجلسات ثلاثي: `harness` / `sessionType` / `channel` | `sessions` | حقول على الجلسة بدل «kind» واحد مبهم |
-| execution profile: `mode` + `accessProfile` + `requiredCapabilities` | `board` + `agents` (capabilities) | المهمة تعلن ما تحتاجه؛ السجل يعرف ما يقدر كل وكيل |
-| «claim/lease/heartbeat/release» لتنسيق من يشغّل المهمة | `board` (runs) + `schedules` | كل تشغيل job له مالك وعقد إيجار ونبض؛ العالق يُكتشف |
-| مراقب heartbeat يكتشف المهام العالقة ويوقظ منسّقًا | `schedules` | مهمة نظام مجدولة تفحص `board` وتنبّه عبر `notify` |
+| execution profile: `mode` + `accessProfile` + `requiredCapabilities` | `tasks` + `agents` (capabilities) | المهمة تعلن ما تحتاجه؛ السجل يعرف ما يقدر كل وكيل |
+| «claim/lease/heartbeat/release» لتنسيق من يشغّل المهمة | `tasks` (runs) + `schedules` | كل تشغيل job له مالك وعقد إيجار ونبض؛ العالق يُكتشف |
+| مراقب heartbeat يكتشف المهام العالقة ويوقظ منسّقًا | `schedules` | مهمة نظام مجدولة تفحص `tasks` وتنبّه عبر `notify` |
 
 ## الأفكار التي نرفضها ولماذا
 - **قراءة ملفات الوكيل الخاصة مباشرة** (تركيب `~/.openclaw/workspace` للقراءة، قراءة `state.db` لـ Hermes): يخالف قاعدة ملكية البيانات عندنا (الوكيل يحتفظ بحالته في بيته، والمركز يخزّن مراجع ونسخًا استلمها عبر واجهة). نصل إلى Hermes عبر واجهته (انظر `hermes-agent.md`).

@@ -87,7 +87,7 @@ Lifecycle in `README.md` §job.
 | column | type | meaning |
 |---|---|---|
 | workspace | ulid? | null for hub-level jobs (server update, backup) |
-| kind | text(64) | `<module>.<verb>`: `agents.install`, `board.worktree_create`, `plugins.install`, `knowledge.reindex`, `auth.workspace_purge` |
+| kind | text(64) | `<module>.<verb>`: `agents.install`, `tasks.worktree_create`, `plugins.install`, `knowledge.reindex`, `auth.workspace_purge` |
 | status | enum(queued, running, cancelling, succeeded, failed, cancelled) | |
 | progress | int | 0–100, or -1 for indeterminate |
 | progress_message | text(300)? | |

@@ -18,7 +18,7 @@ adapter (never stored, see below).
 | tags | json<string[]> | |
 | source_kind | enum(user, agent, import) | |
 | source_agent_id | ulid? → agents.agent | |
-| project_id, task_id | ulid? → board | the common filters, as columns |
+| project_id, task_id | ulid? → tasks | the common filters, as columns |
 | links | json<NoteLink[]> | other references: session, room, run, schedule, note |
 | pinned | bool | |
 | archived_at | ms? | |

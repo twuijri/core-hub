@@ -9,7 +9,7 @@
  * by a hand-written migration, not declared here; PostgreSQL uses a tsvector
  * column instead (packages/server/src/db/README.md).
  *
- * Cross-module id columns: knowledge_notes.project_id / task_id -> board,
+ * Cross-module id columns: knowledge_notes.project_id / task_id -> tasks,
  * knowledge_notes.source_agent_id / journal_entries.author_agent_id ->
  * agents.agents, journal_entries.run_id -> sessions.runs,
  * attachments.source_id -> the entity named by `source_kind`.
