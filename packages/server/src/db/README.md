@@ -40,7 +40,7 @@ id only (`docs/domain/README.md` §Ownership).
 | `HUB_ADMIN_PASSWORD` | unset | consumed once on first boot to create the owner |
 
 SQLite file: **`<DATA_DIR>/hub.sqlite`**. Also under the data directory:
-`attachments/` (knowledge), `worktrees/` (board, unless a project overrides
+`attachments/` (knowledge), `worktrees/` (tasks, unless a project overrides
 it), `keys/` (the data key that encrypts secrets), `releases/` (updates),
 `backups/`.
 

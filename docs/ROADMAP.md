@@ -19,10 +19,12 @@ web client once it exists. From then on every phase ends with a redeploy of
 that stack; the fork keeps running until Phase 5.
 
 ## Phase 1 — Working together
-- `rooms` (multi-agent rooms), `board` (projects, kanban, agent assignment,
-  worktree per task), `schedules` (cron + workflows), `notify`.
-- Done when: a task can be assigned to an agent from the board, runs in its
-  own worktree, reports progress in a room, and a schedule can run a standup.
+- `rooms` (multi-agent rooms), `tasks` (a kanban-style section: projects,
+  agent assignment, worktree per task), `schedules` (cron + workflows),
+  `notify`.
+- Done when: a task can be assigned to an agent from the Tasks section, runs
+  in its own worktree, reports progress in a room, and a schedule can run a
+  standup.
 
 ## Phase 2 — Web client
 - `packages/web` implementing `docs/clients/NAVIGATION.md` one-to-one.

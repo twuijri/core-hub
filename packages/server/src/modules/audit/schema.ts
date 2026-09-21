@@ -134,7 +134,7 @@ export const jobs = sqliteTable(
     ...globalColumns(),
     /** Null for hub-level jobs (server update, backup). */
     workspace: ulid('workspace'),
-    /** `<module>.<verb>`: `agents.install`, `board.worktree_create`, `plugins.install`, `knowledge.reindex`. */
+    /** `<module>.<verb>`: `agents.install`, `tasks.worktree_create`, `plugins.install`, `knowledge.reindex`. */
     kind: text('kind', { length: 64 }).notNull(),
     status: text('status', { enum: JOB_STATUSES }).notNull().default('queued'),
     /** 0..100; -1 when unknown (indeterminate progress bar). */

@@ -37,8 +37,8 @@ tags:
     description: Chat sessions, messages, runs (streamed), tool calls, approvals, categories and attachments.
   - name: rooms
     description: Multi-agent rooms — seats, members, invites, messages, mentions, handoffs and room memory.
-  - name: board
-    description: Projects and tasks on a kanban board, assignment of tasks to agents, subtasks, dependencies, worktrees and task activity.
+  - name: tasks
+    description: Tasks (a kanban-style section) and their projects — assignment of tasks to agents, subtasks, dependencies, worktrees and task activity.
   - name: schedules
     description: Scheduled jobs (cron / interval / once), their run history, and workflows (DAGs of runs) with their runs.
   - name: models
@@ -112,7 +112,7 @@ paths:
                 contract_version: 1.0.0
                 api_versions: [v1]
                 realtime_namespaces:
-                  [/rt/sessions, /rt/rooms, /rt/board, /rt/schedules, /rt/devices, /rt/jobs]
+                  [/rt/sessions, /rt/rooms, /rt/tasks, /rt/schedules, /rt/devices, /rt/jobs]
                 locales: [ar, en]
                 setup_required: false
         '429':
@@ -1165,7 +1165,7 @@ paths:
                   contract_version: 1.0.0
                   api_versions: [v1]
                   realtime_namespaces:
-                    [/rt/sessions, /rt/rooms, /rt/board, /rt/schedules, /rt/devices, /rt/jobs]
+                    [/rt/sessions, /rt/rooms, /rt/tasks, /rt/schedules, /rt/devices, /rt/jobs]
                   locales: [ar, en]
                   setup_required: false
         '400':
@@ -3092,7 +3092,7 @@ paths:
                         audio,
                       ]
                     sections:
-                      [jobs, kanban, channels, skills, plugins, mcp, memory, journey, settings]
+                      [jobs, tasks, channels, skills, plugins, mcp, memory, journey, settings]
                     default_model:
                       provider_id: 01J8QK3ZR2W7M5N4P6T8V9X0PV
                       model: claude-sonnet-4-5
@@ -5953,12 +5953,12 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-  # ================================================================== board
+  # ================================================================== tasks
   /projects:
     get:
-      operationId: board.listProjects
-      tags: [board]
-      summary: List projects (the board picker)
+      operationId: tasks.listProjects
+      tags: [tasks]
+      summary: List projects (the Tasks picker)
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: status
@@ -6019,8 +6019,8 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
     post:
-      operationId: board.createProject
-      tags: [board]
+      operationId: tasks.createProject
+      tags: [tasks]
       summary: Create a project
       parameters:
         - $ref: '#/components/parameters/Profile'
@@ -6080,8 +6080,8 @@ paths:
       - $ref: '#/components/parameters/Profile'
       - $ref: '#/components/parameters/ProjectId'
     get:
-      operationId: board.getProject
-      tags: [board]
+      operationId: tasks.getProject
+      tags: [tasks]
       summary: Read a project
       x-rt-events: []
       responses:
@@ -6116,8 +6116,8 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
     patch:
-      operationId: board.updateProject
-      tags: [board]
+      operationId: tasks.updateProject
+      tags: [tasks]
       summary: Edit a project
       requestBody:
         required: true
@@ -6162,8 +6162,8 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
     delete:
-      operationId: board.deleteProject
-      tags: [board]
+      operationId: tasks.deleteProject
+      tags: [tasks]
       summary: Delete a project and its tasks (worktrees are removed)
       x-rt-events: [project.deleted, run.cancelled]
       responses:
@@ -6175,11 +6175,11 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-  /board:
+  /task-columns:
     get:
-      operationId: board.get
-      tags: [board]
-      summary: The kanban in one call — columns with their ordered tasks and counts
+      operationId: tasks.getColumns
+      tags: [tasks]
+      summary: The Tasks section in one call — columns with their ordered tasks and counts
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: project_id
@@ -6195,11 +6195,11 @@ paths:
       x-rt-events: []
       responses:
         '200':
-          description: The board.
+          description: The columns with their ordered tasks and counts.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Board'
+                $ref: '#/components/schemas/TaskColumns'
               example:
                 project_id: 01J8QK3ZR2W7M5N4P6T8V9X0PJ
                 columns:
@@ -6252,10 +6252,10 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-  /board/dispatch:
+  /task-dispatches:
     post:
-      operationId: board.dispatch
-      tags: [board]
+      operationId: tasks.dispatch
+      tags: [tasks]
       summary: Assign `ready` tasks to agents by role, up to `max` (the Claw-Kanban idea)
       parameters:
         - $ref: '#/components/parameters/Profile'
@@ -6287,8 +6287,8 @@ paths:
           $ref: '#/components/responses/NotFound'
   /tasks:
     get:
-      operationId: board.listTasks
-      tags: [board]
+      operationId: tasks.listTasks
+      tags: [tasks]
       summary: List tasks with filters (search, status, assignee, tag)
       parameters:
         - $ref: '#/components/parameters/Profile'
@@ -6340,8 +6340,8 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
     post:
-      operationId: board.createTask
-      tags: [board]
+      operationId: tasks.createTask
+      tags: [tasks]
       summary: Create a task (in `triage` unless a status is given)
       parameters:
         - $ref: '#/components/parameters/Profile'
@@ -6418,8 +6418,8 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
     patch:
-      operationId: board.bulkUpdateTasks
-      tags: [board]
+      operationId: tasks.bulkUpdateTasks
+      tags: [tasks]
       summary: Bulk edit tasks (archive, priority, tags, project)
       parameters:
         - $ref: '#/components/parameters/Profile'
@@ -6453,8 +6453,8 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
     delete:
-      operationId: board.bulkDeleteTasks
-      tags: [board]
+      operationId: tasks.bulkDeleteTasks
+      tags: [tasks]
       summary: Delete several tasks
       parameters:
         - $ref: '#/components/parameters/Profile'
@@ -6488,8 +6488,8 @@ paths:
       - $ref: '#/components/parameters/Profile'
       - $ref: '#/components/parameters/TaskId'
     get:
-      operationId: board.getTask
-      tags: [board]
+      operationId: tasks.getTask
+      tags: [tasks]
       summary: Read a task with subtasks, comments and runs
       x-rt-events: []
       responses:
@@ -6607,8 +6607,8 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
     patch:
-      operationId: board.updateTask
-      tags: [board]
+      operationId: tasks.updateTask
+      tags: [tasks]
       summary: Edit a task's fields (not its status — use `move`)
       requestBody:
         required: true
@@ -6671,8 +6671,8 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
     delete:
-      operationId: board.deleteTask
-      tags: [board]
+      operationId: tasks.deleteTask
+      tags: [tasks]
       summary: Delete a task (its worktree is removed, its session kept)
       x-rt-events: [task.deleted, run.cancelled]
       responses:
@@ -6687,8 +6687,8 @@ paths:
       - $ref: '#/components/parameters/Profile'
       - $ref: '#/components/parameters/TaskId'
     post:
-      operationId: board.moveTask
-      tags: [board]
+      operationId: tasks.moveTask
+      tags: [tasks]
       summary: Move a task to another column (the only way to change `status`)
       description: |
         The server enforces the transition table (DECISIONS.md): an illegal move is `409 state_invalid`
@@ -6762,8 +6762,8 @@ paths:
       - $ref: '#/components/parameters/Profile'
       - $ref: '#/components/parameters/TaskId'
     post:
-      operationId: board.assignTask
-      tags: [board]
+      operationId: tasks.assignTask
+      tags: [tasks]
       summary: Assign the task to an agent and (optionally) start it in its own worktree
       description: |
         With `start: true` the task moves to `running`, a worktree is created if the project has a
@@ -6814,8 +6814,8 @@ paths:
         '422':
           $ref: '#/components/responses/AgentUnavailable'
     delete:
-      operationId: board.unassignTask
-      tags: [board]
+      operationId: tasks.unassignTask
+      tags: [tasks]
       summary: Remove the assignee (stops the run; the task returns to `ready`)
       x-rt-events: [task.unassigned, task.moved, run.cancelled]
       responses:
@@ -6830,8 +6830,8 @@ paths:
       - $ref: '#/components/parameters/Profile'
       - $ref: '#/components/parameters/TaskId'
     post:
-      operationId: board.stopTask
-      tags: [board]
+      operationId: tasks.stopTask
+      tags: [tasks]
       summary: Stop the task's active run (the task stays assigned, moves to `ready`)
       x-rt-events: [run.cancelled, task.moved]
       responses:
@@ -6848,8 +6848,8 @@ paths:
       - $ref: '#/components/parameters/Profile'
       - $ref: '#/components/parameters/TaskId'
     post:
-      operationId: board.createSubtask
-      tags: [board]
+      operationId: tasks.createSubtask
+      tags: [tasks]
       summary: Add a subtask
       requestBody:
         required: true
@@ -6893,8 +6893,8 @@ paths:
         schema:
           $ref: '#/components/schemas/Ulid'
     patch:
-      operationId: board.updateSubtask
-      tags: [board]
+      operationId: tasks.updateSubtask
+      tags: [tasks]
       summary: Edit a subtask (title, status, note, blocked reason, order)
       requestBody:
         required: true
@@ -6929,8 +6929,8 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
     delete:
-      operationId: board.deleteSubtask
-      tags: [board]
+      operationId: tasks.deleteSubtask
+      tags: [tasks]
       summary: Delete a subtask
       x-rt-events: [subtask.updated, task.updated]
       responses:
@@ -6945,8 +6945,8 @@ paths:
       - $ref: '#/components/parameters/Profile'
       - $ref: '#/components/parameters/TaskId'
     put:
-      operationId: board.setDependencies
-      tags: [board]
+      operationId: tasks.setDependencies
+      tags: [tasks]
       summary: Replace the tasks this one depends on (cycles are rejected)
       requestBody:
         required: true
@@ -7018,8 +7018,8 @@ paths:
       - $ref: '#/components/parameters/Profile'
       - $ref: '#/components/parameters/TaskId'
     post:
-      operationId: board.createComment
-      tags: [board]
+      operationId: tasks.createComment
+      tags: [tasks]
       summary: Comment on a task (agents read comments on their next run)
       requestBody:
         required: true
@@ -7067,8 +7067,8 @@ paths:
       - $ref: '#/components/parameters/Profile'
       - $ref: '#/components/parameters/TaskId'
     get:
-      operationId: board.listActivity
-      tags: [board]
+      operationId: tasks.listActivity
+      tags: [tasks]
       summary: The task's timeline (moves, assignments, runs, comments, worktree events)
       parameters:
         - $ref: '#/components/parameters/Cursor'
@@ -7117,8 +7117,8 @@ paths:
       - $ref: '#/components/parameters/Profile'
       - $ref: '#/components/parameters/TaskId'
     get:
-      operationId: board.getWorktree
-      tags: [board]
+      operationId: tasks.getWorktree
+      tags: [tasks]
       summary: Read the task's worktree state
       x-rt-events: []
       responses:
@@ -7143,8 +7143,8 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
     post:
-      operationId: board.createWorktree
-      tags: [board]
+      operationId: tasks.createWorktree
+      tags: [tasks]
       summary: Create (or recreate) the worktree without starting a run
       requestBody:
         required: false
@@ -7176,8 +7176,8 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
     delete:
-      operationId: board.deleteWorktree
-      tags: [board]
+      operationId: tasks.deleteWorktree
+      tags: [tasks]
       summary: Remove the worktree (the branch is kept)
       x-rt-events: [job.queued, job.completed, worktree.updated]
       responses:
@@ -12999,12 +12999,12 @@ components:
           presets,
           journey,
           jobs,
-          kanban,
+          tasks,
         ]
     AgentSection:
       type: string
       description: The rows shown under the agent's card, in order (NAVIGATION §4).
-      enum: [jobs, kanban, channels, skills, plugins, presets, mcp, memory, journey, settings]
+      enum: [jobs, tasks, channels, skills, plugins, presets, mcp, memory, journey, settings]
     AgentInstall:
       type: object
       required:
@@ -14063,7 +14063,7 @@ components:
           maxLength: 80
         seat:
           $ref: '#/components/schemas/SeatConfig'
-    # ---------------------------------------------------------------- board
+    # ---------------------------------------------------------------- tasks
     ProjectStatus:
       type: string
       enum: [active, paused, archived]
@@ -14124,7 +14124,7 @@ components:
               description: Room where assigned agents post progress.
             auto_dispatch:
               type: boolean
-              description: Assign `ready` tasks automatically (see `/board/dispatch`).
+              description: Assign `ready` tasks automatically (see `/task-dispatches`).
             counts:
               $ref: '#/components/schemas/StatusCounts'
     ProjectWrite:
@@ -14585,7 +14585,7 @@ components:
         dry_run:
           type: boolean
           default: false
-    Board:
+    TaskColumns:
       type: object
       required: [project_id, columns, counts]
       properties:

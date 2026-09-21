@@ -13,7 +13,7 @@
  *     adapter.settings(...)     -> the form the settings screen renders
  *     adapter.start(target)     -> AgentSession { send, stream, interrupt, close }
  *
- * Rooms, the board and schedules never import an adapter; they receive one of these.
+ * Rooms, tasks and schedules never import an adapter; they receive one of these.
  * Nothing here knows about HTTP, Fastify or the database.
  */
 import type { AgentCapability, AgentSection } from '../schema.js';

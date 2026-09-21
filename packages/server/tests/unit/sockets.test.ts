@@ -19,12 +19,12 @@ describe('realtime composition', () => {
 
   it('exposes exactly the namespaces from ARCHITECTURE §Realtime plus /rt/jobs', () => {
     expect(hub.app.hub.namespaces).toEqual([
-      '/rt/board',
       '/rt/devices',
       '/rt/jobs',
       '/rt/rooms',
       '/rt/schedules',
       '/rt/sessions',
+      '/rt/tasks',
     ]);
     expect(Object.values(REALTIME_NAMESPACES).sort()).toEqual(hub.app.hub.namespaces);
   });

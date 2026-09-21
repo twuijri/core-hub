@@ -17,7 +17,7 @@ One interface, `AgentAdapter` (`discover`, `start`, `send`, `stream`,
 3. **Process harness** — for CLIs without ACP: a PTY, a transcript parser and
    a capability whitelist. Last resort, clearly marked "limited" in the UI.
 
-Rooms, the board and schedules only ever see `AgentAdapter`.
+Rooms, tasks and schedules only ever see `AgentAdapter`.
 
 ## Alternatives rejected
 - Per-agent bespoke integration (Ekko's way): the reason its agent manager

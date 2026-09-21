@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/board/comment.created.schema.json",
-  "title": "/rt/board · comment.created",
-  "description": "Emitted by: board module (people and agents).",
+  "$id": "https://majlis.dev/contracts/events/tasks/comment.created.schema.json",
+  "title": "/rt/tasks · comment.created",
+  "description": "Emitted by: tasks module (people and agents).",
   "type": "object",
   "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
   "properties": {
@@ -10,7 +10,7 @@
       "const": "comment.created"
     },
     "namespace": {
-      "const": "/rt/board"
+      "const": "/rt/tasks"
     },
     "profile": {
       "oneOf": [
@@ -44,7 +44,7 @@
   "examples": [
     {
       "event": "comment.created",
-      "namespace": "/rt/board",
+      "namespace": "/rt/tasks",
       "profile": "work",
       "ts": "2026-09-21T10:15:04Z",
       "seq": 8812,

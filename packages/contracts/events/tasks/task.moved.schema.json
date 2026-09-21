@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/board/task.moved.schema.json",
-  "title": "/rt/board · task.moved",
-  "description": "The task changed column; `task.status` is the new one. Emitted by: board module (move, assign/stop/unassign side effects, dispatch, bulk archive).",
+  "$id": "https://majlis.dev/contracts/events/tasks/task.moved.schema.json",
+  "title": "/rt/tasks · task.moved",
+  "description": "The task changed column; `task.status` is the new one. Emitted by: tasks module (move, assign/stop/unassign side effects, dispatch, bulk archive).",
   "type": "object",
   "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
   "properties": {
@@ -10,7 +10,7 @@
       "const": "task.moved"
     },
     "namespace": {
-      "const": "/rt/board"
+      "const": "/rt/tasks"
     },
     "profile": {
       "oneOf": [
@@ -53,7 +53,7 @@
   "examples": [
     {
       "event": "task.moved",
-      "namespace": "/rt/board",
+      "namespace": "/rt/tasks",
       "profile": "work",
       "ts": "2026-09-21T10:15:04Z",
       "seq": 8812,

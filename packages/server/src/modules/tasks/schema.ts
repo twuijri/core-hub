@@ -1,6 +1,6 @@
 /**
- * board — projects, kanban tasks, their transitions and dependencies, and
- * the git worktree each task runs in.
+ * tasks — projects, tasks (a kanban-style section), their transitions and
+ * dependencies, and the git worktree each task runs in.
  *
  * All tables are workspace-scoped. Intra-module foreign keys cascade from
  * projects -> tasks/worktrees -> task_transitions/task_dependencies.
@@ -138,7 +138,7 @@ export const tasks = sqliteTable(
   },
   (t) => [
     uniqueIndex('tasks_project_number_uq').on(t.projectId, t.number),
-    index('tasks_board_idx').on(t.workspace, t.archivedAt, t.status, t.sortKey),
+    index('tasks_workspace_status_idx').on(t.workspace, t.archivedAt, t.status, t.sortKey),
     index('tasks_project_status_idx').on(t.projectId, t.status),
     index('tasks_assignee_agent_idx').on(t.assigneeAgentId, t.status),
     index('tasks_parent_idx').on(t.parentId),

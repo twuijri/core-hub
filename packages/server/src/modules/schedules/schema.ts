@@ -9,7 +9,7 @@
  * Cross-module id columns: schedules.agent_id -> agents.agents,
  * schedules.model_id -> models.models, schedule_runs.run_id / node_runs.run_id
  * -> sessions.runs, node_runs.approval_id -> sessions.approvals,
- * node_runs.task_id -> board.tasks, workflow_runs.trigger_ref -> the entity
+ * node_runs.task_id -> tasks.tasks, workflow_runs.trigger_ref -> the entity
  * named by `trigger_kind`.
  */
 import {
@@ -220,7 +220,7 @@ export const nodeRuns = sqliteTable(
     runId: ulid('run_id'),
     /** approval nodes: the sessions.approval created for this node. */
     approvalId: ulid('approval_id'),
-    /** task nodes: the board.task created or moved. */
+    /** task nodes: the tasks.task created or moved. */
     taskId: ulid('task_id'),
     startedAt: timestampMs('started_at'),
     finishedAt: timestampMs('finished_at'),

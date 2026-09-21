@@ -87,7 +87,7 @@
           "capabilities": ["streaming", "tools"],
           "sections": [
             "jobs",
-            "kanban",
+            "tasks",
             "channels",
             "skills",
             "plugins",
@@ -202,7 +202,7 @@
         "presets",
         "journey",
         "jobs",
-        "kanban"
+        "tasks"
       ]
     },
     "AgentInstall": {
@@ -291,7 +291,7 @@
       "description": "The rows shown under the agent's card, in order (NAVIGATION §4).",
       "enum": [
         "jobs",
-        "kanban",
+        "tasks",
         "channels",
         "skills",
         "plugins",

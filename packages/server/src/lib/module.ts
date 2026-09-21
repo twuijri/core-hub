@@ -8,7 +8,7 @@ export const MODULE_NAMES = [
   'agents',
   'sessions',
   'rooms',
-  'board',
+  'tasks',
   'schedules',
   'knowledge',
   'models',
@@ -28,7 +28,7 @@ export type ModuleName = (typeof MODULE_NAMES)[number];
 export const REALTIME_NAMESPACES = {
   sessions: '/rt/sessions',
   rooms: '/rt/rooms',
-  board: '/rt/board',
+  tasks: '/rt/tasks',
   schedules: '/rt/schedules',
   devices: '/rt/devices',
   // Not a module of its own: the jobs kernel lives in `audit`, but the namespace is named

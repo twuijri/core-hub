@@ -7,10 +7,10 @@
  * sessions -> messages/runs -> tool_calls/approvals.
  *
  * Cross-module id columns: sessions.agent_id / runs.agent_id -> agents.agents,
- * sessions.model_id -> models.models, sessions.worktree_id -> board.worktrees,
+ * sessions.model_id -> models.models, sessions.worktree_id -> tasks.worktrees,
  * messages.attachment_ids / tool_calls.output_attachment_id -> knowledge.attachments,
  * approvals.responded_by_user_id -> auth.users. Origin pairs (`origin_kind`,
- * `origin_id`) point at board.tasks, schedules.schedule_runs,
+ * `origin_id`) point at tasks.tasks, schedules.schedule_runs,
  * schedules.node_runs or rooms.seats.
  */
 import {

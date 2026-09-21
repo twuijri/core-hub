@@ -1,10 +1,10 @@
 # Majlis (مجلس)
 
 Majlis is a self-hosted hub that puts every AI agent you use in one place:
-chat with an agent, put several agents in one room, hand tasks to agents on a
-board, schedule work, and reach all of it from the web, the desktop and your
-phone. The server is the product; every client is a thin, native surface over
-one documented contract.
+chat with an agent, put several agents in one room, hand agents work in Tasks
+(a kanban-style section), schedule work, and reach all of it from the web,
+the desktop and your phone. The server is the product; every client is a
+thin, native surface over one documented contract.
 
 This repository is built from scratch and is owned by twuijri. It borrows
 *ideas* from open projects (see `docs/inspirations/`) and never copies their
