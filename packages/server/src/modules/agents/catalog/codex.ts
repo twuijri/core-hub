@@ -12,6 +12,8 @@ export const codex: CatalogEntry = {
   protocolArgs: [],
   versionArgs: ['--version'],
   install: { kind: 'npm', package: '@zed-industries/codex-acp', version: '0.16.0' },
+  // Codex talks to OpenAI directly; `OPENAI_BASE_URL` stays the person's business.
+  credentials: { openai: 'OPENAI_API_KEY' },
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp'],
   sections: ['mcp', 'settings'],

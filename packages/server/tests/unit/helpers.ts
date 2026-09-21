@@ -14,6 +14,7 @@ import {
   type AgentInstaller,
   type AgentsOverrides,
 } from '../../src/modules/agents/index.js';
+import { overrideModels, type ModelsOverrides } from '../../src/modules/models/index.js';
 import { jobRunnerFor } from '../../src/modules/audit/index.js';
 import type { AdapterSet } from '../../src/modules/agents/adapters/index.js';
 import type { AgentAdapter, AgentProbe } from '../../src/modules/agents/adapters/types.js';
@@ -34,12 +35,14 @@ export interface TestHub {
 export interface TestHubOptions extends Omit<BuildOptions, 'config' | 'logger'> {
   /** Fakes for the agents module; see `overrideAgents`. */
   agents?: AgentsOverrides;
+  /** Fakes for the models module: a scripted provider `fetch`; see `overrideModels`. */
+  models?: ModelsOverrides;
 }
 
 export async function testHub(env: EnvSource = {}, options: TestHubOptions = {}): Promise<TestHub> {
   const dataDir = mkdtempSync(path.join(tmpdir(), 'majlis-test-'));
   const config = loadConfig({ DATA_DIR: dataDir, PORT: '0', ...env });
-  const { agents: agentOverrides, ...build } = options;
+  const { agents: agentOverrides, models: modelOverrides, ...build } = options;
   // The suite must say the same thing on every machine: a PATH with nothing on it, and a
   // Hermes gateway probe that always fails, so a Hermes running on the developer's own
   // box cannot change a result.
@@ -48,6 +51,9 @@ export async function testHub(env: EnvSource = {}, options: TestHubOptions = {})
     adapterOptions: { hermes: { fetchImpl: unreachableFetch } },
     ...agentOverrides,
   });
+  // No provider adapter may reach the network from a test, for the same reason: the
+  // suite must say the same thing on every machine.
+  overrideModels({ fetchImpl: unreachableFetch, ...modelOverrides });
   const app = await buildServer({
     config,
     logger: createLogger({ level: 'silent' }),

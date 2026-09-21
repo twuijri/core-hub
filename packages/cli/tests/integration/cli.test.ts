@@ -14,6 +14,7 @@ import { loadConfig } from '../../../server/src/app/config.js';
 import { buildServer } from '../../../server/src/app/server.js';
 import { createLogger } from '../../../server/src/lib/logger.js';
 import { modules as defaultModules } from '../../../server/src/modules/index.js';
+import { overrideModels } from '../../../server/src/modules/models/index.js';
 import { createSessionsModule } from '../../../server/src/modules/sessions/index.js';
 import {
   FakeAgentDirectory,
@@ -72,9 +73,12 @@ async function cli(args: string[], input: string[] = [], variables: NodeJS.Proce
   return { code, stdout: running.stdout(), stderr: running.stderr() };
 }
 
-async function waitUntil(predicate: () => boolean, timeoutMs = 10_000): Promise<void> {
+async function waitUntil(
+  predicate: () => boolean | Promise<boolean>,
+  timeoutMs = 10_000,
+): Promise<void> {
   const until = Date.now() + timeoutMs;
-  while (!predicate()) {
+  while (!(await predicate())) {
     if (Date.now() > until) throw new Error('timed out waiting');
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
@@ -86,8 +90,27 @@ const ndjson = (text: string) =>
     .filter(Boolean)
     .map((line) => JSON.parse(line) as Record<string, unknown>);
 
+/**
+ * The only provider this suite talks to. `providers test` and the catalogue refresh make
+ * real HTTP calls by design (ADR 0010: a test that does not reach the provider proves
+ * nothing), so the hub is built with a scripted `fetch` and never leaves the process.
+ */
+const scriptedProviders: typeof fetch = (input) => {
+  const url = String(input);
+  const body = url.startsWith('https://api.anthropic.com/v1/models')
+    ? { data: [{ id: 'claude-sonnet-4-5', display_name: 'Claude Sonnet 4.5' }], has_more: false }
+    : { error: { message: 'this provider is not part of the test' } };
+  return Promise.resolve(
+    new Response(JSON.stringify(body), {
+      status: url.startsWith('https://api.anthropic.com') ? 200 : 502,
+      headers: { 'content-type': 'application/json' },
+    }),
+  );
+};
+
 beforeAll(async () => {
   runner = new FakeAgentRunner();
+  overrideModels({ fetchImpl: scriptedProviders });
   const sessions = createSessionsModule({
     agents: new FakeAgentDirectory([fakeHermes(AGENT_ID)]),
     runner,
@@ -164,6 +187,48 @@ describe('the reference client against the hub', () => {
     const missing = await cli(['agents', 'get', '01J8QK3ZR2W7M5N4P6T8V9X0ZZ']);
     expect(missing.code).toBe(1);
     expect(missing.stderr).toContain('not_found');
+  });
+
+  it('adds a provider key from a prompt, tests it, and lists the models it unlocked', async () => {
+    const before = await cli(['providers', 'list', '--json']);
+    expect(before.code, before.stderr).toBe(0);
+    const providers = (
+      JSON.parse(before.stdout) as { items: { slug: string; api_key: string | null }[] }
+    ).items;
+    expect(providers.find((p) => p.slug === 'anthropic')?.api_key).toBeNull();
+
+    // The key is never an argument: it is asked for, hidden, or piped in.
+    const added = await cli(['providers', 'add', 'anthropic'], ['sk-ant-from-the-cli']);
+    expect(added.code, added.stderr).toBe(0);
+    expect(added.stdout).toContain('Key stored for anthropic.');
+    expect(added.stdout).not.toContain('sk-ant-from-the-cli');
+    expect(added.stderr).toContain('Every agent uses this key');
+
+    const listed = await cli(['providers', 'list']);
+    expect(listed.stdout).toMatch(/anthropic.*stored/);
+    // Not even the masked table leaks the value.
+    expect(listed.stdout).not.toContain('sk-ant');
+
+    const tested = await cli(['providers', 'test', 'anthropic']);
+    expect(tested.code, tested.stderr).toBe(0);
+    expect(tested.stdout).toContain('The provider answered.');
+
+    // The catalogue refresh is a job the key triggered; wait for the model to show up.
+    await waitUntil(async () => {
+      const models = await cli(['models', 'list', '--json']);
+      return models.stdout.includes('claude-sonnet-4-5');
+    });
+
+    const chosen = await cli(['models', 'default', 'anthropic/claude-sonnet-4-5']);
+    expect(chosen.code, chosen.stderr).toBe(0);
+    const shown = await cli(['models', 'default', '--json']);
+    expect(JSON.parse(shown.stdout)).toMatchObject({
+      default: { model: 'claude-sonnet-4-5' },
+    });
+
+    const unknown = await cli(['providers', 'test', 'no-such-provider']);
+    expect(unknown.code).toBe(1);
+    expect(unknown.stderr).toContain('No provider "no-such-provider"');
   });
 
   it('creates, lists and shows a session', async () => {

@@ -79,6 +79,43 @@
     "discover_started": "Scanning the host for agent CLIs…",
     "discover_done": "Scan finished.",
     "restart_started": "Restarting the Hermes runtime…",
-    "restart_done": "Hermes runtime restarted."
+    "restart_done": "Hermes runtime restarted.",
+    "refresh_started": "Asking the provider for its models…",
+    "refresh_done": "Model list updated."
+  },
+  "models": {
+    "test": {
+      "ok": "The provider answered.",
+      "no_key": "No API key is stored for this provider yet.",
+      "unauthorized": "The provider rejected the stored key.",
+      "rate_limited": "The provider is rate-limiting this key right now.",
+      "unreachable": "The provider could not be reached from the hub.",
+      "http_error": "The provider answered with an error.",
+      "unsupported": "This provider has nothing the hub can test."
+    },
+    "catalogue": {
+      "not_refreshable": "This provider does not publish a model list; add its models by hand."
+    },
+    "speech": {
+      "no_tts_provider": "No text-to-speech provider is chosen for this workspace.",
+      "provider_disabled": "The chosen text-to-speech provider is switched off.",
+      "failed": "The speech provider did not return audio.",
+      "stt": {
+        "not_chosen": "No speech-to-text provider is chosen.",
+        "disabled": "The chosen speech-to-text provider is switched off.",
+        "no_key": "The chosen speech-to-text provider has no key."
+      },
+      "tts": {
+        "not_chosen": "No text-to-speech provider is chosen.",
+        "disabled": "The chosen text-to-speech provider is switched off.",
+        "no_key": "The chosen text-to-speech provider has no key."
+      }
+    },
+    "transcribe": {
+      "not_implemented": "The hub cannot receive an audio upload yet; dictate on the device instead."
+    },
+    "signin": {
+      "not_implemented": "No provider here signs in by browser yet; every one of them takes an API key."
+    }
   }
 }

@@ -1,14 +1,23 @@
 /**
- * models — providers, their keys (secrets), the model catalogue, defaults
- * with fallbacks, and the workspace secret store.
+ * models — the hub's one provider and credential store (ADR 0010).
  *
- * All tables are workspace-scoped (ADR 0005: each workspace has its own
- * models). `secrets` is the only table that holds ciphertext; every column
- * marked ENCRYPTED is AES-256-GCM under the server data key, masked as
- * `[stored]` on read, never logged, never returned.
+ * A person adds a provider key **once, here**; the hub propagates it to every agent
+ * (`propagation.ts`): into Hermes's own home through its `.env`, and into a coding
+ * agent's process environment at start. Nobody configures a provider per agent.
+ *
+ * All tables are workspace-scoped (ADR 0005: each workspace has its own providers and
+ * models). `secrets` is the only table that holds ciphertext; every column marked
+ * ENCRYPTED is AES-256-GCM under the server data key (`<data>/keys/data.key`), rotated
+ * by `key_id`, masked as `[stored]` on read, never logged, never returned.
  *
  * Cross-module consumers reference `secrets.id` by id: agents.agent_settings,
  * notify.webhooks, plugins.plugin_bindings.
+ *
+ * The vocabulary is the contract's: `providers.kind`, `models.kind`,
+ * `models.capabilities`, `providers.api_mode` and `providers.visibility_mode` hold
+ * exactly the values of `ProviderKind`, `ModelKind`, `ModelCapability`, `Provider.api_mode`
+ * and `Visibility.mode` in `packages/contracts/openapi.yaml`, so no translation table sits
+ * between the database and the API.
  */
 import {
   check,
@@ -30,55 +39,84 @@ import {
   ulid,
 } from '../../db/columns.js';
 
-export const PROVIDER_KINDS = [
-  'anthropic',
-  'openai',
-  'openrouter',
-  'google',
-  'mistral',
-  'groq',
-  'ollama',
-  'openai_compatible',
-  'custom',
-] as const;
-export const PROVIDER_STATUSES = ['unconfigured', 'ok', 'error'] as const;
-export const MODEL_KINDS = ['chat', 'stt', 'tts', 'embedding', 'image'] as const;
-export const MODEL_SOURCES = ['catalogue', 'discovered', 'manual'] as const;
-export const MODEL_ROLES = [
-  'chat',
-  'coding',
-  'titles',
-  'summaries',
-  'stt',
-  'tts',
-  'embedding',
-] as const;
-export const SECRET_KINDS = ['api_key', 'token', 'password', 'generic'] as const;
+/** The contract's `ProviderKind`. */
+export const PROVIDER_KINDS = ['llm', 'stt', 'tts'] as const;
+export type ProviderKind = (typeof PROVIDER_KINDS)[number];
 
-export type ProviderCapabilities = {
+/** The contract's `Provider.api_mode`. */
+export const API_MODES = ['native', 'chat_completions', 'responses'] as const;
+export type ApiMode = (typeof API_MODES)[number];
+
+/** The contract's `Provider.auth.kind`. */
+export const AUTH_KINDS = ['api_key', 'oauth', 'none'] as const;
+export type AuthKind = (typeof AUTH_KINDS)[number];
+
+/** The contract's `Provider.catalogue.status`. */
+export const CATALOGUE_STATUSES = ['ready', 'loading', 'error', 'unsupported'] as const;
+export type CatalogueStatus = (typeof CATALOGUE_STATUSES)[number];
+
+/** Outcome of the last `models.testProvider` (domain docs/domain/models.md). */
+export const PROVIDER_STATUSES = ['unconfigured', 'ok', 'error'] as const;
+export type ProviderStatus = (typeof PROVIDER_STATUSES)[number];
+
+/** The contract's `Visibility.mode`. */
+export const VISIBILITY_MODES = ['all', 'include'] as const;
+export type VisibilityMode = (typeof VISIBILITY_MODES)[number];
+
+/** The contract's `ModelKind`. */
+export const MODEL_KINDS = ['chat', 'embedding', 'stt', 'tts'] as const;
+export type ModelKind = (typeof MODEL_KINDS)[number];
+
+/** The contract's `ModelCapability`. */
+export const MODEL_CAPABILITIES = ['vision', 'tools', 'reasoning', 'audio', 'streaming'] as const;
+export type ModelCapability = (typeof MODEL_CAPABILITIES)[number];
+
+export const MODEL_SOURCES = ['catalogue', 'discovered', 'manual'] as const;
+export type ModelSource = (typeof MODEL_SOURCES)[number];
+
+/**
+ * Roles a workspace assigns a model to. `chat` is the contract's `ModelDefaults.default`;
+ * the rest are its `auxiliary.assignments` keys, declared by the server
+ * (`defaults.ts` §AUXILIARY_TASKS) and shown with an Arabic and an English label.
+ */
+export const MODEL_ROLES = ['chat', 'coding', 'title', 'summary', 'embedding'] as const;
+export type ModelRole = (typeof MODEL_ROLES)[number];
+
+export const SECRET_KINDS = ['api_key', 'token', 'password', 'generic'] as const;
+export type SecretKind = (typeof SECRET_KINDS)[number];
+
+export interface ProviderCapabilities {
   chat?: boolean;
   stt?: boolean;
   tts?: boolean;
   embeddings?: boolean;
-  images?: boolean;
-  /** Provider can list its models (`discovered` source). */
+  /** Provider can list its own models: `models.refreshProvider` is meaningful. */
   listModels?: boolean;
-};
+  /** Provider can list TTS voices (`models.listVoices`). */
+  listVoices?: boolean;
+}
 
-/** Micro-USD per million tokens. */
-export type ModelPricing = {
+/** Micro-USD per million tokens (integers; the contract renders them as `Money`). */
+export interface ModelPricing {
   inputPerMillion?: number;
   outputPerMillion?: number;
   cacheReadPerMillion?: number;
   cacheWritePerMillion?: number;
-};
+}
 
-export type ModelCapabilities = {
-  tools?: boolean;
-  vision?: boolean;
-  reasoning?: boolean;
-  json?: boolean;
-};
+/** STT/TTS settings of one speech provider (the contract's `SpeechProvider.settings`). */
+export interface SpeechProviderSettings {
+  model?: string | null;
+  language?: string | null;
+  voice?: string | null;
+}
+
+/** One member of an ensemble (the contract's `EnsembleMember`). */
+export interface EnsembleMemberValue {
+  provider_id: string;
+  model: string;
+  reasoning_effort?: string | null;
+}
 
 export const secrets = sqliteTable(
   'secrets',
@@ -86,7 +124,7 @@ export const secrets = sqliteTable(
     ...scopedColumns(),
     name: text('name', { length: 120 }).notNull(),
     kind: text('kind', { enum: SECRET_KINDS }).notNull().default('generic'),
-    /** ENCRYPTED. Base64 AES-256-GCM ciphertext; null once wiped. */
+    /** ENCRYPTED. Base64 AES-256-GCM ciphertext (with the tag); null once wiped. */
     ciphertext: text('ciphertext'),
     /** ENCRYPTED (metadata). Base64 GCM nonce for `ciphertext`. */
     nonce: text('nonce', { length: 32 }),
@@ -109,26 +147,52 @@ export const providers = sqliteTable(
   'providers',
   {
     ...scopedColumns(),
-    kind: text('kind', { enum: PROVIDER_KINDS }).notNull(),
-    name: text('name', { length: 120 }).notNull(),
+    /** Stable id inside the workspace: `anthropic`, `openai-tts`, `custom-ollama`. */
+    slug: text('slug', { length: 64 }).notNull(),
+    label: text('label', { length: 80 }).notNull(),
+    kind: text('kind', { enum: PROVIDER_KINDS }).notNull().default('llm'),
+    /** Seeded from the bundled catalogue; a person may disable it but never delete it. */
+    builtin: bool('builtin').notNull().default(false),
+    enabled: bool('enabled').notNull().default(true),
     baseUrl: text('base_url'),
+    apiMode: text('api_mode', { enum: API_MODES }).notNull().default('native'),
+    authKind: text('auth_kind', { enum: AUTH_KINDS }).notNull().default('api_key'),
+    /**
+     * The one credential. Providers of the same **credential family** (OpenAI chat, OpenAI
+     * speech-to-text, OpenAI text-to-speech) share this row, which is what makes "add the
+     * key once" true across `llm`, `stt` and `tts` (ADR 0010).
+     */
     apiKeySecretId: ulid('api_key_secret_id').references((): AnySQLiteColumn => secrets.id, {
       onDelete: 'set null',
     }),
+    /** Credential family (`openai`); providers sharing it share `api_key_secret_id`. */
+    family: text('family', { length: 64 }).notNull(),
     /** Non-secret extra headers (org id, project id). */
     headers: json<Record<string, string>>('headers').notNull().default(EMPTY_OBJECT),
     capabilities: json<ProviderCapabilities>('capabilities').notNull().default(EMPTY_OBJECT),
-    enabled: bool('enabled').notNull().default(true),
+    settings: json<SpeechProviderSettings>('settings').notNull().default(EMPTY_OBJECT),
+    visibilityMode: text('visibility_mode', { enum: VISIBILITY_MODES }).notNull().default('all'),
+    visibleModels: json<string[]>('visible_models').notNull().default(EMPTY_ARRAY),
+    catalogueStatus: text('catalogue_status', { enum: CATALOGUE_STATUSES })
+      .notNull()
+      .default('loading'),
+    catalogueRefreshedAt: timestampMs('catalogue_refreshed_at'),
+    catalogueError: text('catalogue_error'),
     status: text('status', { enum: PROVIDER_STATUSES }).notNull().default('unconfigured'),
     lastCheckedAt: timestampMs('last_checked_at'),
     lastError: text('last_error'),
     archivedAt: timestampMs('archived_at'),
   },
   (t) => [
-    uniqueIndex('providers_workspace_name_uq').on(t.workspace, t.name),
+    uniqueIndex('providers_workspace_slug_uq').on(t.workspace, t.slug),
     index('providers_workspace_kind_idx').on(t.workspace, t.kind),
+    index('providers_workspace_family_idx').on(t.workspace, t.family),
     check('providers_kind_check', inList(t.kind, PROVIDER_KINDS)),
+    check('providers_api_mode_check', inList(t.apiMode, API_MODES)),
+    check('providers_auth_kind_check', inList(t.authKind, AUTH_KINDS)),
+    check('providers_catalogue_status_check', inList(t.catalogueStatus, CATALOGUE_STATUSES)),
     check('providers_status_check', inList(t.status, PROVIDER_STATUSES)),
+    check('providers_visibility_mode_check', inList(t.visibilityMode, VISIBILITY_MODES)),
   ],
 );
 
@@ -142,12 +206,19 @@ export const models = sqliteTable(
     /** The provider's own model id, e.g. "claude-sonnet-4-5". */
     modelKey: text('model_key', { length: 200 }).notNull(),
     label: text('label', { length: 200 }).notNull(),
+    /** A name the person gave it; shown instead of `label` when set. */
+    alias: text('alias', { length: 200 }),
     kind: text('kind', { enum: MODEL_KINDS }).notNull().default('chat'),
     contextWindow: integer('context_window'),
     maxOutputTokens: integer('max_output_tokens'),
     pricing: json<ModelPricing>('pricing').notNull().default(EMPTY_OBJECT),
-    capabilities: json<ModelCapabilities>('capabilities').notNull().default(EMPTY_OBJECT),
+    capabilities: json<ModelCapability[]>('capabilities').notNull().default(EMPTY_ARRAY),
+    /** The contract's `Model.disabled` is `!enabled`. */
     enabled: bool('enabled').notNull().default(true),
+    /** The contract's `Model.visible`: hidden from pickers without being disabled. */
+    visible: bool('visible').notNull().default(true),
+    preview: bool('preview').notNull().default(false),
+    /** `manual` is the contract's `Model.custom`. */
     source: text('source', { enum: MODEL_SOURCES }).notNull().default('catalogue'),
     archivedAt: timestampMs('archived_at'),
   },
@@ -175,3 +246,45 @@ export const modelDefaults = sqliteTable(
     check('model_defaults_role_check', inList(t.role, MODEL_ROLES)),
   ],
 );
+
+/** Mixture-of-agents presets (the contract's `Ensemble`). At most one is `active`. */
+export const ensembles = sqliteTable(
+  'ensembles',
+  {
+    ...scopedColumns(),
+    name: text('name', { length: 80 }).notNull(),
+    enabled: bool('enabled').notNull().default(true),
+    active: bool('active').notNull().default(false),
+    members: json<EnsembleMemberValue[]>('members').notNull().default(EMPTY_ARRAY),
+    /**
+     * Required: the contract's `Ensemble.aggregator` is not nullable, so an ensemble
+     * without one could not be serialized. `models.createEnsemble` refuses instead.
+     */
+    aggregator: json<EnsembleMemberValue>('aggregator').notNull(),
+    maxTokens: integer('max_tokens'),
+    archivedAt: timestampMs('archived_at'),
+  },
+  (t) => [uniqueIndex('ensembles_workspace_name_uq').on(t.workspace, t.name)],
+);
+
+/** Which speech providers the workspace speaks with. One row per workspace. */
+export const speechSettings = sqliteTable(
+  'speech_settings',
+  {
+    ...scopedColumns(),
+    sttProviderId: ulid('stt_provider_id').references((): AnySQLiteColumn => providers.id, {
+      onDelete: 'set null',
+    }),
+    ttsProviderId: ulid('tts_provider_id').references((): AnySQLiteColumn => providers.id, {
+      onDelete: 'set null',
+    }),
+  },
+  (t) => [uniqueIndex('speech_settings_workspace_uq').on(t.workspace)],
+);
+
+export type SecretRow = typeof secrets.$inferSelect;
+export type ProviderRow = typeof providers.$inferSelect;
+export type ModelRow = typeof models.$inferSelect;
+export type ModelDefaultRow = typeof modelDefaults.$inferSelect;
+export type EnsembleRow = typeof ensembles.$inferSelect;
+export type SpeechSettingsRow = typeof speechSettings.$inferSelect;
