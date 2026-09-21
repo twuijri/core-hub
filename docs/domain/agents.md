@@ -99,6 +99,15 @@ Indexes: unique (workspace, agent_id).
 - Settings form: the adapter's declared settings schema (from code) + the
   `agent_settings` row; secrets shown as `[stored]`.
 
+## The Hermes runtime (ADR 0008)
+
+The hub supervises `hermes gateway run` as a child process when the image (or the host)
+has the `hermes` executable and no gateway already answers on the endpoint; its home is
+`${DATA_DIR}/hermes`, its API server key `${DATA_DIR}/keys/hermes-api.secret`. The
+runtime state (`starting`, `running`, `error`, `stopped`) is process memory reported on
+the `hermes` row; `agents.restart` recycles the child and is `409 state_invalid` when the
+gateway is external or absent.
+
 ## Not stored
 
 - The agent's own configuration files, memory, skills sources, plugin caches.
