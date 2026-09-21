@@ -37,6 +37,18 @@ volume, never to the hub (§3).
 Upgrading is `docker compose pull && docker compose up -d`; the volume is
 untouched.
 
+## 1b. Getting an image built
+
+- **A release**: push a tag `v*` on `main`. The Release workflow builds for
+  amd64 and arm64 and publishes `:<version>`, `:<major>.<minor>` and `:latest`.
+- **A preview**: Actions → Release → *Run workflow*, pick the branch, give an
+  image tag (`preview`, `test`, `0.1.0-rc.1` …) and the platforms. It
+  publishes `ghcr.io/twuijri/majlis:<that tag>` and refuses to touch `latest`,
+  which belongs to release tags on `main` alone.
+
+The number to watch is the compressed pull size, not what `docker image ls`
+prints (`docs/ROADMAP.md` §Sizes).
+
 ## 2. First login and pairing
 
 1. Open `http://<host>:8080` — the hub serves the web client from `/` — or use
