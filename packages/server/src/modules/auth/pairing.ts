@@ -65,7 +65,7 @@ export function createPairing(db: ModuleDb, input: PairingCreateInput, now: numb
       .returning()
       .get();
   }
-  throw new HubError('internal_error');
+  throw new HubError('internal');
 }
 
 export function findPairing(db: ModuleDb, id: string): PairingRow | null {

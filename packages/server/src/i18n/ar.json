@@ -2,16 +2,23 @@
   "errors": {
     "bad_request": "تعذّر فهم الطلب.",
     "validation_failed": "الطلب لا يطابق الشكل المتوقع.",
+    "profile_required": "نطاق مساحة العمل (X-Hub-Profile) مطلوب.",
     "unauthorized": "سجّل الدخول للمتابعة.",
+    "token_expired": "انتهت صلاحية الجلسة. سجّل الدخول من جديد.",
     "forbidden": "ليست لديك صلاحية لهذا الإجراء.",
     "not_found": "العنصر المطلوب غير موجود.",
+    "profile_not_found": "مساحة العمل هذه غير موجودة.",
     "conflict": "هذا يتعارض مع الحالة الحالية.",
-    "profile_required": "نطاق مساحة العمل (X-Hub-Profile) مطلوب.",
+    "state_invalid": "هذا غير مسموح في الحالة الحالية.",
+    "already_running": "هناك عمل جارٍ هنا بالفعل.",
+    "payload_too_large": "حجم الملف يتجاوز الحد المسموح.",
+    "unsupported_media_type": "نوع الملف هذا غير مدعوم.",
+    "agent_unavailable": "الوكيل غير قادر على خدمة هذا الطلب الآن.",
+    "agent_error": "أبلغ الوكيل عن خطأ.",
     "rate_limited": "طلبات كثيرة جدًا. حاول بعد قليل.",
+    "internal": "حدث خطأ في المركز.",
     "not_implemented": "هذه العملية معلنة في العقد ولم تُنفَّذ بعد.",
-    "internal_error": "حدث خطأ في المركز.",
-    "token_expired": "انتهت صلاحية رمز الدخول.",
-    "profile_not_found": "مساحة العمل المطلوبة غير موجودة أو لا يمكنك دخولها."
+    "service_unavailable": "المركز غير جاهز لخدمة هذا بعد."
   },
   "system": {
     "healthy": "المركز يعمل."
@@ -46,5 +53,16 @@
     "pairing_wrong_code": "كود الاقتران غير صحيح.",
     "pairing_claimed": "استُخدم طلب الاقتران هذا من قبل.",
     "pairing_user_disabled": "الحساب الذي أنشأ الاقتران معطّل."
+  },
+  "sessions": {
+    "run_interrupted": "أوقفه المستخدم.",
+    "run_timed_out": "لم يُرسل الوكيل شيئًا خلال المهلة المسموحة.",
+    "run_superseded": "استبدلته رسالة أحدث.",
+    "session_deleted": "حُذفت الجلسة أثناء تشغيل جارٍ.",
+    "approval_tool_title": "تنفيذ أمر",
+    "approval_choice_once": "مرة واحدة",
+    "approval_choice_session": "لهذه الجلسة",
+    "approval_choice_always": "دائمًا",
+    "approval_choice_deny": "رفض"
   }
 }
