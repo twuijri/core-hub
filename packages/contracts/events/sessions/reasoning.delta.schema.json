@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/sessions/reasoning.delta.schema.json",
+  "$id": "https://majlis.dev/contracts/events/sessions/reasoning.delta.schema.json",
   "title": "/rt/sessions · reasoning.delta",
   "description": "Append `delta` to the reasoning block of the assistant message. Emitted by: sessions module from the AgentAdapter stream.",
   "type": "object",

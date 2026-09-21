@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/rooms/seat.updated.schema.json",
+  "$id": "https://majlis.dev/contracts/events/rooms/seat.updated.schema.json",
   "title": "/rt/rooms · seat.updated",
   "description": "A seat changed — including its `status` (idle, queued, thinking, running, waiting_approval), which drives the activity strip. Members. Emitted by: rooms module.",
   "type": "object",

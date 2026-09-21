@@ -6,7 +6,7 @@ import {
   toRoutePattern,
   type ClientMethod,
   type OpenApiDocument,
-} from '@corehub/contracts';
+} from '@majlis/contracts';
 import { pickLanguage, type Language } from '../i18n/index.js';
 import { HubError, notImplemented } from '../lib/errors.js';
 import type { HubModule } from '../lib/module.js';

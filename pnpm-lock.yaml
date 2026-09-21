@@ -224,7 +224,7 @@ importers:
 
   packages/server:
     dependencies:
-      '@corehub/contracts':
+      '@majlis/contracts':
         specifier: workspace:*
         version: link:../contracts
       better-sqlite3:

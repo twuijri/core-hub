@@ -22,7 +22,7 @@ export function loadDocument(file = openapiPath) {
 }
 
 export function isScaffoldStub(file = openapiPath) {
-  return existsSync(file) && readFileSync(file, 'utf8').includes('x-corehub-scaffold-stub: true');
+  return existsSync(file) && readFileSync(file, 'utf8').includes('x-majlis-scaffold-stub: true');
 }
 
 /** Path prefix declared by servers[0].url ('/api/v1' for a relative server). */

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/rooms/member.left.schema.json",
+  "$id": "https://majlis.dev/contracts/events/rooms/member.left.schema.json",
   "title": "/rt/rooms · member.left",
   "description": "A person left or was removed. A client whose own `member.user_id` matches shows the \"removed from room\" banner. Emitted by: rooms module.",
   "type": "object",

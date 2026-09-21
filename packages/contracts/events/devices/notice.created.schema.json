@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/devices/notice.created.schema.json",
+  "$id": "https://majlis.dev/contracts/events/devices/notice.created.schema.json",
   "title": "/rt/devices · notice.created",
   "description": "A new in-app notice for the user (every device of the user; push mirrors it when enabled). User-level. Emitted by: notify module.",
   "type": "object",

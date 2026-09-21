@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/sessions/tool.started.schema.json",
+  "$id": "https://majlis.dev/contracts/events/sessions/tool.started.schema.json",
   "title": "/rt/sessions · tool.started",
   "description": "A tool call began; add it to the message. Emitted by: sessions module from the AgentAdapter stream.",
   "type": "object",

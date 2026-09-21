@@ -1,13 +1,13 @@
-# One-box install of Core Hub. Copy .env.example to .env, set HUB_ADMIN_PASSWORD, then:
+# One-box install of Majlis. Copy .env.example to .env, set HUB_ADMIN_PASSWORD, then:
 #   docker compose up -d
 # Upgrades replace only the image; /data (SQLite + secrets) lives in the named volume.
 services:
   hub:
-    image: ghcr.io/twuijri/corehub:latest
+    image: ghcr.io/twuijri/majlis:latest
     build:
       context: .
       dockerfile: packages/server/Dockerfile
-    container_name: corehub
+    container_name: majlis
     restart: unless-stopped
     ports:
       - '${HUB_PORT:-8080}:8080'

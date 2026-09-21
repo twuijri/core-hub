@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/rooms/memory.updated.schema.json",
+  "$id": "https://majlis.dev/contracts/events/rooms/memory.updated.schema.json",
   "title": "/rt/rooms · memory.updated",
   "description": "The rolling summary changed. Members. Emitted by: rooms module (summarizer job, manual edit).",
   "type": "object",

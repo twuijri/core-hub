@@ -1,4 +1,4 @@
-# Agent Map — Core Hub
+# Agent Map — Majlis
 
 This file is the short map for coding agents and new contributors. Keep it
 small; details live in `docs/`.
@@ -37,6 +37,8 @@ derived from Hermes Studio / Ekko Studio code (BSL 1.1). See
   entry label equals its title (`docs/clients/NAVIGATION.md`).
 - One task = one branch from `main` + one change record in `docs/changes/` +
   green checks + a PR. Only the owner merges to `main`. No auto-merge by agents.
+- Clients are built from scratch on the contract (ADR 0007); the owner's
+  earlier apps are behaviour references only, never code or constraints.
 - Never commit secrets, hostnames of the owner's servers, or third-party code.
 - When stuck, improve the harness (docs, tests, scripts, CI) instead of
   repeating the same attempt.

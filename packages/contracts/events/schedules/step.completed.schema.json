@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/schedules/step.completed.schema.json",
+  "$id": "https://majlis.dev/contracts/events/schedules/step.completed.schema.json",
   "title": "/rt/schedules · step.completed",
   "description": "A node finished; read its output from `step.session_id`. Emitted by: schedules module (workflow engine).",
   "type": "object",

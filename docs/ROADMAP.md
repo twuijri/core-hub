@@ -7,16 +7,16 @@ is parallel by module.
 - Workspace skeleton, CI, Docker, contract pipeline generating three clients.
 - `auth` (owner account, app tokens, QR pairing), `agents` registry with the
   ACP and Hermes adapters, `sessions` with streaming, `models` basics.
-- Done when: a phone app (our existing Android/iOS, re-pointed at `/api/v1`)
-  can pair, list agents, open a session with Hermes and a coding agent, and
-  stream a reply, with every call generated from the contract.
+- Done when: the in-repo reference client (`packages/cli`, generated from the
+  contract) can pair, list agents, open a session with Hermes and a coding
+  agent, and stream a reply. No old client is involved (ADR 0007).
 
 ## Checkpoint A — first deployment on the owner's server
 When Phase 0 is about 80 % done (pairing, agents registry with Hermes, one
 streamed session), the image is deployed on the owner's host as a separate
-test stack next to the fork, and the owner's phones are pointed at it. From
-then on every phase ends with a redeploy of that stack; the fork keeps
-running until Phase 5.
+test stack next to the fork, reachable from the reference client and from the
+web client once it exists. From then on every phase ends with a redeploy of
+that stack; the fork keeps running until Phase 5.
 
 ## Phase 1 — Working together
 - `rooms` (multi-agent rooms), `board` (projects, kanban, agent assignment,
@@ -29,7 +29,12 @@ running until Phase 5.
 - Done when: web parity test passes against the same navigation manifest the
   phones use.
 
-## Phase 3 — Desktop
+## Phase 3 — Phones and desktop
+- `apps/android`, `apps/ios`: new native clients from the contract and the
+  navigation manifest (ADR 0007); `apps/desktop`: the web client in a shell
+  plus local capabilities.
+
+## Phase 3b — Desktop details
 - `apps/desktop`: the web client in a shell plus local capabilities (local
   apps exposure, device agent).
 

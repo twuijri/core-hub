@@ -45,7 +45,7 @@ export function createLogger(config: LoggerConfig = {}): Logger {
   const options: LoggerOptions = {
     level: config.level ?? 'info',
     redact: { paths: REDACT_PATHS, censor: REDACTED },
-    base: { service: 'corehub' },
+    base: { service: 'majlis' },
     timestamp: pino.stdTimeFunctions.isoTime,
   };
   if (config.destination) return pino(options, config.destination);

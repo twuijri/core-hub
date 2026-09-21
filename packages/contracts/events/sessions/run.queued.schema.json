@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/sessions/run.queued.schema.json",
+  "$id": "https://majlis.dev/contracts/events/sessions/run.queued.schema.json",
   "title": "/rt/sessions · run.queued",
   "description": "A run was queued behind an active one. Subscribers of the session; also profile-wide on /rt/jobs as `job.*`. Emitted by: sessions module (job runner).",
   "type": "object",

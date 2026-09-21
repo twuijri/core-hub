@@ -1,8 +1,8 @@
 {
-  "name": "corehub",
+  "name": "majlis",
   "version": "0.0.0",
   "private": true,
-  "description": "Core Hub — a self-hosted hub for AI agents. Server first; every client renders one contract.",
+  "description": "Majlis — a self-hosted hub for AI agents. Server first; every client renders one contract.",
   "license": "UNLICENSED",
   "type": "module",
   "engines": {
@@ -11,22 +11,22 @@
   },
   "packageManager": "pnpm@12.5.1",
   "scripts": {
-    "contracts:lint": "pnpm --filter @corehub/contracts lint",
-    "contracts:generate": "pnpm --filter @corehub/contracts generate",
-    "contracts:generate:ts": "pnpm --filter @corehub/contracts generate:ts",
+    "contracts:lint": "pnpm --filter @majlis/contracts lint",
+    "contracts:generate": "pnpm --filter @majlis/contracts generate",
+    "contracts:generate:ts": "pnpm --filter @majlis/contracts generate:ts",
     "contracts:check-clients": "node packages/contracts/scripts/check-clients.mjs",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
-    "contract:test": "pnpm --filter @corehub/server contract:test",
+    "contract:test": "pnpm --filter @majlis/server contract:test",
     "lint": "eslint . && prettier --check .",
     "lint:fix": "eslint . --fix && prettier --write .",
-    "db:generate": "pnpm --filter @corehub/server db:generate",
-    "db:migrate": "pnpm --filter @corehub/server db:migrate",
+    "db:generate": "pnpm --filter @majlis/server db:generate",
+    "db:migrate": "pnpm --filter @majlis/server db:migrate",
     "i18n:check": "node scripts/i18n-check.mjs",
     "nav:check": "node scripts/navigation-check.mjs",
     "change-record:check": "node scripts/check-change-record.mjs",
     "build": "pnpm -r --if-present build",
-    "dev": "pnpm --filter @corehub/server dev"
+    "dev": "pnpm --filter @majlis/server dev"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

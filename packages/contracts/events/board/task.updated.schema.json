@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/board/task.updated.schema.json",
+  "$id": "https://majlis.dev/contracts/events/board/task.updated.schema.json",
   "title": "/rt/board · task.updated",
   "description": "Any non-status field changed. Emitted by: board module (patch, bulk patch, summary from the assignee, dependency change).",
   "type": "object",

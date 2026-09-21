@@ -21,7 +21,7 @@ export async function testHub(
   env: EnvSource = {},
   options: Omit<BuildOptions, 'config' | 'logger'> = {},
 ): Promise<TestHub> {
-  const dataDir = mkdtempSync(path.join(tmpdir(), 'corehub-test-'));
+  const dataDir = mkdtempSync(path.join(tmpdir(), 'majlis-test-'));
   const config = loadConfig({ DATA_DIR: dataDir, PORT: '0', ...env });
   const app = await buildServer({ config, logger: createLogger({ level: 'silent' }), ...options });
   return {

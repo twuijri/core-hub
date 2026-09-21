@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/rooms/seat.removed.schema.json",
+  "$id": "https://majlis.dev/contracts/events/rooms/seat.removed.schema.json",
   "title": "/rt/rooms · seat.removed",
   "description": "A seat was removed; its past messages stay. Members. Emitted by: rooms module.",
   "type": "object",

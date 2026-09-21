@@ -205,7 +205,7 @@ push, and `notice.resource` says what to open.
 
 ## 15. Pairing QR is JSON with a fixed `type`
 
-`{ "type": "corehub.pairing", "hub_url", "pairing_id", "code", "expires_at" }`.
+`{ "type": "majlis.pairing", "hub_url", "pairing_id", "code", "expires_at" }`.
 The phone validates `type`, refuses expired codes, and claims with
 `POST /auth/pairings/{id}/claim`. The claim returns the app token, the device,
 the user and `Meta` (contract version) in one response; the web receives

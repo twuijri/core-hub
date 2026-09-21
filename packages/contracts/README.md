@@ -1,6 +1,6 @@
-# @corehub/contracts
+# @majlis/contracts
 
-The single source of truth for the Core Hub API (ADR 0003).
+The single source of truth for the Majlis API (ADR 0003).
 
 - `openapi.yaml` — OpenAPI 3.1 document for `/api/v1`.
 - `events/` — JSON Schema for every realtime event (`<entity>.<verb>`).
@@ -10,4 +10,4 @@ The single source of truth for the Core Hub API (ADR 0003).
 - `scripts/check-clients.mjs` — fails when a client hand-types an `/api/` path (see `docs/harness/README.md`).
 
 Commands (from the repository root): `pnpm contracts:lint`, `pnpm contracts:generate`,
-`pnpm test --filter @corehub/contracts`.
+`pnpm test --filter @majlis/contracts`.

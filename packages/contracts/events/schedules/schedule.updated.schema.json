@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/schedules/schedule.updated.schema.json",
+  "$id": "https://majlis.dev/contracts/events/schedules/schedule.updated.schema.json",
   "title": "/rt/schedules · schedule.updated",
   "description": "Profile-wide. Emitted by: schedules module (patch, state changes, next_run_at recomputed, repeat exhausted).",
   "type": "object",

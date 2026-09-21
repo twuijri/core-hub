@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/common.schema.json",
-  "title": "Core Hub realtime — shared definitions",
+  "$id": "https://majlis.dev/contracts/events/common.schema.json",
+  "title": "Majlis realtime — shared definitions",
   "type": "object",
   "description": "Entity shapes shared by every event payload. GENERATED from packages/contracts/openapi.yaml components.schemas by `pnpm contracts:generate` (rewriting #/components/schemas/X to #/$defs/X); do not edit by hand. Also defines the event envelope.",
   "$defs": {
@@ -250,7 +250,7 @@
       "properties": {
         "name": {
           "type": "string",
-          "description": "Display name the owner set (defaults to \"Core Hub\")."
+          "description": "Display name the owner set (defaults to \"Majlis\")."
         },
         "server_version": {
           "type": "string"
@@ -930,7 +930,7 @@
         },
         "qr_payload": {
           "type": "string",
-          "description": "JSON to encode in the QR: `{ type: \"corehub.pairing\", hub_url, pairing_id, code, expires_at }`."
+          "description": "JSON to encode in the QR: `{ type: \"majlis.pairing\", hub_url, pairing_id, code, expires_at }`."
         },
         "expires_at": {
           "$ref": "#/$defs/Timestamp"

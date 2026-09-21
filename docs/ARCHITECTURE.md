@@ -1,7 +1,7 @@
 # Architecture
 
 ## One sentence
-Core Hub is a server that owns the truth about agents, sessions, rooms, tasks
+Majlis is a server that owns the truth about agents, sessions, rooms, tasks
 and schedules, exposes it through one versioned contract (REST + realtime),
 and drives agents through adapters; every client renders that contract.
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/schedules/workflow.created.schema.json",
+  "$id": "https://majlis.dev/contracts/events/schedules/workflow.created.schema.json",
   "title": "/rt/schedules · workflow.created",
   "description": "Profile-wide. Emitted by: schedules module.",
   "type": "object",

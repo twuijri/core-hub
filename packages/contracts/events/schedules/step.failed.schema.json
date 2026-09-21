@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/schedules/step.failed.schema.json",
+  "$id": "https://majlis.dev/contracts/events/schedules/step.failed.schema.json",
   "title": "/rt/schedules · step.failed",
   "description": "A node failed or was cancelled/rejected. Emitted by: schedules module (workflow engine).",
   "type": "object",
