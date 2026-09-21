@@ -154,7 +154,7 @@ export function AddProviderDialog({
 
         <fieldset className="flex flex-col gap-1">
           <legend className="text-xs text-muted">{t('models.add.type')}</legend>
-          <div className="segmented" role="group">
+          <div className="segmented self-start" role="group">
             <button
               type="button"
               ref={firstField}
