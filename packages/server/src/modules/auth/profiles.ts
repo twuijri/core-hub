@@ -17,15 +17,31 @@ import { findWorkspace } from './workspace.js';
  * `agent_count` / `session_count` belong to other modules. They register a provider here;
  * until they do, both counts are 0.
  */
-export type WorkspaceStatsProvider = (workspaceId: string) => ProfileStats;
-let statsProvider: WorkspaceStatsProvider = () => ({ agentCount: 0, sessionCount: 0 });
+export type WorkspaceStatsProvider = (workspaceId: string) => Partial<ProfileStats>;
+
+/**
+ * Several modules contribute: `agents` knows `agent_count`, `sessions` knows
+ * `session_count`. They are merged in registration order, so each module answers for its
+ * own field and a module that has not landed simply leaves its count at 0. A provider
+ * that throws (an app closed while its provider is still registered, which happens in the
+ * test suite) is skipped rather than failing the whole read.
+ */
+const statsProviders: WorkspaceStatsProvider[] = [];
 
 export function registerWorkspaceStatsProvider(provider: WorkspaceStatsProvider): void {
-  statsProvider = provider;
+  statsProviders.push(provider);
 }
 
 export function statsOf(workspaceId: string): ProfileStats {
-  return statsProvider(workspaceId);
+  let stats: ProfileStats = { agentCount: 0, sessionCount: 0 };
+  for (const provider of statsProviders) {
+    try {
+      stats = { ...stats, ...provider(workspaceId) };
+    } catch {
+      // A stale provider cannot make a profile unreadable.
+    }
+  }
+  return stats;
 }
 
 export interface ProfileCreateInput {
