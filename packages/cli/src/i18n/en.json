@@ -52,9 +52,12 @@
     "provider_kind": "Only providers of this kind: llm, stt or tts.",
     "model_kind": "Only models of this kind: chat, embedding, stt or tts.",
     "provider": "Only this provider's models.",
-    "role": "Which default to set: chat (the default), coding, title, summary or embedding."
+    "role": "Which default to set: chat (the default), coding, title, summary or embedding.",
+    "display_name": "Display name for the owner (asked for when omitted)",
+    "workspace_name": "Name of the first workspace (asked for when omitted)"
   },
   "cmd": {
+    "setup": "Create the owner account on a hub that has none yet",
     "login": "Sign in to a hub and remember the token",
     "logout": "Revoke the token and forget it",
     "whoami": "Show the signed-in user",
@@ -89,7 +92,7 @@
     "not_signed_in": "Not signed in. Run `majlis login --server URL` first.",
     "server_required": "No hub is configured. Pass --server URL.",
     "server_invalid": "{server} is not an http(s) origin.",
-    "setup_required": "The hub has no owner account yet. Set HUB_ADMIN_PASSWORD on the server and restart it.",
+    "setup_required": "The hub has no owner account yet. Run `majlis setup --server URL` with the setup token from its log, or open the hub in a browser.",
     "connection": "Could not reach {server}: {reason}",
     "api": "{message} [{code}, HTTP {status}]",
     "not_implemented": "The hub declares {operation} in the contract but does not implement it yet [not_implemented, HTTP 501].",
@@ -100,7 +103,19 @@
     "pairing_json_invalid": "That JSON is not a Majlis pairing payload.",
     "config_invalid": "The config file {file} is not valid JSON.",
     "interrupted": "Interrupted.",
-    "unexpected": "Unexpected error: {message}"
+    "unexpected": "Unexpected error: {message}",
+    "setup_done": "This hub is already set up. Run `majlis login --server URL` instead.",
+    "password_mismatch": "The two passwords are not the same; nothing was sent."
+  },
+  "setup": {
+    "where": "{server} has no account yet. Its setup token was printed once in the hub log and written to setup-token.txt in its data directory (docker compose logs hub, or docker compose exec hub cat /data/setup-token.txt).",
+    "token": "Setup token: ",
+    "username": "Username for the owner: ",
+    "display_name": "Display name (optional): ",
+    "workspace_name": "Workspace name (optional, \"Default\"): ",
+    "password": "Password (8+ characters): ",
+    "confirm": "Confirm the password: ",
+    "success": "Owner account {username} created on {server} and signed in. Workspace: {profile}."
   },
   "login": {
     "username": "Username: ",
