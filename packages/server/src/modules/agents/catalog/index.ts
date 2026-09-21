@@ -54,5 +54,18 @@ export function assertCatalogIsWellFormed(catalog: readonly CatalogEntry[] = CAT
       );
     }
     if (!entry.licence) throw new Error(`catalog: "${entry.id}" has no licence`);
+    // ADR 0010: an agent's credential line is the only place a variable is renamed, so a
+    // typo here would silently start the agent without a key it was supposed to inherit.
+    for (const [family, variable] of Object.entries(entry.credentials)) {
+      if (!/^[a-z0-9-]{2,40}$/.test(family)) {
+        throw new Error(`catalog: "${entry.id}" names a credential family "${family}" it cannot`);
+      }
+      if (!/^[A-Z][A-Z0-9_]*$/.test(variable)) {
+        throw new Error(
+          `catalog: "${entry.id}" maps "${family}" to "${variable}", which is not an ` +
+            'environment variable name',
+        );
+      }
+    }
   }
 }

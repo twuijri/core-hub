@@ -26,9 +26,16 @@ export interface RouteDefinition {
   operationId: string;
   /** Success status; `204` sends no body. Defaults to 200. */
   status?: number;
+  /**
+   * The reply is passed as well for the handful of operations whose response is not JSON
+   * (`models.synthesize` answers audio bytes with a `Content-Type` the provider chose).
+   * Such a handler sends on the reply itself and returns it; every other handler ignores
+   * the third argument and returns the body, as before.
+   */
   handler(
     request: FastifyRequest,
     parts: { body: unknown; query: Record<string, unknown>; params: Record<string, unknown> },
+    reply: FastifyReply,
   ): Promise<unknown> | unknown;
 }
 
@@ -64,7 +71,13 @@ export function defineRoute(
       const query = operation.validateQuery(request.query) as Record<string, unknown>;
       operation.validateBody(request.body);
 
-      const result = await definition.handler(request, { body: request.body, query, params });
+      const result = await definition.handler(
+        request,
+        { body: request.body, query, params },
+        reply,
+      );
+      // A handler that answered on the reply itself (a binary body) is already done.
+      if (reply.sent || result === reply) return reply;
       const status = definition.status ?? 200;
       if (status === 204) return reply.status(204).send();
       return reply.status(status).send(result);

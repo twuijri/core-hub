@@ -43,7 +43,12 @@ import type { AdapterKind } from './adapters/types.js';
 import { HERMES_ENTRY } from './catalog/index.js';
 import { HermesRuntime, type HermesRuntimeStatus, type Spawner } from './hermes-runtime.js';
 import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './installer.js';
-import type { AgentDirectoryPort, AgentInfo, AgentRunnerPort } from './ports.js';
+import type {
+  AgentDirectoryPort,
+  AgentInfo,
+  AgentModelsPort,
+  AgentRunnerPort,
+} from './ports.js';
 import { AgentRunner } from './runner.js';
 import { AgentsService, type AgentPatchInput } from './service.js';
 
@@ -70,7 +75,32 @@ export {
   pinnedVersion,
 } from './catalog/index.js';
 export type { CatalogEntry, HealthCheck, InstallRecipe } from './catalog/index.js';
-export type { AgentDirectoryPort, AgentInfo, AgentRunnerPort, RunnerEvent } from './ports.js';
+export type {
+  AgentDirectoryPort,
+  AgentInfo,
+  AgentModelsPort,
+  AgentRunnerPort,
+  RunnerEvent,
+} from './ports.js';
+
+/**
+ * The shared provider store (ADR 0010), registered by the `models` module at boot.
+ *
+ * A module-level slot rather than a constructor argument for the same reason
+ * `auth.registerWorkspaceStatsProvider` is one: `agents` mounts before `models` in the
+ * composition order, and inverting that order to pass a value would make the registry
+ * depend on the provider store being up. Until it is registered, an agent starts with
+ * its own settings only.
+ */
+let modelsPort: AgentModelsPort | null = null;
+
+export function registerAgentModelsPort(port: AgentModelsPort | null): void {
+  modelsPort = port;
+}
+
+export function agentModelsPort(): AgentModelsPort | null {
+  return modelsPort;
+}
 export { AgentRunner, toRunnerEvent, toolKindOf, mintSessionRef } from './runner.js';
 export { HermesRuntime, loadOrCreateHermesApiKey } from './hermes-runtime.js';
 export type { HermesRuntimeMode, HermesRuntimeStatus, Spawner } from './hermes-runtime.js';
@@ -167,6 +197,7 @@ function contextOf(app: FastifyInstance): AgentsContext {
     jobs: jobRunnerFor(app),
     adapters,
     installer: own.installer ?? createNpmInstaller({ dataDir: hub.config.dataDir, host }),
+    models: () => modelsPort,
   });
   const runner = new AgentRunner({ service, adapters, log: app.log });
   const created: AgentsContext = { service, adapters, runner, runtime };
@@ -347,13 +378,16 @@ export function agentDirectory(app: FastifyInstance): AgentDirectoryPort {
       }
       const enabled = service.isEnabled(workspace, row.id);
       const available = row.installState === 'installed' && enabled;
+      // What the workspace's providers resolve to for this agent (ADR 0010): the model
+      // pinned to it, else the workspace default for its kind. A session that names no
+      // model starts on this one, and nobody configured it per agent.
+      const model = service.defaultModelOf(row, workspace);
       return Promise.resolve({
         id: row.id,
         name: row.name,
         adapterKind: row.adapterKind,
-        // `models` is not implemented, so an agent has no configured model yet.
-        defaultModel: null,
-        defaultProvider: null,
+        defaultModel: model?.model ?? null,
+        defaultProvider: model?.provider_id ?? null,
         available,
         ...(available ? {} : { unavailableReason: enabled ? row.installState : 'disabled' }),
       });

@@ -14,6 +14,41 @@
  * at the wiring line, which is exactly where it should surface.
  */
 
+/**
+ * What the `models` module gives `agents` (ADR 0010).
+ *
+ * The direction matters: `agents` never reads a provider row and never sees a key. It
+ * says "this agent declares these credential families" and "this agent is of this kind",
+ * and gets back an environment and a model reference. `models` registers the
+ * implementation at boot (`registerAgentModelsPort`); until it does, agents start with
+ * their own settings only, exactly as they did before this port existed.
+ */
+export interface AgentModelsPort {
+  /**
+   * The environment a process agent starts with: the workspace's shared provider keys
+   * under the names this agent declared, then its own `env`, then its `secret_refs`.
+   */
+  environmentFor(
+    workspace: string,
+    declared: Readonly<Record<string, string>>,
+    extra: {
+      settingsEnv?: Readonly<Record<string, string>>;
+      secretRefs?: Readonly<Record<string, string>>;
+    },
+  ): Record<string, string>;
+  /**
+   * The model this agent should use: the one pinned to it when there is one, otherwise
+   * the workspace default for its kind. `null` when the workspace has chosen none.
+   */
+  defaultModelFor(
+    workspace: string,
+    adapterKind: string,
+    pinnedModelId: string | null,
+  ): { provider_id: string; model: string } | null;
+  /** Which workspace assignment an agent of this kind inherits (`chat` / `coding`). */
+  roleForAdapter(adapterKind: string): string;
+}
+
 /** A registry entry, reduced to what starting a turn needs. */
 export interface AgentInfo {
   id: string;
