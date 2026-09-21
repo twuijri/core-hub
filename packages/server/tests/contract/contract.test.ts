@@ -1,8 +1,6 @@
 // `pnpm contract:test`: every operation in packages/contracts/openapi.yaml is exercised through
 // the generated TypeScript client against the running app. Each must answer either a status
 // documented for it with a schema-valid body, or the documented 501 not_implemented envelope.
-import { Ajv2020 } from 'ajv/dist/2020.js';
-import addFormatsModule, { type FormatsPlugin } from 'ajv-formats';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   HubApiError,
@@ -14,9 +12,9 @@ import {
   type ClientMethod,
   type ContractOperation,
   type HubClient,
-  type OpenApiDocument,
 } from '@majlis/contracts';
 import { testHub, type TestHub } from '../unit/helpers.js';
+import { ajvFor } from './schema.js';
 
 const doc = loadOpenApiDocument();
 const CLIENT_METHODS: readonly ClientMethod[] = ['get', 'post', 'put', 'patch', 'delete'];
@@ -25,23 +23,6 @@ const ENVELOPE = {
   required: ['error', 'code'],
   properties: { error: { type: 'string', minLength: 1 }, code: { type: 'string', minLength: 1 } },
 };
-
-function ajvFor(document: OpenApiDocument) {
-  const ajv = new Ajv2020({ strict: false, allErrors: true, validateFormats: true });
-  // ajv-formats is CommonJS: the callable lives on module.exports and on .default.
-  const addFormats = ((addFormatsModule as unknown as { default?: unknown }).default ??
-    addFormatsModule) as FormatsPlugin;
-  addFormats(ajv);
-  return {
-    validate(schema: Record<string, unknown>, data: unknown): string[] {
-      // Compile with the document's components alongside so `#/components/schemas/...` refs resolve.
-      const compiled = ajv.compile({ allOf: [schema], components: document.components ?? {} });
-      return compiled(data)
-        ? []
-        : (compiled.errors ?? []).map((e) => `${e.instancePath || '/'} ${e.message ?? ''}`);
-    },
-  };
-}
 
 function exampleOf(
   media:
@@ -69,7 +50,8 @@ function pathParamsFor(op: ContractOperation): Record<string, string | number> {
   // Parameters declared on the path item (not the operation) are not in
   // op.pathParameters; every {token} in the path still needs a value.
   for (const match of op.path.matchAll(/\{([^}]+)\}/g)) {
-    if (!(match[1] in params)) params[match[1]] = 'contract-test';
+    const name = match[1]!;
+    if (!(name in params)) params[name] = 'contract-test';
   }
   return params;
 }

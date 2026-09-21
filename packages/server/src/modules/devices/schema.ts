@@ -5,6 +5,11 @@
  * Global: devices (a device belongs to a user, not to a workspace).
  * Scoped: device_commands (a command is requested from inside a workspace).
  *
+ * Column names follow the contract's `Device` / `DeviceRegistration` schemas
+ * (packages/contracts/openapi.yaml): a device carries the stable `device_key`
+ * it generated, its `kind`, `brand`, `model`, how it reaches the hub
+ * (`connection`) and its capabilities as `{ kind, enabled, consent_at }`.
+ *
  * Cross-module id columns: devices.app_token_id -> auth.app_tokens,
  * device_commands.run_id -> sessions.runs, device_commands.requested_by_id
  * -> auth.users / agents.agents / schedules.workflow_runs,
@@ -12,6 +17,7 @@
  */
 import { check, index, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import {
+  EMPTY_ARRAY,
   EMPTY_OBJECT,
   globalColumns,
   inList,
@@ -21,9 +27,24 @@ import {
   ulid,
 } from '../../db/columns.js';
 
-export const DEVICE_PLATFORMS = ['android', 'ios', 'web', 'desktop', 'cli'] as const;
+export const DEVICE_PLATFORMS = ['android', 'ios', 'web', 'macos', 'windows', 'linux'] as const;
+export const DEVICE_KINDS = ['phone', 'tablet', 'computer', 'browser'] as const;
+export const DEVICE_CONNECTIONS = ['lan', 'relay'] as const;
 export const PUSH_PROVIDERS = ['none', 'fcm', 'apns', 'webpush'] as const;
 export const DEVICE_STATUSES = ['paired', 'revoked'] as const;
+export const CAPABILITY_KINDS = [
+  'location',
+  'camera',
+  'microphone',
+  'notifications',
+  'clipboard',
+  'screen',
+  'files',
+  'apps',
+  'calendar',
+  'reminders',
+  'health',
+] as const;
 export const DEVICE_COMMAND_KINDS = [
   'capture_photo',
   'record_audio',
@@ -46,29 +67,40 @@ export const DEVICE_COMMAND_STATUSES = [
 ] as const;
 export const DEVICE_REQUESTERS = ['user', 'agent', 'workflow'] as const;
 
-export type DeviceCapabilities = {
-  camera?: boolean;
-  microphone?: boolean;
-  location?: boolean;
-  clipboard?: boolean;
-  notifications?: boolean;
-  tts?: boolean;
-  /** Desktop only: local apps the device agent can expose. */
-  localApps?: string[];
+export type DevicePlatform = (typeof DEVICE_PLATFORMS)[number];
+export type DeviceKind = (typeof DEVICE_KINDS)[number];
+export type DeviceConnection = (typeof DEVICE_CONNECTIONS)[number];
+export type CapabilityKind = (typeof CAPABILITY_KINDS)[number];
+
+/** One entry of the contract's `Device.capabilities`. */
+export type DeviceCapability = {
+  kind: CapabilityKind;
+  enabled: boolean;
+  /** Epoch ms when the person granted the OS permission, if the device reports it. */
+  consentAt: number | null;
 };
 
 export const devices = sqliteTable(
   'devices',
   {
     ...globalColumns(),
+    /** Stable id the device generated once; re-pairing updates the same row (unique per owner). */
+    deviceKey: text('device_key', { length: 128 }).notNull(),
     name: text('name', { length: 120 }).notNull(),
     platform: text('platform', { enum: DEVICE_PLATFORMS }).notNull(),
+    kind: text('kind', { enum: DEVICE_KINDS }).notNull().default('phone'),
+    brand: text('brand', { length: 80 }),
+    model: text('model', { length: 120 }),
     osVersion: text('os_version', { length: 64 }),
     appVersion: text('app_version', { length: 32 }),
+    /** How the device reaches the hub: directly or through the message relay. */
+    connection: text('connection', { enum: DEVICE_CONNECTIONS }).notNull().default('lan'),
     pushProvider: text('push_provider', { enum: PUSH_PROVIDERS }).notNull().default('none'),
     /** ENCRYPTED. Push registration token; never returned to a client. */
     pushToken: text('push_token'),
-    capabilities: json<DeviceCapabilities>('capabilities').notNull().default(EMPTY_OBJECT),
+    pushLocale: text('push_locale', { length: 8 }),
+    pushRegisteredAt: timestampMs('push_registered_at'),
+    capabilities: json<DeviceCapability[]>('capabilities').notNull().default(EMPTY_ARRAY),
     status: text('status', { enum: DEVICE_STATUSES }).notNull().default('paired'),
     /** The device token issued at pairing (auth module). */
     appTokenId: ulid('app_token_id'),
@@ -78,8 +110,11 @@ export const devices = sqliteTable(
   },
   (t) => [
     index('devices_owner_idx').on(t.ownerId, t.status),
+    uniqueIndex('devices_owner_key_uq').on(t.ownerId, t.deviceKey),
     uniqueIndex('devices_app_token_uq').on(t.appTokenId),
     check('devices_platform_check', inList(t.platform, DEVICE_PLATFORMS)),
+    check('devices_kind_check', inList(t.kind, DEVICE_KINDS)),
+    check('devices_connection_check', inList(t.connection, DEVICE_CONNECTIONS)),
     check('devices_push_provider_check', inList(t.pushProvider, PUSH_PROVIDERS)),
     check('devices_status_check', inList(t.status, DEVICE_STATUSES)),
   ],
