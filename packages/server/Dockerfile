@@ -1,6 +1,7 @@
 # Majlis server image. Build from the repository root:
 #   docker build -f packages/server/Dockerfile -t majlis .
 # One process, one container, one data directory (/data). Non-root. Healthcheck on /api/v1/health.
+# The image also carries the built web client, served by the hub from /.
 # The image holds the hub and the Hermes runtime only (ADR 0006); the hub starts and supervises
 # `hermes gateway run` itself (ADR 0008). Works with the legacy builder and BuildKit alike.
 #
@@ -21,9 +22,17 @@ FROM base AS build
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/server/package.json packages/server/
+COPY packages/cli/package.json packages/cli/
+COPY packages/ui-tokens/package.json packages/ui-tokens/
+COPY packages/web/package.json packages/web/
 RUN pnpm install --frozen-lockfile
 COPY packages/contracts packages/contracts
 COPY packages/server packages/server
+COPY packages/cli packages/cli
+COPY packages/ui-tokens packages/ui-tokens
+COPY packages/web packages/web
+# The web client bundles the navigation manifest at build time (docs/clients/README.md).
+COPY docs/clients/navigation.json docs/clients/navigation.json
 RUN pnpm build \
  && mkdir -p packages/server/drizzle packages/contracts/events
 
@@ -32,6 +41,9 @@ FROM base AS prod-deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/server/package.json packages/server/
+COPY packages/cli/package.json packages/cli/
+COPY packages/ui-tokens/package.json packages/ui-tokens/
+COPY packages/web/package.json packages/web/
 RUN pnpm install --frozen-lockfile --prod
 # better-sqlite3 ships the SQLite amalgamation, its C++ sources and a prebuilt binary for every
 # platform it supports (~25 MB). At runtime lib/binding.js loads prebuilds/<platform>-<arch>.node
@@ -137,6 +149,8 @@ COPY --from=build --chown=hub:hub /app/packages/contracts/events ./packages/cont
 COPY --from=build --chown=hub:hub /app/packages/contracts/dist ./packages/contracts/dist
 COPY --from=build --chown=hub:hub /app/packages/server/dist ./packages/server/dist
 COPY --from=build --chown=hub:hub /app/packages/server/drizzle ./packages/server/drizzle
+# The web client: static files the hub serves from / (packages/server/src/app/web.ts).
+COPY --from=build --chown=hub:hub /app/packages/web/dist ./packages/web/dist
 USER hub
 VOLUME ["/data"]
 EXPOSE 8080

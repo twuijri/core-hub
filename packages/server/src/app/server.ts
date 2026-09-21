@@ -13,6 +13,7 @@ import { loadConfig, type HubConfig } from './config.js';
 import { createDatabase, packageRoot, type HubDatabase } from './db.js';
 import { registerRoutes, type RoutesReport } from './routes.js';
 import { createSockets, listNamespaces, registerModuleEvents } from './sockets.js';
+import { registerWebClient } from './web.js';
 
 export interface HubState {
   config: HubConfig;
@@ -22,6 +23,8 @@ export interface HubState {
   namespaces: string[];
   stubs: string[];
   version: string;
+  /** True when the built web client is served from `/`. */
+  web: boolean;
 }
 
 declare module 'fastify' {
@@ -37,6 +40,8 @@ export interface BuildOptions {
   /** Defaults to packages/contracts/openapi.yaml; `null` disables the 501 stubs. */
   contract?: OpenApiDocument | null;
   migrate?: boolean;
+  /** Directory of the built web client; `null` never serves it (tests), undefined = packages/web/dist. */
+  webDir?: string | null;
 }
 
 export function readVersion(): string {
@@ -67,13 +72,27 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   const io = createSockets(app);
   // Decorated before the modules register so a module can reach the database and the
   // configuration while mounting (first-boot tasks); the report fields are filled below.
-  const hub: HubState = { config, database, io, modules: [], namespaces: [], stubs: [], version };
+  const hub: HubState = {
+    config,
+    database,
+    io,
+    modules: [],
+    namespaces: [],
+    stubs: [],
+    version,
+    web: false,
+  };
   app.decorate('hub', hub);
   const events = await registerModuleEvents(io, modules);
   const routes: RoutesReport = await registerRoutes(app, { version, database, modules, contract });
   hub.modules = routes.modules.filter((name) => events.includes(name));
   hub.namespaces = listNamespaces(io);
   hub.stubs = routes.stubs;
+  // After the API so `/api/v1/*` and the 501 stubs exist before the SPA fallback.
+  hub.web =
+    options.webDir === null
+      ? false
+      : await registerWebClient(app, options.webDir ? { dir: options.webDir } : {});
 
   app.addHook('onClose', async () => {
     await database.close();

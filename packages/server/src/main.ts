@@ -13,6 +13,7 @@ try {
       stubs: app.hub.stubs.length,
       database: app.hub.database.kind,
       dataDir: app.hub.config.dataDir,
+      web: app.hub.web,
     },
     'core hub listening',
   );
