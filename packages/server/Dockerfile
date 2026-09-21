@@ -3,6 +3,10 @@
 # One process, one container, one data directory (/data). Non-root. Healthcheck on /api/v1/health.
 # The image holds the hub and the Hermes runtime only (ADR 0006); the hub starts and supervises
 # `hermes gateway run` itself (ADR 0008). Works with the legacy builder and BuildKit alike.
+#
+# Size discipline (docs/changes/2026-09-21-twuijri-slim-image.md): every stage that lands in the
+# runtime image prunes what nothing loads at runtime — and only that. Keep the prune lists next to
+# the reason for each entry; when in doubt, keep the file.
 
 FROM node:24-bookworm AS base
 ENV PNPM_HOME=/pnpm \
@@ -29,6 +33,16 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/server/package.json packages/server/
 RUN pnpm install --frozen-lockfile --prod
+# better-sqlite3 ships the SQLite amalgamation, its C++ sources and a prebuilt binary for every
+# platform it supports (~25 MB). At runtime lib/binding.js loads prebuilds/<platform>-<arch>.node
+# (build/Release/ holds only node-gyp's stamp here), so keep the Linux glibc binaries — the two
+# platforms release.yml builds — and drop the rest. The require() proves the kept binary loads.
+RUN set -eu; \
+    for pkg in node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3; do \
+      rm -rf "$pkg/deps" "$pkg/src" "$pkg/build" "$pkg/binding.gyp"; \
+      find "$pkg/prebuilds" -type f ! -name 'linux-x64.node' ! -name 'linux-arm64.node' -delete; \
+    done; \
+    cd packages/server && node -e "const db=require('better-sqlite3')(':memory:'); if (db.prepare('select 1 as ok').get().ok!==1) process.exit(1)"
 
 # ---- Hermes Agent (MIT), pinned to a release tag ------------------------------------------
 # A standalone CPython managed by uv plus a venv, both under /opt/hermes so the runtime stage
@@ -53,21 +67,67 @@ RUN sh /tmp/uv-installer.sh \
  && cd /opt/hermes/src \
  && uv pip install --python /opt/hermes/.venv/bin/python -e ".[cron,mcp]" "aiohttp==3.14.3" \
  && /opt/hermes/.venv/bin/hermes --version
+# Prune the checkout to what the editable install and Hermes's runtime actually read. The
+# packages come from pyproject [tool.setuptools.packages.find] plus the root modules; the data
+# directories are the ones Hermes resolves relative to its source root (locales, skills,
+# optional-skills, optional-mcps, plugin-catalog, scripts/, uv.lock, cli-config.yaml.example,
+# website/static/api/model-catalog.json). Everything removed here has no reference from
+# non-test code: the test suites, the desktop app, the docs site, the TUI and dashboard
+# sources (never built in this image, ADR 0008 §3), evals, Nix/Docker packaging, installers.
+RUN set -eu; cd /opt/hermes/src; \
+    mv website/static/api/model-catalog.json /tmp/model-catalog.json; \
+    rm -rf tests tests-js apps website ui-tui web evals contributors nix docker .github \
+           flake.nix flake.lock install.sh setup-hermes.sh docker-compose.yml \
+           docker-compose.windows.yml Dockerfile eslint.config.shared.mjs constraints-termux.txt \
+           README.es.md README.ur-pk.md README.zh-CN.md CONTRIBUTING.md CONTRIBUTING.es.md \
+           SECURITY.md SECURITY.es.md COMPAT_MANIFEST.md; \
+    mkdir -p website/static/api && mv /tmp/model-catalog.json website/static/api/; \
+    /opt/hermes/.venv/bin/hermes --version
+# Prune the standalone CPython to an interpreter: the python3.12 binary is statically linked
+# (ldd lists no libpython), no wheel in the venv links libpython either, so the 32 MB embedding
+# library goes, along with Tcl/Tk (+ tkinter, IDLE, turtledemo — nothing in Hermes imports
+# them), the C headers, pkg-config and *-config scripts (no compiler in the image), the man
+# pages, and the base interpreter's own pip (invisible to the venv, which has
+# include-system-site-packages=false). ensurepip stays: tools/lazy_deps.py falls back to it.
+RUN set -eu; \
+    for py in /opt/hermes/python/cpython-3.12.*-linux-*-gnu; do \
+      rm -rf "$py/include" "$py/share/man" "$py/lib/pkgconfig" \
+             "$py"/lib/libpython3*.so* "$py"/lib/libtcl9* "$py"/lib/tcl9* "$py"/lib/tk9* \
+             "$py"/lib/itcl* "$py"/lib/thread* \
+             "$py/lib/python3.12/tkinter" "$py/lib/python3.12/idlelib" "$py/lib/python3.12/turtledemo" \
+             "$py"/lib/python3.12/config-3.12-* "$py"/lib/python3.12/lib-dynload/_tkinter* \
+             "$py"/lib/python3.12/site-packages/* \
+             "$py"/bin/2to3* "$py"/bin/idle3* "$py"/bin/pip* "$py"/bin/pydoc3* "$py"/bin/*-config; \
+    done; \
+    /opt/hermes/.venv/bin/python -c "import ssl, sqlite3, ensurepip, curses, zoneinfo; import hermes_cli" \
+ && /opt/hermes/.venv/bin/hermes --version
 
 # ---- runtime ------------------------------------------------------------------------------
-FROM node:24-bookworm-slim AS runtime
+# debian:bookworm-slim is the base of node:24-bookworm-slim; taking it directly and copying the
+# node binary and npm from the build image leaves out yarn, corepack, the node headers and the
+# node image's own apt layer (wget, gnupg) — nothing here uses them. npm stays: the hub installs
+# catalog agents with `npm install --global --prefix` (modules/agents/installer.ts).
+FROM debian:bookworm-slim AS runtime
 ENV NODE_ENV=production \
     DATA_DIR=/data \
     PORT=8080 \
     HERMES_HOME=/data/hermes \
     PATH=/opt/hermes/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-# git and ripgrep are what Hermes's own tools shell out to; ca-certificates for provider calls.
+# git and ripgrep are what Hermes's own tools shell out to (tools/checkpoint_manager.py,
+# tools/working_diff.py, tools/subagent_worktree.py; tools/file_operations_search.py); curl is
+# how Hermes fetches its managed uv (hermes_cli/managed_uv.py); ca-certificates for provider calls.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl git ripgrep \
+ && apt-get clean \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --gid 10001 hub \
  && useradd --uid 10001 --gid hub --create-home --shell /usr/sbin/nologin hub \
  && mkdir -p /data && chown hub:hub /data
+COPY --from=base /usr/local/bin/node /usr/local/bin/node
+COPY --from=base /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+ && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+ && node --version && npm --version
 WORKDIR /app
 COPY --from=hermes --chown=hub:hub /opt/hermes /opt/hermes
 # The whole prod-deps tree: root node_modules plus whatever per-package node_modules pnpm made.
