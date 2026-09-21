@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "24f9f07d-73be-434c-b73a-c062cc526834",
+  "id": "366ab174-31e4-4af2-82f2-405897f6bdb5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "app_tokens": {
@@ -1592,7 +1592,7 @@
       "checkConstraints": {
         "messages_role_check": {
           "name": "messages_role_check",
-          "value": "\"messages\".\"role\" in ('user', 'assistant', 'system', 'tool', 'event')"
+          "value": "\"messages\".\"role\" in ('user', 'assistant', 'system', 'command', 'tool', 'event')"
         },
         "messages_author_kind_check": {
           "name": "messages_author_kind_check",
@@ -1674,6 +1674,13 @@
           "autoincrement": false,
           "default": "'queued'"
         },
+        "job_id": {
+          "name": "job_id",
+          "type": "text(26)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "attempt": {
           "name": "attempt",
           "type": "integer",
@@ -1700,6 +1707,20 @@
         "model_label": {
           "name": "model_label",
           "type": "text(200)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text(120)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reasoning_effort": {
+          "name": "reasoning_effort",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -1890,9 +1911,23 @@
           "name": "title",
           "type": "text(200)",
           "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "''"
+          "default": "'chat'"
+        },
+        "channel": {
+          "name": "channel",
+          "type": "text(60)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "origin_kind": {
           "name": "origin_kind",
@@ -1919,6 +1954,20 @@
         "model_label": {
           "name": "model_label",
           "type": "text(200)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text(120)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reasoning_effort": {
+          "name": "reasoning_effort",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -1966,6 +2015,13 @@
           "autoincrement": false,
           "default": 0
         },
+        "preview": {
+          "name": "preview",
+          "type": "text(300)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "pinned": {
           "name": "pinned",
           "type": "integer",
@@ -1973,6 +2029,28 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
+        },
+        "parent_session_id": {
+          "name": "parent_session_id",
+          "type": "text(26)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "category_id": {
+          "name": "category_id",
+          "type": "text(26)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "notify": {
+          "name": "notify",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
         },
         "metadata": {
           "name": "metadata",
@@ -2015,6 +2093,14 @@
             "origin_id"
           ],
           "isUnique": false
+        },
+        "sessions_workspace_source_idx": {
+          "name": "sessions_workspace_source_idx",
+          "columns": [
+            "workspace",
+            "source"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {},
@@ -2024,6 +2110,10 @@
         "sessions_origin_kind_check": {
           "name": "sessions_origin_kind_check",
           "value": "\"sessions\".\"origin_kind\" in ('user', 'task', 'schedule', 'workflow', 'room', 'api')"
+        },
+        "sessions_source_check": {
+          "name": "sessions_source_check",
+          "value": "\"sessions\".\"source\" in ('chat', 'global_agent', 'room', 'task', 'schedule', 'workflow', 'channel', 'cli', 'api')"
         }
       }
     },
@@ -2130,9 +2220,24 @@
           "notNull": false,
           "autoincrement": false
         },
+        "output_truncated": {
+          "name": "output_truncated",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
         "output_attachment_id": {
           "name": "output_attachment_id",
           "type": "text(26)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "subagent_id": {
+          "name": "subagent_id",
+          "type": "text(120)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

@@ -2,16 +2,23 @@
   "errors": {
     "bad_request": "The request could not be understood.",
     "validation_failed": "The request did not match the expected shape.",
+    "profile_required": "A workspace scope (X-Hub-Profile) is required.",
     "unauthorized": "Sign in to continue.",
+    "token_expired": "Your session expired. Sign in again.",
     "forbidden": "You do not have permission to do this.",
     "not_found": "The requested item does not exist.",
+    "profile_not_found": "That workspace does not exist.",
     "conflict": "This conflicts with the current state.",
-    "profile_required": "A workspace scope (X-Hub-Profile) is required.",
+    "state_invalid": "That is not allowed in the current state.",
+    "already_running": "Something is already running here.",
+    "payload_too_large": "The upload exceeds the allowed size.",
+    "unsupported_media_type": "That file type is not supported.",
+    "agent_unavailable": "The agent cannot serve this request right now.",
+    "agent_error": "The agent reported an error.",
     "rate_limited": "Too many requests. Try again shortly.",
+    "internal": "Something went wrong on the hub.",
     "not_implemented": "This operation is declared in the contract but not implemented yet.",
-    "internal_error": "Something went wrong on the hub.",
-    "token_expired": "The access token has expired.",
-    "profile_not_found": "The requested workspace does not exist or you cannot enter it."
+    "service_unavailable": "The hub is not ready to serve this yet."
   },
   "system": {
     "healthy": "The hub is running."
@@ -46,5 +53,16 @@
     "pairing_wrong_code": "The pairing code is wrong.",
     "pairing_claimed": "This pairing was already claimed.",
     "pairing_user_disabled": "The account that started the pairing is disabled."
+  },
+  "sessions": {
+    "run_interrupted": "Stopped by the user.",
+    "run_timed_out": "The agent sent nothing within the allowed time.",
+    "run_superseded": "Replaced by a newer message.",
+    "session_deleted": "The session was deleted while the run was active.",
+    "approval_tool_title": "Run a command",
+    "approval_choice_once": "Once",
+    "approval_choice_session": "For this session",
+    "approval_choice_always": "Always",
+    "approval_choice_deny": "Deny"
   }
 }
