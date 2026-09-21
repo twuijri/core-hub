@@ -368,8 +368,16 @@ describe('Hermes adapter', () => {
     expect(sections[0]?.fields[0]).toMatchObject({ key: 'max_turns', value: 12, kind: 'integer' });
   });
 
-  it('refuses to pretend it can run a turn yet', async () => {
-    const adapter = createHermesAdapter({ host: { pathValue: '/nowhere-at-all' } });
+  it('refuses to start a conversation without the API server key it would need', async () => {
+    const adapter = createHermesAdapter({ host: { pathValue: '/nowhere-at-all' }, apiKey: null });
+    await expect(adapter.start({ ...target, sessionRef: 'majlis-x' })).rejects.toMatchObject({
+      code: 'agent_unavailable',
+      details: { reason: 'hermes_api_key_missing' },
+    });
+  });
+
+  it('needs the runner to name the conversation (ADR 0008 §Session continuity)', async () => {
+    const adapter = createHermesAdapter({ host: { pathValue: '/nowhere-at-all' }, apiKey: 'k'.repeat(32) });
     await expect(adapter.start(target)).rejects.toMatchObject({ code: 'not_implemented' });
   });
 });
