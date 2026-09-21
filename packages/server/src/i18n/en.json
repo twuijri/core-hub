@@ -77,6 +77,8 @@
     "check_started": "Checking the installed version against the catalog…",
     "check_done": "Version check finished.",
     "discover_started": "Scanning the host for agent CLIs…",
-    "discover_done": "Scan finished."
+    "discover_done": "Scan finished.",
+    "restart_started": "Restarting the Hermes runtime…",
+    "restart_done": "Hermes runtime restarted."
   }
 }

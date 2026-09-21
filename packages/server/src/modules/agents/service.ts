@@ -308,6 +308,42 @@ export class AgentsService {
     );
   }
 
+  /**
+   * `agents.restart`: restart the runtime the hub supervises (ADR 0008). Only Hermes has
+   * one; a gateway the hub merely found, or no gateway at all, is nothing it can restart.
+   */
+  restart(
+    scope: WorkspaceScope,
+    actor: Actor,
+    id: string,
+    runtime: { managed(): boolean; restart(): Promise<void> },
+  ): JobRow {
+    const { row, entry } = this.loadCatalogued(id);
+    if (entry.adapter !== 'hermes') {
+      throw stateInvalid({ agent_id: row.id, reason: 'no runtime process to restart' });
+    }
+    if (!runtime.managed()) {
+      throw stateInvalid({ agent_id: row.id, reason: 'runtime_not_managed' });
+    }
+    return this.options.jobs.start(
+      {
+        kind: 'agents.restart',
+        workspace: scope.id,
+        ownerId: actor.userId,
+        entityKind: 'agent',
+        entityId: row.id,
+        message: t('jobs.restart_started', this.language),
+      },
+      async (handle) => {
+        handle.progress(10, t('jobs.restart_started', this.language));
+        await runtime.restart();
+        this.announce(this.loadAgent(row.id), scope);
+        handle.progress(100, t('jobs.restart_done', this.language));
+        return {};
+      },
+    );
+  }
+
   discover(scope: WorkspaceScope, actor: Actor): JobRow {
     return this.options.jobs.start(
       {
@@ -554,6 +590,47 @@ export class AgentsService {
       executablePath: row.executablePath,
       endpoint: row.endpoint,
     };
+  }
+
+  /**
+   * The target for a conversation: the registry row plus this workspace's settings
+   * (working directory, non-secret env) and what the run asks for. Used by the runner.
+   */
+  targetFor(
+    row: AgentRow,
+    workspaceId: string,
+    run: {
+      sessionRef: string | null;
+      cwd: string | null;
+      model: string | null;
+      reasoningEffort: string | null;
+    },
+  ): AgentTarget {
+    const settings = this.settingsRow(workspaceId, row.id);
+    const cwd = run.cwd ?? settings?.workingDir ?? null;
+    return {
+      ...this.targetOf(row),
+      ...(settings?.env && Object.keys(settings.env).length > 0 ? { env: settings.env } : {}),
+      ...(cwd ? { cwd } : {}),
+      sessionRef: run.sessionRef,
+      model: run.model,
+      reasoningEffort: run.reasoningEffort,
+    };
+  }
+
+  /** The supervised runtime reports here; the row and the `agent.updated` event follow. */
+  setRuntime(slug: string, runtime: RuntimeState): void {
+    const row = this.db.select().from(agents).where(eq(agents.slug, slug)).get();
+    if (!row) return;
+    this.runtimes.set(row.id, runtime);
+  }
+
+  /** Re-run the adapter probe for one catalog entry (after the runtime came up). */
+  async reprobe(slug: string): Promise<void> {
+    const row = this.db.select().from(agents).where(eq(agents.slug, slug)).get();
+    if (!row) return;
+    const probe = await this.options.adapters.byKind(row.adapterKind).probe(this.targetOf(row));
+    this.applyProbe(row, probe);
   }
 
   private present(
