@@ -14,7 +14,7 @@ catches and where it lives.
 | Invalid or incomplete OpenAPI (no operationId, no example, not 3.1) | `pnpm contracts:lint` | `packages/contracts/scripts/lint.mjs` (Redocly + house rules) |
 | Invalid realtime event schema | `pnpm contracts:lint` | same script, Ajv over `packages/contracts/events/**` |
 | Generated clients out of date | `pnpm contracts:generate` then "no uncommitted diff" step | `.github/workflows/ci.yml` job `checks` |
-| A client hand-types an `/api/` path | `pnpm contracts:check-clients` | `packages/contracts/scripts/check-clients.mjs` scans `packages/web`, `apps/*` |
+| A client hand-types an `/api/` path | `pnpm contracts:check-clients` | `packages/contracts/scripts/check-clients.mjs` scans `packages/cli`, `packages/web`, `apps/*` |
 | Server routes drift from the document | `pnpm contract:test` | `packages/server/tests/contract/contract.test.ts`: every operation is called through the generated TS client; the answer must be schema-valid for a documented status, or the documented `501 not_implemented` envelope |
 | An operation declared but never implemented | the server mounts a `501` stub for it at boot | `packages/server/src/app/routes.ts` — the gap is visible in `app.hub.stubs` and to clients |
 
@@ -25,9 +25,9 @@ route for at least one success and one failure case in the module's own tests.
 
 `pnpm i18n:check` (`scripts/i18n-check.mjs`) flattens each locale set's `ar.json` and
 `en.json` and fails on a key missing on either side, an empty value, or placeholders that
-differ. Today the only set is `packages/server/src/i18n` (error-code messages); the script
-already lists `packages/web/src/i18n` and `apps/desktop/src/i18n` and starts checking them as
-soon as they exist. Native apps add their locale directories to `LOCALE_SETS`.
+differ. Today the sets are `packages/server/src/i18n` (error-code messages) and
+`packages/cli/src/i18n` (every string the reference client prints); the script already lists
+`packages/web/src/i18n` and `apps/desktop/src/i18n` and starts checking them as soon as they exist. Native apps add their locale directories to `LOCALE_SETS`.
 
 The server picks `ar` or `en` from `Accept-Language` and localises the `error` field of the
 envelope; `code` is what clients localise on.

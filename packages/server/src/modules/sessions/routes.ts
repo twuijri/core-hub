@@ -119,7 +119,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(profile)) {
       throw new HubError('profile_required', { details: { header: 'X-Hub-Profile', profile } });
     }
-    const scope = await deps.scopes.resolve(profile);
+    const scope = await deps.scopes.resolve(profile, request);
     if (!scope) throw new HubError('profile_not_found', { details: { profile } });
     return { ...scope, workspace: scope.workspaceId, language: request.language };
   };
