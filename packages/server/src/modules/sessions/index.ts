@@ -20,24 +20,35 @@ import { SessionsStore } from './store.js';
 import type { AgentDirectory, AgentRunner, SessionsPorts } from './ports.js';
 import { unavailableAgents, unavailableRunner } from './unavailable.js';
 
+/**
+ * A port, or a factory that builds it for one app: the real ports (`agents`, `auth`) keep
+ * their state per app, so the module resolves them once per app instead of once per process.
+ */
+export type PortOrFactory<T> = T | ((app: FastifyInstance) => T);
+
 export interface SessionsModuleOptions {
   /** The `agents` registry. Default: nothing is installed (404 on every id). */
-  agents?: AgentDirectory;
+  agents?: PortOrFactory<AgentDirectory>;
   /** The `AgentAdapter` slice a run needs. Default: `422 agent_unavailable`. */
-  runner?: AgentRunner;
+  runner?: PortOrFactory<AgentRunner>;
   /** `auth`'s workspace/user resolution. Default: derived from the profile slug. */
-  scopes?: ScopeResolver;
+  scopes?: PortOrFactory<ScopeResolver>;
   /** Silence from the adapter for this long ends a run as `timed_out`. */
   agentTimeoutMs?: number;
 }
 
+function resolvePort<T>(port: PortOrFactory<T>, app: FastifyInstance): T {
+  return typeof port === 'function' ? (port as (app: FastifyInstance) => T)(app) : port;
+}
+
 export function createSessionsModule(options: SessionsModuleOptions = {}): HubModule {
-  const ports: SessionsPorts = {
-    agents: options.agents ?? unavailableAgents,
-    runner: options.runner ?? unavailableRunner,
+  const portsFor = (app: FastifyInstance): SessionsPorts => ({
+    agents: resolvePort(options.agents ?? unavailableAgents, app),
+    runner: resolvePort(options.runner ?? unavailableRunner, app),
     agentTimeoutMs: options.agentTimeoutMs ?? 10 * 60_000,
-  };
-  const scopes = options.scopes ?? derivedScopeResolver;
+  });
+  const scopesFor = (app: FastifyInstance): ScopeResolver =>
+    resolvePort(options.scopes ?? derivedScopeResolver, app);
   const services = new WeakMap<SocketServer, SessionsService>();
 
   const service = (request: FastifyRequest): SessionsService => {
@@ -58,7 +69,7 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
       store,
       new AuditService(hub.database.db),
       realtime,
-      ports,
+      portsFor(request.server),
       request.log,
     );
     const stale = created.recoverStaleRuns();
@@ -70,7 +81,7 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
   return defineModule({
     name: 'sessions',
     registerRoutes(app: FastifyInstance) {
-      registerSessionRoutes(app, { service, scopes });
+      registerSessionRoutes(app, { service, scopes: scopesFor(app) });
     },
     registerEvents(io: SocketServer) {
       io.of(REALTIME_NAMESPACES.sessions);

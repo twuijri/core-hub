@@ -1,6 +1,9 @@
 # One-box install of Majlis. Copy .env.example to .env, set HUB_ADMIN_PASSWORD, then:
 #   docker compose up -d
-# Upgrades replace only the image; /data (SQLite + secrets) lives in the named volume.
+# Upgrades replace only the image; /data (SQLite, keys, Hermes's home, coding agents) lives in
+# the named volume. The image bundles Hermes; the hub starts it on 127.0.0.1:8642 inside the
+# container (ADR 0008). Model provider keys are set in Hermes, inside the volume, never here:
+#   docker compose exec hub hermes model        (see docs/DEPLOY.md §3)
 services:
   hub:
     image: ghcr.io/twuijri/majlis:latest
