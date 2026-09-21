@@ -2,7 +2,8 @@
  * `ModelsService` — the hub's one provider and credential store (ADR 0010).
  *
  * It owns four things and hands out a fifth:
- *   1. providers (the bundled catalogue seeded per workspace, plus custom ones),
+ *   1. providers — the rows a person added, from a preset or as their own endpoint,
+ *      and the presets themselves (`catalogue.ts`), which are a list, not rows,
  *   2. the encrypted key behind each credential family (`secrets.ts`, `crypto.ts`),
  *   3. the model catalogue each provider itself reported (`adapters/`),
  *   4. defaults, ensembles and the speech configuration,
@@ -12,6 +13,7 @@
  * Every write that can change what an agent should be using ends in `propagate()`. That
  * is the whole of the owner's requirement, in one call site per mutation.
  */
+import { existsSync } from 'node:fs';
 import type { FastifyBaseLogger } from 'fastify';
 import { eq } from 'drizzle-orm';
 import type { ModuleDb } from '../../lib/db.js';
@@ -22,7 +24,14 @@ import type { WorkspaceScope } from '../auth/index.js';
 import type { AuditService, JobRow, JobRunner } from '../audit/index.js';
 import { providerAdapter } from './adapters/index.js';
 import type { DiscoveredVoice, ProviderContext, SynthesizeResult } from './adapters/types.js';
-import { catalogueEntry, secretNameOf, type ProviderCatalogueEntry } from './catalogue.js';
+import {
+  PROVIDER_CATALOGUE,
+  authKindOf,
+  catalogueEntry,
+  familyEntries,
+  secretNameOf,
+  type ProviderCatalogueEntry,
+} from './catalogue.js';
 import { isMask } from './crypto.js';
 import { AUXILIARY_TASKS, isAuxiliaryKey, roleForAdapter } from './defaults.js';
 import {
@@ -40,7 +49,9 @@ import {
   type EnsembleMemberValue,
   type ModelRole,
   type ModelRow,
+  type ProviderCapabilities,
   type ProviderRow,
+  type SpeechProviderSettings,
 } from './schema.js';
 import type { SecretStore } from './secrets.js';
 import { ModelsStore } from './store.js';
@@ -81,11 +92,49 @@ export interface ModelsServiceOptions {
 }
 
 export interface ProviderCreateInput {
+  /** A `ProviderPreset.id`; absent for a bare OpenAI-compatible endpoint. */
+  preset?: string | null;
   label: string;
   kind: 'llm' | 'stt' | 'tts';
   base_url?: string | null;
   api_key?: string | null;
   api_mode?: 'chat_completions' | 'responses';
+}
+
+/** One entry of `models.listProviderPresets`. */
+export interface ContractProviderPreset {
+  id: string;
+  label: string;
+  kind: string;
+  api_mode: string;
+  base_url: string | null;
+  base_url_required: boolean;
+  key: 'required' | 'optional';
+  local: boolean;
+  repeatable: boolean;
+  keys_url: string | null;
+}
+
+export interface ProviderHostInfo {
+  containerized: boolean;
+  loopback_alias: string;
+}
+
+export interface ProviderProbeInput {
+  preset?: string | null;
+  base_url?: string | null;
+  api_key?: string | null;
+  api_mode?: string | null;
+  kind?: string | null;
+}
+
+export interface ProbeOutcome {
+  ok: boolean;
+  /** i18n key under `models.probe.*`; the route translates it. `null` when it worked. */
+  reasonKey: string | null;
+  detail: string | null;
+  durationMs: number;
+  models: { id: string; label: string }[];
 }
 
 export interface ProviderPatchInput {
@@ -162,17 +211,30 @@ export class ModelsService {
 
   // ------------------------------------------------------------------ providers
 
-  /** Seeds the workspace's provider rows. Called by every route before it reads. */
-  ready(scope: WorkspaceScope, ownerId: string): void {
-    this.store.seed(scope.id, ownerId);
-  }
-
   /**
-   * The same, for a caller that holds a workspace id and no scope — the `agents` module
-   * resolving credentials while starting a process, where no request is in flight.
+   * The provider *types* a person can add. Not the same list as `listProviders`, which
+   * answers "what did I configure" (contract decision §26).
    */
-  readyById(workspace: string, ownerId: string): void {
-    this.store.seed(workspace, ownerId);
+  listPresets(filter: { kind?: string } = {}): {
+    items: ContractProviderPreset[];
+    host: ProviderHostInfo;
+  } {
+    const items = PROVIDER_CATALOGUE.filter(
+      (entry) => !filter.kind || entry.kind === filter.kind,
+    ).map((entry) => ({
+      id: entry.slug,
+      label: entry.label,
+      kind: entry.kind,
+      api_mode: entry.apiMode,
+      base_url: entry.baseUrl,
+      // No default address means the person must give one; there is nothing to prefill.
+      base_url_required: entry.baseUrl === null,
+      key: entry.keyRequirement,
+      local: entry.local === true,
+      repeatable: entry.repeatable === true,
+      keys_url: entry.keysUrl,
+    }));
+    return { items, host: hostInfo() };
   }
 
   listProviders(scope: WorkspaceScope, filter: { kind?: string } = {}): ContractProvider[] {
@@ -183,18 +245,40 @@ export class ModelsService {
     return this.present(scope, this.loadProvider(scope, id));
   }
 
+  /**
+   * The one way a provider row comes into existence.
+   *
+   * With a preset the slug, protocol, credential family and default address come from the
+   * catalogue, and the **sibling rows of the same family are created in the same call** —
+   * OpenAI chat, dictation and speech are three rows and one key (ADR 0010 §2), so adding
+   * OpenAI must not leave the speech tabs empty.
+   *
+   * Without a preset it is somebody's own OpenAI-compatible endpoint: its own credential
+   * family, because sharing a key with a built-in provider of a similar name is a guess.
+   */
   createProvider(
     scope: WorkspaceScope,
     actor: Actor,
     input: ProviderCreateInput,
   ): { provider: ContractProvider; job: JobRow | null } {
-    const label = input.label.trim();
+    const presetId = input.preset?.trim();
+    const preset = presetId ? catalogueEntry(presetId) : undefined;
+    if (presetId && !preset) {
+      throw validationFailed({
+        field: 'preset',
+        reason: 'not a provider type this hub knows',
+        known: PROVIDER_CATALOGUE.map((entry) => entry.slug),
+      });
+    }
+    const label = input.label.trim() || preset?.label || '';
     if (!label) throw validationFailed({ field: 'label', reason: 'empty' });
-    const baseUrl = (input.base_url ?? '').trim();
+    const baseUrl = (input.base_url ?? '').trim() || preset?.baseUrl || '';
     if (!baseUrl) {
       throw validationFailed({
         field: 'base_url',
-        reason: 'a custom provider needs the base URL of its OpenAI-compatible endpoint',
+        reason: preset
+          ? 'this provider has no address anybody could guess; give the one it listens on'
+          : 'a custom provider needs the base URL of its OpenAI-compatible endpoint',
       });
     }
     try {
@@ -202,34 +286,70 @@ export class ModelsService {
     } catch {
       throw validationFailed({ field: 'base_url', reason: 'not a URL' });
     }
-    const slug = this.freeSlug(scope.id, label);
+    const apiKey = input.api_key?.trim() ?? '';
+    if (preset?.keyRequirement === 'required' && !apiKey) {
+      throw validationFailed({ field: 'api_key', reason: 'this provider needs a key to answer' });
+    }
+
+    // A preset that may be added more than once behaves like a custom endpoint: the
+    // person names each instance, and each instance owns its own key.
+    const repeatable = !preset || preset.repeatable === true;
     const at = this.now();
-    const id = newUlid();
-    // A custom provider is its own credential family: it is somebody's own endpoint, and
-    // sharing a key with a built-in provider of the same name would be a guess.
-    const family = `custom:${slug}`;
-    this.db
-      .insert(providers)
-      .values({
-        id,
-        ownerId: actor.userId,
-        workspace: scope.id,
-        createdAt: at,
-        updatedAt: at,
-        slug,
-        label,
-        kind: input.kind,
-        builtin: false,
-        enabled: true,
-        baseUrl,
-        apiMode: input.api_mode ?? 'chat_completions',
-        authKind: input.api_key ? 'api_key' : 'none',
-        family,
-        capabilities: { chat: input.kind === 'llm', listModels: true },
-        catalogueStatus: 'loading',
-      })
-      .run();
-    if (input.api_key) this.storeKey(scope, actor, family, input.api_key);
+    const primarySlug = repeatable ? this.freeSlug(scope.id, label) : preset.slug;
+    const family = repeatable ? `custom:${primarySlug}` : preset.family;
+    const kind = preset && !repeatable ? preset.kind : input.kind;
+
+    const existing = this.store.providerBySlug(scope.id, primarySlug);
+    if (existing && !existing.archivedAt) {
+      throw conflict({
+        reason: 'provider_exists',
+        detail: `${primarySlug} is already added to this workspace`,
+      });
+    }
+
+    const primaryId = this.materialize(scope, actor, {
+      slug: primarySlug,
+      label,
+      kind,
+      family,
+      baseUrl,
+      apiMode: (preset && !repeatable ? preset.apiMode : input.api_mode) ?? 'chat_completions',
+      // Without a preset the hub cannot know whether the endpoint wants a key, so it does
+      // not demand one — and the field is still there (contract decision §26).
+      authKind: preset && !repeatable ? authKindOf(preset) : 'none',
+      builtin: Boolean(preset) && !repeatable,
+      capabilities:
+        preset && !repeatable ? preset.capabilities : { chat: kind === 'llm', listModels: true },
+      settings: preset?.settings ?? {},
+      at,
+    });
+
+    // The rest of the credential family: one key, several rows.
+    const siblings: string[] = [];
+    if (preset && !repeatable) {
+      for (const entry of familyEntries(preset.family)) {
+        if (entry.slug === preset.slug || entry.repeatable) continue;
+        const row = this.store.providerBySlug(scope.id, entry.slug);
+        if (row && !row.archivedAt) continue;
+        siblings.push(
+          this.materialize(scope, actor, {
+            slug: entry.slug,
+            label: entry.label,
+            kind: entry.kind,
+            family: entry.family,
+            baseUrl: entry.baseUrl ?? baseUrl,
+            apiMode: entry.apiMode,
+            authKind: authKindOf(entry),
+            builtin: true,
+            capabilities: entry.capabilities,
+            settings: entry.settings ?? {},
+            at,
+          }),
+        );
+      }
+    }
+
+    if (apiKey) this.storeKey(scope, actor, family, apiKey);
     this.options.audit.record({
       workspace: scope.id,
       ownerId: actor.userId,
@@ -237,12 +357,73 @@ export class ModelsService {
       actorId: actor.userId,
       action: 'provider.created',
       entityKind: 'provider',
-      entityId: id,
-      summary: `provider ${slug} added`,
-      data: { slug, kind: input.kind },
+      entityId: primaryId,
+      summary: `provider ${primarySlug} added`,
+      // Never the key; only that one arrived with it.
+      data: { slug: primarySlug, kind, preset: preset?.slug ?? null, key_set: apiKey !== '' },
     });
-    const job = this.refreshProvider(scope, actor, id);
-    return { provider: this.getProvider(scope, id), job };
+    if (apiKey) this.propagate(scope, actor);
+    const job = this.refreshProvider(scope, actor, primaryId);
+    for (const id of siblings) this.refreshProvider(scope, actor, id);
+    return { provider: this.getProvider(scope, primaryId), job };
+  }
+
+  /**
+   * Insert a provider row, or bring back the archived row that already holds its slug —
+   * `(workspace, slug)` is unique, so a provider that was removed and is being added
+   * again is the same row with its history reset.
+   */
+  private materialize(
+    scope: WorkspaceScope,
+    actor: Actor,
+    row: {
+      slug: string;
+      label: string;
+      kind: 'llm' | 'stt' | 'tts';
+      family: string;
+      baseUrl: string;
+      apiMode: 'native' | 'chat_completions' | 'responses';
+      authKind: 'api_key' | 'oauth' | 'none';
+      builtin: boolean;
+      capabilities: ProviderCapabilities;
+      settings: SpeechProviderSettings;
+      at: Date;
+    },
+  ): string {
+    const values = {
+      ownerId: actor.userId,
+      workspace: scope.id,
+      updatedAt: row.at,
+      slug: row.slug,
+      label: row.label,
+      kind: row.kind,
+      builtin: row.builtin,
+      enabled: true,
+      baseUrl: row.baseUrl,
+      apiMode: row.apiMode,
+      authKind: row.authKind,
+      family: row.family,
+      capabilities: row.capabilities,
+      settings: row.settings,
+      catalogueStatus: (row.capabilities.listModels === false ? 'unsupported' : 'loading') as
+        'loading' | 'unsupported',
+      catalogueError: null,
+      catalogueRefreshedAt: null,
+      status: 'unconfigured' as const,
+      lastError: null,
+      archivedAt: null,
+    };
+    const existing = this.store.providerBySlug(scope.id, row.slug);
+    if (existing) {
+      this.db.update(providers).set(values).where(eq(providers.id, existing.id)).run();
+      return existing.id;
+    }
+    const id = newUlid();
+    this.db
+      .insert(providers)
+      .values({ id, createdAt: row.at, ...values })
+      .run();
+    return id;
   }
 
   updateProvider(
@@ -265,14 +446,16 @@ export class ModelsService {
     let keyChanged = false;
     if (patch.api_key !== undefined && !isMask(patch.api_key)) {
       const value = patch.api_key?.trim() ?? '';
+      // `auth_kind` is what the provider *requires*, which storing a key does not change.
+      // Flipping it was the 2026-09-22 defect: a keyless custom provider that had been
+      // given a key still read as "no key needed", and one that had not been given a key
+      // was told "Missing API key" by a check the hub had no business making.
       if (value === '') {
         this.clearKey(scope, row.family);
-        changes.authKind = row.builtin ? row.authKind : 'none';
         changes.status = 'unconfigured';
         changes.lastError = null;
       } else {
         this.storeKey(scope, actor, row.family, value);
-        changes.authKind = 'api_key';
         // Nothing has been proven yet: the status stays `unconfigured` until a test or a
         // refresh actually reaches the provider.
         changes.status = 'unconfigured';
@@ -306,21 +489,23 @@ export class ModelsService {
     return this.getProvider(scope, row.id);
   }
 
+  /**
+   * A provider a person added is a provider they can remove — preset or not. The key
+   * survives while another row of the same credential family still uses it (removing the
+   * OpenAI chat row must not silently sign the dictation row out).
+   */
   deleteProvider(scope: WorkspaceScope, actor: Actor, id: string): void {
     const row = this.loadProvider(scope, id);
-    if (row.builtin) {
-      throw conflict({
-        reason: 'builtin_provider',
-        detail: 'a built-in provider can be disabled, never removed',
-      });
-    }
     const at = this.now();
     this.db
       .update(providers)
       .set({ archivedAt: at, enabled: false, updatedAt: at })
       .where(eq(providers.id, row.id))
       .run();
-    this.clearKey(scope, row.family);
+    const remaining = this.store
+      .familyRows(scope.id, row.family)
+      .filter((sibling) => sibling.id !== row.id && !sibling.archivedAt);
+    if (remaining.length === 0) this.clearKey(scope, row.family);
     this.options.audit.record({
       workspace: scope.id,
       ownerId: actor.userId,
@@ -357,6 +542,66 @@ export class ModelsService {
       reasonKey: `models.test.${result.reason}`,
       detail: result.detail,
       durationMs: result.durationMs,
+    };
+  }
+
+  /**
+   * The add-provider dialog's **Fetch**: the model list of an endpoint that is not saved
+   * yet, so a default model can be chosen in the same dialog that types the URL.
+   *
+   * Nothing is stored — not the key, not a row, not a model. A provider that cannot be
+   * reached comes back `ok: false` carrying its own words; an empty list is an empty
+   * list and is never drawn as success by a client that reads `ok`.
+   */
+  async probeProvider(input: ProviderProbeInput): Promise<ProbeOutcome> {
+    const presetId = input.preset?.trim();
+    const preset = presetId ? catalogueEntry(presetId) : undefined;
+    if (presetId && !preset) {
+      throw validationFailed({
+        field: 'preset',
+        reason: 'not a provider type this hub knows',
+        known: PROVIDER_CATALOGUE.map((entry) => entry.slug),
+      });
+    }
+    const baseUrl = (input.base_url ?? '').trim() || preset?.baseUrl || '';
+    if (!baseUrl) {
+      throw validationFailed({ field: 'base_url', reason: 'nothing says where to ask' });
+    }
+    try {
+      void new URL(baseUrl);
+    } catch {
+      throw validationFailed({ field: 'base_url', reason: 'not a URL' });
+    }
+    const adapter = providerAdapter(preset?.protocol ?? 'openai');
+    const apiKey = input.api_key?.trim() ?? '';
+    const started = Date.now();
+    const result = await adapter.listModels({
+      slug: preset?.slug ?? 'probe',
+      label: preset?.label ?? baseUrl,
+      baseUrl,
+      apiKey: apiKey || null,
+      // A preset that does not demand a key must not be told it is missing one.
+      requiresKey: preset ? preset.keyRequirement === 'required' : false,
+      headers: {},
+      settings: {},
+      fetchImpl: this.fetchImpl,
+    });
+    const durationMs = Date.now() - started;
+    if (!result.supported) {
+      return {
+        ok: false,
+        reasonKey: 'models.probe.failed',
+        detail: result.reason,
+        durationMs,
+        models: [],
+      };
+    }
+    return {
+      ok: true,
+      reasonKey: null,
+      detail: null,
+      durationMs,
+      models: result.models.map((model) => ({ id: model.key, label: model.label })),
     };
   }
 
@@ -991,6 +1236,9 @@ export class ModelsService {
       label: row.label,
       baseUrl: row.baseUrl ?? entry?.baseUrl ?? '',
       apiKey: row.apiKeySecretId ? this.options.secrets.reveal(scope.id, row.apiKeySecretId) : null,
+      // `auth_kind` is the requirement, not "has a key": a provider that does not demand
+      // one is asked without one, and whatever the endpoint answers is the answer.
+      requiresKey: row.authKind === 'api_key',
       headers: { ...row.headers },
       settings: { ...row.settings },
       fetchImpl: this.fetchImpl,
@@ -1155,6 +1403,23 @@ export class ModelsService {
     }
     throw conflict({ reason: 'slug_exhausted', detail: label });
   }
+}
+
+/** The host name a container reaches its host machine by, on Docker and Podman alike. */
+export const LOOPBACK_ALIAS = 'host.docker.internal';
+
+/**
+ * Whether the hub is running inside a container — the fact a client needs to warn that
+ * `http://127.0.0.1:1234/v1` is the *container's* loopback, not the person's machine.
+ * The hub reports it and never rewrites a URL somebody typed.
+ */
+export function hostInfo(exists: (path: string) => boolean = existsSync): ProviderHostInfo {
+  // Docker writes `/.dockerenv`; Podman writes `/run/.containerenv`. Neither is a
+  // guarantee, which is why the client *warns* instead of acting — and why this is not a
+  // configuration variable: the four in `app/config.ts` are the whole configuration
+  // (ARCHITECTURE invariant 5), and a fifth one people had to set would be a trap.
+  const containerized = exists('/.dockerenv') || exists('/run/.containerenv');
+  return { containerized, loopback_alias: LOOPBACK_ALIAS };
 }
 
 /**

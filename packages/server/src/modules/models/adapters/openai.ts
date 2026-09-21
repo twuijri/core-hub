@@ -95,7 +95,10 @@ export const openAiAdapter: ProviderAdapter = {
   protocol: 'openai',
 
   async test(ctx: ProviderContext): Promise<ProviderTestResult> {
-    if (!ctx.apiKey) {
+    // Only a provider that *requires* a key is told it is missing one. A local server
+    // (LM Studio, LiteLLM, somebody's own proxy) is asked without one, and if it does
+    // want a key its own 401 says so — in its own words, not ours.
+    if (!ctx.apiKey && ctx.requiresKey !== false) {
       return { ok: false, reason: 'no_key', detail: null, status: null, durationMs: 0 };
     }
     const answer = await requestJson({
