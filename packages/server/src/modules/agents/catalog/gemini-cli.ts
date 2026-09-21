@@ -10,7 +10,7 @@ export const geminiCli: CatalogEntry = {
   binary: 'gemini',
   protocolArgs: ['--experimental-acp'],
   versionArgs: ['--version'],
-  install: { kind: 'npm', package: '@google/gemini-cli', version: '0.14.0' },
+  install: { kind: 'npm', package: '@google/gemini-cli', version: '0.60.0' },
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'resume'],
   sections: ['mcp', 'settings'],

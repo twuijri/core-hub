@@ -10,7 +10,7 @@ export const opencode: CatalogEntry = {
   binary: 'opencode',
   protocolArgs: ['acp'],
   versionArgs: ['--version'],
-  install: { kind: 'npm', package: 'opencode-ai', version: '0.15.9' },
+  install: { kind: 'npm', package: 'opencode-ai', version: '1.18.31' },
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp'],
   sections: ['mcp', 'settings'],
