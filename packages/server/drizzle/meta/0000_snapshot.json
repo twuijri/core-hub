@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "494c8442-e83d-40a0-9fe7-b7dfd916756e",
+  "id": "4c2eaeca-e25f-45e2-a55b-f1a9e314daef",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "app_tokens": {
@@ -3812,8 +3812,8 @@
           ],
           "isUnique": true
         },
-        "tasks_board_idx": {
-          "name": "tasks_board_idx",
+        "tasks_workspace_status_idx": {
+          "name": "tasks_workspace_status_idx",
           "columns": [
             "workspace",
             "archived_at",

@@ -1,15 +1,16 @@
-# board
+# tasks
 
-Owns: `project`, `task`, `task_transition`, `task_dependency`, `worktree`.
-Schema: `packages/server/src/modules/board/schema.ts`. All scoped. Base
+The Tasks section (a kanban-style board of columns and cards). Owns:
+`project`, `task`, `task_transition`, `task_dependency`, `worktree`.
+Schema: `packages/server/src/modules/tasks/schema.ts`. All scoped. Base
 columns omitted.
 
-Realtime namespace `/rt/board`: `task.created`, `task.moved`,
+Realtime namespace `/rt/tasks`: `task.created`, `task.moved`,
 `task.assigned`, `task.updated`, `worktree.ready`, `worktree.removed`.
 
-Phase 1 "done" in the roadmap: a task assigned to an agent from the board
-runs in its own worktree, reports progress in a room, and a schedule can run
-a standup. The columns below are what that needs.
+Phase 1 "done" in the roadmap: a task assigned to an agent from the Tasks
+section runs in its own worktree, reports progress in a room, and a schedule
+can run a standup. The columns below are what that needs.
 
 ## project (scoped)
 
@@ -39,7 +40,7 @@ Lifecycle in `README.md` §task.
 | number | int | per project; unique (project_id, number) |
 | title | text(300) | |
 | description | text? | Markdown brief the agent receives verbatim |
-| status | enum(backlog, todo, in_progress, blocked, review, done, cancelled) | kanban column |
+| status | enum(backlog, todo, in_progress, blocked, review, done, cancelled) | the column the card sits in |
 | priority | enum(urgent, high, normal, low) | |
 | assignee_kind | enum(none, user, agent) | |
 | assignee_user_id | ulid? → auth.user | |
@@ -55,8 +56,9 @@ Lifecycle in `README.md` §task.
 | attempt_count | int | agent runs started for this task |
 | archived_at | ms? | |
 
-Indexes: unique (project_id, number); (workspace, archived_at, status,
-sort_key) for the board; (project_id, status); (assignee_agent_id, status)
+Indexes: unique (project_id, number); `tasks_workspace_status_idx` on
+(workspace, archived_at, status, sort_key) for the columns; (project_id,
+status); (assignee_agent_id, status)
 for "what is this agent doing"; `parent_id`.
 
 ## task_transition (scoped)
@@ -109,7 +111,7 @@ task_id is not null`; `path` unique; (project_id, status).
 
 ## Queries the clients need
 
-- Board: tasks of the workspace (optionally one project), not archived,
+- Columns: tasks of the workspace (optionally one project), not archived,
   grouped by `status`, ordered by `sort_key`; with assignee name/avatar,
   live worktree status and `current_run_id`.
 - Task screen: the task, its transitions (newest first), dependencies both
@@ -126,5 +128,5 @@ task_id is not null`; `path` unique; (project_id, status).
 - File contents of the worktree, diffs (a diff is an attachment produced by
   a tool call, owned by knowledge).
 - Git objects; only refs and shas.
-- Kanban column definitions: the status enum is the column set; custom
-  columns are a future ADR.
+- Column definitions: the status enum is the column set; custom columns are
+  a future ADR.

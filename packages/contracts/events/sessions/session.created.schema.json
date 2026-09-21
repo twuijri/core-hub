@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://majlis.dev/contracts/events/sessions/session.created.schema.json",
   "title": "/rt/sessions · session.created",
-  "description": "A session appeared in the workspace. Profile-wide — no subscription needed. Emitted by: sessions module (create, fork; board/schedules/rooms when they open a session).",
+  "description": "A session appeared in the workspace. Profile-wide — no subscription needed. Emitted by: sessions module (create, fork; tasks/schedules/rooms when they open a session).",
   "type": "object",
   "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
   "properties": {

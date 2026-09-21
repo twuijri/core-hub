@@ -20,7 +20,7 @@ argument is:
 
 `seq` is monotonic per namespace and profile. A client that sees a gap
 refetches the affected entity over HTTP (`GET /sessions/{id}`,
-`GET /rooms/{id}`, `GET /board`, …) and continues. `profile` is `null` only for
+`GET /rooms/{id}`, `GET /task-columns`, …) and continues. `profile` is `null` only for
 user-level events on `/rt/devices` (devices, pairing, notices).
 
 ## Connecting and subscribing (client → server)
@@ -37,8 +37,8 @@ where `profile` is optional. Acks are always `{ ok: true }` or
 | `/rt/rooms` | `join` | `{ room_id }` | become present in the room (`member.joined` if not yet a member is **not** implied — join via HTTP first) and receive its events |
 | `/rt/rooms` | `leave` | `{ room_id }` | stop; presence goes offline |
 | `/rt/rooms` | `typing` | `{ room_id, typing: true|false }` | broadcast `member.typing` |
-| `/rt/board` | `subscribe` | `{ project_id }` or `{}` | receive one project's task events, or the whole workspace's |
-| `/rt/board` | `unsubscribe` | `{ project_id }` or `{}` | stop |
+| `/rt/tasks` | `subscribe` | `{ project_id }` or `{}` | receive one project's task events, or the whole workspace's |
+| `/rt/tasks` | `unsubscribe` | `{ project_id }` or `{}` | stop |
 | `/rt/schedules` | `subscribe` | `{ workflow_id }` or `{}` | receive a workflow's run/step events, or every schedule and workflow event of the workspace |
 | `/rt/schedules` | `unsubscribe` | same | stop |
 | `/rt/devices` | *(none)* | — | a device's own events arrive on connect; the socket also marks the device online/offline |
@@ -79,7 +79,7 @@ idempotency keys, and the same error envelope everywhere. The one exception is
 
 Reconnection: the client reconnects with backoff (cap 30 s), re-subscribes,
 then reads `GET /jobs?status=running`, `GET /sessions/{id}` (or the room /
-board / workflow-run document) to resynchronise. Streaming deltas missed while
+tasks / workflow-run document) to resynchronise. Streaming deltas missed while
 offline are covered by the terminal `run.completed`, which carries the final
 message.
 
@@ -90,7 +90,7 @@ message.
 
 | Event | Emitted by | Payload | Notes |
 |---|---|---|---|
-| `session.created` | sessions module (create, fork; board/schedules/rooms when they open a session) | `session`: `Session` | A session appeared in the workspace. Profile-wide — no subscription needed. |
+| `session.created` | sessions module (create, fork; tasks/schedules/rooms when they open a session) | `session`: `Session` | A session appeared in the workspace. Profile-wide — no subscription needed. |
 | `session.updated` | sessions module (patch, bulk patch, title generation, model change, status change) | `session`: `Session` | Any field of a session changed (title, pinned, archived, category, model, status, usage). Profile-wide. |
 | `session.deleted` | sessions module | `session_id`: `Ulid` | A session was deleted. Profile-wide. |
 | `message.created` | sessions module (user message stored; assistant message shell when a run starts; peer clients in the same session) | `message`: `Message` | A complete message (user, command, system) or the empty shell of a streaming assistant message. Subscribers of the session. |
@@ -138,22 +138,22 @@ message.
 | `handoff.updated` | rooms module | `room_id`: `Ulid`, `chain`: `HandoffChain` | A handoff chain advanced, stopped or completed. Members. |
 | `memory.updated` | rooms module (summarizer job, manual edit) | `room_id`: `Ulid`, `memory`: `RoomMemory` | The rolling summary changed. Members. |
 
-### `/rt/board` — 12 events
+### `/rt/tasks` — 12 events
 
 | Event | Emitted by | Payload | Notes |
 |---|---|---|---|
-| `project.created` | board module | `project`: `Project` | Profile-wide. |
-| `project.updated` | board module (patch, count changes) | `project`: `Project` | Profile-wide. |
-| `project.deleted` | board module | `project_id`: `Ulid` | Profile-wide. |
-| `task.created` | board module | `task`: `Task` | Subscribers of the project (or profile-wide when subscribed without a project). |
-| `task.updated` | board module (patch, bulk patch, summary from the assignee, dependency change) | `task`: `Task` | Any non-status field changed. |
-| `task.moved` | board module (move, assign/stop/unassign side effects, dispatch, bulk archive) | `task`: `Task`, `from`: `TaskStatus`, `to`: `TaskStatus`, `actor`: `Author` | The task changed column; `task.status` is the new one. |
-| `task.deleted` | board module | `task_id`: `Ulid`, `project_id`: `Ulid` |  |
-| `task.assigned` | board module (assign, dispatch) | `task`: `Task` | `task.assignee` is set; a run may follow (`run.queued` on /rt/sessions). |
-| `task.unassigned` | board module | `task`: `Task` | `task.assignee` is null. |
-| `subtask.updated` | board module (create, patch, delete, assignee progress) | `task_id`: `Ulid`, `subtask`: `Subtask`, `deleted`: `boolean` | A subtask was created, changed or deleted (`deleted: true`). |
-| `comment.created` | board module (people and agents) | `comment`: `Comment` |  |
-| `worktree.updated` | board module (worktree jobs, git status polling while a run is active) | `task_id`: `Ulid`, `worktree`: `Worktree | null` |  |
+| `project.created` | tasks module | `project`: `Project` | Profile-wide. |
+| `project.updated` | tasks module (patch, count changes) | `project`: `Project` | Profile-wide. |
+| `project.deleted` | tasks module | `project_id`: `Ulid` | Profile-wide. |
+| `task.created` | tasks module | `task`: `Task` | Subscribers of the project (or profile-wide when subscribed without a project). |
+| `task.updated` | tasks module (patch, bulk patch, summary from the assignee, dependency change) | `task`: `Task` | Any non-status field changed. |
+| `task.moved` | tasks module (move, assign/stop/unassign side effects, dispatch, bulk archive) | `task`: `Task`, `from`: `TaskStatus`, `to`: `TaskStatus`, `actor`: `Author` | The task changed column; `task.status` is the new one. |
+| `task.deleted` | tasks module | `task_id`: `Ulid`, `project_id`: `Ulid` |  |
+| `task.assigned` | tasks module (assign, dispatch) | `task`: `Task` | `task.assignee` is set; a run may follow (`run.queued` on /rt/sessions). |
+| `task.unassigned` | tasks module | `task`: `Task` | `task.assignee` is null. |
+| `subtask.updated` | tasks module (create, patch, delete, assignee progress) | `task_id`: `Ulid`, `subtask`: `Subtask`, `deleted`: `boolean` | A subtask was created, changed or deleted (`deleted: true`). |
+| `comment.created` | tasks module (people and agents) | `comment`: `Comment` |  |
+| `worktree.updated` | tasks module (worktree jobs, git status polling while a run is active) | `task_id`: `Ulid`, `worktree`: `Worktree | null` |  |
 
 ### `/rt/schedules` — 18 events
 

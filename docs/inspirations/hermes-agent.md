@@ -117,7 +117,7 @@
 | cron | `schedules` | مهمة مجدولة من نوع «Hermes job» تُنشأ عبر CLI/`cli.exec` وتُعرض حالتها (`blocked_config` تظهر كتنبيه في `notify`) |
 | قنوات المراسلة + اقتران DM | `agents` (per-agent) + `notify` | Hermes يملك القنوات؛ نعرض الحالة (Saved ≠ متصل) ورمز الاقتران؛ لا نعيد بناء القنوات |
 | outbound webhooks/hooks | `notify` + `audit` | نستقبل أحداث دورة الحياة الموقّعة كمصدر تدقيق |
-| Kanban | `board` | اللوحة عندنا هي الحقيقة لمهام المركز؛ Hermes Kanban يظهر كمرآة للقراءة لمهام Hermes الأصلية (يُقرَّر في ADR لاحق) |
+| Kanban | `tasks` | قسم «المهام» عندنا هو الحقيقة لمهام المركز؛ Hermes Kanban يظهر كمرآة للقراءة لمهام Hermes الأصلية (يُقرَّر في ADR لاحق) |
 | الملفات الشخصية | ADR 0005 (workspaces) + `agents` | مساحة عمل ↔ ملف شخصي Hermes بعلاقة 1:1؛ نحترم «عملية واحدة لكل بيت» |
 | `session.usage`/عدّادات الرموز | `audit` | التكلفة لكل جلسة وتشغيل |
 | ACP (`hermes acp`) | `agents` (محوّل ACP) | يبقى مسارًا مساندًا للتحقق من محوّل ACP على وكيل نعرفه |

@@ -33,7 +33,7 @@ surface. A module owns its tables, its routes, its events and its tests.
 | `agents` | registry of agents, adapters, install/version state, per-agent settings, capabilities | Ekko idea: one manager; AionUi: ACP auto-detect |
 | `sessions` | chat sessions, messages, streaming runs, tool calls, approvals | Ekko idea |
 | `rooms` | multi-agent rooms, seats, mentions, handoffs, room memory | Ekko idea (unique) |
-| `board` | projects, tasks (kanban), assignment to agents, transitions, worktrees per task | clawboard, Vibe Kanban, Multica, Claw-Kanban |
+| `tasks` | Tasks (a kanban-style section) and their projects, assignment to agents, transitions, worktrees per task | clawboard, Vibe Kanban, Multica, Claw-Kanban |
 | `schedules` | cron jobs, workflows (DAG of runs), run history, approvals inside runs | Multica standups, Proliferate workflows |
 | `knowledge` | journal, notes/memory browser, files/attachments, search | clawboard |
 | `models` | providers, keys (secrets), model catalogue, fallbacks, STT/TTS providers | Ekko idea |
@@ -49,7 +49,7 @@ DB, config). No module imports `app`.
 ## Hermes is the base (ADR 0006)
 Hermes Agent is the always-present runtime the hub is built around; coding
 agents are optional installs from the registry. Memory, skills, jobs and
-channels are Hermes's; rooms, the board and schedules may use any installed
+channels are Hermes's; rooms, tasks and schedules may use any installed
 agent.
 
 ## Data ownership
@@ -70,7 +70,7 @@ create `/api/v2` and an ADR.
 
 ## Realtime
 Socket.IO namespaces mirror modules that stream: `/rt/sessions`, `/rt/rooms`,
-`/rt/board`, `/rt/schedules`, `/rt/devices`. Events are named
+`/rt/tasks`, `/rt/schedules`, `/rt/devices`. Events are named
 `<entity>.<verb>` (`message.delta`, `run.failed`, `task.moved`) and are
 declared in the contract with their payload schema.
 

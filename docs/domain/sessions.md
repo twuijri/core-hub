@@ -33,14 +33,14 @@ the only place that converts:
 | source | enum(chat, global_agent, room, task, schedule, workflow, channel, cli, api) | how the client groups it (contract `Session.source`) |
 | channel | text(60)? | messaging platform slug when `source = channel` |
 | origin_kind | enum(user, task, schedule, workflow, room, api) | who created it |
-| origin_id | ulid? | board.task, schedules.schedule_run, schedules.node_run or rooms.seat |
+| origin_id | ulid? | tasks.task, schedules.schedule_run, schedules.node_run or rooms.seat |
 | model_id | ulid? → models.model | override for this session |
 | model_label | text(200)? | model id frozen at creation |
 | provider | text(120)? | provider slug frozen next to it |
 | reasoning_effort | enum(none, minimal, low, medium, high, max)? | per-session override; null = profile default |
 | agent_session_ref | text(200)? | the agent's own session id (ACP session, Hermes session key) |
 | working_dir | text? | |
-| worktree_id | ulid? → board.worktree | when the session serves a task |
+| worktree_id | ulid? → tasks.worktree | when the session serves a task |
 | last_run_id | ulid? | the newest run; its status is the session's live state |
 | last_message_at | ms? | list ordering |
 | message_count | int | |

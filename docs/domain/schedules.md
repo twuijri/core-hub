@@ -109,7 +109,7 @@ Indexes: (workflow_id, created_at); (workspace, status).
 | error | text? | |
 | run_id | ulid? → sessions.run | agent_run nodes |
 | approval_id | ulid? → sessions.approval | approval nodes |
-| task_id | ulid? → board.task | task nodes |
+| task_id | ulid? → tasks.task | task nodes |
 | started_at, finished_at | ms? | |
 
 ## Queries the clients need

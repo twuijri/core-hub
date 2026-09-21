@@ -26,11 +26,11 @@ export const hermes: CatalogEntry = {
     'channels',
     'resume',
     'jobs',
-    'kanban',
+    'tasks',
   ],
   sections: [
     'jobs',
-    'kanban',
+    'tasks',
     'channels',
     'skills',
     'plugins',

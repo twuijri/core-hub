@@ -80,7 +80,7 @@ erDiagram
   HANDOFF }o--|| SEAT : from
   HANDOFF }o--|| SEAT : to
 
-  %% board
+  %% tasks
   PROJECT ||--o{ TASK : contains
   PROJECT ||--o{ WORKTREE : hosts
   TASK ||--o{ TASK_TRANSITION : history
@@ -145,7 +145,7 @@ erDiagram
 - A **room** holds **seats**; every seat is one agent backed by its own
   session. Room messages are a separate log from session messages
   (`DECISIONS.md` §1).
-- A **task** on the board is assigned to a user or an agent, works in one
+- A **task** in the Tasks section is assigned to a user or an agent, works in one
   session, and has at most one live **worktree**. Its history is
   `task_transition` rows, never overwritten.
 - A **schedule** ticks into **schedule_run** rows, each of which produced
@@ -169,7 +169,7 @@ id everywhere else. The referencing module asks the owner through its public
 | `agents` | agent_adapter, agent, agent_settings | job (install), model, secret |
 | `sessions` | session, message, run, tool_call, approval | agent, model, worktree, attachment, user; origin ids (task, schedule_run, node_run, seat) |
 | `rooms` | room, room_member, seat, room_message, handoff | agent, session, run, user, attachment |
-| `board` | project, task, task_transition, task_dependency, worktree | agent, user, session, run, room, job |
+| `tasks` | project, task, task_transition, task_dependency, worktree | agent, user, session, run, room, job |
 | `schedules` | schedule, schedule_run, workflow, workflow_run, node_run | agent, model, run, approval, task |
 | `knowledge` | knowledge_note, journal_entry, attachment | project, task, agent, run |
 | `models` | provider, model, model_default, secret | — |
@@ -343,7 +343,8 @@ Rules:
    rows nothing references after the retention window and files past
    `expires_at`.
 5. **Archiving a parent hides its children** without touching them: an
-   archived project hides its tasks from the board; un-archiving restores them.
+   archived project hides its tasks from the Tasks section; un-archiving restores
+   them.
 6. **Runs, tool calls and approvals are never archived individually.** They
    live and die with their session.
 7. **Workspaces archive only.** Purging a workspace is an owner-only job that

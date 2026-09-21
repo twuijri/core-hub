@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/board/task.deleted.schema.json",
-  "title": "/rt/board · task.deleted",
-  "description": "Emitted by: board module.",
+  "$id": "https://majlis.dev/contracts/events/tasks/task.deleted.schema.json",
+  "title": "/rt/tasks · task.deleted",
+  "description": "Emitted by: tasks module.",
   "type": "object",
   "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
   "properties": {
@@ -10,7 +10,7 @@
       "const": "task.deleted"
     },
     "namespace": {
-      "const": "/rt/board"
+      "const": "/rt/tasks"
     },
     "profile": {
       "oneOf": [
@@ -47,7 +47,7 @@
   "examples": [
     {
       "event": "task.deleted",
-      "namespace": "/rt/board",
+      "namespace": "/rt/tasks",
       "profile": "work",
       "ts": "2026-09-21T10:15:04Z",
       "seq": 8812,

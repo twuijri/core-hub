@@ -4,7 +4,7 @@ import { authModule, principalScopeResolver } from './auth/index.js';
 import { agentDirectory, agentRunner, agentsModule } from './agents/index.js';
 import { createSessionsModule } from './sessions/index.js';
 import { roomsModule } from './rooms/index.js';
-import { boardModule } from './board/index.js';
+import { tasksModule } from './tasks/index.js';
 import { schedulesModule } from './schedules/index.js';
 import { knowledgeModule } from './knowledge/index.js';
 import { modelsModule } from './models/index.js';
@@ -27,7 +27,7 @@ export const modules: readonly HubModule[] = [
   agentsModule,
   sessionsModule,
   roomsModule,
-  boardModule,
+  tasksModule,
   schedulesModule,
   knowledgeModule,
   modelsModule,
