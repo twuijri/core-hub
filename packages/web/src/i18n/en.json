@@ -1,0 +1,246 @@
+{
+  "app": { "name": "Majlis" },
+  "nav": {
+    "new_chat": "New chat",
+    "search": "Search",
+    "device_connections": "Device connections",
+    "agent_manager": "Agent Manager",
+    "models": "Models",
+    "knowledge": "Knowledge",
+    "chat": "Chat",
+    "rooms": "Rooms",
+    "tasks": "Tasks",
+    "schedules": "Schedules",
+    "history": "History",
+    "settings": "Settings",
+    "account": "Account",
+    "users": "Users",
+    "webhooks": "Webhooks",
+    "display": "Display",
+    "notifications": "Notifications",
+    "privacy": "Privacy",
+    "this_device": "This device",
+    "about": "About",
+    "logs": "Logs",
+    "usage": "Usage",
+    "performance": "Performance",
+    "theme": "Theme",
+    "workspaces": "Workspaces",
+    "updates": "Updates",
+    "plugins": "Plugins",
+    "skills": "Skills",
+    "mcp": "MCP",
+    "memory": "Memory",
+    "jobs": "Jobs",
+    "channels": "Channels",
+    "agent_settings": "Settings",
+    "global_agent": "Global agent",
+    "new_room": "New room",
+    "join_by_code": "Join by code",
+    "sign_out": "Sign out"
+  },
+  "common": { "loading": "Loading…", "retry": "Retry" },
+  "errors": {
+    "not_implemented": "The hub declares {operation} in the contract but does not implement it yet.",
+    "connection": "Could not reach the hub. Check the connection and try again.",
+    "unexpected": "Something went wrong: {message}"
+  },
+  "login": {
+    "title": "Sign in",
+    "hub": "{name} · server {version}",
+    "setup_required": "This hub has no owner account yet. Set HUB_ADMIN_PASSWORD and restart it.",
+    "username": "Username",
+    "password": "Password",
+    "submit": "Sign in",
+    "signing_in": "Signing in…"
+  },
+  "shell": {
+    "sidebar": "Main menu",
+    "segments": "Sections",
+    "workspace": "Workspace",
+    "model_chip": "Default model for new sessions",
+    "model_default": "Default model",
+    "open_menu": "Open menu",
+    "close_menu": "Close menu",
+    "history_is_page": "History opens as a page.",
+    "segment_later": "{name} arrives with its module in a later phase.",
+    "language_chip": "Switch UI language",
+    "theme_chip": "Switch theme",
+    "connection": { "connected": "Connected", "connecting": "Connecting…", "offline": "Offline" }
+  },
+  "pane": {
+    "resize": "Resize the side pane (arrow keys resize, Home collapses, End expands)",
+    "collapse": "Collapse the side pane",
+    "expand": "Expand the side pane",
+    "close": "Close the side pane",
+    "kind": {
+      "tool": "Tool output",
+      "code": "Code",
+      "preview": "Preview",
+      "artifact": "Artifact",
+      "tasks": "Tasks"
+    }
+  },
+  "sessions": {
+    "untitled": "New chat",
+    "filter": "Filter sessions",
+    "empty": "No sessions in this workspace yet. Start one with New chat.",
+    "none_match": "No session matches this filter.",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "pinned": "Pinned",
+    "archive": "Archive",
+    "delete": "Delete",
+    "reorder": "Reorder {title} (Space to pick up, arrows to move)",
+    "confirm_delete": "Delete \"{title}\" and its messages?",
+    "status": { "idle": "Idle", "running": "Running", "waiting": "Waiting for you" },
+    "source": {
+      "chat": "Chat",
+      "global_agent": "Global agent",
+      "room": "Rooms",
+      "task": "Board tasks",
+      "schedule": "Schedules",
+      "workflow": "Workflows",
+      "channel": "Channels",
+      "cli": "Terminal",
+      "api": "API"
+    }
+  },
+  "search": { "placeholder": "Search titles and messages…", "none": "Nothing found." },
+  "history": {
+    "archive": "Archive",
+    "unarchive": "Unarchive",
+    "delete": "Delete",
+    "selected": "{count} selected",
+    "select": "Select {title}",
+    "confirm_delete": "Delete {count} session(s)?",
+    "pinned": "Pinned",
+    "archived": "Archive"
+  },
+  "new_chat": {
+    "pick_agent": "Pick the agent this chat talks to. The list is the hub's registry.",
+    "no_agents": "No agent is enabled on this hub. Install or enable one in Agent Manager."
+  },
+  "chat": {
+    "pick_one": "Pick a session from the list, or start a new chat.",
+    "empty": "No messages yet. Say something below.",
+    "assistant": "Agent",
+    "streaming": "typing…",
+    "failed": "failed",
+    "interrupted": "stopped",
+    "thinking": "Thinking…",
+    "reasoning": "Reasoning",
+    "copy_code": "Copy code",
+    "open_in_pane": "Open in side pane",
+    "location": "Location",
+    "usage": "{input} in · {output} out",
+    "resumed": "Reconnected; {replayed} missed event(s) replayed.",
+    "resynced": "Reconnected; the transcript was reloaded from the hub.",
+    "session_deleted": "This session was deleted.",
+    "run_failed": "The run failed: {error} ({code})"
+  },
+  "composer": {
+    "label": "Message composer",
+    "placeholder": "Message the agent… (Enter to send, Shift+Enter for a new line)",
+    "disabled": "The session is not ready.",
+    "send": "Send",
+    "stop": "Stop the run",
+    "attach": "Attach files",
+    "drop_here": "Drop files to attach them",
+    "upload_failed": "upload failed",
+    "remove_attachment": "Remove {name}",
+    "busy_hint": "A run is active; your next message is queued behind it."
+  },
+  "approval": {
+    "from": "{agent} is waiting for your decision",
+    "once": "Once",
+    "session": "This session",
+    "always": "Always",
+    "deny": "Deny",
+    "answer": "Your answer",
+    "send": "Answer",
+    "skip": "Skip (deny)"
+  },
+  "tool": {
+    "status": {
+      "running": "running",
+      "succeeded": "done",
+      "failed": "failed",
+      "interrupted": "stopped",
+      "awaiting_approval": "awaiting approval"
+    },
+    "truncated": "output truncated",
+    "no_output": "No output."
+  },
+  "agents": {
+    "empty": "The registry is empty.",
+    "install": "Install",
+    "remove": "Remove",
+    "restart": "Restart",
+    "limited": "This agent runs through the process harness and is limited.",
+    "update_available": "Update available: {version}",
+    "under_agent": "Under the agent",
+    "status": {
+      "available": "Available",
+      "not_installed": "Not installed",
+      "installing": "Installing…",
+      "updating": "Updating…",
+      "error": "Error",
+      "limited": "Limited",
+      "disabled": "Disabled"
+    }
+  },
+  "jobs": {
+    "status": {
+      "queued": "Queued",
+      "running": "Running…",
+      "succeeded": "Done",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    }
+  },
+  "settings": {
+    "tools": "Tools",
+    "back": "Back to Settings",
+    "global_note": "This screen is hub-wide, outside the current workspace."
+  },
+  "account": {
+    "username": "Username",
+    "display_name": "Display name",
+    "role": "Role",
+    "workspaces": "Workspaces"
+  },
+  "roles": { "owner": "Owner", "admin": "Admin", "member": "Member" },
+  "display": {
+    "theme": { "label": "Theme", "system": "System", "light": "Light", "dark": "Dark" },
+    "glass": {
+      "label": "Glass intensity",
+      "hint": "Translucency and blur of the floating chrome only; content stays solid.",
+      "0": "Solid",
+      "1": "Light",
+      "2": "Medium",
+      "3": "Full"
+    },
+    "language": "Language",
+    "text_scale": "Text size",
+    "local_only": "Saved on this device only; the hub could not store the preference."
+  },
+  "theme": {
+    "intro": "Theme and background of this device. The footer chip changes the same preference.",
+    "reduced_note": "If your system asks for reduced transparency or motion, the app honours it automatically."
+  },
+  "devices": {
+    "tab": { "app": "App", "devices": "Devices" },
+    "pair_intro": "Pair a phone: scan the QR with the Majlis app, or type the code. The code expires in five minutes.",
+    "pair": "Pair a device",
+    "pair_again": "New pairing",
+    "expires_in": "Expires in {seconds} s",
+    "claimed": "Paired: {name}",
+    "pairing_expired": "The pairing expired. Start a new one.",
+    "pairing_cancelled": "The pairing was cancelled."
+  },
+  "placeholder": {
+    "later": "{name} arrives with its module in phase {phase}. Nothing is hidden here.",
+    "agent": "Agent {id}"
+  }
+}

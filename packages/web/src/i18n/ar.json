@@ -1,0 +1,246 @@
+{
+  "app": { "name": "مجلس" },
+  "nav": {
+    "new_chat": "محادثة جديدة",
+    "search": "بحث",
+    "device_connections": "اتصالات الأجهزة",
+    "agent_manager": "مدير الوكلاء",
+    "models": "النماذج",
+    "knowledge": "المعرفة",
+    "chat": "محادثة",
+    "rooms": "الغرف",
+    "tasks": "المهام",
+    "schedules": "الجدولة",
+    "history": "السجل",
+    "settings": "الإعدادات",
+    "account": "الحساب",
+    "users": "المستخدمون",
+    "webhooks": "خطافات الويب",
+    "display": "العرض",
+    "notifications": "الإشعارات",
+    "privacy": "الخصوصية",
+    "this_device": "هذا الجهاز",
+    "about": "حول",
+    "logs": "السجلات",
+    "usage": "الاستخدام",
+    "performance": "الأداء",
+    "theme": "السمة",
+    "workspaces": "مساحات العمل",
+    "updates": "التحديثات",
+    "plugins": "الإضافات",
+    "skills": "المهارات",
+    "mcp": "MCP",
+    "memory": "الذاكرة",
+    "jobs": "المهام المجدولة",
+    "channels": "القنوات",
+    "agent_settings": "الإعدادات",
+    "global_agent": "الوكيل العام",
+    "new_room": "غرفة جديدة",
+    "join_by_code": "انضمام برمز",
+    "sign_out": "تسجيل الخروج"
+  },
+  "common": { "loading": "جارٍ التحميل…", "retry": "إعادة المحاولة" },
+  "errors": {
+    "not_implemented": "المركز يعلن {operation} في العقد لكنه لم ينفّذها بعد.",
+    "connection": "تعذّر الوصول إلى المركز. تحقق من الاتصال وحاول مجددًا.",
+    "unexpected": "حدث خطأ: {message}"
+  },
+  "login": {
+    "title": "تسجيل الدخول",
+    "hub": "{name} · الخادم {version}",
+    "setup_required": "لا يوجد حساب مالك على هذا المركز بعد. اضبط HUB_ADMIN_PASSWORD وأعد تشغيله.",
+    "username": "اسم المستخدم",
+    "password": "كلمة المرور",
+    "submit": "دخول",
+    "signing_in": "جارٍ الدخول…"
+  },
+  "shell": {
+    "sidebar": "القائمة الرئيسية",
+    "segments": "الأقسام",
+    "workspace": "مساحة العمل",
+    "model_chip": "النموذج الافتراضي للجلسات الجديدة",
+    "model_default": "النموذج الافتراضي",
+    "open_menu": "فتح القائمة",
+    "close_menu": "إغلاق القائمة",
+    "history_is_page": "السجل يُفتح كصفحة.",
+    "segment_later": "{name} يصل مع وحدته في مرحلة لاحقة.",
+    "language_chip": "تبديل لغة الواجهة",
+    "theme_chip": "تبديل السمة",
+    "connection": { "connected": "متصل", "connecting": "جارٍ الاتصال…", "offline": "غير متصل" }
+  },
+  "pane": {
+    "resize": "تغيير عرض اللوحة الجانبية (الأسهم للتغيير، Home للطيّ، End للتوسيع)",
+    "collapse": "طيّ اللوحة الجانبية",
+    "expand": "توسيع اللوحة الجانبية",
+    "close": "إغلاق اللوحة الجانبية",
+    "kind": {
+      "tool": "مخرجات الأداة",
+      "code": "كود",
+      "preview": "معاينة",
+      "artifact": "ناتج",
+      "tasks": "المهام"
+    }
+  },
+  "sessions": {
+    "untitled": "محادثة جديدة",
+    "filter": "تصفية الجلسات",
+    "empty": "لا جلسات في مساحة العمل هذه بعد. ابدأ واحدة من «محادثة جديدة».",
+    "none_match": "لا جلسة تطابق هذه التصفية.",
+    "pin": "تثبيت",
+    "unpin": "إلغاء التثبيت",
+    "pinned": "مثبّتة",
+    "archive": "أرشفة",
+    "delete": "حذف",
+    "reorder": "إعادة ترتيب {title} (مسافة للالتقاط، الأسهم للتحريك)",
+    "confirm_delete": "حذف «{title}» ورسائلها؟",
+    "status": { "idle": "خاملة", "running": "تعمل", "waiting": "بانتظارك" },
+    "source": {
+      "chat": "محادثة",
+      "global_agent": "الوكيل العام",
+      "room": "الغرف",
+      "task": "مهام اللوحة",
+      "schedule": "الجدولة",
+      "workflow": "سير العمل",
+      "channel": "القنوات",
+      "cli": "الطرفية",
+      "api": "API"
+    }
+  },
+  "search": { "placeholder": "ابحث في العناوين والرسائل…", "none": "لا نتائج." },
+  "history": {
+    "archive": "أرشفة",
+    "unarchive": "إخراج من الأرشيف",
+    "delete": "حذف",
+    "selected": "المحدد: {count}",
+    "select": "تحديد {title}",
+    "confirm_delete": "حذف {count} جلسة؟",
+    "pinned": "المثبّتة",
+    "archived": "الأرشيف"
+  },
+  "new_chat": {
+    "pick_agent": "اختر الوكيل الذي تحادثه. القائمة من سجلّ المركز.",
+    "no_agents": "لا وكيل مفعّل على هذا المركز. ثبّت أو فعّل واحدًا من مدير الوكلاء."
+  },
+  "chat": {
+    "pick_one": "اختر جلسة من القائمة، أو ابدأ محادثة جديدة.",
+    "empty": "لا رسائل بعد. اكتب شيئًا في الأسفل.",
+    "assistant": "الوكيل",
+    "streaming": "يكتب…",
+    "failed": "فشل",
+    "interrupted": "أُوقف",
+    "thinking": "يفكّر…",
+    "reasoning": "التفكير",
+    "copy_code": "نسخ الكود",
+    "open_in_pane": "فتح في اللوحة الجانبية",
+    "location": "موقع",
+    "usage": "{input} داخل · {output} خارج",
+    "resumed": "أُعيد الاتصال؛ أُعيد إرسال {replayed} حدثًا فائتًا.",
+    "resynced": "أُعيد الاتصال؛ أُعيد تحميل المحادثة من المركز.",
+    "session_deleted": "حُذفت هذه الجلسة.",
+    "run_failed": "فشل التشغيل: {error} ({code})"
+  },
+  "composer": {
+    "label": "محرّر الرسالة",
+    "placeholder": "راسل الوكيل… (Enter للإرسال، Shift+Enter لسطر جديد)",
+    "disabled": "الجلسة غير جاهزة.",
+    "send": "إرسال",
+    "stop": "إيقاف التشغيل",
+    "attach": "إرفاق ملفات",
+    "drop_here": "أفلت الملفات هنا لإرفاقها",
+    "upload_failed": "فشل الرفع",
+    "remove_attachment": "إزالة {name}",
+    "busy_hint": "يوجد تشغيل نشط؛ رسالتك التالية تُصفّ خلفه."
+  },
+  "approval": {
+    "from": "{agent} ينتظر قرارك",
+    "once": "مرة واحدة",
+    "session": "لهذه الجلسة",
+    "always": "دائمًا",
+    "deny": "رفض",
+    "answer": "إجابتك",
+    "send": "إجابة",
+    "skip": "تخطٍّ (رفض)"
+  },
+  "tool": {
+    "status": {
+      "running": "يعمل",
+      "succeeded": "تم",
+      "failed": "فشل",
+      "interrupted": "أُوقف",
+      "awaiting_approval": "بانتظار الموافقة"
+    },
+    "truncated": "المخرجات مقتطعة",
+    "no_output": "لا مخرجات."
+  },
+  "agents": {
+    "empty": "السجلّ فارغ.",
+    "install": "تثبيت",
+    "remove": "إزالة",
+    "restart": "إعادة تشغيل",
+    "limited": "هذا الوكيل يعمل عبر حزام العمليات وهو محدود.",
+    "update_available": "تحديث متاح: {version}",
+    "under_agent": "تحت الوكيل",
+    "status": {
+      "available": "متاح",
+      "not_installed": "غير مثبّت",
+      "installing": "جارٍ التثبيت…",
+      "updating": "جارٍ التحديث…",
+      "error": "خطأ",
+      "limited": "محدود",
+      "disabled": "معطّل"
+    }
+  },
+  "jobs": {
+    "status": {
+      "queued": "في الطابور",
+      "running": "يعمل…",
+      "succeeded": "تم",
+      "failed": "فشل",
+      "cancelled": "أُلغي"
+    }
+  },
+  "settings": {
+    "tools": "الأدوات",
+    "back": "العودة إلى الإعدادات",
+    "global_note": "هذه الشاشة على مستوى المركز كله، خارج مساحة العمل الحالية."
+  },
+  "account": {
+    "username": "اسم المستخدم",
+    "display_name": "الاسم المعروض",
+    "role": "الدور",
+    "workspaces": "مساحات العمل"
+  },
+  "roles": { "owner": "المالك", "admin": "مشرف", "member": "عضو" },
+  "display": {
+    "theme": { "label": "السمة", "system": "النظام", "light": "فاتحة", "dark": "داكنة" },
+    "glass": {
+      "label": "شدة الزجاج",
+      "hint": "الشفافية والتمويه على الأطر العائمة فقط؛ المحتوى يبقى صلبًا.",
+      "0": "صلب",
+      "1": "خفيف",
+      "2": "متوسط",
+      "3": "كامل"
+    },
+    "language": "اللغة",
+    "text_scale": "حجم النص",
+    "local_only": "محفوظ على هذا الجهاز فقط؛ تعذّر حفظ التفضيل في المركز."
+  },
+  "theme": {
+    "intro": "سمة هذا الجهاز وخلفيته. شريحة التذييل تغيّر التفضيل نفسه.",
+    "reduced_note": "إن طلب نظامك تقليل الشفافية أو الحركة، يحترم التطبيق ذلك تلقائيًا."
+  },
+  "devices": {
+    "tab": { "app": "التطبيق", "devices": "الأجهزة" },
+    "pair_intro": "اقرن هاتفًا: امسح رمز QR بتطبيق مجلس، أو اكتب الرمز. ينتهي الرمز بعد خمس دقائق.",
+    "pair": "إقران جهاز",
+    "pair_again": "إقران جديد",
+    "expires_in": "ينتهي بعد {seconds} ث",
+    "claimed": "تم الإقران: {name}",
+    "pairing_expired": "انتهى الإقران. ابدأ واحدًا جديدًا.",
+    "pairing_cancelled": "أُلغي الإقران."
+  },
+  "placeholder": {
+    "later": "{name} يصل مع وحدته في المرحلة {phase}. لا شيء مخفي هنا.",
+    "agent": "الوكيل {id}"
+  }
+}
