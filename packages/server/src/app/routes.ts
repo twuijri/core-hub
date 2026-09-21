@@ -54,6 +54,7 @@ export async function registerRoutes(
 
   app.setErrorHandler((error: unknown, request, reply) => {
     if (error instanceof HubError) {
+      if (error.headers) void reply.headers(error.headers);
       return reply.status(error.status).send(error.toEnvelope(request.language));
     }
     const fastifyError = error as { validation?: unknown; statusCode?: number; message?: string };
@@ -76,7 +77,7 @@ export async function registerRoutes(
         .send(new HubError('bad_request').toEnvelope(request.language));
     }
     request.log.error({ err: error }, 'unhandled error');
-    return reply.status(500).send(new HubError('internal_error').toEnvelope(request.language));
+    return reply.status(500).send(new HubError('internal').toEnvelope(request.language));
   });
 
   const report: RoutesReport = { modules: [], stubs: [] };

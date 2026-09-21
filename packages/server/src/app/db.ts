@@ -53,8 +53,15 @@ export function createDatabase(config: DatabaseConfig, log: Logger): HubDatabase
       kind: 'postgres',
       db,
       async migrate() {
-        if (!hasMigrations()) return log.info('db: no migrations to apply yet');
-        await migratePg(db, { migrationsFolder });
+        // The SQLite DDL in ./drizzle is not valid PostgreSQL; the pg journal lives in
+        // ./drizzle/pg once it exists (src/db/README.md §PostgreSQL option).
+        const pgFolder = path.join(migrationsFolder, 'pg');
+        if (!hasMigrations(pgFolder)) {
+          return log.warn(
+            'db: PostgreSQL migrations are not generated yet (drizzle/pg); nothing applied — DATABASE_URL is accepted but not supported',
+          );
+        }
+        await migratePg(db, { migrationsFolder: pgFolder });
         log.info('db: migrations applied (postgres)');
       },
       async ping() {

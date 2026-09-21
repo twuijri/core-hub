@@ -5,8 +5,12 @@
  * app_tokens, pairing_codes, login_lockouts. Scoped: workspace_members.
  *
  * Cross-module id columns (no DB foreign key, validated through the owning
- * module's API): users.avatar_attachment_id -> knowledge.attachments,
- * app_tokens.device_id / pairing_codes.device_id -> devices.devices.
+ * module's API): app_tokens.device_id / pairing_codes.device_id ->
+ * devices.devices.
+ *
+ * Avatars (users, workspaces) are files under `<DATA_DIR>/avatars/`, not
+ * knowledge attachments: attachments are workspace-scoped and these rows are
+ * global. The row keeps only the MIME type; the file is named by the row id.
  */
 import { check, index, sqliteTable, text, uniqueIndex, integer } from 'drizzle-orm/sqlite-core';
 import {
@@ -25,21 +29,60 @@ export const USER_ROLES = ['owner', 'admin', 'member'] as const;
 export const USER_STATUSES = ['active', 'disabled'] as const;
 export const LOCALES = ['ar', 'en'] as const;
 export const APP_TOKEN_KINDS = ['personal', 'device', 'web'] as const;
+export const APP_TOKEN_SCOPES = ['read', 'write', 'device', 'admin'] as const;
 export const LOCKOUT_SUBJECT_KINDS = ['ip', 'user'] as const;
+/** Which flow the failures belong to (the contract's `Lockout.kind`). */
+export const LOCKOUT_KINDS = ['password', 'token', 'pairing'] as const;
+export const PAIRING_CONNECTIONS = ['lan', 'relay'] as const;
+
+export type UserRole = (typeof USER_ROLES)[number];
+export type UserStatus = (typeof USER_STATUSES)[number];
+export type Locale = (typeof LOCALES)[number];
+export type AppTokenKind = (typeof APP_TOKEN_KINDS)[number];
+export type AppTokenScope = (typeof APP_TOKEN_SCOPES)[number];
+export type LockoutKind = (typeof LOCKOUT_KINDS)[number];
+export type PairingConnection = (typeof PAIRING_CONNECTIONS)[number];
+
+/** The contract's `ModelRef`. */
+export type ModelRef = { providerId: string; model: string };
+
+/** The contract's `ProfileSettings` (stored under `WorkspaceSettings.hub`). */
+export type WorkspaceHubSettings = {
+  proxy: {
+    httpsProxy: string | null;
+    httpProxy: string | null;
+    allProxy: string | null;
+    noProxy: string | null;
+  };
+  compression: {
+    enabled: boolean;
+    threshold: number;
+    targetRatio: number;
+    protectFirst: number;
+    protectLast: number;
+  };
+  privacy: { redactPii: boolean };
+  appearance: {
+    fontSize: number;
+    textColor: string | null;
+    accentColor: string | null;
+    backgroundAttachmentId: string | null;
+  };
+};
 
 export type WorkspaceSettings = {
   /** Default agent slug for "new session" in this workspace. */
   defaultAgent?: string;
   /** Hermes profile name this workspace drives (Hermes adapter). */
   hermesProfile?: string;
+  /** The contract's `Profile.default_model`. */
+  defaultModel?: ModelRef | null;
+  /** The contract's `ProfileSettings`; missing sections fall back to defaults. */
+  hub?: Partial<WorkspaceHubSettings>;
 };
 
-export type UserPreferences = {
-  theme?: 'system' | 'light' | 'dark';
-  showReasoning?: boolean;
-  showCost?: boolean;
-  compact?: boolean;
-};
+/** The contract's `Preferences`, stored as given (snake_case keys) so a PUT round-trips. */
+export type UserPreferences = Record<string, unknown>;
 
 export const workspaces = sqliteTable(
   'workspaces',
@@ -51,6 +94,8 @@ export const workspaces = sqliteTable(
     description: text('description'),
     color: text('color', { length: 16 }),
     icon: text('icon', { length: 64 }),
+    /** MIME of the avatar file under `<DATA_DIR>/avatars/workspaces/<id>`; null = generated avatar. */
+    avatarMime: text('avatar_mime', { length: 64 }),
     /** Exactly one workspace is the default for new users and tokens. */
     isDefault: bool('is_default').notNull().default(false),
     settings: json<WorkspaceSettings>('settings').notNull().default(EMPTY_OBJECT),
@@ -71,7 +116,8 @@ export const users = sqliteTable(
     passwordHash: text('password_hash').notNull(),
     passwordChangedAt: timestampMs('password_changed_at'),
     locale: text('locale', { enum: LOCALES }).notNull().default('ar'),
-    avatarAttachmentId: ulid('avatar_attachment_id'),
+    /** MIME of the avatar file under `<DATA_DIR>/avatars/users/<id>`; null = generated avatar. */
+    avatarMime: text('avatar_mime', { length: 64 }),
     defaultWorkspaceId: ulid('default_workspace_id').references(() => workspaces.id, {
       onDelete: 'set null',
     }),
@@ -107,13 +153,14 @@ export const appTokens = sqliteTable(
     userId: ulid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    /** `web` rows are the rotating refresh tokens of browser/desktop sign-ins. */
     kind: text('kind', { enum: APP_TOKEN_KINDS }).notNull().default('personal'),
     name: text('name', { length: 120 }).notNull(),
     /** SHA-256 of the bearer token. The token itself is shown once, never stored. */
     tokenHash: text('token_hash', { length: 64 }).notNull(),
     /** First 8 characters, for the "which token is this" list. */
     tokenPrefix: text('token_prefix', { length: 8 }).notNull(),
-    scopes: json<string[]>('scopes').notNull().default(EMPTY_ARRAY),
+    scopes: json<AppTokenScope[]>('scopes').notNull().default(EMPTY_ARRAY),
     /** Set for `device` tokens issued by pairing. */
     deviceId: ulid('device_id'),
     expiresAt: timestampMs('expires_at'),
@@ -131,7 +178,7 @@ export const pairingCodes = sqliteTable(
   'pairing_codes',
   {
     ...globalColumns(),
-    /** Short human code; the QR payload is `{hubUrl, code}` and is never stored. */
+    /** Short human code (`7KQ2-M9XW`); the QR payload is rebuilt from the row, never stored. */
     code: text('code', { length: 12 }).notNull(),
     createdByUserId: ulid('created_by_user_id')
       .notNull()
@@ -140,14 +187,19 @@ export const pairingCodes = sqliteTable(
     initialWorkspaceId: ulid('initial_workspace_id').references(() => workspaces.id, {
       onDelete: 'set null',
     }),
+    connection: text('connection', { enum: PAIRING_CONNECTIONS }).notNull().default('lan'),
+    /** Origin the web client used to create the pairing; the QR tells the phone to call it. */
+    hubUrl: text('hub_url', { length: 512 }).notNull(),
     expiresAt: timestampMs('expires_at').notNull(),
     consumedAt: timestampMs('consumed_at'),
+    cancelledAt: timestampMs('cancelled_at'),
     deviceId: ulid('device_id'),
     appTokenId: ulid('app_token_id').references(() => appTokens.id, { onDelete: 'set null' }),
   },
   (t) => [
     uniqueIndex('pairing_codes_code_uq').on(t.code),
     index('pairing_codes_expires_idx').on(t.expiresAt),
+    check('pairing_codes_connection_check', inList(t.connection, PAIRING_CONNECTIONS)),
   ],
 );
 
@@ -158,12 +210,14 @@ export const loginLockouts = sqliteTable(
     subjectKind: text('subject_kind', { enum: LOCKOUT_SUBJECT_KINDS }).notNull(),
     /** The client IP or the user id being throttled. */
     subject: text('subject', { length: 128 }).notNull(),
+    kind: text('kind', { enum: LOCKOUT_KINDS }).notNull().default('password'),
     failures: integer('failures').notNull().default(0),
     lastFailureAt: timestampMs('last_failure_at'),
     lockedUntil: timestampMs('locked_until'),
   },
   (t) => [
-    uniqueIndex('login_lockouts_subject_uq').on(t.subjectKind, t.subject),
+    uniqueIndex('login_lockouts_subject_uq').on(t.subjectKind, t.subject, t.kind),
     check('login_lockouts_subject_kind_check', inList(t.subjectKind, LOCKOUT_SUBJECT_KINDS)),
+    check('login_lockouts_kind_check', inList(t.kind, LOCKOUT_KINDS)),
   ],
 );
