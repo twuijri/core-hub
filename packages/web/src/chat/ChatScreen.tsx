@@ -106,7 +106,14 @@ function OpenSession({ sessionId }: { sessionId: string }) {
             <ApprovalCard key={approval.id} approval={approval} />
           ))}
           {failedRun?.error &&
-            !state.messages.some((m) => m.run_id === failedRun.id && m.status === 'failed') && (
+            // A failed run often leaves an empty assistant message; the badge alone would
+            // hide the reason, so the notice is only suppressed when that message has text.
+            !state.messages.some(
+              (m) =>
+                m.run_id === failedRun.id &&
+                m.status === 'failed' &&
+                m.content.some((part) => part.type === 'text' && part.text.trim() !== ''),
+            ) && (
               <Notice tone="danger">
                 {t('chat.run_failed', { error: failedRun.error.error, code: failedRun.error.code })}
               </Notice>
