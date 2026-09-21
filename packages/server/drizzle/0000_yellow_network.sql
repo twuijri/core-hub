@@ -118,11 +118,11 @@ CREATE TABLE `agent_adapters` (
 	`kind` text NOT NULL,
 	`name` text(120) NOT NULL,
 	`version` text(32) NOT NULL,
-	`capabilities` text DEFAULT '{}' NOT NULL,
+	`capabilities` text DEFAULT '[]' NOT NULL,
 	`status` text DEFAULT 'available' NOT NULL,
 	`last_probe_at` integer,
 	`last_error` text,
-	CONSTRAINT "agent_adapters_kind_check" CHECK("agent_adapters"."kind" in ('acp', 'hermes', 'process')),
+	CONSTRAINT "agent_adapters_kind_check" CHECK("agent_adapters"."kind" in ('hermes', 'acp', 'harness', 'builtin')),
 	CONSTRAINT "agent_adapters_status_check" CHECK("agent_adapters"."status" in ('available', 'unavailable'))
 );
 --> statement-breakpoint
@@ -154,26 +154,34 @@ CREATE TABLE `agents` (
 	`updated_at` integer NOT NULL,
 	`slug` text(64) NOT NULL,
 	`name` text(120) NOT NULL,
+	`vendor` text(120),
+	`licence` text(64),
 	`description` text,
 	`icon` text(64),
 	`adapter_id` text(26) NOT NULL,
 	`adapter_kind` text NOT NULL,
-	`source` text DEFAULT 'detected' NOT NULL,
+	`source` text DEFAULT 'none' NOT NULL,
 	`command` text DEFAULT '[]' NOT NULL,
 	`executable_path` text,
+	`package_name` text(200),
 	`endpoint` text,
 	`version` text(64),
+	`latest_version` text(64),
+	`auto_update` integer DEFAULT false NOT NULL,
+	`checked_at` integer,
 	`install_state` text DEFAULT 'not_installed' NOT NULL,
 	`install_job_id` text(26),
 	`detected_at` integer,
-	`capabilities` text DEFAULT '{}' NOT NULL,
+	`capabilities` text DEFAULT '[]' NOT NULL,
+	`sections` text DEFAULT '[]' NOT NULL,
 	`limited` integer DEFAULT false NOT NULL,
+	`selectable` integer DEFAULT true NOT NULL,
 	`last_error` text,
 	`archived_at` integer,
 	FOREIGN KEY (`adapter_id`) REFERENCES `agent_adapters`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "agents_adapter_kind_check" CHECK("agents"."adapter_kind" in ('acp', 'hermes', 'process')),
-	CONSTRAINT "agents_source_check" CHECK("agents"."source" in ('detected', 'manual', 'bundled')),
-	CONSTRAINT "agents_install_state_check" CHECK("agents"."install_state" in ('not_installed', 'installing', 'installed', 'updating', 'broken'))
+	CONSTRAINT "agents_adapter_kind_check" CHECK("agents"."adapter_kind" in ('hermes', 'acp', 'harness', 'builtin')),
+	CONSTRAINT "agents_source_check" CHECK("agents"."source" in ('managed', 'user_cli', 'builtin', 'none')),
+	CONSTRAINT "agents_install_state_check" CHECK("agents"."install_state" in ('not_installed', 'installing', 'installed', 'updating', 'failed'))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `agents_slug_uq` ON `agents` (`slug`);--> statement-breakpoint

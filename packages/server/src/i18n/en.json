@@ -64,5 +64,19 @@
     "approval_choice_session": "For this session",
     "approval_choice_always": "Always",
     "approval_choice_deny": "Deny"
+  },
+  "jobs": {
+    "queued": "Queued.",
+    "cancelled": "Cancelled at your request.",
+    "install_started": "Installing…",
+    "install_done": "Installed.",
+    "uninstall_started": "Removing…",
+    "uninstall_done": "Removed.",
+    "update_started": "Updating…",
+    "update_done": "Updated.",
+    "check_started": "Checking the installed version against the catalog…",
+    "check_done": "Version check finished.",
+    "discover_started": "Scanning the host for agent CLIs…",
+    "discover_done": "Scan finished."
   }
 }

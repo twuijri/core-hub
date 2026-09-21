@@ -78,6 +78,6 @@ export {
   type WorkspaceScope,
 } from './workspace.js';
 export { registerWorkspaceStatsProvider, type WorkspaceStatsProvider } from './profiles.js';
-export { findUser, presentUser } from './users.js';
+export { findUser, ownerUser, presentUser } from './users.js';
 export { emitToUser, userRoom } from './sockets.js';
 export type { UserRole, UserStatus, AppTokenScope, Locale } from './schema.js';
