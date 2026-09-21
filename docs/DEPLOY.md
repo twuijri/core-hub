@@ -4,6 +4,13 @@ One container, one data volume. The image holds the hub (Node) and the Hermes
 runtime (Python) — nothing else (ADR 0006, ADR 0008). Coding agents are
 installed later from the Agents screen into the same volume.
 
+What the image weighs (linux/amd64, measured 2026-09-21): about 210 MB to
+pull, about 710 MB unpacked. Roughly a third of that is Hermes's pinned
+Python dependencies, a sixth is `git` (Hermes's checkpoint and worktree tools
+shell out to it) and a sixth is the Node runtime. The Dockerfile keeps only
+what the hub and Hermes load at runtime; the prune lists in
+`packages/server/Dockerfile` say why each entry is safe to drop.
+
 ## 1. Run the image
 
 ```bash
