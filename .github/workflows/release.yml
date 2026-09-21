@@ -1,10 +1,23 @@
 name: Release
 
-# Builds the server image from a version tag on main and publishes it to GHCR.
-# Publishing is gated on the tag alone (TEAM-RULES §6): nothing else pushes an image.
+# Builds the server image and publishes it to GHCR. Two ways in: a version tag on main
+# (the normal release), or the owner pressing "Run workflow" on a branch and choosing a
+# tag name (a preview image). Both publish only from this workflow (TEAM-RULES §6).
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to publish (e.g. preview, test, 0.1.0-rc.1). "latest" is refused.'
+        required: true
+        default: preview
+      platforms:
+        description: 'Platforms to build'
+        required: true
+        default: linux/amd64
+        type: choice
+        options: [linux/amd64, 'linux/amd64,linux/arm64']
 
 permissions:
   contents: read
@@ -21,12 +34,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Refuse tags that are not on main
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           git fetch --no-tags origin main
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
             echo '::error::Release tags must point at a commit on main.'
             exit 1
           fi
+      - name: Refuse a manual run that would overwrite latest
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          case "${{ inputs.image_tag }}" in
+            latest|main)
+              echo '::error::A manual run may not publish "latest"; that tag belongs to a release tag on main.'
+              exit 1
+              ;;
+          esac
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -41,13 +64,14 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=${{ inputs.image_tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: packages/server/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          platforms: ${{ github.event_name == 'workflow_dispatch' && inputs.platforms || 'linux/amd64,linux/arm64' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
