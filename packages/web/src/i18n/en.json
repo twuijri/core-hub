@@ -1,5 +1,7 @@
 {
-  "app": { "name": "Majlis" },
+  "app": {
+    "name": "Majlis"
+  },
   "nav": {
     "new_chat": "New chat",
     "search": "Search",
@@ -39,7 +41,10 @@
     "join_by_code": "Join by code",
     "sign_out": "Sign out"
   },
-  "common": { "loading": "Loading…", "retry": "Retry" },
+  "common": {
+    "loading": "Loading…",
+    "retry": "Retry"
+  },
   "errors": {
     "not_implemented": "The hub declares {operation} in the contract but does not implement it yet.",
     "connection": "Could not reach the hub. Check the connection and try again.",
@@ -66,7 +71,11 @@
     "segment_later": "{name} arrives with its module in a later phase.",
     "language_chip": "Switch UI language",
     "theme_chip": "Switch theme",
-    "connection": { "connected": "Connected", "connecting": "Connecting…", "offline": "Offline" }
+    "connection": {
+      "connected": "Connected",
+      "connecting": "Connecting…",
+      "offline": "Offline"
+    }
   },
   "pane": {
     "resize": "Resize the side pane (arrow keys resize, Home collapses, End expands)",
@@ -93,7 +102,11 @@
     "delete": "Delete",
     "reorder": "Reorder {title} (Space to pick up, arrows to move)",
     "confirm_delete": "Delete \"{title}\" and its messages?",
-    "status": { "idle": "Idle", "running": "Running", "waiting": "Waiting for you" },
+    "status": {
+      "idle": "Idle",
+      "running": "Running",
+      "waiting": "Waiting for you"
+    },
     "source": {
       "chat": "Chat",
       "global_agent": "Global agent",
@@ -106,7 +119,10 @@
       "api": "API"
     }
   },
-  "search": { "placeholder": "Search titles and messages…", "none": "Nothing found." },
+  "search": {
+    "placeholder": "Search titles and messages…",
+    "none": "Nothing found."
+  },
   "history": {
     "archive": "Archive",
     "unarchive": "Unarchive",
@@ -188,6 +204,20 @@
       "error": "Error",
       "limited": "Limited",
       "disabled": "Disabled"
+    },
+    "capability": {
+      "approvals": "approvals",
+      "channels": "channels",
+      "jobs": "jobs",
+      "kanban": "Tasks",
+      "mcp": "MCP",
+      "memory": "memory",
+      "resume": "resume",
+      "skills": "skills",
+      "streaming": "streaming",
+      "tasks": "Tasks",
+      "tools": "tools",
+      "worktrees": "worktrees"
     }
   },
   "jobs": {
@@ -210,9 +240,18 @@
     "role": "Role",
     "workspaces": "Workspaces"
   },
-  "roles": { "owner": "Owner", "admin": "Admin", "member": "Member" },
+  "roles": {
+    "owner": "Owner",
+    "admin": "Admin",
+    "member": "Member"
+  },
   "display": {
-    "theme": { "label": "Theme", "system": "System", "light": "Light", "dark": "Dark" },
+    "theme": {
+      "label": "Theme",
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    },
     "glass": {
       "label": "Glass intensity",
       "hint": "Translucency and blur of the floating chrome only; content stays solid.",
@@ -230,7 +269,10 @@
     "reduced_note": "If your system asks for reduced transparency or motion, the app honours it automatically."
   },
   "devices": {
-    "tab": { "app": "App", "devices": "Devices" },
+    "tab": {
+      "app": "App",
+      "devices": "Devices"
+    },
     "pair_intro": "Pair a phone: scan the QR with the Majlis app, or type the code. The code expires in five minutes.",
     "pair": "Pair a device",
     "pair_again": "New pairing",

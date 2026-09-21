@@ -1,3 +1,4 @@
+import type { Translator } from '../i18n/index.js';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -10,6 +11,13 @@ import { AppShell } from '../shell/AppShell.js';
 import type { Agent, Job } from '../types.js';
 import { Notice, Spinner } from '../ui/Notice.js';
 import { useJobs } from './useJobs.js';
+
+/** A capability's label, falling back to the raw name the catalog declared. */
+function capabilityLabel(t: Translator, capability: string): string {
+  const key = `agents.capability.${capability}`;
+  const label = t(key);
+  return label === key ? capability : label;
+}
 
 const STATUS_TONE: Record<Agent['status'], string> = {
   available: 'bg-success-soft text-success-soft-text',
@@ -102,7 +110,7 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
       <p className="flex flex-wrap gap-1">
         {agent.capabilities.map((c) => (
           <span key={c} className="chip">
-            {c}
+            {capabilityLabel(t, c)}
           </span>
         ))}
       </p>
