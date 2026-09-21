@@ -63,3 +63,9 @@ test('navigation parity', () => {
 
 Changing `navigation.json` is a contract change: it needs the clients' parity tests updated in
 the same PR (or a follow-up recorded in the change record) and the owner's review.
+
+## The reference client
+
+`packages/cli` is the terminal client that proves the server end to end in Phase 0 (ADR 0007):
+it is generated from the contract, has no screens and therefore no navigation parity test, and
+is documented in `CLI.md`.
