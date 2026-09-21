@@ -77,6 +77,8 @@
     "check_started": "جارٍ مقارنة النسخة المثبّتة بالمعتمدة…",
     "check_done": "انتهى فحص الإصدار.",
     "discover_started": "جارٍ فحص الخادم بحثًا عن أدوات الوكلاء…",
-    "discover_done": "انتهى الفحص."
+    "discover_done": "انتهى الفحص.",
+    "restart_started": "جارٍ إعادة تشغيل Hermes…",
+    "restart_done": "أُعيد تشغيل Hermes."
   }
 }

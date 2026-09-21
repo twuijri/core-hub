@@ -1,0 +1,396 @@
+/**
+ * `AgentRunner` — the `sessions` port (`start`, `stream`, `send`, `interrupt`) on top of
+ * the adapters (ADR 0002).
+ *
+ * One hub session maps to one live `AgentSession` (an ACP child process, or a Hermes
+ * conversation keyed by its `session_id`); one hub run maps to one turn of it. The
+ * sessions engine runs a session's turns strictly one after another, so a turn can read
+ * the session's shared event stream until its own terminal event and leave nothing
+ * behind for the next.
+ *
+ * The runner also owns the translation from an adapter's coarse events
+ * (`adapters/types.ts`) to the sessions module's (`ports.ts`), which is what the engine
+ * folds into the contract's `/rt/sessions` events. That translation is a pure function
+ * (`toRunnerEvent`) so a test can assert it frame by frame.
+ *
+ * Approvals: an adapter names its choices in the agent's words (`once`, `allow_always`,
+ * …); the runner exposes them to the contract as `approve_once` / `approve_session` /
+ * `approve_always` / `deny` and remembers, per approval, which agent option each decision
+ * stands for, so `send()` can hand the agent exactly the option it offered.
+ */
+import type { FastifyBaseLogger } from 'fastify';
+import { HubError, agentUnavailable } from '../../lib/errors.js';
+import type { AdapterSet } from './adapters/index.js';
+import type { AgentEvent, AgentSession, ApprovalOption } from './adapters/types.js';
+import type {
+  AgentRunnerPort,
+  RunnerApprovalKind,
+  RunnerChoice,
+  RunnerDecision,
+  RunnerEvent,
+  RunnerPromptBlock,
+  RunnerRunAccepted,
+  RunnerRunInput,
+  RunnerRunRequest,
+  RunnerToolKind,
+} from './ports.js';
+import type { AgentsService } from './service.js';
+
+/** How a hub decision maps onto the options an agent offered, per approval. */
+type DecisionMap = Map<RunnerDecision, string>;
+
+interface LiveSession {
+  session: AgentSession;
+  adapterKind: string;
+  /** The hub session the agent session serves; the map key, kept for logging. */
+  sessionId: string;
+}
+
+interface LiveRun {
+  runId: string;
+  sessionId: string;
+  live: LiveSession;
+  queue: RunnerEvent[];
+  waiting: ((result: IteratorResult<RunnerEvent>) => void)[];
+  ended: boolean;
+  interruptRequested: boolean;
+  decisions: Map<string, DecisionMap>;
+}
+
+export interface AgentRunnerDeps {
+  service: AgentsService;
+  adapters: AdapterSet;
+  log: FastifyBaseLogger;
+}
+
+export class AgentRunner implements AgentRunnerPort {
+  private readonly sessions = new Map<string, LiveSession>();
+  private readonly runs = new Map<string, LiveRun>();
+
+  constructor(private readonly deps: AgentRunnerDeps) {}
+
+  async start(request: RunnerRunRequest): Promise<RunnerRunAccepted> {
+    const { service, adapters } = this.deps;
+    const row = service.loadAgent(request.agentId);
+    if (row.installState !== 'installed') {
+      throw agentUnavailable({ agent_id: row.id, status: row.installState });
+    }
+    const adapter = adapters.byKind(row.adapterKind);
+
+    let live = this.sessions.get(request.sessionId);
+    if (!live) {
+      const target = service.targetFor(row, request.workspace, {
+        sessionRef: request.agentSessionRef ?? mintSessionRef(row.adapterKind, request.sessionId),
+        cwd: request.workingDir,
+        model: request.model,
+        reasoningEffort: request.reasoningEffort,
+      });
+      const session = await adapter.start(target);
+      live = { session, adapterKind: row.adapterKind, sessionId: request.sessionId };
+      this.sessions.set(request.sessionId, live);
+    }
+
+    const run: LiveRun = {
+      runId: request.runId,
+      sessionId: request.sessionId,
+      live,
+      queue: [],
+      waiting: [],
+      ended: false,
+      interruptRequested: false,
+      decisions: new Map(),
+    };
+    this.runs.set(request.runId, run);
+
+    // The turn: events are pumped from the session stream while `send()` drives the agent.
+    // Neither is awaited here — the engine consumes `stream()` and `send()` resolves on the
+    // agent's own terms.
+    void this.pump(run);
+    void live.session.send({ text: promptText(request.prompt) }).catch((error: unknown) => {
+      this.push(run, {
+        type: 'failed',
+        code: error instanceof HubError ? error.code : 'agent_error',
+        message: error instanceof Error ? error.message : 'the agent refused the turn',
+      });
+    });
+
+    return { agentSessionRef: live.session.id, agentRunRef: null };
+  }
+
+  stream(runId: string): AsyncIterable<RunnerEvent> {
+    const run = this.runs.get(runId);
+    const next = (): Promise<IteratorResult<RunnerEvent>> => {
+      if (!run) return Promise.resolve({ value: undefined as never, done: true });
+      const buffered = run.queue.shift();
+      if (buffered) return Promise.resolve({ value: buffered, done: false });
+      if (run.ended) return Promise.resolve({ value: undefined as never, done: true });
+      return new Promise((resolve) => run.waiting.push(resolve));
+    };
+    return { [Symbol.asyncIterator]: () => ({ next }) };
+  }
+
+  async send(runId: string, input: RunnerRunInput): Promise<void> {
+    const run = this.runs.get(runId);
+    if (!run) throw new HubError('state_invalid', { details: { reason: 'run_not_live', runId } });
+    const options = run.decisions.get(input.approvalRef);
+    if (!options) {
+      throw new HubError('state_invalid', {
+        details: { reason: 'unknown_approval', approval_ref: input.approvalRef },
+      });
+    }
+    if (!input.decision) {
+      // Free-text answers need an agent surface that asks questions; neither ACP's
+      // permission request nor Hermes's run approval takes text.
+      throw new HubError('state_invalid', {
+        details: { reason: 'answer_not_supported', adapter: run.live.adapterKind },
+      });
+    }
+    const optionId = options.get(input.decision) ?? fallbackOption(options, input.decision);
+    if (!optionId) {
+      throw new HubError('state_invalid', {
+        details: { reason: 'decision_not_offered', decision: input.decision },
+      });
+    }
+    await run.live.session.respond(input.approvalRef, optionId);
+  }
+
+  async interrupt(runId: string): Promise<void> {
+    const run = this.runs.get(runId);
+    if (!run) return;
+    run.interruptRequested = true;
+    await run.live.session.interrupt();
+  }
+
+  /** Shutdown: end every live agent session (ACP children exit, Hermes streams close). */
+  async closeAll(): Promise<void> {
+    const open = [...this.sessions.values()];
+    this.sessions.clear();
+    await Promise.all(
+      open.map((live) =>
+        live.session.close().catch((error: unknown) => {
+          this.deps.log.warn({ err: error, sessionId: live.sessionId }, 'agents: close failed');
+        }),
+      ),
+    );
+    for (const run of this.runs.values()) this.end(run);
+    this.runs.clear();
+  }
+
+  // -------------------------------------------------------------- internals
+
+  private async pump(run: LiveRun): Promise<void> {
+    try {
+      for await (const event of run.live.session.stream()) {
+        const mapped = this.translate(run, event);
+        for (const out of mapped) this.push(run, out);
+        if (mapped.some((out) => out.type === 'completed' || out.type === 'failed')) break;
+      }
+      if (!run.ended) {
+        // The session closed under the run (agent exited): the engine reads a silent
+        // end as `agent_error` on its own; say why when the adapter told us.
+        this.end(run);
+      }
+    } catch (error) {
+      this.push(run, {
+        type: 'failed',
+        code: 'agent_error',
+        message: error instanceof Error ? error.message : 'adapter stream failed',
+      });
+    }
+  }
+
+  private translate(run: LiveRun, event: AgentEvent): RunnerEvent[] {
+    if (event.type === 'approval.requested') {
+      const { choices, decisions } = approvalChoices(event.options);
+      run.decisions.set(event.id, decisions);
+      return [toRunnerEvent(event, { choices, interruptRequested: run.interruptRequested })];
+    }
+    return [toRunnerEvent(event, { interruptRequested: run.interruptRequested })].filter(
+      (out): out is RunnerEvent => out !== null,
+    );
+  }
+
+  private push(run: LiveRun, event: RunnerEvent): void {
+    if (run.ended) return;
+    const waiter = run.waiting.shift();
+    if (waiter) waiter({ value: event, done: false });
+    else run.queue.push(event);
+    if (event.type === 'completed' || event.type === 'failed') this.end(run);
+  }
+
+  private end(run: LiveRun): void {
+    if (run.ended) return;
+    run.ended = true;
+    for (const waiter of run.waiting.splice(0)) waiter({ value: undefined as never, done: true });
+    this.runs.delete(run.runId);
+    // A session whose child process died is not reusable; forget it so the next turn
+    // opens a fresh one. Hermes sessions are HTTP conversations and stay.
+    if (run.live.adapterKind === 'acp' && isClosed(run.live.session)) {
+      this.sessions.delete(run.sessionId);
+    }
+  }
+}
+
+function isClosed(session: AgentSession): boolean {
+  const flag = (session as { closed?: unknown }).closed;
+  return flag === true;
+}
+
+/** Hermes keys a conversation by the id the client chooses: derive it from the hub's. */
+export function mintSessionRef(adapterKind: string, sessionId: string): string | null {
+  return adapterKind === 'hermes' ? `majlis-${sessionId.toLowerCase()}` : null;
+}
+
+/** Blocks the adapters cannot carry yet are named in the text, never dropped silently. */
+export function promptText(blocks: RunnerPromptBlock[]): string {
+  const parts: string[] = [];
+  for (const block of blocks) {
+    if (block.type === 'text') parts.push(block.text);
+    else if (block.type === 'attachment') parts.push(`[attachment ${block.kind} ${block.attachmentId}]`);
+    else parts.push(`[location ${block.latitude},${block.longitude}]`);
+  }
+  return parts.join('\n\n');
+}
+
+const TOOL_KINDS: Array<[RegExp, RunnerToolKind]> = [
+  [/^(terminal|shell|bash|execute|command|process)/i, 'shell'],
+  [/^(read|read_file|search_files|list|glob|view)/i, 'file_read'],
+  [/^(write|write_file|edit|patch|delete|create|move)/i, 'file_write'],
+  [/^(search|grep|find)/i, 'search'],
+  [/^(web|fetch|browser|http|web_search|web_extract)/i, 'web'],
+  [/^mcp/i, 'mcp'],
+  [/^(device|phone|camera|location)/i, 'device'],
+];
+
+/** The contract's `ToolCall.kind` from the agent's own word for the tool. */
+export function toolKindOf(kind: string, name?: string): RunnerToolKind {
+  for (const candidate of [kind, name ?? '']) {
+    for (const [pattern, mapped] of TOOL_KINDS) if (pattern.test(candidate)) return mapped;
+  }
+  return 'custom';
+}
+
+/** ACP permission kinds and Hermes choices, as hub decisions. */
+function decisionOf(option: ApprovalOption): RunnerDecision | null {
+  const word = `${option.kind} ${option.id}`.toLowerCase();
+  if (/reject|deny|no\b/.test(word)) return 'deny';
+  if (/always|permanent/.test(word)) return 'approve_always';
+  if (/session/.test(word)) return 'approve_session';
+  if (/allow|once|approve|yes\b|accept/.test(word)) return 'approve_once';
+  return null;
+}
+
+export function approvalChoices(options: ApprovalOption[]): {
+  choices: RunnerChoice[];
+  decisions: DecisionMap;
+} {
+  const decisions: DecisionMap = new Map();
+  const choices: RunnerChoice[] = [];
+  for (const option of options) {
+    const decision = decisionOf(option);
+    if (!decision || decisions.has(decision)) continue;
+    decisions.set(decision, option.id);
+    choices.push({ value: decision, label: option.label });
+  }
+  return { choices, decisions };
+}
+
+/** A decision the agent did not offer degrades to the nearest one it did. */
+function fallbackOption(options: DecisionMap, decision: RunnerDecision): string | undefined {
+  const order: RunnerDecision[] =
+    decision === 'deny'
+      ? ['deny']
+      : decision === 'approve_always'
+        ? ['approve_always', 'approve_session', 'approve_once']
+        : decision === 'approve_session'
+          ? ['approve_session', 'approve_once']
+          : ['approve_once'];
+  for (const candidate of order) {
+    const option = options.get(candidate);
+    if (option) return option;
+  }
+  return undefined;
+}
+
+export interface TranslateContext {
+  choices?: RunnerChoice[];
+  interruptRequested: boolean;
+}
+
+/** Adapter event -> sessions event. Pure; `null` when the contract has no event for it. */
+export function toRunnerEvent(event: AgentEvent, ctx: TranslateContext): RunnerEvent;
+export function toRunnerEvent(event: AgentEvent, ctx: TranslateContext): RunnerEvent | null {
+  switch (event.type) {
+    case 'message.delta':
+      return { type: 'message_delta', text: event.text };
+    case 'reasoning.delta':
+      return { type: 'reasoning_delta', text: event.text };
+    case 'tool.started':
+      return {
+        type: 'tool_started',
+        ref: event.id,
+        name: event.name ?? event.title,
+        kind: toolKindOf(event.kind, event.name),
+        title: event.title,
+        input: event.input ?? {},
+        subagentId: event.subagentId ?? null,
+      };
+    case 'tool.completed':
+      return {
+        type: 'tool_completed',
+        ref: event.id,
+        output: event.output,
+        exitCode: event.exitCode ?? null,
+      };
+    case 'tool.failed':
+      return {
+        type: 'tool_failed',
+        ref: event.id,
+        output: event.output,
+        exitCode: event.exitCode ?? null,
+      };
+    case 'approval.requested': {
+      const choices = ctx.choices ?? approvalChoices(event.options).choices;
+      const kind: RunnerApprovalKind = 'tool_call';
+      return {
+        type: 'approval_requested',
+        ref: event.id,
+        kind,
+        title: event.title,
+        description: event.description ?? null,
+        command: event.command ?? null,
+        choices,
+        allowAlways: choices.some((c) => c.value === 'approve_always'),
+        answerMode: 'choice',
+        toolRef: event.toolId ?? null,
+      };
+    }
+    case 'usage':
+      return {
+        type: 'usage',
+        modelLabel: event.modelLabel ?? null,
+        providerId: event.providerId ?? null,
+        ...(event.inputTokens !== undefined ? { inputTokens: event.inputTokens } : {}),
+        ...(event.outputTokens !== undefined ? { outputTokens: event.outputTokens } : {}),
+        ...(event.cacheReadTokens !== undefined ? { cacheReadTokens: event.cacheReadTokens } : {}),
+        ...(event.cacheWriteTokens !== undefined
+          ? { cacheWriteTokens: event.cacheWriteTokens }
+          : {}),
+        ...(event.reasoningTokens !== undefined ? { reasoningTokens: event.reasoningTokens } : {}),
+        costSource: 'unknown',
+      };
+    case 'context':
+      return { type: 'context', usedTokens: event.usedTokens, windowTokens: event.windowTokens ?? null };
+    case 'run.completed':
+      if (event.interrupted && !ctx.interruptRequested) {
+        // The agent stopped on its own; the hub never asked. Not a success.
+        return { type: 'failed', code: 'cancelled', message: 'the agent cancelled the turn' };
+      }
+      return { type: 'completed' };
+    case 'run.failed':
+      return { type: 'failed', code: 'agent_error', message: event.error };
+    case 'plan':
+      // No `/rt/sessions` event carries a plan yet; it is not a message.
+      return null;
+  }
+}
