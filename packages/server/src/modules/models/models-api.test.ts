@@ -19,7 +19,7 @@ interface Scripted {
   text?: string;
 }
 
-function scriptedFetch(byUrl: (url: string) => Scripted): {
+function scriptedFetch(byUrl: (url: string, headers: Record<string, string>) => Scripted): {
   fetchImpl: typeof fetch;
   calls: { url: string; headers: Record<string, string> }[];
 } {
@@ -30,7 +30,7 @@ function scriptedFetch(byUrl: (url: string) => Scripted): {
       headers[key.toLowerCase()] = value;
     }
     calls.push({ url: String(url), headers });
-    const answer = byUrl(String(url));
+    const answer = byUrl(String(url), headers);
     return Promise.resolve(
       new Response(answer.text ?? JSON.stringify(answer.json ?? {}), {
         status: answer.status ?? 200,
@@ -39,6 +39,19 @@ function scriptedFetch(byUrl: (url: string) => Scripted): {
     );
   }) as unknown as typeof fetch;
   return { fetchImpl, calls };
+}
+
+/**
+ * An endpoint that wants a key after all: 401 with its own words until the right
+ * `Authorization` header arrives. The hub must relay those words, never replace them.
+ */
+function scriptedFetchWithAuth(url: string, expected: () => string | null, ok: unknown) {
+  return scriptedFetch((requested, headers) => {
+    if (requested !== url) return { status: 503, json: { error: 'not part of this test' } };
+    const want = expected();
+    if (want && headers.authorization === `Bearer ${want}`) return { json: ok };
+    return { status: 401, json: { error: { message: 'missing api key' } } };
+  });
 }
 
 /** Anthropic answers with two models; everything else is not listening. */
@@ -88,22 +101,82 @@ const bySlug = (list: Provider[], slug: string): Provider => {
   return found;
 };
 
+/**
+ * Add a provider the way the dialog does: a preset, a key when the preset needs one.
+ * A workspace starts with no providers at all now (contract decision §26), so every test
+ * below says which ones this person added.
+ */
+async function addProvider(
+  hub: TestHub & { token: string },
+  preset: string,
+  extra: { api_key?: string | null; base_url?: string; label?: string; kind?: string } = {},
+): Promise<Provider> {
+  const response = await authed(hub, hub.token, {
+    method: 'POST',
+    url: '/api/v1/models/providers',
+    payload: {
+      preset,
+      label: extra.label ?? preset,
+      kind: extra.kind ?? 'llm',
+      ...(extra.base_url === undefined ? {} : { base_url: extra.base_url }),
+      ...(extra.api_key === undefined ? {} : { api_key: extra.api_key }),
+    },
+  });
+  if (response.statusCode !== 201) {
+    throw new Error(`adding ${preset} answered ${String(response.statusCode)}: ${response.body}`);
+  }
+  return response.json() as Provider;
+}
+
 describe('models: providers over HTTP', () => {
-  it('offers the bundled catalogue to a fresh workspace, all unconfigured', async () => {
+  it('gives a fresh workspace no providers, and offers the presets instead', async () => {
     const hub = await signedInHub();
     try {
-      const list = await providers(hub, hub.token);
-      expect(list.map((p) => p.slug)).toContain('anthropic');
-      expect(list.map((p) => p.slug)).toEqual(expect.arrayContaining(['openai-stt', 'elevenlabs']));
-      for (const provider of list) {
-        expect(provider.builtin).toBe(true);
-        // Visible and unconfigured, never hidden (ADR 0006's rule, ADR 0010 §1).
-        expect(provider.api_key).toBeNull();
-        expect(provider.models).toEqual([]);
-      }
-      // A local runtime takes no key, so it is "signed in" from the start.
-      expect(bySlug(list, 'ollama').auth).toEqual({ kind: 'none', signed_in: true });
-      expect(bySlug(list, 'anthropic').auth).toEqual({ kind: 'api_key', signed_in: false });
+      // The screen lists what the person configured, which on day one is nothing.
+      expect(await providers(hub, hub.token)).toEqual([]);
+
+      const response = await authed(hub, hub.token, {
+        method: 'GET',
+        url: '/api/v1/models/provider-presets',
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        items: {
+          id: string;
+          key: string;
+          base_url: string | null;
+          base_url_required: boolean;
+          local: boolean;
+          repeatable: boolean;
+        }[];
+        host: { containerized: boolean; loopback_alias: string };
+      };
+      const preset = (id: string) => {
+        const found = body.items.find((item) => item.id === id);
+        if (!found) throw new Error(`no preset "${id}"`);
+        return found;
+      };
+      // The local ones the owner asked for first.
+      expect(preset('lmstudio')).toMatchObject({
+        key: 'optional',
+        base_url: 'http://127.0.0.1:1234/v1',
+        base_url_required: false,
+        local: true,
+      });
+      // No host could be guessed for a LiteLLM proxy, so the person must give one.
+      expect(preset('litellm')).toMatchObject({
+        key: 'optional',
+        base_url: null,
+        base_url_required: true,
+      });
+      expect(preset('openai-compatible')).toMatchObject({ key: 'optional', repeatable: true });
+      expect(preset('ollama')).toMatchObject({ key: 'optional', local: true });
+      // Nothing here refuses a key — `none` is not a value this contract has.
+      expect(body.items.every((item) => item.key === 'required' || item.key === 'optional')).toBe(
+        true,
+      );
+      expect(preset('anthropic').key).toBe('required');
+      expect(body.host.loopback_alias).toBe('host.docker.internal');
     } finally {
       await hub.close();
     }
@@ -113,7 +186,7 @@ describe('models: providers over HTTP', () => {
     const { fetchImpl } = anthropicOnly();
     const hub = await signedInHub({}, { models: { fetchImpl } });
     try {
-      const anthropic = bySlug(await providers(hub, hub.token), 'anthropic');
+      const anthropic = await addProvider(hub, 'anthropic', { api_key: 'sk-ant-placeholder' });
       const saved = await authed(hub, hub.token, {
         method: 'PATCH',
         url: `/api/v1/models/providers/${anthropic.id}`,
@@ -142,20 +215,25 @@ describe('models: providers over HTTP', () => {
   it('shares one key across every provider row of the same credential family', async () => {
     const hub = await signedInHub();
     try {
-      const openai = bySlug(await providers(hub, hub.token), 'openai');
-      await authed(hub, hub.token, {
-        method: 'PATCH',
-        url: `/api/v1/models/providers/${openai.id}`,
-        payload: { api_key: 'sk-openai-once' },
-      });
+      await addProvider(hub, 'openai', { api_key: 'sk-openai-once' });
+      await addProvider(hub, 'anthropic', { api_key: 'sk-ant-other-account' });
 
-      // The chat tab, the dictation tab and the speech tab are one account (ADR 0010 §2).
+      // Adding OpenAI adds its whole credential family in one go: the chat tab, the
+      // dictation tab and the speech tab are one account (ADR 0010 §2).
       const list = await providers(hub, hub.token);
       expect(bySlug(list, 'openai').api_key).toBe('[stored]');
       expect(bySlug(list, 'openai-stt').api_key).toBe('[stored]');
       expect(bySlug(list, 'openai-tts').api_key).toBe('[stored]');
-      // A different account is untouched.
-      expect(bySlug(list, 'anthropic').api_key).toBeNull();
+
+      // A different account is a different key: clearing one leaves the other alone.
+      await authed(hub, hub.token, {
+        method: 'PATCH',
+        url: `/api/v1/models/providers/${bySlug(list, 'openai').id}`,
+        payload: { api_key: '' },
+      });
+      const after = await providers(hub, hub.token);
+      expect(bySlug(after, 'openai-tts').api_key).toBeNull();
+      expect(bySlug(after, 'anthropic').api_key).toBe('[stored]');
     } finally {
       await hub.close();
     }
@@ -164,9 +242,8 @@ describe('models: providers over HTTP', () => {
   it('leaves the stored key alone when a client sends the mask back', async () => {
     const hub = await signedInHub();
     try {
-      const anthropic = bySlug(await providers(hub, hub.token), 'anthropic');
+      const anthropic = await addProvider(hub, 'anthropic', { api_key: 'sk-real' });
       const url = `/api/v1/models/providers/${anthropic.id}`;
-      await authed(hub, hub.token, { method: 'PATCH', url, payload: { api_key: 'sk-real' } });
       // A form that round-trips what it was shown must not wipe the key.
       const again = await authed(hub, hub.token, {
         method: 'PATCH',
@@ -193,12 +270,8 @@ describe('models: providers over HTTP', () => {
     }));
     const hub = await signedInHub({}, { models: { fetchImpl } });
     try {
-      const anthropic = bySlug(await providers(hub, hub.token), 'anthropic');
-      await authed(hub, hub.token, {
-        method: 'PATCH',
-        url: `/api/v1/models/providers/${anthropic.id}`,
-        payload: { api_key: 'sk-wrong' },
-      });
+      const anthropic = await addProvider(hub, 'anthropic', { api_key: 'sk-wrong' });
+      await drainJobs(hub.app);
       calls.length = 0;
 
       const tested = await authed(hub, hub.token, {
@@ -219,7 +292,7 @@ describe('models: providers over HTTP', () => {
     }
   });
 
-  it('creates and removes a custom provider, and refuses to remove a built-in one', async () => {
+  it('removes any provider the workspace added, preset or custom', async () => {
     const hub = await signedInHub();
     try {
       const created = await authed(hub, hub.token, {
@@ -244,13 +317,243 @@ describe('models: providers over HTTP', () => {
       });
       expect(removed.statusCode).toBe(204);
 
-      const anthropic = bySlug(await providers(hub, hub.token), 'anthropic');
-      const refused = await authed(hub, hub.token, {
+      // A preset provider is not a fixture of the workspace either: what a person added,
+      // a person removes, and it goes back to being an offer in the preset list.
+      const anthropic = await addProvider(hub, 'anthropic', { api_key: 'sk-added-then-removed' });
+      const gone = await authed(hub, hub.token, {
         method: 'DELETE',
         url: `/api/v1/models/providers/${anthropic.id}`,
       });
-      expect(refused.statusCode).toBe(409);
-      expect(refused.json()).toMatchObject({ code: 'conflict' });
+      expect(gone.statusCode).toBe(204);
+      expect(await providers(hub, hub.token)).toEqual([]);
+
+      // And it can be added again, key and all.
+      const again = await addProvider(hub, 'anthropic', { api_key: 'sk-added-again' });
+      expect(again.api_key).toBe('[stored]');
+      expect(again.models).toEqual([]);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('refuses to add the same preset twice, and says which one', async () => {
+    const hub = await signedInHub();
+    try {
+      await addProvider(hub, 'lmstudio');
+      const again = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/models/providers',
+        payload: { preset: 'lmstudio', label: 'LM Studio', kind: 'llm' },
+      });
+      expect(again.statusCode).toBe(409);
+      expect(again.json()).toMatchObject({
+        code: 'conflict',
+        details: { reason: 'provider_exists', detail: expect.stringContaining('lmstudio') },
+      });
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('refuses a preset it does not know, and lists the ones it does', async () => {
+    const hub = await signedInHub();
+    try {
+      const response = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/models/providers',
+        payload: { preset: 'not-a-provider', label: 'x', kind: 'llm' },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ code: 'validation_failed' });
+    } finally {
+      await hub.close();
+    }
+  });
+});
+
+/**
+ * The local providers, which is what the owner asked for first: a model server on his
+ * own machine, reached with no key at all — and the defect of 2026-09-22, where a
+ * provider that needed no key was told it was missing one and given nowhere to type it.
+ */
+describe('models: a local provider, with no key and with one', () => {
+  /** LM Studio's OpenAI-compatible surface, answering `GET /v1/models` to anybody. */
+  function lmStudio(host = 'http://host.docker.internal:1234/v1') {
+    return scriptedFetch((url) =>
+      url === `${host}/models`
+        ? {
+            json: {
+              data: [{ id: 'qwen2.5-coder-7b-instruct' }, { id: 'nomic-embed-text-v1.5' }],
+            },
+          }
+        : { status: 503, json: { error: 'not part of this test' } },
+    );
+  }
+
+  it('goes from add to fetched models to default, without a key anywhere', async () => {
+    const { fetchImpl, calls } = lmStudio();
+    const hub = await signedInHub({}, { models: { fetchImpl } });
+    try {
+      // 1. Fetch, in the dialog, before anything is saved.
+      const probed = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/models/provider-probes',
+        payload: { preset: 'lmstudio', base_url: 'http://host.docker.internal:1234/v1' },
+      });
+      expect(probed.statusCode).toBe(200);
+      const probe = probed.json() as {
+        ok: boolean;
+        message: string | null;
+        models: { id: string }[];
+      };
+      expect(probe.ok).toBe(true);
+      expect(probe.message).toBeNull();
+      expect(probe.models.map((m) => m.id)).toContain('qwen2.5-coder-7b-instruct');
+      // Nothing was stored by a probe.
+      expect(await providers(hub, hub.token)).toEqual([]);
+      // And it was asked with no Authorization header at all.
+      expect(calls[0]!.headers.authorization).toBeUndefined();
+
+      // 2. Add it — no key, no complaint.
+      const added = await addProvider(hub, 'lmstudio', {
+        base_url: 'http://host.docker.internal:1234/v1',
+      });
+      expect(added.auth).toEqual({ kind: 'none', signed_in: true });
+      expect(added.api_key).toBeNull();
+      await drainJobs(hub.app);
+
+      // 3. The model list arrived by itself, from the provider's own endpoint.
+      const row = bySlug(await providers(hub, hub.token), 'lmstudio');
+      expect(row.catalogue.error).toBeNull();
+      expect(row.catalogue.status).toBe('ready');
+      expect(row.models.map((m) => m.model)).toContain('qwen2.5-coder-7b-instruct');
+
+      // 4. Test says the provider answered — never that a key is missing.
+      const tested = await authed(hub, hub.token, {
+        method: 'POST',
+        url: `/api/v1/models/providers/${row.id}/test`,
+      });
+      const outcome = tested.json() as { ok: boolean; message: string };
+      expect(outcome.ok).toBe(true);
+      expect(outcome.message).not.toContain('key');
+
+      // 5. And it can be the workspace default.
+      const defaults = await authed(hub, hub.token, {
+        method: 'PUT',
+        url: '/api/v1/models/defaults',
+        payload: { default: { provider_id: row.id, model: 'qwen2.5-coder-7b-instruct' } },
+      });
+      expect(defaults.statusCode).toBe(200);
+      expect((defaults.json() as { default: { model: string } }).default.model).toBe(
+        'qwen2.5-coder-7b-instruct',
+      );
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('never invents "missing key" for a keyless provider, and always takes one', async () => {
+    // The owner's own case: `cli-proxy-api`, added as a custom OpenAI-compatible
+    // endpoint, which turns out to want a key after all.
+    let key: string | null = null;
+    const { fetchImpl } = scriptedFetchWithAuth('http://cli-proxy-api:8317/v1/models', () => key, {
+      data: [{ id: 'gemini-2.5-pro' }],
+    });
+    const hub = await signedInHub({}, { models: { fetchImpl } });
+    try {
+      const created = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/models/providers',
+        payload: {
+          label: 'cli-proxy-api',
+          kind: 'llm',
+          base_url: 'http://cli-proxy-api:8317/v1',
+          api_mode: 'chat_completions',
+        },
+      });
+      expect(created.statusCode).toBe(201);
+      const custom = created.json() as Provider;
+      // The card's badge and the card's error can no longer contradict each other: the
+      // hub demands no key (`kind: none`) and therefore never reports one as missing.
+      expect(custom.auth).toEqual({ kind: 'none', signed_in: true });
+      await drainJobs(hub.app);
+
+      const before = bySlug(await providers(hub, hub.token), custom.slug);
+      // The upstream 401 is the only thing allowed to mention a key, in its own words.
+      expect(before.catalogue.error).toContain('missing api key');
+      const failed = await authed(hub, hub.token, {
+        method: 'POST',
+        url: `/api/v1/models/providers/${custom.id}/test`,
+      });
+      const outcome = failed.json() as { ok: boolean; message: string };
+      expect(outcome.ok).toBe(false);
+      expect(outcome.message).toContain('missing api key');
+      // Not our sentence for "no key is stored" — that check is gone for these providers.
+      expect(outcome.message).not.toContain('No API key is stored');
+
+      // And a key can be typed on exactly this provider, which is what was impossible.
+      key = 'proxy-master-key';
+      const saved = await authed(hub, hub.token, {
+        method: 'PATCH',
+        url: `/api/v1/models/providers/${custom.id}`,
+        payload: { api_key: 'proxy-master-key' },
+      });
+      expect(saved.statusCode).toBe(200);
+      const withKey = saved.json() as Provider;
+      expect(withKey.api_key).toBe('[stored]');
+      // Still "no key required" — storing one does not change what the endpoint demands,
+      // and the badge stays honest instead of flipping to "needs a key".
+      expect(withKey.auth).toEqual({ kind: 'none', signed_in: true });
+      await drainJobs(hub.app);
+
+      const passed = await authed(hub, hub.token, {
+        method: 'POST',
+        url: `/api/v1/models/providers/${custom.id}/test`,
+      });
+      expect((passed.json() as { ok: boolean }).ok).toBe(true);
+      expect(
+        bySlug(await providers(hub, hub.token), custom.slug).models.map((m) => m.model),
+      ).toEqual(['gemini-2.5-pro']);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('reports a probe of an endpoint that is not listening as a failure, not an empty list', async () => {
+    const { fetchImpl } = scriptedFetch(() => ({ status: 502, text: 'Bad Gateway' }));
+    const hub = await signedInHub({}, { models: { fetchImpl } });
+    try {
+      const probed = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/models/provider-probes',
+        payload: { base_url: 'http://127.0.0.1:1234/v1' },
+      });
+      expect(probed.statusCode).toBe(200);
+      const probe = probed.json() as { ok: boolean; message: string; models: unknown[] };
+      expect(probe.ok).toBe(false);
+      expect(probe.models).toEqual([]);
+      expect(probe.message).toContain('Bad Gateway');
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('refuses to probe or add a LiteLLM proxy with no address', async () => {
+    const hub = await signedInHub();
+    try {
+      const probed = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/models/provider-probes',
+        payload: { preset: 'litellm' },
+      });
+      expect(probed.statusCode).toBe(400);
+      const added = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/models/providers',
+        payload: { preset: 'litellm', label: 'LiteLLM', kind: 'llm' },
+      });
+      expect(added.statusCode).toBe(400);
+      expect(added.json()).toMatchObject({ code: 'validation_failed' });
     } finally {
       await hub.close();
     }
@@ -261,12 +564,7 @@ describe('models: catalogue and defaults', () => {
   async function hubWithModels() {
     const { fetchImpl } = anthropicOnly();
     const hub = await signedInHub({}, { models: { fetchImpl } });
-    const anthropic = bySlug(await providers(hub, hub.token), 'anthropic');
-    await authed(hub, hub.token, {
-      method: 'PATCH',
-      url: `/api/v1/models/providers/${anthropic.id}`,
-      payload: { api_key: 'sk-ant-scripted' },
-    });
+    const anthropic = await addProvider(hub, 'anthropic', { api_key: 'sk-ant-scripted' });
     await drainJobs(hub.app);
     return { hub, providerId: anthropic.id };
   }
@@ -453,8 +751,19 @@ describe('models: speech', () => {
       // A sentence in the request's language, as the contract's example shows — the key
       // stays inside the server (`models/index.ts` §localiseSpeech).
       expect(speech.stt.reason).toBe('No speech-to-text provider is chosen.');
-      expect(speech.stt.providers.map((p) => p.slug)).toEqual(['openai-stt']);
-      expect(speech.tts.providers.map((p) => p.slug).sort()).toEqual(['elevenlabs', 'openai-tts']);
+      // Nothing was added yet, so there is nothing to choose from — and the screen says
+      // why rather than drawing an empty list.
+      expect(speech.stt.providers).toEqual([]);
+
+      // Adding OpenAI on the chat tab is what puts dictation and speech on the others.
+      await addProvider(hub, 'openai', { api_key: 'sk-openai-once' });
+      const after = await authed(hub, hub.token, {
+        method: 'GET',
+        url: '/api/v1/models/speech',
+      });
+      const filled = after.json() as typeof speech;
+      expect(filled.stt.providers.map((p) => p.slug)).toEqual(['openai-stt']);
+      expect(filled.tts.providers.map((p) => p.slug)).toEqual(['openai-tts']);
     } finally {
       await hub.close();
     }
@@ -463,6 +772,7 @@ describe('models: speech', () => {
   it('becomes ready once a provider is chosen and its family has a key', async () => {
     const hub = await signedInHub();
     try {
+      await addProvider(hub, 'openai', { api_key: 'sk-openai-chat' });
       const tts = bySlug(await providers(hub, hub.token), 'openai-tts');
       const updated = await authed(hub, hub.token, {
         method: 'PATCH',
@@ -521,6 +831,7 @@ describe('models: speech', () => {
 
     const hub = await signedInHub({}, { models: { fetchImpl } });
     try {
+      await addProvider(hub, 'openai', { api_key: 'sk-openai-chat' });
       const tts = bySlug(await providers(hub, hub.token), 'openai-tts');
       await authed(hub, hub.token, {
         method: 'PATCH',
@@ -567,7 +878,7 @@ describe('models: speech', () => {
   it('is still a documented 501 for OAuth sign-in, because no provider uses it yet', async () => {
     const hub = await signedInHub();
     try {
-      const anthropic = bySlug(await providers(hub, hub.token), 'anthropic');
+      const anthropic = await addProvider(hub, 'anthropic', { api_key: 'sk-ant-for-signin' });
       const response = await authed(hub, hub.token, {
         method: 'POST',
         url: `/api/v1/models/providers/${anthropic.id}/sign-in`,
@@ -590,13 +901,8 @@ describe('models: one key, every agent (ADR 0010)', () => {
     const { fetchImpl } = anthropicOnly();
     const hub = await signedInHub({}, { models: { fetchImpl } });
     try {
-      // 1. The owner pastes the Anthropic key, once, on the Models screen.
-      const anthropic = bySlug(await providers(hub, hub.token), 'anthropic');
-      await authed(hub, hub.token, {
-        method: 'PATCH',
-        url: `/api/v1/models/providers/${anthropic.id}`,
-        payload: { api_key: 'sk-ant-the-one-key' },
-      });
+      // 1. The owner adds Anthropic and pastes its key, once, on the Models screen.
+      const anthropic = await addProvider(hub, 'anthropic', { api_key: 'sk-ant-the-one-key' });
       await drainJobs(hub.app);
 
       // 2. He picks a coding model. He never opens an agent's settings.
@@ -641,12 +947,7 @@ describe('models: one key, every agent (ADR 0010)', () => {
     const { fetchImpl } = anthropicOnly();
     const hub = await signedInHub({}, { models: { fetchImpl } });
     try {
-      const anthropic = bySlug(await providers(hub, hub.token), 'anthropic');
-      await authed(hub, hub.token, {
-        method: 'PATCH',
-        url: `/api/v1/models/providers/${anthropic.id}`,
-        payload: { api_key: 'sk-ant-the-one-key' },
-      });
+      const anthropic = await addProvider(hub, 'anthropic', { api_key: 'sk-ant-the-one-key' });
       await drainJobs(hub.app);
       await authed(hub, hub.token, {
         method: 'PUT',
@@ -696,12 +997,7 @@ describe('models: one key, every agent (ADR 0010)', () => {
       },
     );
     try {
-      const anthropic = bySlug(await providers(hub, hub.token), 'anthropic');
-      await authed(hub, hub.token, {
-        method: 'PATCH',
-        url: `/api/v1/models/providers/${anthropic.id}`,
-        payload: { api_key: 'sk-ant-for-hermes' },
-      });
+      const anthropic = await addProvider(hub, 'anthropic', { api_key: 'sk-ant-for-hermes' });
       await drainJobs(hub.app);
 
       // The key landed in Hermes's own `.env`, under the name Hermes reads it from.
@@ -742,12 +1038,7 @@ describe('models: one key, every agent (ADR 0010)', () => {
       },
     );
     try {
-      const groq = bySlug(await providers(hub, hub.token), 'groq');
-      await authed(hub, hub.token, {
-        method: 'PATCH',
-        url: `/api/v1/models/providers/${groq.id}`,
-        payload: { api_key: 'gsk-scripted' },
-      });
+      const groq = await addProvider(hub, 'groq', { api_key: 'gsk-scripted' });
       await drainJobs(hub.app);
       await authed(hub, hub.token, {
         method: 'PUT',
@@ -771,12 +1062,7 @@ describe('models: one key, every agent (ADR 0010)', () => {
     // The suite's PATH has no `hermes`, so the runtime is `absent`.
     const hub = await signedInHub({}, { models: { fetchImpl } });
     try {
-      const anthropic = bySlug(await providers(hub, hub.token), 'anthropic');
-      await authed(hub, hub.token, {
-        method: 'PATCH',
-        url: `/api/v1/models/providers/${anthropic.id}`,
-        payload: { api_key: 'sk-ant-for-nobody' },
-      });
+      await addProvider(hub, 'anthropic', { api_key: 'sk-ant-for-nobody' });
       await drainJobs(hub.app);
       expect(() => readFileSync(path.join(hub.dataDir, 'hermes', '.env'), 'utf8')).toThrow();
     } finally {
@@ -803,12 +1089,7 @@ describe.skipIf(!process.env.MAJLIS_LIVE_PROVIDER)('models: a live provider', ()
     // The real `fetch`: this is the one test in the suite that is allowed out.
     const hub = await signedInHub({}, { models: { fetchImpl: globalThis.fetch } });
     try {
-      const provider = bySlug(await providers(hub, hub.token), slug);
-      await authed(hub, hub.token, {
-        method: 'PATCH',
-        url: `/api/v1/models/providers/${provider.id}`,
-        payload: { api_key: key },
-      });
+      const provider = await addProvider(hub, slug, { api_key: key ?? null });
       const tested = await authed(hub, hub.token, {
         method: 'POST',
         url: `/api/v1/models/providers/${provider.id}/test`,

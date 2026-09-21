@@ -15581,7 +15581,7 @@ components:
           type: boolean
         message:
           type: [string, 'null']
-          description: 'Why it failed, ending in the endpoint''s own words. `null` when it worked.'
+          description: "Why it failed, ending in the endpoint's own words. `null` when it worked."
         duration_ms:
           type: integer
         models:

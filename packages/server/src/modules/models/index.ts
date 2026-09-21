@@ -1,7 +1,8 @@
 /**
  * Module `models`: the hub's one provider and credential store (ADR 0010).
  *
- * Implemented: `models.listProviders`, `models.createProvider`, `models.updateProvider`,
+ * Implemented: `models.listProviders`, `models.listProviderPresets`, `models.probeProvider`,
+ * `models.createProvider`, `models.updateProvider`,
  * `models.deleteProvider`, `models.refreshProvider`, `models.testProvider`,
  * `models.putModel`, `models.deleteModel`, `models.listCatalogue`, `models.getDefaults`,
  * `models.setDefaults`, `models.listEnsembles`, `models.createEnsemble`,
@@ -32,13 +33,7 @@ import { createContractIndex } from '../../lib/contract.js';
 import { defineModule } from '../../lib/module.js';
 import { defineRoute } from '../../lib/route.js';
 import { t } from '../../i18n/index.js';
-import {
-  ownerUser,
-  requireRole,
-  requireUser,
-  requireWorkspace,
-  type WorkspaceScope,
-} from '../auth/index.js';
+import { requireRole, requireUser, requireWorkspace, type WorkspaceScope } from '../auth/index.js';
 import { auditFor, jobRunnerFor } from '../audit/index.js';
 import {
   hermesRuntimeFor,
@@ -56,23 +51,29 @@ import {
   type ModelPatchInput,
   type ProviderCreateInput,
   type ProviderPatchInput,
+  type ProviderProbeInput,
   type SpeechPatchInput,
 } from './service.js';
 
 export { ModelsService } from './service.js';
 export type {
   Actor,
+  ContractProviderPreset,
   DefaultsWriteInput,
   EnsembleWriteInput,
   HermesTarget,
   ModelPatchInput,
   ModelRefInput,
   ModelsServiceOptions,
+  ProbeOutcome,
   ProviderCreateInput,
+  ProviderHostInfo,
   ProviderPatchInput,
+  ProviderProbeInput,
   SpeechPatchInput,
   TestOutcome,
 } from './service.js';
+export { LOOPBACK_ALIAS, hostInfo } from './service.js';
 export { DataKeyRing, MASKED, hintOf, isMask, maskSecret } from './crypto.js';
 export type { SealedSecret } from './crypto.js';
 export { SecretStore } from './secrets.js';
@@ -80,12 +81,13 @@ export type { SecretSummary } from './secrets.js';
 export {
   PROVIDER_CATALOGUE,
   assertCatalogueIsWellFormed,
+  authKindOf,
   catalogueEntry,
   envVarOf,
   familyEntries,
   secretNameOf,
 } from './catalogue.js';
-export type { CredentialFamily, ProviderCatalogueEntry } from './catalogue.js';
+export type { CredentialFamily, KeyRequirement, ProviderCatalogueEntry } from './catalogue.js';
 export { AUXILIARY_TASKS, roleForAdapter } from './defaults.js';
 export {
   agentEnvironment,
@@ -170,17 +172,13 @@ const actorOf = (request: FastifyRequest): { userId: string } => {
   return { userId: principal.user.id };
 };
 
-/** Seeds the workspace's providers and hands back scope + actor in one step. */
+/** The service, the workspace and the acting user in one step. */
 function enter(request: FastifyRequest): {
   service: ModelsService;
   scope: WorkspaceScope;
   actor: { userId: string };
 } {
-  const service = contextOf(request.server);
-  const scope = scopeOf(request);
-  const actor = actorOf(request);
-  service.ready(scope, actor.userId);
-  return { service, scope, actor };
+  return { service: contextOf(request.server), scope: scopeOf(request), actor: actorOf(request) };
 }
 
 export const modelsModule = defineModule({
@@ -194,17 +192,14 @@ export const modelsModule = defineModule({
     };
 
     // The port `agents` asked for: every coding agent's credentials and default model
-    // come from here, so installing one needs no key entry (ADR 0010).
-    const owner = ownerUser(requireSqlite(app.hub.database));
+    // come from here, so installing one needs no key entry (ADR 0010). It reads rows and
+    // creates none, so it needs no owner to attribute anything to.
     const port: AgentModelsPort = {
       environmentFor(workspace, declared, extra) {
-        const service = contextOf(app);
-        service.readyById(workspace, owner?.id ?? 'system');
-        return service.environmentFor(workspace, declared, extra);
+        return contextOf(app).environmentFor(workspace, declared, extra);
       },
       defaultModelFor(workspace, adapterKind, pinnedModelId) {
         const service = contextOf(app);
-        service.readyById(workspace, owner?.id ?? 'system');
         if (pinnedModelId) {
           const pinned = service.refForModelId(workspace, pinnedModelId);
           if (pinned) return pinned;
@@ -225,6 +220,32 @@ export const modelsModule = defineModule({
           items: service.listProviders(scope, {
             ...(query.kind ? { kind: query.kind as string } : {}),
           }),
+        };
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.listProviderPresets',
+      handler: (request, { query }) => {
+        const { service } = enter(request);
+        return service.listPresets({ ...(query.kind ? { kind: query.kind as string } : {}) });
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.probeProvider',
+      handler: async (request, { body }) => {
+        const { service } = enter(request);
+        const outcome = await service.probeProvider(body as ProviderProbeInput);
+        return {
+          ok: outcome.ok,
+          // The endpoint's own words after the localised sentence, exactly as
+          // `models.testProvider` does it; null when there was nothing to explain.
+          message: outcome.reasonKey
+            ? [t(outcome.reasonKey, request.language), outcome.detail].filter(Boolean).join(' — ')
+            : null,
+          duration_ms: outcome.durationMs,
+          models: outcome.models,
         };
       },
     });
