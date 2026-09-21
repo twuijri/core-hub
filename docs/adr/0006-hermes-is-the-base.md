@@ -26,9 +26,18 @@ the messaging channels, and the others are tools you add.
 - Hermes only: loses the coding agents that the board and rooms exist for.
 
 ## Consequences
-- The Docker image contains the hub and the Hermes runtime only. Coding
-  agents are installed on demand into the data volume by the hub's own setup
-  jobs, so the image stays small and the user decides what lives on the box.
+- The Docker image contains the hub and the Hermes runtime only, so it stays
+  small.
+- Side agents come from a **curated catalog** shipped with the hub
+  (`packages/server/src/modules/agents/catalog/`): the project owner approves
+  each entry (id, install recipe, version pin, health check, licence). A user
+  can install or remove only catalog entries — never an arbitrary agent — and
+  the hub runs the install as one of its own jobs.
+- Installs land in the data volume (`${DATA_DIR}/agents/<id>`), never in the
+  image, and are recorded in the `agents` table with their state
+  (`not_installed`, `installing`, `installed`, `failed`). They survive a
+  container restart and an image rebuild; on start the hub reconciles the
+  table against the volume and repairs or marks what is missing.
 The Agent Manager screen has one pinned "Hermes" section and one "Coding
 agents" section with install buttons. The `hermes` adapter is required for the
 server to report `ready`; ACP/process adapters are optional.
