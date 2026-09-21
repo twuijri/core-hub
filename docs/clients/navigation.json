@@ -1,12 +1,7 @@
 {
   "$comment": "Machine-readable navigation contract for every Majlis client (web, desktop, android, ios). docs/clients/NAVIGATION.md explains it; scripts/navigation-check.mjs validates it; each client's parity test reads it.",
   "version": 1,
-  "surfaces": [
-    "web",
-    "desktop",
-    "android",
-    "ios"
-  ],
+  "surfaces": ["web", "desktop", "android", "ios"],
   "terms": {
     "new_chat": {
       "en": "New chat",
@@ -166,9 +161,7 @@
       "entry": {
         "kind": "rail"
       },
-      "roles": [
-        "member"
-      ],
+      "roles": ["member"],
       "note": "Opens a draft session and closes the menu."
     },
     {
@@ -179,9 +172,7 @@
       "entry": {
         "kind": "rail"
       },
-      "roles": [
-        "member"
-      ],
+      "roles": ["member"],
       "note": "A search sheet over sessions with the field focused; not History. A result from the global agent opens global_agent."
     },
     {
@@ -192,13 +183,8 @@
       "entry": {
         "kind": "rail"
       },
-      "roles": [
-        "member"
-      ],
-      "tabs": [
-        "app",
-        "devices"
-      ],
+      "roles": ["member"],
+      "tabs": ["app", "devices"],
       "note": "Tab devices is admin-only."
     },
     {
@@ -209,9 +195,7 @@
       "entry": {
         "kind": "rail"
       },
-      "roles": [
-        "admin"
-      ],
+      "roles": ["admin"],
       "note": "The registry from the server; each agent card enters the agent level."
     },
     {
@@ -222,16 +206,8 @@
       "entry": {
         "kind": "rail"
       },
-      "roles": [
-        "member"
-      ],
-      "tabs": [
-        "general",
-        "auxiliary",
-        "ensembles",
-        "stt_providers",
-        "tts_providers"
-      ],
+      "roles": ["member"],
+      "tabs": ["general", "auxiliary", "ensembles", "stt_providers", "tts_providers"],
       "note": "Providers, keys and voice providers live here, never in Settings."
     },
     {
@@ -242,9 +218,7 @@
       "entry": {
         "kind": "rail"
       },
-      "roles": [
-        "member"
-      ],
+      "roles": ["member"],
       "note": "Journal, notes/memory browser, files, search (Phase 4)."
     },
     {
@@ -255,9 +229,7 @@
       "entry": {
         "kind": "segment"
       },
-      "roles": [
-        "member"
-      ],
+      "roles": ["member"],
       "note": "Session list: pinned, recent with counter, categories, workspace filter."
     },
     {
@@ -268,13 +240,8 @@
       "entry": {
         "kind": "segment"
       },
-      "roles": [
-        "member"
-      ],
-      "actions": [
-        "new_room",
-        "join_by_code"
-      ]
+      "roles": ["member"],
+      "actions": ["new_room", "join_by_code"]
     },
     {
       "id": "tasks",
@@ -284,9 +251,7 @@
       "entry": {
         "kind": "segment"
       },
-      "roles": [
-        "member"
-      ],
+      "roles": ["member"],
       "note": "Projects and tasks (kanban) with agent assignment. Named Tasks everywhere (owner decision 2026-09-21); the contract tag `board` is being renamed to `tasks` in a parallel branch."
     },
     {
@@ -297,9 +262,7 @@
       "entry": {
         "kind": "segment"
       },
-      "roles": [
-        "member"
-      ],
+      "roles": ["member"],
       "note": "Cron jobs and workflows with status badges."
     },
     {
@@ -310,9 +273,7 @@
       "entry": {
         "kind": "segment"
       },
-      "roles": [
-        "member"
-      ],
+      "roles": ["member"],
       "note": "A page: pinned, collapsible groups by source, multi-select (archive/cancel/delete), archive. Opening a session does not change the selected segment."
     },
     {
@@ -323,9 +284,7 @@
       "entry": {
         "kind": "footer"
       },
-      "roles": [
-        "member"
-      ],
+      "roles": ["member"],
       "note": "One screen with tabs and a Tools section; no settings inside settings."
     },
     {
@@ -336,9 +295,7 @@
       "entry": {
         "kind": "settings-tab"
       },
-      "roles": [
-        "member"
-      ]
+      "roles": ["member"]
     },
     {
       "id": "users",
@@ -348,9 +305,7 @@
       "entry": {
         "kind": "settings-tab"
       },
-      "roles": [
-        "admin"
-      ],
+      "roles": ["admin"],
       "global": true
     },
     {
@@ -361,9 +316,7 @@
       "entry": {
         "kind": "settings-tab"
       },
-      "roles": [
-        "admin"
-      ]
+      "roles": ["admin"]
     },
     {
       "id": "display",
@@ -373,9 +326,7 @@
       "entry": {
         "kind": "settings-tab"
       },
-      "roles": [
-        "member"
-      ],
+      "roles": ["member"],
       "note": "Connection mode, link target, input behaviour while busy, theme and background from the server, app language, text size."
     },
     {
@@ -386,9 +337,7 @@
       "entry": {
         "kind": "settings-tab"
       },
-      "roles": [
-        "member"
-      ]
+      "roles": ["member"]
     },
     {
       "id": "privacy",
@@ -398,9 +347,7 @@
       "entry": {
         "kind": "settings-tab"
       },
-      "roles": [
-        "member"
-      ]
+      "roles": ["member"]
     },
     {
       "id": "this_device",
@@ -410,14 +357,8 @@
       "entry": {
         "kind": "settings-tab"
       },
-      "roles": [
-        "member"
-      ],
-      "surfaces": [
-        "desktop",
-        "android",
-        "ios"
-      ],
+      "roles": ["member"],
+      "surfaces": ["desktop", "android", "ios"],
       "note": "Hub connection, voice input mode, dictation language, spoken replies, self-update where the platform allows it."
     },
     {
@@ -428,9 +369,7 @@
       "entry": {
         "kind": "settings-tab"
       },
-      "roles": [
-        "member"
-      ]
+      "roles": ["member"]
     },
     {
       "id": "logs",
@@ -440,9 +379,7 @@
       "entry": {
         "kind": "settings-tool"
       },
-      "roles": [
-        "member"
-      ]
+      "roles": ["member"]
     },
     {
       "id": "usage",
@@ -452,9 +389,7 @@
       "entry": {
         "kind": "settings-tool"
       },
-      "roles": [
-        "member"
-      ],
+      "roles": ["member"],
       "note": "Tokens and costs."
     },
     {
@@ -465,9 +400,7 @@
       "entry": {
         "kind": "settings-tool"
       },
-      "roles": [
-        "admin"
-      ],
+      "roles": ["admin"],
       "global": true,
       "note": "Runtime processes and snapshots."
     },
@@ -479,9 +412,7 @@
       "entry": {
         "kind": "settings-tool"
       },
-      "roles": [
-        "member"
-      ],
+      "roles": ["member"],
       "note": "Theme and background. The footer theme chip is a local preference, not an entry."
     },
     {
@@ -492,9 +423,7 @@
       "entry": {
         "kind": "settings-tool"
       },
-      "roles": [
-        "admin"
-      ],
+      "roles": ["admin"],
       "note": "Manage workspaces (ADR 0005). The footer workspace chip only switches the X-Hub-Profile scope."
     },
     {
@@ -505,9 +434,7 @@
       "entry": {
         "kind": "settings-tool"
       },
-      "roles": [
-        "admin"
-      ],
+      "roles": ["admin"],
       "global": true
     },
     {
@@ -518,9 +445,7 @@
       "entry": {
         "kind": "settings-tool"
       },
-      "roles": [
-        "admin"
-      ]
+      "roles": ["admin"]
     },
     {
       "id": "agent_skills",
@@ -531,9 +456,7 @@
       "entry": {
         "kind": "agent"
       },
-      "roles": [
-        "admin"
-      ]
+      "roles": ["admin"]
     },
     {
       "id": "agent_mcp",
@@ -544,9 +467,7 @@
       "entry": {
         "kind": "agent"
       },
-      "roles": [
-        "admin"
-      ]
+      "roles": ["admin"]
     },
     {
       "id": "agent_memory",
@@ -557,9 +478,7 @@
       "entry": {
         "kind": "agent"
       },
-      "roles": [
-        "admin"
-      ]
+      "roles": ["admin"]
     },
     {
       "id": "agent_jobs",
@@ -570,9 +489,7 @@
       "entry": {
         "kind": "agent"
       },
-      "roles": [
-        "admin"
-      ]
+      "roles": ["admin"]
     },
     {
       "id": "agent_channels",
@@ -583,9 +500,7 @@
       "entry": {
         "kind": "agent"
       },
-      "roles": [
-        "admin"
-      ]
+      "roles": ["admin"]
     },
     {
       "id": "agent_plugins",
@@ -596,9 +511,7 @@
       "entry": {
         "kind": "agent"
       },
-      "roles": [
-        "admin"
-      ]
+      "roles": ["admin"]
     },
     {
       "id": "agent_settings",
@@ -609,9 +522,7 @@
       "entry": {
         "kind": "agent"
       },
-      "roles": [
-        "admin"
-      ],
+      "roles": ["admin"],
       "note": "Always last. Tabs come from the adapter's settings descriptor (ADR 0002)."
     },
     {
@@ -621,34 +532,15 @@
       "level": "app",
       "entry": {
         "kind": "secondary-only",
-        "reachedFrom": [
-          "search"
-        ]
+        "reachedFrom": ["search"]
       },
-      "roles": [
-        "member"
-      ],
+      "roles": ["member"],
       "note": "No menu entry; reached from search results and the pending-actions bar."
     }
   ],
-  "rail": [
-    "new_chat",
-    "search",
-    "device_connections",
-    "agent_manager",
-    "models",
-    "knowledge"
-  ],
-  "segments": [
-    "chat",
-    "rooms",
-    "tasks",
-    "schedules",
-    "history"
-  ],
-  "footer": [
-    "settings"
-  ],
+  "rail": ["new_chat", "search", "device_connections", "agent_manager", "models", "knowledge"],
+  "segments": ["chat", "rooms", "tasks", "schedules", "history"],
+  "footer": ["settings"],
   "settingsTabs": [
     "account",
     "users",
@@ -659,15 +551,7 @@
     "this_device",
     "about"
   ],
-  "settingsTools": [
-    "logs",
-    "usage",
-    "performance",
-    "theme",
-    "workspaces",
-    "updates",
-    "plugins"
-  ],
+  "settingsTools": ["logs", "usage", "performance", "theme", "workspaces", "updates", "plugins"],
   "agentLevel": [
     "agent_skills",
     "agent_mcp",
@@ -678,13 +562,8 @@
     "agent_settings"
   ],
   "secondaryEntries": {
-    "chat": [
-      "history",
-      "search"
-    ],
-    "global_agent": [
-      "search"
-    ]
+    "chat": ["history", "search"],
+    "global_agent": ["search"]
   },
   "footerChips": {
     "$comment": "Not destinations: they switch state in place and never navigate.",
