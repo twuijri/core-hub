@@ -3,14 +3,42 @@
  * rename, search, fork, export, workspace isolation — and the operations
  * that are honestly still `501`.
  */
+import { Ajv2020 } from 'ajv/dist/2020.js';
+import addFormatsModule, { type FormatsPlugin } from 'ajv-formats';
 import { describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import { loadOpenApiDocument } from '@corehub/contracts';
 import { modules as defaultModules } from '../index.js';
 import { testHub, type TestHub } from '../../../tests/unit/helpers.js';
 import { createSessionsModule } from './index.js';
 import { FakeAgentDirectory, FakeAgentRunner, fakeHermes } from './testing/fake-runner.js';
 
 const AGENT_ID = '01J8QK3ZR2W7M5N4P6T8V9X0AG';
+
+/**
+ * Validate a response body against a `components.schemas` entry of
+ * packages/contracts/openapi.yaml. The event schemas already cover these
+ * shapes as they travel over the socket; this asserts the HTTP side answers
+ * with the same document the contract declares.
+ */
+const document = loadOpenApiDocument();
+const ajv = new Ajv2020({ strict: false, allErrors: true, validateFormats: true });
+const addFormats = ((addFormatsModule as unknown as { default?: unknown }).default ??
+  addFormatsModule) as FormatsPlugin;
+addFormats(ajv);
+
+function expectMatchesSchema(name: string, data: unknown): void {
+  const validate = ajv.compile({
+    $ref: `#/components/schemas/${name}`,
+    components: document?.components ?? {},
+  });
+  expect(
+    validate(data)
+      ? []
+      : (validate.errors ?? []).map((e) => `${e.instancePath || '/'} ${e.message ?? ''}`),
+    `response does not match ${name}`,
+  ).toEqual([]);
+}
 
 async function hubWithAgent(): Promise<TestHub> {
   const sessions = createSessionsModule({
@@ -75,6 +103,7 @@ describe('sessions: create, read, rename, archive, delete', () => {
         match: null,
       });
       expect(session.id).toMatch(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/);
+      expectMatchesSchema('Session', session);
     } finally {
       await hub.close();
     }
@@ -141,8 +170,36 @@ describe('sessions: create, read, rename, archive, delete', () => {
   });
 });
 
+describe('sessions: the HTTP documents match the contract', () => {
+  it('answers SessionDetail, MessagePage and the run page in their declared shapes', async () => {
+    const hub = await hubWithAgent();
+    try {
+      const id = ((await create(hub.app, { title: 'contract shapes' })).json() as { id: string })
+        .id;
+      await call(hub.app, 'POST', `/sessions/${id}/runs`, {
+        body: { content: [{ type: 'text', text: 'مرحبا' }] },
+      });
+
+      expectMatchesSchema('SessionDetail', (await call(hub.app, 'GET', `/sessions/${id}`)).json());
+      expectMatchesSchema(
+        'MessagePage',
+        (await call(hub.app, 'GET', `/sessions/${id}/messages`)).json(),
+      );
+      const runs = (await call(hub.app, 'GET', `/sessions/${id}/runs`)).json() as {
+        items: unknown[];
+      };
+      for (const run of runs.items) expectMatchesSchema('Run', run);
+
+      const approvals = (await call(hub.app, 'GET', '/approvals')).json() as { items: unknown[] };
+      for (const approval of approvals.items) expectMatchesSchema('Approval', approval);
+    } finally {
+      await hub.close();
+    }
+  });
+});
+
 describe('sessions: listing', () => {
-  it('pages with a cursor, newest activity first, without repeating a row', async () => {
+  it('pages with a cursor: three pages equal one, with no repeats and no gaps', async () => {
     const hub = await hubWithAgent();
     try {
       const ids: string[] = [];
@@ -172,9 +229,17 @@ describe('sessions: listing', () => {
       ).json() as { items: { id: string }[]; next_cursor: string | null };
 
       const seen = [...first.items, ...second.items, ...third.items].map((s) => s.id);
-      expect(new Set(seen).size).toBe(5);
-      expect(seen).toEqual([...ids].reverse());
       expect(third.next_cursor).toBeNull();
+      expect(new Set(seen)).toEqual(new Set(ids));
+
+      // The cursor's only real promise: walking the pages gives exactly what
+      // one big page gives, in the same order. (Sessions created inside the
+      // same millisecond share a sort key and are ordered by id, so that is
+      // not always creation order — but it is always the same order.)
+      const single = (await call(hub.app, 'GET', '/sessions?limit=50')).json() as {
+        items: { id: string }[];
+      };
+      expect(seen).toEqual(single.items.map((s) => s.id));
     } finally {
       await hub.close();
     }
