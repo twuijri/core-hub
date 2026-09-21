@@ -39,8 +39,8 @@ untouched.
 
 ## 2. First login and pairing
 
-1. Open `http://<host>:8080` (the web client, when it exists) or use the
-   reference client. Sign in as `admin` with `HUB_ADMIN_PASSWORD`.
+1. Open `http://<host>:8080` — the hub serves the web client from `/` — or use
+   the reference client. Sign in as `admin` with `HUB_ADMIN_PASSWORD`.
 2. Change the password (`PATCH /auth/me`), create your workspace or keep
    `default`.
 3. Pair a phone: `POST /auth/pairings` shows a QR; the phone claims it and
