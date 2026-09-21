@@ -13,7 +13,7 @@ import {
   visibleEntries,
   webDestinations,
 } from '../src/navigation/manifest.js';
-import { routes } from '../src/navigation/routes.js';
+import { LOGIN_PATH, SETUP_PATH, routes } from '../src/navigation/routes.js';
 import { segmentFromPath } from '../src/shell/Sidebar.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -38,6 +38,23 @@ describe('navigation parity (web)', () => {
   it('routes come from surfaceRoutes.web and are unique', () => {
     for (const route of routes) expect(route.path).toBe(navigation.surfaceRoutes.web?.[route.id]);
     expect(new Set(routes.map((r) => r.path)).size).toBe(routes.length);
+  });
+
+  it("2b. the pre-auth screens are the manifest's, and they are not destinations", () => {
+    // Sign-in and first-run setup (ADR 0011) are reachable before anyone is signed in and have
+    // no entry anywhere; their paths still come from the manifest, never from a literal here.
+    expect(Object.keys(raw.preAuth).filter((id) => !id.startsWith('$'))).toEqual([
+      'login',
+      'setup',
+    ]);
+    expect(LOGIN_PATH).toBe(raw.preAuth.login?.routes.web);
+    expect(SETUP_PATH).toBe(raw.preAuth.setup?.routes.web);
+    const destinationIds = new Set(navigation.destinations.map((d) => d.id));
+    expect(destinationIds.has('login')).toBe(false);
+    expect(destinationIds.has('setup')).toBe(false);
+    // No destination route collides with a pre-auth one.
+    expect(routes.map((r) => r.path)).not.toContain(LOGIN_PATH);
+    expect(routes.map((r) => r.path)).not.toContain(SETUP_PATH);
   });
 
   it('3. one primary entry per destination: the lists match the manifest in order (owner sees all)', () => {

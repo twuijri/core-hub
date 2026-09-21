@@ -1,7 +1,7 @@
 // The e2e hub: the real server (auth, sessions, realtime, static web client) with a scripted
-// agent runner in place of the adapters, so the three smoke journeys run without a model.
+// agent runner in place of the adapters, so the smoke journeys run without a model.
 // The script an agent plays is chosen by the text of the prompt (see `scriptFor`).
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -124,7 +124,17 @@ class ScriptedRunner implements AgentRunner {
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.MAJLIS_E2E_PORT ?? 8791);
-const dataDir = mkdtempSync(path.join(tmpdir(), 'majlis-e2e-'));
+// Journey 4 (first-run setup, ADR 0011) needs the opposite hub: no owner, no
+// HUB_ADMIN_PASSWORD, and a data directory the test can read the claim token from. Playwright
+// starts that one as a second web server with MAJLIS_E2E_MODE=setup and a data dir it names.
+const setupMode = process.env.MAJLIS_E2E_MODE === 'setup';
+const namedDataDir = process.env.MAJLIS_E2E_DATA_DIR;
+const dataDir = namedDataDir ?? mkdtempSync(path.join(tmpdir(), 'majlis-e2e-'));
+if (namedDataDir) {
+  // A fresh hub on every start, so the journey is the same on the first run and on a retry.
+  rmSync(namedDataDir, { recursive: true, force: true });
+  mkdirSync(namedDataDir, { recursive: true });
+}
 // The registry (agents.list) is the real module seeded from the catalog; the sessions module
 // asks this directory whether an agent can take a turn — every catalog id plays the script.
 // The journeys must say the same thing on every machine: a Hermes running on the
@@ -173,7 +183,11 @@ const sessions = createSessionsModule({
   agentTimeoutMs: 30_000,
 });
 const app = await buildServer({
-  config: loadConfig({ DATA_DIR: dataDir, PORT: String(port), HUB_ADMIN_PASSWORD: E2E_PASSWORD }),
+  config: loadConfig({
+    DATA_DIR: dataDir,
+    PORT: String(port),
+    ...(setupMode ? {} : { HUB_ADMIN_PASSWORD: E2E_PASSWORD }),
+  }),
   logger: createLogger({ level: 'warn' }),
   modules: defaultModules.map((module) => (module.name === 'sessions' ? sessions : module)),
   webDir: path.resolve(here, '..', 'dist'),
@@ -186,7 +200,9 @@ app.post('/__e2e/drop-sockets', async () => {
 });
 
 await app.listen({ port, host: '127.0.0.1' });
-console.log(`e2e hub listening on http://127.0.0.1:${port} (web: ${app.hub.web})`);
+console.log(
+  `e2e hub listening on http://127.0.0.1:${port} (web: ${app.hub.web}, setup: ${setupMode})`,
+);
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
     void app.close().then(() => {

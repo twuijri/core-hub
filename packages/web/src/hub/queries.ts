@@ -7,6 +7,7 @@ import type { Preferences, Session } from '../types.js';
 
 export const keys = {
   meta: () => ['meta'] as const,
+  setup: () => ['setup'] as const,
   me: () => ['me'] as const,
   preferences: () => ['preferences'] as const,
   profiles: () => ['profiles'] as const,
@@ -25,6 +26,21 @@ export function useMeta() {
     queryFn: async () => (await anonymous.request('get', '/meta')).data,
     retry: false,
     staleTime: 60_000,
+  });
+}
+
+/**
+ * First run (ADR 0011): does this hub still need its owner account created? Unauthenticated,
+ * always fetched fresh — it decides between the sign-in screen and the setup screen.
+ */
+export function useSetupState() {
+  const { anonymous } = useAuth();
+  return useQuery({
+    queryKey: keys.setup(),
+    queryFn: async () => (await anonymous.request('get', '/auth/setup')).data,
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
   });
 }
 

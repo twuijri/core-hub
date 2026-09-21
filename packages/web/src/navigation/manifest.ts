@@ -22,6 +22,12 @@ export interface Destination {
   note?: string;
 }
 
+/** A screen shown before anyone is signed in: sign-in and first-run setup (ADR 0011). */
+export interface PreAuthScreen {
+  title: string;
+  routes: Partial<Record<Surface, string>>;
+}
+
 export interface NavigationManifest {
   version: number;
   terms: Record<string, { en: string; ar: string }>;
@@ -33,6 +39,7 @@ export interface NavigationManifest {
   settingsTools: string[];
   agentLevel: string[];
   secondaryEntries: Record<string, string[]>;
+  preAuth: Record<string, PreAuthScreen>;
   surfaceRoutes: Record<string, Record<string, string>>;
 }
 
@@ -55,6 +62,16 @@ export const webDestinations: readonly Destination[] =
 export function routeOf(id: string): string {
   const route = navigation.surfaceRoutes.web?.[id];
   if (!route) throw new Error(`navigation.json has no web route for "${id}"`);
+  return route;
+}
+
+/**
+ * The URL of a pre-auth screen on the web (`preAuth.<id>.routes.web`). These screens have no
+ * navigation entry by design: nothing links to them from a signed-in session.
+ */
+export function preAuthRouteOf(id: string): string {
+  const route = navigation.preAuth?.[id]?.routes.web;
+  if (!route) throw new Error(`navigation.json has no web route for pre-auth screen "${id}"`);
   return route;
 }
 

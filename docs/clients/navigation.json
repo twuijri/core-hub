@@ -150,6 +150,14 @@
     "sign_out": {
       "en": "Sign out",
       "ar": "تسجيل الخروج"
+    },
+    "login": {
+      "en": "Sign in",
+      "ar": "تسجيل الدخول"
+    },
+    "setup": {
+      "en": "First-run setup",
+      "ar": "تهيئة أول تشغيل"
     }
   },
   "destinations": [
@@ -571,6 +579,21 @@
     "model": "Default model for new sessions.",
     "language": "UI language (ar/en); content direction is per message.",
     "theme": "Local preference mirrored by the Theme tool."
+  },
+  "preAuth": {
+    "$comment": "Screens a client shows before anyone is signed in. They are not destinations: they have no entry anywhere in the navigation, cannot be reached from a signed-in session, and are not counted by the parity rules for rail/segments/footer. `title` is a key in `terms`; `routes` is per surface like `surfaceRoutes`. `setup` exists only while the hub has no owner account (ADR 0011); `login` is the way in afterwards.",
+    "login": {
+      "title": "login",
+      "routes": {
+        "web": "/login"
+      }
+    },
+    "setup": {
+      "title": "setup",
+      "routes": {
+        "web": "/setup"
+      }
+    }
   },
   "surfaceRoutes": {
     "$comment": "Per-surface URL (web) or screen id of every destination that exists on that surface. A destination whose `surfaces` exclude the surface must be absent here; every other destination must be present. The web parity test (packages/web/tests/navigation.parity.test.ts) builds its router from this map.",

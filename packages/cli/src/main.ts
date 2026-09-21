@@ -8,7 +8,7 @@ import {
   agentsListCommand,
   agentsRemoveCommand,
 } from './commands/agents.js';
-import { loginCommand, logoutCommand, whoamiCommand } from './commands/auth.js';
+import { loginCommand, logoutCommand, setupCommand, whoamiCommand } from './commands/auth.js';
 import { chatCommand } from './commands/chat.js';
 import {
   modelsDefaultCommand,
@@ -42,6 +42,7 @@ const helpCommand: CommandSpec = {
 };
 
 export const COMMANDS: readonly CommandSpec[] = [
+  setupCommand,
   loginCommand,
   logoutCommand,
   whoamiCommand,

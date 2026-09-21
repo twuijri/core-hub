@@ -52,9 +52,12 @@
     "provider_kind": "مزوّدو هذا النوع فقط: ‏llm‏ أو ‏stt‏ أو ‏tts‏.",
     "model_kind": "نماذج هذا النوع فقط: ‏chat‏ أو ‏embedding‏ أو ‏stt‏ أو ‏tts‏.",
     "provider": "نماذج هذا المزوّد فقط.",
-    "role": "أي افتراضي تضبط: ‏chat‏ (الافتراضي) أو ‏coding‏ أو ‏title‏ أو ‏summary‏ أو ‏embedding‏."
+    "role": "أي افتراضي تضبط: ‏chat‏ (الافتراضي) أو ‏coding‏ أو ‏title‏ أو ‏summary‏ أو ‏embedding‏.",
+    "display_name": "الاسم الظاهر للمالك (يُسأل عنه عند إغفاله)",
+    "workspace_name": "اسم أول مساحة عمل (يُسأل عنه عند إغفاله)"
   },
   "cmd": {
+    "setup": "إنشاء حساب المالك على مركز لا يملك حسابًا بعد",
     "login": "سجّل الدخول إلى خادم واحفظ الرمز",
     "logout": "ألغِ الرمز وانسَه",
     "whoami": "اعرض المستخدم المسجَّل",
@@ -89,7 +92,7 @@
     "not_signed_in": "لم تسجّل الدخول. شغّل أولًا `majlis login --server URL`.",
     "server_required": "لا يوجد خادم مضبوط. مرّر --server URL.",
     "server_invalid": "{server} ليس أصل http(s) صالحًا.",
-    "setup_required": "لا يوجد حساب مالك على الخادم بعد. اضبط HUB_ADMIN_PASSWORD على الخادم وأعد تشغيله.",
+    "setup_required": "لا يوجد في المركز حساب مالك بعد. شغّل ⁨majlis setup --server URL⁩ برمز التهيئة من سجلّ المركز، أو افتح المركز في المتصفح.",
     "connection": "تعذّر الوصول إلى {server}: {reason}",
     "api": "{message} [{code}, HTTP {status}]",
     "not_implemented": "الخادم يعلن {operation} في العقد لكنه لم ينفّذه بعد [not_implemented, HTTP 501].",
@@ -100,7 +103,19 @@
     "pairing_json_invalid": "هذا الـJSON ليس حمولة اقتران لمجلس.",
     "config_invalid": "ملف الإعدادات {file} ليس JSON صالحًا.",
     "interrupted": "قوطع.",
-    "unexpected": "خطأ غير متوقع: {message}"
+    "unexpected": "خطأ غير متوقع: {message}",
+    "setup_done": "هذا المركز مهيَّأ بالفعل. شغّل ⁨majlis login --server URL⁩ بدلًا من ذلك.",
+    "password_mismatch": "كلمتا المرور غير متطابقتين؛ لم يُرسل شيء."
+  },
+  "setup": {
+    "where": "لا يوجد في ⁨{server}⁩ حساب بعد. طُبع رمز التهيئة مرة واحدة في سجلّ المركز وكُتب في الملف ⁨setup-token.txt⁩ داخل مجلد بياناته ⁨(docker compose logs hub)⁩ أو ⁨(docker compose exec hub cat /data/setup-token.txt)⁩.",
+    "token": "رمز التهيئة: ",
+    "username": "اسم المستخدم للمالك: ",
+    "display_name": "الاسم الظاهر (اختياري): ",
+    "workspace_name": "اسم مساحة العمل (اختياري، «Default»): ",
+    "password": "كلمة المرور (٨ محارف فأكثر): ",
+    "confirm": "تأكيد كلمة المرور: ",
+    "success": "أُنشئ حساب المالك ⁨{username}⁩ على ⁨{server}⁩ وتم الدخول. مساحة العمل: ⁨{profile}⁩."
   },
   "login": {
     "username": "اسم المستخدم: ",

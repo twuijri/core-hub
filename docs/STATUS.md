@@ -4,17 +4,19 @@ Measured on this branch by asking a booted hub which contract operations are
 still the built-in 501 stub. Regenerate it the same way after a phase:
 every operation that answers `501 not_implemented` is not built yet.
 
-**64 of 245 contract operations are implemented.** Nothing fakes a success:
-an unbuilt operation answers `501` with its operation id.
+**89 of 247 contract operations are implemented.** Nothing fakes a success:
+an unbuilt operation answers `501` with its operation id. (Measured on this
+branch, 2026-09-22; the jump from the 64 recorded before is the `models` module
+landing in `main` plus the two first-run operations added here.)
 
 | module | implemented | total | what that means |
 |---|---|---|---|
-| auth | 32 | 32 | sign-in, refresh, users, workspaces, app tokens, QR pairing, profiles |
+| auth | 34 | 34 | first-run setup, sign-in, refresh, users, workspaces, app tokens, QR pairing, profiles |
 | sessions | 17 | 29 | sessions, messages, streamed runs, approvals, resume; attachments and session categories are not built |
 | agents | 11 | 40 | registry, curated catalog, install/remove/upgrade, discovery, restart; the Hermes-gateway screens (skills, MCP, memory, channels, plugins, presets) are not built |
 | jobs | 3 | 3 | list, get, cancel, with `/rt/jobs` events |
 | meta | 1 | 2 | health |
-| models | 0 | 23 | providers, keys, catalogue, defaults, speech — in progress (ADR 0010) |
+| models | 23 | 23 | providers, keys, catalogue, defaults, speech (ADR 0010) |
 | tasks | 0 | 27 | the Tasks section |
 | rooms | 0 | 28 | several agents in one room |
 | schedules | 0 | 23 | scheduled and recurring work |
@@ -26,12 +28,19 @@ an unbuilt operation answers `501` with its operation id.
 | plugins | 0 | 1 | plugin bindings |
 
 ## Clients
-- **Web** (`packages/web`): login, chat with streaming, approvals and resume,
-  sessions list, agents, settings, pairing. Screens whose module is still 501
-  say so explicitly instead of showing an empty page.
-- **Terminal** (`packages/cli`): the reference client — login, pairing,
-  agents, sessions, an interactive `chat` with resume and approvals.
+- **Web** (`packages/web`): first-run setup, login, chat with streaming,
+  approvals and resume, sessions list, agents, models, settings, pairing.
+  Screens whose module is still 501 say so explicitly instead of showing an
+  empty page.
+- **Terminal** (`packages/cli`): the reference client — `setup`, login, pairing,
+  agents, models, sessions, an interactive `chat` with resume and approvals.
 - Desktop, Android and iOS: not started (ADR 0007, ADR 0009).
+
+## First run
+A hub with no account writes a claim token to `<DATA_DIR>/setup-token.txt`,
+logs it once, and the owner account is created from `/setup` in the browser or
+`majlis setup` in a terminal (ADR 0011). `HUB_ADMIN_PASSWORD` still creates the
+owner unattended and skips the screen.
 
 ## Runtime
 Hermes runs inside the image, supervised by the hub (ADR 0008), and a run

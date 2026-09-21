@@ -11,7 +11,7 @@ import { NewChatScreen } from '../screens/NewChatScreen.js';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen.js';
 import { SearchScreen } from '../screens/SearchScreen.js';
 import { SettingsScreen } from '../settings/SettingsScreen.js';
-import { navigation, routeOf, webDestinations } from './manifest.js';
+import { navigation, preAuthRouteOf, routeOf, webDestinations } from './manifest.js';
 
 export interface RouteEntry {
   /** The destination id (NAVIGATION). */
@@ -48,5 +48,7 @@ export const routes: readonly RouteEntry[] = webDestinations.map((d) => ({
   element: elementFor(d.id),
 }));
 
-export const LOGIN_PATH = '/login';
+// Pre-auth screens come from the manifest too (`preAuth`), so no client invents a path.
+export const LOGIN_PATH = preAuthRouteOf('login');
+export const SETUP_PATH = preAuthRouteOf('setup');
 export const HOME_PATH = routeOf('chat').split('/:')[0] ?? '/';

@@ -23,6 +23,7 @@ Node 24 (`.nvmrc`). There is no global install yet; the package is private until
 
 | Command | What it does | Contract operations |
 |---|---|---|
+| `majlis setup --server URL [--username NAME] [--display-name N] [--workspace-name N]` | First run only (ADR 0011): creates the owner account on a hub that has none. Asks for the hub's setup token (printed in its log, and in `<DATA_DIR>/setup-token.txt`) and for the password, twice and hidden. Ends signed in. | `auth.getSetup`, `auth.completeSetup` |
 | `majlis login --server URL [--username NAME]` | Signs in; the password is always prompted (hidden on a terminal, read from stdin otherwise). Stores the tokens. | `meta.get`, `auth.login` |
 | `majlis logout` | Revokes the token on the hub and forgets it locally. | `auth.logout` |
 | `majlis whoami` | The signed-in user, hub, workspace and token kind. | `auth.getMe` |
@@ -112,6 +113,11 @@ CLI uses is implemented.
 - `packages/cli/tests/*.test.ts` — argument parsing (including the refusal of secrets),
   config store permissions, output widths and tables, the QR matrix, prompts on a pipe, the
   token-refresh wrapper against a fake `fetch`, and the transcript reducer.
+- `packages/cli/tests/integration/setup.test.ts` — boots a real hub with **no** owner and no
+  `HUB_ADMIN_PASSWORD`, then runs `setup`: a secret refused on the command line (exit 2), a
+  wrong token (exit 3), a mistyped confirmation (exit 1, nothing sent), the real token read
+  from the file the server wrote (exit 0, signed in, the file deleted), and a second run that
+  says the hub is already set up.
 - `packages/cli/tests/integration/cli.test.ts` — boots the real server in-process with the
   scripted fake runner from `packages/server/src/modules/sessions/testing/`, then runs
   `login`, `whoami` (text, JSON, Arabic), `agents list` (501), `sessions new|list|show`,

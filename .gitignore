@@ -32,3 +32,6 @@ coverage/
 packages/web/playwright-report/
 packages/web/test-results/
 packages/ui-tokens/dist/
+
+# web e2e: the throwaway data directory of the first-run setup hub
+packages/web/e2e/.setup-data/
