@@ -56,6 +56,16 @@ export interface CatalogEntry {
   versionArgs: string[];
   install: InstallRecipe;
   health: HealthCheck;
+  /**
+   * Credential family (`models` module's `CredentialFamily`) -> the environment variable
+   * **this** agent reads that key from.
+   *
+   * This is the whole of the per-agent credential work, and we do it, once, here — the
+   * owner adds a provider key in the Models screen and never opens an agent's settings
+   * for it (ADR 0010). An entry that declares nothing inherits nothing: a CLI is not
+   * handed every key in the workspace because it happens to be installed.
+   */
+  credentials: Record<string, string>;
   /** Hermes only: the gateway the adapter talks to. */
   defaultEndpoint?: string;
   capabilities: AgentCapability[];

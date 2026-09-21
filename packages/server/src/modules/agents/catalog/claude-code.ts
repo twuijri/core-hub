@@ -12,6 +12,8 @@ export const claudeCode: CatalogEntry = {
   protocolArgs: [],
   versionArgs: ['--version'],
   install: { kind: 'npm', package: '@zed-industries/claude-code-acp', version: '0.16.2' },
+  // Claude Code reads the Anthropic key from the standard variable.
+  credentials: { anthropic: 'ANTHROPIC_API_KEY' },
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'skills', 'worktrees', 'resume'],
   sections: ['skills', 'mcp', 'settings'],

@@ -55,7 +55,8 @@ export interface ContractAgent {
   };
   capabilities: string[];
   sections: string[];
-  default_model: null;
+  /** What this workspace's providers resolve to for this agent (ADR 0010). */
+  default_model: { provider_id: string; model: string } | null;
   limited: boolean;
 }
 
@@ -89,6 +90,12 @@ export function serializeAgent(
     profile: string;
     settings: AgentSettingsRow | undefined;
     runtime: RuntimeState;
+    /**
+     * The model this agent inherits from the workspace, or the one pinned to it
+     * (ADR 0010). Null when the workspace has chosen none — a client then shows
+     * "inherits nothing yet" rather than a guess.
+     */
+    defaultModel?: { provider_id: string; model: string } | null;
   },
 ): ContractAgent {
   const enabled = options.settings?.enabled ?? true;
@@ -123,8 +130,7 @@ export function serializeAgent(
     runtime: options.runtime,
     capabilities: [...row.capabilities],
     sections: [...row.sections],
-    // `models` is not implemented, so no workspace can point an agent at a model yet.
-    default_model: null,
+    default_model: options.defaultModel ?? null,
     limited: row.limited,
   };
 }

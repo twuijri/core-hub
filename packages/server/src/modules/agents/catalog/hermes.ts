@@ -14,6 +14,11 @@ export const hermes: CatalogEntry = {
   versionArgs: ['--version'],
   install: { kind: 'bundled' },
   // Hermes's API server documents `GET /health` (docs/inspirations/hermes-agent.md §1).
+  // Hermes does not take its keys from the process environment the hub spawns it with:
+  // it reads its own `${HERMES_HOME}/.env`, which the hub writes (ADR 0010
+  // §Propagation, `modules/models/propagation.ts`). Declaring none here keeps the two
+  // paths from disagreeing.
+  credentials: {},
   health: { kind: 'http', path: '/health' },
   defaultEndpoint: 'http://127.0.0.1:8642',
   capabilities: [

@@ -39,6 +39,7 @@ import {
 import type { AdapterSet } from './adapters/index.js';
 import type { AdapterKind, AgentProbe, AgentTarget, SettingsSection } from './adapters/types.js';
 import type { AgentInstaller } from './installer.js';
+import type { AgentModelsPort } from './ports.js';
 import { agents, agentSettings, agentAdapters } from './schema.js';
 import {
   serializeAgent,
@@ -63,6 +64,11 @@ export interface AgentsServiceOptions {
   jobs: JobRunner;
   adapters: AdapterSet;
   installer: AgentInstaller;
+  /**
+   * The shared provider store (ADR 0010). Absent until the `models` module registers it;
+   * an agent then starts with its own settings only, never with a wrong key.
+   */
+  models?: () => AgentModelsPort | null;
   catalog?: readonly CatalogEntry[];
   language?: Language;
   now?: () => Date;
@@ -608,14 +614,64 @@ export class AgentsService {
   ): AgentTarget {
     const settings = this.settingsRow(workspaceId, row.id);
     const cwd = run.cwd ?? settings?.workingDir ?? null;
+    const env = this.environmentFor(row, workspaceId, settings);
     return {
       ...this.targetOf(row),
-      ...(settings?.env && Object.keys(settings.env).length > 0 ? { env: settings.env } : {}),
+      ...(Object.keys(env).length > 0 ? { env } : {}),
       ...(cwd ? { cwd } : {}),
       sessionRef: run.sessionRef,
-      model: run.model,
+      model: run.model ?? this.defaultModelOf(row, workspaceId)?.model ?? null,
       reasoningEffort: run.reasoningEffort,
     };
+  }
+
+  /**
+   * The environment a process agent inherits (ADR 0010 §Propagation).
+   *
+   * The workspace's shared provider keys come first, under the names this agent's
+   * catalog entry declared; the agent's own non-secret `env` and its explicit
+   * `secret_refs` override them. Nobody entered a key for this agent: installing it was
+   * the whole setup.
+   */
+  private environmentFor(
+    row: AgentRow,
+    workspaceId: string,
+    settings: AgentSettingsRow | undefined,
+  ): Record<string, string> {
+    const port = this.options.models?.() ?? null;
+    const declared = this.catalog.find((entry) => entry.id === row.slug)?.credentials ?? {};
+    if (!port) return { ...(settings?.env ?? {}) };
+    try {
+      return port.environmentFor(workspaceId, declared, {
+        ...(settings?.env ? { settingsEnv: settings.env } : {}),
+        ...(settings?.secretRefs ? { secretRefs: settings.secretRefs } : {}),
+      });
+    } catch (error) {
+      // A provider store that cannot answer must not stop an agent that needs no key.
+      this.options.log.warn(
+        { agent: row.slug, err: error },
+        'agents: could not resolve the shared provider credentials',
+      );
+      return { ...(settings?.env ?? {}) };
+    }
+  }
+
+  /**
+   * The model this agent uses when a run does not name one: the model pinned to it in
+   * this workspace, else the workspace default for its kind (ADR 0010).
+   */
+  defaultModelOf(
+    row: AgentRow,
+    workspaceId: string,
+  ): { provider_id: string; model: string } | null {
+    const port = this.options.models?.() ?? null;
+    if (!port) return null;
+    const settings = this.settingsRow(workspaceId, row.id);
+    try {
+      return port.defaultModelFor(workspaceId, row.adapterKind, settings?.defaultModelId ?? null);
+    } catch {
+      return null;
+    }
   }
 
   /** The supervised runtime reports here; the row and the `agent.updated` event follow. */
@@ -642,6 +698,7 @@ export class AgentsService {
       profile: scope.slug,
       settings,
       runtime: this.runtimes.get(row.id) ?? NOT_APPLICABLE,
+      defaultModel: this.defaultModelOf(row, scope.id),
     });
   }
 
