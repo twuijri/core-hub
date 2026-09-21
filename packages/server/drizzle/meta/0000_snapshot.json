@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "366ab174-31e4-4af2-82f2-405897f6bdb5",
+  "id": "494c8442-e83d-40a0-9fe7-b7dfd916756e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "app_tokens": {
@@ -824,7 +824,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'{}'"
+          "default": "'[]'"
         },
         "status": {
           "name": "status",
@@ -864,7 +864,7 @@
       "checkConstraints": {
         "agent_adapters_kind_check": {
           "name": "agent_adapters_kind_check",
-          "value": "\"agent_adapters\".\"kind\" in ('acp', 'hermes', 'process')"
+          "value": "\"agent_adapters\".\"kind\" in ('hermes', 'acp', 'harness', 'builtin')"
         },
         "agent_adapters_status_check": {
           "name": "agent_adapters_status_check",
@@ -1058,6 +1058,20 @@
           "notNull": true,
           "autoincrement": false
         },
+        "vendor": {
+          "name": "vendor",
+          "type": "text(120)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "licence": {
+          "name": "licence",
+          "type": "text(64)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "description": {
           "name": "description",
           "type": "text",
@@ -1092,7 +1106,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'detected'"
+          "default": "'none'"
         },
         "command": {
           "name": "command",
@@ -1109,6 +1123,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "package_name": {
+          "name": "package_name",
+          "type": "text(200)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "endpoint": {
           "name": "endpoint",
           "type": "text",
@@ -1119,6 +1140,28 @@
         "version": {
           "name": "version",
           "type": "text(64)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "latest_version": {
+          "name": "latest_version",
+          "type": "text(64)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "auto_update": {
+          "name": "auto_update",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "checked_at": {
+          "name": "checked_at",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -1151,7 +1194,15 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'{}'"
+          "default": "'[]'"
+        },
+        "sections": {
+          "name": "sections",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
         },
         "limited": {
           "name": "limited",
@@ -1160,6 +1211,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
+        },
+        "selectable": {
+          "name": "selectable",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
         },
         "last_error": {
           "name": "last_error",
@@ -1212,15 +1271,15 @@
       "checkConstraints": {
         "agents_adapter_kind_check": {
           "name": "agents_adapter_kind_check",
-          "value": "\"agents\".\"adapter_kind\" in ('acp', 'hermes', 'process')"
+          "value": "\"agents\".\"adapter_kind\" in ('hermes', 'acp', 'harness', 'builtin')"
         },
         "agents_source_check": {
           "name": "agents_source_check",
-          "value": "\"agents\".\"source\" in ('detected', 'manual', 'bundled')"
+          "value": "\"agents\".\"source\" in ('managed', 'user_cli', 'builtin', 'none')"
         },
         "agents_install_state_check": {
           "name": "agents_install_state_check",
-          "value": "\"agents\".\"install_state\" in ('not_installed', 'installing', 'installed', 'updating', 'broken')"
+          "value": "\"agents\".\"install_state\" in ('not_installed', 'installing', 'installed', 'updating', 'failed')"
         }
       }
     },
