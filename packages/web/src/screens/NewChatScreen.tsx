@@ -1,6 +1,6 @@
 // New chat: pick an agent from the server's registry (never a client-side list) and open a
 // draft session — the server mints the id (contract: sessions.create).
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useAgents, useCreateSession } from '../hub/queries.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
@@ -31,6 +31,15 @@ export function NewChatScreen() {
         <Notice tone="warning">{t('new_chat.no_agents')}</Notice>
       )}
       {create.isError && <Notice tone="danger">{describeError(create.error, t)}</Notice>}
+      {agents.data &&
+        selectable.length > 0 &&
+        selectable.every((agent) => agent.status === 'not_installed') && (
+          // Every card disabled with no word why is a dead end; say what to do instead.
+          <Notice tone="warning">
+            {t('new_chat.none_ready')}{' '}
+            <Link to={routeOf('agent_manager')}>{t('nav.agent_manager')}</Link>
+          </Notice>
+        )}
       <ul className="mt-4 grid gap-2 sm:grid-cols-2">
         {selectable.map((agent) => (
           <li key={agent.id}>
