@@ -213,7 +213,7 @@ export const modelsModule = defineModule({
       },
       roleForAdapter,
     };
-    registerAgentModelsPort(port);
+    registerAgentModelsPort(app.hub.io, port);
 
     // --------------------------------------------------------------- providers
 
