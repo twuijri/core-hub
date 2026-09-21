@@ -1,0 +1,31 @@
+{
+  "name": "@majlis/cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Majlis reference client: a terminal client generated from the contract (ADR 0007, Phase 0).",
+  "type": "module",
+  "bin": {
+    "majlis": "./dist/bin.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "typecheck": "pnpm --filter @majlis/contracts build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "build": "pnpm --filter @majlis/contracts build && tsc -p tsconfig.json",
+    "test": "pnpm --filter @majlis/contracts build && vitest run",
+    "start": "node dist/bin.js"
+  },
+  "dependencies": {
+    "@majlis/contracts": "workspace:*",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "qrcode-generator": "^2.0.4",
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
+  }
+}
