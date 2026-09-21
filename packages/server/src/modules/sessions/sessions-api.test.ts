@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { loadOpenApiDocument } from '@majlis/contracts';
 import { modules as defaultModules } from '../index.js';
-import { testHub, type TestHub } from '../../../tests/unit/helpers.js';
+import { authed, signedInHub, testHub, type TestHub } from '../../../tests/unit/helpers.js';
 import { createSessionsModule } from './index.js';
 import { FakeAgentDirectory, FakeAgentRunner, fakeHermes } from './testing/fake-runner.js';
 
@@ -423,14 +423,17 @@ describe('sessions: what is deliberately not implemented', () => {
     }
   });
 
-  it('cannot start a session with no agent registry behind it', async () => {
-    // The default module list ships the real ports: nothing is installed yet.
-    const hub = await testHub();
+  it('cannot start a session for an agent the registry does not know', async () => {
+    // The default module list ships the real ports: `auth` scopes the request and the
+    // `agents` registry answers for the id — this one is not a row.
+    const hub = await signedInHub();
     try {
-      const res = await call(hub.app, 'POST', '/sessions', {
-        body: { agent_id: AGENT_ID },
+      const res = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/sessions',
+        payload: { agent_id: AGENT_ID },
       });
-      expect(res.status).toBe(404);
+      expect(res.statusCode).toBe(404);
       expect(res.json()).toMatchObject({ code: 'not_found', details: { resource: 'agent' } });
     } finally {
       await hub.close();

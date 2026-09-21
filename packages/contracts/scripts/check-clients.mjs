@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ADR 0003: a hand-typed API path in a client is a CI failure.
-// Scans client sources (packages/web, apps/*) for literal strings containing `/api/`
+// Scans client sources (packages/cli, packages/web, apps/*) for literal strings containing `/api/`
 // and fails when one is not an operation path of the OpenAPI document.
 //
 //   node scripts/check-clients.mjs [--root <repoRoot>] [--doc <openapi.yaml>]
@@ -41,14 +41,16 @@ const SKIP_DIRS = new Set([
   'coverage',
 ]);
 
-const clientRoots = [path.join(root, 'packages', 'web')];
+const clientRoots = [path.join(root, 'packages', 'cli'), path.join(root, 'packages', 'web')];
 const appsDir = path.join(root, 'apps');
 if (existsSync(appsDir)) {
   for (const entry of readdirSync(appsDir)) clientRoots.push(path.join(appsDir, entry));
 }
 const existingRoots = clientRoots.filter((dir) => existsSync(dir));
 if (existingRoots.length === 0) {
-  console.log('check-clients  no client sources yet (packages/web, apps/*) — nothing to check.');
+  console.log(
+    'check-clients  no client sources yet (packages/cli, packages/web, apps/*) — nothing to check.',
+  );
   process.exit(0);
 }
 

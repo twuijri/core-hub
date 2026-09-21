@@ -4,6 +4,7 @@
 |---|---|
 | `packages/contracts` | `pnpm contracts:lint` (OpenAPI + schemas), `pnpm contracts:generate` (all three clients regenerate with no diff left uncommitted), `pnpm test --filter contracts` |
 | `packages/server` | `pnpm typecheck`, `pnpm test --filter server`, `pnpm contract:test` (every route exercised from the generated client), `pnpm lint` |
+| `packages/cli` | `pnpm typecheck`, `pnpm test --filter @majlis/cli` (unit + the in-process integration test against the real server), `pnpm contracts:check-clients`, `pnpm i18n:check`, `pnpm lint`, `pnpm build` then `node packages/cli/dist/bin.js --help` |
 | a module's schema | `pnpm db:generate` produces a migration; `pnpm db:migrate` on a fresh SQLite and on PostgreSQL in CI |
 | any user text | `pnpm i18n:check` (ar/en parity, no missing keys) |
 | the agents catalog (`modules/agents/catalog/`) | `pnpm test --filter server` — the catalog guard checks unique ids, an exact version pin and a licence on every entry (ADR 0006); the pinned versions themselves are the owner's review |

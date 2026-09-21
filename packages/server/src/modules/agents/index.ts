@@ -6,9 +6,10 @@
  * `agents.updateSettings`, `agents.install`, `agents.uninstall`, `agents.upgrade`,
  * `agents.checkUpdate`, `agents.discover`.
  *
+ * `agents.restart` restarts the Hermes runtime when this hub supervises it (ADR 0008,
+ * `hermes-runtime.ts`); an external or absent runtime answers `409 state_invalid`.
+ *
  * Still documented 501 stubs, with the reason:
- * - `agents.restart` — the hub does not own the Hermes runtime process yet, so there is
- *   nothing it could honestly restart; it lands with the Hermes session surface.
  * - `agents.getAvatar` — every agent is a `generated` avatar drawn from its slug until
  *   the `knowledge` module stores attachments.
  * - skills, MCP servers, memory, channels, plugins, presets, journey and config files —
@@ -39,8 +40,11 @@ import {
 import { auditFor, jobRunnerFor } from '../audit/index.js';
 import { createAdapterSet, type AdapterSet, type AdapterSetOptions } from './adapters/index.js';
 import type { AdapterKind } from './adapters/types.js';
+import { HERMES_ENTRY } from './catalog/index.js';
+import { HermesRuntime, type HermesRuntimeStatus, type Spawner } from './hermes-runtime.js';
 import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './installer.js';
-import type { AgentDirectoryPort, AgentInfo } from './ports.js';
+import type { AgentDirectoryPort, AgentInfo, AgentRunnerPort } from './ports.js';
+import { AgentRunner } from './runner.js';
 import { AgentsService, type AgentPatchInput } from './service.js';
 
 export { AgentsService } from './service.js';
@@ -66,7 +70,10 @@ export {
   pinnedVersion,
 } from './catalog/index.js';
 export type { CatalogEntry, HealthCheck, InstallRecipe } from './catalog/index.js';
-export type { AgentDirectoryPort, AgentInfo } from './ports.js';
+export type { AgentDirectoryPort, AgentInfo, AgentRunnerPort, RunnerEvent } from './ports.js';
+export { AgentRunner, toRunnerEvent, toolKindOf, mintSessionRef } from './runner.js';
+export { HermesRuntime, loadOrCreateHermesApiKey } from './hermes-runtime.js';
+export type { HermesRuntimeMode, HermesRuntimeStatus, Spawner } from './hermes-runtime.js';
 
 /** Test seams: a fake PATH, a fake adapter set, a fake installer. Set before the app boots. */
 export interface AgentsOverrides {
@@ -75,6 +82,8 @@ export interface AgentsOverrides {
   pathValue?: string;
   /** Options for the real adapter set (a stubbed `fetch` for the Hermes gateway probe). */
   adapterOptions?: Omit<AdapterSetOptions, 'host'>;
+  /** The Hermes runtime supervisor's seams (a fake spawner, a health interval). */
+  runtime?: { spawnImpl?: Spawner; healthIntervalMs?: number };
 }
 
 let pendingOverrides: AgentsOverrides | null = null;
@@ -88,11 +97,18 @@ export function overrideAgents(next: AgentsOverrides | null): void {
   pendingOverrides = next;
 }
 
-const services = new WeakMap<SocketServer, AgentsService>();
+interface AgentsContext {
+  service: AgentsService;
+  adapters: AdapterSet;
+  runner: AgentRunner;
+  runtime: HermesRuntime;
+}
 
-export function agentsServiceFor(app: FastifyInstance): AgentsService {
+const contexts = new WeakMap<SocketServer, AgentsContext>();
+
+function contextOf(app: FastifyInstance): AgentsContext {
   const { hub } = app;
-  const existing = services.get(hub.io);
+  const existing = contexts.get(hub.io);
   if (existing) return existing;
   if (pendingOverrides) {
     overrides.set(hub.io, pendingOverrides);
@@ -108,17 +124,63 @@ export function agentsServiceFor(app: FastifyInstance): AgentsService {
     pathExt: hub.config.hostEnv.pathExt,
     inherited: hub.config.hostEnv.inherited,
   };
+  // The supervised Hermes (ADR 0008). Its API key is what the adapter sends; an external
+  // gateway is expected to carry the same key file (docs/DEPLOY.md).
+  const hermesFetch = own.adapterOptions?.hermes?.fetchImpl;
+  const runtime = new HermesRuntime({
+    dataDir: hub.config.dataDir,
+    host,
+    log: app.log,
+    endpoint: own.adapterOptions?.hermes?.defaultEndpoint ?? HERMES_ENTRY.defaultEndpoint!,
+    ...(hermesFetch ? { fetchImpl: hermesFetch } : {}),
+    ...(own.runtime?.spawnImpl ? { spawnImpl: own.runtime.spawnImpl } : {}),
+    ...(own.runtime?.healthIntervalMs !== undefined
+      ? { healthIntervalMs: own.runtime.healthIntervalMs }
+      : {}),
+    onState: (status: HermesRuntimeStatus) => {
+      const ctx = contexts.get(hub.io);
+      if (!ctx) return;
+      ctx.service.setRuntime(HERMES_ENTRY.id, {
+        state: status.state,
+        url: status.state === 'running' ? status.endpoint : null,
+        error: status.lastError,
+      });
+      if (status.state === 'running') {
+        void ctx.service.reprobe(HERMES_ENTRY.id).catch((error: unknown) => {
+          app.log.warn({ err: error }, 'agents: hermes reprobe failed');
+        });
+      }
+    },
+  });
+  const adapters =
+    own.adapters ??
+    createAdapterSet({
+      ...own.adapterOptions,
+      hermes: { apiKey: () => runtime.apiKey(), ...own.adapterOptions?.hermes },
+      host,
+    });
   const service = new AgentsService({
     db: requireSqlite(hub.database),
     log: app.log,
     realtime: createRealtime(hub.io),
     audit: auditFor(app),
     jobs: jobRunnerFor(app),
-    adapters: own.adapters ?? createAdapterSet({ ...own.adapterOptions, host }),
+    adapters,
     installer: own.installer ?? createNpmInstaller({ dataDir: hub.config.dataDir, host }),
   });
-  services.set(hub.io, service);
-  return service;
+  const runner = new AgentRunner({ service, adapters, log: app.log });
+  const created: AgentsContext = { service, adapters, runner, runtime };
+  contexts.set(hub.io, created);
+  return created;
+}
+
+export function agentsServiceFor(app: FastifyInstance): AgentsService {
+  return contextOf(app).service;
+}
+
+/** The Hermes runtime this hub supervises or found (ADR 0008). */
+export function hermesRuntimeFor(app: FastifyInstance): HermesRuntime {
+  return contextOf(app).runtime;
 }
 
 const scopeOf = (request: FastifyRequest): WorkspaceScope => {
@@ -164,6 +226,17 @@ export const agentsModule = defineModule({
       },
       'agents: registry reconciled with the data volume',
     );
+
+    // The Hermes runtime: decided once the server is ready to serve, stopped with it.
+    const ctx = contextOf(app);
+    app.addHook('onReady', async () => {
+      const mode = await ctx.runtime.start();
+      app.log.info({ mode, endpoint: ctx.runtime.endpoint }, 'agents: hermes runtime');
+    });
+    app.addHook('onClose', async () => {
+      await ctx.runner.closeAll();
+      await ctx.runtime.stop();
+    });
 
     defineRoute(app, deps, {
       operationId: 'agents.list',
@@ -224,6 +297,17 @@ export const agentsModule = defineModule({
       status: 202,
       handler: (request) => ({ job_id: service.discover(scopeOf(request), actorOf(request)).id }),
     });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.restart',
+      status: 202,
+      handler: (request, { params }) => ({
+        job_id: service.restart(scopeOf(request), actorOf(request), params.agent_id as string, {
+          managed: () => ctx.runtime.status().mode === 'managed',
+          restart: () => ctx.runtime.restart(),
+        }).id,
+      }),
+    });
   },
   registerEvents(_io: SocketServer) {
     // The registry's own event, `agent.updated`, rides on `/rt/jobs` because it is always
@@ -236,10 +320,18 @@ export const registerRoutes = agentsModule.registerRoutes.bind(agentsModule);
 export const registerEvents = agentsModule.registerEvents.bind(agentsModule);
 
 /**
+ * The `AgentRunner` port `sessions` needs: one runner per app, over the app's adapters.
+ * Wired next to the directory in `src/modules/index.ts`.
+ */
+export function agentRunner(app: FastifyInstance): AgentRunnerPort {
+  return contextOf(app).runner;
+}
+
+/**
  * The `AgentDirectory` port `sessions` needs (`modules/sessions/ports.ts`). Wiring it is
  * one line in `src/modules/index.ts`:
  *
- *     createSessionsModule({ agents: agentDirectory(app), runner: … })
+ *     createSessionsModule({ agents: agentDirectory, runner: agentRunner, scopes })
  *
  * so nothing inside `sessions` has to change when the registry grows.
  */

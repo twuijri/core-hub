@@ -29,6 +29,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import type { AgentCapability } from '../schema.js';
 import { entriesFor, type CatalogEntry } from '../catalog/index.js';
+import { EventQueue } from './event-queue.js';
 import { parseVersion, runCommand, whichSync, type HostEnvironment } from './host.js';
 import type {
   AgentAdapter,
@@ -115,37 +116,6 @@ export function childProcessTransport(child: ChildProcessWithoutNullStreams): Ac
 interface Pending {
   resolve(value: unknown): void;
   reject(error: Error): void;
-}
-
-/** Async queue: producers push events, the consumer awaits them in order. */
-class EventQueue {
-  private readonly buffer: AgentEvent[] = [];
-  private readonly waiting: ((value: IteratorResult<AgentEvent>) => void)[] = [];
-  private done = false;
-
-  push(event: AgentEvent): void {
-    if (this.done) return;
-    const waiter = this.waiting.shift();
-    if (waiter) waiter({ value: event, done: false });
-    else this.buffer.push(event);
-  }
-
-  end(): void {
-    this.done = true;
-    for (const waiter of this.waiting.splice(0)) {
-      waiter({ value: undefined as never, done: true });
-    }
-  }
-
-  iterator(): AsyncIterable<AgentEvent> {
-    const next = (): Promise<IteratorResult<AgentEvent>> => {
-      const buffered = this.buffer.shift();
-      if (buffered) return Promise.resolve({ value: buffered, done: false });
-      if (this.done) return Promise.resolve({ value: undefined as never, done: true });
-      return new Promise((resolve) => this.waiting.push(resolve));
-    };
-    return { [Symbol.asyncIterator]: () => ({ next }) };
-  }
 }
 
 /** The ACP client for one session: owns the request ids and the update stream. */
