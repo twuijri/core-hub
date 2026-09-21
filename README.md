@@ -23,6 +23,14 @@ Read in this order:
    phones.
 6. `docs/TEAM-RULES.md` — how work is done, reviewed, merged and released.
 7. `docs/ROADMAP.md` — the phases, in order, with what "done" means for each.
+8. `docs/STATUS.md` — what is implemented today and what still answers 501.
+9. `docs/DEVELOPMENT.md` — running the hub and the clients locally, and the
+   checks to run before a PR.
+10. `docs/clients/DESIGN.md` — the look every client shares, and why it is
+    only partly glass.
 
-Status: founding specification. No runtime code yet beyond the workspace
-skeleton. See `docs/ROADMAP.md` Phase 0.
+Status: Phase 0 is done — the hub runs, Hermes runs inside its image, and a
+message reaches it; the web and terminal clients talk to it. 64 of the 245
+contract operations are implemented and the rest answer `501` honestly.
+`docs/STATUS.md` has the module-by-module table; `docs/ROADMAP.md` has what
+comes next; `docs/DEVELOPMENT.md` is how to run it locally.
