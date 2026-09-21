@@ -225,7 +225,7 @@ CREATE TABLE `messages` (
 	`edited_at` integer,
 	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`run_id`) REFERENCES `runs`(`id`) ON UPDATE no action ON DELETE set null,
-	CONSTRAINT "messages_role_check" CHECK("messages"."role" in ('user', 'assistant', 'system', 'tool', 'event')),
+	CONSTRAINT "messages_role_check" CHECK("messages"."role" in ('user', 'assistant', 'system', 'command', 'tool', 'event')),
 	CONSTRAINT "messages_author_kind_check" CHECK("messages"."author_kind" in ('user', 'agent', 'system'))
 );
 --> statement-breakpoint
@@ -242,10 +242,13 @@ CREATE TABLE `runs` (
 	`trigger_message_id` text(26),
 	`final_message_id` text(26),
 	`status` text DEFAULT 'queued' NOT NULL,
+	`job_id` text(26) NOT NULL,
 	`attempt` integer DEFAULT 1 NOT NULL,
 	`origin_kind` text DEFAULT 'user' NOT NULL,
 	`origin_id` text(26),
 	`model_label` text(200),
+	`provider` text(120),
+	`reasoning_effort` text,
 	`adapter_kind` text(16) NOT NULL,
 	`agent_run_ref` text(200),
 	`started_at` integer,
@@ -271,26 +274,36 @@ CREATE TABLE `sessions` (
 	`updated_at` integer NOT NULL,
 	`workspace` text(26) NOT NULL,
 	`agent_id` text(26) NOT NULL,
-	`title` text(200) DEFAULT '' NOT NULL,
+	`title` text(200),
+	`source` text DEFAULT 'chat' NOT NULL,
+	`channel` text(60),
 	`origin_kind` text DEFAULT 'user' NOT NULL,
 	`origin_id` text(26),
 	`model_id` text(26),
 	`model_label` text(200),
+	`provider` text(120),
+	`reasoning_effort` text,
 	`agent_session_ref` text(200),
 	`working_dir` text,
 	`worktree_id` text(26),
 	`last_run_id` text(26),
 	`last_message_at` integer,
 	`message_count` integer DEFAULT 0 NOT NULL,
+	`preview` text(300),
 	`pinned` integer DEFAULT false NOT NULL,
+	`parent_session_id` text(26),
+	`category_id` text(26),
+	`notify` integer DEFAULT true NOT NULL,
 	`metadata` text DEFAULT '{}' NOT NULL,
 	`archived_at` integer,
-	CONSTRAINT "sessions_origin_kind_check" CHECK("sessions"."origin_kind" in ('user', 'task', 'schedule', 'workflow', 'room', 'api'))
+	CONSTRAINT "sessions_origin_kind_check" CHECK("sessions"."origin_kind" in ('user', 'task', 'schedule', 'workflow', 'room', 'api')),
+	CONSTRAINT "sessions_source_check" CHECK("sessions"."source" in ('chat', 'global_agent', 'room', 'task', 'schedule', 'workflow', 'channel', 'cli', 'api'))
 );
 --> statement-breakpoint
 CREATE INDEX `sessions_workspace_recent_idx` ON `sessions` (`workspace`,`archived_at`,`last_message_at`);--> statement-breakpoint
 CREATE INDEX `sessions_workspace_agent_idx` ON `sessions` (`workspace`,`agent_id`);--> statement-breakpoint
 CREATE INDEX `sessions_origin_idx` ON `sessions` (`origin_kind`,`origin_id`);--> statement-breakpoint
+CREATE INDEX `sessions_workspace_source_idx` ON `sessions` (`workspace`,`source`);--> statement-breakpoint
 CREATE TABLE `tool_calls` (
 	`id` text(26) PRIMARY KEY NOT NULL,
 	`owner_id` text(26) NOT NULL,
@@ -306,7 +319,9 @@ CREATE TABLE `tool_calls` (
 	`title` text(200),
 	`input` text DEFAULT '{}' NOT NULL,
 	`output` text,
+	`output_truncated` integer DEFAULT false NOT NULL,
 	`output_attachment_id` text(26),
+	`subagent_id` text(120),
 	`status` text DEFAULT 'pending' NOT NULL,
 	`approval_id` text(26),
 	`started_at` integer,
