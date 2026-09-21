@@ -1,13 +1,52 @@
-// The floating composer: text, Enter to send (Shift+Enter for a line), a drop zone for
-// files and images (the paperclip button is the keyboard equivalent), and the stop button
-// while a run is active.
-import { useCallback, useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
+/**
+ * The composer: one rounded surface that holds everything about the next message
+ * (ADOPTION-BACKLOG 2.6, 2.7, 2.12).
+ *
+ *   [ agent chips ]                                   — passed in, above the surface
+ *   ┌───────────────────────────────────────────────┐
+ *   │ attachments · error · the growing textarea    │
+ *   │ [+]  [model]  [approvals]        [mic] [send] │
+ *   └───────────────────────────────────────────────┘
+ *   [ starters, on an empty chat ]
+ *
+ * Seven states, each deliberate and named by `composer-state.ts`, on `data-state`:
+ * empty · typing · sending · streaming (send becomes stop) · error · dragging · disabled
+ * (always with the reason on screen — TEAM-RULES §4 forbids a silent dead end).
+ *
+ * The textarea grows without moving anything: the surface is a grid whose invisible
+ * `::after` twin carries the same text, so the row's height is already correct when the
+ * character lands (`.composer-grow` in styles/app.css). No measuring, no jump.
+ *
+ * Glass belongs to floating chrome, which this is (DESIGN §Glass); the intensity is the
+ * one token scale, so `prefers-reduced-transparency` flattens it with everything else.
+ */
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import type { Attachment, ContentBlock } from '../types.js';
-import { IconClose, IconPaperclip, IconSend, IconStop } from '../ui/icons.js';
+import {
+  IconClose,
+  IconMic,
+  IconPaperclip,
+  IconPlus,
+  IconSend,
+  IconShield,
+  IconSpark,
+  IconStop,
+  IconUpload,
+} from '../ui/icons.js';
 import { Notice } from '../ui/Notice.js';
+import { canSend, composerState } from './composer-state.js';
 
 interface Pending {
   key: string;
@@ -32,17 +71,50 @@ export function blocksFor(text: string, pending: readonly Pending[]): ContentBlo
   return blocks;
 }
 
+export interface ComposerOption {
+  value: string;
+  label: string;
+}
+
+export interface ComposerProps {
+  busy: boolean;
+  disabled: boolean;
+  /** Why it is disabled. Required whenever `disabled` is true; shown, never implied. */
+  disabledReason?: string | null;
+  onSend(blocks: ContentBlock[]): Promise<void>;
+  onCancel(): Promise<void>;
+  /** The agent chips row; rendered above the surface so it reads as part of the composer. */
+  chips?: ReactNode;
+  /** The model this message runs on. `null` = the workspace default. */
+  model?: string | null;
+  models?: readonly ComposerOption[];
+  onModel?: ((value: string | null) => void) | undefined;
+  /** `agent_settings.approval_mode`: ask · auto_safe · auto_all. */
+  approvalMode?: string | null;
+  onApprovalMode?: ((value: string) => void) | undefined;
+  /** Disabled when the agent adapter does not declare the setting. */
+  approvalDisabledReason?: string | null;
+  /** Three suggestions, shown only while the chat is empty. */
+  starters?: readonly string[];
+}
+
+export const APPROVAL_MODES = ['ask', 'auto_safe', 'auto_all'] as const;
+
 export function Composer({
   busy,
   disabled,
+  disabledReason,
   onSend,
   onCancel,
-}: {
-  busy: boolean;
-  disabled: boolean;
-  onSend(blocks: ContentBlock[]): Promise<void>;
-  onCancel(): Promise<void>;
-}) {
+  chips,
+  model = null,
+  models = [],
+  onModel,
+  approvalMode = null,
+  onApprovalMode,
+  approvalDisabledReason = null,
+  starters = [],
+}: ComposerProps) {
   const { t } = useI18n();
   const { client } = useAuth();
   const [text, setText] = useState('');
@@ -50,8 +122,33 @@ export function Composer({
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+  const reasonId = useId();
+
+  const hasContent = text.trim() !== '' || pending.some((p) => p.status === 'done');
+  const input = { disabled, dragging, busy, sending, error: error !== null, hasContent };
+  const state = composerState(input);
+  const sendable = canSend(input);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!menu.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    const escape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [menuOpen]);
 
   const upload = useCallback(
     async (files: FileList | File[]) => {
@@ -86,12 +183,11 @@ export function Composer({
   );
 
   const send = async () => {
-    const blocks = blocksFor(text, pending);
-    if (blocks.length === 0 || sending) return;
+    if (!canSend({ ...input, error: false })) return;
     setSending(true);
     setError(null);
     try {
-      await onSend(blocks);
+      await onSend(blocksFor(text, pending));
       setText('');
       setPending((current) => current.filter((p) => p.status === 'error'));
       textarea.current?.focus();
@@ -114,28 +210,38 @@ export function Composer({
     if (event.dataTransfer.files.length > 0) void upload(event.dataTransfer.files);
   };
 
+  const useStarter = (suggestion: string) => {
+    setText(suggestion);
+    textarea.current?.focus();
+  };
+
   return (
-    <div className="sticky bottom-0 z-[var(--mj-z-sticky)] pb-3 pt-2">
+    <div className="sticky bottom-0 z-[var(--mj-z-sticky)] pb-3 pt-2" data-testid="composer-dock">
+      {chips}
       <form
-        className={`glass rounded-xl p-2 ${dragging ? 'drop-target' : ''}`}
+        className="composer glass"
+        data-state={state}
         onSubmit={(event) => {
           event.preventDefault();
           void send();
         }}
         onDragOver={(event) => {
           event.preventDefault();
-          setDragging(true);
+          if (!disabled) setDragging(true);
         }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
         aria-label={t('composer.label')}
+        aria-describedby={disabled && disabledReason ? reasonId : undefined}
         data-testid="composer"
       >
         {dragging && (
-          <p className="px-2 pb-1 text-xs text-accent-soft-text">{t('composer.drop_here')}</p>
+          <p className="composer-drop" role="status">
+            {t('composer.drop_here')}
+          </p>
         )}
         {pending.length > 0 && (
-          <ul className="flex flex-wrap gap-1 px-1 pb-1">
+          <ul className="flex flex-wrap gap-1 pb-1" data-testid="composer-attachments">
             {pending.map((item) => (
               <li
                 key={item.key}
@@ -143,7 +249,7 @@ export function Composer({
                 title={item.error}
               >
                 <span dir="auto">{item.file.name}</span>
-                {item.status === 'uploading' && <span>…</span>}
+                {item.status === 'uploading' && <span aria-hidden>…</span>}
                 {item.status === 'error' && <span>{t('composer.upload_failed')}</span>}
                 <button
                   type="button"
@@ -158,11 +264,27 @@ export function Composer({
           </ul>
         )}
         {error && (
-          <Notice tone="danger" className="mb-1">
+          <Notice tone="danger" className="mb-2">
             {error}
           </Notice>
         )}
-        <div className="flex items-end gap-1">
+
+        <div className="composer-grow" data-value={text}>
+          <textarea
+            ref={textarea}
+            rows={1}
+            placeholder={disabled ? t('composer.disabled') : t('composer.placeholder')}
+            aria-label={t('composer.placeholder')}
+            value={text}
+            disabled={disabled}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={onKeyDown}
+            dir="auto"
+            data-testid="composer-input"
+          />
+        </div>
+
+        <div className="composer-tools">
           <input
             ref={fileInput}
             type="file"
@@ -170,37 +292,111 @@ export function Composer({
             hidden
             onChange={(event) => event.target.files && void upload(event.target.files)}
           />
+          <div className="relative" ref={menu}>
+            <button
+              type="button"
+              className="composer-btn"
+              onClick={() => setMenuOpen((open) => !open)}
+              aria-label={t('composer.more')}
+              title={t('composer.more')}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-controls={menuOpen ? menuId : undefined}
+              disabled={disabled}
+              data-testid="composer-plus"
+            >
+              <IconPlus />
+            </button>
+            {menuOpen && (
+              <div
+                id={menuId}
+                role="menu"
+                className="composer-menu glass"
+                data-testid="composer-menu"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    fileInput.current?.click();
+                  }}
+                >
+                  <IconPaperclip size={16} />
+                  {t('composer.attach')}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    fileInput.current?.click();
+                  }}
+                >
+                  <IconUpload size={16} />
+                  {t('composer.upload')}
+                </button>
+                <p className="composer-menu-note">{t('composer.drop_hint')}</p>
+              </div>
+            )}
+          </div>
+
+          <label className="composer-select" data-testid="composer-model">
+            <IconSpark size={14} aria-hidden />
+            <span className="sr-only">{t('composer.model')}</span>
+            <select
+              value={model ?? ''}
+              disabled={disabled || !onModel}
+              aria-label={t('composer.model')}
+              onChange={(event) => onModel?.(event.target.value === '' ? null : event.target.value)}
+            >
+              <option value="">{t('composer.model_default')}</option>
+              {models.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label
+            className="composer-select"
+            data-testid="composer-approval"
+            title={approvalDisabledReason ?? t('composer.approval')}
+          >
+            <IconShield size={14} aria-hidden />
+            <span className="sr-only">{t('composer.approval')}</span>
+            <select
+              value={approvalMode ?? 'ask'}
+              disabled={disabled || !onApprovalMode || approvalDisabledReason !== null}
+              aria-label={t('composer.approval')}
+              onChange={(event) => onApprovalMode?.(event.target.value)}
+            >
+              {APPROVAL_MODES.map((mode) => (
+                <option key={mode} value={mode}>
+                  {t(`composer.approval_mode.${mode}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <span className="composer-spacer" />
+
           <button
             type="button"
-            className="btn btn-ghost px-2"
-            onClick={() => fileInput.current?.click()}
-            aria-label={t('composer.attach')}
-            title={t('composer.attach')}
-            disabled={disabled}
+            className="composer-btn"
+            disabled
+            aria-label={t('composer.dictate')}
+            title={t('composer.dictate_unavailable')}
+            data-testid="composer-mic"
           >
-            <IconPaperclip />
+            <IconMic />
           </button>
-          <textarea
-            ref={textarea}
-            className="field max-h-48 min-h-10 flex-1 resize-none border-0 bg-transparent py-2"
-            rows={1}
-            placeholder={disabled ? t('composer.disabled') : t('composer.placeholder')}
-            aria-label={t('composer.placeholder')}
-            value={text}
-            disabled={disabled}
-            onChange={(event) => {
-              setText(event.target.value);
-              event.target.style.blockSize = 'auto';
-              event.target.style.blockSize = `${Math.min(192, event.target.scrollHeight)}px`;
-            }}
-            onKeyDown={onKeyDown}
-            dir="auto"
-            data-testid="composer-input"
-          />
+
           {busy ? (
             <button
               type="button"
-              className="btn btn-danger px-2"
+              className="composer-btn composer-btn-stop"
               onClick={() => void onCancel()}
               aria-label={t('composer.stop')}
               title={t('composer.stop')}
@@ -208,22 +404,39 @@ export function Composer({
             >
               <IconStop />
             </button>
-          ) : null}
-          <button
-            type="submit"
-            className="btn btn-primary px-2"
-            aria-label={t('composer.send')}
-            title={t('composer.send')}
-            disabled={
-              disabled || sending || (!text.trim() && !pending.some((p) => p.status === 'done'))
-            }
-            data-testid="send"
-          >
-            <IconSend />
-          </button>
+          ) : (
+            <button
+              type="submit"
+              className="composer-btn composer-btn-send"
+              aria-label={t('composer.send')}
+              title={t('composer.send')}
+              disabled={!sendable}
+              data-busy={sending ? 'true' : undefined}
+              data-testid="send"
+            >
+              <IconSend />
+            </button>
+          )}
         </div>
-        {busy && <p className="px-2 pt-1 text-xs text-muted">{t('composer.busy_hint')}</p>}
       </form>
+
+      {disabled && disabledReason && (
+        <p id={reasonId} className="composer-reason" role="status" data-testid="composer-reason">
+          {disabledReason}
+        </p>
+      )}
+      {busy && <p className="composer-reason">{t('composer.busy_hint')}</p>}
+      {!disabled && !busy && !hasContent && starters.length > 0 && (
+        <ul className="composer-starters" data-testid="composer-starters">
+          {starters.map((suggestion) => (
+            <li key={suggestion}>
+              <button type="button" className="starter" onClick={() => useStarter(suggestion)}>
+                <span dir="auto">{suggestion}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

@@ -4,7 +4,14 @@ import manifest from '../../../../docs/clients/navigation.json' with { type: 'js
 
 export type Surface = 'web' | 'desktop' | 'android' | 'ios';
 export type EntryKind =
-  'rail' | 'segment' | 'footer' | 'settings-tab' | 'settings-tool' | 'agent' | 'secondary-only';
+  | 'rail'
+  | 'segment'
+  | 'footer'
+  | 'settings-tab'
+  | 'settings-management'
+  | 'settings-tool'
+  | 'agent'
+  | 'secondary-only';
 export type Role = 'member' | 'admin' | 'owner';
 
 export interface Destination {
@@ -36,6 +43,8 @@ export interface NavigationManifest {
   segments: string[];
   footer: string[];
   settingsTabs: string[];
+  /** Pages configured once — agents, models, devices, knowledge — inside Settings. */
+  settingsManagement: string[];
   settingsTools: string[];
   agentLevel: string[];
   secondaryEntries: Record<string, string[]>;

@@ -161,3 +161,26 @@ export const IconGlobe = (p: IconProps) => (
     <path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18" />
   </Svg>
 );
+export const IconMic = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="9" y="3" width="6" height="11" rx="3" />
+    <path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />
+  </Svg>
+);
+export const IconShield = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3 5 6v6c0 4 3 7.3 7 9 4-1.7 7-5 7-9V6l-7-3z" />
+    <path d="m9 12 2 2 4-4" />
+  </Svg>
+);
+export const IconUpload = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 16V4m0 0L8 8m4-4 4 4" />
+    <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
+  </Svg>
+);
+export const IconFolder = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.5.7L11.5 7H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+  </Svg>
+);

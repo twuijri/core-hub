@@ -129,9 +129,9 @@ describe('sessions: the working directory over HTTP', () => {
     expect(statSync(session.working_dir).isDirectory()).toBe(true);
 
     const listed = await call(hub.app, 'GET', '/sessions/working-dirs');
-    expect((listed.json() as { items: Array<{ name: string }> }).items.map((i) => i.name)).toContain(
-      session.id,
-    );
+    expect(
+      (listed.json() as { items: Array<{ name: string }> }).items.map((i) => i.name),
+    ).toContain(session.id);
   });
 
   it('creates the folder the client named, and finds it again on the next session', async () => {

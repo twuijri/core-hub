@@ -8,26 +8,12 @@ import { useI18n } from '../i18n/context.js';
 import { navigation, routeOf, termKey, visibleEntries } from '../navigation/manifest.js';
 import { useRealtime } from '../realtime/context.js';
 import { SessionList } from '../sessions/SessionList.js';
-import {
-  IconAgents,
-  IconDevices,
-  IconGlobe,
-  IconKnowledge,
-  IconModels,
-  IconPlus,
-  IconSearch,
-  IconSettings,
-  IconSignOut,
-} from '../ui/icons.js';
+import { IconGlobe, IconPlus, IconSearch, IconSettings, IconSignOut } from '../ui/icons.js';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher.js';
 
 const RAIL_ICONS: Record<string, (p: { size?: number }) => ReactElement> = {
   new_chat: IconPlus,
   search: IconSearch,
-  device_connections: IconDevices,
-  agent_manager: IconAgents,
-  models: IconModels,
-  knowledge: IconKnowledge,
 };
 
 const SEGMENT_STORAGE = 'majlis.segment';
@@ -90,9 +76,12 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <span className="text-base font-semibold">{t('app.name')}</span>
       </div>
 
-      <ul className="flex flex-col gap-0.5 px-2" data-testid="rail">
-        {rail.map((d) => {
+      {/* Slim by design (NAVIGATION §1, 2026-09-22): starting a chat, finding one, and the
+          list. Everything configured once lives on a page inside Settings. */}
+      <ul className="flex flex-col gap-1 px-2" data-testid="rail">
+        {rail.map((d, index) => {
           const Icon = RAIL_ICONS[d.id] ?? IconSearch;
+          const primary = index === 0;
           return (
             <li key={d.id}>
               <NavLink
@@ -100,7 +89,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 onClick={onNavigate}
                 data-nav-id={d.id}
                 className={({ isActive }) =>
-                  `flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-ui hover:bg-surface-2 ${isActive ? 'bg-surface-2 font-medium' : ''}`
+                  primary
+                    ? 'btn btn-primary w-full justify-start'
+                    : `flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-ui hover:bg-surface-2 ${isActive ? 'bg-surface-2 font-medium' : ''}`
                 }
               >
                 <Icon size={18} />
