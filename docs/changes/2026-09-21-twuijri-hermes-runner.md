@@ -65,8 +65,9 @@
 **`packages/server/src/modules/index.ts`**: سطر التركيب
 `createSessionsModule({ agents: agentDirectory, runner: agentRunner, scopes: principalScopeResolver })`.
 **`packages/server/src/i18n/{ar,en}.json`**: `jobs.restart_started/restart_done`.
+**`packages/server/package.json` + `pnpm-lock.yaml`**: `ajv`/`ajv-formats` إلى `dependencies` (انظر الفحوص).
 **الصورة**: `packages/server/Dockerfile` (مرحلة `hermes`: CPython 3.12 مستقل عبر `uv` + venv
-بـ`hermes-agent[cron,mcp]` من الوسم `v2026.9.14` + `aiohttp`؛ وقت التشغيل يضيف
+بتثبيت editable لـ`hermes-agent[cron,mcp]` من checkout للوسم `v2026.9.14` + `aiohttp`؛ وقت التشغيل يضيف
 `git`/`ripgrep`/`ca-certificates` و`HERMES_HOME=/data/hermes`)، `docker-compose.yml` (تعليق).
 **الوثائق**: `docs/adr/0008-hermes-runtime.md`، `docs/DEPLOY.md`،
 `docs/inspirations/hermes-agent.md` (قسم `/v1/runs` والروابط)، `docs/domain/agents.md`.
@@ -84,7 +85,104 @@
 | **الصورة تُبنى وHermes داخلها يقلع تحت إشراف المركز** | انظر الفحوص أدناه |
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-(تُلصق بعد التشغيل في القسم التالي من هذا السجل)
+كلها على `node v24.21.0` / `pnpm 12.5.1` في worktree نظيف بعد إعادة الأساس على
+`origin/feat/auth-and-agents` (`534431c`):
+
+```
+$ pnpm lint
+$ eslint . && prettier --check .
+All matched files use Prettier code style!
+[exit 0]
+
+$ pnpm typecheck                       # contracts + server، tsc --noEmit
+[exit 0]
+
+$ pnpm i18n:check
+i18n:check  server: 72 keys, ar/en in parity
+i18n:check  OK
+
+$ pnpm nav:check
+nav:check  OK — 35 destinations, 37 terms, ar/en complete
+
+$ pnpm contracts:lint
+Woohoo! Your API description is valid. 🎉
+contracts:lint  OK
+
+$ pnpm test
+ Test Files  3 passed (3)              # @majlis/contracts
+      Tests  11 passed (11)
+ Test Files  30 passed | 1 skipped (31)   # @majlis/server (unit)
+      Tests  187 passed | 1 skipped (188)  # المتخطَّى = hermes.e2e.test.ts بلا HERMES_E2E
+
+$ pnpm contract:test
+ Test Files  2 passed (2)
+      Tests  247 passed (247)
+
+$ pnpm build
+[exit 0]
+
+$ pnpm db:generate
+No schema changes, nothing to migrate 😴
+
+$ DATA_DIR=$(mktemp -d) pnpm db:migrate    # قاعدة SQLite جديدة
+{"level":30,"service":"majlis","msg":"db: migrations applied (sqlite)"}
+
+$ cd packages/server && npx vitest run --project unit src/modules/agents/hermes.e2e.test.ts
+ Test Files  1 skipped (1)             # بلا HERMES_E2E=1: يتخطّى بصراحة، لا ينجح زورًا
+```
+
+**بناء الصورة وتشغيلها (على جهاز المطوّر، `DOCKER_BUILDKIT=0` لأن buildx غير مثبّت هنا):**
+
+```
+$ docker build -f packages/server/Dockerfile -t majlis:runner .
+Successfully built 551a54a4f89a            # الحجم 1.24 GB (مقابل ≈6 GB لصورة Hermes الرسمية)
+
+$ docker run -d --name majlis-smoke -p 127.0.0.1:18080:8080 \
+    -e HUB_ADMIN_PASSWORD=smoke-test-password -v majlis-smoke-data:/data majlis:runner
+# سجل المركز (مقتطف):
+{"msg":"hermes: gateway started (managed)","pid":20,"home":"/data/hermes"}
+{"msg":"agents: hermes runtime","mode":"managed","endpoint":"http://127.0.0.1:8642"}
+{"msg":"core hub listening", "modules":[…13…], "database":"sqlite","dataDir":"/data"}
+{"hermes":true,"msg":"│           ☤ Hermes Gateway Starting...                 │"}
+{"msg":"hermes: gateway healthy","endpoint":"http://127.0.0.1:8642"}      # بعد ≈18 ثانية
+
+$ docker exec majlis-smoke curl -fsS http://127.0.0.1:8642/health
+{"status": "ok", "platform": "hermes-agent", "version": "0.21.3"}
+
+$ node smoke.mjs http://127.0.0.1:18080 smoke-test-password     # تسجيل دخول → agents → session → run
+health 200 {"ok":true,"server_version":"0.0.0","uptime_seconds":19}
+login 200
+hermes agent {"status":"available","runtime":{"state":"running","url":"http://127.0.0.1:8642","error":null}}
+session 201 01M32KHDJAGC3H3J1VJKYCEQTE
+run accepted 202 {"job_id":"…","run_id":"01M32KHDJGFKXGTGQFE8477ADS","message_id":"…","queue_position":null}
+run final {"status":"failed","error":{"error":"⚠️ Provider authentication failed: No inference provider
+  configured. Run 'hermes model' to choose a provider and model, or set an API key (OPENROUTER_API_KEY,
+  OPENAI_API_KEY, etc.) in ~/.hermes/.env.","code":"agent_error"},"usage":null}
+messages [{"role":"user","status":"complete","text":"Reply with one word: مرحبا"},
+          {"role":"assistant","status":"failed","text":""}]
+
+$ curl -X POST …/api/v1/agents/<hermes id>/restart        # agents.restart
+{"job_id":"01M32KHPFXYWQWHEHP1YEMJM8R"}
+{"msg":"hermes: restart requested","pid":20} … {"msg":"hermes: gateway started (managed)","pid":220}
+
+$ docker restart majlis-smoke                               # البيانات تبقى
+sessions after restart: ['smoke']
+$ docker exec majlis-smoke stat -c "%a %n" /data/keys/hermes-api.secret
+600 /data/keys/hermes-api.secret
+```
+
+القراءة الصحيحة لهذا الناتج: المسار الكامل عبر Hermes **الحقيقي** (0.21.3 داخل الصورة، تحت
+إشراف المركز) يعمل: `POST /v1/runs` قُبل، بث SSE وصل، الحدث الختامي `run.failed` تُرجم إلى
+`run.failed` على العقد بنص Hermes نفسه. الفشل هو الفشل الصادق المتوقّع في حاوية بلا مفتاح
+مزوّد — تعيينه بيد المالك (`docs/DEPLOY.md` §3). **لم يُنفَّذ** دور بردّ نموذج حقيقي
+(`hermes.e2e.test.ts`) لأن مفتاح API للبوابة المحلية على هذا الجهاز ليس بحوزتي.
+
+أخطاء اكتُشفت أثناء بناء الصورة وأُصلحت هنا:
+- `hermes-agent` يرفض بناء wheel من git (`Building wheels or sdists for hermes-agent is not
+  supported`)، فصار التثبيت **editable** من checkout للوسم في `/opt/hermes/src`.
+- `ajv`/`ajv-formats` كانا `devDependencies` بينما `src/lib/contract.ts` يستوردهما وقت
+  التشغيل → الحاوية كانت تسقط بـ`ERR_MODULE_NOT_FOUND` (خلل سابق من فرع الوكلاء، كان سيُسقط
+  وظيفة docker في CI أيضًا). نُقلا إلى `dependencies` وحُدّث `pnpm-lock.yaml`.
 
 ## المخاطر والرجوع
 - **الاختبار الحقيقي لم يُنفَّذ بعد**: أشكال الإطارات مأخوذة من مصدر `main` (0.21.3) بينما
