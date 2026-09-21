@@ -13,7 +13,7 @@ export * from '../modules/auth/schema.js';
 export * from '../modules/agents/schema.js';
 export * from '../modules/sessions/schema.js';
 export * from '../modules/rooms/schema.js';
-export * from '../modules/board/schema.js';
+export * from '../modules/tasks/schema.js';
 export * from '../modules/schedules/schema.js';
 export * from '../modules/knowledge/schema.js';
 export * from '../modules/models/schema.js';

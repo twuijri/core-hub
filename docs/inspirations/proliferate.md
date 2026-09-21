@@ -17,7 +17,7 @@
 | عقدة `human_in_loop` وحالة `awaiting_human` على مستوى العقدة والـ run | `schedules` (approvals inside runs) | يطابق «approvals inside runs» في ARCHITECTURE |
 | مراجع بين العقد: `@input:name` و`@doc:slug` مع تحقق صارم بدل نص حر | `schedules` | مدخلات وقوالب مستندات جزء من مخطط العقد |
 | أفعال على العقدة: `approve`, `fail-redo`, `undo-advance`, `resume`, `adhoc-nodes`, `cancel` | `schedules` | أفعال في العقد على `/api/v1/schedules/runs/{id}/nodes/{id}` |
-| «الجلسة قبل الحوسبة»: سجل الـ run يوجد قبل أي بيئة، والوضع (placement) لاحق | `board` + `schedules` | يطابق الثابت 4 (HTTP يعيد job id فورًا) |
+| «الجلسة قبل الحوسبة»: سجل الـ run يوجد قبل أي بيئة، والوضع (placement) لاحق | `tasks` + `schedules` | يطابق الثابت 4 (HTTP يعيد job id فورًا) |
 | غلاف ميزانية يُقلَّص فقط عند التفريع، سقف عمق، إلغاء الشجرة كاملة | `schedules` + `audit` | `parent_run_id`, `depth`, `budget` على الـ run |
 | قوانين الوكلاء الأبناء: الابن جلسة عادية، العلاقة هي السلطة، سقف الأبناء يشمل المغلقين، الابن لا يفوّض | `sessions` + `rooms` | `session_links(relation=subagent)`؛ الاستيقاظ رسالة في نسخة الأب |
 | مفردات «العمل المفوَّض»: `title` + `generatedName` + `shortId`، وحالات `needs_attention / failed / running / queued / finished / closed` | `sessions`/`rooms` (العقد) | أسماء ودّية مستقرة للوكلاء الأبناء في كل العملاء |

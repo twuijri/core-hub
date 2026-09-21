@@ -52,6 +52,7 @@
 | `chat` | Chat | محادثة | |
 | `rooms` | Rooms | الغرف | كانت «Group Chat» في تطبيق الجوال |
 | `tasks` | Tasks | المهام | كانت «Board/Kanban»؛ قرار المالك 2026-09-21: «المهام» في كل الواجهات والكود |
+| `tasks` | Tasks | المهام | القسم اسمه «المهام»، لا «اللوحة» ولا Kanban |
 | `schedules` | Schedules | الجدولة | كانت «Workflow» في تطبيق الجوال |
 | `history` | History | السجل | صفحة |
 | `settings` | Settings | الإعدادات | |

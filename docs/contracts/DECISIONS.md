@@ -287,3 +287,39 @@ An operation either succeeds with its documented shape or fails with the error
 envelope. Outcomes that are legitimately "the remote thing said no" (MCP test,
 provider test) are `200` with an explicit `ok: boolean` in a dedicated schema,
 never a generic `success` flag on a resource.
+
+## 25. The section is `tasks`, never `board` or `kanban`
+
+Owner decision (2026-09-21): the section that holds projects and their task
+cards is named **Tasks** in English and **«المهام»** in Arabic, everywhere —
+navigation, contract, server module, database. "Kanban" and "Board" are
+descriptions of its shape, never its name; a first mention may read "Tasks (a
+kanban-style board)". The model words stay: a task sits in a **column**, is
+drawn as a **card**, and swimlanes remain swimlanes.
+
+The rename is breaking and happened pre-1.0, before any client or deployment
+existed, so it is applied in place rather than versioned to `/api/v2` (§ADR
+0003 forbids incompatible changes to a *published* `/api/v1`; nothing was
+published). Entries 2, 6 and 8 above were written with the old names — read
+them through this table:
+
+| Old | New |
+|---|---|
+| tag `board` | tag `tasks` |
+| `board.*` operation ids | `tasks.*` |
+| `GET /board` | `GET /task-columns` (`tasks.getColumns`) |
+| `POST /board/dispatch` | `POST /task-dispatches` (`tasks.dispatch`) |
+| schema `Board` | schema `TaskColumns` |
+| `AgentCapability` / `AgentSection` value `kanban` | `tasks` |
+| `events/board/` | `events/tasks/` |
+| namespace `/rt/board` | `/rt/tasks` |
+
+`/board` did not become `/tasks`: that path already lists tasks. It did not
+become `/tasks/columns` or `/tasks/dispatch` either, because a literal
+sibling of `/tasks/{task_id}` is exactly what §7 rejects and what redocly's
+`no-ambiguous-paths` fails on. The house pattern for these
+(`/room-invites`, `/agent-discoveries`, `/delivery-targets`) is a hyphenated
+top-level collection, so `/task-columns` and `/task-dispatches` it is.
+
+Event names did not change (`task.moved`, `project.created`, …): they are
+`<entity>.<verb>` and never named the section.

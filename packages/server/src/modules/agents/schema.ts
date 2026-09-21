@@ -64,14 +64,14 @@ export const AGENT_CAPABILITIES = [
   'presets',
   'journey',
   'jobs',
-  'kanban',
+  'tasks',
 ] as const;
 export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];
 
 /** Contract `AgentSection` — the rows a client draws under an agent's card. */
 export const AGENT_SECTIONS = [
   'jobs',
-  'kanban',
+  'tasks',
   'channels',
   'skills',
   'plugins',

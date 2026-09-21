@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/board/subtask.updated.schema.json",
-  "title": "/rt/board · subtask.updated",
-  "description": "A subtask was created, changed or deleted (`deleted: true`). Emitted by: board module (create, patch, delete, assignee progress).",
+  "$id": "https://majlis.dev/contracts/events/tasks/subtask.updated.schema.json",
+  "title": "/rt/tasks · subtask.updated",
+  "description": "A subtask was created, changed or deleted (`deleted: true`). Emitted by: tasks module (create, patch, delete, assignee progress).",
   "type": "object",
   "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
   "properties": {
@@ -10,7 +10,7 @@
       "const": "subtask.updated"
     },
     "namespace": {
-      "const": "/rt/board"
+      "const": "/rt/tasks"
     },
     "profile": {
       "oneOf": [
@@ -50,7 +50,7 @@
   "examples": [
     {
       "event": "subtask.updated",
-      "namespace": "/rt/board",
+      "namespace": "/rt/tasks",
       "profile": "work",
       "ts": "2026-09-21T10:15:04Z",
       "seq": 8812,

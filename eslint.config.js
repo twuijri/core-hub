@@ -9,7 +9,7 @@ const SERVER_MODULES = [
   'agents',
   'sessions',
   'rooms',
-  'board',
+  'tasks',
   'schedules',
   'knowledge',
   'models',

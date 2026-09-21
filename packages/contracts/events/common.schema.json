@@ -2838,7 +2838,7 @@
         "presets",
         "journey",
         "jobs",
-        "kanban"
+        "tasks"
       ]
     },
     "AgentSection": {
@@ -2846,7 +2846,7 @@
       "description": "The rows shown under the agent's card, in order (NAVIGATION §4).",
       "enum": [
         "jobs",
-        "kanban",
+        "tasks",
         "channels",
         "skills",
         "plugins",
@@ -4596,7 +4596,7 @@
             },
             "auto_dispatch": {
               "type": "boolean",
-              "description": "Assign `ready` tasks automatically (see `/board/dispatch`)."
+              "description": "Assign `ready` tasks automatically (see `/task-dispatches`)."
             },
             "counts": {
               "$ref": "#/$defs/StatusCounts"
@@ -5372,7 +5372,7 @@
         }
       }
     },
-    "Board": {
+    "TaskColumns": {
       "type": "object",
       "required": ["project_id", "columns", "counts"],
       "properties": {
@@ -7929,7 +7929,7 @@
           "enum": [
             "/rt/sessions",
             "/rt/rooms",
-            "/rt/board",
+            "/rt/tasks",
             "/rt/schedules",
             "/rt/devices",
             "/rt/jobs"

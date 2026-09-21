@@ -7,7 +7,7 @@ The API and realtime contract lives in code, in `packages/contracts`:
   compatibility note on change (ADR 0003).
 - `packages/contracts/events/` — JSON Schema per realtime event, named `<entity>.<verb>`
   (`message.delta`, `run.failed`, `task.moved`), grouped by Socket.IO namespace
-  (`/rt/sessions`, `/rt/rooms`, `/rt/board`, `/rt/schedules`, `/rt/devices`).
+  (`/rt/sessions`, `/rt/rooms`, `/rt/tasks`, `/rt/schedules`, `/rt/devices`).
 - Generated from it: the TypeScript client (`createHubClient`), the Kotlin client and the Swift
   client (`pnpm contracts:generate`). Clients never hand-type a path; CI fails if one does.
 

@@ -549,7 +549,7 @@ CREATE TABLE `tasks` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `tasks_project_number_uq` ON `tasks` (`project_id`,`number`);--> statement-breakpoint
-CREATE INDEX `tasks_board_idx` ON `tasks` (`workspace`,`archived_at`,`status`,`sort_key`);--> statement-breakpoint
+CREATE INDEX `tasks_workspace_status_idx` ON `tasks` (`workspace`,`archived_at`,`status`,`sort_key`);--> statement-breakpoint
 CREATE INDEX `tasks_project_status_idx` ON `tasks` (`project_id`,`status`);--> statement-breakpoint
 CREATE INDEX `tasks_assignee_agent_idx` ON `tasks` (`assignee_agent_id`,`status`);--> statement-breakpoint
 CREATE INDEX `tasks_parent_idx` ON `tasks` (`parent_id`);--> statement-breakpoint
