@@ -8,6 +8,7 @@ import { defineModule } from '../../lib/module.js';
 import type { AuthContext } from './context.js';
 import { authenticateHook } from './principal.js';
 import { registerAuthRoutes } from './routes.js';
+import { clearSetupToken, issueSetupToken, setupTokenLog } from './setup.js';
 import { registerSocketAuth } from './sockets.js';
 import { loadOrCreateSigningKey } from './tokens.js';
 import { bootstrap } from './users.js';
@@ -37,9 +38,12 @@ export const authModule = defineModule({
     if (boot.ownerCreated) app.log.info('auth: owner account created from HUB_ADMIN_PASSWORD');
     if (boot.workspaceCreated) app.log.info('auth: default workspace created');
     if (boot.setupRequired) {
-      app.log.warn(
-        'auth: no user exists and HUB_ADMIN_PASSWORD is not set; nobody can sign in (setup_required)',
-      );
+      // First run without HUB_ADMIN_PASSWORD: the owner is created from the browser with a
+      // claim token (ADR 0011). A fresh token on every boot; the old one stops working.
+      app.log.info(setupTokenLog(hub.config.dataDir, issueSetupToken(hub.config.dataDir)));
+    } else {
+      // The owner exists: nothing may still be claimable on disk.
+      clearSetupToken(hub.config.dataDir);
     }
 
     app.decorateRequest('principal', null);

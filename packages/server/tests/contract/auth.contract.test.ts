@@ -2,6 +2,8 @@
 // TypeScript client against a hub booted with HUB_ADMIN_PASSWORD, each answer validated against
 // the schema the contract documents for that status. The generic runner (contract.test.ts) covers
 // the unauthenticated/failure answers of the same operations.
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   HubApiError,
@@ -77,6 +79,14 @@ describe.skipIf(!doc)('contract: auth operations answer their success path', () 
   });
 
   it('runs the whole auth surface in order', async () => {
+    // first run is already over on this hub (HUB_ADMIN_PASSWORD created the owner)
+    const setupState = await call('auth.getSetup', 200, { as: anonymous });
+    expect(setupState).toEqual({ required: false });
+    await call('auth.completeSetup', 409, {
+      body: { token: 'a'.repeat(48), username: 'intruder', password: 'a-long-enough-password' },
+      as: anonymous,
+    });
+
     // sign-in
     const login = await call('auth.login', 200, {
       body: { username: 'admin', password: PASSWORD },
@@ -251,5 +261,79 @@ describe.skipIf(!doc)('contract: auth operations answer their success path', () 
     // sign-out ends the session immediately
     await call('auth.logout', 204);
     await call('auth.getMe', 401);
+  });
+});
+
+// The success path of first-run setup needs the opposite hub: no owner and no
+// HUB_ADMIN_PASSWORD, so the claim token on disk is the only way in (ADR 0011).
+describe.skipIf(!doc)('contract: first-run setup on a hub with no owner', () => {
+  const document = doc!;
+  const ops = operationsById(document);
+  const schemas = ajvFor(document);
+  let hub: TestHub;
+  let anonymous: HubClient;
+
+  async function call(
+    operationId: string,
+    expectedStatus: number,
+    body?: unknown,
+  ): Promise<Record<string, unknown>> {
+    const op = ops.get(operationId);
+    if (!op) throw new Error(`unknown operation ${operationId}`);
+    let status: number;
+    let data: unknown;
+    try {
+      const res = await anonymous.raw(op.method as ClientMethod, op.path, {
+        ...(body !== undefined ? { body } : {}),
+      });
+      status = res.status;
+      data = res.data;
+    } catch (error) {
+      if (!(error instanceof HubApiError)) throw error;
+      status = error.status;
+      data = error.body;
+    }
+    expect(status, `${operationId}: ${JSON.stringify(data)}`).toBe(expectedStatus);
+    const schema = responseSchema(op, status);
+    if (schema) expect(schemas.validate(schema, data), operationId).toEqual([]);
+    return (data ?? {}) as Record<string, unknown>;
+  }
+
+  beforeAll(async () => {
+    hub = await testHub();
+    await hub.app.listen({ port: 0, host: '127.0.0.1' });
+    const address = hub.app.server.address();
+    anonymous = createHubClient({
+      baseUrl: `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`,
+      apiBase: serverBasePath(document),
+      profile: 'default',
+    });
+  });
+  afterAll(async () => {
+    await hub.close();
+  });
+
+  it('auth.getSetup then auth.completeSetup: wrong token 401, the real one signs the owner in', async () => {
+    expect(await call('auth.getSetup', 200)).toEqual({ required: true });
+    await call('auth.completeSetup', 401, {
+      token: 'c'.repeat(48),
+      username: 'tariq',
+      password: 'a-good-owner-password',
+    });
+    const token = readFileSync(path.join(hub.dataDir, 'setup-token.txt'), 'utf8').trim();
+    const pair = await call('auth.completeSetup', 200, {
+      token,
+      username: 'tariq',
+      password: 'a-good-owner-password',
+      display_name: 'طارق',
+      workspace_name: 'مساحتي',
+    });
+    expect((pair.user as { role: string }).role).toBe('owner');
+    expect(await call('auth.getSetup', 200)).toEqual({ required: false });
+    await call('auth.completeSetup', 409, {
+      token,
+      username: 'tariq2',
+      password: 'a-good-owner-password',
+    });
   });
 });

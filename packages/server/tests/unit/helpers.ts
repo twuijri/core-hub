@@ -31,8 +31,11 @@ export interface TestHub {
   close(): Promise<void>;
 }
 
-/** Builds the hub on a fresh SQLite file in a temp DATA_DIR with a silent logger. */
-export interface TestHubOptions extends Omit<BuildOptions, 'config' | 'logger'> {
+/**
+ * Builds the hub on a fresh SQLite file in a temp DATA_DIR with a silent logger. Pass
+ * `logger` (see `capturingLogger`) when the test asserts on what the hub logged at boot.
+ */
+export interface TestHubOptions extends Omit<BuildOptions, 'config'> {
   /** Fakes for the agents module; see `overrideAgents`. */
   agents?: AgentsOverrides;
   /** Fakes for the models module: a scripted provider `fetch`; see `overrideModels`. */

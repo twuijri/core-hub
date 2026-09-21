@@ -45,6 +45,12 @@ import {
 } from './profiles.js';
 import { APP_TOKEN_SCOPES, LOCALES, PAIRING_CONNECTIONS, appTokens, workspaces } from './schema.js';
 import {
+  clearSetupToken,
+  completeSetup,
+  readSetupToken,
+  setupTokenMatches,
+} from './setup.js';
+import {
   hubSettingsOf,
   preferencesOf,
   serializeAppToken,
@@ -102,6 +108,13 @@ const AvatarInput = z.union([
 const LoginBody = z.object({
   username: z.string().min(1).max(64),
   password: z.string().min(1).max(1024),
+});
+const SetupBody = z.object({
+  token: z.string().min(8).max(256),
+  username: Username,
+  password: Password,
+  display_name: z.string().max(80).optional(),
+  workspace_name: z.string().max(80).optional(),
 });
 const RefreshBody = z.object({ refresh_token: z.string().min(1) });
 const UserSelfPatch = z.object({
@@ -365,6 +378,69 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
 
   const admin = [requireUser, requireRole('admin')];
   const signedIn = [requireUser];
+
+  // ---------------------------------------------------------------- first run (ADR 0011)
+
+  // Unauthenticated and deliberately one bit wide: no token, no "a token file exists".
+  route('GET', '/auth/setup', [], async () => ({ required: setupRequired(db) }));
+
+  route('POST', '/auth/setup', [], async (request) => {
+    const body = parse(SetupBody, request.body);
+    const ip = request.ip;
+    // The same per-IP counter that protects the password login (contract decision §26).
+    assertNotLocked(db, 'password', ip, now());
+    // Checked before the token is looked at: a replayed token answers like any other.
+    if (!setupRequired(db)) throw new HubError('conflict', { messageKey: 'auth.setup_done' });
+    const expected = readSetupToken(ctx.dataDir);
+    if (!expected || !setupTokenMatches(expected, body.token)) {
+      const locked = recordFailure(db, 'password', ip, now(), attributionId());
+      ledger.record(
+        {
+          actorKind: 'system',
+          action: 'auth.setup_failed',
+          summary: locked ? 'setup token wrong; ip locked' : 'setup token wrong',
+          data: { locked, token_present: expected !== null },
+          requestId: request.id,
+          ownerId: attributionId(),
+        },
+        now(),
+      );
+      throw new HubError('unauthorized', { messageKey: 'auth.setup_token_invalid' });
+    }
+    clearFailures(db, 'password', ip);
+    const user = await completeSetup(
+      db,
+      {
+        username: body.username,
+        password: body.password,
+        displayName: body.display_name,
+        workspaceName: body.workspace_name,
+        locale: request.language === 'en' ? 'en' : 'ar',
+      },
+      now(),
+    );
+    // The account exists now, so nothing on disk may still create one.
+    clearSetupToken(ctx.dataDir);
+    ctx.log.info('auth: owner account created from the first-run setup token');
+    touchLogin(db, user.id, now());
+    const agent = String(request.headers['user-agent'] ?? 'web').slice(0, 80);
+    const session = createSession(db, user, now(), `web · ${agent}`);
+    ledger.record(
+      {
+        actorKind: 'user',
+        actorId: user.id,
+        action: 'auth.setup',
+        entityKind: 'user',
+        entityId: user.id,
+        summary: 'owner account created by first-run setup',
+        data: { session_id: session.sessionId, username: user.username },
+        requestId: request.id,
+        ownerId: user.id,
+      },
+      now(),
+    );
+    return tokenPair(findUser(db, user.id)!, session.sessionId, session.refreshToken);
+  });
 
   // ---------------------------------------------------------------- sign-in
 

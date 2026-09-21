@@ -323,3 +323,35 @@ top-level collection, so `/task-columns` and `/task-dispatches` it is.
 
 Event names did not change (`task.moved`, `project.created`, …): they are
 `<entity>.<verb>` and never named the section.
+
+## 26. First run is a claim token, not open onboarding
+
+`GET /auth/setup` answers `{ required }` and nothing else; `POST /auth/setup` takes a token
+plus the owner's username and password and answers the same `TokenPair` `auth.login` answers,
+so the browser that completed setup is signed in without a second round trip.
+
+Rejected: **open onboarding** — "no user exists, so let whoever loads the page create the
+owner". Every hub we deploy sits on a public domain behind a reverse proxy; open onboarding
+means the first stranger who loads the URL owns the instance, and the owner cannot tell it
+happened. The claim token is the model Jenkins uses (`initialAdminPassword`): the hub writes a
+random token to `<DATA_DIR>/setup-token.txt` (0600) and logs it once, so proving you are the
+person who can read the server's disk or log is the authentication. It costs the operator one
+`docker compose logs` and nothing else.
+
+Rejected: **putting the token in the `GET`** (as a boolean "a token file exists", or worse the
+token itself). The `GET` is unauthenticated, so anything in it is public. `required` is the
+only bit a client needs to decide which screen to show.
+
+Rejected: **a second rate-limit mechanism** for setup attempts. Wrong tokens count on the same
+per-IP `login_lockout` row as wrong passwords (`kind: password`): five failures in fifteen
+minutes lock the IP for fifteen minutes, and the lock is visible in `auth.listLockouts` like
+any other. One mechanism, one admin screen.
+
+Once an owner exists the operation is `409 conflict`, checked before the token is looked at, so
+a replayed token cannot even be distinguished from a random one by its answer. `TokenPair`
+rather than `204` was chosen because the alternative — setup then sign in — asks a person to
+type the password twice into two screens for no gain.
+
+`HUB_ADMIN_PASSWORD` keeps working and simply skips all of this: with it set, the owner exists
+at the end of first boot, `auth.getSetup` answers `false`, and no token file is ever written
+(ADR 0011).

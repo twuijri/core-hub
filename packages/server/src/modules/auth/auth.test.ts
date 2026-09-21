@@ -53,7 +53,10 @@ describe('module: auth', () => {
         payload: { username: 'admin', password: 'anything-at-all' },
       });
       expect(login.statusCode).toBe(401);
-      expect(login.json().error).toContain('HUB_ADMIN_PASSWORD');
+      // The way out is the first-run setup screen, not an environment variable (ADR 0011).
+      expect(login.json().error).toContain('setup');
+      const setup = await hub.app.inject({ method: 'GET', url: '/api/v1/auth/setup' });
+      expect(setup.json()).toEqual({ required: true });
     } finally {
       await hub.close();
     }

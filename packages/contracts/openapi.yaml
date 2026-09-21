@@ -268,6 +268,114 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
   # ================================================================== auth
+  /auth/setup:
+    get:
+      operationId: auth.getSetup
+      tags: [auth]
+      summary: Ask whether this hub still needs its owner account created
+      description: |
+        Unauthenticated, and deliberately says nothing else: `required` is `true` only while no
+        user exists at all. It never reveals the setup token, whether a token file is present,
+        or how many attempts were made. A client that gets `true` sends the person to its setup
+        screen; anything else sends them to sign-in.
+      security: []
+      x-scope: global
+      x-rt-events: []
+      responses:
+        '200':
+          description: Whether first-run setup is still open.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupState'
+              example:
+                required: true
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+    post:
+      operationId: auth.completeSetup
+      tags: [auth]
+      summary: Create the owner account with the hub's first-run setup token
+      description: |
+        First run only. While no user exists the hub writes a random setup token to
+        `<DATA_DIR>/setup-token.txt` (mode 0600) and logs it once; the operator reads it from the
+        container log or that file and pastes it here. On success the owner and the default
+        workspace are created, the token file is deleted, and the answer is the same `TokenPair`
+        `auth.login` returns, so the client is signed in immediately.
+
+        The token is compared in constant time and failures are throttled per IP by the same
+        lockout that protects `auth.login` (`kind: password` in `/auth/lockouts`). Once an owner
+        exists the operation is `409 conflict` for good — including a replay of the same token.
+        An unattended install that sets `HUB_ADMIN_PASSWORD` never opens this path: the owner
+        already exists on first boot and `auth.getSetup` answers `false`.
+      security: []
+      x-scope: global
+      x-rt-events: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetupRequest'
+            example:
+              token: 9f2c7a41d0b84e5c9a3f61d7e8b02c4a5d6f7081
+              username: tariq
+              password: '••••••••'
+              display_name: 'طارق'
+              workspace_name: 'مساحتي'
+      responses:
+        '200':
+          description: The owner was created and is signed in.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+              example:
+                access_token: eyJhbGciOiJIUzI1NiJ9.e30.access
+                refresh_token: hub_rt_3f8c2b1a9d7e4c6b5a0f1e2d3c4b5a69
+                expires_in: 900
+                user:
+                  id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                  username: tariq
+                  display_name: 'طارق'
+                  role: owner
+                  status: active
+                  locale: ar
+                  avatar:
+                    kind: generated
+                    url: null
+                    seed: tariq
+                  profiles: [default]
+                  default_profile: default
+                  last_login_at: '2026-09-22T08:00:00Z'
+                  created_at: '2026-09-22T08:00:00Z'
+                  updated_at: '2026-09-22T08:00:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: The setup token is wrong or no longer on disk (`unauthorized`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'رمز التهيئة غير صحيح.'
+                code: unauthorized
+        '409':
+          description: An owner account already exists; first-run setup is closed (`conflict`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'تمت تهيئة هذا المركز بالفعل؛ سجّل الدخول.'
+                code: conflict
+        '429':
+          $ref: '#/components/responses/RateLimited'
   /auth/login:
     post:
       operationId: auth.login
@@ -11568,6 +11676,43 @@ components:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
           $ref: '#/components/schemas/Timestamp'
+    SetupState:
+      type: object
+      required: [required]
+      properties:
+        required:
+          type: boolean
+          description: |
+            `true` while the hub has no user at all, so a client must run first-run setup
+            (`auth.completeSetup`) before anyone can sign in. Nothing else is exposed: the
+            setup token and the presence of its file are never part of an answer.
+    SetupRequest:
+      type: object
+      required: [token, username, password]
+      properties:
+        token:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 256
+          description: The token the hub wrote to `<DATA_DIR>/setup-token.txt` and logged on boot.
+        username:
+          type: string
+          pattern: '^[a-z0-9._-]{2,40}$'
+          description: The owner's login name.
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 1024
+          description: Same policy as every other password in `auth` (8 characters or more).
+        display_name:
+          type: string
+          maxLength: 80
+        workspace_name:
+          type: string
+          maxLength: 80
+          description: Name of the `default` workspace created with the owner; defaults to "Default".
     LoginRequest:
       type: object
       required: [username, password]
