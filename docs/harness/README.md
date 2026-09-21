@@ -25,19 +25,34 @@ route for at least one success and one failure case in the module's own tests.
 
 `pnpm i18n:check` (`scripts/i18n-check.mjs`) flattens each locale set's `ar.json` and
 `en.json` and fails on a key missing on either side, an empty value, or placeholders that
-differ. Today the sets are `packages/server/src/i18n` (error-code messages) and
-`packages/cli/src/i18n` (every string the reference client prints); the script already lists
-`packages/web/src/i18n` and `apps/desktop/src/i18n` and starts checking them as soon as they exist. Native apps add their locale directories to `LOCALE_SETS`.
+differ. Today the sets are `packages/server/src/i18n` (error-code messages),
+`packages/cli/src/i18n` (every string the reference client prints) and
+`packages/web/src/i18n` (every string the web client shows); the script already lists
+`apps/desktop/src/i18n` and starts checking it as soon as it exists. Native apps add their
+locale directories to `LOCALE_SETS`.
 
 The server picks `ar` or `en` from `Accept-Language` and localises the `error` field of the
 envelope; `code` is what clients localise on.
+
+## Design and layout drift (web)
+
+- `packages/ui-tokens/tests/contrast.test.ts` computes WCAG contrast from `tokens.json` for
+  every pair listed under `contrast.pairs`, in both themes and — for text over the glass
+  chrome — at every glass level (the tint composited over the page background).
+- `packages/web/tests/logical-css.test.ts` fails on any physical `left`/`right` property or
+  Tailwind class, so one stylesheet serves Arabic (rtl) and English (ltr).
+- `packages/web/tests/i18n.test.ts` fails when a `t('key')` literal in `src` is missing from
+  either catalogue, or when a dynamic key family (statuses, roles, …) is incomplete.
 
 ## Navigation drift
 
 `pnpm nav:check` (`scripts/navigation-check.mjs`) validates `docs/clients/navigation.json`:
 every term has `ar` and `en`, every destination has exactly one primary entry, entry label
-key equals title key, every list item is a known destination, secondary entries are explicit.
-Each client's parity test (`docs/clients/README.md`) then compares the client to the manifest.
+key equals title key, every list item is a known destination, secondary entries are explicit,
+and `surfaceRoutes.<surface>` names a unique route for every destination that exists on that
+surface (and none for one that does not). Each client's parity test
+(`docs/clients/README.md`) then compares the client to the manifest — for the web,
+`packages/web/tests/navigation.parity.test.tsx`.
 
 ## Missing change records (TEAM-RULES §2)
 
@@ -69,7 +84,8 @@ both are no-ops until a `src/modules/<name>/schema.ts` and a migration exist. CI
 ## Release
 
 `pnpm build` and the Docker job in CI (`packages/server/Dockerfile`, smoke-tested on
-`/api/v1/health`). `.github/workflows/release.yml` publishes to GHCR only on a `v*` tag that
+`/api/v1/health` and on `/chat` answering the web client's `index.html`). The `web-e2e`
+job runs the Playwright journeys of `packages/web/e2e` against the real hub. `.github/workflows/release.yml` publishes to GHCR only on a `v*` tag that
 points at `main` (TEAM-RULES §6).
 
 ## CI on a private repository

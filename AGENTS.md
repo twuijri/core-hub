@@ -24,7 +24,8 @@ derived from Hermes Studio / Ekko Studio code (BSL 1.1). See
 - `packages/contracts` — OpenAPI + realtime event schemas + generated clients.
 - `packages/server` — the hub (TypeScript, Fastify, Socket.IO, Drizzle).
 - `packages/cli` — the reference terminal client, generated from the contract; proves Phase 0 (ADR 0007). `docs/clients/CLI.md`.
-- `packages/web` — the web client (later phase).
+- `packages/ui-tokens` — design tokens (`tokens.json` → CSS variables + types); WCAG contrast test.
+- `packages/web` — the web client (Vite + React), one screen per navigation destination; served by the hub from `/`.
 - `apps/desktop`, `apps/android`, `apps/ios` — native shells (later phases).
 - `docs/` — everything a contributor needs; `docs/changes/` — one record per task.
 
