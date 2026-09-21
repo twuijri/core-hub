@@ -48,7 +48,7 @@ longer holds is *reported*, never silently skipped: that is data loss.
 | slug | text(64) | stable id inside the workspace: `anthropic`, `openai-tts`, `custom-ollama` |
 | label | text(80) | display |
 | kind | enum(llm, stt, tts) | the contract's `ProviderKind` |
-| builtin | bool | seeded from the bundled catalogue; can be disabled, never deleted |
+| builtin | bool | came from a catalogue preset (vs. somebody's own endpoint); removable either way |
 | enabled | bool | |
 | base_url | text? | |
 | api_mode | enum(native, chat_completions, responses) | |
@@ -75,10 +75,22 @@ configures the others (ADR 0010 §2). The bundled catalogue
 (`modules/models/catalogue.ts`) is where a family, its environment-variable
 name, and Hermes's own slug for it are declared.
 
-**Seeding.** A workspace's provider rows are created lazily from the bundled
-catalogue on its first request, disabled ones included: a provider the hub
-supports is visible and unconfigured, never hidden (ADR 0006's rule for agents,
-applied to providers).
+**No seeding: a row exists because somebody added it.** A fresh workspace has
+no providers, and `models.listProviders` answers `{ items: [] }`. What the hub
+*can* talk to is the preset list (`models.listProviderPresets`), which is where
+"visible and unconfigured, never hidden" now lives (ADR 0006's rule; contract
+decision §26). Adding a preset creates the whole credential family in one call,
+so adding OpenAI on the chat tab puts its dictation and speech rows on theirs.
+Migration `0002_unseeded_providers.sql` removed the untouched rows the old
+lazy seeding had created — built-in, no key, no model — and left every row that
+had either.
+
+**`auth_kind` is a requirement, not a state.** `none` means *no key is
+required*; it never means a key is refused, and storing one does not change it.
+Every provider accepts a key — a local proxy behind a master key is ordinary —
+and the only thing allowed to report a key as missing is the endpoint's own
+answer. A preset declares `keyRequirement: required | optional`, and that is the
+only vocabulary there is (contract decision §26; the defect of 2026-09-22).
 
 ## model (scoped)
 
@@ -141,8 +153,10 @@ with a key"; `reason` is an i18n key, never a sentence in one language.
 
 - Model picker: enabled, visible chat models of enabled providers in the
   workspace, grouped by provider.
-- Providers screen: providers with `configured = a key is stored for the
-  family`, `status`, model count.
+- Providers screen: the providers the workspace added, each with `status`, its
+  address, its model count and whether a key is stored; plus the preset list
+  behind "Add provider", and `host.containerized` so a loopback address can be
+  called out before it fails.
 - Defaults screen: the chat default with its fallbacks, plus one row per
   auxiliary task.
 - Resolve for a run: session.model → agent_settings.default_model_id →
