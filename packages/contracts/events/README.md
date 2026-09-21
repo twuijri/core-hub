@@ -32,7 +32,7 @@ where `profile` is optional. Acks are always `{ ok: true }` or
 
 | Namespace | Command | Payload | What it does |
 |---|---|---|---|
-| `/rt/sessions` | `subscribe` | `{ session_id }` | receive the session's message/run/tool events (profile-wide events need no subscription) |
+| `/rt/sessions` | `subscribe` | `{ session_id, after_seq? }` | receive the session's message/run/tool events (profile-wide events need no subscription); with `after_seq`, resume — see below |
 | `/rt/sessions` | `unsubscribe` | `{ session_id }` | stop |
 | `/rt/rooms` | `join` | `{ room_id }` | become present in the room (`member.joined` if not yet a member is **not** implied — join via HTTP first) and receive its events |
 | `/rt/rooms` | `leave` | `{ room_id }` | stop; presence goes offline |
@@ -43,6 +43,33 @@ where `profile` is optional. Acks are always `{ ok: true }` or
 | `/rt/schedules` | `unsubscribe` | same | stop |
 | `/rt/devices` | *(none)* | — | a device's own events arrive on connect; the socket also marks the device online/offline |
 | `/rt/jobs` | *(none)* | — | every job of the profile arrives on connect |
+
+### Resuming a session (`after_seq`)
+
+A phone that loses signal mid-run must not lose the part of the answer that
+arrived while it was away. `subscribe` therefore takes the `seq` of the last
+envelope the client processed:
+
+```json
+{ "session_id": "01J8QK3ZR2W7M5N4P6T8V9X0YA", "after_seq": 8812 }
+```
+
+The ack is `{ ok: true, replayed, truncated }`:
+
+- the server re-sends, on that socket and in their original order, every
+  envelope of that session with `seq > after_seq` — the same envelopes,
+  unchanged, not a summary;
+- `replayed` is how many were re-sent;
+- `truncated: true` means the replay may be incomplete (the server's buffer
+  no longer reaches back that far, or it restarted). The client then
+  resynchronises the documented way — `GET /sessions/{id}` and
+  `GET /sessions/{id}/messages` — exactly as in §Reconnection below.
+
+Omitting `after_seq` (or sending `0`) is a fresh subscription: nothing is
+replayed and `truncated` is `false`. The buffer is in memory and bounded, so
+`truncated` is the normal answer for a session that has been idle for a long
+time; it is never wrong, only sometimes conservative. Deltas themselves are
+still never persisted.
 
 Sending messages, answering approvals, stopping runs and every other mutation
 goes over HTTP (`POST /sessions/{id}/runs`, `POST /approvals/{id}/respond`,
