@@ -135,7 +135,8 @@
   },
   "new_chat": {
     "pick_agent": "Pick the agent this chat talks to. The list is the hub's registry.",
-    "no_agents": "No agent is enabled on this hub. Install or enable one in Agent Manager."
+    "no_agents": "No agent is enabled on this hub. Install or enable one in Agent Manager.",
+    "none_ready": "No agent is ready. Hermes ships with the hub; if it reads \"not installed\", check that it is running, or install one from the catalog in"
   },
   "chat": {
     "pick_one": "Pick a session from the list, or start a new chat.",

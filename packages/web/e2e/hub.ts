@@ -9,6 +9,8 @@ import { loadConfig } from '../../server/src/app/config.js';
 import { buildServer } from '../../server/src/app/server.js';
 import { createLogger } from '../../server/src/lib/logger.js';
 import { modules as defaultModules } from '../../server/src/modules/index.js';
+import { overrideAgents } from '../../server/src/modules/agents/index.js';
+import type { AgentInstaller } from '../../server/src/modules/agents/index.js';
 import { createSessionsModule } from '../../server/src/modules/sessions/index.js';
 import type {
   AgentEvent,
@@ -125,6 +127,46 @@ const port = Number(process.env.MAJLIS_E2E_PORT ?? 8791);
 const dataDir = mkdtempSync(path.join(tmpdir(), 'majlis-e2e-'));
 // The registry (agents.list) is the real module seeded from the catalog; the sessions module
 // asks this directory whether an agent can take a turn — every catalog id plays the script.
+// The journeys must say the same thing on every machine: a Hermes running on the
+// developer's box must not decide whether the agent picker has an enabled card, and CI
+// (which has none) must not end up with every card disabled. So the installer reports the
+// catalog's agents as present on disk and the health check passes; the turns themselves
+// come from ScriptedRunner below, never from a real agent.
+const e2eInstaller: AgentInstaller = {
+  root: path.join(dataDir, 'agents'),
+  binDirFor: (id) => path.join(dataDir, 'agents', id, 'bin'),
+  isPresent: () => true,
+  async install(entry, report) {
+    await report(100, 'installed');
+    return {
+      version: '0.0.0-e2e',
+      executablePath: path.join(dataDir, 'agents', entry.id, 'bin', entry.binary),
+    };
+  },
+  async uninstall() {},
+  async health() {
+    return { ok: true, version: '0.0.0-e2e', error: null };
+  },
+};
+// Neither a gateway on the developer's box nor its absence on a CI runner may decide a
+// journey, so the probe is scripted: a healthy Hermes, always. Turns still come from
+// ScriptedRunner below; nothing here talks to a real agent.
+const scriptedGateway: typeof fetch = async (input) => {
+  const url = String(input instanceof Request ? input.url : input);
+  if (url.endsWith('/health')) {
+    return new Response(JSON.stringify({ status: 'ok', version: '0.0.0-e2e' }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+  return new Response('not found', { status: 404 });
+};
+overrideAgents({
+  pathValue: path.join(dataDir, 'no-such-bin'),
+  installer: e2eInstaller,
+  adapterOptions: { hermes: { fetchImpl: scriptedGateway } },
+});
+
 const sessions = createSessionsModule({
   agents: { find: async (_workspace, agentId) => fakeHermes(agentId) },
   runner: new ScriptedRunner(),
