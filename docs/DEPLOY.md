@@ -34,8 +34,8 @@ sets:
 | `DATABASE_URL` | Optional PostgreSQL instead of the SQLite file. |
 
 These four are the whole configuration (ARCHITECTURE invariant 5). There is
-no variable for model provider keys: they belong to Hermes, inside the
-volume, never to the hub (§3).
+no variable for model provider keys either — they are added once on the Models
+screen and the hub carries them to every agent (§3).
 
 Upgrading is `docker compose pull && docker compose up -d`; the volume is
 untouched.
@@ -121,21 +121,53 @@ hermes: gateway started (managed)
 [API Server] API server listening on http://127.0.0.1:8642
 ```
 
-Hermes needs a model provider before it can answer. Configure it **inside the
-volume**, through Hermes's own commands, so no key ever passes through the hub:
+Hermes needs a model provider before it can answer, and so does every coding
+agent you install later. You add one **once, on the Models screen** — Models →
+*Add provider* → pick a preset (or *Custom* for your own OpenAI-compatible
+endpoint), give it a base URL and, if it needs one, a key. The hub stores the
+key encrypted under `/data/keys/data.key`, writes it into Hermes's own
+`/data/hermes/.env`, restarts the gateway, and hands it to every coding agent
+that declares the same credential family (ADR 0010). Nobody pastes a key twice,
+and `hermes config` keeps working for anything the hub does not own.
 
-```bash
-docker compose exec hub hermes model                        # interactive provider + model picker
-# or non-interactively:
-docker compose exec hub hermes config set OPENROUTER_API_KEY sk-or-...
-docker compose exec hub hermes config set model openrouter/anthropic/claude-sonnet-4.6
-docker compose exec -T hub hermes doctor                    # what Hermes thinks of its setup
+`majlis providers presets` and `majlis providers add <preset>` do the same from
+a terminal.
+
+**Back up `/data/keys/data.key`.** It is the one file that cannot be
+regenerated: without it every stored key reads as "there was a secret here".
+
+## 3b. A model server on your own machine (LM Studio, Ollama, LiteLLM)
+
+This is the one that catches people. The hub runs **inside a container**, so
+`http://127.0.0.1:1234/v1` — the address LM Studio prints in its own window —
+is the *container's* loopback and there is nothing listening on it. The Models
+screen says so when you type such an address and suggests the one that works;
+it never rewrites what you typed.
+
+Use the host's name instead:
+
+| Your server | What to give the hub |
+|---|---|
+| LM Studio on the host | `http://host.docker.internal:1234/v1` |
+| Ollama on the host | `http://host.docker.internal:11434` |
+| LiteLLM in another container on the same network | `http://<service name>:4000/v1` |
+
+On **Docker Desktop** (macOS, Windows) that name already resolves. On a
+**Linux host** it does not exist until the stack maps it, which is this line —
+already in the repository's `docker-compose.yml`:
+
+```yaml
+services:
+  hub:
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
 ```
 
-The hub's `hermes` command already has `HERMES_HOME=/data/hermes` in its
-environment, so these edit `/data/hermes/.env` and `/data/hermes/config.yaml`.
-Restart Hermes from the Agents screen (`agents.restart`) or
-`docker compose restart hub` for the new key to take effect.
+Then make sure the server itself listens on more than loopback: LM Studio's
+"Serve on local network", and `OLLAMA_HOST=0.0.0.0` for Ollama. A local server
+usually needs no key at all; if yours is behind one (a LiteLLM master key, a
+proxy), type it in the same dialog — the key field is always there, and the hub
+never demands a key it was not told to expect.
 
 ### Using a Hermes you already run
 

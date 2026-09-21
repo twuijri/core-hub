@@ -71,25 +71,28 @@ export function ModelsScreen() {
     <AppShell title={title} wide>
       <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">{title}</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="btn"
-            disabled={configured.length === 0 || refresh.isPending}
-            onClick={refreshAll}
-            data-testid="refresh-all"
-          >
-            {t('models.refresh_all')}
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => setAdding(true)}
-            data-testid="open-add-provider"
-          >
-            {t('models.provider.add')}
-          </button>
-        </div>
+        {/* The two header actions NAVIGATION §3 puts on `General`, and only there. */}
+        {tab === 'general' && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="btn"
+              disabled={configured.length === 0 || refresh.isPending}
+              onClick={refreshAll}
+              data-testid="refresh-all"
+            >
+              {t('models.refresh_all')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setAdding(true)}
+              data-testid="open-add-provider"
+            >
+              {t('models.provider.add')}
+            </button>
+          </div>
+        )}
       </header>
 
       <nav
