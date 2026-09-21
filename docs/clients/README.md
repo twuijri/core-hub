@@ -5,8 +5,9 @@ contract (`packages/contracts`) and the same navigation map (`NAVIGATION.md`). T
 this directory are binding:
 
 - `navigation.json` — the machine-readable navigation manifest: `terms` (ar/en labels),
-  `destinations`, and the ordered lists `rail`, `segments`, `footer`, `settingsTabs`,
-  `settingsTools`, `agentLevel`, plus the explicitly allowed `secondaryEntries`.
+  `destinations`, the ordered lists `rail`, `segments`, `footer`, `settingsTabs`,
+  `settingsTools`, `agentLevel`, the explicitly allowed `secondaryEntries`, and
+  `surfaceRoutes` — the URL (web) or screen id of every destination per surface.
 - `NAVIGATION.md` — the rules the manifest encodes, in prose (Arabic, the owner's language).
 
 `pnpm nav:check` validates the manifest itself. Each client must add a **parity test** that
@@ -63,6 +64,15 @@ test('navigation parity', () => {
 
 Changing `navigation.json` is a contract change: it needs the clients' parity tests updated in
 the same PR (or a follow-up recorded in the change record) and the owner's review.
+
+## The web client
+
+`packages/web` implements this manifest (`docs/clients/web.md` is not needed: the package
+README says how it is laid out). Its parity test is
+`packages/web/tests/navigation.parity.test.tsx` (rules 1–7) and
+`packages/web/tests/workspace.test.tsx` (rule 8); its router is built from
+`surfaceRoutes.web` in the manifest, so a destination without a route fails `pnpm nav:check`
+before the test even runs.
 
 ## The reference client
 

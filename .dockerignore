@@ -3,12 +3,15 @@
 node_modules
 **/node_modules
 **/dist
+**/playwright-report
+**/test-results
 packages/contracts/generated/kotlin
 packages/contracts/generated/swift
 data
 .env
 .env.*
 docs
+!docs/clients/navigation.json
 *.md
 !packages/**/README.md
 coverage

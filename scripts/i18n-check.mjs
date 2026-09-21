@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // `pnpm i18n:check`: Arabic/English key parity for every locale set in the repository.
-// Today: packages/server and packages/cli src/i18n/{ar,en}.json. Later: packages/web and apps/* locale files —
+// Today: packages/server, packages/cli and packages/web src/i18n/{ar,en}.json. Later: apps/* locale files —
 // add their directories to LOCALE_SETS; the rule is the same (same keys, same placeholders, no empties).
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -11,7 +11,7 @@ const LANGUAGES = ['ar', 'en'];
 const LOCALE_SETS = [
   { name: 'server', dir: 'packages/server/src/i18n', required: true },
   { name: 'cli', dir: 'packages/cli/src/i18n', required: true },
-  { name: 'web', dir: 'packages/web/src/i18n', required: false },
+  { name: 'web', dir: 'packages/web/src/i18n', required: true },
   { name: 'desktop', dir: 'apps/desktop/src/i18n', required: false },
 ];
 
