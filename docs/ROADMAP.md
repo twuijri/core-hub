@@ -19,6 +19,8 @@ web client once it exists. From then on every phase ends with a redeploy of
 that stack; the fork keeps running until Phase 5.
 
 ## Phase 1 — Working together
+- The ideas adopted from other products for this phase are listed in
+  `docs/inspirations/ADOPTION-BACKLOG.md`; build them with the phase, not before.
 - `rooms` (multi-agent rooms), `tasks` (a kanban-style section: projects,
   agent assignment, worktree per task), `schedules` (cron + workflows),
   `notify`.

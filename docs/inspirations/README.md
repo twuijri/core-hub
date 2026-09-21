@@ -18,3 +18,7 @@ Capability comparison: `FEATURE-MATRIX.md`.
 | agenthub | Apache-2.0 | structured, replayable ACP timelines; remote execution nodes; task/attempt/run vocabulary | `agenthub.md` |
 | Claw-Kanban | Apache-2.0 | role-based auto-assignment of tasks to agents; fail-closed runs; chat-to-card | `claw-kanban.md` |
 | Hubcode | AGPL-3.0 — **no code** (repo located 2026-09-21 at github.com/hubtool/hubcode; the earlier "repo not located" entry was wrong) | shared live sessions with voice; kanban per worktree; worker+verifier loops | `hubcode.md` |
+
+## ما نأخذه ومتى
+`ADOPTION-BACKLOG.md` يجمع كل فكرة قررنا أخذها، مرتَّبة بمرحلتها من
+`docs/ROADMAP.md`. أي فكرة جديدة من أي مشروع تُسجَّل هناك قبل أن تُبنى.
