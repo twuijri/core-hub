@@ -333,18 +333,6 @@
     "test": {
       "ok": "The provider answered.",
       "http_error": "The provider answered with an error."
-    },
-    "speech": {
-      "stt": {
-        "not_chosen": "No speech-to-text provider is chosen.",
-        "disabled": "The chosen speech-to-text provider is switched off.",
-        "no_key": "The chosen speech-to-text provider has no key."
-      },
-      "tts": {
-        "not_chosen": "No text-to-speech provider is chosen.",
-        "disabled": "The chosen text-to-speech provider is switched off.",
-        "no_key": "The chosen text-to-speech provider has no key."
-      }
     }
   }
 }

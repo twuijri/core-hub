@@ -86,7 +86,11 @@ JSON (`models.synthesize` يعيد بايتات صوت). كل معالج آخر 
 | العملية | السبب |
 |---|---|
 | `models.startProviderSignIn` · `getProviderSignIn` · `completeProviderSignIn` | لا مزوّد في الفهرس المُدمج يستوثق بـOAuth device code؛ كلهم مفتاح واجهة. إعادة `201` بـ`verification_url` مخترَع كذبة يعرضها العميل. تصل مع أول مزوّد OAuth. |
+
 | `models.transcribe` | الصوت يصل `multipart/form-data` والخادم بلا قارئ multipart (محلّل جسم واحد عمدًا). إضافته تغيير مستقل؛ حتى ذلك تقول العملية ذلك بدل إرجاع نص فارغ. |
+
+الأربع مسجَّلة كمسارات صريحة لا كـstub عام في `app/routes.ts`، فيصل العميل **سببها** لا
+«غير منفَّذة بعد» فقط، ويتحقّق اختباران من نصّ السبب.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 
@@ -128,9 +132,9 @@ $ pnpm nav:check
 nav:check  OK — 35 destinations, 37 terms, ar/en complete, routes for web
 
 $ pnpm i18n:check
-i18n:check  server: 92 keys, ar/en in parity
+i18n:check  server: 93 keys, ar/en in parity
 i18n:check  cli: 199 keys, ar/en in parity
-i18n:check  web: 257 keys, ar/en in parity
+i18n:check  web: 251 keys, ar/en in parity
 i18n:check  desktop: apps/desktop/src/i18n not present yet — skipped
 i18n:check  OK
 

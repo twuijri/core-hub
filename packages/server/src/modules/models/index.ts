@@ -400,11 +400,24 @@ export const modelsModule = defineModule({
 
     // ------------------------------------------------------------------ speech
 
+    /**
+     * `SpeechSide.reason` leaves as a sentence, not a key: the contract's example is a
+     * sentence, and a client that is not ours would otherwise render `models.speech.…`.
+     * The service keeps the key so the choice of language stays with the request.
+     */
+    const localiseSpeech = (
+      speech: ReturnType<ModelsService['getSpeech']>,
+      request: FastifyRequest,
+    ) => ({
+      stt: { ...speech.stt, reason: speech.stt.reason && t(speech.stt.reason, request.language) },
+      tts: { ...speech.tts, reason: speech.tts.reason && t(speech.tts.reason, request.language) },
+    });
+
     defineRoute(app, deps, {
       operationId: 'models.getSpeech',
       handler: (request) => {
         const { service, scope, actor } = enter(request);
-        return service.getSpeech(scope, actor.userId);
+        return localiseSpeech(service.getSpeech(scope, actor.userId), request);
       },
     });
 
@@ -412,7 +425,10 @@ export const modelsModule = defineModule({
       operationId: 'models.updateSpeech',
       handler: (request, { body }) => {
         const { service, scope, actor } = enter(request);
-        return service.updateSpeech(scope, actor, body as SpeechPatchInput);
+        return localiseSpeech(
+          service.updateSpeech(scope, actor, body as SpeechPatchInput),
+          request,
+        );
       },
     });
 
@@ -446,6 +462,31 @@ export const modelsModule = defineModule({
           .send(Buffer.from(spoken.audio));
       },
     });
+
+    // ------------------------------------------------- the documented gaps
+
+    /**
+     * Declared in the contract, deliberately not implemented, and each says which gap it
+     * is waiting on. An explicit route is better than the app's generic 501 stub: the
+     * client gets the reason, not just "not implemented yet".
+     */
+    const gaps: Record<string, string> = {
+      'models.startProviderSignIn': 'models.signin.not_implemented',
+      'models.getProviderSignIn': 'models.signin.not_implemented',
+      'models.completeProviderSignIn': 'models.signin.not_implemented',
+      'models.transcribe': 'models.transcribe.not_implemented',
+    };
+    for (const [operationId, messageKey] of Object.entries(gaps)) {
+      defineRoute(app, deps, {
+        operationId,
+        handler: () => {
+          throw new HubError('not_implemented', {
+            messageKey,
+            details: { operation_id: operationId },
+          });
+        },
+      });
+    }
   },
   registerEvents(_io: SocketServer) {
     // This module does not stream (ARCHITECTURE §Realtime). A catalogue refresh is a job

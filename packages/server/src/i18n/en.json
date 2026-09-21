@@ -113,6 +113,9 @@
     },
     "transcribe": {
       "not_implemented": "The hub cannot receive an audio upload yet; dictate on the device instead."
+    },
+    "signin": {
+      "not_implemented": "No provider here signs in by browser yet; every one of them takes an API key."
     }
   }
 }
