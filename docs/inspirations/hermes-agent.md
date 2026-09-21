@@ -65,11 +65,52 @@
 - `hermes dashboard` (9119، `--host`, `--port`): سطح إدارة على مستوى الجهاز يختار الملف الشخصي بـ `?profile=`؛ صفحات Status/Chat (TUI عبر PTY على `/api/pty` WebSocket)/Sessions/Config/API Keys/Skills/MCP/Models/Cron/Logs؛ لافتة ضغط الذاكرة/القرص.
 - الأمان (`security`): `approvals.mode` = `smart|manual|off`، `timeout`, `cron_mode`/`single_query_mode`/`unattended_mode` = `deny|approve`، YOLO (`--yolo`, `/yolo`)، ثماني طبقات (تفويض، موافقة الأوامر الخطرة، أمان الكتابة، عزل حاويات، تصفية اعتمادات MCP، فحص ملفات السياق، عزل الجلسات، تعقيم المدخلات).
 
+## سطح `/v1/runs` كما نقوده فعلًا (من مصدر Hermes بترخيص MIT، 2026-09-21)
+هذا القسم ليس فكرة مقتبسة بل توثيق **سطح وقت التشغيل الذي نبني عليه** (ADR 0008). قُرئ من
+`gateway/platforms/api_server.py` و`api_server_runs.py` و`gateway/config_env.py` و
+`tools/approval.py` على فرع `main` (النسخة 0.21.3، الوسم `v2026.9.14`)؛ روابط المصدر في آخر الصفحة.
+
+- **التفعيل**: وجود `API_SERVER_KEY` قوي (≥16 حرفًا وليس قيمة نائبة) في بيئة `hermes gateway run`
+  يفعّل الخادم (`_api_server()` في `config_env.py`)، مع `API_SERVER_HOST` و`API_SERVER_PORT`
+  (الافتراضي `127.0.0.1:8642`). بلا مفتاح **يرفض الإقلاع** (`_api_key_passes_startup_guard`).
+- **الاستيثاق**: `Authorization: Bearer <API_SERVER_KEY>` على كل شيء عدا `GET /health`
+  (يعيد `{"status":"ok", "platform":"hermes-agent", "version":…}`). الخطأ:
+  `{"error":{"message":…,"code":"gateway_auth_failed"}}` بحالة 401.
+- **`POST /v1/runs`** جسم `{ input: string | [{role,content}], session_id?, instructions?, model?,
+  model_options?: { reasoning_effort }, previous_response_id?, conversation_history? }` ← `202
+  {"run_id":"run_<hex>","status":"started","replayed":false}`. `session_id` يختاره العميل؛ هرمس
+  يحمّل تاريخ تلك الجلسة ويكتب الدور إليها، فالدور التالي بنفس المعرّف يكمل المحادثة. رأس
+  `Idempotency-Key` اختياري.
+- **`GET /v1/runs/{id}/events`** بث SSE: كل إطار `data: {json}` بلا سطر `event:`، والاسم داخل
+  الكائن: `{"event": name, "run_id", "timestamp", …}`. تعليق `: keepalive` كل 10 ثوانٍ، و
+  `: stream closed` عند النهاية. الأحداث وحقولها (`api_server_runs.py`):
+  `run.started` · `message.delta {delta}` · `message.interim {text, already_streamed}` ·
+  `reasoning.available {text}` · `tool.started {tool, preview}` · `tool.completed {tool, duration,
+  error, preview}` · `subagent.start/complete {delegation_id, goal, status, summary, …}` ·
+  `approval.request {command, pattern_key, description, allow_permanent, allow_session,
+  smart_denied?, choices: [once|session|always|deny]}` · `approval.responded {choice, resolved}` ·
+  ختامي واحد: `run.completed {completed, partial, interrupted, output, usage{input_tokens,
+  output_tokens, total_tokens, cache_read_tokens, cache_write_tokens}, runtime{provider, model}}`
+  أو `run.failed {error}` أو `run.cancelled` أو `run.interrupted {error}`؛ و`error {message}` عند
+  استثناء. أحداث `tool.progress`/`subagent.tool` ضجيج للواجهات ويُسقطها المحوّل.
+- **`POST /v1/runs/{id}/approval`** `{ choice: once|session|always|deny, request_id? }`؛ الحالة
+  أثناء الانتظار `waiting_for_approval`؛ رفض بلا موافقة معلّقة `409 approval_not_pending`.
+- **`POST /v1/runs/{id}/stop`** `{}` ← `{"run_id","status":"stopping"}` ثم `run.cancelled`.
+- **`GET /v1/runs/{id}`** حالة قابلة للاستطلاع: `queued|running|waiting_for_approval|stopping|
+  completed|failed|cancelled|interrupted` مع `output` و`usage` و`error`.
+- **الصورة الرسمية** `nousresearch/hermes-agent` (≈6 GB مع المتصفحات وffmpeg وs6) تشغّل
+  `gateway run` بـ`HERMES_HOME=/opt/data`؛ نحن لا نبني عليها بل نثبّت الحزمة من وسم git بـ`uv`
+  (`packages/server/Dockerfile`، ADR 0008). `aiohttp` (الذي يحتاجه الخادم) ليس في التبعيات
+  الأساسية بل في extras المراسلة، فنثبّته صراحةً.
+- **الحدود المعروفة**: `/v1/runs` لا يحمل أسئلة `clarify` النصية (هذه في TUI gateway)، ولا
+  يرقّم نداءات الأدوات (نطابق `tool.completed` بآخر نداء مفتوح بالاسم نفسه)، و`usage` تأتي مع
+  الحدث الختامي فقط.
+
 ## الأفكار التي نتبنّاها (وخريطة المحوّل)
 | سطح Hermes | وحدتنا | القرار |
 |---|---|---|
-| TUI gateway JSON-RPC (WebSocket) | `agents` (محوّل `hermes`) | القناة الأساسية: `start`/`send`/`stream`/`interrupt` تُترجم إلى `session.*`/`prompt.submit`/`session.interrupt`؛ الموافقات والأسئلة تصلنا كطلبات خادم→عميل ونعرضها في `sessions` (approvals) |
-| `/v1/runs` في API server | `agents` + `schedules` + `board` | للتشغيلات غير التفاعلية (job بلا واجهة) مع `approval/steer/stop`؛ سياسة `unattended_mode` تُضبط من واجهتنا |
+| `/v1/runs` في API server | `agents` (محوّل `hermes`) | **القناة الأساسية منذ ADR 0008**: `start`/`send`/`stream`/`interrupt` = `POST /v1/runs` + SSE + `/approval` + `/stop`؛ `session_id` من عندنا يحفظ استمرارية المحادثة |
+| TUI gateway JSON-RPC (WebSocket) | `agents` (لاحقًا) | خطوة ثانية للتوجيه (`session.steer`) وأسئلة `clarify` النصية؛ ليست الأساس لأن تشغيلها المستقل غير موثّق وهويتها مصمّمة لتطبيق سطح المكتب |
 | الجلسات ومصادرها | `sessions` | نخزّن مرجع جلسة Hermes + النسخة التي استلمناها عبر الأحداث؛ **لا نقرأ `state.db` مباشرة** (ملكية البيانات) |
 | الذاكرة (`MEMORY.md`/`USER.md`، الموافقة على الكتابة) | `knowledge` (memory browser) + `agents` (per-agent settings) | متصفّح ذاكرة للقراءة والموافقة على المعلّق؛ الكتابة عبر أوامر Hermes لا عبر الملف |
 | المهارات | `agents` (per-agent) + `plugins` | قائمة/تفعيل/تثبيت من Hub عبر أوامر Hermes؛ لا ننسخ محتوى المهارات |
@@ -89,6 +130,16 @@
 
 ## ما لا نأخذه تحت هذه الرخصة
 MIT تسمح بالنسخ مع الإشعار، لكن ADR 0004 يسمح فقط بملف كامل بإشعاره مسجَّلًا في `THIRD-PARTY-NOTICES.md` ومبرَّرًا في ADR؛ لا نتوقع أيًا. لا نأخذ: كود Python/TypeScript، `web/` و`ui-tui/`، الأصول (`assets/banner.png`, الشعار)، `SOUL.md` والشخصيات، محتوى المهارات المدمجة (`skills/`, `optional-skills/` — رخصها قد تختلف)، نصوص الوثائق، ولا اسم «Hermes» في علامتنا (نذكره فقط كاسم وقت التشغيل).
+
+## روابط المصدر (MIT) التي قُرئت لسطح `/v1/runs` (2026-09-21)
+- <https://github.com/NousResearch/hermes-agent/blob/main/gateway/platforms/api_server.py>
+- <https://github.com/NousResearch/hermes-agent/blob/main/gateway/platforms/api_server_runs.py>
+- <https://github.com/NousResearch/hermes-agent/blob/main/gateway/config_env.py>
+- <https://github.com/NousResearch/hermes-agent/blob/main/tools/approval.py>
+- <https://github.com/NousResearch/hermes-agent/blob/main/hermes_cli/gateway.py> (`run_gateway`)
+- <https://github.com/NousResearch/hermes-agent/blob/main/Dockerfile> و<https://github.com/NousResearch/hermes-agent/blob/main/pyproject.toml>
+- <https://hermes-agent.nousresearch.com/docs/user-guide/docker>
+- <https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server>
 
 ## روابط (وثائق الموقع، مصدرها `website/docs/` في المستودع بتاريخ 2026-09-21)
 - <https://hermes-agent.nousresearch.com/docs/developer-guide/programmatic-integration>

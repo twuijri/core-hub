@@ -20,6 +20,7 @@
  * `src/modules/index.ts`; after that the ids are the real rows'.
  */
 import { createHash } from 'node:crypto';
+import type { FastifyRequest } from 'fastify';
 
 /** Crockford base32, as `src/db/ids.ts` uses it. */
 const ENCODING = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -36,8 +37,12 @@ export interface RequestScope {
 }
 
 export interface ScopeResolver {
-  /** `null` when the profile does not exist — the caller answers `profile_not_found`. */
-  resolve(profile: string): Promise<RequestScope | null>;
+  /**
+   * `null` when the profile does not exist — the caller answers `profile_not_found`.
+   * `request` carries who is asking (`auth` reads its principal from it); the derived
+   * resolver ignores it.
+   */
+  resolve(profile: string, request: FastifyRequest): Promise<RequestScope | null>;
 }
 
 /**

@@ -52,6 +52,12 @@ jobs:
       - run: pnpm test
       - run: pnpm contract:test
       - run: pnpm build
+      - name: The reference client starts from its build output
+        run: |
+          node packages/cli/dist/bin.js --version
+          node packages/cli/dist/bin.js --help >/dev/null
+          node packages/cli/dist/bin.js --lang ar help chat >/dev/null
+          if node packages/cli/dist/bin.js whoami; then echo '::error::whoami must exit 3 when not signed in'; exit 1; fi
 
   migrations:
     name: db:generate + db:migrate (SQLite and PostgreSQL)
