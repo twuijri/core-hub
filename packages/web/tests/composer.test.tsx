@@ -80,6 +80,17 @@ function renderComposer(props: Props = {}, language: 'ar' | 'en' = 'en') {
   return view;
 }
 
+/**
+ * Open a Radix trigger from the keyboard. jsdom's pointer emulation stops dispatching a
+ * usable `pointerdown` after the first `userEvent` interaction of a file, so the mouse path
+ * is asserted by the Playwright journeys; this is the keyboard path, which every one of
+ * these controls must support anyway.
+ */
+async function open(user: ReturnType<typeof userEvent.setup>, trigger: HTMLElement): Promise<void> {
+  trigger.focus();
+  await user.keyboard('{Enter}');
+}
+
 const surface = () => screen.getByTestId('composer');
 const state = () => surface().getAttribute('data-state');
 
@@ -221,30 +232,52 @@ describe('composer', () => {
   it('the + menu offers attach and upload and closes on Escape', async () => {
     const user = userEvent.setup();
     renderComposer();
-    await user.click(screen.getByTestId('composer-plus'));
-    const menu = screen.getByTestId('composer-menu');
+    await open(user, screen.getByTestId('composer-plus'));
+    const menu = await screen.findByTestId('composer-menu');
     expect(menu.querySelectorAll('[role="menuitem"]')).toHaveLength(2);
     await user.keyboard('{Escape}');
-    expect(screen.queryByTestId('composer-menu')).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId('composer-menu')).toBeNull());
   });
 
-  it('the approval selector binds to agent_settings.approval_mode', async () => {
+  it('the approval selector offers the three modes and reports the choice', async () => {
     const user = userEvent.setup();
     const onApprovalMode = vi.fn();
     renderComposer({ approvalMode: 'ask', onApprovalMode });
-    const select = screen.getByLabelText('Approvals') as HTMLSelectElement;
-    expect([...select.options].map((o) => o.value)).toEqual(['ask', 'auto_safe', 'auto_all']);
-    await user.selectOptions(select, 'auto_all');
+    const trigger = screen.getByTestId('composer-approval');
+    expect(trigger).toHaveTextContent('Default: ask');
+    await open(user, trigger);
+    const options = await screen.findAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual([
+      'Default: ask',
+      'Auto-edit',
+      'No ask',
+    ]);
+    await user.click(options[2] as HTMLElement);
     expect(onApprovalMode).toHaveBeenCalledWith('auto_all');
   });
 
   it('a selector with no answer is disabled and says why', () => {
     renderComposer({ approvalDisabledReason: 'This agent declares no approval mode.' });
-    expect(screen.getByLabelText('Approvals')).toBeDisabled();
-    expect(screen.getByTestId('composer-approval')).toHaveAttribute(
-      'title',
-      'This agent declares no approval mode.',
-    );
+    const trigger = screen.getByTestId('composer-approval');
+    expect(trigger).toBeDisabled();
+    expect(trigger).toHaveAttribute('title', 'This agent declares no approval mode.');
+  });
+
+  it('the model selector offers the workspace default plus the catalogue', async () => {
+    const user = userEvent.setup();
+    const onModel = vi.fn();
+    renderComposer({
+      model: null,
+      models: [{ value: 'anthropic/sonnet', label: 'Sonnet' }],
+      onModel,
+    });
+    const trigger = screen.getByTestId('composer-model');
+    expect(trigger).toHaveTextContent('Default model');
+    await open(user, trigger);
+    const options = await screen.findAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual(['Default model', 'Sonnet']);
+    await user.click(options[1] as HTMLElement);
+    expect(onModel).toHaveBeenCalledWith('anthropic/sonnet');
   });
 
   it('dictation is present but honestly disabled while models.transcribe is a stub', () => {
