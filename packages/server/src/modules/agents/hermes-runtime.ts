@@ -74,6 +74,8 @@ export interface HermesRuntimeOptions {
 export const HERMES_DEFAULT_ENDPOINT = 'http://127.0.0.1:8642';
 const RESTART_BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 30_000, 60_000];
 const STOP_GRACE_MS = 10_000;
+const WARM_UP_INTERVAL_MS = 2_000;
+const WARM_UP_ATTEMPTS = 60;
 
 /** Reads or mints the API server key. Kept next to the JWT secret, mode 0600. */
 export function loadOrCreateHermesApiKey(dataDir: string): string {
@@ -104,6 +106,7 @@ export class HermesRuntime {
   private restarts = 0;
   private healthyAt: number | null = null;
   private stopping = false;
+  private restartRequested = false;
   private restartTimer: NodeJS.Timeout | null = null;
   private healthTimer: NodeJS.Timeout | null = null;
 
@@ -168,9 +171,8 @@ export class HermesRuntime {
     const child = this.child;
     if (!child) return;
     this.log.info({ pid: child.pid }, 'hermes: restart requested');
+    this.restartRequested = true;
     await this.terminate(child);
-    // The exit handler relaunches with backoff reset, because this was asked for.
-    this.healthyAt = Date.now();
   }
 
   async stop(): Promise<void> {
@@ -220,6 +222,14 @@ export class HermesRuntime {
         this.log.info({ code, signal }, 'hermes: gateway stopped');
         return;
       }
+      if (this.restartRequested) {
+        // Asked for: no backoff, not a crash.
+        this.restartRequested = false;
+        this.log.info({ code, signal }, 'hermes: gateway stopped for restart');
+        this.setState('starting', null);
+        this.launch(binary);
+        return;
+      }
       this.log.error({ code, signal }, 'hermes: gateway crashed; restarting');
       this.setState('error', reason);
       this.scheduleRestart(binary);
@@ -252,6 +262,17 @@ export class HermesRuntime {
     if (this.healthIntervalMs <= 0) return;
     this.healthTimer = setInterval(() => void this.checkHealth(), this.healthIntervalMs);
     this.healthTimer.unref?.();
+    // Warm-up: a gateway takes a few seconds to bind; poll quickly until the first answer
+    // so the registry says `running` when it is, not one interval later.
+    if (this.mode === 'managed') this.warmUp(WARM_UP_ATTEMPTS);
+  }
+
+  private warmUp(attempts: number): void {
+    if (attempts <= 0 || this.stopping || this.state === 'running') return;
+    const timer = setTimeout(() => {
+      void this.checkHealth().then(() => this.warmUp(attempts - 1));
+    }, WARM_UP_INTERVAL_MS);
+    timer.unref?.();
   }
 
   private async checkHealth(): Promise<void> {

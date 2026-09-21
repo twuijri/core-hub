@@ -186,9 +186,10 @@ describe('Hermes runtime: choosing a mode', () => {
     });
     await managed.start();
     await managed.restart();
-    // The exit handler schedules the relaunch (1 s backoff).
-    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    // A requested restart relaunches at once, without backoff and without counting as a crash.
+    await new Promise((resolve) => setTimeout(resolve, 20));
     expect(spawned).toHaveLength(2);
+    expect(managed.status()).toMatchObject({ state: 'starting', restarts: 0, pid: 4242 });
     await managed.stop();
 
     const external = new HermesRuntime({
