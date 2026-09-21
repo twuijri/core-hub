@@ -106,12 +106,44 @@ for (const [a, b] of Object.entries(manifest.secondaryEntries ?? {})) {
     if (!byId.has(target)) fail(`secondaryEntries: "${a}" -> "${target}" is not a destination`);
 }
 
+// surfaceRoutes: a URL (web) or screen id per destination that exists on that surface — the
+// client's router is built from it, so it must be complete, exact and unique.
+for (const [surface, routes] of Object.entries(manifest.surfaceRoutes ?? {})) {
+  if (surface.startsWith('$')) continue;
+  if (!SURFACES.has(surface)) {
+    fail(`surfaceRoutes: unknown surface "${surface}"`);
+    continue;
+  }
+  const seen = new Map();
+  for (const [id, route] of Object.entries(routes)) {
+    const destination = byId.get(id);
+    if (!destination) {
+      fail(`surfaceRoutes.${surface}: "${id}" is not a destination`);
+      continue;
+    }
+    if (destination.surfaces && !destination.surfaces.includes(surface))
+      fail(`surfaceRoutes.${surface}: "${id}" does not exist on ${surface}`);
+    if (typeof route !== 'string' || route.trim() === '')
+      fail(`surfaceRoutes.${surface}: "${id}" has an empty route`);
+    else if (seen.has(route))
+      fail(
+        `surfaceRoutes.${surface}: route "${route}" is used by "${seen.get(route)}" and "${id}"`,
+      );
+    seen.set(route, id);
+  }
+  for (const [id, destination] of byId) {
+    if (destination.surfaces && !destination.surfaces.includes(surface)) continue;
+    if (!(id in routes)) fail(`surfaceRoutes.${surface}: destination "${id}" has no route`);
+  }
+}
+
 if (failures > 0) {
   console.error(
     `nav:check  FAILED with ${failures} problem(s) in ${path.relative(repoRoot, manifestPath)}`,
   );
   process.exit(1);
 }
+const surfaces = Object.keys(manifest.surfaceRoutes ?? {}).filter((s) => !s.startsWith('$'));
 console.log(
-  `nav:check  OK — ${destinations.length} destinations, ${Object.keys(terms).length} terms, ar/en complete`,
+  `nav:check  OK — ${destinations.length} destinations, ${Object.keys(terms).length} terms, ar/en complete, routes for ${surfaces.join(', ') || 'no surface yet'}`,
 );
