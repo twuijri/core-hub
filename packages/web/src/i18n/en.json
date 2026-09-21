@@ -43,7 +43,9 @@
   },
   "common": {
     "loading": "Loading…",
-    "retry": "Retry"
+    "retry": "Retry",
+    "save": "Save",
+    "cancel": "Cancel"
   },
   "errors": {
     "not_implemented": "The hub declares {operation} in the contract but does not implement it yet.",
@@ -285,5 +287,64 @@
   "placeholder": {
     "later": "{name} arrives with its module in phase {phase}. Nothing is hidden here.",
     "agent": "Agent {id}"
+  },
+  "models": {
+    "tab": {
+      "general": "Providers",
+      "auxiliary": "Defaults",
+      "ensembles": "Ensembles",
+      "stt_providers": "Speech to text",
+      "tts_providers": "Text to speech"
+    },
+    "providers": {
+      "hint": "Add a provider key once here. Every agent uses it — you never enter it again.",
+      "empty": "No provider of this kind is available."
+    },
+    "provider": {
+      "key": "API key",
+      "key_hint": "Paste the key",
+      "key_stored": "[stored] — paste a new key to replace it",
+      "save_key": "Save key",
+      "clear_key": "Remove key",
+      "configured": "Key stored",
+      "not_configured": "No key",
+      "no_key_needed": "No key needed",
+      "test": "Test",
+      "testing": "Asking the provider…",
+      "refresh": "Refresh models",
+      "enabled": "Enabled",
+      "remove": "Remove",
+      "add": "Add a provider",
+      "label": "Name",
+      "base_url": "Base URL",
+      "model_count": "{count} models"
+    },
+    "defaults": {
+      "hint": "One chat model and one coding model. Every agent inherits them unless it is pinned to something else.",
+      "chat": "Chat",
+      "none": "Not chosen",
+      "no_models": "No models yet. Add a provider key and the hub fetches its model list.",
+      "inheriting": "Agents inheriting these",
+      "inheriting_hint": "What each agent will use when a chat does not name a model."
+    },
+    "ensembles": {
+      "hint": "Ensembles are created over the API for now; this tab lands with the rooms screens."
+    },
+    "test": {
+      "ok": "The provider answered.",
+      "http_error": "The provider answered with an error."
+    },
+    "speech": {
+      "stt": {
+        "not_chosen": "No speech-to-text provider is chosen.",
+        "disabled": "The chosen speech-to-text provider is switched off.",
+        "no_key": "The chosen speech-to-text provider has no key."
+      },
+      "tts": {
+        "not_chosen": "No text-to-speech provider is chosen.",
+        "disabled": "The chosen text-to-speech provider is switched off.",
+        "no_key": "The chosen text-to-speech provider has no key."
+      }
+    }
   }
 }

@@ -48,7 +48,11 @@
     "once": "Exit when the first run finishes (with --message)",
     "reasoning": "Show the agent's reasoning as it streams",
     "approve": "Answer approvals without asking: once, session, always or deny",
-    "timeout": "Give up waiting for a run after this many seconds (0 = never)"
+    "timeout": "Give up waiting for a run after this many seconds (0 = never)",
+    "provider_kind": "Only providers of this kind: llm, stt or tts.",
+    "model_kind": "Only models of this kind: chat, embedding, stt or tts.",
+    "provider": "Only this provider's models.",
+    "role": "Which default to set: chat (the default), coding, title, summary or embedding."
   },
   "cmd": {
     "login": "Sign in to a hub and remember the token",
@@ -65,13 +69,21 @@
     "sessions_show": "Show a session with its live state",
     "sessions_delete": "Delete a session",
     "chat": "Chat in a session and stream the reply",
-    "help": "Show help for a command"
+    "help": "Show help for a command",
+    "providers_list": "List the workspace's model providers and whether each has a key.",
+    "providers_add": "Store a provider's API key (asked for, never given as an argument).",
+    "providers_test": "Ask the provider whether the stored key works.",
+    "providers_remove": "Clear a provider's key, or remove a custom provider.",
+    "models_list": "List the models the providers reported.",
+    "models_default": "Show the workspace's default models, or set one."
   },
   "arg": {
     "code": "Pairing code (XXXX-XXXX) or the full QR JSON",
     "agent_id": "Agent id",
     "session_id": "Session id",
-    "command": "Command name"
+    "command": "Command name",
+    "provider": "Provider slug or id (`anthropic`).",
+    "model_key": "Model key as `<provider>/<model>`; omit to show the current defaults."
   },
   "errors": {
     "not_signed_in": "Not signed in. Run `majlis login --server URL` first.",
@@ -193,5 +205,27 @@
     "yes": "yes",
     "no": "no",
     "none": "—"
+  },
+  "models": {
+    "slug": "Provider",
+    "label": "Name",
+    "kind": "Kind",
+    "key": "Key",
+    "count": "Models",
+    "model": "Model",
+    "context": "Context",
+    "empty": "No models yet. Add a provider key and the hub fetches its model list.",
+    "providers_empty": "No providers in this workspace.",
+    "key_stored": "stored",
+    "key_missing": "missing",
+    "key_not_needed": "not needed",
+    "prompt_key": "API key for {provider}: ",
+    "key_saved": "Key stored for {provider}.",
+    "key_cleared": "Key removed from {provider}.",
+    "provider_removed": "Provider {provider} removed.",
+    "shared_note": "Every agent uses this key; you do not enter it again per agent.",
+    "unknown_provider": "No provider \"{provider}\". Known: {known}",
+    "role_chat": "Chat",
+    "default_set": "Default for {role} is now {model}."
   }
 }
