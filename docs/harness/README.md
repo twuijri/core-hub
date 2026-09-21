@@ -71,3 +71,16 @@ both are no-ops until a `src/modules/<name>/schema.ts` and a migration exist. CI
 `pnpm build` and the Docker job in CI (`packages/server/Dockerfile`, smoke-tested on
 `/api/v1/health`). `.github/workflows/release.yml` publishes to GHCR only on a `v*` tag that
 points at `main` (TEAM-RULES §6).
+
+## CI on a private repository
+
+`twuijri/corehub` is private. GitHub Actions minutes for private repositories
+come out of the account's monthly quota; when it is exhausted every job fails
+in about three seconds with no steps executed (the signature we saw on the
+founding commit: run 35627237198, three jobs, `steps: []`). Nothing is wrong
+with the workflows — the same workflows run fine on a public repository.
+
+Until the owner adds Actions minutes or makes the repository public, the
+checks in `docs/harness/validation.md` are run locally before every merge and
+their real output is pasted in the change record. Do not "fix" CI by removing
+jobs.
