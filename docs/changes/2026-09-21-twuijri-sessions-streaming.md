@@ -122,13 +122,13 @@ $ pnpm typecheck
 $ pnpm -r --if-present typecheck
 $ pnpm generate:ts && tsc --noEmit -p tsconfig.json
 contracts:generate:ts  wrote generated/ts/schema.ts
-$ pnpm --filter @corehub/contracts build && tsc --noEmit -p tsconfig.json
+$ pnpm --filter @majlis/contracts build && tsc --noEmit -p tsconfig.json
 (لا أخطاء)
 
 $ pnpm test
- Test Files  3 passed (3)        # @corehub/contracts
+ Test Files  3 passed (3)        # @majlis/contracts
       Tests  11 passed (11)
- Test Files  22 passed (22)      # @corehub/server (unit)
+ Test Files  22 passed (22)      # @majlis/server (unit)
       Tests  84 passed (84)
 
 $ npx vitest run --project unit src/modules/sessions
@@ -143,7 +143,7 @@ $ pnpm build
 $ pnpm -r --if-present build
 $ pnpm generate:ts && tsc -p tsconfig.json
 contracts:generate:ts  wrote generated/ts/schema.ts
-$ pnpm --filter @corehub/contracts build && tsc -p tsconfig.json
+$ pnpm --filter @majlis/contracts build && tsc -p tsconfig.json
 (لا أخطاء)
 
 $ pnpm i18n:check
@@ -161,7 +161,7 @@ $ pnpm db:generate
 [✓] Your SQL migration file ➜ drizzle/0000_furry_tyrannus.sql 🚀
 
 $ DATA_DIR=/tmp/ch-migrate-check pnpm db:migrate   # قاعدة SQLite نظيفة
-{"level":30,"service":"corehub","msg":"db: migrations applied (sqlite)"}
+{"level":30,"service":"majlis","msg":"db: migrations applied (sqlite)"}
 ```
 
 ما يثبته اختبار التكامل تحديدًا (`src/modules/sessions/sessions-run.test.ts`):

@@ -598,7 +598,7 @@ export class SessionsService {
         ? { kind: 'user' as const, id: row.authorId, name: scope.userName, avatar: null }
         : row.authorKind === 'agent'
           ? { kind: 'agent' as const, id: row.authorId, name: 'agent', avatar: null }
-          : { kind: 'system' as const, id: null, name: 'Core Hub', avatar: null };
+          : { kind: 'system' as const, id: null, name: 'Majlis', avatar: null };
     return toMessage(
       {
         row,
