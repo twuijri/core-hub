@@ -33,7 +33,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['**/*.{ts,mts,cts}'],
+    files: ['**/*.{ts,mts,cts,tsx}'],
     rules: {
       '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
       '@typescript-eslint/no-unused-vars': [
@@ -45,6 +45,19 @@ export default tseslint.config(
   {
     files: ['**/*.{js,mjs,cjs}'],
     languageOptions: { globals: { ...globals.node } },
+  },
+  {
+    // The web client runs in the browser; its build/test configs and e2e harness run on Node.
+    files: ['packages/web/src/**/*.{ts,tsx}'],
+    languageOptions: { globals: { ...globals.browser } },
+  },
+  {
+    files: [
+      'packages/web/{tests,e2e}/**/*.{ts,tsx}',
+      'packages/web/*.ts',
+      'packages/ui-tokens/**/*.ts',
+    ],
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
   },
   {
     // Server modules must not reach into app composition or into each other's internals
