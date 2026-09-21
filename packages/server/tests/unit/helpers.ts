@@ -48,7 +48,12 @@ export async function testHub(env: EnvSource = {}, options: TestHubOptions = {})
     adapterOptions: { hermes: { fetchImpl: unreachableFetch } },
     ...agentOverrides,
   });
-  const app = await buildServer({ config, logger: createLogger({ level: 'silent' }), ...build });
+  const app = await buildServer({
+    config,
+    logger: createLogger({ level: 'silent' }),
+    webDir: null,
+    ...build,
+  });
   return {
     app,
     dataDir,
