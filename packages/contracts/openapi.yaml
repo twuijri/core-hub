@@ -11420,6 +11420,7 @@ components:
           update,
           uninstall,
           restart,
+          check_update,
           discover,
           refresh_catalogue,
           worktree,
@@ -11490,7 +11491,11 @@ components:
             progress:
               $ref: '#/components/schemas/JobProgress'
             resource:
-              $ref: '#/components/schemas/ResourceRef'
+              oneOf:
+                - $ref: '#/components/schemas/ResourceRef'
+                - type: 'null'
+              description: The entity the job is about; `null` for work with no single
+                subject (a host-wide agent discovery).
             result:
               type: [object, 'null']
               description: Kind-specific outcome (an install's `version`, an export's `attachment_id`).

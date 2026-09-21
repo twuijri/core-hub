@@ -291,6 +291,7 @@
         "update",
         "uninstall",
         "restart",
+        "check_update",
         "discover",
         "refresh_catalogue",
         "worktree",
@@ -385,7 +386,15 @@
               "$ref": "#/$defs/JobProgress"
             },
             "resource": {
-              "$ref": "#/$defs/ResourceRef"
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ResourceRef"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The entity the job is about; `null` for work with no single subject (a host-wide agent discovery)."
             },
             "result": {
               "type": ["object", "null"],

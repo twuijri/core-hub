@@ -3,9 +3,9 @@
 import type { FastifyInstance } from 'fastify';
 import { Server as SocketServer } from 'socket.io';
 import type { HubModule } from '../lib/module.js';
-import { REALTIME_NAMESPACES } from '../lib/module.js';
+import { REALTIME_NAMESPACES, SOCKET_PATH } from '../lib/module.js';
 
-export const SOCKET_PATH = '/rt';
+export { SOCKET_PATH };
 
 export function createSockets(app: FastifyInstance): SocketServer {
   const io = new SocketServer(app.server, {
