@@ -121,13 +121,13 @@ function hub(state: Partial<HubState> = {}) {
         stt: {
           active_provider_id: null,
           ready: false,
-          reason: 'models.speech.stt.not_chosen',
+          reason: 'No speech-to-text provider is chosen.',
           providers: [],
         },
         tts: {
           active_provider_id: null,
           ready: false,
-          reason: 'models.speech.tts.not_chosen',
+          reason: 'No text-to-speech provider is chosen.',
           providers: [],
         },
       });
@@ -235,9 +235,9 @@ describe('models screen', () => {
     await waitFor(() => expect(screen.getByTestId('models-tabs')).toBeTruthy());
 
     await userEvent.click(screen.getByText('Text to speech'));
-    await waitFor(() =>
-      expect(screen.getByText('No text-to-speech provider is chosen.')).toBeTruthy(),
-    );
+    await waitFor(() => {
+      expect(screen.getByText('No text-to-speech provider is chosen.')).toBeTruthy();
+    });
   });
 
   it('picks the defaults and lists which agents inherit them', async () => {

@@ -450,7 +450,9 @@ describe('models: speech', () => {
         tts: { ready: boolean; reason: string | null; providers: { slug: string }[] };
       };
       expect(speech.stt.ready).toBe(false);
-      expect(speech.stt.reason).toBe('models.speech.stt.not_chosen');
+      // A sentence in the request's language, as the contract's example shows — the key
+      // stays inside the server (`models/index.ts` §localiseSpeech).
+      expect(speech.stt.reason).toBe('No speech-to-text provider is chosen.');
       expect(speech.stt.providers.map((p) => p.slug)).toEqual(['openai-stt']);
       expect(speech.tts.providers.map((p) => p.slug).sort()).toEqual(['elevenlabs', 'openai-tts']);
     } finally {
@@ -552,7 +554,11 @@ describe('models: speech', () => {
         payload: {},
       });
       expect(response.statusCode).toBe(501);
-      expect(response.json()).toMatchObject({ code: 'not_implemented' });
+      // Not the app's generic stub: the route says which gap it is waiting on.
+      expect(response.json()).toMatchObject({
+        code: 'not_implemented',
+        error: expect.stringContaining('audio upload') as unknown as string,
+      });
     } finally {
       await hub.close();
     }
@@ -567,7 +573,10 @@ describe('models: speech', () => {
         url: `/api/v1/models/providers/${anthropic.id}/sign-in`,
       });
       expect(response.statusCode).toBe(501);
-      expect(response.json()).toMatchObject({ code: 'not_implemented' });
+      expect(response.json()).toMatchObject({
+        code: 'not_implemented',
+        error: expect.stringContaining('API key') as unknown as string,
+      });
     } finally {
       await hub.close();
     }

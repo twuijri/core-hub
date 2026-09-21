@@ -104,8 +104,10 @@ function ProvidersTab({ providers, kind }: { providers: Provider[]; kind: 'llm' 
     <>
       <p className="mb-3 text-sm text-muted">{t('models.providers.hint')}</p>
       {side && !side.ready && side.reason && (
+        // The hub sends a sentence in the request's language (`models/index.ts`
+        // §localiseSpeech), so it is shown as it arrived.
         <Notice tone="warning" className="mb-3">
-          {t(side.reason)}
+          {side.reason}
         </Notice>
       )}
       <ul className="grid gap-3 md:grid-cols-2" data-testid="provider-list">
