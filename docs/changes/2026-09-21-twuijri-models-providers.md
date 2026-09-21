@@ -86,7 +86,6 @@ JSON (`models.synthesize` يعيد بايتات صوت). كل معالج آخر 
 | العملية | السبب |
 |---|---|
 | `models.startProviderSignIn` · `getProviderSignIn` · `completeProviderSignIn` | لا مزوّد في الفهرس المُدمج يستوثق بـOAuth device code؛ كلهم مفتاح واجهة. إعادة `201` بـ`verification_url` مخترَع كذبة يعرضها العميل. تصل مع أول مزوّد OAuth. |
-
 | `models.transcribe` | الصوت يصل `multipart/form-data` والخادم بلا قارئ multipart (محلّل جسم واحد عمدًا). إضافته تغيير مستقل؛ حتى ذلك تقول العملية ذلك بدل إرجاع نص فارغ. |
 
 الأربع مسجَّلة كمسارات صريحة لا كـstub عام في `app/routes.ts`، فيصل العميل **سببها** لا
