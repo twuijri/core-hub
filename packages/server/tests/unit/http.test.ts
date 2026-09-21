@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { OpenApiDocument } from '@corehub/contracts';
+import type { OpenApiDocument } from '@majlis/contracts';
 import { defineModule } from '../../src/lib/module.js';
 import { testHub, type TestHub } from './helpers.js';
 

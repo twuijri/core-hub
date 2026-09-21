@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/board/task.assigned.schema.json",
+  "$id": "https://majlis.dev/contracts/events/board/task.assigned.schema.json",
   "title": "/rt/board · task.assigned",
   "description": "`task.assignee` is set; a run may follow (`run.queued` on /rt/sessions). Emitted by: board module (assign, dispatch).",
   "type": "object",

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/sessions/message.created.schema.json",
+  "$id": "https://majlis.dev/contracts/events/sessions/message.created.schema.json",
   "title": "/rt/sessions · message.created",
   "description": "A complete message (user, command, system) or the empty shell of a streaming assistant message. Subscribers of the session. Emitted by: sessions module (user message stored; assistant message shell when a run starts; peer clients in the same session).",
   "type": "object",

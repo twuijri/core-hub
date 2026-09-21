@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/board/project.deleted.schema.json",
+  "$id": "https://majlis.dev/contracts/events/board/project.deleted.schema.json",
   "title": "/rt/board · project.deleted",
   "description": "Profile-wide. Emitted by: board module.",
   "type": "object",

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/board/task.unassigned.schema.json",
+  "$id": "https://majlis.dev/contracts/events/board/task.unassigned.schema.json",
   "title": "/rt/board · task.unassigned",
   "description": "`task.assignee` is null. Emitted by: board module.",
   "type": "object",

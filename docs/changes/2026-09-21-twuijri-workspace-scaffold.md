@@ -16,10 +16,10 @@
 - كل عملية معلنة في العقد ولا تنفّذها وحدة تُجاب بـ`501 { error, code: "not_implemented" }`
   مركّبة عند الإقلاع، فيراها العملاء واختبار العقد بدل 404 مضلّل.
 - الغرفة النظيفة (ADR 0004): لم يُفتح أي ملف من `packages/*` في Studio. خريطة التنقّل
-  نُقلت من وثيقتنا (MIT) وعُمّمت على وحدات Core Hub بلا أي إشارة إلى ملفات Studio.
+  نُقلت من وثيقتنا (MIT) وعُمّمت على وحدات Majlis بلا أي إشارة إلى ملفات Studio.
 - مهمتان متوازيتان تكتبان `packages/contracts/openapi.yaml` + `events/*` و
   `packages/server/src/modules/*/schema.ts` + `src/db/*`؛ لم تُنشأ هذه الملفات هنا.
-  كُتب `openapi.yaml` مؤقت معلَّم بـ`x-corehub-scaffold-stub: true` لأنه لم يكن موجودًا؛
+  كُتب `openapi.yaml` مؤقت معلَّم بـ`x-majlis-scaffold-stub: true` لأنه لم يكن موجودًا؛
   الأدوات تتحمّل غيابه. ظهر `src/db/schema.ts` أثناء العمل فرُبط به `drizzle.config.ts`
   و`app/db.ts`.
 - ينتظر موافقة المالك: فتح PR، الدمج، وأي نشر.
@@ -81,18 +81,18 @@ $ pnpm build        → packages/contracts/dist + packages/server/dist
 $ pnpm db:generate  (على schema.ts لمهمة قاعدة البيانات)
 [✓] Your SQL migration file ➜ drizzle/0000_abnormal_thunderbolts.sql
 $ DATA_DIR=<tmp> pnpm db:migrate
-{"level":30,"service":"corehub","msg":"db: migrations applied (sqlite)"}
+{"level":30,"service":"majlis","msg":"db: migrations applied (sqlite)"}
    (حُذف ناتج db:generate بعد التحقق؛ توليد الهجرة والتزامها من نطاق مهمة المخطط)
-$ docker build -f packages/server/Dockerfile -t corehub:scaffold .     # الباني القديم (بلا buildx على هذا الجهاز)
-exit=0   image corehub:scaffold 425MB
-$ docker run -d --name corehub-smoke -p 18080:8080 -e HUB_ADMIN_PASSWORD=… corehub:scaffold
+$ docker build -f packages/server/Dockerfile -t majlis:scaffold .     # الباني القديم (بلا buildx على هذا الجهاز)
+exit=0   image majlis:scaffold 425MB
+$ docker run -d --name majlis-smoke -p 18080:8080 -e HUB_ADMIN_PASSWORD=… majlis:scaffold
 $ curl http://127.0.0.1:18080/api/v1/health
 {"ok":true,"server_version":"0.0.0","uptime_seconds":1}
 $ curl -H 'Accept-Language: ar' http://127.0.0.1:18080/api/v1/nope
 {"error":"العنصر المطلوب غير موجود.","code":"not_found"}
-$ docker exec corehub-smoke id
+$ docker exec majlis-smoke id
 uid=10001(hub) gid=10001(hub) groups=10001(hub)
-$ docker inspect --format '{{.State.Health.Status}}' corehub-smoke   → healthy
+$ docker inspect --format '{{.State.Health.Status}}' majlis-smoke   → healthy
 $ node scripts/check-change-record.mjs --files docs/changes/2026-09-21-twuijri-workspace-scaffold.md
 change-record  OK — 1 record(s) valid
 ```

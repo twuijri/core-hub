@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/jobs/job.completed.schema.json",
+  "$id": "https://majlis.dev/contracts/events/jobs/job.completed.schema.json",
   "title": "/rt/jobs · job.completed",
   "description": "The job succeeded; `job.result` is the outcome. Profile-wide. Emitted by: the jobs kernel module, for every job of the workspace.",
   "type": "object",

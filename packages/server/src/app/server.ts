@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
-import { loadOpenApiDocument, type OpenApiDocument } from '@corehub/contracts';
+import { loadOpenApiDocument, type OpenApiDocument } from '@majlis/contracts';
 import { createLogger, type Logger } from '../lib/logger.js';
 import type { HubModule } from '../lib/module.js';
 import { modules as allModules } from '../modules/index.js';

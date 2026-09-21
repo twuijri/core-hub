@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/rooms/member.joined.schema.json",
+  "$id": "https://majlis.dev/contracts/events/rooms/member.joined.schema.json",
   "title": "/rt/rooms · member.joined",
   "description": "A person joined. Members. Emitted by: rooms module.",
   "type": "object",

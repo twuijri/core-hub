@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/schedules/schedule_run.completed.schema.json",
+  "$id": "https://majlis.dev/contracts/events/schedules/schedule_run.completed.schema.json",
   "title": "/rt/schedules · schedule_run.completed",
   "description": "History entry state. Profile-wide. Emitted by: schedules module (job runner).",
   "type": "object",

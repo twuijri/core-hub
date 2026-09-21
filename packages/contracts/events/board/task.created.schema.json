@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/board/task.created.schema.json",
+  "$id": "https://majlis.dev/contracts/events/board/task.created.schema.json",
   "title": "/rt/board · task.created",
   "description": "Subscribers of the project (or profile-wide when subscribed without a project). Emitted by: board module.",
   "type": "object",

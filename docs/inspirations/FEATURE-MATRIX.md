@@ -1,8 +1,8 @@
-# مصفوفة الميزات — المشاريع الملهِمة مقابل هدف Core Hub
+# مصفوفة الميزات — المشاريع الملهِمة مقابل هدف Majlis
 
-قراءة بتاريخ 2026-09-21 من README ووثائق كل مشروع (لا من الكود). القيم: **نعم** / **جزئي** / **لا** / — (لا ينطبق). الملاحظة بعد الشرطة قصيرة عمدًا؛ التفاصيل في صفحة كل مشروع. عمود Core Hub = الهدف بحسب `docs/ARCHITECTURE.md` و`docs/ROADMAP.md` (رقم المرحلة بين قوسين).
+قراءة بتاريخ 2026-09-21 من README ووثائق كل مشروع (لا من الكود). القيم: **نعم** / **جزئي** / **لا** / — (لا ينطبق). الملاحظة بعد الشرطة قصيرة عمدًا؛ التفاصيل في صفحة كل مشروع. عمود Majlis = الهدف بحسب `docs/ARCHITECTURE.md` و`docs/ROADMAP.md` (رقم المرحلة بين قوسين).
 
-| القدرة | Hermes Studio / Ekko | clawboard | AionUi | Vibe Kanban | Multica | Proliferate | agenthub | Claw-Kanban | Hubcode | Hermes Agent | **Core Hub (الهدف)** |
+| القدرة | Hermes Studio / Ekko | clawboard | AionUi | Vibe Kanban | Multica | Proliferate | agenthub | Claw-Kanban | Hubcode | Hermes Agent | **Majlis (الهدف)** |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | بث المحادثة (chat streaming) | نعم — Socket.IO | جزئي — نسخ الجلسات وبث مخرجات | نعم — جلسات متوازية | نعم — جلسة داخل workspace | نعم — دردشة + بث نسخة الـ run | نعم — محادثة لكل worktree | نعم — خط زمني ACP | جزئي — عارض طرفية فقط | نعم — دردشة متعددة التبويبات | نعم — TUI/gateway/SSE | **نعم** — `sessions` + `/rt/sessions` (0) |
 | غرف متعددة الوكلاء | نعم — الغرف | لا — على الخارطة | جزئي — Team Mode قائد/زملاء | لا | جزئي — squads + تعليقات | جزئي — روستر وكلاء أبناء | نعم — قنوات وخيوط `# all` | لا | جزئي — جلسة مشتركة مع بشر | جزئي — delegate + Kanban ملفات شخصية | **نعم** — `rooms` مقاعد/ذكر/تسليم (1) |

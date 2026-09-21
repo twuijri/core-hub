@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/schedules/schedule.fired.schema.json",
+  "$id": "https://majlis.dev/contracts/events/schedules/schedule.fired.schema.json",
   "title": "/rt/schedules · schedule.fired",
   "description": "A schedule fired; `schedule_run_id` identifies the history entry. Emitted by: schedules module (timer or run-now).",
   "type": "object",

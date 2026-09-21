@@ -15,7 +15,7 @@ import {
   type ContractOperation,
   type HubClient,
   type OpenApiDocument,
-} from '@corehub/contracts';
+} from '@majlis/contracts';
 import { testHub, type TestHub } from '../unit/helpers.js';
 
 const doc = loadOpenApiDocument();

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/board/task.moved.schema.json",
+  "$id": "https://majlis.dev/contracts/events/board/task.moved.schema.json",
   "title": "/rt/board · task.moved",
   "description": "The task changed column; `task.status` is the new one. Emitted by: board module (move, assign/stop/unassign side effects, dispatch, bulk archive).",
   "type": "object",

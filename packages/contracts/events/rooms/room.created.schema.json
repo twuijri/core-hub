@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/rooms/room.created.schema.json",
+  "$id": "https://majlis.dev/contracts/events/rooms/room.created.schema.json",
   "title": "/rt/rooms · room.created",
   "description": "A room was created or cloned. Profile-wide. Emitted by: rooms module.",
   "type": "object",

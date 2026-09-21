@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/sessions/context.updated.schema.json",
+  "$id": "https://majlis.dev/contracts/events/sessions/context.updated.schema.json",
   "title": "/rt/sessions · context.updated",
   "description": "The context-window usage of a session changed. Emitted by: sessions module after each run and after compression.",
   "type": "object",

@@ -1,6 +1,6 @@
-# Core Hub
+# Majlis (مجلس)
 
-Core Hub is a self-hosted hub that puts every AI agent you use in one place:
+Majlis is a self-hosted hub that puts every AI agent you use in one place:
 chat with an agent, put several agents in one room, hand tasks to agents on a
 board, schedule work, and reach all of it from the web, the desktop and your
 phone. The server is the product; every client is a thin, native surface over

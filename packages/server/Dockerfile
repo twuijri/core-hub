@@ -1,5 +1,5 @@
-# Core Hub server image. Build from the repository root:
-#   docker build -f packages/server/Dockerfile -t corehub .
+# Majlis server image. Build from the repository root:
+#   docker build -f packages/server/Dockerfile -t majlis .
 # One process, one container, one data directory (/data). Non-root. Healthcheck on /api/v1/health.
 # Works with the legacy builder and BuildKit alike (no BuildKit-only mounts); CI adds layer caching.
 

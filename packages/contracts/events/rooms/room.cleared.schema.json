@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/rooms/room.cleared.schema.json",
+  "$id": "https://majlis.dev/contracts/events/rooms/room.cleared.schema.json",
   "title": "/rt/rooms · room.cleared",
   "description": "Context was cleared: drop the transcript, the queue and activity; `total_tokens` resets. Emitted by: rooms module.",
   "type": "object",

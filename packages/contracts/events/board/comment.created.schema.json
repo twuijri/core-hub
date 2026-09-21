@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/board/comment.created.schema.json",
+  "$id": "https://majlis.dev/contracts/events/board/comment.created.schema.json",
   "title": "/rt/board · comment.created",
   "description": "Emitted by: board module (people and agents).",
   "type": "object",

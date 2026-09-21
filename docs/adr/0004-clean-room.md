@@ -4,7 +4,7 @@ Status: accepted (2026-09-21)
 
 ## Context
 The owner runs a personal fork of Hermes Studio (BSL 1.1: non-commercial only
-until 2029-05-10). Core Hub must be usable commercially and must not be a
+until 2029-05-10). Majlis must be usable commercially and must not be a
 derivative work of that code base.
 
 ## Decision

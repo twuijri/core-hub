@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://corehub.dev/contracts/events/sessions/session.created.schema.json",
+  "$id": "https://majlis.dev/contracts/events/sessions/session.created.schema.json",
   "title": "/rt/sessions · session.created",
   "description": "A session appeared in the workspace. Profile-wide — no subscription needed. Emitted by: sessions module (create, fork; board/schedules/rooms when they open a session).",
   "type": "object",
@@ -63,7 +63,7 @@
           "model": "claude-sonnet-4-5",
           "provider": "anthropic",
           "reasoning_effort": "medium",
-          "working_dir": "/home/agent/projects/corehub",
+          "working_dir": "/home/agent/projects/majlis",
           "pinned": true,
           "archived": false,
           "category_id": null,

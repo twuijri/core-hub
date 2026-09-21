@@ -11,7 +11,7 @@ const doc = path.resolve(here, '..', 'openapi.yaml');
 const temps: string[] = [];
 
 function fixture(source: string, file = 'packages/web/src/api.ts') {
-  const root = mkdtempSync(path.join(tmpdir(), 'corehub-check-clients-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'majlis-check-clients-'));
   temps.push(root);
   mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
   writeFileSync(path.join(root, file), source);
@@ -47,7 +47,7 @@ describe('check-clients (ADR 0003)', () => {
   });
 
   it('passes when there are no client sources yet', () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'corehub-empty-'));
+    const root = mkdtempSync(path.join(tmpdir(), 'majlis-empty-'));
     temps.push(root);
     const result = run(root);
     expect(result.status, result.stderr).toBe(0);
