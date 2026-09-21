@@ -11,7 +11,7 @@ export const claudeCode: CatalogEntry = {
   binary: 'claude-code-acp',
   protocolArgs: [],
   versionArgs: ['--version'],
-  install: { kind: 'npm', package: '@zed-industries/claude-code-acp', version: '0.6.1' },
+  install: { kind: 'npm', package: '@zed-industries/claude-code-acp', version: '0.16.2' },
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'skills', 'worktrees', 'resume'],
   sections: ['skills', 'mcp', 'settings'],
