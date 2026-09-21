@@ -1,7 +1,8 @@
-// The Models screen: a key is typed once, is never echoed back, and what each agent
-// inherits is visible (ADR 0010).
+// The Models screen: the providers the person added, one way to add another, a key that
+// is typed once and never echoed, and no control that contradicts another (ADR 0010,
+// contract decision §26).
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -11,6 +12,7 @@ import { ThemeProvider } from '../src/design/theme.js';
 import { I18nProvider } from '../src/i18n/context.js';
 import { RealtimeProvider } from '../src/realtime/context.js';
 import { ModelsScreen } from '../src/models/ModelsScreen.js';
+import { isLoopbackUrl, suggestedHostUrl } from '../src/models/loopback.js';
 
 function memoryStorage(): Storage {
   const map = new Map<string, string>();
@@ -65,13 +67,55 @@ const MODEL = {
   pricing: null,
 };
 
+const PRESETS = [
+  {
+    id: 'anthropic',
+    label: 'Anthropic',
+    kind: 'llm',
+    api_mode: 'native',
+    base_url: 'https://api.anthropic.com',
+    base_url_required: false,
+    key: 'required',
+    local: false,
+    repeatable: false,
+    keys_url: 'https://console.anthropic.com/settings/keys',
+  },
+  {
+    id: 'lmstudio',
+    label: 'LM Studio',
+    kind: 'llm',
+    api_mode: 'chat_completions',
+    base_url: 'http://127.0.0.1:1234/v1',
+    base_url_required: false,
+    key: 'optional',
+    local: true,
+    repeatable: false,
+    keys_url: null,
+  },
+  {
+    id: 'litellm',
+    label: 'LiteLLM',
+    kind: 'llm',
+    api_mode: 'chat_completions',
+    base_url: null,
+    base_url_required: true,
+    key: 'optional',
+    local: true,
+    repeatable: false,
+    keys_url: null,
+  },
+];
+
 interface HubState {
   providers: Record<string, unknown>[];
   models: Record<string, unknown>[];
   defaults: Record<string, unknown>;
   agents: Record<string, unknown>[];
+  containerized: boolean;
+  /** What the probe answers, so a test can be a failure as easily as a success. */
+  probe: Record<string, unknown>;
   /** Every request body the screen sent, for the "never echoed" assertions. */
-  sent: { url: string; body: unknown }[];
+  sent: { url: string; method: string; body: unknown }[];
 }
 
 function hub(state: Partial<HubState> = {}) {
@@ -87,13 +131,20 @@ function hub(state: Partial<HubState> = {}) {
       },
     },
     agents: [],
+    containerized: false,
+    probe: {
+      ok: true,
+      message: null,
+      duration_ms: 12,
+      models: [{ id: 'qwen2.5-coder-7b-instruct', label: 'qwen2.5-coder-7b-instruct' }],
+    },
     sent: [],
     ...state,
   };
   const fetchImpl: typeof fetch = (input, init) => {
     const url = String(input);
     const body = init?.body ? (JSON.parse(String(init.body)) as unknown) : null;
-    hubState.sent.push({ url, body });
+    hubState.sent.push({ url, method: init?.method ?? 'GET', body });
     const json = (value: unknown, status = 200) =>
       Promise.resolve(
         new Response(JSON.stringify(value), {
@@ -101,8 +152,29 @@ function hub(state: Partial<HubState> = {}) {
           headers: { 'Content-Type': 'application/json' },
         }),
       );
+    if (url.includes('/models/provider-presets')) {
+      return json({
+        items: PRESETS,
+        host: {
+          containerized: hubState.containerized,
+          loopback_alias: 'host.docker.internal',
+        },
+      });
+    }
+    if (url.includes('/models/provider-probes')) return json(hubState.probe);
     if (url.endsWith('/models/providers')) {
-      if (init?.method === 'PATCH') return json(hubState.providers[0]);
+      if (init?.method === 'POST') {
+        const created = provider({
+          id: '01J8QK3ZR2W7M5N4P6T8V9X0NEW',
+          slug: 'lmstudio',
+          label: 'LM Studio',
+          builtin: true,
+          base_url: 'http://127.0.0.1:1234/v1',
+          auth: { kind: 'none', signed_in: true },
+        });
+        hubState.providers = [...hubState.providers, created];
+        return json(created, 201);
+      }
       return json({ items: hubState.providers });
     }
     if (url.includes('/models/providers/') && url.endsWith('/test')) {
@@ -167,17 +239,30 @@ function renderScreen(fetchImpl: typeof fetch, language: 'ar' | 'en' = 'en') {
   );
 }
 
+/** Open the add dialog and wait for the presets to arrive in it. */
+async function openDialog() {
+  await waitFor(() => expect(screen.getByTestId('open-add-provider')).toBeTruthy());
+  await userEvent.click(screen.getByTestId('open-add-provider'));
+  await waitFor(() =>
+    expect(
+      (screen.getByTestId('add-preset') as HTMLSelectElement).options.length,
+    ).toBeGreaterThanOrEqual(1),
+  );
+  return screen.getByTestId('add-provider-dialog');
+}
+
 afterEach(cleanup);
 
 describe('models screen', () => {
-  it('shows every provider with whether a key is stored', async () => {
+  it('lists only the providers that were added, with one way to add another', async () => {
     const { fetchImpl } = hub({
       providers: [
-        provider(),
+        provider({ api_key: '[stored]', auth: { kind: 'api_key', signed_in: true } }),
         provider({
           id: '01J8QK3ZR2W7M5N4P6T8V9X0PW',
-          slug: 'ollama',
-          label: 'Ollama',
+          slug: 'lmstudio',
+          label: 'LM Studio',
+          base_url: 'http://host.docker.internal:1234/v1',
           auth: { kind: 'none', signed_in: true },
           catalogue: { status: 'ready', refreshed_at: null, error: null, refreshable: true },
         }),
@@ -187,32 +272,232 @@ describe('models screen', () => {
 
     await waitFor(() => expect(screen.getByTestId('provider-list')).toBeTruthy());
     expect(screen.getByText('Anthropic')).toBeTruthy();
-    expect(screen.getByText('No key')).toBeTruthy();
-    // A provider that needs no key says so instead of showing an empty key field.
-    expect(screen.getByText('No key needed')).toBeTruthy();
+    expect(screen.getByText('LM Studio')).toBeTruthy();
+    expect(screen.getByText('Key stored')).toBeTruthy();
+    // A provider that needs no key says the key is optional — never "no key needed"
+    // beside a complaint that one is missing.
+    expect(screen.getByText('Key optional')).toBeTruthy();
+    expect(screen.queryByText('No key')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add a provider' })).toBeTruthy();
+
+    // A preset already added is not offered again: adding it twice is a 409.
+    await openDialog();
+    const offered = [...(screen.getByTestId('add-preset') as HTMLSelectElement).options].map(
+      (option) => option.value,
+    );
+    expect(offered).not.toContain('anthropic');
+    expect(offered).not.toContain('lmstudio');
+    expect(offered).toContain('litellm');
+  });
+
+  it('says a fresh workspace has no providers and offers the first one', async () => {
+    const { fetchImpl } = hub({ providers: [] });
+    renderScreen(fetchImpl);
+    await waitFor(() =>
+      expect(
+        screen.getByText('No providers yet. Add the first one and its models arrive with it.'),
+      ),
+    );
+    // Two ways to the same dialog: the header button and the empty state.
+    expect(screen.getAllByRole('button', { name: 'Add a provider' }).length).toBe(2);
+  });
+
+  it('prefills the base URL from the preset and asks for one the preset cannot know', async () => {
+    const { fetchImpl } = hub({ providers: [] });
+    renderScreen(fetchImpl);
+    await openDialog();
+
+    const url = () => screen.getByTestId('add-base-url') as HTMLInputElement;
+    // Anthropic is first: its address is known.
+    expect(url().value).toBe('https://api.anthropic.com');
+    await userEvent.selectOptions(screen.getByTestId('add-preset'), 'lmstudio');
+    expect(url().value).toBe('http://127.0.0.1:1234/v1');
+    // LiteLLM has no address anybody could guess, so the field is empty and required.
+    await userEvent.selectOptions(screen.getByTestId('add-preset'), 'litellm');
+    expect(url().value).toBe('');
+    expect(url().required).toBe(true);
+    expect((screen.getByTestId('add-submit') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('never demands a key for a provider whose preset says optional', async () => {
+    const { state, fetchImpl } = hub({ providers: [] });
+    renderScreen(fetchImpl);
+    await openDialog();
+
+    await userEvent.selectOptions(screen.getByTestId('add-preset'), 'lmstudio');
+    // The field is there — always — and it says it is optional.
+    const key = screen.getByTestId('add-api-key') as HTMLInputElement;
+    expect(key.required).toBe(false);
+    expect(screen.getByLabelText('API key (optional)')).toBeTruthy();
+    // And the dialog can be submitted with it empty.
+    expect((screen.getByTestId('add-submit') as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.click(screen.getByTestId('add-submit'));
+
+    await waitFor(() => {
+      const post = state.sent.find(
+        (call) => call.method === 'POST' && call.url.endsWith('/models/providers'),
+      );
+      expect(post?.body).toMatchObject({
+        preset: 'lmstudio',
+        base_url: 'http://127.0.0.1:1234/v1',
+      });
+      // Nothing about a key was sent, and nothing complained about one.
+      expect((post?.body as { api_key?: string }).api_key).toBeUndefined();
+    });
+  });
+
+  it('a preset that requires a key will not submit without one', async () => {
+    const { fetchImpl } = hub({ providers: [] });
+    renderScreen(fetchImpl);
+    await openDialog();
+
+    await userEvent.selectOptions(screen.getByTestId('add-preset'), 'anthropic');
+    expect(screen.getByLabelText('API key')).toBeTruthy();
+    expect((screen.getByTestId('add-submit') as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.type(screen.getByTestId('add-api-key'), 'sk-ant-typed');
+    expect((screen.getByTestId('add-submit') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('custom asks for a name instead of a preset, and needs an address', async () => {
+    const { fetchImpl } = hub({ providers: [] });
+    renderScreen(fetchImpl);
+    await openDialog();
+
+    await userEvent.click(screen.getByTestId('add-mode-custom'));
+    expect(screen.queryByTestId('add-preset')).toBeNull();
+    const label = screen.getByTestId('add-label') as HTMLInputElement;
+    expect(label.required).toBe(true);
+    // A name with no address is not enough, and neither is an address with no name.
+    expect((screen.getByTestId('add-submit') as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.type(label, 'cli-proxy-api');
+    expect((screen.getByTestId('add-submit') as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.type(screen.getByTestId('add-base-url'), 'http://cli-proxy-api:8317/v1');
+    expect((screen.getByTestId('add-submit') as HTMLButtonElement).disabled).toBe(false);
+    // A custom endpoint may be given a key, and is never forced to have one.
+    expect((screen.getByTestId('add-api-key') as HTMLInputElement).required).toBe(false);
+  });
+
+  it('fetches the model list from the endpoint, and shows its own words when it cannot', async () => {
+    const { state, fetchImpl } = hub({
+      providers: [],
+      probe: {
+        ok: false,
+        message: 'Connection refused at 127.0.0.1:1234',
+        duration_ms: 3,
+        models: [],
+      },
+    });
+    renderScreen(fetchImpl);
+    await openDialog();
+    await userEvent.selectOptions(screen.getByTestId('add-preset'), 'lmstudio');
+
+    await userEvent.click(screen.getByTestId('add-fetch-models'));
+    await waitFor(() =>
+      expect(screen.getByTestId('add-fetch-error').textContent).toBe(
+        'Connection refused at 127.0.0.1:1234',
+      ),
+    );
+    // A failure is a failure: no models were invented for the select.
+    expect((screen.getByTestId('add-default-model') as HTMLSelectElement).disabled).toBe(true);
+    const probe = state.sent.find((call) => call.url.includes('provider-probes'));
+    expect(probe?.body).toMatchObject({ preset: 'lmstudio', base_url: 'http://127.0.0.1:1234/v1' });
+  });
+
+  it('fetches, offers the models and sets the chosen one as the default', async () => {
+    const { state, fetchImpl } = hub({ providers: [] });
+    renderScreen(fetchImpl);
+    await openDialog();
+    await userEvent.selectOptions(screen.getByTestId('add-preset'), 'lmstudio');
+    await userEvent.click(screen.getByTestId('add-fetch-models'));
+
+    await waitFor(() =>
+      expect((screen.getByTestId('add-default-model') as HTMLSelectElement).disabled).toBe(false),
+    );
+    await userEvent.selectOptions(
+      screen.getByTestId('add-default-model'),
+      'qwen2.5-coder-7b-instruct',
+    );
+    await userEvent.click(screen.getByTestId('add-submit'));
+
+    await waitFor(() => {
+      const put = state.sent.find((call) => call.url.endsWith('/models/defaults') && call.body);
+      expect(put?.body).toEqual({
+        default: {
+          provider_id: '01J8QK3ZR2W7M5N4P6T8V9X0NEW',
+          model: 'qwen2.5-coder-7b-instruct',
+        },
+      });
+    });
+    // The model was registered first, so the default is legal before the refresh job ends.
+    expect(state.sent.some((call) => call.url.includes('/models/qwen2.5-coder-7b-instruct'))).toBe(
+      true,
+    );
+  });
+
+  it('warns that loopback means the container, and suggests the address that works', async () => {
+    const { fetchImpl } = hub({ providers: [], containerized: true });
+    renderScreen(fetchImpl);
+    await openDialog();
+    await userEvent.selectOptions(screen.getByTestId('add-preset'), 'lmstudio');
+
+    const warning = await screen.findByTestId('loopback-warning');
+    expect(warning.textContent).toContain('http://host.docker.internal:1234/v1');
+    expect(warning.textContent).toContain('host.docker.internal:host-gateway');
+    // …and it is a warning, not a rewrite.
+    expect((screen.getByTestId('add-base-url') as HTMLInputElement).value).toBe(
+      'http://127.0.0.1:1234/v1',
+    );
   });
 
   it('sends a typed key once and never renders it back', async () => {
     const { state, fetchImpl } = hub();
     renderScreen(fetchImpl);
-    await waitFor(() => expect(screen.getByTestId('provider-key')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('provider-edit')).toBeTruthy());
+    await userEvent.click(screen.getByTestId('provider-edit'));
 
     const field = screen.getByTestId('provider-key') as HTMLInputElement;
     // The key field is a password field: a shoulder-surfer sees nothing either.
     expect(field.type).toBe('password');
     await userEvent.type(field, 'sk-ant-api03-TYPED-ONCE');
-    await userEvent.click(screen.getByRole('button', { name: 'Save key' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => {
-      const patch = state.sent.find((call) => call.url.includes(PROVIDER_ID));
-      expect(patch?.body).toEqual({ api_key: 'sk-ant-api03-TYPED-ONCE' });
+      const patch = state.sent.find((call) => call.method === 'PATCH');
+      expect(patch?.body).toMatchObject({ api_key: 'sk-ant-api03-TYPED-ONCE' });
     });
-    // The field is cleared, and the screen shows the mask, not the key.
-    await waitFor(() =>
-      expect((screen.getByTestId('provider-key') as HTMLInputElement).value).toBe(''),
-    );
     expect(document.body.textContent).not.toContain('TYPED-ONCE');
     await waitFor(() => expect(screen.getByText('Key stored')).toBeTruthy());
+  });
+
+  it('offers a key field on a provider that does not require one', async () => {
+    const { fetchImpl } = hub({
+      providers: [
+        provider({
+          slug: 'cli-proxy-api',
+          label: 'cli-proxy-api',
+          builtin: false,
+          base_url: 'http://cli-proxy-api:8317/v1',
+          auth: { kind: 'none', signed_in: true },
+          catalogue: {
+            status: 'error',
+            refreshed_at: null,
+            error: 'missing api key',
+            refreshable: true,
+          },
+        }),
+      ],
+    });
+    renderScreen(fetchImpl);
+    await waitFor(() => expect(screen.getByTestId('provider-edit')).toBeTruthy());
+
+    // The badge says the key is optional and the card shows the endpoint's own error —
+    // the two do not contradict, and the upstream words are not replaced by ours.
+    expect(screen.getByText('Key optional')).toBeTruthy();
+    expect(screen.getByText('missing api key')).toBeTruthy();
+    // One click reaches the field. This is what was impossible on 2026-09-22.
+    await userEvent.click(screen.getByTestId('provider-edit'));
+    const panel = screen.getByTestId('provider-edit-panel');
+    expect(within(panel).getByLabelText('API key (optional)')).toBeTruthy();
   });
 
   it('shows what the provider answered to a test, success or failure', async () => {
@@ -281,19 +566,59 @@ describe('models screen', () => {
     const { fetchImpl } = hub();
     renderScreen(fetchImpl, 'ar');
     await waitFor(() => expect(screen.getByTestId('provider-list')).toBeTruthy());
-    expect(screen.getByText('المزوّدون')).toBeTruthy();
-    expect(screen.getByText('حفظ المفتاح')).toBeTruthy();
+    expect(screen.getAllByRole('heading', { name: 'النماذج' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('المزوّدون').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'إضافة مزوّد' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'تحديث قائمة النماذج' })).toBeTruthy();
+  });
+
+  it('warns about loopback in Arabic too', async () => {
+    const { fetchImpl } = hub({ providers: [], containerized: true });
+    renderScreen(fetchImpl, 'ar');
+    await openDialog();
+    await userEvent.selectOptions(screen.getByTestId('add-preset'), 'lmstudio');
+    const warning = await screen.findByTestId('loopback-warning');
+    expect(warning.textContent).toContain('حاوية');
+    expect(warning.textContent).toContain('http://host.docker.internal:1234/v1');
   });
 
   it('gives every control a label a keyboard reaches', async () => {
     const { fetchImpl } = hub();
     renderScreen(fetchImpl);
-    await waitFor(() => expect(screen.getByTestId('provider-key')).toBeTruthy());
-    // The key field is reachable by its label, and every action is a real button.
-    expect(screen.getByLabelText('API key')).toBeTruthy();
-    for (const name of ['Save key', 'Test', 'Add a provider']) {
+    await waitFor(() => expect(screen.getByTestId('provider-list')).toBeTruthy());
+    for (const name of ['Test', 'Add a provider', 'Refresh model cache', 'Edit', 'Remove']) {
       expect(screen.getByRole('button', { name }).tagName).toBe('BUTTON');
     }
+    await userEvent.click(screen.getByTestId('provider-edit'));
     expect(screen.getByRole('checkbox', { name: 'Enabled' })).toBeTruthy();
+    // The dialog is a dialog, and Escape closes it.
+    await userEvent.click(screen.getByTestId('open-add-provider'));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+});
+
+describe('the container trap', () => {
+  const host = { containerized: true, loopback_alias: 'host.docker.internal' };
+
+  it('knows a loopback address from a routable one', () => {
+    expect(isLoopbackUrl('http://127.0.0.1:1234/v1')).toBe(true);
+    expect(isLoopbackUrl('http://localhost:11434')).toBe(true);
+    expect(isLoopbackUrl('http://[::1]:1234/v1')).toBe(true);
+    expect(isLoopbackUrl('http://host.docker.internal:1234/v1')).toBe(false);
+    expect(isLoopbackUrl('https://api.anthropic.com')).toBe(false);
+    // Half-typed addresses are not warnings.
+    expect(isLoopbackUrl('http://')).toBe(false);
+    expect(isLoopbackUrl('')).toBe(false);
+  });
+
+  it('suggests the host alias and keeps the port and path', () => {
+    expect(suggestedHostUrl('http://127.0.0.1:1234/v1', host)).toBe(
+      'http://host.docker.internal:1234/v1',
+    );
+    expect(suggestedHostUrl('http://localhost:11434', host)).toBe(
+      'http://host.docker.internal:11434',
+    );
   });
 });

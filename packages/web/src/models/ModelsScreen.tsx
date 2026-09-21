@@ -1,33 +1,42 @@
 /**
- * The Models screen: where a provider key is typed, once (ADR 0010).
+ * The Models screen: the providers this workspace **added**, and one way to add another.
  *
- * The tabs are the navigation manifest's (`general`, `auxiliary`, `ensembles`,
- * `stt_providers`, `tts_providers`). Two rules run through every control here:
+ * Owner direction, 2026-09-22: the old screen was a grid of every provider the hub knows,
+ * each with its own key box, and he found it scattered. Now the list is what he
+ * configured; everything the hub *can* talk to lives behind "Add provider" (contract
+ * decision §26).
  *
+ * The rules that run through every control here:
  * - a key is write-only. The field shows `[stored]` as a placeholder and is empty; the
  *   screen never receives the value, so it cannot echo it;
- * - nothing is silent. A test says what the provider answered, a provider with no key
- *   says so, and the agents list underneath says which agents inherit the defaults.
+ * - a key is never refused. "Key optional" means the hub does not demand one, not that
+ *   the field disappears — the 2026-09-22 defect was a card badged "No key needed" that
+ *   also said "Missing API key", with nowhere to type one;
+ * - nothing is silent. A test says what the provider answered, a loopback address on a
+ *   containerized hub says so, and the agents list underneath says what each inherited.
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { NavLink } from 'react-router';
 import { describeError } from '../auth/client.js';
 import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { navigation, routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
-import type { Agent, Model, Provider } from '../types.js';
+import type { Agent, Model, Provider, ProviderHost } from '../types.js';
 import { Notice, Spinner } from '../ui/Notice.js';
+import { AddProviderDialog } from './AddProviderDialog.js';
+import { needsLoopbackWarning, suggestedHostUrl } from './loopback.js';
 import {
   parseRef,
   refValue,
   useCatalogue,
-  useCreateProvider,
   useDeleteProvider,
   useModelDefaults,
+  useProviderPresets,
   useProviders,
   useRefreshProvider,
   useSaveDefaults,
+  useSaveModel,
   useSaveProvider,
   useSpeechSettings,
   useTestProvider,
@@ -35,9 +44,8 @@ import {
   type TestResult,
 } from './queries.js';
 
-/** Which provider kind each tab shows. `general` and `auxiliary` are the chat side. */
+/** Which provider kind each speech tab shows. `general` shows everything configured. */
 const KIND_OF_TAB: Record<string, 'llm' | 'stt' | 'tts'> = {
-  general: 'llm',
   stt_providers: 'stt',
   tts_providers: 'tts',
 };
@@ -48,10 +56,42 @@ export function ModelsScreen() {
   const tabs = navigation.destinations.find((d) => d.id === 'models')?.tabs ?? ['general'];
   const [tab, setTab] = useState<string>(tabs[0] ?? 'general');
   const providers = useProviders();
+  const presets = useProviderPresets();
+  const refresh = useRefreshProvider();
+  const [adding, setAdding] = useState(false);
+
+  const configured = providers.data ?? [];
+  const refreshAll = () => {
+    for (const provider of configured) {
+      if (provider.catalogue.refreshable && provider.enabled) refresh.mutate(provider.id);
+    }
+  };
 
   return (
     <AppShell title={title} wide>
-      <h1 className="sr-only">{title}</h1>
+      <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-semibold">{title}</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="btn"
+            disabled={configured.length === 0 || refresh.isPending}
+            onClick={refreshAll}
+            data-testid="refresh-all"
+          >
+            {t('models.refresh_all')}
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => setAdding(true)}
+            data-testid="open-add-provider"
+          >
+            {t('models.provider.add')}
+          </button>
+        </div>
+      </header>
+
       <nav
         className="mb-4 flex flex-wrap gap-1 border-b border-line pb-2"
         aria-label={title}
@@ -83,11 +123,22 @@ export function ModelsScreen() {
             <Notice>{t('models.ensembles.hint')}</Notice>
           ) : (
             <ProvidersTab
-              providers={providers.data.filter((p) => p.kind === (KIND_OF_TAB[tab] ?? 'llm'))}
-              kind={KIND_OF_TAB[tab] ?? 'llm'}
+              providers={providers.data}
+              tab={tab}
+              host={presets.data?.host}
+              onAdd={() => setAdding(true)}
             />
           )}
         </section>
+      )}
+
+      {adding && (
+        <AddProviderDialog
+          presets={presets.data?.items ?? []}
+          host={presets.data?.host}
+          taken={new Set(configured.map((provider) => provider.slug))}
+          onClose={() => setAdding(false)}
+        />
       )}
     </AppShell>
   );
@@ -95,10 +146,31 @@ export function ModelsScreen() {
 
 // ---------------------------------------------------------------- providers
 
-function ProvidersTab({ providers, kind }: { providers: Provider[]; kind: 'llm' | 'stt' | 'tts' }) {
+function ProvidersTab({
+  providers,
+  tab,
+  host,
+  onAdd,
+}: {
+  providers: Provider[];
+  tab: string;
+  host: ProviderHost | undefined;
+  onAdd(): void;
+}) {
   const { t } = useI18n();
   const speech = useSpeechSettings();
-  const side = kind === 'stt' ? speech.data?.stt : kind === 'tts' ? speech.data?.tts : undefined;
+  const defaults = useModelDefaults();
+  const kindOfTab = KIND_OF_TAB[tab];
+  const side =
+    kindOfTab === 'stt' ? speech.data?.stt : kindOfTab === 'tts' ? speech.data?.tts : undefined;
+  const [filter, setFilter] = useState<'all' | 'llm' | 'stt' | 'tts'>('all');
+
+  // The speech tabs are about one kind; the providers tab is the whole list, with the
+  // filter the owner asked for.
+  const shown = useMemo(() => {
+    if (kindOfTab) return providers.filter((provider) => provider.kind === kindOfTab);
+    return filter === 'all' ? providers : providers.filter((provider) => provider.kind === filter);
+  }, [providers, kindOfTab, filter]);
 
   return (
     <>
@@ -110,101 +182,212 @@ function ProvidersTab({ providers, kind }: { providers: Provider[]; kind: 'llm' 
           {side.reason}
         </Notice>
       )}
-      <ul className="grid gap-3 md:grid-cols-2" data-testid="provider-list">
-        {providers.map((provider) => (
+      {!kindOfTab && providers.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <label className="text-xs text-muted" htmlFor="provider-filter">
+            {t('models.filter')}
+          </label>
+          <select
+            id="provider-filter"
+            className="field max-w-60"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value as typeof filter)}
+            data-testid="provider-filter"
+          >
+            <option value="all">{t('models.filter_all')}</option>
+            <option value="llm">{t('models.tab.general')}</option>
+            <option value="stt">{t('models.tab.stt_providers')}</option>
+            <option value="tts">{t('models.tab.tts_providers')}</option>
+          </select>
+        </div>
+      )}
+      <ul className="grid gap-3 lg:grid-cols-2" data-testid="provider-list">
+        {shown.map((provider) => (
           <li key={provider.id}>
-            <ProviderCard provider={provider} />
+            <ProviderCard
+              provider={provider}
+              host={host}
+              isDefault={defaults.data?.default?.provider_id === provider.id}
+              defaultModel={
+                defaults.data?.default?.provider_id === provider.id
+                  ? defaults.data.default.model
+                  : null
+              }
+            />
           </li>
         ))}
       </ul>
-      {providers.length === 0 && <Notice>{t('models.providers.empty')}</Notice>}
-      {kind === 'llm' && <AddProvider />}
+      {shown.length === 0 && (
+        <div className="flex flex-col items-start gap-2">
+          <Notice>
+            {t(providers.length === 0 ? 'models.providers.none' : 'models.providers.empty')}
+          </Notice>
+          {providers.length === 0 && (
+            <button type="button" className="btn btn-primary" onClick={onAdd}>
+              {t('models.provider.add')}
+            </button>
+          )}
+        </div>
+      )}
     </>
   );
 }
 
-function ProviderCard({ provider }: { provider: Provider }) {
+const MODEL_CHIPS = 6;
+
+function ProviderCard({
+  provider,
+  host,
+  isDefault,
+  defaultModel,
+}: {
+  provider: Provider;
+  host: ProviderHost | undefined;
+  isDefault: boolean;
+  defaultModel: string | null;
+}) {
   const { t } = useI18n();
   const save = useSaveProvider();
   const test = useTestProvider();
   const refresh = useRefreshProvider();
   const remove = useDeleteProvider();
-  const [draft, setDraft] = useState('');
+  const saveDefaults = useSaveDefaults();
   const [outcome, setOutcome] = useState<TestResult | null>(null);
+  const [panel, setPanel] = useState<'none' | 'edit' | 'models'>('none');
   const stored = provider.api_key !== null;
-  const needsKey = provider.auth.kind === 'api_key';
-  const fieldId = `provider-key-${provider.id}`;
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setOutcome(null);
-    await save.mutateAsync({ id: provider.id, api_key: draft.trim() });
-    // The value leaves this component the moment it is saved; nothing keeps it.
-    setDraft('');
-  };
+  // `auth.kind: none` is "no key required" — never "no key accepted" (contract §26).
+  const keyRequired = provider.auth.kind === 'api_key';
+  const warn = needsLoopbackWarning(provider.base_url ?? '', host);
 
   return (
     <article className="card flex flex-col gap-2" data-provider-slug={provider.slug}>
-      <header className="flex items-center gap-2">
+      <header className="flex flex-wrap items-start gap-2">
         <div className="min-w-0 flex-1">
           <h3 className="truncate font-semibold" dir="auto">
             {provider.label}
           </h3>
-          <p className="truncate text-xs text-muted" dir="ltr">
-            {provider.base_url ?? provider.slug}
-          </p>
+          <div className="mt-1 flex flex-wrap gap-1">
+            <span className="chip">
+              {t(provider.builtin ? 'models.badge.builtin' : 'models.badge.custom')}
+            </span>
+            {isDefault && (
+              <span className="chip bg-accent-soft text-accent-soft-text">
+                {t('models.badge.default')}
+              </span>
+            )}
+            <span className={`chip ${stored ? 'bg-success-soft text-success-soft-text' : ''}`}>
+              {t(
+                stored
+                  ? 'models.provider.configured'
+                  : keyRequired
+                    ? 'models.provider.not_configured'
+                    : 'models.provider.key_optional',
+              )}
+            </span>
+            {!provider.enabled && <span className="chip">{t('models.badge.disabled')}</span>}
+          </div>
         </div>
-        <span className={`chip ${stored ? 'bg-success-soft text-success-soft-text' : ''}`}>
-          {t(
-            !needsKey
-              ? 'models.provider.no_key_needed'
-              : stored
-                ? 'models.provider.configured'
-                : 'models.provider.not_configured',
-          )}
-        </span>
       </header>
 
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+        <dt className="text-muted">{t('models.row.provider')}</dt>
+        <dd className="truncate" dir="ltr">
+          {provider.slug}
+        </dd>
+        <dt className="text-muted">{t('models.provider.base_url')}</dt>
+        <dd className="truncate" dir="ltr">
+          {provider.base_url ?? '—'}
+        </dd>
+        <dt className="text-muted">{t('models.row.models')}</dt>
+        <dd>{provider.models.length}</dd>
+      </dl>
+
+      {warn && host && (
+        <Notice tone="warning">
+          <span data-testid="card-loopback-warning">
+            {t('models.add.loopback', { url: suggestedHostUrl(provider.base_url ?? '', host) })}
+          </span>
+        </Notice>
+      )}
       {provider.catalogue.error && <Notice tone="danger">{provider.catalogue.error}</Notice>}
 
-      {needsKey && (
-        <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => void submit(e)}>
-          <div className="min-w-0 flex-1">
-            <label className="block text-xs text-muted" htmlFor={fieldId}>
-              {t('models.provider.key')}
-            </label>
-            <input
-              id={fieldId}
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              dir="ltr"
-              // The stored value is never sent to a client, so the field starts empty
-              // and says what is already there instead of pretending to hold it.
-              placeholder={stored ? t('models.provider.key_stored') : t('models.provider.key_hint')}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              className="field"
-              data-testid="provider-key"
-            />
-          </div>
-          <button type="submit" className="btn btn-primary" disabled={save.isPending || !draft}>
-            {t('models.provider.save_key')}
-          </button>
-          {stored && (
-            <button
-              type="button"
-              className="btn"
-              disabled={save.isPending}
-              onClick={() => void save.mutateAsync({ id: provider.id, api_key: '' })}
-            >
-              {t('models.provider.clear_key')}
-            </button>
+      {provider.models.length > 0 && (
+        <ul className="flex flex-wrap gap-1" data-testid="model-chips">
+          {provider.models.slice(0, MODEL_CHIPS).map((model) => (
+            <li key={model.key} className="chip" dir="ltr">
+              {model.alias ?? model.model}
+            </li>
+          ))}
+          {provider.models.length > MODEL_CHIPS && (
+            <li className="chip">
+              {t('models.more_models', { count: provider.models.length - MODEL_CHIPS })}
+            </li>
           )}
-        </form>
+        </ul>
       )}
 
       <div className="flex flex-wrap items-center gap-2">
+        <label className="text-xs text-muted" htmlFor={`default-model-${provider.id}`}>
+          {t('models.add.default_model')}
+        </label>
+        <select
+          id={`default-model-${provider.id}`}
+          className="field max-w-72"
+          value={defaultModel ?? ''}
+          disabled={provider.models.length === 0 || saveDefaults.isPending}
+          onChange={(event) => {
+            const model = event.target.value;
+            saveDefaults.mutate({
+              default: model ? { provider_id: provider.id, model } : null,
+            });
+          }}
+          data-testid="card-default-model"
+        >
+          <option value="">{t('models.defaults.none')}</option>
+          {provider.models.map((model) => (
+            <option key={model.key} value={model.model}>
+              {model.alias ?? model.model}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="btn"
+          disabled={provider.models.length === 0 || saveDefaults.isPending || isDefault}
+          onClick={() => {
+            const first = provider.models[0];
+            if (first) {
+              saveDefaults.mutate({ default: { provider_id: provider.id, model: first.model } });
+            }
+          }}
+        >
+          {t('models.action.set_default')}
+        </button>
+        <button type="button" className="btn" onClick={() => setPanel('models')}>
+          {t('models.action.display_names')}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => setPanel('models')}
+          data-testid="manage-visible"
+        >
+          {t('models.action.visible_models')}
+        </button>
+        {provider.catalogue.refreshable && (
+          <button
+            type="button"
+            className="btn"
+            disabled={refresh.isPending}
+            onClick={() => refresh.mutate(provider.id)}
+            data-testid="provider-refresh"
+          >
+            {t('models.provider.refresh')}
+          </button>
+        )}
         <button
           type="button"
           className="btn"
@@ -217,37 +400,39 @@ function ProviderCard({ provider }: { provider: Provider }) {
         >
           {t('models.provider.test')}
         </button>
-        {provider.catalogue.refreshable && (
+        <button
+          type="button"
+          className="btn"
+          aria-expanded={panel === 'edit'}
+          onClick={() => setPanel(panel === 'edit' ? 'none' : 'edit')}
+          data-testid="provider-edit"
+        >
+          {t('models.action.edit')}
+        </button>
+        {stored && (
           <button
             type="button"
             className="btn"
-            disabled={refresh.isPending || !stored}
-            onClick={() => refresh.mutate(provider.id)}
+            disabled={save.isPending}
+            onClick={() => void save.mutateAsync({ id: provider.id, api_key: '' })}
+            data-testid="provider-clear-key"
           >
-            {t('models.provider.refresh')}
+            {t('models.action.clear_credentials')}
           </button>
         )}
-        <label className="flex items-center gap-1 text-sm">
-          <input
-            type="checkbox"
-            checked={provider.enabled}
-            onChange={(event) =>
-              void save.mutateAsync({ id: provider.id, enabled: event.target.checked })
-            }
-          />
-          {t('models.provider.enabled')}
-        </label>
-        {!provider.builtin && (
-          <button
-            type="button"
-            className="btn btn-danger"
-            disabled={remove.isPending}
-            onClick={() => remove.mutate(provider.id)}
-          >
-            {t('models.provider.remove')}
-          </button>
-        )}
+        <button
+          type="button"
+          className="btn btn-danger"
+          disabled={remove.isPending}
+          onClick={() => remove.mutate(provider.id)}
+          data-testid="provider-remove"
+        >
+          {t('models.provider.remove')}
+        </button>
       </div>
+
+      {panel === 'edit' && <EditPanel provider={provider} onDone={() => setPanel('none')} />}
+      {panel === 'models' && <ModelsPanel provider={provider} onDone={() => setPanel('none')} />}
 
       {test.isPending && <Spinner label={t('models.provider.testing')} />}
       {outcome && (
@@ -260,79 +445,214 @@ function ProviderCard({ provider }: { provider: Provider }) {
       )}
       {save.isError && <Notice tone="danger">{describeError(save.error, t)}</Notice>}
       {remove.isError && <Notice tone="danger">{describeError(remove.error, t)}</Notice>}
-
-      <p className="text-xs text-muted">
-        {t('models.provider.model_count', { count: provider.models.length })}
-      </p>
     </article>
   );
 }
 
-function AddProvider() {
+/** Name, address, key and enablement — everything about the provider row itself. */
+function EditPanel({ provider, onDone }: { provider: Provider; onDone(): void }) {
   const { t } = useI18n();
-  const create = useCreateProvider();
-  const [open, setOpen] = useState(false);
-  const [label, setLabel] = useState('');
-  const [baseUrl, setBaseUrl] = useState('');
+  const save = useSaveProvider();
+  const [label, setLabel] = useState(provider.label);
+  const [baseUrl, setBaseUrl] = useState(provider.base_url ?? '');
+  const [key, setKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const stored = provider.api_key !== null;
+  const fieldId = `provider-key-${provider.id}`;
 
-  if (!open) {
-    return (
-      <button type="button" className="btn mt-3" onClick={() => setOpen(true)}>
-        {t('models.provider.add')}
-      </button>
-    );
-  }
   return (
     <form
-      className="card mt-3 flex flex-col gap-2"
+      className="flex flex-col gap-2 border-t border-line pt-2"
+      data-testid="provider-edit-panel"
       onSubmit={(event) => {
         event.preventDefault();
-        create.mutate(
-          { label: label.trim(), kind: 'llm', base_url: baseUrl.trim() },
-          {
-            onSuccess: () => {
-              setOpen(false);
-              setLabel('');
-              setBaseUrl('');
-            },
-          },
-        );
+        void save
+          .mutateAsync({
+            id: provider.id,
+            label: label.trim(),
+            base_url: baseUrl.trim() || null,
+            // Only sent when something was typed: an empty field means "leave it", and
+            // clearing is the explicit button.
+            ...(key.trim() ? { api_key: key.trim() } : {}),
+          })
+          .then(() => {
+            setKey('');
+            onDone();
+          });
       }}
     >
-      <h3 className="font-semibold">{t('models.provider.add')}</h3>
-      <label className="text-xs text-muted" htmlFor="new-provider-label">
+      <label className="text-xs text-muted" htmlFor={`provider-label-${provider.id}`}>
         {t('models.provider.label')}
       </label>
       <input
-        id="new-provider-label"
+        id={`provider-label-${provider.id}`}
         className="field"
         dir="auto"
         value={label}
         onChange={(event) => setLabel(event.target.value)}
-        required
       />
-      <label className="text-xs text-muted" htmlFor="new-provider-url">
+      <label className="text-xs text-muted" htmlFor={`provider-url-${provider.id}`}>
         {t('models.provider.base_url')}
       </label>
       <input
-        id="new-provider-url"
+        id={`provider-url-${provider.id}`}
         className="field"
         dir="ltr"
-        placeholder="http://127.0.0.1:11434/v1"
         value={baseUrl}
         onChange={(event) => setBaseUrl(event.target.value)}
-        required
       />
-      {create.isError && <Notice tone="danger">{describeError(create.error, t)}</Notice>}
+      <label className="text-xs text-muted" htmlFor={fieldId}>
+        {/* Always here, for every provider: "optional" is not "refused". */}
+        {t(
+          provider.auth.kind === 'api_key' ? 'models.add.key_required' : 'models.add.key_optional',
+        )}
+      </label>
+      <div className="flex items-center gap-2">
+        <input
+          id={fieldId}
+          className="field"
+          type={showKey ? 'text' : 'password'}
+          autoComplete="off"
+          spellCheck={false}
+          dir="ltr"
+          // The stored value is never sent to a client, so the field starts empty and
+          // says what is already there instead of pretending to hold it.
+          placeholder={stored ? t('models.provider.key_stored') : t('models.provider.key_hint')}
+          value={key}
+          onChange={(event) => setKey(event.target.value)}
+          data-testid="provider-key"
+        />
+        <button
+          type="button"
+          className="btn"
+          aria-pressed={showKey}
+          onClick={() => setShowKey((shown) => !shown)}
+        >
+          {t(showKey ? 'models.add.hide_key' : 'models.add.show_key')}
+        </button>
+      </div>
+      <label className="flex items-center gap-1 text-sm">
+        <input
+          type="checkbox"
+          checked={provider.enabled}
+          onChange={(event) =>
+            void save.mutateAsync({ id: provider.id, enabled: event.target.checked })
+          }
+        />
+        {t('models.provider.enabled')}
+      </label>
+      {save.isError && <Notice tone="danger">{describeError(save.error, t)}</Notice>}
       <div className="flex gap-2">
-        <button type="submit" className="btn btn-primary" disabled={create.isPending}>
+        <button type="submit" className="btn btn-primary" disabled={save.isPending}>
           {t('common.save')}
         </button>
-        <button type="button" className="btn" onClick={() => setOpen(false)}>
+        <button type="button" className="btn" onClick={onDone}>
           {t('common.cancel')}
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Display names and visible models, which are the same two columns of one table:
+ * `models.putModel` carries the alias, `models.updateProvider` carries the visibility.
+ */
+function ModelsPanel({ provider, onDone }: { provider: Provider; onDone(): void }) {
+  const { t } = useI18n();
+  const saveModel = useSaveModel();
+  const saveProvider = useSaveProvider();
+  const [aliases, setAliases] = useState<Record<string, string>>({});
+  const visible = new Set(
+    provider.visibility.mode === 'include'
+      ? provider.visibility.models
+      : provider.models.map((model) => model.model),
+  );
+
+  if (provider.models.length === 0) {
+    return (
+      <div className="border-t border-line pt-2">
+        <Notice>{t('models.panel.no_models')}</Notice>
+      </div>
+    );
+  }
+
+  const toggle = (model: string, on: boolean) => {
+    const next = new Set(visible);
+    if (on) next.add(model);
+    else next.delete(model);
+    saveProvider.mutate({
+      id: provider.id,
+      // Once anything is hidden the list is explicit; showing everything goes back to
+      // `all`, so a model the provider adds later is visible by default.
+      visibility:
+        next.size === provider.models.length
+          ? { mode: 'all', models: [] }
+          : { mode: 'include', models: [...next] },
+    });
+  };
+
+  return (
+    <div
+      className="flex flex-col gap-2 border-t border-line pt-2"
+      data-testid="provider-models-panel"
+    >
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-xs text-muted">
+            <th className="text-start font-normal">{t('models.panel.model')}</th>
+            <th className="text-start font-normal">{t('models.panel.alias')}</th>
+            <th className="text-start font-normal">{t('models.panel.visible')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {provider.models.map((model) => (
+            <tr key={model.key}>
+              <td className="truncate pe-2" dir="ltr">
+                {model.model}
+              </td>
+              <td className="pe-2">
+                <input
+                  className="field"
+                  dir="auto"
+                  aria-label={t('models.panel.alias_for', { model: model.model })}
+                  value={aliases[model.model] ?? model.alias ?? ''}
+                  onChange={(event) =>
+                    setAliases((current) => ({ ...current, [model.model]: event.target.value }))
+                  }
+                  onBlur={(event) => {
+                    const next = event.target.value.trim();
+                    if (next === (model.alias ?? '')) return;
+                    saveModel.mutate({
+                      provider_id: provider.id,
+                      model: model.model,
+                      alias: next || null,
+                    });
+                  }}
+                />
+              </td>
+              <td>
+                <input
+                  type="checkbox"
+                  aria-label={t('models.panel.visible_for', { model: model.model })}
+                  checked={visible.has(model.model)}
+                  onChange={(event) => toggle(model.model, event.target.checked)}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {saveModel.isError && <Notice tone="danger">{describeError(saveModel.error, t)}</Notice>}
+      {saveProvider.isError && (
+        <Notice tone="danger">{describeError(saveProvider.error, t)}</Notice>
+      )}
+      <div>
+        <button type="button" className="btn" onClick={onDone}>
+          {t('models.panel.done')}
+        </button>
+      </div>
+    </div>
   );
 }
 

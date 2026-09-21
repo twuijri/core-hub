@@ -2,10 +2,19 @@
 // Every key carries the workspace slug, so switching the chip refetches (NAVIGATION rule 4).
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/context.js';
-import type { Model, ModelDefaults, Provider, SpeechSettings } from '../types.js';
+import type {
+  Model,
+  ModelDefaults,
+  Provider,
+  ProviderHost,
+  ProviderPreset,
+  ProviderProbeResult,
+  SpeechSettings,
+} from '../types.js';
 
 export const modelKeys = {
   providers: (profile: string) => ['models', 'providers', profile] as const,
+  presets: (profile: string) => ['models', 'presets', profile] as const,
   catalogue: (profile: string) => ['models', 'catalogue', profile] as const,
   defaults: (profile: string) => ['models', 'defaults', profile] as const,
   speech: (profile: string) => ['models', 'speech', profile] as const,
@@ -17,6 +26,24 @@ export function useProviders() {
     queryKey: modelKeys.providers(profile),
     queryFn: async () =>
       (await client.request('get', '/models/providers')).data.items as Provider[],
+    enabled: !!session,
+  });
+}
+
+/**
+ * What can be added, which is not what has been added: the providers list answers the
+ * second question and this one the first (contract decision §26). `host` says whether a
+ * loopback base URL would reach the container instead of the person's machine.
+ */
+export function useProviderPresets() {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: modelKeys.presets(profile),
+    queryFn: async () =>
+      (await client.request('get', '/models/provider-presets')).data as {
+        items: ProviderPreset[];
+        host: ProviderHost;
+      },
     enabled: !!session,
   });
 }
@@ -73,6 +100,7 @@ export interface ProviderPatch {
   enabled?: boolean;
   label?: string;
   base_url?: string | null;
+  visibility?: { mode: 'all' | 'include'; models: string[] };
 }
 
 export function useSaveProvider() {
@@ -86,14 +114,57 @@ export function useSaveProvider() {
   });
 }
 
+export interface ProviderCreate {
+  /** A `ProviderPreset.id`, or absent for a bare OpenAI-compatible endpoint. */
+  preset?: string;
+  label: string;
+  kind: 'llm' | 'stt' | 'tts';
+  base_url: string;
+  /** Sent only when the person typed one; every provider accepts one, none demands it. */
+  api_key?: string;
+}
+
 export function useCreateProvider() {
   const { client } = useAuth();
+  return useModelsMutation(async (input: ProviderCreate) => {
+    // The contract gives `api_mode` a default, but the generated type still requires
+    // it: every endpoint a client here adds is an OpenAI-compatible one.
+    const body = { ...input, api_mode: 'chat_completions' as const };
+    return (await client.request('post', '/models/providers', { body })).data as Provider;
+  });
+}
+
+/**
+ * The dialog's **Fetch**: the model list of an endpoint that has not been saved. Nothing
+ * is stored, and a failure comes back as `ok: false` with the endpoint's own words.
+ */
+export function useProbeProvider() {
+  const { client } = useAuth();
+  return useMutation({
+    mutationFn: async (input: { preset?: string; base_url: string; api_key?: string }) =>
+      (await client.request('post', '/models/provider-probes', { body: input }))
+        .data as ProviderProbeResult,
+  });
+}
+
+/** An alias, a visibility, or registering a model the provider does not list. */
+export function useSaveModel() {
+  const { client } = useAuth();
   return useModelsMutation(
-    async (input: { label: string; kind: 'llm' | 'stt' | 'tts'; base_url: string }) => {
-      // The contract gives `api_mode` a default, but the generated type still requires
-      // it: a custom provider the hub can drive is an OpenAI-compatible one.
-      const body = { ...input, api_mode: 'chat_completions' as const };
-      return (await client.request('post', '/models/providers', { body })).data as Provider;
+    async (input: {
+      provider_id: string;
+      model: string;
+      alias?: string | null;
+      visible?: boolean;
+      custom?: boolean;
+    }) => {
+      const { provider_id, model, ...patch } = input;
+      return (
+        await client.request('put', '/models/providers/{provider_id}/models/{model}', {
+          params: { provider_id, model: encodeURIComponent(model) },
+          body: patch,
+        })
+      ).data as Model;
     },
   );
 }
