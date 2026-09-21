@@ -252,7 +252,7 @@
         "kind": "segment"
       },
       "roles": ["member"],
-      "note": "Projects and tasks (kanban) with agent assignment. Named Tasks everywhere (owner decision 2026-09-21); the contract tag `board` is being renamed to `tasks` in a parallel branch."
+      "note": "Projects and tasks (kanban-style columns) with agent assignment. The section is named Tasks everywhere (owner decision 2026-09-21)."
     },
     {
       "id": "schedules",
