@@ -129,11 +129,11 @@ $ pnpm test
  Test Files  3 passed (3)        # @corehub/contracts
       Tests  11 passed (11)
  Test Files  22 passed (22)      # @corehub/server (unit)
-      Tests  83 passed (83)
+      Tests  84 passed (84)
 
 $ npx vitest run --project unit src/modules/sessions
  Test Files  5 passed (5)
-      Tests  54 passed (54)
+      Tests  55 passed (55)
 
 $ pnpm contract:test
  Test Files  1 passed (1)
@@ -168,7 +168,9 @@ $ DATA_DIR=/tmp/ch-migrate-check pnpm db:migrate   # قاعدة SQLite نظيف�
 تسلسل الأحداث الكامل لتشغيل واحد يطابق حرفيًا ما تعلنه `sessions.createRun` في
 `x-rt-events`، وكل ظرف مُرسَل يُتحقَّق منه مقابل مخطّط JSON الخاص به في
 `packages/contracts/events/sessions/` (بما في ذلك `additionalProperties: false`)،
-لا مقابل وصف مكتوب باليد.
+لا مقابل وصف مكتوب باليد. ويُتحقَّق كذلك من أجسام ردود HTTP (`SessionDetail`،
+`MessagePage`، `Run`، `Approval`، `Session`) مقابل `components.schemas` في
+`openapi.yaml` مباشرةً (`sessions-api.test.ts`).
 
 ## المخاطر والرجوع
 - **لا وكيل حقيقي بعد.** كل شيء مُختبَر عبر `FakeAgentRunner`. صحّة التعامل مع وكيل
