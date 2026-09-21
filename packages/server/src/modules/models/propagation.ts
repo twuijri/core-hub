@@ -173,7 +173,10 @@ export function writeHermesEnv(plan: HermesEnvPlan): HermesWriteResult {
  * `choice` of null leaves the selection untouched: the hub never clears a model Hermes is
  * using just because this workspace has not chosen one.
  */
-export function writeHermesModel(home: string, choice: HermesModelChoice | null): HermesWriteResult {
+export function writeHermesModel(
+  home: string,
+  choice: HermesModelChoice | null,
+): HermesWriteResult {
   const file = path.join(home, 'config.yaml');
   const result: HermesWriteResult = { file, changed: [], removed: [], dirty: false };
   if (!choice) return result;
@@ -222,10 +225,7 @@ export interface HermesPropagation {
 }
 
 /** Both files, in one call. Throws only on a corrupt `config.yaml`; the caller logs it. */
-export function writeHermesConfiguration(
-  home: string,
-  state: PropagationState,
-): HermesPropagation {
+export function writeHermesConfiguration(home: string, state: PropagationState): HermesPropagation {
   const env = writeHermesEnv(hermesEnvPlan(home, state));
   const model = writeHermesModel(home, state.hermesModel);
   return { env, model, dirty: env.dirty || model.dirty };

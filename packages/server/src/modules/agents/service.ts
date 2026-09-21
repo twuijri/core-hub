@@ -547,6 +547,13 @@ export class AgentsService {
     return row;
   }
 
+  /** The registry row for a catalog id (`hermes`, `claude-code`). Throws a 404. */
+  loadAgentBySlug(slug: string): AgentRow {
+    const row = this.db.select().from(agents).where(eq(agents.slug, slug)).get();
+    if (!row) throw notFound({ resource: 'agent', id: slug });
+    return row;
+  }
+
   /** An agent id is only meaningful while it is still a catalog entry (ADR 0006). */
   private loadCatalogued(id: string): { row: AgentRow; entry: CatalogEntry } {
     const row = this.loadAgent(id);

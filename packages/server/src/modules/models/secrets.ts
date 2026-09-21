@@ -14,7 +14,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { ModuleDb } from '../../lib/db.js';
 import { newUlid } from '../../db/ids.js';
-import { DataKeyRing } from './crypto.js';
+import type { DataKeyRing } from './crypto.js';
 import { secrets, type SecretKind, type SecretRow } from './schema.js';
 
 export interface SecretStoreOptions {
