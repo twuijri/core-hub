@@ -12,7 +12,6 @@ import {
   type ClientMethod,
   type ContractOperation,
   type HubClient,
-  type OpenApiDocument,
 } from '@majlis/contracts';
 import { testHub, type TestHub } from '../unit/helpers.js';
 import { ajvFor } from './schema.js';
