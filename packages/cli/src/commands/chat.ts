@@ -24,6 +24,13 @@ import {
   subscribe,
   type Envelope,
 } from '../realtime.js';
+import {
+  DECISIONS,
+  DECISION_OF,
+  parseAnswer,
+  parseDecision,
+  type Decision,
+} from '../chat/approvals.js';
 import type { Approval, ApprovalDecision, SessionDetail } from '../types.js';
 import { optionEnum, optionInteger, optionString, requireSession } from './shared.js';
 
@@ -46,15 +53,6 @@ const SESSION_EVENTS = [
   'approval.resolved',
   'context.updated',
 ] as const;
-
-const DECISIONS = ['once', 'session', 'always', 'deny'] as const;
-type AutoDecision = (typeof DECISIONS)[number];
-const DECISION_OF: Record<AutoDecision, ApprovalDecision> = {
-  once: 'approve_once',
-  session: 'approve_session',
-  always: 'approve_always',
-  deny: 'deny',
-};
 
 type Terminal = 'succeeded' | 'failed' | 'cancelled' | 'deleted';
 
@@ -84,7 +82,7 @@ class Chat {
   private readonly auth: AuthenticatedClient;
   private readonly json: boolean;
   private readonly validator: EnvelopeValidator | undefined;
-  private readonly autoApprove: AutoDecision | undefined;
+  private readonly autoApprove: Decision | undefined;
   private readonly timeoutMs: number;
   private readonly ownMessageIds = new Set<string>();
   private readonly ownTexts = new Set<string>();
@@ -377,34 +375,21 @@ class Chat {
         if (approval.choices.length > 0)
           out.notice(`  ${approval.choices.map((c, i) => `[${i + 1}] ${c.label}`).join('  ')}`);
         const reply = (await ctx.prompter.ask(t('chat.approval_answer'))) ?? '';
-        const index = Number(reply.trim());
-        const choice = Number.isInteger(index) ? approval.choices[index - 1] : undefined;
-        answer = choice ? choice.value : reply.trim();
-        if (answer === '') decision = 'deny';
+        answer = parseAnswer(reply, approval.choices);
+        if (answer === null) decision = 'deny';
       } else {
-        out.notice(
-          `  ${t(approval.allow_always ? 'chat.approval_choices' : 'chat.approval_choices_no_always')}`,
+        const menu = t(
+          approval.allow_always ? 'chat.approval_choices' : 'chat.approval_choices_no_always',
         );
+        out.notice(`  ${menu}`);
         for (;;) {
-          const reply = ((await ctx.prompter.ask(t('chat.approval_choose'))) ?? '4')
-            .trim()
-            .toLowerCase();
-          const picked =
-            ((
-              { '1': 'once', '2': 'session', '3': 'always', '4': 'deny' } as Record<
-                string,
-                AutoDecision
-              >
-            )[reply] ?? (DECISIONS as readonly string[]).includes(reply))
-              ? (reply as AutoDecision)
-              : undefined;
-          if (picked && (picked !== 'always' || approval.allow_always)) {
+          const reply = (await ctx.prompter.ask(t('chat.approval_choose'))) ?? '4';
+          const picked = parseDecision(reply, approval.allow_always);
+          if (picked) {
             decision = DECISION_OF[picked];
             break;
           }
-          out.notice(
-            `  ${t(approval.allow_always ? 'chat.approval_choices' : 'chat.approval_choices_no_always')}`,
-          );
+          out.notice(`  ${menu}`);
         }
       }
     }
