@@ -3,43 +3,154 @@
   "version": 1,
   "surfaces": ["web", "desktop", "android", "ios"],
   "terms": {
-    "new_chat": { "en": "New chat", "ar": "محادثة جديدة" },
-    "search": { "en": "Search", "ar": "بحث" },
-    "device_connections": { "en": "Device connections", "ar": "اتصالات الأجهزة" },
-    "agent_manager": { "en": "Agent Manager", "ar": "مدير الوكلاء" },
-    "models": { "en": "Models", "ar": "النماذج" },
-    "knowledge": { "en": "Knowledge", "ar": "المعرفة" },
-    "chat": { "en": "Chat", "ar": "محادثة" },
-    "rooms": { "en": "Rooms", "ar": "الغرف" },
-    "board": { "en": "Board", "ar": "اللوحة" },
-    "schedules": { "en": "Schedules", "ar": "الجدولة" },
-    "history": { "en": "History", "ar": "السجل" },
-    "settings": { "en": "Settings", "ar": "الإعدادات" },
-    "account": { "en": "Account", "ar": "الحساب" },
-    "users": { "en": "Users", "ar": "المستخدمون" },
-    "webhooks": { "en": "Webhooks", "ar": "خطافات الويب" },
-    "display": { "en": "Display", "ar": "العرض" },
-    "notifications": { "en": "Notifications", "ar": "الإشعارات" },
-    "privacy": { "en": "Privacy", "ar": "الخصوصية" },
-    "this_device": { "en": "This device", "ar": "هذا الجهاز" },
-    "about": { "en": "About", "ar": "حول" },
-    "logs": { "en": "Logs", "ar": "السجلات" },
-    "usage": { "en": "Usage", "ar": "الاستخدام" },
-    "performance": { "en": "Performance", "ar": "الأداء" },
-    "theme": { "en": "Theme", "ar": "السمة" },
-    "workspaces": { "en": "Workspaces", "ar": "مساحات العمل" },
-    "updates": { "en": "Updates", "ar": "التحديثات" },
-    "plugins": { "en": "Plugins", "ar": "الإضافات" },
-    "skills": { "en": "Skills", "ar": "المهارات" },
-    "mcp": { "en": "MCP", "ar": "MCP" },
-    "memory": { "en": "Memory", "ar": "الذاكرة" },
-    "jobs": { "en": "Jobs", "ar": "المهام المجدولة" },
-    "channels": { "en": "Channels", "ar": "القنوات" },
-    "agent_settings": { "en": "Settings", "ar": "الإعدادات" },
-    "global_agent": { "en": "Global agent", "ar": "الوكيل العام" },
-    "new_room": { "en": "New room", "ar": "غرفة جديدة" },
-    "join_by_code": { "en": "Join by code", "ar": "انضمام برمز" },
-    "sign_out": { "en": "Sign out", "ar": "تسجيل الخروج" }
+    "new_chat": {
+      "en": "New chat",
+      "ar": "محادثة جديدة"
+    },
+    "search": {
+      "en": "Search",
+      "ar": "بحث"
+    },
+    "device_connections": {
+      "en": "Device connections",
+      "ar": "اتصالات الأجهزة"
+    },
+    "agent_manager": {
+      "en": "Agent Manager",
+      "ar": "مدير الوكلاء"
+    },
+    "models": {
+      "en": "Models",
+      "ar": "النماذج"
+    },
+    "knowledge": {
+      "en": "Knowledge",
+      "ar": "المعرفة"
+    },
+    "chat": {
+      "en": "Chat",
+      "ar": "محادثة"
+    },
+    "rooms": {
+      "en": "Rooms",
+      "ar": "الغرف"
+    },
+    "tasks": {
+      "en": "Tasks",
+      "ar": "المهام"
+    },
+    "schedules": {
+      "en": "Schedules",
+      "ar": "الجدولة"
+    },
+    "history": {
+      "en": "History",
+      "ar": "السجل"
+    },
+    "settings": {
+      "en": "Settings",
+      "ar": "الإعدادات"
+    },
+    "account": {
+      "en": "Account",
+      "ar": "الحساب"
+    },
+    "users": {
+      "en": "Users",
+      "ar": "المستخدمون"
+    },
+    "webhooks": {
+      "en": "Webhooks",
+      "ar": "خطافات الويب"
+    },
+    "display": {
+      "en": "Display",
+      "ar": "العرض"
+    },
+    "notifications": {
+      "en": "Notifications",
+      "ar": "الإشعارات"
+    },
+    "privacy": {
+      "en": "Privacy",
+      "ar": "الخصوصية"
+    },
+    "this_device": {
+      "en": "This device",
+      "ar": "هذا الجهاز"
+    },
+    "about": {
+      "en": "About",
+      "ar": "حول"
+    },
+    "logs": {
+      "en": "Logs",
+      "ar": "السجلات"
+    },
+    "usage": {
+      "en": "Usage",
+      "ar": "الاستخدام"
+    },
+    "performance": {
+      "en": "Performance",
+      "ar": "الأداء"
+    },
+    "theme": {
+      "en": "Theme",
+      "ar": "السمة"
+    },
+    "workspaces": {
+      "en": "Workspaces",
+      "ar": "مساحات العمل"
+    },
+    "updates": {
+      "en": "Updates",
+      "ar": "التحديثات"
+    },
+    "plugins": {
+      "en": "Plugins",
+      "ar": "الإضافات"
+    },
+    "skills": {
+      "en": "Skills",
+      "ar": "المهارات"
+    },
+    "mcp": {
+      "en": "MCP",
+      "ar": "MCP"
+    },
+    "memory": {
+      "en": "Memory",
+      "ar": "الذاكرة"
+    },
+    "jobs": {
+      "en": "Jobs",
+      "ar": "المهام المجدولة"
+    },
+    "channels": {
+      "en": "Channels",
+      "ar": "القنوات"
+    },
+    "agent_settings": {
+      "en": "Settings",
+      "ar": "الإعدادات"
+    },
+    "global_agent": {
+      "en": "Global agent",
+      "ar": "الوكيل العام"
+    },
+    "new_room": {
+      "en": "New room",
+      "ar": "غرفة جديدة"
+    },
+    "join_by_code": {
+      "en": "Join by code",
+      "ar": "انضمام برمز"
+    },
+    "sign_out": {
+      "en": "Sign out",
+      "ar": "تسجيل الخروج"
+    }
   },
   "destinations": [
     {
@@ -47,7 +158,9 @@
       "title": "new_chat",
       "module": "sessions",
       "level": "app",
-      "entry": { "kind": "rail" },
+      "entry": {
+        "kind": "rail"
+      },
       "roles": ["member"],
       "note": "Opens a draft session and closes the menu."
     },
@@ -56,7 +169,9 @@
       "title": "search",
       "module": "sessions",
       "level": "app",
-      "entry": { "kind": "rail" },
+      "entry": {
+        "kind": "rail"
+      },
       "roles": ["member"],
       "note": "A search sheet over sessions with the field focused; not History. A result from the global agent opens global_agent."
     },
@@ -65,7 +180,9 @@
       "title": "device_connections",
       "module": "devices",
       "level": "app",
-      "entry": { "kind": "rail" },
+      "entry": {
+        "kind": "rail"
+      },
       "roles": ["member"],
       "tabs": ["app", "devices"],
       "note": "Tab devices is admin-only."
@@ -75,7 +192,9 @@
       "title": "agent_manager",
       "module": "agents",
       "level": "app",
-      "entry": { "kind": "rail" },
+      "entry": {
+        "kind": "rail"
+      },
       "roles": ["admin"],
       "note": "The registry from the server; each agent card enters the agent level."
     },
@@ -84,7 +203,9 @@
       "title": "models",
       "module": "models",
       "level": "app",
-      "entry": { "kind": "rail" },
+      "entry": {
+        "kind": "rail"
+      },
       "roles": ["member"],
       "tabs": ["general", "auxiliary", "ensembles", "stt_providers", "tts_providers"],
       "note": "Providers, keys and voice providers live here, never in Settings."
@@ -94,7 +215,9 @@
       "title": "knowledge",
       "module": "knowledge",
       "level": "app",
-      "entry": { "kind": "rail" },
+      "entry": {
+        "kind": "rail"
+      },
       "roles": ["member"],
       "note": "Journal, notes/memory browser, files, search (Phase 4)."
     },
@@ -103,7 +226,9 @@
       "title": "chat",
       "module": "sessions",
       "level": "app",
-      "entry": { "kind": "segment" },
+      "entry": {
+        "kind": "segment"
+      },
       "roles": ["member"],
       "note": "Session list: pinned, recent with counter, categories, workspace filter."
     },
@@ -112,25 +237,31 @@
       "title": "rooms",
       "module": "rooms",
       "level": "app",
-      "entry": { "kind": "segment" },
+      "entry": {
+        "kind": "segment"
+      },
       "roles": ["member"],
       "actions": ["new_room", "join_by_code"]
     },
     {
-      "id": "board",
-      "title": "board",
-      "module": "board",
+      "id": "tasks",
+      "title": "tasks",
+      "module": "tasks",
       "level": "app",
-      "entry": { "kind": "segment" },
+      "entry": {
+        "kind": "segment"
+      },
       "roles": ["member"],
-      "note": "Projects and tasks (kanban) with agent assignment."
+      "note": "Projects and tasks (kanban) with agent assignment. Named Tasks everywhere (owner decision 2026-09-21); the contract tag `board` is being renamed to `tasks` in a parallel branch."
     },
     {
       "id": "schedules",
       "title": "schedules",
       "module": "schedules",
       "level": "app",
-      "entry": { "kind": "segment" },
+      "entry": {
+        "kind": "segment"
+      },
       "roles": ["member"],
       "note": "Cron jobs and workflows with status badges."
     },
@@ -139,7 +270,9 @@
       "title": "history",
       "module": "sessions",
       "level": "app",
-      "entry": { "kind": "segment" },
+      "entry": {
+        "kind": "segment"
+      },
       "roles": ["member"],
       "note": "A page: pinned, collapsible groups by source, multi-select (archive/cancel/delete), archive. Opening a session does not change the selected segment."
     },
@@ -148,7 +281,9 @@
       "title": "settings",
       "module": "auth",
       "level": "app",
-      "entry": { "kind": "footer" },
+      "entry": {
+        "kind": "footer"
+      },
       "roles": ["member"],
       "note": "One screen with tabs and a Tools section; no settings inside settings."
     },
@@ -157,7 +292,9 @@
       "title": "account",
       "module": "auth",
       "level": "settings",
-      "entry": { "kind": "settings-tab" },
+      "entry": {
+        "kind": "settings-tab"
+      },
       "roles": ["member"]
     },
     {
@@ -165,7 +302,9 @@
       "title": "users",
       "module": "auth",
       "level": "settings",
-      "entry": { "kind": "settings-tab" },
+      "entry": {
+        "kind": "settings-tab"
+      },
       "roles": ["admin"],
       "global": true
     },
@@ -174,7 +313,9 @@
       "title": "webhooks",
       "module": "notify",
       "level": "settings",
-      "entry": { "kind": "settings-tab" },
+      "entry": {
+        "kind": "settings-tab"
+      },
       "roles": ["admin"]
     },
     {
@@ -182,7 +323,9 @@
       "title": "display",
       "module": "auth",
       "level": "settings",
-      "entry": { "kind": "settings-tab" },
+      "entry": {
+        "kind": "settings-tab"
+      },
       "roles": ["member"],
       "note": "Connection mode, link target, input behaviour while busy, theme and background from the server, app language, text size."
     },
@@ -191,7 +334,9 @@
       "title": "notifications",
       "module": "notify",
       "level": "settings",
-      "entry": { "kind": "settings-tab" },
+      "entry": {
+        "kind": "settings-tab"
+      },
       "roles": ["member"]
     },
     {
@@ -199,7 +344,9 @@
       "title": "privacy",
       "module": "auth",
       "level": "settings",
-      "entry": { "kind": "settings-tab" },
+      "entry": {
+        "kind": "settings-tab"
+      },
       "roles": ["member"]
     },
     {
@@ -207,7 +354,9 @@
       "title": "this_device",
       "module": "devices",
       "level": "settings",
-      "entry": { "kind": "settings-tab" },
+      "entry": {
+        "kind": "settings-tab"
+      },
       "roles": ["member"],
       "surfaces": ["desktop", "android", "ios"],
       "note": "Hub connection, voice input mode, dictation language, spoken replies, self-update where the platform allows it."
@@ -217,7 +366,9 @@
       "title": "about",
       "module": "updates",
       "level": "settings",
-      "entry": { "kind": "settings-tab" },
+      "entry": {
+        "kind": "settings-tab"
+      },
       "roles": ["member"]
     },
     {
@@ -225,7 +376,9 @@
       "title": "logs",
       "module": "audit",
       "level": "settings",
-      "entry": { "kind": "settings-tool" },
+      "entry": {
+        "kind": "settings-tool"
+      },
       "roles": ["member"]
     },
     {
@@ -233,7 +386,9 @@
       "title": "usage",
       "module": "audit",
       "level": "settings",
-      "entry": { "kind": "settings-tool" },
+      "entry": {
+        "kind": "settings-tool"
+      },
       "roles": ["member"],
       "note": "Tokens and costs."
     },
@@ -242,7 +397,9 @@
       "title": "performance",
       "module": "audit",
       "level": "settings",
-      "entry": { "kind": "settings-tool" },
+      "entry": {
+        "kind": "settings-tool"
+      },
       "roles": ["admin"],
       "global": true,
       "note": "Runtime processes and snapshots."
@@ -252,7 +409,9 @@
       "title": "theme",
       "module": "auth",
       "level": "settings",
-      "entry": { "kind": "settings-tool" },
+      "entry": {
+        "kind": "settings-tool"
+      },
       "roles": ["member"],
       "note": "Theme and background. The footer theme chip is a local preference, not an entry."
     },
@@ -261,7 +420,9 @@
       "title": "workspaces",
       "module": "auth",
       "level": "settings",
-      "entry": { "kind": "settings-tool" },
+      "entry": {
+        "kind": "settings-tool"
+      },
       "roles": ["admin"],
       "note": "Manage workspaces (ADR 0005). The footer workspace chip only switches the X-Hub-Profile scope."
     },
@@ -270,7 +431,9 @@
       "title": "updates",
       "module": "updates",
       "level": "settings",
-      "entry": { "kind": "settings-tool" },
+      "entry": {
+        "kind": "settings-tool"
+      },
       "roles": ["admin"],
       "global": true
     },
@@ -279,7 +442,9 @@
       "title": "plugins",
       "module": "plugins",
       "level": "settings",
-      "entry": { "kind": "settings-tool" },
+      "entry": {
+        "kind": "settings-tool"
+      },
       "roles": ["admin"]
     },
     {
@@ -288,7 +453,9 @@
       "module": "agents",
       "level": "agent",
       "capability": "skills",
-      "entry": { "kind": "agent" },
+      "entry": {
+        "kind": "agent"
+      },
       "roles": ["admin"]
     },
     {
@@ -297,7 +464,9 @@
       "module": "agents",
       "level": "agent",
       "capability": "mcp",
-      "entry": { "kind": "agent" },
+      "entry": {
+        "kind": "agent"
+      },
       "roles": ["admin"]
     },
     {
@@ -306,7 +475,9 @@
       "module": "agents",
       "level": "agent",
       "capability": "memory",
-      "entry": { "kind": "agent" },
+      "entry": {
+        "kind": "agent"
+      },
       "roles": ["admin"]
     },
     {
@@ -315,7 +486,9 @@
       "module": "agents",
       "level": "agent",
       "capability": "jobs",
-      "entry": { "kind": "agent" },
+      "entry": {
+        "kind": "agent"
+      },
       "roles": ["admin"]
     },
     {
@@ -324,7 +497,9 @@
       "module": "agents",
       "level": "agent",
       "capability": "channels",
-      "entry": { "kind": "agent" },
+      "entry": {
+        "kind": "agent"
+      },
       "roles": ["admin"]
     },
     {
@@ -333,7 +508,9 @@
       "module": "agents",
       "level": "agent",
       "capability": "plugins",
-      "entry": { "kind": "agent" },
+      "entry": {
+        "kind": "agent"
+      },
       "roles": ["admin"]
     },
     {
@@ -342,7 +519,9 @@
       "module": "agents",
       "level": "agent",
       "capability": "settings",
-      "entry": { "kind": "agent" },
+      "entry": {
+        "kind": "agent"
+      },
       "roles": ["admin"],
       "note": "Always last. Tabs come from the adapter's settings descriptor (ADR 0002)."
     },
@@ -351,13 +530,16 @@
       "title": "global_agent",
       "module": "sessions",
       "level": "app",
-      "entry": { "kind": "secondary-only", "reachedFrom": ["search"] },
+      "entry": {
+        "kind": "secondary-only",
+        "reachedFrom": ["search"]
+      },
       "roles": ["member"],
       "note": "No menu entry; reached from search results and the pending-actions bar."
     }
   ],
   "rail": ["new_chat", "search", "device_connections", "agent_manager", "models", "knowledge"],
-  "segments": ["chat", "rooms", "board", "schedules", "history"],
+  "segments": ["chat", "rooms", "tasks", "schedules", "history"],
   "footer": ["settings"],
   "settingsTabs": [
     "account",
@@ -389,5 +571,44 @@
     "model": "Default model for new sessions.",
     "language": "UI language (ar/en); content direction is per message.",
     "theme": "Local preference mirrored by the Theme tool."
+  },
+  "surfaceRoutes": {
+    "$comment": "Per-surface URL (web) or screen id of every destination that exists on that surface. A destination whose `surfaces` exclude the surface must be absent here; every other destination must be present. The web parity test (packages/web/tests/navigation.parity.test.ts) builds its router from this map.",
+    "web": {
+      "new_chat": "/new",
+      "search": "/search",
+      "device_connections": "/devices",
+      "agent_manager": "/agents",
+      "models": "/models",
+      "knowledge": "/knowledge",
+      "chat": "/chat/:sessionId?",
+      "rooms": "/rooms",
+      "tasks": "/tasks",
+      "schedules": "/schedules",
+      "history": "/history",
+      "settings": "/settings",
+      "account": "/settings/account",
+      "users": "/settings/users",
+      "webhooks": "/settings/webhooks",
+      "display": "/settings/display",
+      "notifications": "/settings/notifications",
+      "privacy": "/settings/privacy",
+      "about": "/settings/about",
+      "logs": "/settings/logs",
+      "usage": "/settings/usage",
+      "performance": "/settings/performance",
+      "theme": "/settings/theme",
+      "workspaces": "/settings/workspaces",
+      "updates": "/settings/updates",
+      "plugins": "/settings/plugins",
+      "agent_skills": "/agents/:agentId/skills",
+      "agent_mcp": "/agents/:agentId/mcp",
+      "agent_memory": "/agents/:agentId/memory",
+      "agent_jobs": "/agents/:agentId/jobs",
+      "agent_channels": "/agents/:agentId/channels",
+      "agent_plugins": "/agents/:agentId/plugins",
+      "agent_settings": "/agents/:agentId/settings",
+      "global_agent": "/global-agent"
+    }
   }
 }

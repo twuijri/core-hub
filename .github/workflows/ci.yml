@@ -52,12 +52,36 @@ jobs:
       - run: pnpm test
       - run: pnpm contract:test
       - run: pnpm build
+      - name: The built web client is in place for the hub to serve
+        run: test -f packages/web/dist/index.html
       - name: The reference client starts from its build output
         run: |
           node packages/cli/dist/bin.js --version
           node packages/cli/dist/bin.js --help >/dev/null
           node packages/cli/dist/bin.js --lang ar help chat >/dev/null
           if node packages/cli/dist/bin.js whoami; then echo '::error::whoami must exit 3 when not signed in'; exit 1; fi
+
+  web-e2e:
+    name: Web smoke journeys (Playwright against the real hub)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @majlis/web exec playwright install --with-deps chromium
+      - run: pnpm build
+      - run: pnpm --filter @majlis/web test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: packages/web/playwright-report
+          retention-days: 7
 
   migrations:
     name: db:generate + db:migrate (SQLite and PostgreSQL)
@@ -113,7 +137,11 @@ jobs:
         run: |
           docker run -d --name hub -p 8080:8080 -e HUB_ADMIN_PASSWORD=ci-only-password majlis:ci
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8080/api/v1/health; then echo; exit 0; fi
+            if curl -fsS http://127.0.0.1:8080/api/v1/health; then
+              echo
+              curl -fsS -H 'Accept: text/html' http://127.0.0.1:8080/chat | grep -q 'id="root"'
+              exit 0
+            fi
             sleep 1
           done
           docker logs hub

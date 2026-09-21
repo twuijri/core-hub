@@ -15,8 +15,8 @@
     "contracts:generate": "pnpm --filter @majlis/contracts generate",
     "contracts:generate:ts": "pnpm --filter @majlis/contracts generate:ts",
     "contracts:check-clients": "node packages/contracts/scripts/check-clients.mjs",
-    "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --workspace-concurrency=1 --if-present typecheck",
+    "test": "pnpm -r --workspace-concurrency=1 --if-present test",
     "contract:test": "pnpm --filter @majlis/server contract:test",
     "lint": "eslint . && prettier --check .",
     "lint:fix": "eslint . --fix && prettier --write .",
@@ -25,8 +25,11 @@
     "i18n:check": "node scripts/i18n-check.mjs",
     "nav:check": "node scripts/navigation-check.mjs",
     "change-record:check": "node scripts/check-change-record.mjs",
-    "build": "pnpm -r --if-present build",
-    "dev": "pnpm --filter @majlis/server dev"
+    "build": "pnpm -r --workspace-concurrency=1 --if-present build",
+    "dev": "pnpm --filter @majlis/server dev",
+    "web:dev": "pnpm --filter @majlis/web dev",
+    "web:e2e": "pnpm --filter @majlis/web test:e2e",
+    "tokens:build": "pnpm --filter @majlis/ui-tokens build"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

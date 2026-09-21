@@ -133,8 +133,11 @@ export function createHubClient(options: HubClientOptions): HubClient {
     const profile = resolve(options.profile);
     if (profile) headers['X-Hub-Profile'] = profile;
     if (options.language) headers['Accept-Language'] = options.language;
-    let body: string | undefined;
-    if (init.body !== undefined) {
+    let body: string | FormData | undefined;
+    if (typeof FormData !== 'undefined' && init.body instanceof FormData) {
+      // Multipart (attachments): the runtime sets the boundary header itself.
+      body = init.body;
+    } else if (init.body !== undefined) {
       headers['Content-Type'] = 'application/json';
       body = JSON.stringify(init.body);
     }

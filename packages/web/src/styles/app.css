@@ -1,0 +1,283 @@
+/* Tailwind 4 reads the design tokens as CSS variables (packages/ui-tokens); no colour or
+   size is written twice. Physical properties (left/right) are forbidden — a test greps for
+   them — so the same stylesheet serves Arabic (rtl) and English (ltr). */
+@import 'tailwindcss';
+@import '@majlis/ui-tokens/tokens.css';
+
+@theme inline {
+  --color-bg: var(--mj-color-bg);
+  --color-raised: var(--mj-color-bg-raised);
+  --color-surface: var(--mj-color-surface);
+  --color-surface-2: var(--mj-color-surface-2);
+  --color-surface-3: var(--mj-color-surface-3);
+  --color-ink: var(--mj-color-text);
+  --color-muted: var(--mj-color-text-muted);
+  --color-faint: var(--mj-color-text-faint);
+  --color-line: var(--mj-color-border);
+  --color-line-strong: var(--mj-color-border-strong);
+  --color-accent: var(--mj-color-accent);
+  --color-accent-strong: var(--mj-color-accent-strong);
+  --color-accent-text: var(--mj-color-accent-text);
+  --color-accent-soft: var(--mj-color-accent-soft);
+  --color-accent-soft-text: var(--mj-color-accent-soft-text);
+  --color-danger: var(--mj-color-danger);
+  --color-danger-text: var(--mj-color-danger-text);
+  --color-danger-soft: var(--mj-color-danger-soft);
+  --color-danger-soft-text: var(--mj-color-danger-soft-text);
+  --color-warning-soft: var(--mj-color-warning-soft);
+  --color-warning-soft-text: var(--mj-color-warning-soft-text);
+  --color-success-soft: var(--mj-color-success-soft);
+  --color-success-soft-text: var(--mj-color-success-soft-text);
+  --color-info-soft: var(--mj-color-info-soft);
+  --color-info-soft-text: var(--mj-color-info-soft-text);
+  --color-link: var(--mj-color-link);
+  --color-focus: var(--mj-color-focus);
+  --color-bubble: var(--mj-color-user-bubble);
+  --color-bubble-text: var(--mj-color-user-bubble-text);
+  --color-code-bg: var(--mj-color-code-bg);
+  --color-code-text: var(--mj-color-code-text);
+  --color-scrim: var(--mj-color-scrim);
+  --radius-sm: var(--mj-radius-sm);
+  --radius-md: var(--mj-radius-md);
+  --radius-lg: var(--mj-radius-lg);
+  --radius-xl: var(--mj-radius-xl);
+  --font-sans: var(--mj-font-sans);
+  --font-mono: var(--mj-font-mono);
+  --text-xs: var(--mj-font-size-xs);
+  --text-sm: var(--mj-font-size-sm);
+  --text-base: var(--mj-font-size-md);
+  --text-lg: var(--mj-font-size-lg);
+  --text-xl: var(--mj-font-size-xl);
+  --text-2xl: var(--mj-font-size-2xl);
+}
+
+@layer base {
+  html {
+    font-family: var(--mj-font-sans);
+    font-size: calc(100% * var(--mj-text-scale, 1));
+    line-height: var(--mj-font-leading-normal);
+    background: var(--mj-color-bg);
+    color: var(--mj-color-text);
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    margin: 0;
+    min-block-size: 100dvh;
+  }
+  :focus-visible {
+    outline: 2px solid var(--mj-color-focus);
+    outline-offset: 2px;
+  }
+  /* Navigation links inherit; only prose links and .link carry the link colour. */
+  a {
+    color: inherit;
+  }
+  .link,
+  .prose-chat a {
+    color: var(--mj-color-link);
+  }
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+  [hidden] {
+    display: none !important;
+  }
+}
+
+/* A transition that follows the motion tokens (0 ms under prefers-reduced-motion). */
+@utility transition-ui {
+  transition-duration: var(--mj-motion-normal);
+  transition-timing-function: var(--mj-motion-ease);
+}
+
+@layer components {
+  /* The one glass surface. Chrome only: sidebar, top bar, composer, popovers, toolbars. */
+  .glass {
+    background: var(--mj-glass-bg);
+    -webkit-backdrop-filter: var(--mj-glass-filter);
+    backdrop-filter: var(--mj-glass-filter);
+    border: 1px solid var(--mj-glass-border);
+    box-shadow: var(--mj-glass-shadow);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass {
+      background: var(--mj-color-surface);
+    }
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-ui;
+    border: 1px solid var(--mj-color-border);
+    background: var(--mj-color-surface);
+    color: var(--mj-color-text);
+  }
+  .btn:hover {
+    background: var(--mj-color-surface-2);
+  }
+  .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--mj-color-accent);
+    border-color: var(--mj-color-accent);
+    color: var(--mj-color-accent-text);
+  }
+  .btn-primary:hover {
+    background: var(--mj-color-accent-strong);
+    border-color: var(--mj-color-accent-strong);
+  }
+  .btn-danger {
+    background: var(--mj-color-danger);
+    border-color: var(--mj-color-danger);
+    color: var(--mj-color-danger-text);
+  }
+  .btn-ghost {
+    background: transparent;
+    border-color: transparent;
+  }
+  .btn-ghost:hover {
+    background: var(--mj-color-surface-2);
+  }
+  .field {
+    @apply w-full rounded-md px-3 py-2 text-base;
+    border: 1px solid var(--mj-color-border);
+    background: var(--mj-color-surface);
+    color: var(--mj-color-text);
+  }
+  .field::placeholder {
+    color: var(--mj-color-text-faint);
+  }
+  .card {
+    @apply rounded-lg p-4;
+    background: var(--mj-color-surface);
+    border: 1px solid var(--mj-color-border);
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs;
+    background: var(--mj-color-surface-2);
+    color: var(--mj-color-text-muted);
+  }
+  .segmented {
+    @apply inline-flex rounded-md p-0.5;
+    background: var(--mj-color-surface-2);
+  }
+  .segmented > button {
+    @apply rounded-sm px-2 py-1 text-xs;
+    color: var(--mj-color-text-muted);
+  }
+  .segmented > button[aria-pressed='true'] {
+    background: var(--mj-color-surface);
+    color: var(--mj-color-text);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+  }
+}
+
+/* Markdown rendering (solid content surface). */
+.prose-chat {
+  overflow-wrap: anywhere;
+}
+.prose-chat > * + * {
+  margin-block-start: 0.75em;
+}
+.prose-chat h1,
+.prose-chat h2,
+.prose-chat h3 {
+  font-weight: 600;
+  line-height: var(--mj-font-leading-tight);
+}
+.prose-chat h1 {
+  font-size: var(--mj-font-size-xl);
+}
+.prose-chat h2 {
+  font-size: var(--mj-font-size-lg);
+}
+.prose-chat ul,
+.prose-chat ol {
+  padding-inline-start: 1.5em;
+}
+.prose-chat ul {
+  list-style: disc;
+}
+.prose-chat ol {
+  list-style: decimal;
+}
+.prose-chat blockquote {
+  border-inline-start: 3px solid var(--mj-color-border-strong);
+  padding-inline-start: 0.75em;
+  color: var(--mj-color-text-muted);
+}
+.prose-chat table {
+  border-collapse: collapse;
+  display: block;
+  max-inline-size: 100%;
+  overflow-x: auto;
+}
+.prose-chat th,
+.prose-chat td {
+  border: 1px solid var(--mj-color-border);
+  padding: 0.25em 0.6em;
+  text-align: start;
+}
+.prose-chat code {
+  font-family: var(--mj-font-mono);
+  font-size: 0.9em;
+  background: var(--mj-color-code-bg);
+  color: var(--mj-color-code-text);
+  border-radius: var(--mj-radius-sm);
+  padding: 0.1em 0.35em;
+}
+.prose-chat pre {
+  background: var(--mj-color-code-bg);
+  color: var(--mj-color-code-text);
+  border: 1px solid var(--mj-color-border);
+  border-radius: var(--mj-radius-md);
+  padding: 0.75em 1em;
+  overflow-x: auto;
+  direction: ltr;
+  text-align: start;
+}
+.prose-chat pre code {
+  background: transparent;
+  padding: 0;
+  font-size: var(--mj-font-size-sm);
+}
+/* highlight.js classes (rehype-highlight) painted with the token colours only. */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-tag {
+  color: var(--mj-color-code-keyword);
+}
+.hljs-string,
+.hljs-attr,
+.hljs-regexp,
+.hljs-addition {
+  color: var(--mj-color-code-string);
+}
+.hljs-comment,
+.hljs-quote,
+.hljs-meta {
+  color: var(--mj-color-code-comment);
+  font-style: italic;
+}
+.hljs-number,
+.hljs-literal,
+.hljs-title,
+.hljs-section,
+.hljs-deletion {
+  color: var(--mj-color-code-number);
+}
+
+/* Drag and drop affordances. */
+.drop-target {
+  outline: 2px dashed var(--mj-color-accent);
+  outline-offset: -4px;
+  background: var(--mj-color-accent-soft);
+}
+.sortable-dragging {
+  opacity: 0.5;
+}
