@@ -75,13 +75,17 @@ export const anthropicAdapter: ProviderAdapter = {
         if (!id) continue;
         models.push({
           key: id,
-          label: typeof item.display_name === 'string' && item.display_name ? item.display_name : id,
+          label:
+            typeof item.display_name === 'string' && item.display_name ? item.display_name : id,
           kind: 'chat',
           capabilities: ['tools', 'vision', 'streaming'],
         });
       }
       if (body.has_more !== true || typeof body.last_id !== 'string') break;
-      url = joinUrl(ctx.baseUrl, `v1/models?limit=100&after_id=${encodeURIComponent(body.last_id)}`);
+      url = joinUrl(
+        ctx.baseUrl,
+        `v1/models?limit=100&after_id=${encodeURIComponent(body.last_id)}`,
+      );
     }
     return { supported: true, models };
   },

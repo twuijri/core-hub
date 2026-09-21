@@ -40,12 +40,17 @@ import {
   type WorkspaceScope,
 } from '../auth/index.js';
 import { auditFor, jobRunnerFor } from '../audit/index.js';
-import { hermesRuntimeFor, registerAgentModelsPort, type AgentModelsPort } from '../agents/index.js';
+import {
+  hermesRuntimeFor,
+  registerAgentModelsPort,
+  type AgentModelsPort,
+} from '../agents/index.js';
 import { DataKeyRing } from './crypto.js';
 import { SecretStore } from './secrets.js';
 import { roleForAdapter } from './defaults.js';
 import {
   ModelsService,
+  type HermesTarget,
   type EnsembleWriteInput,
   type DefaultsWriteInput,
   type ModelPatchInput,
@@ -82,7 +87,12 @@ export {
 } from './catalogue.js';
 export type { CredentialFamily, ProviderCatalogueEntry } from './catalogue.js';
 export { AUXILIARY_TASKS, roleForAdapter } from './defaults.js';
-export { agentEnvironment, writeHermesConfiguration, writeHermesEnv, writeHermesModel } from './propagation.js';
+export {
+  agentEnvironment,
+  writeHermesConfiguration,
+  writeHermesEnv,
+  writeHermesModel,
+} from './propagation.js';
 export type { PropagationState, ResolvedCredential } from './propagation.js';
 export { mergeEnv, parseEnv, quoteValue } from './dotenv.js';
 export { providerAdapter } from './adapters/index.js';
@@ -92,6 +102,11 @@ export interface ModelsOverrides {
   fetchImpl?: typeof fetch;
   /** Skip the key file entirely (the crypto tests own their own ring). */
   keys?: DataKeyRing;
+  /**
+   * A scripted Hermes home. The real one comes from the supervised runtime, which a test
+   * process does not have; this is how the propagation path is exercised end to end.
+   */
+  hermes?: HermesTarget;
 }
 
 let pendingOverrides: ModelsOverrides | null = null;
@@ -116,22 +131,23 @@ function contextOf(app: FastifyInstance): ModelsService {
   const db = requireSqlite(hub.database);
   const keys = own.keys ?? DataKeyRing.open(hub.config.dataDir);
   const runtime = hermesRuntimeFor(app);
+  const hermes: HermesTarget = own.hermes ?? {
+    // Only a runtime this hub supervises has a home the hub may write into; an
+    // external gateway is somebody else's process with somebody else's files.
+    home: () => runtime.status().home,
+    restart: async () => {
+      if (runtime.status().mode !== 'managed') return false;
+      await runtime.restart();
+      return true;
+    },
+  };
   const service = new ModelsService({
     db,
     log: app.log,
     secrets: new SecretStore({ db, keys }),
     audit: auditFor(app),
     jobs: jobRunnerFor(app),
-    hermes: {
-      // Only a runtime this hub supervises has a home the hub may write into; an
-      // external gateway is somebody else's process with somebody else's files.
-      home: () => runtime.status().home,
-      restart: async () => {
-        if (runtime.status().mode !== 'managed') return false;
-        await runtime.restart();
-        return true;
-      },
-    },
+    hermes,
     ...(own.fetchImpl ? { fetchImpl: own.fetchImpl } : {}),
   });
   contexts.set(hub.io, service);

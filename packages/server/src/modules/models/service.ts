@@ -16,17 +16,13 @@ import type { FastifyBaseLogger } from 'fastify';
 import { eq } from 'drizzle-orm';
 import type { ModuleDb } from '../../lib/db.js';
 import { HubError, conflict, notFound, validationFailed } from '../../lib/errors.js';
-import { clampLimit, decodeCursor, encodeCursor } from '../../lib/pagination.js';
+import { clampLimit } from '../../lib/pagination.js';
 import { newUlid } from '../../db/ids.js';
 import type { WorkspaceScope } from '../auth/index.js';
 import type { AuditService, JobRow, JobRunner } from '../audit/index.js';
 import { providerAdapter } from './adapters/index.js';
 import type { DiscoveredVoice, ProviderContext, SynthesizeResult } from './adapters/types.js';
-import {
-  catalogueEntry,
-  secretNameOf,
-  type ProviderCatalogueEntry,
-} from './catalogue.js';
+import { catalogueEntry, secretNameOf, type ProviderCatalogueEntry } from './catalogue.js';
 import { isMask } from './crypto.js';
 import { AUXILIARY_TASKS, isAuxiliaryKey, roleForAdapter } from './defaults.js';
 import {
@@ -180,9 +176,7 @@ export class ModelsService {
   }
 
   listProviders(scope: WorkspaceScope, filter: { kind?: string } = {}): ContractProvider[] {
-    return this.store
-      .listProviders(scope.id, filter.kind)
-      .map((row) => this.present(scope, row));
+    return this.store.listProviders(scope.id, filter.kind).map((row) => this.present(scope, row));
   }
 
   getProvider(scope: WorkspaceScope, id: string): ContractProvider {
@@ -303,8 +297,11 @@ export class ModelsService {
 
     if (keyChanged || patch.enabled !== undefined) {
       this.propagate(scope, actor);
+      // `row` was read before the write; ask the table what it says now, or a key that
+      // just arrived would look absent and its catalogue would never be fetched.
+      const fresh = this.loadProvider(scope, row.id);
       // A key that just arrived deserves the model list it unlocks, without a second click.
-      if (keyChanged && this.hasKey(scope, row)) this.refreshFamily(scope, actor, row.family);
+      if (keyChanged && this.hasKey(scope, fresh)) this.refreshFamily(scope, actor, fresh.family);
     }
     return this.getProvider(scope, row.id);
   }
@@ -456,7 +453,9 @@ export class ModelsService {
     const bySlug = new Map(this.store.listProviders(scope.id).map((row) => [row.id, row]));
     const needle = query.q?.trim().toLowerCase();
     const visible = query.visible ?? true;
-    const after = decodeCursor(query.cursor);
+    // The catalogue is ordered by (provider, model), so its cursor is that pair rather
+    // than a row id (`store.ts` §allModels).
+    const after = decodeCatalogueCursor(query.cursor);
     const limit = clampLimit(query.limit);
     const matching = this.store
       .allModels(scope.id)
@@ -473,12 +472,13 @@ export class ModelsService {
         }
         return true;
       })
-      .filter((row) => !after || row.id > after);
+      .filter((row) => !after || catalogueCursorOf(row) > after);
     const page = matching.slice(0, limit);
     const last = page.at(-1);
     return {
       items: page.map((row) => serializeModel(row, bySlug.get(row.providerId)!.slug)),
-      next_cursor: matching.length > limit && last ? encodeCursor(last.id) : null,
+      next_cursor:
+        matching.length > limit && last ? encodeCatalogueCursor(catalogueCursorOf(last)) : null,
     };
   }
 
@@ -590,9 +590,7 @@ export class ModelsService {
         this.store.clearDefault(scope.id, 'chat');
       } else {
         const model = this.requireModel(scope, body.default);
-        const fallbacks = (body.fallbacks ?? []).map(
-          (ref) => this.requireModel(scope, ref).id,
-        );
+        const fallbacks = (body.fallbacks ?? []).map((ref) => this.requireModel(scope, ref).id);
         this.store.setDefault(
           { workspace: scope.id, ownerId: actor.userId },
           'chat',
@@ -654,11 +652,7 @@ export class ModelsService {
     return this.store.listEnsembles(scope.id).map((row) => serializeEnsemble(row, scope.slug));
   }
 
-  createEnsemble(
-    scope: WorkspaceScope,
-    actor: Actor,
-    body: EnsembleWriteInput,
-  ): ContractEnsemble {
+  createEnsemble(scope: WorkspaceScope, actor: Actor, body: EnsembleWriteInput): ContractEnsemble {
     const name = body.name?.trim();
     if (!name) throw validationFailed({ field: 'name', reason: 'required' });
     if (!body.aggregator) {
@@ -755,11 +749,7 @@ export class ModelsService {
         ? this.requireSpeechProvider(scope, patch.tts_provider_id, 'tts').id
         : null;
     }
-    this.db
-      .update(speechSettings)
-      .set(changes)
-      .where(eq(speechSettings.id, settings.id))
-      .run();
+    this.db.update(speechSettings).set(changes).where(eq(speechSettings.id, settings.id)).run();
 
     let keyChanged = false;
     for (const entry of patch.providers ?? []) {
@@ -778,7 +768,8 @@ export class ModelsService {
             ? { voice: entry.settings.voice }
             : {}),
         };
-        if (typeof entry.settings.base_url === 'string') rowChanges.baseUrl = entry.settings.base_url;
+        if (typeof entry.settings.base_url === 'string')
+          rowChanges.baseUrl = entry.settings.base_url;
       }
       if (entry.api_key !== undefined && !isMask(entry.api_key)) {
         const value = entry.api_key?.trim() ?? '';
@@ -807,7 +798,12 @@ export class ModelsService {
   async synthesize(
     scope: WorkspaceScope,
     ownerId: string,
-    request: { text: string; language: string | null; voice: string | null; providerId?: string | null },
+    request: {
+      text: string;
+      language: string | null;
+      voice: string | null;
+      providerId?: string | null;
+    },
   ): Promise<{ audio: Uint8Array; contentType: string; provider: string }> {
     const settings = this.store.ensureSpeech({ workspace: scope.id, ownerId });
     const id = request.providerId ?? settings.ttsProviderId;
@@ -994,9 +990,7 @@ export class ModelsService {
       slug: row.slug,
       label: row.label,
       baseUrl: row.baseUrl ?? entry?.baseUrl ?? '',
-      apiKey: row.apiKeySecretId
-        ? this.options.secrets.reveal(scope.id, row.apiKeySecretId)
-        : null,
+      apiKey: row.apiKeySecretId ? this.options.secrets.reveal(scope.id, row.apiKeySecretId) : null,
       headers: { ...row.headers },
       settings: { ...row.settings },
       fetchImpl: this.fetchImpl,
@@ -1161,4 +1155,24 @@ export class ModelsService {
     }
     throw conflict({ reason: 'slug_exhausted', detail: label });
   }
+}
+
+/**
+ * The catalogue's cursor: the `(provider_id, model_key)` pair the list is ordered by,
+ * base64url-encoded so a client cannot build one — the same contract the shared row-id
+ * cursor offers (`lib/pagination.ts`), for a list that is not ordered by row id.
+ */
+function catalogueCursorOf(row: ModelRow): string {
+  return `${row.providerId}\u0000${row.modelKey}`;
+}
+
+function encodeCatalogueCursor(value: string): string {
+  return Buffer.from(value, 'utf8').toString('base64url');
+}
+
+/** Null for an absent or unreadable cursor: a bad cursor restarts the list. */
+function decodeCatalogueCursor(cursor: string | undefined): string | null {
+  if (!cursor) return null;
+  const value = Buffer.from(cursor, 'base64url').toString('utf8');
+  return value.includes('\u0000') ? value : null;
 }

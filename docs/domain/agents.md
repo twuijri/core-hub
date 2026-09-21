@@ -87,6 +87,15 @@ Created lazily with defaults the first time a workspace uses an agent.
 | env | json<Record<string,string>> | non-secret environment |
 | secret_refs | json<Record<string,string>> | env name → models.secret id, resolved at process start |
 
+**Credentials are not entered here** (ADR 0010). An agent's process environment
+is built at start from the workspace's shared providers, under the variable
+names its catalog entry declares (`catalog/<id>.ts` §`credentials`, one line per
+agent: `{ anthropic: 'ANTHROPIC_API_KEY' }`). `env` and `secret_refs` are the
+*override*: they are layered on top and win. An entry that declares nothing
+inherits nothing. Likewise `default_model_id` overrides the workspace's
+assignment for the agent's kind — Hermes takes `chat`, coding agents take
+`coding` — and the resolved value is what `Agent.default_model` reports.
+
 Indexes: unique (workspace, agent_id).
 
 ## Queries the clients need
@@ -99,7 +108,7 @@ Indexes: unique (workspace, agent_id).
 - Settings form: the adapter's declared settings schema (from code) + the
   `agent_settings` row; secrets shown as `[stored]`.
 
-## The Hermes runtime (ADR 0008)
+## The Hermes runtime (ADR 0008, ADR 0010)
 
 The hub supervises `hermes gateway run` as a child process when the image (or the host)
 has the `hermes` executable and no gateway already answers on the endpoint; its home is
@@ -107,6 +116,11 @@ has the `hermes` executable and no gateway already answers on the endpoint; its 
 runtime state (`starting`, `running`, `error`, `stopped`) is process memory reported on
 the `hermes` row; `agents.restart` recycles the child and is `409 state_invalid` when the
 gateway is external or absent.
+
+Hermes takes its provider keys from that home, not from the environment the hub spawns it
+with, so the `models` module writes `${HERMES_HOME}/.env` and `${HERMES_HOME}/config.yaml`
+and then recycles the same child (ADR 0010 §3). That is why the `hermes` catalog entry
+declares no `credentials`: two paths to one setting would eventually disagree.
 
 ## Not stored
 

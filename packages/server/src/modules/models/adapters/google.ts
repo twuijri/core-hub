@@ -88,8 +88,7 @@ export const googleAdapter: ProviderAdapter = {
           typeof item.outputTokenLimit === 'number' ? Math.trunc(item.outputTokenLimit) : null;
         models.push({
           key: id,
-          label:
-            typeof item.displayName === 'string' && item.displayName ? item.displayName : id,
+          label: typeof item.displayName === 'string' && item.displayName ? item.displayName : id,
           kind: kindOf(item.supportedGenerationMethods, id),
           ...(contextWindow !== null ? { contextWindow } : {}),
           ...(maxOutput !== null ? { maxOutputTokens: maxOutput } : {}),

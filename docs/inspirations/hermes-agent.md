@@ -106,6 +106,140 @@
   يرقّم نداءات الأدوات (نطابق `tool.completed` بآخر نداء مفتوح بالاسم نفسه)، و`usage` تأتي مع
   الحدث الختامي فقط.
 
+## مفاتيح المزوّدين واختيار النموذج (ADR 0010)
+
+قُرئ من مصدر Hermes بترخيص MIT عند الالتزام `e7c5141f1c5b14e83bdafa3732a6c7fce7fc2465`
+(فرع `main`، 2026-09-21) ومن وثائق الموقع؛ الروابط في آخر القسم. هذا هو السطح الذي يكتب
+عليه المركز في ADR 0010، فكل معرّف هنا منقول حرفيًا لا مترجمًا.
+
+### أ) بنية `HERMES_HOME`
+```
+~/.hermes/
+├── config.yaml     # الإعدادات (النموذج، الطرفية، TTS، الضغط…)
+├── .env            # مفاتيح الواجهات والأسرار
+├── auth.json       # اعتمادات OAuth
+├── SOUL.md · memories/ · skills/ · cron/ · sessions/ · logs/
+```
+- **المفاتيح في `.env` لا في `config.yaml`**؛ القاعدة الموثّقة: «الأسرار (مفاتيح الواجهات،
+  رموز البوتات، كلمات المرور) في `.env`، وكل ما عداها في `config.yaml`».
+- `get_config_path()` → `get_hermes_home() / "config.yaml"`، و`get_env_path()` → `.env`
+  (`hermes_cli/config.py`). ترتيب حسم البيت: تجاوز محلّي → متغيّر `HERMES_HOME` → الافتراضي
+  (`hermes_constants.py`). علامات البيت: `("config.yaml", ".env", "state.db")`.
+- اكتشاف المسارات بلا تخمين: `hermes config path` و`hermes config env-path`.
+- صيغة `.env` (`agent/secret_scope.py` §`_parse_env_text`): `KEY=value`، مع قبول بادئة
+  `export `، ومسافات حول `=`، وتعليقات `#`، وفكّ اقتباسات. والكاتب
+  (`_quote_env_value`) **يقتبس فقط** إذا احتوت القيمة على `#` أو `"` أو `'` أو مسافة.
+  الكتابة ذرّية: ملف مؤقّت + `fsync` + إعادة تسمية، مع الحفاظ على صلاحيات الملف،
+  و«الأسطر الفارغة والتعليقات تُحفظ حرفيًا».
+
+### ب) أسماء متغيّرات البيئة لكل مزوّد
+ليست جدولًا واحدًا: تُدمج من ثلاثة مصادر — `env_vars=(…)` في
+`plugins/model-providers/<id>/__init__.py`، و`HERMES_OVERLAYS` في `hermes_cli/providers.py`،
+وحقل `env` في فهرس models.dev (مخزّن في `<home>/models_dev_cache.json`).
+
+| مزوّد Hermes | `env_vars` (الأول هو الأساسي) |
+|---|---|
+| `anthropic` | `ANTHROPIC_API_KEY`, `ANTHROPIC_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN` |
+| `openrouter` | `OPENROUTER_API_KEY` (ويرجع إلى `OPENAI_API_KEY`) |
+| `gemini` (مرادفات `google`, `google-gemini`) | `GOOGLE_API_KEY`, `GEMINI_API_KEY` |
+| `deepseek` | `DEEPSEEK_API_KEY` |
+| `xai` (مرادفات `grok`, `x-ai`) | `XAI_API_KEY` |
+| `zai` | `GLM_API_KEY`, `ZAI_API_KEY`, `Z_AI_API_KEY` |
+| `nous` | `NOUS_API_KEY` |
+| `huggingface` | `HF_TOKEN` |
+| `nvidia` | `NVIDIA_API_KEY` |
+| `alibaba` (`dashscope`) | `DASHSCOPE_API_KEY` |
+| `copilot` | `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN` |
+
+**مزلقان يقرّرهما `hermesProvider` في `modules/models/catalogue.ts`:**
+1. لا يوجد مزوّد محادثة اسمه `openai` عند Hermes: `openai` **مرادف لـ `openrouter`**
+   (`_ALIAS_GROUPS`)، و OpenAI المباشر هو `openai-api` / `openai-codex`.
+2. `MISTRAL_API_KEY` و`GROQ_API_KEY` عند Hermes مفاتيح **صوت** (Voxtral وWhisper،
+   `tools/voice_client_config.py`) لا مزوّدا محادثة؛ لا إضافة لهما في
+   `plugins/model-providers/`.
+
+### ج) `hermes config`
+`config` · `edit` · `get <key>` · `set [--force] <key> <value>` · `unset <key>` · `check` ·
+`migrate` · `path` · `env-path`. التوجيه في `set_config_value()`:
+مفتاح بلا نقطة ينتهي بـ `_API_KEY`/`_TOKEN`/`_SECRET` (أو ضمن `_ENV_CONFIG_KEYS`) → `.env`؛
+أي اسم `^[A-Z][A-Z0-9_]*$` → `.env`؛ مفتاح منقوط → `config.yaml`. **الملفان يُحفظان بلا
+إتلاف** لبقية المفاتيح. الضبط غير التفاعلي متاح:
+`hermes config set OPENROUTER_API_KEY sk-or-…`. هناك قائمة منع للكتابة تشمل `HERMES_HOME`
+و`PATH` و`LD_PRELOAD` وغيرها.
+
+### د) `hermes model`
+**تفاعلي فقط** (لا وسيط موضعي للنموذج). ما يحفظه، من
+`model_selection_config_updates()` في `hermes_cli/model_switch.py`:
+`model.default` (معرّف النموذج، وهو المفتاح المعياري؛ `model.model` و`model.name` مرادفان
+يُهاجَران إليه) و`model.provider` و`model.base_url` و`model.api_mode`، مع **مسح**
+`model.base_url`/`model.api_mode` عند تغيّر المزوّد. والكتابة
+`atomic_roundtrip_yaml_update(path, f"model.{key}", value)` مفتاحًا مفتاحًا، وتعليق المصدر
+صريح: «كتابات مفتاح مستهدفة لا إعادة كتابة كتلة `model:`؛ إعادة الكتابة تُتلف المفاتيح
+الشقيقة». على تثبيت جديد تكون `model: ""` (سلسلة فارغة) وتُرقّى إلى خريطة عند أول ضبط.
+البديل غير التفاعلي: `hermes config set model.default <id>` + `model.provider <slug>`.
+
+### هـ) الأسبقية
+الموثّق: وسائط CLI ← `config.yaml` ← `.env` ← الافتراضيات. وفي المصدر، للاعتمادات
+تحديدًا: **`$HERMES_HOME/.env` يتغلّب على بيئة الصدفة الموروثة** — `load_hermes_dotenv()`
+يحمّل بـ`override=True`، و`get_env_value_prefer_dotenv()` يقرأ `.env` قبل `os.environ`
+«لأن ملف المستخدم هو المرجع». و`load_hermes_dotenv()` يُستدعى عند الاستيراد في
+`run_agent.py` و`cli.py` و`tui_gateway/server.py`، أي عند إقلاع البوّابة.
+
+### و) إعادة التحميل — ولماذا يعيد المركز تشغيل البوّابة
+- القراءتان مخزّنتان بتوقيع الملف (mtime/size/inode)، فالقراءة التالية بعد تحرير خارجي
+  تلتقط التغيير؛ لكن `os.environ` في العملية الحيّة **لا يتحدّث** حتى يُستدعى
+  `reload_env()`.
+- الموثّق: «**البوّابة**: الجلسة الجديدة التالية. الجلسات القائمة تحتفظ بنموذجها. أعد
+  تشغيل البوّابة (`hermes gateway restart`) لفرض التقاط التغيير على الجميع».
+- `reload.env` و`reload.mcp` موجودان في **TUI gateway** فقط (JSON-RPC على stdio أو
+  WebSocket على `/api/ws`)، لا في خادم الواجهة على 8642.
+- **خادم الواجهة (8642) لا يعرض أي مسار لقراءة أو كتابة المفاتيح أو النموذج**: جدول مساراته
+  (`_http_route_table()`) يحوي `GET /v1/models` و`GET /api/model/options` و
+  `GET /v1/capabilities` وكلها للقراءة، وأعلامه الثابتة تقول `"admin_config_rw": False`.
+  سطح الكتابة الوحيد هو لوحة `hermes dashboard` (`PUT /api/env`, `PUT /api/config`,
+  `POST /api/model/set` برأس `X-Hermes-Session-Token`)، وهي خادم ثانٍ لا نشغّله (ADR 0008 §3).
+- لذلك: المركز يكتب الملفين ثم **يعيد تشغيل الطفل الذي يشرف عليه** (ADR 0008 §2).
+
+### ز) اختيار النموذج لكل تشغيل
+`POST /v1/runs` يقبل `model` و`provider` و`model_options` في الجسم
+(`_request_agent_overrides()`). الأسبقية: قفل المتصفّح المؤكَّد > تجاوز `/model` للجلسة >
+نموذج الجلسة المحفوظ > مرادف `model_routes` > `provider`/`model` للطلب > الافتراضي العام.
+`model` مجرّد بلا `provider` **يُقبل** على `/v1/runs` (بخلاف `/v1/chat/completions`). لا
+تحقّق مسبق من فهرس النماذج: نموذج مجهول يمرّ إلى المزوّد وينتهي التشغيل `run.failed`
+بخطأ المزوّد؛ ومزوّد مجهول يُنهي التشغيل بخطأ اعتماد محكوم لا بـ 500.
+
+### ح) الملفات الشخصية
+كل ملف شخصي **يملك `.env` الخاص به ولا يرث من `~/.hermes/.env`**. عند الإنشاء يُزرع
+`.env` فارغ بصلاحيات `0600` تحديدًا كي «لا يرث الملف الجديد مفاتيح الصدفة صامتًا». وفي
+البوّابة متعدّدة الملفات: «مفاتيح المزوّدين … من `.env` الخاص بالملف — **أبدًا قيمة الملف
+الافتراضي**».
+
+### ط) تحذيرات عند التحرير أثناء التشغيل
+لا يوجد تحذير صريح «لا تحرّر أثناء التشغيل»، لكن: التغيير يصل الجلسات الجديدة فقط؛ العملية
+الحيّة تحتفظ بنموذج الإقلاع؛ «لا تشغّل عمليتين على بيت واحد»؛ ولا يوجد قفل ملفات **بين**
+العمليات على `config.yaml` أو `.env` (القفل داخل العملية فقط) — آخر كاتب ذرّي يفوز. لذلك
+يكتب المركز بملف مؤقّت + إعادة تسمية، ويرفض إعادة كتابة `config.yaml` غير قابل للتحليل.
+
+### روابط هذا القسم (MIT، قُرئت 2026-09-21)
+- <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/hermes_cli/config.py>
+- <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/hermes_cli/model_switch.py>
+- <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/hermes_cli/providers.py>
+- <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/hermes_cli/env_loader.py>
+- <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/hermes_cli/auth.py>
+- <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/hermes_cli/profiles.py>
+- <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/hermes_constants.py>
+- <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/agent/secret_scope.py>
+- <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/agent/credential_pool.py>
+- <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/tui_gateway/methods_tools.py>
+- <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/gateway/platforms/api_server.py>
+- <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/cli-config.yaml.example>
+- <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/plugins/model-providers/anthropic/__init__.py>
+- <https://hermes-agent.nousresearch.com/docs/user-guide/configuration>
+- <https://hermes-agent.nousresearch.com/docs/user-guide/configuring-models>
+- <https://hermes-agent.nousresearch.com/docs/reference/environment-variables>
+- <https://hermes-agent.nousresearch.com/docs/user-guide/profiles>
+- <https://hermes-agent.nousresearch.com/docs/user-guide/multi-profile-gateways>
+
 ## الأفكار التي نتبنّاها (وخريطة المحوّل)
 | سطح Hermes | وحدتنا | القرار |
 |---|---|---|
@@ -118,6 +252,7 @@
 | قنوات المراسلة + اقتران DM | `agents` (per-agent) + `notify` | Hermes يملك القنوات؛ نعرض الحالة (Saved ≠ متصل) ورمز الاقتران؛ لا نعيد بناء القنوات |
 | outbound webhooks/hooks | `notify` + `audit` | نستقبل أحداث دورة الحياة الموقّعة كمصدر تدقيق |
 | Kanban | `tasks` | قسم «المهام» عندنا هو الحقيقة لمهام المركز؛ Hermes Kanban يظهر كمرآة للقراءة لمهام Hermes الأصلية (يُقرَّر في ADR لاحق) |
+| `.env` و`config.yaml` في بيت Hermes | `models` (ADR 0010) | المركز يكتب مفاتيح المزوّدين في `.env` و`model.default`/`model.provider` في `config.yaml` بدمج غير متلف، ثم يعيد تشغيل الطفل؛ المستخدم لا يشغّل `hermes model` |
 | الملفات الشخصية | ADR 0005 (workspaces) + `agents` | مساحة عمل ↔ ملف شخصي Hermes بعلاقة 1:1؛ نحترم «عملية واحدة لكل بيت» |
 | `session.usage`/عدّادات الرموز | `audit` | التكلفة لكل جلسة وتشغيل |
 | ACP (`hermes acp`) | `agents` (محوّل ACP) | يبقى مسارًا مساندًا للتحقق من محوّل ACP على وكيل نعرفه |

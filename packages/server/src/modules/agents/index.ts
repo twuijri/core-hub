@@ -43,12 +43,7 @@ import type { AdapterKind } from './adapters/types.js';
 import { HERMES_ENTRY } from './catalog/index.js';
 import { HermesRuntime, type HermesRuntimeStatus, type Spawner } from './hermes-runtime.js';
 import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './installer.js';
-import type {
-  AgentDirectoryPort,
-  AgentInfo,
-  AgentModelsPort,
-  AgentRunnerPort,
-} from './ports.js';
+import type { AgentDirectoryPort, AgentInfo, AgentModelsPort, AgentRunnerPort } from './ports.js';
 import { AgentRunner } from './runner.js';
 import { AgentsService, type AgentPatchInput } from './service.js';
 

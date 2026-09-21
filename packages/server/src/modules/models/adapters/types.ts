@@ -58,8 +58,7 @@ export interface DiscoveredModel {
 }
 
 export type ListModelsResult =
-  | { supported: true; models: DiscoveredModel[] }
-  | { supported: false; reason: string };
+  { supported: true; models: DiscoveredModel[] } | { supported: false; reason: string };
 
 export interface DiscoveredVoice {
   id: string;
@@ -69,8 +68,7 @@ export interface DiscoveredVoice {
 }
 
 export type ListVoicesResult =
-  | { supported: true; voices: DiscoveredVoice[] }
-  | { supported: false; reason: string };
+  { supported: true; voices: DiscoveredVoice[] } | { supported: false; reason: string };
 
 export interface SynthesizeRequest {
   text: string;

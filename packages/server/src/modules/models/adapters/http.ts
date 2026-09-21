@@ -140,9 +140,11 @@ export function reasonOf(answer: { ok: boolean; status: number | null; error: st
  */
 export function detailOf(answer: HttpAnswer): string | null {
   if (answer.error) return answer.error.slice(0, 200);
-  const body = answer.body as
-    | { error?: { message?: unknown } | string; message?: unknown; detail?: unknown }
-    | null;
+  const body = answer.body as {
+    error?: { message?: unknown } | string;
+    message?: unknown;
+    detail?: unknown;
+  } | null;
   const candidate =
     (typeof body?.error === 'object' && body.error && typeof body.error.message === 'string'
       ? body.error.message

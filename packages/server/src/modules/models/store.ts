@@ -151,13 +151,20 @@ export class ModelsStore {
       .get();
   }
 
-  /** Every non-archived model of the workspace, provider order then model order. */
+  /**
+   * Every non-archived model of the workspace, ordered by provider then model id.
+   *
+   * Not by row id: two models discovered in the same millisecond get ULIDs whose order
+   * is random, and a picker whose order changes between two identical requests is a bug
+   * a person can see. The catalogue's cursor is the `(provider_id, model_key)` pair for
+   * the same reason (`service.ts` §listCatalogue).
+   */
   allModels(workspace: string): ModelRow[] {
     return this.db
       .select()
       .from(models)
       .where(and(eq(models.workspace, workspace), isNull(models.archivedAt)))
-      .orderBy(asc(models.id))
+      .orderBy(asc(models.providerId), asc(models.modelKey))
       .all();
   }
 
@@ -276,11 +283,7 @@ export class ModelsStore {
     }[],
   ): { added: number; updated: number; archived: number } {
     const at = this.now();
-    const existing = this.db
-      .select()
-      .from(models)
-      .where(eq(models.providerId, providerId))
-      .all();
+    const existing = this.db.select().from(models).where(eq(models.providerId, providerId)).all();
     const byKey = new Map(existing.map((row) => [row.modelKey, row]));
     const seen = new Set<string>();
     let added = 0;

@@ -104,7 +104,7 @@ export const elevenLabsAdapter: ProviderAdapter = {
       body: {
         text: request.text,
         model_id: ctx.settings.model ?? 'eleven_multilingual_v2',
-        ...(request.language ?? ctx.settings.language
+        ...((request.language ?? ctx.settings.language)
           ? { language_code: request.language ?? ctx.settings.language }
           : {}),
       },
