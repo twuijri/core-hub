@@ -18,6 +18,11 @@ derived from Hermes Studio / Ekko Studio code (BSL 1.1). See
 - `docs/clients/NAVIGATION.md` — the navigation map all clients implement.
 - `docs/TEAM-RULES.md` — branch, record, check, PR, merge, release.
 - `docs/harness/validation.md` — which checks to run for which change.
+- `docs/STATUS.md` — what is built and what is still a 501 stub; read it
+  before claiming anything works.
+- `docs/DEVELOPMENT.md` — run the hub, the web client and the checks locally.
+- `docs/clients/DESIGN.md` — the shared look: chat-centric, glass only on
+  floating chrome, drag and drop only where it means something.
 - `.ua/knowledge-graph.json` (when present) — the generated map of the code; use `/understand-explain` before touching more than one module. See `docs/harness/knowledge-graph.md`.
 
 ## Layout
