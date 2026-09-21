@@ -113,7 +113,10 @@ async function startHarness(frames: HermesRunEvent[] | (() => HermesRunEvent[]))
       const seen = events.filter((e) => e.event === event);
       if (seen.length >= count) return Promise.resolve(seen[count - 1] as Envelope);
       return new Promise<Envelope>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error(`timed out waiting for ${event} #${count}`)), 5_000);
+        const timer = setTimeout(
+          () => reject(new Error(`timed out waiting for ${event} #${count}`)),
+          5_000,
+        );
         waiters.push({ event, count, resolve: (e) => (clearTimeout(timer), resolve(e)) });
       });
     },
@@ -127,7 +130,8 @@ async function startHarness(frames: HermesRunEvent[] | (() => HermesRunEvent[]))
 async function hermesAgentId(h: Harness): Promise<string> {
   const res = await authed(h.hub, h.hub.token, { method: 'GET', url: '/api/v1/agents' });
   expect(res.statusCode).toBe(200);
-  const items = (res.json() as { items: Array<{ id: string; slug: string; status: string }> }).items;
+  const items = (res.json() as { items: Array<{ id: string; slug: string; status: string }> })
+    .items;
   const hermes = items.find((a) => a.slug === 'hermes');
   expect(hermes, 'the registry lists Hermes').toBeDefined();
   expect(hermes!.status).toBe('available');
@@ -160,7 +164,13 @@ describe('agent runner: a Hermes turn through the composed app', () => {
             { event: 'reasoning.available', text: 'thinking' },
             { event: 'message.delta', delta: 'مرحبا ' },
             { event: 'tool.started', tool: 'terminal', preview: 'ls' },
-            { event: 'tool.completed', tool: 'terminal', duration: 0.1, error: false, preview: 'a b' },
+            {
+              event: 'tool.completed',
+              tool: 'terminal',
+              duration: 0.1,
+              error: false,
+              preview: 'a b',
+            },
             { event: 'message.delta', delta: 'بك.' },
             {
               event: 'run.completed',
@@ -208,7 +218,9 @@ describe('agent runner: a Hermes turn through the composed app', () => {
       role: 'assistant',
       status: 'complete',
       content: [{ type: 'text', text: 'مرحبا بك.' }],
-      tool_calls: [expect.objectContaining({ name: 'terminal', status: 'succeeded', output: 'a b' })],
+      tool_calls: [
+        expect.objectContaining({ name: 'terminal', status: 'succeeded', output: 'a b' }),
+      ],
     });
     // The first turn opened the conversation under the hub's own id; Hermes echoed its own.
     expect(harness.hermes.calls.createRun[0]).toMatchObject({
@@ -318,7 +330,11 @@ describe('agent runner: a Hermes turn through the composed app', () => {
 
   it('reports a Hermes failure as a failed run with the agent’s reason', async () => {
     harness = await startHarness([
-      { event: 'run.failed', completed: false, error: 'No API key configured for provider openrouter' },
+      {
+        event: 'run.failed',
+        completed: false,
+        error: 'No API key configured for provider openrouter',
+      },
     ]);
     const agentId = await hermesAgentId(harness);
     const sessionId = await newSession(harness, agentId);
@@ -386,14 +402,20 @@ describe('agent runner: the translation table', () => {
   });
 
   it('turns a self-cancelled turn into a failure and a requested one into completion', () => {
-    const cancelled = { type: 'run.completed' as const, stopReason: 'cancelled', interrupted: true };
+    const cancelled = {
+      type: 'run.completed' as const,
+      stopReason: 'cancelled',
+      interrupted: true,
+    };
     expect(toRunnerEvent(cancelled, { interruptRequested: false })).toEqual({
       type: 'failed',
       code: 'cancelled',
       message: 'the agent cancelled the turn',
     });
     expect(toRunnerEvent(cancelled, { interruptRequested: true })).toEqual({ type: 'completed' });
-    expect(toRunnerEvent({ type: 'run.failed', error: 'boom' }, { interruptRequested: false })).toEqual({
+    expect(
+      toRunnerEvent({ type: 'run.failed', error: 'boom' }, { interruptRequested: false }),
+    ).toEqual({
       type: 'failed',
       code: 'agent_error',
       message: 'boom',

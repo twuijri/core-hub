@@ -199,7 +199,11 @@ function frameToEvent(frame: string): HermesRunEvent | null {
   if (!data) return null;
   try {
     const parsed = JSON.parse(data) as unknown;
-    if (parsed && typeof parsed === 'object' && typeof (parsed as HermesRunEvent).event === 'string') {
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      typeof (parsed as HermesRunEvent).event === 'string'
+    ) {
       return parsed as HermesRunEvent;
     }
   } catch {
@@ -381,7 +385,9 @@ export class HermesSession implements AgentSession {
       case 'subagent.complete': {
         const delegation = str(frame.delegation_id);
         const id = delegation ? `subagent-${delegation}` : null;
-        const index = turn.openTools.findIndex((t) => (id ? t.id === id : t.name === 'delegate_task'));
+        const index = turn.openTools.findIndex((t) =>
+          id ? t.id === id : t.name === 'delegate_task',
+        );
         if (index < 0) return null;
         const [open] = turn.openTools.splice(index, 1);
         const status = str(frame.status) ?? 'completed';
@@ -435,7 +441,9 @@ export class HermesSession implements AgentSession {
             type: 'usage',
             modelLabel: str(runtime?.model) ?? this.model,
             providerId: str(runtime?.provider),
-            ...(num(usage.input_tokens) !== undefined ? { inputTokens: num(usage.input_tokens)! } : {}),
+            ...(num(usage.input_tokens) !== undefined
+              ? { inputTokens: num(usage.input_tokens)! }
+              : {}),
             ...(num(usage.output_tokens) !== undefined
               ? { outputTokens: num(usage.output_tokens)! }
               : {}),
@@ -450,7 +458,8 @@ export class HermesSession implements AgentSession {
         if (frame.event === 'run.completed') {
           // A run that never streamed (a provider without deltas) still has its answer here.
           const output = str(frame.output);
-          if (output && !turn.streamedText) this.queue.push({ type: 'message.delta', text: output });
+          if (output && !turn.streamedText)
+            this.queue.push({ type: 'message.delta', text: output });
           this.queue.push({ type: 'run.completed', stopReason: 'completed' });
           return 'completed';
         }

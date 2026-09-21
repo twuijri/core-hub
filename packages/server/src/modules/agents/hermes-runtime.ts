@@ -17,8 +17,9 @@
  * (`gateway/config_env.py` in Hermes's MIT source) and refuses to start it otherwise, so
  * the key is not optional and never logged.
  *
- * Everything here is argv arrays and a spawner the tests replace; nothing reads
- * `process.env` (app/config.ts is the only file that may).
+ * Everything here is argv arrays and a spawner the tests replace; the child's environment
+ * is built from the injected `HostEnvironment`, never read from the process (app/config.ts
+ * is the only file that may).
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -257,7 +258,8 @@ export class HermesRuntime {
     if (this.stopping) return;
     const ok = await this.healthy();
     if (ok) {
-      if (this.state !== 'running') this.log.info({ endpoint: this.endpoint }, 'hermes: gateway healthy');
+      if (this.state !== 'running')
+        this.log.info({ endpoint: this.endpoint }, 'hermes: gateway healthy');
       this.healthyAt = this.healthyAt ?? Date.now();
       this.setState('running', null);
       return;

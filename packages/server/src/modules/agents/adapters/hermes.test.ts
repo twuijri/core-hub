@@ -65,24 +65,35 @@ async function collect(session: HermesSession, until: number): Promise<AgentEven
 describe('Hermes session: one turn over /v1/runs', () => {
   it('maps deltas, reasoning, tools, usage and the terminal frame, in order', async () => {
     const hermes = scriptedHermes([
-        { event: 'run.started' },
-        { event: 'message.started' },
-        { event: 'reasoning.available', text: 'The user wants the tests run.' },
-        { event: 'message.delta', delta: 'سأشغّل ' },
-        { event: 'tool.started', tool: 'terminal', preview: 'pnpm test' },
-        { event: 'tool.progress', tool: 'terminal', delta: 'noise the hub drops' },
-        { event: 'tool.completed', tool: 'terminal', duration: 0.4, error: false, preview: '30 passed' },
-        { event: 'message.delta', delta: 'الاختبارات الآن.' },
-        {
-          event: 'run.completed',
-          session_id: 'majlis-s1',
-          completed: true,
-          partial: false,
-          interrupted: false,
-          output: 'سأشغّل الاختبارات الآن.',
-          usage: { input_tokens: 2300, output_tokens: 410, total_tokens: 2710, cache_read_tokens: 12 },
-          runtime: { provider: 'nous', model: 'hermes-4' },
+      { event: 'run.started' },
+      { event: 'message.started' },
+      { event: 'reasoning.available', text: 'The user wants the tests run.' },
+      { event: 'message.delta', delta: 'سأشغّل ' },
+      { event: 'tool.started', tool: 'terminal', preview: 'pnpm test' },
+      { event: 'tool.progress', tool: 'terminal', delta: 'noise the hub drops' },
+      {
+        event: 'tool.completed',
+        tool: 'terminal',
+        duration: 0.4,
+        error: false,
+        preview: '30 passed',
+      },
+      { event: 'message.delta', delta: 'الاختبارات الآن.' },
+      {
+        event: 'run.completed',
+        session_id: 'majlis-s1',
+        completed: true,
+        partial: false,
+        interrupted: false,
+        output: 'سأشغّل الاختبارات الآن.',
+        usage: {
+          input_tokens: 2300,
+          output_tokens: 410,
+          total_tokens: 2710,
+          cache_read_tokens: 12,
         },
+        runtime: { provider: 'nous', model: 'hermes-4' },
+      },
     ]);
     const session = new HermesSession(hermes.transport, { sessionRef: 'majlis-s1', model: null });
     const events = collect(session, 7);
@@ -234,7 +245,10 @@ describe('Hermes session: one turn over /v1/runs', () => {
   });
 
   it('refuses a second turn while one is in flight', async () => {
-    const hermes = scriptedHermes([{ event: '__wait__' }, { event: 'run.completed', completed: true }]);
+    const hermes = scriptedHermes([
+      { event: '__wait__' },
+      { event: 'run.completed', completed: true },
+    ]);
     const session = new HermesSession(hermes.transport, { sessionRef: 'majlis-s8' });
     const first = session.send({ text: 'one' });
     await new Promise((resolve) => setTimeout(resolve, 5));
@@ -277,11 +291,18 @@ describe('Hermes transport: the wire', () => {
         body: typeof init?.body === 'string' ? init.body : null,
       });
       if (String(input).endsWith('/v1/runs')) {
-        return new Response(JSON.stringify({ run_id: 'run_9', status: 'started' }), { status: 202 });
+        return new Response(JSON.stringify({ run_id: 'run_9', status: 'started' }), {
+          status: 202,
+        });
       }
       if (String(input).endsWith('/stop')) {
         return new Response(
-          JSON.stringify({ error: { message: 'Invalid gateway API key (API_SERVER_KEY)', code: 'gateway_auth_failed' } }),
+          JSON.stringify({
+            error: {
+              message: 'Invalid gateway API key (API_SERVER_KEY)',
+              code: 'gateway_auth_failed',
+            },
+          }),
           { status: 401 },
         );
       }
