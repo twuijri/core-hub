@@ -32,8 +32,11 @@ RUN pnpm install --frozen-lockfile --prod
 
 # ---- Hermes Agent (MIT), pinned to a release tag ------------------------------------------
 # A standalone CPython managed by uv plus a venv, both under /opt/hermes so the runtime stage
-# copies one tree. Core dependencies only, plus what the API server (aiohttp), cron and MCP
-# need: no dashboard, TUI, browsers, ffmpeg or messaging extras — the hub is the UI.
+# copies one tree. Hermes refuses to build a wheel ("distributed via the shell installer,
+# Docker image, or Nix"); the supported route is an editable install from a checkout, so the
+# pinned tag is cloned to /opt/hermes/src and stays there. Core dependencies only, plus what
+# the API server (aiohttp), cron and MCP need: no dashboard, TUI, browsers, ffmpeg or
+# messaging extras — the hub is the UI.
 FROM node:24-bookworm AS hermes
 ARG HERMES_REF=v2026.9.14
 ARG UV_VERSION=0.11.6
@@ -45,9 +48,10 @@ RUN sh /tmp/uv-installer.sh \
  && install -m 0755 /root/.local/bin/uv /usr/local/bin/uv \
  && uv python install 3.12 \
  && uv venv --python 3.12 /opt/hermes/.venv \
- && uv pip install --python /opt/hermes/.venv/bin/python \
-      "hermes-agent[cron,mcp] @ git+https://github.com/NousResearch/hermes-agent@${HERMES_REF}" \
-      "aiohttp==3.14.3" \
+ && git clone --depth 1 --branch "${HERMES_REF}" https://github.com/NousResearch/hermes-agent /opt/hermes/src \
+ && rm -rf /opt/hermes/src/.git \
+ && cd /opt/hermes/src \
+ && uv pip install --python /opt/hermes/.venv/bin/python -e ".[cron,mcp]" "aiohttp==3.14.3" \
  && /opt/hermes/.venv/bin/hermes --version
 
 # ---- runtime ------------------------------------------------------------------------------
