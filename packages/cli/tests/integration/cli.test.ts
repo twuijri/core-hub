@@ -149,14 +149,21 @@ describe('the reference client against the hub', () => {
     expect(arabic.stdout).toContain('المستخدم');
   });
 
-  it('reports agents.list honestly while the agents module is not there (501)', async () => {
-    const result = await cli(['agents', 'list']);
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain('agents.list');
-    expect(result.stderr).toContain('not_implemented');
-    const install = await cli(['agents', 'install', AGENT_ID, '--json']);
-    expect(install.code).toBe(1);
-    expect(install.stderr).toContain('agents.install');
+  it('lists the curated catalog with hermes bundled', async () => {
+    const result = await cli(['agents', 'list', '--json']);
+    expect(result.code, result.stderr).toBe(0);
+    const items = (JSON.parse(result.stdout) as { items: { id: string; slug: string }[] }).items;
+    const hermes = items.find((a) => a.slug === 'hermes');
+    expect(hermes, 'hermes is bundled in the catalog').toBeDefined();
+    const table = await cli(['agents', 'list']);
+    expect(table.code, table.stderr).toBe(0);
+    expect(table.stdout).toContain('hermes');
+    const shown = await cli(['agents', 'get', hermes!.id, '--json']);
+    expect(shown.code, shown.stderr).toBe(0);
+    expect((JSON.parse(shown.stdout) as { slug: string }).slug).toBe('hermes');
+    const missing = await cli(['agents', 'get', '01J8QK3ZR2W7M5N4P6T8V9X0ZZ']);
+    expect(missing.code).toBe(1);
+    expect(missing.stderr).toContain('not_found');
   });
 
   it('creates, lists and shows a session', async () => {
