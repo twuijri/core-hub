@@ -355,3 +355,50 @@ type the password twice into two screens for no gain.
 `HUB_ADMIN_PASSWORD` keeps working and simply skips all of this: with it set, the owner exists
 at the end of first boot, `auth.getSetup` answers `false`, and no token file is ever written
 (ADR 0011).
+
+## 27. A provider row is something you added; the catalogue is a separate list of presets
+
+Owner decision (2026-09-22): the Models screen shows **only the providers he
+configured**, plus one "Add provider" button. The old shape — one card per
+bundled provider, each with its own key box — was the whole screen, and he
+found it scattered.
+
+So the two lists are split in the contract:
+
+| Question | Operation |
+|---|---|
+| What have I configured? | `models.listProviders` — a fresh workspace answers `{ items: [] }` |
+| What can I add? | `models.listProviderPresets` — the bundled catalogue of provider *types* |
+
+`ProviderCreate.preset` names a preset; the hub then takes the slug, protocol,
+credential family and default base URL from the catalogue and only what the
+person typed from the body, and creates the sibling rows of the same family in
+the same call (OpenAI chat + dictation + speech are three rows and one key,
+ADR 0010 §2). Without `preset` the body still describes a bare
+OpenAI-compatible endpoint, exactly as before, so no existing caller changed.
+`models.deleteProvider` now removes any provider the workspace added, preset or
+not: what a person added, a person removes. Nothing is hidden by this — a
+provider the hub supports but you have not added is in the preset list, which
+is where "visible and unconfigured" now lives (ADR 0006's rule still holds; the
+list it applies to moved).
+
+`models.probeProvider` (`POST /models/provider-probes`) is the dialog's
+**Fetch** button: the model list of an endpoint that has not been saved yet, so
+a default model can be chosen in the same dialog that types the URL. It stores
+nothing, and a provider that cannot be reached is `ok: false` carrying the
+endpoint's own words — §24's rule, and never an empty list drawn as success.
+
+`ProviderPreset.key` is `required | optional`. There is deliberately **no**
+value meaning "a key is refused": a local endpoint (LM Studio, LiteLLM,
+`cli-proxy-api`, vLLM) is routinely put behind a master key, and the owner hit
+exactly that wall — a card badged "No key needed" that also showed "Missing API
+key", with no field to type one into. `Provider.auth.kind: none` therefore
+means *no key is required*, clients always offer the field, and the only thing
+allowed to say a key is missing is the endpoint's own 401.
+
+`ProviderPreset.local` and the response's `host { containerized,
+loopback_alias }` exist for the same deployment: the hub runs in a container,
+so `127.0.0.1` in a base URL is the container, not the person's machine. The
+hub reports the fact; the client warns and suggests `host.docker.internal`.
+Rewriting the URL silently was rejected — a hub that edits what you typed is a
+hub you cannot debug.
