@@ -1,0 +1,29 @@
+{
+  "name": "@majlis/ui-tokens",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Majlis design tokens: one JSON source of truth, generated CSS variables and TypeScript types; exportable to Kotlin/Swift later.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/tokens.d.ts",
+      "default": "./dist/tokens.js"
+    },
+    "./tokens.css": "./dist/tokens.css",
+    "./tokens.json": "./tokens.json"
+  },
+  "files": [
+    "dist",
+    "tokens.json"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "node scripts/build.mjs && tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
+  }
+}

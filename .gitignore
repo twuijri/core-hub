@@ -27,3 +27,8 @@ coverage/
 .idea/
 .vscode/
 !.vscode/extensions.json
+
+# web client
+packages/web/playwright-report/
+packages/web/test-results/
+packages/ui-tokens/dist/
