@@ -44,12 +44,7 @@ import {
   type HubSettingsPatch,
 } from './profiles.js';
 import { APP_TOKEN_SCOPES, LOCALES, PAIRING_CONNECTIONS, appTokens, workspaces } from './schema.js';
-import {
-  clearSetupToken,
-  completeSetup,
-  readSetupToken,
-  setupTokenMatches,
-} from './setup.js';
+import { clearSetupToken, completeSetup, readSetupToken, setupTokenMatches } from './setup.js';
 import {
   hubSettingsOf,
   preferencesOf,

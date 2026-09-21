@@ -202,7 +202,10 @@ describe('auth: first-run setup', () => {
     }
     // A file left behind by hand (or by an older boot) is removed on the next start.
     writeFileSync(tokenFile(dataDir), 'left-over-token\n', { mode: 0o600 });
-    const again = await testHub({ DATA_DIR: dataDir, HUB_ADMIN_PASSWORD: 'unattended-install-password' });
+    const again = await testHub({
+      DATA_DIR: dataDir,
+      HUB_ADMIN_PASSWORD: 'unattended-install-password',
+    });
     try {
       expect(existsSync(tokenFile(dataDir))).toBe(false);
       const stale = await again.app.inject({

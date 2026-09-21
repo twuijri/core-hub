@@ -1,5 +1,5 @@
 // The e2e hub: the real server (auth, sessions, realtime, static web client) with a scripted
-// agent runner in place of the adapters, so the three smoke journeys run without a model.
+// agent runner in place of the adapters, so the smoke journeys run without a model.
 // The script an agent plays is chosen by the text of the prompt (see `scriptFor`).
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

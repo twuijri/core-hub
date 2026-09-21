@@ -1,5 +1,6 @@
-# One-box install of Majlis. Copy .env.example to .env, set HUB_ADMIN_PASSWORD, then:
+# One-box install of Majlis. Copy .env.example to .env (nothing in it is required), then:
 #   docker compose up -d
+#   docker compose logs hub     # prints the first-run setup token once; open the site and paste it
 # Upgrades replace only the image; /data (SQLite, keys, Hermes's home, coding agents) lives in
 # the named volume. The image bundles Hermes; the hub starts it on 127.0.0.1:8642 inside the
 # container (ADR 0008). Model provider keys are set in Hermes, inside the volume, never here:
@@ -17,8 +18,10 @@ services:
     environment:
       DATA_DIR: /data
       PORT: '8080'
-      # First boot only: creates the owner account, then ignored.
-      HUB_ADMIN_PASSWORD: ${HUB_ADMIN_PASSWORD:?set HUB_ADMIN_PASSWORD in .env}
+      # Unattended installs only (ADR 0011): set HUB_ADMIN_PASSWORD in .env and the hub creates
+      # the owner `admin` on first boot instead of asking. Left empty — the normal case — the
+      # hub prints a setup token and the owner account is created from the browser.
+      HUB_ADMIN_PASSWORD: ${HUB_ADMIN_PASSWORD:-}
       # Optional: shared installs on PostgreSQL instead of the SQLite file under /data.
       # DATABASE_URL: postgres://hub:password@db:5432/hub
     volumes:

@@ -39,9 +39,18 @@ with `connect_error` `unauthorized`.
 ## How it works
 
 - **First boot** (`users.ts` `bootstrap`): with no user and `HUB_ADMIN_PASSWORD` set, the user
-  `admin` (role `owner`) and the `default` workspace are created; without the password the hub
-  logs a warning and every sign-in answers `401` with `auth.setup_required`. The HS256 key for
-  access tokens is created at `<DATA_DIR>/keys/jwt.secret` (mode 0600).
+  `admin` (role `owner`) and the `default` workspace are created. The HS256 key for access
+  tokens is created at `<DATA_DIR>/keys/jwt.secret` (mode 0600).
+- **First run without that variable** (`setup.ts`, ADR 0011): the hub writes a random claim
+  token to `<DATA_DIR>/setup-token.txt` (mode 0600) and logs it once with where to read it
+  again; a fresh token on every boot until an owner exists, and the file is deleted the moment
+  one does (on success, and at boot if it was left behind). `GET /auth/setup` answers
+  `{ required }` and nothing more; `POST /auth/setup` compares the token in constant time
+  (SHA-256 digests through `timingSafeEqual`), creates the owner and the `default` workspace in
+  one transaction, deletes the file and answers the `TokenPair` of `auth.login`. Wrong tokens
+  count on the **password** lockout row of the caller's IP — one throttle, one admin screen —
+  and once an owner exists the operation is `409 conflict`, checked before the token is read.
+  Sign-in on a hub with no user answers `401` with `auth.setup_required`.
 - **Passwords**: Argon2id (`passwords.ts`, OWASP parameters).
 - **Sign-in** (`POST /auth/login`): a `web` row in `app_tokens` is the rotating refresh token
   (SHA-256 stored, 30 days); the access token is a 15-minute JWT whose `sid` is that row. A

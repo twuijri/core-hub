@@ -83,8 +83,11 @@ declared in the contract with their payload schema.
    filtered by it.
 4. Long work (installs, runs) is a job with progress events; HTTP returns the
    job id immediately.
-5. The server starts with zero configuration beyond a data directory and an
-   admin password; everything else is set from the UI and stored.
+5. The server starts with zero configuration beyond a data directory;
+   everything else is set from the UI and stored. The owner account is created
+   on first run from a client, with the claim token the hub writes into that
+   directory (ADR 0011); `HUB_ADMIN_PASSWORD` stays as the optional unattended
+   path. Four environment variables exist and none of them is required.
 
 ## Clean room
 This code base is written from `docs/` specifications. Contributors, human or

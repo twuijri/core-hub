@@ -94,7 +94,9 @@ export function SetupScreen() {
           </h2>
           <p className="text-muted">{t('setup.where_body')}</p>
           <pre dir="ltr" className="overflow-x-auto rounded-md bg-surface-2 p-2 text-xs">
-            <code>{'docker compose logs hub\ndocker compose exec hub cat /data/setup-token.txt'}</code>
+            <code>
+              {'docker compose logs hub\ndocker compose exec hub cat /data/setup-token.txt'}
+            </code>
           </pre>
           <p className="text-muted">{t('setup.where_local')}</p>
         </section>

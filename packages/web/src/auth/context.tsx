@@ -78,7 +78,13 @@ export function AuthProvider({
       access_token: string;
       refresh_token: string | null;
       expires_in: number;
-      user: { id: string; username: string; display_name: string; role: string; default_profile: string };
+      user: {
+        id: string;
+        username: string;
+        display_name: string;
+        role: string;
+        default_profile: string;
+      };
     }) => {
       const next: StoredSession = {
         profile: data.user.default_profile,

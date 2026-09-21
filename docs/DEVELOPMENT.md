@@ -16,11 +16,16 @@ pnpm --filter @majlis/server dev     # the hub on :8080, SQLite under ./.data
 pnpm --filter @majlis/web dev        # Vite on :5173, proxying /api and /rt to :8080
 ```
 
-The first boot needs an owner account: set `HUB_ADMIN_PASSWORD` once
-(`HUB_ADMIN_PASSWORD=… pnpm --filter @majlis/server dev`); afterwards the
-variable is ignored. `DATA_DIR` decides where the database, the keys, Hermes's
-home and installed agents live. Those four variables are the whole
-configuration (ARCHITECTURE invariant 5).
+The first boot has no account. The hub prints a one-time **setup token** and
+writes it to `<DATA_DIR>/setup-token.txt`; open the client and create the owner
+on `/setup`, or run `node packages/cli/dist/bin.js setup --server
+http://127.0.0.1:8080` (ADR 0011). A new token is printed on every restart until
+the account exists. To skip the screen — in a script, or when you want the same
+account every time — set `HUB_ADMIN_PASSWORD` once
+(`HUB_ADMIN_PASSWORD=… pnpm --filter @majlis/server dev`) and the hub creates
+`admin` itself; afterwards the variable is ignored. `DATA_DIR` decides where the
+database, the keys, Hermes's home and installed agents live. Those four
+variables are the whole configuration (ARCHITECTURE invariant 5).
 
 To use the built client instead of Vite, `pnpm build` and open the hub's own
 port: the hub serves `packages/web/dist` at `/`.

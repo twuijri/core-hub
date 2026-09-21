@@ -8,7 +8,7 @@ one destination = one screen.
 ## Run
 
 ```bash
-pnpm dev                       # the hub on :8080 (HUB_ADMIN_PASSWORD set)
+pnpm dev                       # the hub on :8080 (first run: /setup, or HUB_ADMIN_PASSWORD)
 pnpm web:dev                   # Vite on :5173, proxying /api and /rt to the hub
 pnpm build                     # builds tokens, contracts, the client (packages/web/dist) and the server
 node packages/server/dist/main.js   # serves the built client from /
@@ -37,7 +37,8 @@ same-origin with the hub (`packages/server/src/app/web.ts`).
 - `pnpm --filter @majlis/web test` — Vitest: navigation parity against the manifest
   (docs/clients/README.md rules 1–8), the logical-CSS guard (no `left`/`right`), i18n key
   coverage, the transcript reducer, the refreshing client, display preferences, approvals.
-- `pnpm --filter @majlis/web test:e2e` — Playwright, three journeys against the real hub
+- `pnpm --filter @majlis/web test:e2e` — Playwright, four journeys against two real hubs
+  (the signed-in one, and one with no owner for the first-run setup journey)
   with a scripted agent (`e2e/hub.ts`): login → new session → streamed reply; approvals
   once/session/always/deny; resume after a socket drop. Needs `pnpm build` first and
   `playwright install chromium`. Screenshots go to `MAJLIS_SHOTS` (default `e2e/shots`).

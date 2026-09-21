@@ -124,12 +124,15 @@ for (const [id, screen] of Object.entries(preAuth)) {
       fail(`preAuth "${id}": route on ${surface} must be an absolute path`);
     const key = `${surface} ${route}`;
     if (preAuthRoutes.has(key))
-      fail(`preAuth: route "${route}" on ${surface} is used by "${preAuthRoutes.get(key)}" and "${id}"`);
+      fail(
+        `preAuth: route "${route}" on ${surface} is used by "${preAuthRoutes.get(key)}" and "${id}"`,
+      );
     preAuthRoutes.set(key, id);
     const clash = Object.entries(manifest.surfaceRoutes?.[surface] ?? {}).find(
       ([, value]) => value === route,
     );
-    if (clash) fail(`preAuth "${id}": route "${route}" already belongs to destination "${clash[0]}"`);
+    if (clash)
+      fail(`preAuth "${id}": route "${route}" already belongs to destination "${clash[0]}"`);
   }
 }
 

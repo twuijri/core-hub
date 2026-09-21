@@ -6,8 +6,9 @@ this directory are binding:
 
 - `navigation.json` — the machine-readable navigation manifest: `terms` (ar/en labels),
   `destinations`, the ordered lists `rail`, `segments`, `footer`, `settingsTabs`,
-  `settingsTools`, `agentLevel`, the explicitly allowed `secondaryEntries`, and
-  `surfaceRoutes` — the URL (web) or screen id of every destination per surface.
+  `settingsTools`, `agentLevel`, the explicitly allowed `secondaryEntries`, `preAuth` — the
+  screens shown before anyone is signed in (`login`, `setup`), which are not destinations —
+  and `surfaceRoutes`, the URL (web) or screen id of every destination per surface.
 - `NAVIGATION.md` — the rules the manifest encodes, in prose (Arabic, the owner's language).
 
 `pnpm nav:check` validates the manifest itself. Each client must add a **parity test** that
@@ -26,6 +27,9 @@ It must assert all of the following, and fail on the first difference:
    this client (absent `surfaces` means all), a route/screen/fragment with that id exists.
 2. **Every screen has a destination.** The client exposes its registry of routes/screens;
    each one maps to a destination id. Nothing is reachable that the manifest does not list.
+   The pre-auth screens are the one exception and are listed too, under `preAuth`: the test
+   asserts the client's sign-in and first-run-setup paths are exactly the manifest's and that
+   neither id is a destination.
 3. **One primary entry per destination.** The client's rail, segments, footer, settings tabs,
    settings tools and agent-level menu contain exactly the ids of the corresponding manifest
    lists, **in the same order**, and nothing else.

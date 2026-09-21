@@ -129,7 +129,10 @@ describe('majlis setup', () => {
     expect(again.code).toBe(1);
     expect(again.stderr).toContain('already set up');
 
-    const login = await cli(['login', '--server', baseUrl, '--username', 'tariq'], [OWNER_PASSWORD]);
+    const login = await cli(
+      ['login', '--server', baseUrl, '--username', 'tariq'],
+      [OWNER_PASSWORD],
+    );
     expect(login.code, login.stderr).toBe(0);
     expect(login.stdout).toContain('Signed in as tariq (owner)');
   });

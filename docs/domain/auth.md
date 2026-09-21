@@ -95,6 +95,9 @@ from `consumed_at`, `cancelled_at`, `expires_at`); expired rows older than a day
 
 ## login_lockout (global)
 
+Also counts wrong first-run setup tokens under `kind = password` (ADR 0011): one
+throttle for every guessable secret an unauthenticated caller can try.
+
 | column | type | meaning |
 |---|---|---|
 | subject_kind | enum(ip, user) | |
@@ -118,6 +121,12 @@ Indexes: unique (subject_kind, subject, kind). Rows are deleted when unlocked.
   `app_token(kind=device)` and marks the code consumed in one transaction.
 - Every request: resolve `X-Hub-Profile` → workspace id (cached), check
   membership, attach `workspace` to the request context.
+
+## Not in the database
+
+The first-run claim token lives in `<DATA_DIR>/setup-token.txt` (mode 0600), never in a table:
+it exists only while no user row does, and the file is deleted when the owner is created
+(ADR 0011, `modules/auth/setup.ts`).
 
 ## Not stored
 

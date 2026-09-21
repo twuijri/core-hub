@@ -37,8 +37,7 @@ export const setupCommand: CommandSpec = {
     // cannot read back is a paste they cannot check.
     const token = await ctx.prompter.ask(t('setup.token'));
     if (token === null || token.trim() === '') throw new CliError('errors.interrupted');
-    const username =
-      optionString(ctx, 'username') ?? (await ctx.prompter.ask(t('setup.username')));
+    const username = optionString(ctx, 'username') ?? (await ctx.prompter.ask(t('setup.username')));
     if (username === null || username.trim() === '') throw new CliError('errors.interrupted');
     const displayName =
       optionString(ctx, 'display-name') ?? (await ctx.prompter.ask(t('setup.display_name')));

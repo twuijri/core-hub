@@ -37,7 +37,7 @@ id only (`docs/domain/README.md` §Ownership).
 | `DATA_DIR` | `./data` (`/data` in the image) | the data directory — the one required setting (invariant 5) |
 | `DATABASE_URL` | unset | set a `postgres://` URL to use PostgreSQL instead of SQLite |
 | `PORT` | `8080` | |
-| `HUB_ADMIN_PASSWORD` | unset | consumed once on first boot to create the owner |
+| `HUB_ADMIN_PASSWORD` | unset | optional: consumed once on first boot to create the owner without the first-run setup screen (ADR 0011) |
 
 SQLite file: **`<DATA_DIR>/hub.sqlite`**. Also under the data directory:
 `attachments/` (knowledge), `worktrees/` (tasks, unless a project overrides

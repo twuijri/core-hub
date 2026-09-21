@@ -40,7 +40,7 @@ describe('navigation parity (web)', () => {
     expect(new Set(routes.map((r) => r.path)).size).toBe(routes.length);
   });
 
-  it('2b. the pre-auth screens are the manifest\'s, and they are not destinations', () => {
+  it("2b. the pre-auth screens are the manifest's, and they are not destinations", () => {
     // Sign-in and first-run setup (ADR 0011) are reachable before anyone is signed in and have
     // no entry anywhere; their paths still come from the manifest, never from a literal here.
     expect(Object.keys(raw.preAuth).filter((id) => !id.startsWith('$'))).toEqual([
