@@ -10,6 +10,14 @@ import {
 } from './commands/agents.js';
 import { loginCommand, logoutCommand, whoamiCommand } from './commands/auth.js';
 import { chatCommand } from './commands/chat.js';
+import {
+  modelsDefaultCommand,
+  modelsListCommand,
+  providersAddCommand,
+  providersListCommand,
+  providersRemoveCommand,
+  providersTestCommand,
+} from './commands/models.js';
 import { pairClaimCommand, pairCommand } from './commands/pair.js';
 import {
   sessionsDeleteCommand,
@@ -43,6 +51,12 @@ export const COMMANDS: readonly CommandSpec[] = [
   agentsGetCommand,
   agentsInstallCommand,
   agentsRemoveCommand,
+  providersListCommand,
+  providersAddCommand,
+  providersTestCommand,
+  providersRemoveCommand,
+  modelsListCommand,
+  modelsDefaultCommand,
   sessionsListCommand,
   sessionsNewCommand,
   sessionsShowCommand,

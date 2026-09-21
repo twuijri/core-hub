@@ -1,0 +1,168 @@
+// The `models` screen's reads and writes, over the generated client (ADR 0003).
+// Every key carries the workspace slug, so switching the chip refetches (NAVIGATION rule 4).
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../auth/context.js';
+import type { Model, ModelDefaults, Provider, SpeechSettings } from '../types.js';
+
+export const modelKeys = {
+  providers: (profile: string) => ['models', 'providers', profile] as const,
+  catalogue: (profile: string) => ['models', 'catalogue', profile] as const,
+  defaults: (profile: string) => ['models', 'defaults', profile] as const,
+  speech: (profile: string) => ['models', 'speech', profile] as const,
+};
+
+export function useProviders() {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: modelKeys.providers(profile),
+    queryFn: async () =>
+      (await client.request('get', '/models/providers')).data.items as Provider[],
+    enabled: !!session,
+  });
+}
+
+export function useModelDefaults() {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: modelKeys.defaults(profile),
+    queryFn: async () => (await client.request('get', '/models/defaults')).data as ModelDefaults,
+    enabled: !!session,
+  });
+}
+
+export function useSpeechSettings() {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: modelKeys.speech(profile),
+    queryFn: async () => (await client.request('get', '/models/speech')).data as SpeechSettings,
+    enabled: !!session,
+  });
+}
+
+/** Every model of every enabled provider, for the default pickers. */
+export function useCatalogue() {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: modelKeys.catalogue(profile),
+    queryFn: async () =>
+      (await client.request('get', '/models', { query: { limit: 200 } })).data.items as Model[],
+    enabled: !!session,
+  });
+}
+
+/** Everything the screen writes invalidates the same three reads: one rule, no drift. */
+function useModelsMutation<TInput, TResult>(run: (input: TInput) => Promise<TResult>) {
+  const { profile } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: run,
+    onSuccess: () => {
+      for (const key of ['providers', 'catalogue', 'defaults', 'speech'] as const) {
+        void queryClient.invalidateQueries({ queryKey: ['models', key, profile] });
+      }
+      // An inherited model is shown on every agent card (ADR 0010 §4).
+      void queryClient.invalidateQueries({ queryKey: ['agents', profile] });
+    },
+  });
+}
+
+export interface ProviderPatch {
+  id: string;
+  /** A value sets the key; `''` clears it. Never the mask — the caller drops that. */
+  api_key?: string;
+  enabled?: boolean;
+  label?: string;
+  base_url?: string | null;
+}
+
+export function useSaveProvider() {
+  const { client } = useAuth();
+  return useModelsMutation(async ({ id, ...patch }: ProviderPatch) => {
+    const response = await client.request('patch', '/models/providers/{provider_id}', {
+      params: { provider_id: id },
+      body: patch,
+    });
+    return response.data as Provider;
+  });
+}
+
+export function useCreateProvider() {
+  const { client } = useAuth();
+  return useModelsMutation(
+    async (input: { label: string; kind: 'llm' | 'stt' | 'tts'; base_url: string }) => {
+      // The contract gives `api_mode` a default, but the generated type still requires
+      // it: a custom provider the hub can drive is an OpenAI-compatible one.
+      const body = { ...input, api_mode: 'chat_completions' as const };
+      return (await client.request('post', '/models/providers', { body })).data as Provider;
+    },
+  );
+}
+
+export function useDeleteProvider() {
+  const { client } = useAuth();
+  return useModelsMutation(async (id: string) => {
+    await client.request('delete', '/models/providers/{provider_id}', {
+      params: { provider_id: id },
+    });
+    return id;
+  });
+}
+
+export function useRefreshProvider() {
+  const { client } = useAuth();
+  return useModelsMutation(
+    async (id: string) =>
+      (
+        await client.request('post', '/models/providers/{provider_id}/refresh', {
+          params: { provider_id: id },
+        })
+      ).data,
+  );
+}
+
+export interface TestResult {
+  ok: boolean;
+  message: string | null;
+  duration_ms: number;
+}
+
+/** A failure is a `200` with `ok: false`; the screen shows the provider's own words. */
+export function useTestProvider() {
+  const { client, profile } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) =>
+      (
+        await client.request('post', '/models/providers/{provider_id}/test', {
+          params: { provider_id: id },
+        })
+      ).data as TestResult,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: modelKeys.providers(profile) });
+    },
+  });
+}
+
+export interface ModelRef {
+  provider_id: string;
+  model: string;
+}
+
+export function useSaveDefaults() {
+  const { client } = useAuth();
+  return useModelsMutation(
+    async (body: { default?: ModelRef | null; assignments?: Record<string, ModelRef | null> }) =>
+      (await client.request('put', '/models/defaults', { body })).data as ModelDefaults,
+  );
+}
+
+/** `<provider_id>|<model>` — the value a `<select>` can carry for a `ModelRef`. */
+export function refValue(ref: ModelRef | null | undefined): string {
+  return ref ? `${ref.provider_id}|${ref.model}` : '';
+}
+
+export function parseRef(value: string): ModelRef | null {
+  const separator = value.indexOf('|');
+  if (separator <= 0) return null;
+  return { provider_id: value.slice(0, separator), model: value.slice(separator + 1) };
+}
