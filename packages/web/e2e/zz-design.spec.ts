@@ -226,6 +226,16 @@ test.describe('the rebuilt screens', () => {
     await expect(page.getByRole('switch', { name: /تفكير/ })).toBeVisible();
     await shot(page, 'design-display-ar-light');
 
+    // The three reports the audit module answers. A hub that has run nothing reports
+    // zeros, which is an answer — not an empty state.
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'الاستخدام' }).click();
+    await expect(page.getByTestId('usage-totals')).toBeVisible();
+    await shot(page, 'design-usage-ar-light');
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'الأداء' }).click();
+    await expect(page.getByText('Node')).toBeVisible();
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'السجلات' }).click();
+    await expect(page.getByTestId('audit-days-7')).toBeVisible();
+
     // Models: the provider card, and the model panel's table inside a scroll area.
     await page.getByTestId('settings-nav').getByRole('link', { name: 'النماذج' }).click();
     await expect(page.getByTestId('open-add-provider')).toBeVisible();

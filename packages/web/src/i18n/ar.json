@@ -617,5 +617,58 @@
       "normal": "عادية",
       "low": "منخفضة"
     }
+  },
+  "schedules": {
+    "new": "جدول جديد",
+    "new_hint": "يُحفظ ويُحسب موعده التالي؛ التشغيل التلقائي يأتي مع المشغّل.",
+    "name": "الاسم",
+    "kind": "النوع",
+    "prompt": "ما الذي يُطلب من الوكيل؟",
+    "empty": "لا جداول بعد",
+    "kinds": {
+      "cron": "تعبير cron",
+      "interval": "كل مدة",
+      "once": "مرة واحدة"
+    },
+    "value": {
+      "cron": "التعبير",
+      "interval": "كل كم دقيقة",
+      "once": "التاريخ والوقت"
+    },
+    "cron_hint": "خمسة حقول: دقيقة ساعة يوم شهر يوم-الأسبوع.",
+    "every": "كل {minutes} دقيقة",
+    "next": "التالي: {at}",
+    "never": "لا موعد",
+    "enabled": "مفعّل",
+    "run_now": "شغّله الآن",
+    "run_unavailable": "المركز لا يبدأ تشغيلًا بعد؛ الجدولة تُحفظ ويُحسب موعدها.",
+    "confirm_delete": "حذف «{name}»؟",
+    "state": {
+      "scheduled": "مجدول",
+      "running": "يعمل",
+      "paused": "موقوف",
+      "exhausted": "انتهى"
+    }
+  },
+  "audit": {
+    "period": "المدة",
+    "days": "{count} يوم",
+    "between": "من {from} إلى {to}",
+    "runs": "الأدوار",
+    "runs_n": "{count} دور",
+    "sessions_n": "{count} محادثة",
+    "tokens": "الرموز",
+    "tokens_n": "{count} رمز",
+    "cost": "الكلفة",
+    "cost_unknown": "بلا سعر معروف",
+    "model": "النموذج",
+    "by_model": "حسب النموذج",
+    "no_entries": "لا شيء في هذه المدة.",
+    "uptime": "مدة التشغيل",
+    "seconds": "{count} ثانية",
+    "memory": "الذاكرة",
+    "node": "Node",
+    "no_samples": "لا قياسات محفوظة بعد.",
+    "samples_n": "{count} قياس"
   }
 }

@@ -480,4 +480,31 @@ test.describe('web smoke journeys', () => {
     ).toContainText('ننتظر المفتاح');
     await shot(page, 'tasks-blocked-ar-light');
   });
+
+  test('11. Schedules: a cron saved, its next time computed, and the button that says why', async ({
+    page,
+  }) => {
+    await login(page);
+    await page.getByRole('link', { name: 'الجدولة' }).click();
+    await expect(page).toHaveURL(/\/schedules$/);
+
+    await page.getByTestId('schedule-name').fill('تقرير الصباح');
+    await page.getByTestId('schedule-value').fill('0 9 * * *');
+    await page.getByTestId('schedule-prompt').fill('اكتب ملخص أمس');
+    await page.getByTestId('schedule-save').click();
+
+    const card = page.getByTestId('schedule-card').first();
+    await expect(card).toBeVisible();
+    // The hub computed a real next time rather than leaving it blank.
+    await expect(card).not.toContainText('لا موعد');
+    // And the run button is there, disabled, saying why — not hidden.
+    await expect(page.getByTestId('schedule-run')).toBeDisabled();
+    await shot(page, 'schedules-ar-light');
+
+    // A cron the hub cannot read is refused when it is saved, with the reason.
+    await page.getByTestId('schedule-name').fill('خطأ');
+    await page.getByTestId('schedule-value').fill('@daily');
+    await page.getByTestId('schedule-save').click();
+    await expect(page.getByRole('alert')).toBeVisible();
+  });
 });
