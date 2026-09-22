@@ -263,6 +263,7 @@ describe('a run on the direct agent', () => {
       'message.delta',
       'run.completed',
       'session.updated', // back to `idle`, with the preview and the usage
+      'session.updated', // the session names itself after its first reply
     ]);
 
     const run = completed.payload.run as Record<string, unknown>;
