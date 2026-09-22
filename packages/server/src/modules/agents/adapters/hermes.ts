@@ -12,7 +12,8 @@
  * - **start**: a conversation over Hermes's **API server run surface**
  *   (`docs/inspirations/hermes-agent.md` §API server, read from Hermes's MIT sources):
  *
- *       POST /v1/runs                  { input, session_id, model?, model_options? } -> 202 { run_id }
+ *       POST /v1/runs                  { input, session_id, model?, provider?,
+ *                                        model_options? }            -> 202 { run_id }
  *       GET  /v1/runs/{id}/events      SSE, one JSON object per `data:` line:
  *                                      message.delta · message.interim · reasoning.available ·
  *                                      tool.started · tool.completed · approval.request ·
@@ -60,6 +61,14 @@ export interface HermesRunRequest {
   input: string;
   session_id: string;
   model?: string;
+  /**
+   * Hermes's own name for the provider that should serve this run. Always honoured
+   * (`gateway/platforms/api_server.py` §`_request_agent_overrides`: "An explicit
+   * `provider` is always honored"), where a bare `model` is only honoured on surfaces
+   * that opt in. Sending it is what keeps a run off whatever `config.yaml`'s
+   * `model.provider` happened to say last.
+   */
+  provider?: string;
   model_options?: { reasoning_effort?: string };
 }
 
@@ -102,8 +111,28 @@ export function httpHermesTransport(options: HermesHttpOptions): HermesTransport
     ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
   });
 
+  /**
+   * A gateway that does not answer at all is `agent_unavailable`, not `agent_error`.
+   * The hub itself recycles this process whenever a provider changes (ADR 0010), so a
+   * turn sent a second later meets a socket that is not listening yet — and `fetch
+   * failed` is not something a person can act on, where "the runtime is starting" is.
+   */
+  const reach = async (url: string, init: RequestInit): Promise<Response> => {
+    try {
+      return await doFetch(url, init);
+    } catch (error) {
+      if (error instanceof HubError) throw error;
+      throw new HubError('agent_unavailable', {
+        message: `the Hermes gateway at ${base} did not answer (${
+          error instanceof Error ? error.message : String(error)
+        })`,
+        details: { reason: 'gateway_unreachable', endpoint: base },
+      });
+    }
+  };
+
   const post = async (path: string, body: unknown, signal?: AbortSignal): Promise<Response> => {
-    const response = await doFetch(`${base}${path}`, {
+    const response = await reach(`${base}${path}`, {
       method: 'POST',
       headers: headers(),
       body: JSON.stringify(body),
@@ -130,7 +159,7 @@ export function httpHermesTransport(options: HermesHttpOptions): HermesTransport
     },
 
     async *events(runId, signal) {
-      const response = await doFetch(`${base}/v1/runs/${encodeURIComponent(runId)}/events`, {
+      const response = await reach(`${base}/v1/runs/${encodeURIComponent(runId)}/events`, {
         method: 'GET',
         headers: { ...headers(), accept: 'text/event-stream' },
         signal,
@@ -238,14 +267,22 @@ export class HermesSession implements AgentSession {
 
   constructor(
     private readonly transport: HermesTransport,
-    options: { sessionRef: string; model?: string | null; reasoningEffort?: string | null },
+    options: {
+      sessionRef: string;
+      model?: string | null;
+      modelProvider?: string | null;
+      reasoningEffort?: string | null;
+    },
   ) {
     this.sessionId = options.sessionRef;
     this.model = options.model ?? null;
+    this.modelProvider = options.modelProvider ?? null;
     this.reasoningEffort = options.reasoningEffort ?? null;
   }
 
+  /** What the conversation was opened with; a turn may name something else. */
   private readonly model: string | null;
+  private readonly modelProvider: string | null;
   private readonly reasoningEffort: string | null;
 
   get id(): string {
@@ -269,9 +306,16 @@ export class HermesSession implements AgentSession {
     const abort = new AbortController();
     this.activeAbort = abort;
     const body: HermesRunRequest = { input: prompt.text, session_id: this.sessionId };
-    if (this.model) body.model = this.model;
-    if (this.reasoningEffort && this.reasoningEffort !== 'none') {
-      body.model_options = { reasoning_effort: this.reasoningEffort };
+    // The turn's own selection wins over the one the conversation was opened with: the
+    // person may have changed it in the composer since (ADR 0008 §1 — every turn is its
+    // own `POST /v1/runs`, and the run surface takes `model` and `provider` on each).
+    const model = prompt.model ?? this.model;
+    const provider = prompt.modelProvider ?? this.modelProvider;
+    const effort = prompt.reasoningEffort ?? this.reasoningEffort;
+    if (model) body.model = model;
+    if (provider) body.provider = provider;
+    if (effort && effort !== 'none') {
+      body.model_options = { reasoning_effort: effort };
     }
     let runId: string;
     try {
@@ -731,6 +775,7 @@ export function createHermesAdapter(options: HermesAdapterOptions): AgentAdapter
       return new HermesSession(transport, {
         sessionRef,
         model: target.model ?? null,
+        modelProvider: target.modelProvider ?? null,
         reasoningEffort: target.reasoningEffort ?? null,
       });
     },

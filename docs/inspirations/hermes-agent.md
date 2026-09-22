@@ -151,7 +151,7 @@
 | `alibaba` (`dashscope`) | `DASHSCOPE_API_KEY` |
 | `copilot` | `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN` |
 
-**مزلقان يقرّرهما `hermesProvider` في `modules/models/catalogue.ts`:**
+**مزلقان يقرّرهما `hermesRoute` في `modules/models/catalogue.ts`:**
 1. لا يوجد مزوّد محادثة اسمه `openai` عند Hermes: `openai` **مرادف لـ `openrouter`**
    (`_ALIAS_GROUPS`)، و OpenAI المباشر هو `openai-api` / `openai-codex`.
 2. `MISTRAL_API_KEY` و`GROQ_API_KEY` عند Hermes مفاتيح **صوت** (Voxtral وWhisper،
@@ -220,7 +220,21 @@
 العمليات على `config.yaml` أو `.env` (القفل داخل العملية فقط) — آخر كاتب ذرّي يفوز. لذلك
 يكتب المركز بملف مؤقّت + إعادة تسمية، ويرفض إعادة كتابة `config.yaml` غير قابل للتحليل.
 
-### روابط هذا القسم (MIT، قُرئت 2026-09-21)
+### ي) الطريق المتوافق مع OpenAI: كتلة تحت `providers:` (قُرئ 2026-09-22 من `/opt/hermes/src` داخل الصورة)
+مزوّد لا يملك Hermes له إضافة خاصّة **ليس** بلا طريق: `config.yaml` يقبل خريطة
+`providers:` مفتاحها اسم المزوّد، وكتلتها تُحلَّل في `hermes_cli/config_providers.py`.
+المفاتيح التي يعرفها (`_KNOWN_PROVIDER_KEYS`) تشمل `name` و`base_url` (وبديلاه `url`/`api`)
+و`key_env` (وبديله `api_key_env`) و`api_key` و`api_mode` (وبديله `transport`)؛ وأي مفتاح
+خارجها يُسجَّل «unknown config keys ignored». الكتلة بلا `base_url` **تُسقَط بصمت**.
+
+الحلّ عند التشغيل في `hermes_cli/runtime_provider_custom.py`:
+`_match_new_style_provider()` يمسح `providers:`، ويقرأ المفتاح من متغيّر البيئة الذي
+يسمّيه `key_env` (وإلا `api_key` المضمّن)، ويطابق الاسم بمرادفاته
+(`custom_provider_aliases`). و`_shadowed_by_builtin()` **يتجاهل الكتلة كلّها** إن كان
+اسمها هو الاسم المعياري لمزوّد مدمج — ولهذا كل كتلة يكتبها المركز تحمل البادئة `majlis-`
+(ADR 0012). و`providers.<name>.enabled: false` يُخفي الكتلة دون حذفها.
+
+### روابط هذا القسم (MIT، قُرئت 2026-09-21؛ الملفّان الأخيران 2026-09-22)
 - <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/hermes_cli/config.py>
 - <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/hermes_cli/model_switch.py>
 - <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/hermes_cli/providers.py>
@@ -233,6 +247,8 @@
 - <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/tui_gateway/methods_tools.py>
 - <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/gateway/platforms/api_server.py>
 - <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/cli-config.yaml.example>
+- <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/hermes_cli/config_providers.py>
+- <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/hermes_cli/runtime_provider_custom.py>
 - <https://raw.githubusercontent.com/NousResearch/hermes-agent/main/plugins/model-providers/anthropic/__init__.py>
 - <https://hermes-agent.nousresearch.com/docs/user-guide/configuration>
 - <https://hermes-agent.nousresearch.com/docs/user-guide/configuring-models>

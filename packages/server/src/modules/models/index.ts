@@ -33,9 +33,17 @@ import { createContractIndex } from '../../lib/contract.js';
 import { defineModule } from '../../lib/module.js';
 import { defineRoute } from '../../lib/route.js';
 import { t } from '../../i18n/index.js';
-import { requireRole, requireUser, requireWorkspace, type WorkspaceScope } from '../auth/index.js';
+import {
+  listWorkspacesFor,
+  ownerUser,
+  requireRole,
+  requireUser,
+  requireWorkspace,
+  type WorkspaceScope,
+} from '../auth/index.js';
 import { auditFor, jobRunnerFor } from '../audit/index.js';
 import {
+  agentRunnerFor,
   hermesRuntimeFor,
   registerAgentModelsPort,
   type AgentModelsPort,
@@ -79,23 +87,35 @@ export type { SealedSecret } from './crypto.js';
 export { SecretStore } from './secrets.js';
 export type { SecretSummary } from './secrets.js';
 export {
+  HERMES_PROVIDER_PREFIX,
   PROVIDER_CATALOGUE,
   assertCatalogueIsWellFormed,
   authKindOf,
   catalogueEntry,
   envVarOf,
   familyEntries,
+  hermesApiModeOf,
+  hermesBaseUrlOf,
+  hermesKeyEnvOf,
+  hermesProviderNameOf,
+  hermesRouteOf,
   secretNameOf,
 } from './catalogue.js';
-export type { CredentialFamily, KeyRequirement, ProviderCatalogueEntry } from './catalogue.js';
+export type {
+  CredentialFamily,
+  HermesRouteKind,
+  KeyRequirement,
+  ProviderCatalogueEntry,
+} from './catalogue.js';
 export { AUXILIARY_TASKS, roleForAdapter } from './defaults.js';
 export {
   agentEnvironment,
   writeHermesConfiguration,
   writeHermesEnv,
   writeHermesModel,
+  writeHermesProviders,
 } from './propagation.js';
-export type { PropagationState, ResolvedCredential } from './propagation.js';
+export type { HermesProviderRoute, PropagationState, ResolvedCredential } from './propagation.js';
 export { mergeEnv, parseEnv, quoteValue } from './dotenv.js';
 export { providerAdapter } from './adapters/index.js';
 
@@ -109,6 +129,11 @@ export interface ModelsOverrides {
    * process does not have; this is how the propagation path is exercised end to end.
    */
   hermes?: HermesTarget;
+  /**
+   * How long the service waits after the last write before recycling Hermes. Tests set
+   * 0 so a restart is one macrotask away instead of a second and a half.
+   */
+  restartDelayMs?: number;
 }
 
 let pendingOverrides: ModelsOverrides | null = null;
@@ -142,6 +167,16 @@ function contextOf(app: FastifyInstance): ModelsService {
       await runtime.restart();
       return true;
     },
+    // `undecided` only exists before `onReady`; to a person looking at the screen that
+    // is the same as "nothing found yet".
+    mode: () => {
+      const decided = runtime.status().mode;
+      return decided === 'undecided' ? 'absent' : decided;
+    },
+    reloadedAt: () => runtime.status().startedAt,
+    // A restart kills whatever turn is in flight; the runner is the only one who knows.
+    busy: () => agentRunnerFor(app).busy,
+    applyEnvironment: (env) => runtime.setProviderEnv(env),
   };
   const service = new ModelsService({
     db,
@@ -151,6 +186,7 @@ function contextOf(app: FastifyInstance): ModelsService {
     jobs: jobRunnerFor(app),
     hermes,
     ...(own.fetchImpl ? { fetchImpl: own.fetchImpl } : {}),
+    ...(own.restartDelayMs === undefined ? {} : { restartDelayMs: own.restartDelayMs }),
   });
   contexts.set(hub.io, service);
   return service;
@@ -206,9 +242,49 @@ export const modelsModule = defineModule({
         }
         return service.defaultRefFor(workspace, adapterKind);
       },
+      resolveModelKey(workspace, key) {
+        return contextOf(app).resolveModelKey(workspace, key);
+      },
+      runtimeProviderName(workspace, providerId) {
+        return contextOf(app).hermesProviderName(workspace, providerId);
+      },
       roleForAdapter,
     };
     registerAgentModelsPort(app.hub.io, port);
+
+    /**
+     * Boot reconciliation (ADR 0010 §Propagation).
+     *
+     * Hermes's home is a volume, and a volume outlives the rows that describe it: a
+     * restored backup, an image upgrade, a `config.yaml` somebody edited by hand, or a
+     * hub that crashed between storing a key and writing it, all leave Hermes describing
+     * a world that is no longer this one. Writing only on change meant that state could
+     * never heal — the owner had to touch a provider to fix a file nobody had touched.
+     *
+     * Runs after the `agents` module's own `onReady`, which is what decides whether there
+     * is a supervised home to write into at all (modules are registered in order, and
+     * Fastify runs `onReady` hooks in registration order). Nothing here throws: a hub
+     * whose Hermes home is unwritable still serves every other screen.
+     */
+    app.addHook('onReady', async () => {
+      const db = requireSqlite(app.hub.database);
+      const owner = ownerUser(db);
+      if (!owner) return;
+      const service = contextOf(app);
+      for (const row of listWorkspacesFor(db, owner)) {
+        try {
+          service.reconcile(
+            { id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault },
+            { userId: owner.id },
+          );
+        } catch (error) {
+          app.log.warn(
+            { err: error, workspace: row.slug },
+            'models: could not reconcile the Hermes configuration at boot',
+          );
+        }
+      }
+    });
 
     // --------------------------------------------------------------- providers
 
@@ -253,17 +329,17 @@ export const modelsModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'models.createProvider',
       status: 201,
-      handler: (request, { body }) => {
+      handler: async (request, { body }) => {
         const { service, scope, actor } = enter(request);
-        return service.createProvider(scope, actor, body as ProviderCreateInput).provider;
+        return (await service.createProvider(scope, actor, body as ProviderCreateInput)).provider;
       },
     });
 
     defineRoute(app, deps, {
       operationId: 'models.updateProvider',
-      handler: (request, { params, body }) => {
+      handler: async (request, { params, body }) => {
         const { service, scope, actor } = enter(request);
-        return service.updateProvider(
+        return await service.updateProvider(
           scope,
           actor,
           params.provider_id as string,
@@ -360,6 +436,14 @@ export const modelsModule = defineModule({
     });
 
     // ---------------------------------------------------------------- defaults
+
+    defineRoute(app, deps, {
+      operationId: 'models.getRuntime',
+      handler: (request) => {
+        const { service, scope } = enter(request);
+        return service.runtimeReport(scope.id);
+      },
+    });
 
     defineRoute(app, deps, {
       operationId: 'models.getDefaults',

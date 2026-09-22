@@ -16,10 +16,11 @@
  */
 import { io as connect, type Socket } from 'socket.io-client';
 import { afterEach, describe, expect, it } from 'vitest';
-import { authed, signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
+import { authed, drainJobs, signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
 import { scriptedHermes } from './adapters/hermes.test.js';
 import type { HermesRunEvent } from './adapters/hermes.js';
-import { approvalChoices, toRunnerEvent, toolKindOf } from './runner.js';
+import { approvalChoices, failureCode, toRunnerEvent, toolKindOf } from './runner.js';
+import type { ModelsOverrides } from '../models/index.js';
 
 const SOCKET_PATH = '/rt';
 const PROFILE = 'default';
@@ -65,7 +66,10 @@ afterEach(async () => {
 
 const healthyFetch: typeof fetch = async () => new Response('{"status":"ok"}', { status: 200 });
 
-async function startHarness(frames: HermesRunEvent[] | (() => HermesRunEvent[])): Promise<Harness> {
+async function startHarness(
+  frames: HermesRunEvent[] | (() => HermesRunEvent[]),
+  models?: ModelsOverrides,
+): Promise<Harness> {
   const hermes = scriptedHermes(frames);
   // A gateway that answers /health makes the Hermes row `installed` on boot; the scripted
   // transport replaces HTTP for the turn itself; the runtime supervisor sees "external".
@@ -76,6 +80,7 @@ async function startHarness(frames: HermesRunEvent[] | (() => HermesRunEvent[]))
         adapterOptions: { hermes: { fetchImpl: healthyFetch, transport: () => hermes.transport } },
         runtime: { healthIntervalMs: 0 },
       },
+      ...(models ? { models } : {}),
     },
   );
   await hub.app.listen({ port: 0, host: '127.0.0.1' });
@@ -369,6 +374,127 @@ describe('agent runner: a Hermes turn through the composed app', () => {
   });
 });
 
+/**
+ * The model the person picked is the model that runs (the defect of 2026-09-22).
+ *
+ * The composer's value is the catalogue's `Model.key` — `"<provider slug>/<model>"`, one
+ * string because a `<Select>` needs one. That string used to travel untouched all the way
+ * to `POST /v1/runs`, where no provider has ever heard of it; and the provider it belongs
+ * to was never named at all, so Hermes served the run with whatever its own `config.yaml`
+ * happened to say. Both are asserted here against the transport itself.
+ */
+describe('agent runner: the model that reaches the wire', () => {
+  const lmstudio = 'http://127.0.0.1:1234/v1';
+  /** LM Studio with two models and no key — a local provider Hermes ships no slug for. */
+  function localModels(): typeof fetch {
+    return ((url: string) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            String(url).startsWith(lmstudio)
+              ? { data: [{ id: 'llama-3.1-8b' }, { id: 'qwen3-30b' }] }
+              : {},
+          ),
+          {
+            status: String(url).startsWith(lmstudio) ? 200 : 503,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+      )) as unknown as typeof fetch;
+  }
+
+  async function addLmStudio(h: Harness): Promise<string> {
+    const created = await authed(h.hub, h.hub.token, {
+      method: 'POST',
+      url: '/api/v1/models/providers',
+      payload: { preset: 'lmstudio', label: 'LM Studio', kind: 'llm', base_url: lmstudio },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = (created.json() as { id: string }).id;
+    await drainJobs(h.hub.app);
+    return id;
+  }
+
+  it('splits the catalogue key and names the provider, turn after turn', async () => {
+    harness = await startHarness(
+      () => [{ event: 'run.completed', completed: true, output: 'ok', usage: {} }],
+      { fetchImpl: localModels() },
+    );
+    await addLmStudio(harness);
+    const agentId = await hermesAgentId(harness);
+
+    // The composer sends the catalogue key, exactly as `useComposerModels` builds it.
+    const created = await authed(harness.hub, harness.hub.token, {
+      method: 'POST',
+      url: '/api/v1/sessions',
+      payload: { agent_id: agentId, model: 'lmstudio/qwen3-30b' },
+    });
+    expect(created.statusCode).toBe(201);
+    const sessionId = (created.json() as { id: string }).id;
+    await new Promise<void>((resolve, reject) =>
+      harness!.socket.emit('subscribe', { session_id: sessionId }, (ack: { ok: boolean }) =>
+        ack.ok ? resolve() : reject(new Error('subscribe refused')),
+      ),
+    );
+
+    await authed(harness.hub, harness.hub.token, {
+      method: 'POST',
+      url: `/api/v1/sessions/${sessionId}/runs`,
+      payload: { content: [{ type: 'text', text: 'one' }] },
+    });
+    await harness.waitFor('run.completed');
+    // The model id the endpoint itself serves, and the name Hermes knows it by.
+    expect(harness.hermes.calls.createRun[0]).toMatchObject({
+      model: 'qwen3-30b',
+      provider: 'majlis-lmstudio',
+    });
+
+    // The person changes the model mid-conversation. The Hermes session is deliberately
+    // never evicted, so this used to keep running the first model for the life of the
+    // process.
+    await authed(harness.hub, harness.hub.token, {
+      method: 'PATCH',
+      url: `/api/v1/sessions/${sessionId}`,
+      payload: { model: 'lmstudio/llama-3.1-8b' },
+    });
+    await authed(harness.hub, harness.hub.token, {
+      method: 'POST',
+      url: `/api/v1/sessions/${sessionId}/runs`,
+      payload: { content: [{ type: 'text', text: 'two' }] },
+    });
+    await harness.waitFor('run.completed', 2);
+    expect(harness.hermes.calls.createRun[1]).toMatchObject({
+      model: 'llama-3.1-8b',
+      provider: 'majlis-lmstudio',
+    });
+    // Same conversation: only the selection moved.
+    expect(harness.hermes.calls.createRun).toHaveLength(2);
+  });
+
+  it('answers a run with no provider configured with a code the client can branch on', async () => {
+    harness = await startHarness([
+      {
+        event: 'run.failed',
+        error:
+          "\u26a0\ufe0f Provider authentication failed: No inference provider configured. Run 'hermes model' to choose a provider and model, or set an API key (OPENROUTER_API_KEY, OPENAI_API_KEY, etc.) in ~/.hermes/.env.",
+      },
+    ]);
+    const agentId = await hermesAgentId(harness);
+    const sessionId = await newSession(harness, agentId);
+    await authed(harness.hub, harness.hub.token, {
+      method: 'POST',
+      url: `/api/v1/sessions/${sessionId}/runs`,
+      payload: { content: [{ type: 'text', text: 'hi' }] },
+    });
+    const failed = await harness.waitFor('run.failed');
+    const run = failed.payload.run as { error: { code: string; error: string } };
+    expect(run.error.code).toBe('provider_not_configured');
+    // Hermes's own words survive intact underneath our label — never replaced, never cut.
+    expect(run.error.error).toContain('No inference provider configured');
+    expect(run.error.error).toContain("Run 'hermes model'");
+  });
+});
+
 describe('agent runner: the translation table', () => {
   it('folds an agent’s tool words into the contract’s kinds', () => {
     expect(toolKindOf('terminal')).toBe('shell');
@@ -420,5 +546,17 @@ describe('agent runner: the translation table', () => {
       code: 'agent_error',
       message: 'boom',
     });
+  });
+
+  it('recognises Hermes’s "nothing is configured" in either of the two shapes it prints', () => {
+    // The code token, when a surface passes the AuthError through…
+    expect(failureCode('auth failed (no_provider_configured)')).toBe('provider_not_configured');
+    // …and the sentence, which is all `/v1/runs` gives us.
+    expect(
+      failureCode('⚠️ Provider authentication failed: No inference provider configured. Run …'),
+    ).toBe('provider_not_configured');
+    // Anything else keeps the generic code; the hub never guesses a cause.
+    expect(failureCode('rate limit exceeded')).toBe('agent_error');
+    expect(failureCode(null)).toBe('agent_error');
   });
 });

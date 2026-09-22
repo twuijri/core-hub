@@ -32,6 +32,13 @@ const DYNAMIC: Record<string, string[]> = {
   'display.glass': ['0', '1', '2', '3'],
   'display.theme': ['system', 'light', 'dark'],
   'jobs.status': ['queued', 'running', 'succeeded', 'failed', 'cancelled'],
+  // Both halves of every runtime check: `models.runtime.<id>.ok` and `.missing`
+  // (`models/RuntimeChecks.tsx` picks one per check).
+  'models.runtime.runtime_writable': ['ok', 'missing'],
+  'models.runtime.provider_keys': ['ok', 'missing'],
+  'models.runtime.provider_verified': ['ok', 'missing'],
+  'models.runtime.model_selected': ['ok', 'missing'],
+  'models.runtime.gateway_reloaded': ['ok', 'missing'],
   'pane.kind': ['tool', 'code', 'preview', 'artifact', 'tasks'],
   roles: ['owner', 'admin', 'member'],
   'sessions.source': [

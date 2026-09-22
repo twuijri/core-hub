@@ -16,6 +16,8 @@ import { Composer } from './Composer.js';
 import { starterSuggestions } from './starters.js';
 import { takeFirstMessage } from './firstMessage.js';
 import { MessageView } from './MessageView.js';
+import { RunFailureNotice } from './RunFailureNotice.js';
+import { useRuntimeReport } from '../models/queries.js';
 import { activeRun, isBusy } from './transcript.js';
 import { useRecentModels } from '../models/useModelPicker.js';
 import { useApprovalMode, useComposerModels } from './useComposerControls.js';
@@ -101,6 +103,11 @@ function OpenSession({ sessionId }: { sessionId: string }) {
   const title = state.session ? sessionTitle(state.session, t) : t(termKey('chat'));
   const showReasoning = preferences.data?.show_reasoning ?? true;
   const failedRun = Object.values(state.runs).find((r) => r.status === 'failed' && r.error);
+  // Only asked for once a run has failed for want of a provider, and then asked fresh:
+  // the notice says which step of propagation is missing right now.
+  const runtime = useRuntimeReport({
+    enabled: failedRun?.error?.code === 'provider_not_configured',
+  });
   // The folder moves freely until the first run; after that the transcript would no longer
   // describe where the work happened, and the hub refuses (`409 state_invalid`).
   const hasRun = messageCount > 0 || Object.keys(state.runs).length > 0;
@@ -168,17 +175,16 @@ function OpenSession({ sessionId }: { sessionId: string }) {
           ))}
           {failedRun?.error &&
             // A failed run often leaves an empty assistant message; the badge alone would
-            // hide the reason, so the notice is only suppressed when that message has text.
-            !state.messages.some(
-              (m) =>
-                m.run_id === failedRun.id &&
-                m.status === 'failed' &&
-                m.content.some((part) => part.type === 'text' && part.text.trim() !== ''),
-            ) && (
-              <Notice tone="danger">
-                {t('chat.run_failed', { error: failedRun.error.error, code: failedRun.error.code })}
-              </Notice>
-            )}
+            // hide the reason, so the notice is only suppressed when that message has text
+            // — except for the one failure whose way out the hub knows, which is never
+            // suppressed: the agent's own text does not say where to go.
+            (failedRun.error.code === 'provider_not_configured' ||
+              !state.messages.some(
+                (m) =>
+                  m.run_id === failedRun.id &&
+                  m.status === 'failed' &&
+                  m.content.some((part) => part.type === 'text' && part.text.trim() !== ''),
+              )) && <RunFailureNotice failure={failedRun.error} runtime={runtime.data} />}
           <div ref={bottom} />
         </div>
         <Composer

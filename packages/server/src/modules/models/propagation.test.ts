@@ -17,6 +17,8 @@ import {
   writeHermesConfiguration,
   writeHermesEnv,
   writeHermesModel,
+  writeHermesProviders,
+  type HermesProviderRoute,
   type PropagationState,
   type ResolvedCredential,
 } from './propagation.js';
@@ -46,8 +48,22 @@ const credential = (
 ): ResolvedCredential => ({ family, envVar, hermesEnvVars, value });
 
 function state(over: Partial<PropagationState> = {}): PropagationState {
-  return { credentials: [], hermesModel: null, hermesModelBlocked: null, ...over };
+  return {
+    credentials: [],
+    hermesProviders: [],
+    hermesModel: null,
+    hermesModelBlocked: null,
+    ...over,
+  };
 }
+
+const route = (over: Partial<HermesProviderRoute> = {}): HermesProviderRoute => ({
+  name: 'majlis-lmstudio',
+  baseUrl: 'http://127.0.0.1:1234/v1',
+  apiMode: 'chat_completions',
+  keyEnv: 'MAJLIS_PROVIDER_LMSTUDIO_API_KEY',
+  ...over,
+});
 
 // ------------------------------------------------------------------ the merge
 
@@ -260,9 +276,86 @@ describe('models: writing the Hermes home', () => {
     );
     expect(result.dirty).toBe(true);
     expect(result.env.changed).toEqual(['ANTHROPIC_API_KEY']);
-    expect(result.model.changed).toEqual(['model.default', 'model.provider']);
+    expect(result.config.changed).toEqual(['model.default', 'model.provider']);
     expect(readFileSync(path.join(home, '.env'), 'utf8')).toContain('ANTHROPIC_API_KEY=sk-a');
     expect(readFileSync(path.join(home, 'config.yaml'), 'utf8')).toContain('provider: anthropic');
+  });
+
+  it('creates no config.yaml at all when there is nothing to say', () => {
+    // Writing `null` into the file is worse than not writing it: Hermes's own loader then
+    // has a document that is not a mapping, and the next write cannot set a key in it.
+    const home = hermesHome();
+    const result = writeHermesConfiguration(
+      home,
+      state({ credentials: [credential('anthropic', 'ANTHROPIC_API_KEY', 'sk-a')] }),
+    );
+    expect(result.config.dirty).toBe(false);
+    expect(() => readFileSync(path.join(home, 'config.yaml'), 'utf8')).toThrow();
+  });
+});
+
+// ----------------------------------------------- the providers: blocks (ADR 0010)
+
+describe('models: OpenAI-compatible endpoints as Hermes providers', () => {
+  it('writes a block Hermes understands, with only the keys it documents', () => {
+    const home = hermesHome();
+    const result = writeHermesProviders(home, [route()]);
+    expect(result.changed).toEqual(['providers.majlis-lmstudio']);
+    const text = readFileSync(path.join(home, 'config.yaml'), 'utf8');
+    expect(text).toContain('majlis-lmstudio:');
+    expect(text).toContain('base_url: http://127.0.0.1:1234/v1');
+    expect(text).toContain('api_mode: chat_completions');
+    expect(text).toContain('key_env: MAJLIS_PROVIDER_LMSTUDIO_API_KEY');
+    // `enabled` is honoured by Hermes but absent from its accepted-keys list, so writing
+    // it makes the gateway log "unknown config keys ignored" about our own file.
+    expect(text).not.toContain('enabled:');
+  });
+
+  it('leaves a transport Hermes should detect out of the block', () => {
+    const home = hermesHome();
+    writeHermesProviders(home, [route({ apiMode: null })]);
+    expect(readFileSync(path.join(home, 'config.yaml'), 'utf8')).not.toContain('api_mode');
+  });
+
+  it('keeps blocks somebody else wrote and removes only its own', () => {
+    const home = hermesHome({
+      'config.yaml': [
+        '# a comment the hub must not destroy',
+        'providers:',
+        '  my-own-proxy:',
+        '    base_url: https://proxy.example/v1',
+        '  majlis-gone:',
+        '    base_url: https://gone.example/v1',
+        'model:',
+        '  default: keep-me',
+        '',
+      ].join('\n'),
+    });
+    const result = writeHermesProviders(home, [route()]);
+    expect(result.removed).toEqual(['providers.majlis-gone']);
+    const text = readFileSync(path.join(home, 'config.yaml'), 'utf8');
+    expect(text).toContain('# a comment the hub must not destroy');
+    expect(text).toContain('my-own-proxy:');
+    expect(text).toContain('default: keep-me');
+    expect(text).not.toContain('majlis-gone');
+    expect(text).toContain('majlis-lmstudio:');
+  });
+
+  it('rewrites nothing when the blocks already say what they should', () => {
+    const home = hermesHome();
+    writeHermesProviders(home, [route()]);
+    const before = readFileSync(path.join(home, 'config.yaml'), 'utf8');
+    const again = writeHermesProviders(home, [route()]);
+    expect(again.dirty).toBe(false);
+    expect(readFileSync(path.join(home, 'config.yaml'), 'utf8')).toBe(before);
+  });
+
+  it('drops the providers mapping when the last block of ours goes', () => {
+    const home = hermesHome();
+    writeHermesProviders(home, [route()]);
+    const result = writeHermesProviders(home, []);
+    expect(result.removed).toEqual(['providers.majlis-lmstudio']);
+    expect(readFileSync(path.join(home, 'config.yaml'), 'utf8')).not.toContain('providers:');
   });
 });
 

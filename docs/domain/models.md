@@ -167,10 +167,39 @@ with a key"; `reason` is an i18n key, never a sentence in one language.
 ## Propagation (ADR 0010)
 
 - **Hermes**: the hub writes the provider keys into `${HERMES_HOME}/.env` (a
-  merge that touches only the variables it owns) and the chat default into
-  `${HERMES_HOME}/config.yaml` as `model.default` + `model.provider` (a YAML
-  round-trip, one key at a time), then recycles the gateway it supervises. A
-  provider Hermes has no slug for leaves its selection untouched.
+  merge that touches only the variables it owns), **puts the same variables into
+  the gateway's own process environment at spawn** (the file is what `hermes
+  model` and a shell in the container read; the environment is what the running
+  process cannot start without), and writes `${HERMES_HOME}/config.yaml` in one
+  YAML round-trip: a `providers:` block per OpenAI-compatible endpoint, plus
+  `model.default` + `model.provider`. Then it recycles the gateway it supervises
+  — once per save, and never while a turn is in flight.
+- **Which providers reach it.** A provider Hermes ships itself is named by its
+  own slug (`hermesProvider`). Every other chat provider — LM Studio, LiteLLM,
+  Groq, Mistral, Ollama, somebody's own endpoint — is written as a block under
+  `providers:` keyed `majlis-<slug>`, carrying `base_url`, `api_mode` and
+  `key_env`. The prefix is load-bearing: Hermes ignores a `providers:` entry
+  named after one of its own canonical providers, and `lmstudio` is one.
+  `hermesKeyEnvOf` mints `MAJLIS_PROVIDER_<SLUG>_API_KEY` for a provider with no
+  world-wide variable name. A provider that still cannot be expressed cannot be
+  the chat default: `models.setDefaults` refuses it by name.
+- **Model ids are opaque.** Whatever the provider answered is what is stored and
+  what is written — `openrouter/free`, `z-ai/glm-5.2:free`, suffixes and all.
+  The catalogue's `Model.key` (`<provider slug>/<id>`) is a client-side handle,
+  split back on the **first** slash and only when the left side is a provider
+  this workspace has.
+- **The first default.** A workspace with providers but no chat default is given
+  one — the first model of the provider just configured, once. A provider added
+  later never steals it, and the owner's own choice is never overwritten.
+- **A key is checked before it is stored.** The provider is asked once on save;
+  an outright refusal (401/403) blocks the save and carries the provider's own
+  words. Anything else — unreachable, slow, 5xx — stores the key and reports
+  what happened, because it says nothing about the key.
+- **Nothing is silent.** `models.getRuntime` answers, from the files and the
+  process as they are now: runtime writable, provider keys present, providers
+  verified, model selected, gateway reloaded. A run that fails for want of a
+  credential carries `provider_not_configured`; one the provider refused carries
+  `provider_unauthorized`.
 - **ACP / harness agents**: the environment is built at process start from the
   same providers, under the variable names each agent's catalog entry declares.
 - **Overrides**: `agent_settings.default_model_id` and

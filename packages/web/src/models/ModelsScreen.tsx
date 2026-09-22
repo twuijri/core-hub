@@ -16,7 +16,7 @@
  *   containerized hub says so, and the agents list underneath says what each inherited.
  */
 import { useMemo, useState } from 'react';
-import { NavLink } from 'react-router';
+import { NavLink, useSearchParams } from 'react-router';
 import { describeError } from '../auth/client.js';
 import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
@@ -31,6 +31,7 @@ import type { Agent, Model, Provider, ProviderHost } from '../types.js';
 import { SettingsBack } from '../settings/SettingsBack.js';
 import { Notice, Spinner } from '../ui/Notice.js';
 import { AddProviderDialog } from './AddProviderDialog.js';
+import { RuntimeChecks } from './RuntimeChecks.js';
 import { needsLoopbackWarning, suggestedHostUrl } from './loopback.js';
 import {
   parseRef,
@@ -41,6 +42,7 @@ import {
   useProviderPresets,
   useProviders,
   useRefreshProvider,
+  useRuntimeReport,
   useSaveDefaults,
   useSaveModel,
   useSaveProvider,
@@ -60,10 +62,18 @@ export function ModelsScreen() {
   const { t } = useI18n();
   const title = t(termKey('models'));
   const tabs = navigation.destinations.find((d) => d.id === 'models')?.tabs ?? ['general'];
-  const [tab, setTab] = useState<string>(tabs[0] ?? 'general');
+  // `?tab=` lets another screen link at one of these tabs by name — the run-failed notice
+  // sends the person to Defaults, and landing on Providers would make them hunt for it.
+  // An unknown value is ignored rather than showing an empty screen.
+  const [search] = useSearchParams();
+  const asked = search.get('tab');
+  const [tab, setTab] = useState<string>(
+    asked && tabs.includes(asked) ? asked : (tabs[0] ?? 'general'),
+  );
   const providers = useProviders();
   const presets = useProviderPresets();
   const refresh = useRefreshProvider();
+  const runtime = useRuntimeReport();
   const [adding, setAdding] = useState(false);
 
   const configured = providers.data ?? [];
@@ -101,6 +111,21 @@ export function ModelsScreen() {
           </div>
         )}
       </header>
+
+      {/* Whether any of this reached the agent runtime. Shown on `General`, next to the
+          providers it is about, and only once a provider exists to be propagated —
+          before that there is nothing to have failed. */}
+      {tab === 'general' && configured.length > 0 && runtime.data && (
+        <section
+          className="mb-4 rounded-md border border-line px-3 py-2"
+          data-testid="runtime-report"
+          aria-label={t('models.runtime.title')}
+        >
+          <h2 className="mb-1 text-sm font-medium">{t('models.runtime.title')}</h2>
+          <p className="mb-2 text-xs text-muted">{t('models.runtime.hint')}</p>
+          <RuntimeChecks report={runtime.data} />
+        </section>
+      )}
 
       <Segmented
         className="mb-4"

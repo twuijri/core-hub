@@ -13,7 +13,8 @@
  * Every write that can change what an agent should be using ends in `propagate()`. That
  * is the whole of the owner's requirement, in one call site per mutation.
  */
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import type { FastifyBaseLogger } from 'fastify';
 import { eq } from 'drizzle-orm';
 import type { ModuleDb } from '../../lib/db.js';
@@ -29,15 +30,23 @@ import {
   authKindOf,
   catalogueEntry,
   familyEntries,
+  hermesApiModeOf,
+  hermesBaseUrlOf,
+  hermesKeyEnvOf,
+  hermesProviderNameOf,
+  hermesRouteOf,
   secretNameOf,
   type ProviderCatalogueEntry,
 } from './catalogue.js';
 import { isMask } from './crypto.js';
+import { parseEnv } from './dotenv.js';
 import { AUXILIARY_TASKS, isAuxiliaryKey, roleForAdapter } from './defaults.js';
 import {
   agentEnvironment,
+  hermesEnvPlan,
   writeHermesConfiguration,
   type HermesModelChoice,
+  type HermesProviderRoute,
   type PropagationState,
   type ResolvedCredential,
 } from './propagation.js';
@@ -77,6 +86,62 @@ export interface HermesTarget {
   home(): string | null;
   /** Recycle the gateway so a changed `.env` takes effect; false when it cannot. */
   restart(): Promise<boolean>;
+  /** Whether a turn is in flight right now — a restart would kill it. */
+  busy?(): boolean;
+  /**
+   * Hands the runtime the provider credentials for its **own process environment**, not
+   * just its files. Returns true when they changed. This is the link ADR 0010 left
+   * implicit: Hermes does read its `.env`, but a running gateway that depends on
+   * somebody else's loader is a chain that can break quietly — and did, as
+   * `HTTP 401: Missing Authentication header` (the owner's report of 2026-09-22).
+   */
+  applyEnvironment?(env: Record<string, string>): boolean;
+  /** How the hub relates to this runtime, for the self-check. Defaults from `home()`. */
+  mode?(): 'managed' | 'external' | 'absent';
+  /** When the process last (re)started, in ms — what "it took the files" means. */
+  reloadedAt?(): number | null;
+}
+
+/** The contract's `RuntimeCheck` and `RuntimeReport` (`models.getRuntime`). */
+export interface ContractRuntimeCheck {
+  id:
+    | 'runtime_writable'
+    | 'provider_keys'
+    | 'provider_verified'
+    | 'model_selected'
+    | 'gateway_reloaded';
+  ok: boolean;
+  detail: string | null;
+}
+
+export interface ContractRuntimeReport {
+  agent: string;
+  mode: 'managed' | 'external' | 'absent';
+  ready: boolean;
+  reloaded_at: string | null;
+  checks: ContractRuntimeCheck[];
+}
+
+/**
+ * The provider credentials as environment variables, under every name the runtime reads
+ * each family's key from — the same set the `.env` merge owns, so the file and the
+ * process can never disagree.
+ */
+function hermesProcessEnv(state: PropagationState): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const credential of state.credentials) {
+    for (const name of credential.hermesEnvVars) env[name] = credential.value;
+  }
+  return env;
+}
+
+/** The `.env` as it is on disk, or empty when there is none to read. */
+function readEnvFile(file: string): Map<string, string> {
+  try {
+    return parseEnv(readFileSync(file, 'utf8'));
+  } catch {
+    return new Map();
+  }
 }
 
 export interface ModelsServiceOptions {
@@ -88,8 +153,20 @@ export interface ModelsServiceOptions {
   hermes: HermesTarget;
   /** Injected in every test; the suite never reaches the network. */
   fetchImpl?: typeof fetch;
+  /**
+   * How long to wait after the last write before recycling the runtime, and how long to
+   * wait between polls while a run is in flight. A test sets it to 0 to stay synchronous.
+   */
+  restartDelayMs?: number;
   now?: () => Date;
 }
+
+/**
+ * How many times a pending restart steps aside for a live turn before going ahead. With
+ * the default delay that is a little over two minutes, which is longer than a turn and
+ * much shorter than "the key never took effect".
+ */
+const RESTART_BUSY_ATTEMPTS = 80;
 
 export interface ProviderCreateInput {
   /** A `ProviderPreset.id`; absent for a bare OpenAI-compatible endpoint. */
@@ -185,16 +262,38 @@ export interface SpeechPatchInput {
 
 export interface TestOutcome {
   ok: boolean;
+  /** The adapter's bare word (`ok`, `no_key`, `unauthorized`, `unreachable`, …). */
+  reason: string;
   /** i18n key under `models.test.*`; the route translates it. */
   reasonKey: string;
   detail: string | null;
   durationMs: number;
 }
 
+/**
+ * A key the provider itself refused. Its own words travel verbatim in `details.detail`:
+ * the hub says what happened, the provider says why, and neither speaks for the other.
+ */
+function rejectedKey(provider: string, detail: string | null): HubError {
+  return new HubError('provider_unauthorized', {
+    messageKey: 'models.test.unauthorized',
+    details: { provider, detail, reason: 'unauthorized' },
+  });
+}
+
 export class ModelsService {
   private readonly store: ModelsStore;
   private readonly now: () => Date;
   private readonly fetchImpl: typeof fetch;
+  /**
+   * When the hub last changed something in the runtime's home, in ms. The self-check
+   * compares it with when the runtime last started: a write the running process has not
+   * read yet is the difference between "configured" and "in effect".
+   */
+  private lastWriteAt = 0;
+  private restartTimer: ReturnType<typeof setTimeout> | null = null;
+  private restartPending = false;
+  private readonly restartDelayMs: number;
 
   constructor(private readonly options: ModelsServiceOptions) {
     this.store = new ModelsStore({
@@ -203,6 +302,7 @@ export class ModelsService {
     });
     this.now = options.now ?? (() => new Date());
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
+    this.restartDelayMs = options.restartDelayMs ?? 1_500;
   }
 
   private get db(): ModuleDb {
@@ -256,11 +356,11 @@ export class ModelsService {
    * Without a preset it is somebody's own OpenAI-compatible endpoint: its own credential
    * family, because sharing a key with a built-in provider of a similar name is a guess.
    */
-  createProvider(
+  async createProvider(
     scope: WorkspaceScope,
     actor: Actor,
     input: ProviderCreateInput,
-  ): { provider: ContractProvider; job: JobRow | null } {
+  ): Promise<{ provider: ContractProvider; job: JobRow | null }> {
     const presetId = input.preset?.trim();
     const preset = presetId ? catalogueEntry(presetId) : undefined;
     if (presetId && !preset) {
@@ -289,6 +389,17 @@ export class ModelsService {
     const apiKey = input.api_key?.trim() ?? '';
     if (preset?.keyRequirement === 'required' && !apiKey) {
       throw validationFailed({ field: 'api_key', reason: 'this provider needs a key to answer' });
+    }
+
+    // The key is checked against the provider **before** anything is stored. A key the
+    // provider itself refuses is not a key: writing it into the runtime turns one wrong
+    // paste into an agent error minutes later, which is what happened on 2026-09-22 (a
+    // key for one provider pasted into another's dialog). Only an outright refusal
+    // blocks the save — an endpoint that is down, slow or unreachable does not, because
+    // that says nothing about the key.
+    const verdict = apiKey ? await this.checkKey(preset, baseUrl, apiKey) : null;
+    if (verdict && !verdict.ok && verdict.reason === 'unauthorized') {
+      throw rejectedKey(preset?.slug ?? label, verdict.detail);
     }
 
     // A preset that may be added more than once behaves like a custom endpoint: the
@@ -350,6 +461,8 @@ export class ModelsService {
     }
 
     if (apiKey) this.storeKey(scope, actor, family, apiKey);
+    // The card shows what the provider answered, without a second click on Test.
+    if (verdict) this.recordCheck(primaryId, verdict);
     this.options.audit.record({
       workspace: scope.id,
       ownerId: actor.userId,
@@ -362,9 +475,14 @@ export class ModelsService {
       // Never the key; only that one arrived with it.
       data: { slug: primarySlug, kind, preset: preset?.slug ?? null, key_set: apiKey !== '' },
     });
-    if (apiKey) this.propagate(scope, actor);
+    // The endpoint itself reaches Hermes even before a key does: a local server that
+    // needs none is otherwise added, listed and unusable.
+    this.propagate(scope, actor);
     const job = this.refreshProvider(scope, actor, primaryId);
     for (const id of siblings) this.refreshProvider(scope, actor, id);
+    // A provider added back after being removed already has its models; the refresh job
+    // above would set the default a moment later, but only if it has one to run.
+    this.ensureChatDefault(scope, actor, primaryId);
     return { provider: this.getProvider(scope, primaryId), job };
   }
 
@@ -426,12 +544,12 @@ export class ModelsService {
     return id;
   }
 
-  updateProvider(
+  async updateProvider(
     scope: WorkspaceScope,
     actor: Actor,
     id: string,
     patch: ProviderPatchInput,
-  ): ContractProvider {
+  ): Promise<ContractProvider> {
     const row = this.loadProvider(scope, id);
     const changes: Partial<typeof providers.$inferInsert> = { updatedAt: this.now() };
     if (patch.label !== undefined) changes.label = patch.label.trim() || row.label;
@@ -444,8 +562,16 @@ export class ModelsService {
     }
 
     let keyChanged = false;
+    let verdict: TestOutcome | null = null;
     if (patch.api_key !== undefined && !isMask(patch.api_key)) {
       const value = patch.api_key?.trim() ?? '';
+      if (value !== '') {
+        const baseUrl = (patch.base_url ?? row.baseUrl ?? this.entryOf(row)?.baseUrl ?? '').trim();
+        verdict = await this.checkKey(this.entryOf(row), baseUrl, value, row);
+        if (!verdict.ok && verdict.reason === 'unauthorized') {
+          throw rejectedKey(row.slug, verdict.detail);
+        }
+      }
       // `auth_kind` is what the provider *requires*, which storing a key does not change.
       // Flipping it was the 2026-09-22 defect: a keyless custom provider that had been
       // given a key still read as "no key needed", and one that had not been given a key
@@ -465,6 +591,7 @@ export class ModelsService {
     }
 
     this.db.update(providers).set(changes).where(eq(providers.id, row.id)).run();
+    if (verdict) this.recordCheck(row.id, verdict);
     this.options.audit.record({
       workspace: scope.id,
       ownerId: actor.userId,
@@ -520,6 +647,64 @@ export class ModelsService {
     this.propagate(scope, actor);
   }
 
+  /**
+   * Asks the provider, once, whether this key is a key it accepts — before the hub
+   * stores it and long before a run depends on it. Never throws: an endpoint that is
+   * unreachable answers `ok: false` with its own reason, which the caller reads.
+   */
+  private async checkKey(
+    entry: ProviderCatalogueEntry | undefined,
+    baseUrl: string,
+    apiKey: string,
+    row?: ProviderRow,
+  ): Promise<TestOutcome> {
+    const adapter = providerAdapter(entry?.protocol ?? 'openai');
+    const started = Date.now();
+    try {
+      const result = await adapter.test({
+        slug: entry?.slug ?? row?.slug ?? 'provider',
+        label: entry?.label ?? row?.label ?? baseUrl,
+        baseUrl: baseUrl || (entry?.baseUrl ?? ''),
+        apiKey,
+        requiresKey: entry ? entry.keyRequirement === 'required' : false,
+        headers: { ...(row?.headers ?? {}) },
+        settings: { ...(row?.settings ?? {}) },
+        fetchImpl: this.fetchImpl,
+      });
+      return {
+        ok: result.ok,
+        reason: result.reason,
+        reasonKey: `models.test.${result.reason}`,
+        detail: result.detail,
+        durationMs: result.durationMs,
+      };
+    } catch (error) {
+      // A check that itself fell over must not stop a person saving a key.
+      return {
+        ok: false,
+        reason: 'unreachable',
+        reasonKey: 'models.test.unreachable',
+        detail: error instanceof Error ? error.message : null,
+        durationMs: Date.now() - started,
+      };
+    }
+  }
+
+  /** Puts a check's verdict on the row, so the card shows it without a second click. */
+  private recordCheck(providerId: string, outcome: TestOutcome): void {
+    const at = this.now();
+    this.db
+      .update(providers)
+      .set({
+        status: outcome.ok ? 'ok' : 'error',
+        lastCheckedAt: at,
+        lastError: outcome.ok ? null : (outcome.detail ?? outcome.reason ?? null),
+        updatedAt: at,
+      })
+      .where(eq(providers.id, providerId))
+      .run();
+  }
+
   /** One small authenticated request. A failure is still a `200` with `ok: false`. */
   async testProvider(scope: WorkspaceScope, id: string): Promise<TestOutcome> {
     const row = this.loadProvider(scope, id);
@@ -539,6 +724,7 @@ export class ModelsService {
       .run();
     return {
       ok: result.ok,
+      reason: result.reason,
       reasonKey: `models.test.${result.reason}`,
       detail: result.detail,
       durationMs: result.durationMs,
@@ -667,6 +853,11 @@ export class ModelsService {
           .where(eq(providers.id, row.id))
           .run();
         handle.progress(100, `${result.models.length} models`);
+        // The models just arrived. If this workspace still has no chat default, the
+        // provider that was added a moment ago becomes it — otherwise the owner adds a
+        // provider, watches its models load, sends a message and is told by Hermes that
+        // no provider is configured, with nothing in the hub having said a word.
+        this.ensureChatDefault(scope, actor, row.id);
         return { ...report, models: result.models.length };
       },
     );
@@ -770,6 +961,9 @@ export class ModelsService {
     this.db.update(models).set(changes).where(eq(models.id, row.id)).run();
     const updated = this.store.model(provider.id, modelKey);
     if (!updated) throw new HubError('internal', { message: 'model row vanished after update' });
+    // A model typed by hand on a provider that lists none (`listModels: false`) is still
+    // the workspace's first model, and it should be usable without a second screen.
+    this.ensureChatDefault(scope, actor, provider.id);
     return serializeModel(updated, provider.slug);
   }
 
@@ -835,6 +1029,7 @@ export class ModelsService {
         this.store.clearDefault(scope.id, 'chat');
       } else {
         const model = this.requireModel(scope, body.default);
+        this.requireExpressible(scope, model.providerId);
         const fallbacks = (body.fallbacks ?? []).map((ref) => this.requireModel(scope, ref).id);
         this.store.setDefault(
           { workspace: scope.id, ownerId: actor.userId },
@@ -1080,6 +1275,148 @@ export class ModelsService {
     return { audio: result.audio, contentType: result.contentType, provider: row.slug };
   }
 
+  // ------------------------------------------------------------ the first default
+
+  /**
+   * Gives a workspace that has no chat default one, from the provider just configured.
+   *
+   * The rule is exactly "the first one, once": a workspace with a chat default is never
+   * touched, so a second provider added later cannot steal it, and the owner's own choice
+   * on the Defaults screen is never overwritten. Without this, "a provider with models"
+   * and "a workspace that can answer" were two different states, and nothing in the
+   * product said so — the run just failed in Hermes's words (the defect of 2026-09-22).
+   *
+   * Which model: the first the provider listed that this workspace would actually show
+   * in a picker — enabled, visible, and passing the provider's visibility choice, which
+   * is how the model the person picked in the Add-provider dialog wins when they narrowed
+   * the list there.
+   */
+  ensureChatDefault(scope: WorkspaceScope, actor: Actor, providerId: string): ContractModel | null {
+    if (this.store.defaultFor(scope.id, 'chat')) return null;
+    const row = this.store.provider(scope.id, providerId);
+    if (!row || row.archivedAt || !row.enabled || row.kind !== 'llm') return null;
+    const model = this.store
+      .modelsOf(row.id)
+      .find(
+        (candidate) =>
+          !candidate.archivedAt &&
+          candidate.enabled &&
+          candidate.visible &&
+          candidate.kind === 'chat' &&
+          this.passesVisibility(row, candidate.modelKey),
+      );
+    if (!model) return null;
+    this.store.setDefault({ workspace: scope.id, ownerId: actor.userId }, 'chat', model.id, []);
+    this.options.audit.record({
+      workspace: scope.id,
+      ownerId: actor.userId,
+      actorKind: 'system',
+      actorId: actor.userId,
+      action: 'model_default.updated',
+      entityKind: 'workspace',
+      entityId: scope.id,
+      summary: `chat default set to ${row.slug}/${model.modelKey}`,
+      data: { role: 'chat', provider: row.slug, model: model.modelKey, reason: 'first_provider' },
+    });
+    this.propagate(scope, actor);
+    return serializeModel(model, row.slug);
+  }
+
+  /**
+   * The self-check behind "I added a provider and nothing happened".
+   *
+   * Propagation used to be entirely invisible: the hub wrote two files and restarted a
+   * process, and if any of that did not happen the only sign was a run failing in the
+   * runtime's own words, with nothing in the product to look at. Every check here is
+   * answered from the files and the process **as they are now** — a stored snapshot
+   * would go stale exactly when it mattered.
+   */
+  runtimeReport(workspace: string): ContractRuntimeReport {
+    const home = this.options.hermes.home();
+    const mode = this.options.hermes.mode?.() ?? (home ? 'managed' : 'absent');
+    const state = home ? this.state(workspace) : null;
+    const checks: ContractRuntimeCheck[] = [];
+
+    // 1. Is there a runtime whose files this hub may write at all? An `external` gateway
+    //    is somebody else's process (ADR 0010 §3); `absent` is no Hermes on this host.
+    checks.push({
+      id: 'runtime_writable',
+      ok: home !== null,
+      detail: mode,
+    });
+
+    // 2. The keys, read back from the file the runtime reads — not from what we meant to
+    //    write. A workspace whose providers all take no key passes with none.
+    const wanted = state ? hermesEnvPlan(home as string, state) : null;
+    const onDisk = home ? readEnvFile(path.join(home, '.env')) : new Map<string, string>();
+    const missingKeys = wanted
+      ? wanted.owned.filter((name) => onDisk.get(name) !== wanted.values[name])
+      : [];
+    checks.push({
+      id: 'provider_keys',
+      ok: home !== null && missingKeys.length === 0,
+      detail: wanted ? (missingKeys[0] ?? String(wanted.owned.length)) : null,
+    });
+
+    // 3. Did the provider itself accept the key? Stored when it was saved and refreshed
+    //    by every Test; a provider that has never answered is not a failure, only
+    //    unproven — the endpoint may simply be one that is asked nothing until a run.
+    const rows = this.store
+      .listProviders(workspace)
+      .filter((row) => row.enabled && !row.archivedAt);
+    const rejected = rows.filter((row) => row.status === 'error');
+    checks.push({
+      id: 'provider_verified',
+      ok: rejected.length === 0,
+      detail: rejected[0]?.slug ?? null,
+    });
+
+    // 4. A model the runtime will actually serve. `blocked` is the honest refusal: the
+    //    provider is one the hub cannot say to this runtime at all.
+    checks.push({
+      id: 'model_selected',
+      ok: Boolean(state?.hermesModel),
+      detail: state?.hermesModel
+        ? `${state.hermesModel.provider}/${state.hermesModel.model}`
+        : (state?.hermesModelBlocked ?? null),
+    });
+
+    // 5. Did the process take the files? It reads them at start, so "reloaded after the
+    //    last write" is the question, and the runtime is the only one who knows.
+    const reloadedAt = this.options.hermes.reloadedAt?.() ?? null;
+    checks.push({
+      id: 'gateway_reloaded',
+      ok: mode === 'external' || (reloadedAt !== null && reloadedAt >= this.lastWriteAt),
+      detail: null,
+    });
+
+    return {
+      agent: 'hermes',
+      mode,
+      ready: checks.every((check) => check.ok),
+      reloaded_at: reloadedAt === null ? null : new Date(reloadedAt).toISOString(),
+      checks,
+    };
+  }
+
+  /**
+   * Reconciles Hermes's own files with this workspace's providers, without any of them
+   * having changed (ADR 0010 §Propagation).
+   *
+   * Called once at boot. A restored volume, an image upgrade or a `config.yaml` somebody
+   * edited by hand all leave Hermes describing a world that is no longer this one; the
+   * hub writes what it knows and recycles the gateway only if that actually changed
+   * something. Never throws: a hub whose Hermes home is unwritable still serves.
+   */
+  reconcile(scope: WorkspaceScope, actor: Actor): void {
+    if (!this.options.hermes.home()) return;
+    this.options.log.info(
+      { workspace: scope.id },
+      'models: reconciling the Hermes configuration with the stored providers',
+    );
+    this.propagate(scope, actor);
+  }
+
   // ---------------------------------------------------------------- propagation
 
   /**
@@ -1088,24 +1425,47 @@ export class ModelsService {
    */
   state(workspace: string): PropagationState {
     const credentials: ResolvedCredential[] = [];
+    const hermesProviders: HermesProviderRoute[] = [];
     const seen = new Set<string>();
     for (const row of this.store.listProviders(workspace)) {
-      if (!row.enabled || seen.has(row.family)) continue;
+      if (!row.enabled) continue;
       const entry = this.entryOf(row);
-      const envVar = entry?.envVar;
-      if (!envVar || !row.apiKeySecretId) continue;
+      const route = hermesRouteOf(entry);
+
+      // The endpoint itself, for the providers Hermes has no provider of its own for.
+      // This runs whether or not there is a key: LM Studio and Ollama answer without one,
+      // and a route the hub did not write is a run that cannot reach them at all.
+      if (route === 'openai-compatible' && row.kind === 'llm' && (row.baseUrl ?? entry?.baseUrl)) {
+        const name = hermesProviderNameOf(row.slug, entry);
+        if (name) {
+          hermesProviders.push({
+            name,
+            baseUrl: hermesBaseUrlOf((row.baseUrl ?? entry?.baseUrl) as string, entry),
+            apiMode: entry?.hermesApiMode ?? hermesApiModeOf(row.apiMode),
+            keyEnv: hermesKeyEnvOf(row.slug, entry),
+          });
+        }
+      }
+
+      if (seen.has(row.family) || !row.apiKeySecretId) continue;
       const value = this.options.secrets.reveal(workspace, row.apiKeySecretId);
       if (!value) continue;
       seen.add(row.family);
-      credentials.push({
-        family: row.family,
-        envVar,
-        hermesEnvVars: entry.hermesEnvVars.length > 0 ? [...entry.hermesEnvVars] : [envVar],
-        value,
-      });
+      // A provider with no world-wide variable name still has one Hermes reads it by: the
+      // `key_env` of its own `providers:` block. Skipping those rows was why a key typed
+      // into a custom or local provider reached nothing (the defect of 2026-09-22).
+      const envVar = entry?.envVar ?? hermesKeyEnvOf(row.slug, entry);
+      const hermesEnvVars =
+        entry && entry.hermesEnvVars.length > 0 ? [...entry.hermesEnvVars] : [envVar];
+      credentials.push({ family: row.family, envVar, hermesEnvVars, value });
     }
     const chat = this.hermesModelChoice(workspace);
-    return { credentials, hermesModel: chat.choice, hermesModelBlocked: chat.blocked };
+    return {
+      credentials,
+      hermesProviders,
+      hermesModel: chat.choice,
+      hermesModelBlocked: chat.blocked,
+    };
   }
 
   /**
@@ -1147,6 +1507,39 @@ export class ModelsService {
   }
 
   /**
+   * What a client named, back to a provider row and the model id that provider serves.
+   *
+   * Accepts either shape a client can hold: the catalogue's `Model.key`
+   * (`"<provider slug>/<model>"`, which is what a `<Select>` value has to be) or a bare
+   * model id. `null` when this workspace has no such model — the caller passes the name
+   * through rather than inventing one.
+   *
+   * The split is on the **first** slash, because a model id legitimately contains them
+   * (`meta-llama/llama-3.1-70b`), and the left side is only accepted when it is actually
+   * one of this workspace's provider slugs.
+   */
+  resolveModelKey(workspace: string, key: string): ModelRefInput | null {
+    const trimmed = key.trim();
+    if (!trimmed) return null;
+    const slash = trimmed.indexOf('/');
+    if (slash > 0) {
+      const provider = this.store.providerBySlug(workspace, trimmed.slice(0, slash));
+      const modelKey = trimmed.slice(slash + 1);
+      if (provider && !provider.archivedAt && modelKey) {
+        const row = this.store.model(provider.id, modelKey);
+        if (row && !row.archivedAt) return { provider_id: provider.id, model: row.modelKey };
+      }
+    }
+    // A bare id: the workspace's own catalogue decides which provider serves it.
+    for (const provider of this.store.listProviders(workspace)) {
+      if (provider.archivedAt || !provider.enabled) continue;
+      const row = this.store.model(provider.id, trimmed);
+      if (row && !row.archivedAt) return { provider_id: provider.id, model: row.modelKey };
+    }
+    return null;
+  }
+
+  /**
    * Writes the shared credentials and the chat default into the Hermes home this hub
    * supervises, then recycles the gateway so the change is live. Never throws: a hub
    * without Hermes, or a read-only volume, must not make "save the key" fail.
@@ -1158,9 +1551,13 @@ export class ModelsService {
     if (state.hermesModelBlocked) {
       this.options.log.warn(
         { provider: state.hermesModelBlocked },
-        'models: Hermes has no provider slug for the chat default; its model selection is left as it is',
+        'models: Hermes cannot be told about the chat default provider; its model selection is left as it is',
       );
     }
+    // The environment first: a running gateway holds its variables from spawn time, so
+    // this is what the restart below actually makes live. The `.env` is written all the
+    // same — `hermes model`, `hermes config` and a shell in the container read it.
+    const envChanged = this.options.hermes.applyEnvironment?.(hermesProcessEnv(state)) ?? false;
     let result;
     try {
       result = writeHermesConfiguration(home, state);
@@ -1171,9 +1568,10 @@ export class ModelsService {
       );
       return;
     }
-    if (!result.dirty) return;
-    const changed = [...result.env.changed, ...result.model.changed];
-    const removed = [...result.env.removed, ...result.model.removed];
+    if (!result.dirty && !envChanged) return;
+    this.lastWriteAt = this.now().getTime();
+    const changed = [...result.env.changed, ...result.config.changed];
+    const removed = [...result.env.removed, ...result.config.removed];
     this.options.log.info(
       // Names only. A value never reaches a log line.
       { changed, removed },
@@ -1190,9 +1588,57 @@ export class ModelsService {
       summary: 'Hermes received the workspace providers',
       data: { changed, removed },
     });
-    void this.options.hermes.restart().catch((error: unknown) => {
+    this.scheduleRestart();
+  }
+
+  /**
+   * Recycles the runtime once, a moment after the writing stops.
+   *
+   * Saving a provider is several writes in a row — the key, then the models the refresh
+   * found, then the default that follows from them — and each used to restart the gateway.
+   * Three restarts for one action is thrash, and each one can land on top of a turn
+   * somebody is watching. So: coalesce them into one, and wait while a run is in flight.
+   * The files are already on disk; only the moment the process re-reads them moves.
+   */
+  private scheduleRestart(): void {
+    this.restartPending = true;
+    if (this.restartTimer) clearTimeout(this.restartTimer);
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = null;
+      void this.drainRestart(0);
+    }, this.restartDelayMs);
+    // A timer must never hold the process open: the hub exiting is the gateway exiting too.
+    this.restartTimer.unref?.();
+  }
+
+  /**
+   * The one pending restart, waiting for the runtime to be idle.
+   *
+   * `restartTimer` being set means a newer write has re-armed the debounce; that timer
+   * owns the restart and this chain steps aside, so several saves in a row can never
+   * leave two chains racing to recycle the same process.
+   */
+  private async drainRestart(attempt: number): Promise<void> {
+    if (this.restartTimer || !this.restartPending) return;
+    // A turn takes seconds; a person waits for it. Past the cap the change wins — a key
+    // that never takes effect is worse than one interrupted turn, and the cap is minutes.
+    if ((this.options.hermes.busy?.() ?? false) && attempt < RESTART_BUSY_ATTEMPTS) {
+      const timer = setTimeout(() => void this.drainRestart(attempt + 1), this.restartDelayMs);
+      timer.unref?.();
+      return;
+    }
+    if (attempt >= RESTART_BUSY_ATTEMPTS) {
+      this.options.log.warn(
+        { attempts: attempt },
+        'models: recycling the Hermes gateway although a run is in flight; the change has waited long enough',
+      );
+    }
+    this.restartPending = false;
+    try {
+      await this.options.hermes.restart();
+    } catch (error) {
       this.options.log.warn({ err: error }, 'models: the Hermes gateway did not restart');
-    });
+    }
   }
 
   // -------------------------------------------------------------------- helpers
@@ -1305,10 +1751,12 @@ export class ModelsService {
   /**
    * The workspace's chat default expressed the way Hermes names a model.
    *
-   * `blocked` is the honest half: Hermes has no provider slug for Groq, Mistral or a
-   * person's own endpoint, and its `openai` id is an alias of **OpenRouter**. Rather than
-   * write a slug that would route a run to the wrong account, the hub writes nothing and
-   * says which provider it could not express.
+   * `blocked` is the honest half, and it is now a much shorter list than it was: Hermes
+   * understands any OpenAI-compatible endpoint given a `providers:` block, so Groq,
+   * Mistral, LM Studio, LiteLLM, Ollama and somebody's own address all reach it. What
+   * stays blocked is a provider that is not a chat route at all. Nothing is ever guessed:
+   * Hermes's `openai` id is an alias of **OpenRouter**, so a slug is only ever written
+   * when the catalogue declares it.
    */
   private hermesModelChoice(workspace: string): {
     choice: HermesModelChoice | null;
@@ -1322,9 +1770,46 @@ export class ModelsService {
       .where(eq(providers.id, ref.provider_id))
       .get();
     if (!provider) return { choice: null, blocked: null };
-    const hermesProvider = catalogueEntry(provider.slug)?.hermesProvider ?? null;
-    if (!hermesProvider) return { choice: null, blocked: provider.slug };
-    return { choice: { provider: hermesProvider, model: ref.model }, blocked: null };
+    const name = this.hermesNameOfProvider(provider);
+    if (!name) return { choice: null, blocked: provider.slug };
+    return { choice: { provider: name, model: ref.model }, blocked: null };
+  }
+
+  /**
+   * The name Hermes knows one of this workspace's providers by, or null when it cannot be
+   * told about it. Public so a run can name its own provider per request rather than
+   * inheriting whatever the last default write left in `config.yaml` (ADR 0008 §1: the
+   * run surface takes `provider` and `model` on every `POST /v1/runs`).
+   */
+  hermesProviderName(workspace: string, providerId: string): string | null {
+    const row = this.db.select().from(providers).where(eq(providers.id, providerId)).get();
+    if (!row || row.workspace !== workspace || row.archivedAt) return null;
+    return this.hermesNameOfProvider(row);
+  }
+
+  /**
+   * Refuses a chat default the hub could not tell the runtime about.
+   *
+   * Silence was the defect: a provider with no name in Hermes was made the workspace
+   * default, the hub logged one line nobody reads, wrote nothing, and the run went out on
+   * a *different* provider's configuration. Every chat provider is expressible now
+   * (`catalogue.ts` guards it), so this can only fire for a provider that is not a chat
+   * route at all — and it fires loudly rather than accepting a default that cannot work.
+   */
+  private requireExpressible(scope: WorkspaceScope, providerId: string): void {
+    const row = this.loadProvider(scope, providerId);
+    if (this.hermesNameOfProvider(row)) return;
+    throw validationFailed({
+      field: 'default',
+      reason: 'the agent runtime cannot be told about this provider, so it cannot be the default',
+      provider: row.slug,
+    });
+  }
+
+  private hermesNameOfProvider(row: ProviderRow): string | null {
+    const entry = this.entryOf(row);
+    if (hermesRouteOf(entry) === 'openai-compatible' && row.kind !== 'llm') return null;
+    return hermesProviderNameOf(row.slug, entry);
   }
 
   private requireModel(scope: WorkspaceScope, ref: ModelRefInput): ModelRow {
