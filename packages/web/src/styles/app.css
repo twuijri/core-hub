@@ -718,6 +718,49 @@
   color: var(--mj-color-accent-soft-text);
   font-weight: 500;
 }
+/* An option that explains itself: icon, then label over one line of consequence, then the
+   tick. Wider than a bare list, because the sentence is the point of it. */
+.mj-select-item[data-described='true'] {
+  align-items: start;
+  max-inline-size: 26rem;
+}
+.mj-select-item-icon {
+  display: inline-grid;
+  place-items: center;
+  padding-block-start: 2px;
+  color: var(--mj-color-text-muted);
+}
+.mj-select-item-body {
+  display: flex;
+  min-inline-size: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+.mj-select-item-hint {
+  font-size: var(--mj-font-size-xs);
+  font-weight: 400;
+  color: var(--mj-color-text-muted);
+}
+.mj-select-item-check {
+  padding-block-start: 2px;
+}
+/* A choice that gives something up says so in its colour, in the list and on the trigger. */
+.mj-select-item[data-tone='danger'],
+.mj-select-item[data-tone='danger'] .mj-select-item-icon,
+.mj-select[data-tone='danger'] {
+  color: var(--mj-color-danger-soft-text);
+}
+.mj-select-item[data-tone='warning'],
+.mj-select-item[data-tone='warning'] .mj-select-item-icon,
+.mj-select[data-tone='warning'] {
+  color: var(--mj-color-warning-soft-text);
+}
+/* The trigger's border follows its own colour rather than adding two more tokens. */
+.mj-select[data-tone='danger'],
+.mj-select[data-tone='warning'] {
+  border-color: color-mix(in oklab, currentColor 45%, transparent);
+}
 
 /* The one menu shape (src/ui/Menu.tsx over Radix DropdownMenu). */
 .mj-menu {
@@ -742,6 +785,9 @@
 .mj-menu-item[data-highlighted] {
   background: var(--mj-color-surface-2);
   outline: none;
+}
+.mj-menu-item[data-tone='danger'] {
+  color: var(--mj-color-danger-soft-text);
 }
 .mj-menu-note {
   padding: var(--mj-space-1) var(--mj-space-2);
@@ -971,27 +1017,31 @@
    popup, and a virtualized list under it. Every size is a token; the rows are
    absolutely positioned by the virtualizer, so their height is fixed here and in
    the component (ROW / GROUP_ROW) and must stay in step. */
+/* The same soft pill as `.mj-select`, and the same height: the model and the approval
+   mode sit side by side in the composer, and two shapes there read as two kinds of
+   control (owner, 2026-09-22: «نفس نموذج الابروفل ناعم ونفس الحجم»). */
 .mj-combo-trigger {
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--mj-space-2);
-  min-inline-size: 12rem;
-  max-inline-size: 22rem;
-  padding: var(--mj-space-1) var(--mj-space-3);
-  min-block-size: var(--mj-control-height-lg);
-  border: 1px solid var(--mj-color-border);
-  border-radius: var(--mj-control-item-radius);
-  background: var(--mj-color-surface);
-  color: var(--mj-color-text);
+  gap: var(--mj-space-1);
+  max-inline-size: 14rem;
+  padding-inline: var(--mj-space-2);
+  block-size: 2rem;
+  border: 1px solid transparent;
+  border-radius: var(--mj-radius-full);
+  background: var(--mj-color-surface-2);
+  color: var(--mj-color-text-muted);
+  font-size: var(--mj-font-size-xs);
   text-align: start;
   cursor: pointer;
   transition-duration: var(--mj-motion-fast);
   transition-timing-function: var(--mj-motion-ease);
-  transition-property: background-color, border-color;
+  transition-property: background-color, color, border-color;
 }
 .mj-combo-trigger:hover:not(:disabled) {
-  background: var(--mj-color-surface-2);
+  background: var(--mj-color-surface-3);
+  color: var(--mj-color-text);
 }
 .mj-combo-trigger[data-state='open'] {
   border-color: var(--mj-color-accent);
@@ -1000,13 +1050,18 @@
   opacity: 0.55;
   cursor: not-allowed;
 }
+.mj-combo-trigger .mj-combo-sub {
+  display: none;
+}
 .mj-combo-value {
   display: flex;
   flex-direction: column;
   min-inline-size: 0;
 }
+/* Inside the composer's pill the name is the pill's own size; the provider line below it
+   would make the control two lines tall, so the trigger keeps the name alone. */
 .mj-combo-name {
-  font-size: var(--mj-font-size-sm);
+  font-size: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
