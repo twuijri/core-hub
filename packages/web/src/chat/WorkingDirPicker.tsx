@@ -48,7 +48,6 @@ export function WorkingDirPicker({
       type="button"
       className="chip working-dir-chip"
       disabled={locked}
-      title={locked ? (lockedReason ?? '') : (value ?? t('working_dir.hint'))}
       data-testid="working-dir-button"
     >
       <IconFolder size={14} />
@@ -61,8 +60,14 @@ export function WorkingDirPicker({
 
   return (
     <div className="working-dir" data-testid="working-dir">
-      <Popover open={open} onOpenChange={setOpen} trigger={trigger} testId="working-dir-sheet">
-        <p className="working-dir-root" dir="ltr" title={root ?? ''}>
+      <Popover
+        open={open}
+        onOpenChange={setOpen}
+        trigger={trigger}
+        tooltip={locked ? (lockedReason ?? '') : (value ?? t('working_dir.hint'))}
+        testId="working-dir-sheet"
+      >
+        <p className="working-dir-root" dir="ltr">
           {root ?? t('common.loading')}
         </p>
         {dirs.isError && (

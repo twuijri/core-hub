@@ -13,7 +13,6 @@
     "rooms": "Rooms",
     "tasks": "Tasks",
     "schedules": "Schedules",
-    "history": "History",
     "settings": "Settings",
     "account": "Account",
     "users": "Users",
@@ -47,7 +46,9 @@
     "loading": "Loading…",
     "retry": "Retry",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "more": "More"
   },
   "errors": {
     "not_implemented": "The hub declares {operation} in the contract but does not implement it yet.",
@@ -93,7 +94,6 @@
     "model_default": "Default model",
     "open_menu": "Open menu",
     "close_menu": "Close menu",
-    "history_is_page": "History opens as a page.",
     "segment_later": "{name} arrives with its module in a later phase.",
     "language_chip": "Switch UI language",
     "theme_chip": "Switch theme",
@@ -143,21 +143,20 @@
       "channel": "Channels",
       "cli": "Terminal",
       "api": "API"
-    }
+    },
+    "unarchive": "Unarchive",
+    "none_archived": "Nothing archived.",
+    "scope": {
+      "label": "List scope",
+      "active": "Active",
+      "archived": "Archived",
+      "all": "All"
+    },
+    "confirm_delete_body": "Its messages go with it, and there is no undo."
   },
   "search": {
     "placeholder": "Search titles and messages…",
     "none": "Nothing found."
-  },
-  "history": {
-    "archive": "Archive",
-    "unarchive": "Unarchive",
-    "delete": "Delete",
-    "selected": "{count} selected",
-    "select": "Select {title}",
-    "confirm_delete": "Delete {count} session(s)?",
-    "pinned": "Pinned",
-    "archived": "Archive"
   },
   "new_chat": {
     "pick_agent": "Pick the agent this chat talks to. The list is the hub's registry.",
@@ -182,7 +181,8 @@
     "resumed": "Reconnected; {replayed} missed event(s) replayed.",
     "resynced": "Reconnected; the transcript was reloaded from the hub.",
     "session_deleted": "This session was deleted.",
-    "run_failed": "The run failed: {error} ({code})"
+    "run_failed": "The run failed: {error} ({code})",
+    "empty_title": "What shall we start with?"
   },
   "composer": {
     "label": "Message composer",
@@ -216,7 +216,8 @@
       "always": "Always ask"
     },
     "dictate": "Dictate",
-    "dictate_unavailable": "Dictation arrives with a speech provider (models.transcribe is still 501)."
+    "dictate_unavailable": "Dictation arrives with a speech provider (models.transcribe is still 501).",
+    "add_agent": "Add an agent"
   },
   "approval": {
     "from": "{agent} is waiting for your decision",
@@ -452,5 +453,15 @@
     "new_placeholder": "New folder name",
     "create": "Create",
     "locked": "The folder is fixed once the chat has run."
+  },
+  "combobox": {
+    "search": "Search…",
+    "recent": "Recent",
+    "loading": "Loading the list…",
+    "unfetched": "Fetch the list first.",
+    "none": "No models in this list.",
+    "no_match": "Nothing matches “{query}”.",
+    "error": "The list could not be fetched.",
+    "count": "{count} models"
   }
 }

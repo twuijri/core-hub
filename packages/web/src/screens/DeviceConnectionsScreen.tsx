@@ -11,6 +11,7 @@ import { useRealtime } from '../realtime/context.js';
 import { isEnvelope } from '../realtime/envelope.js';
 import { AppShell } from '../shell/AppShell.js';
 import { SettingsBack } from '../settings/SettingsBack.js';
+import { Segmented } from '../ui/Segmented.js';
 import type { Pairing } from '../types.js';
 import { Notice } from '../ui/Notice.js';
 import { phaseOf } from './PlaceholderScreen.js';
@@ -104,28 +105,16 @@ export function DeviceConnectionsScreen() {
     <AppShell title={title}>
       <SettingsBack />
       <h1 className="sr-only">{title}</h1>
-      <div className="segmented mb-4" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'app'}
-          aria-pressed={tab === 'app'}
-          onClick={() => setTab('app')}
-        >
-          {t('devices.tab.app')}
-        </button>
-        {isAdmin && (
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'devices'}
-            aria-pressed={tab === 'devices'}
-            onClick={() => setTab('devices')}
-          >
-            {t('devices.tab.devices')}
-          </button>
-        )}
-      </div>
+      <Segmented
+        className="mb-4"
+        label={title}
+        value={tab}
+        onChange={(next) => setTab(next as 'app' | 'devices')}
+        options={[
+          { value: 'app', label: t('devices.tab.app') },
+          ...(isAdmin ? [{ value: 'devices', label: t('devices.tab.devices') }] : []),
+        ]}
+      />
       {tab === 'app' ? (
         <section className="flex flex-col items-start gap-3">
           <p className="text-sm text-muted">{t('devices.pair_intro')}</p>

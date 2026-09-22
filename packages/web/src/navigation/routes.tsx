@@ -6,7 +6,6 @@ import { AgentManagerScreen } from '../agents/AgentManagerScreen.js';
 import { ChatScreen } from '../chat/ChatScreen.js';
 import { ModelsScreen } from '../models/ModelsScreen.js';
 import { DeviceConnectionsScreen } from '../screens/DeviceConnectionsScreen.js';
-import { HistoryScreen } from '../screens/HistoryScreen.js';
 import { NewChatScreen } from '../screens/NewChatScreen.js';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen.js';
 import { SearchScreen } from '../screens/SearchScreen.js';
@@ -26,7 +25,6 @@ const SPECIAL: Record<string, () => ReactElement> = {
   device_connections: () => <DeviceConnectionsScreen />,
   agent_manager: () => <AgentManagerScreen />,
   chat: () => <ChatScreen />,
-  history: () => <HistoryScreen />,
   models: () => <ModelsScreen />,
 };
 

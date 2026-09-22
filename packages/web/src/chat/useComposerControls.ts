@@ -12,8 +12,10 @@ import { useMemo } from 'react';
 import { useAgentSettings, useSaveAgentSetting } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { useCatalogue } from '../models/queries.js';
+import { modelOption } from '../models/useModelPicker.js';
 import type { SettingsSection } from '../types.js';
-import type { ComposerOption } from './Composer.js';
+import type { ComboboxOption } from '../ui/Combobox.js';
+import type { SelectOption } from '../ui/Select.js';
 
 /**
  * The approval field, whatever the adapter calls it. The ACP adapters declare
@@ -27,7 +29,7 @@ export interface ApprovalField {
   section: string;
   key: string;
   value: string;
-  options: ComposerOption[];
+  options: SelectOption[];
 }
 
 export function findApprovalMode(
@@ -52,14 +54,18 @@ export function findApprovalMode(
   return null;
 }
 
-export function useComposerModels(): ComposerOption[] {
+/**
+ * The chat models this workspace can run, as the searchable picker shows them: the alias
+ * reads, the id identifies and is searched too, and the provider becomes the group.
+ */
+export function useComposerModels(): ComboboxOption[] {
   const catalogue = useCatalogue();
   return useMemo(
     () =>
       (catalogue.data ?? [])
         .filter((model) => model.visible && !model.disabled && model.kind === 'chat')
         // `key` is `<provider>/<model>`, which is what a session stores.
-        .map((model) => ({ value: model.key, label: model.alias ?? model.model })),
+        .map((model) => modelOption(model, model.key)),
     [catalogue.data],
   );
 }
@@ -67,7 +73,7 @@ export function useComposerModels(): ComposerOption[] {
 export interface ApprovalControl {
   mode: string | null;
   /** The modes the adapter declares; empty when it declares none. */
-  options: ComposerOption[];
+  options: SelectOption[];
   disabledReason: string | null;
   set(value: string): void;
 }

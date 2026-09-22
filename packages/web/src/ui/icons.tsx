@@ -184,3 +184,22 @@ export const IconFolder = (p: IconProps) => (
     <path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.5.7L11.5 7H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
   </Svg>
 );
+export const IconTasks = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m3.5 7 1.8 1.8L8.5 5.5" />
+    <path d="m3.5 16 1.8 1.8 3.2-3.3" />
+    <path d="M11.5 7.5h9M11.5 16.5h9" />
+  </Svg>
+);
+export const IconSchedules = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12.5" r="7.5" />
+    <path d="M12 8.5v4l2.5 1.5M9 2.5h6" />
+  </Svg>
+);
+export const IconUnarchive = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 7h18v3H3zM5 10v9h14v-9" />
+    <path d="M12 17v-5m0 0-2.5 2.5M12 12l2.5 2.5" />
+  </Svg>
+);
