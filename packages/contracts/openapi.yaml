@@ -15792,13 +15792,7 @@ components:
         id:
           type: string
           enum:
-            [
-              runtime_writable,
-              provider_keys,
-              provider_verified,
-              model_selected,
-              gateway_reloaded,
-            ]
+            [runtime_writable, provider_keys, provider_verified, model_selected, gateway_reloaded]
         ok:
           type: boolean
         detail:
