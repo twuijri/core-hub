@@ -22,6 +22,7 @@ const ENTRY_KINDS = new Set([
   'segment',
   'footer',
   'settings-tab',
+  'settings-management',
   'settings-tool',
   'agent',
   'secondary-only',
@@ -70,6 +71,7 @@ const lists = {
   segments: 'segment',
   footer: 'footer',
   settingsTabs: 'settings-tab',
+  settingsManagement: 'settings-management',
   settingsTools: 'settings-tool',
   agentLevel: 'agent',
 };

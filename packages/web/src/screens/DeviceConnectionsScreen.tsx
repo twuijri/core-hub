@@ -10,6 +10,7 @@ import { termKey } from '../navigation/manifest.js';
 import { useRealtime } from '../realtime/context.js';
 import { isEnvelope } from '../realtime/envelope.js';
 import { AppShell } from '../shell/AppShell.js';
+import { SettingsBack } from '../settings/SettingsBack.js';
 import type { Pairing } from '../types.js';
 import { Notice } from '../ui/Notice.js';
 import { phaseOf } from './PlaceholderScreen.js';
@@ -101,6 +102,7 @@ export function DeviceConnectionsScreen() {
 
   return (
     <AppShell title={title}>
+      <SettingsBack />
       <h1 className="sr-only">{title}</h1>
       <div className="segmented mb-4" role="tablist">
         <button

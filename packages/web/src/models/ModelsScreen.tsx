@@ -23,6 +23,7 @@ import { useI18n } from '../i18n/context.js';
 import { navigation, routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import type { Agent, Model, Provider, ProviderHost } from '../types.js';
+import { SettingsBack } from '../settings/SettingsBack.js';
 import { Notice, Spinner } from '../ui/Notice.js';
 import { AddProviderDialog } from './AddProviderDialog.js';
 import { needsLoopbackWarning, suggestedHostUrl } from './loopback.js';
@@ -69,6 +70,7 @@ export function ModelsScreen() {
 
   return (
     <AppShell title={title} wide>
+      <SettingsBack />
       <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">{title}</h1>
         {/* The two header actions NAVIGATION §3 puts on `General`, and only there. */}

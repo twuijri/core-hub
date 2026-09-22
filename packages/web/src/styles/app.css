@@ -281,3 +281,367 @@
 .sortable-dragging {
   opacity: 0.5;
 }
+
+/* ------------------------------------------------------------------ composer
+   One surface, one spacing scale (the `space` tokens), one focus ring (the
+   `:focus-visible` rule in @layer base — nothing here draws its own). Glass is
+   allowed because the composer is floating chrome; `prefers-reduced-transparency`
+   flattens it through the same token scale as the sidebar. */
+.composer {
+  border-radius: var(--mj-radius-xl);
+  padding: var(--mj-space-2) var(--mj-space-3) var(--mj-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--mj-space-1);
+  transition-duration: var(--mj-motion-normal);
+  transition-timing-function: var(--mj-motion-ease);
+  transition-property: border-color, box-shadow, background-color;
+}
+.composer:focus-within {
+  border-color: var(--mj-color-accent);
+}
+.composer[data-state='dragging'] {
+  border-color: var(--mj-color-accent);
+  border-style: dashed;
+  background: var(--mj-color-accent-soft);
+}
+.composer[data-state='disabled'] {
+  opacity: 0.7;
+}
+.composer[data-state='error'] {
+  border-color: var(--mj-color-danger);
+}
+.composer-drop {
+  color: var(--mj-color-accent-soft-text);
+  font-size: var(--mj-font-size-xs);
+  padding-block-end: var(--mj-space-1);
+}
+
+/* The textarea grows by itself: an invisible twin carries the same text, so the
+   row is already the right height when the character lands — no measuring in JS
+   and no jump of the messages above. */
+.composer-grow {
+  display: grid;
+  max-block-size: 12rem;
+  overflow-y: auto;
+}
+.composer-grow::after {
+  content: attr(data-value) ' ';
+  visibility: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.composer-grow > textarea,
+.composer-grow::after {
+  grid-area: 1 / 1;
+  font: inherit;
+  line-height: var(--mj-font-leading-normal);
+  padding: var(--mj-space-2) var(--mj-space-1);
+  border: 0;
+  background: transparent;
+  color: var(--mj-color-text);
+  resize: none;
+  overflow: hidden;
+  min-block-size: 2.5rem;
+}
+.composer-grow > textarea:focus {
+  outline: none; /* the surface shows the focus; one ring, not two */
+}
+.composer-grow > textarea::placeholder {
+  color: var(--mj-color-text-faint);
+}
+
+.composer-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--mj-space-1);
+  flex-wrap: wrap;
+}
+.composer-spacer {
+  margin-inline-start: auto;
+}
+.composer-btn {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: var(--mj-radius-full);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--mj-color-text-muted);
+  transition-duration: var(--mj-motion-fast);
+  transition-timing-function: var(--mj-motion-ease);
+  transition-property: background-color, color, transform;
+}
+.composer-btn:hover:not(:disabled) {
+  background: var(--mj-color-surface-2);
+  color: var(--mj-color-text);
+}
+.composer-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.composer-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.composer-btn-send {
+  background: var(--mj-color-accent);
+  color: var(--mj-color-accent-text);
+}
+.composer-btn-send:hover:not(:disabled) {
+  background: var(--mj-color-accent-strong);
+  color: var(--mj-color-accent-text);
+}
+.composer-btn-send[data-busy='true'] {
+  animation: mj-pulse 1s var(--mj-motion-ease) infinite;
+}
+.composer-btn-stop {
+  background: var(--mj-color-danger);
+  color: var(--mj-color-danger-text);
+}
+@keyframes mj-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-btn-send[data-busy='true'] {
+    animation: none;
+  }
+}
+
+/* The one dropdown shape (src/ui/Select.tsx over Radix Select): a chip that opens a
+   token-painted listbox. Radix owns the behaviour and the RTL arrows; this owns the look. */
+.mj-select {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mj-space-1);
+  padding-inline: var(--mj-space-2);
+  block-size: 2rem;
+  border-radius: var(--mj-radius-full);
+  border: 1px solid transparent;
+  background: var(--mj-color-surface-2);
+  color: var(--mj-color-text-muted);
+  font-size: var(--mj-font-size-xs);
+  max-inline-size: 14rem;
+  transition-duration: var(--mj-motion-fast);
+  transition-timing-function: var(--mj-motion-ease);
+  transition-property: background-color, color;
+}
+.mj-select:hover:not(:disabled) {
+  background: var(--mj-color-surface-3);
+  color: var(--mj-color-text);
+}
+.mj-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.mj-select[data-state='open'] {
+  border-color: var(--mj-color-accent);
+  color: var(--mj-color-text);
+}
+.mj-select-menu {
+  z-index: var(--mj-z-popover);
+  min-inline-size: var(--radix-select-trigger-width);
+  max-block-size: var(--radix-select-content-available-height);
+  overflow-y: auto;
+  padding: var(--mj-space-1);
+  border-radius: var(--mj-radius-md);
+}
+.mj-select-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mj-space-3);
+  padding: var(--mj-space-2);
+  border-radius: var(--mj-radius-sm);
+  font-size: var(--mj-font-size-sm);
+  cursor: pointer;
+}
+.mj-select-item[data-highlighted] {
+  background: var(--mj-color-surface-2);
+  outline: none;
+}
+.mj-select-item[data-state='checked'] {
+  color: var(--mj-color-accent-soft-text);
+  font-weight: 500;
+}
+
+/* The one menu shape (src/ui/Menu.tsx over Radix DropdownMenu). */
+.mj-menu {
+  z-index: var(--mj-z-popover);
+  min-inline-size: 14rem;
+  padding: var(--mj-space-1);
+  border-radius: var(--mj-radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mj-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--mj-space-2);
+  padding: var(--mj-space-2);
+  border-radius: var(--mj-radius-sm);
+  text-align: start;
+  font-size: var(--mj-font-size-sm);
+  cursor: pointer;
+}
+.mj-menu-item[data-highlighted] {
+  background: var(--mj-color-surface-2);
+  outline: none;
+}
+.mj-menu-note {
+  padding: var(--mj-space-1) var(--mj-space-2);
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-faint);
+}
+
+/* The one anchored sheet (src/ui/Popover.tsx over Radix Popover). */
+.mj-popover {
+  z-index: var(--mj-z-popover);
+  min-inline-size: 20rem;
+  max-inline-size: min(28rem, 90vw);
+  padding: var(--mj-space-3);
+  border-radius: var(--mj-radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--mj-space-2);
+}
+
+.composer-reason {
+  padding: var(--mj-space-1) var(--mj-space-3) 0;
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-muted);
+}
+
+.composer-starters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--mj-space-2);
+  padding: var(--mj-space-3) var(--mj-space-1) 0;
+}
+.starter {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  padding: var(--mj-space-2) var(--mj-space-3);
+  border-radius: var(--mj-radius-md);
+  border: 1px solid var(--mj-color-border);
+  background: var(--mj-color-surface);
+  color: var(--mj-color-text-muted);
+  font-size: var(--mj-font-size-sm);
+  text-align: start;
+  transition-duration: var(--mj-motion-fast);
+  transition-timing-function: var(--mj-motion-ease);
+  transition-property: background-color, color, border-color;
+}
+.starter:hover {
+  background: var(--mj-color-surface-2);
+  color: var(--mj-color-text);
+  border-color: var(--mj-color-border-strong);
+}
+
+/* ------------------------------------------------------------- agent chips */
+.chip-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mj-space-2);
+  max-inline-size: 12rem;
+  padding: 0.3rem var(--mj-space-3) 0.3rem 0.3rem;
+  border-radius: var(--mj-radius-full);
+  border: 1px solid var(--mj-color-border);
+  background: var(--mj-color-surface);
+  color: var(--mj-color-text-muted);
+  font-size: var(--mj-font-size-sm);
+  cursor: grab;
+  transition-duration: var(--mj-motion-fast);
+  transition-timing-function: var(--mj-motion-ease);
+  transition-property: background-color, color, border-color;
+}
+.chip-agent:hover:not(:disabled) {
+  background: var(--mj-color-surface-2);
+  color: var(--mj-color-text);
+}
+.chip-agent[aria-pressed='true'] {
+  border-color: var(--mj-color-accent);
+  background: var(--mj-color-accent-soft);
+  color: var(--mj-color-accent-soft-text);
+  font-weight: 500;
+}
+.chip-agent:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.chip-agent-mark {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  border-radius: var(--mj-radius-full);
+  background: var(--mj-color-surface-2);
+  color: var(--mj-color-text);
+  font-size: var(--mj-font-size-xs);
+}
+.chip-agent[aria-pressed='true'] .chip-agent-mark {
+  background: var(--mj-color-accent);
+  color: var(--mj-color-accent-text);
+}
+
+/* -------------------------------------------------- the session's folder */
+.working-dir {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mj-space-2);
+  min-inline-size: 0;
+}
+.working-dir-chip {
+  max-inline-size: 18rem;
+  cursor: pointer;
+}
+.working-dir-chip:hover:not(:disabled) {
+  background: var(--mj-color-surface-3);
+  color: var(--mj-color-text);
+}
+.working-dir-root {
+  font-family: var(--mj-font-mono);
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-faint);
+  overflow-wrap: anywhere;
+}
+.working-dir-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-block-size: 14rem;
+  overflow-y: auto;
+}
+.working-dir-list button {
+  inline-size: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--mj-space-2);
+  padding: var(--mj-space-2);
+  border-radius: var(--mj-radius-sm);
+  text-align: start;
+  font-size: var(--mj-font-size-sm);
+}
+.working-dir-list button:hover {
+  background: var(--mj-color-surface-2);
+}
+.working-dir-list button[aria-pressed='true'] {
+  background: var(--mj-color-accent-soft);
+  color: var(--mj-color-accent-soft-text);
+}
+.working-dir-note {
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-faint);
+}
+.working-dir-new {
+  display: flex;
+  gap: var(--mj-space-2);
+  border-block-start: 1px solid var(--mj-color-border);
+  padding-block-start: var(--mj-space-2);
+}

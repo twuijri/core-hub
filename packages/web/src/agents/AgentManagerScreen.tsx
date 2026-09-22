@@ -8,6 +8,7 @@ import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import { agentMenu, routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
+import { SettingsBack } from '../settings/SettingsBack.js';
 import type { Agent, Job } from '../types.js';
 import { Notice, Spinner } from '../ui/Notice.js';
 import { useJobs } from './useJobs.js';
@@ -36,6 +37,7 @@ export function AgentManagerScreen() {
   const title = t(termKey('agent_manager'));
   return (
     <AppShell title={title} wide>
+      <SettingsBack />
       <h1 className="sr-only">{title}</h1>
       {agents.isPending && <Spinner label={t('common.loading')} />}
       {agents.isError && <Notice tone="danger">{describeError(agents.error, t)}</Notice>}

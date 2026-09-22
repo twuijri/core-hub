@@ -187,47 +187,47 @@
       "id": "device_connections",
       "title": "device_connections",
       "module": "devices",
-      "level": "app",
+      "level": "settings",
       "entry": {
-        "kind": "rail"
+        "kind": "settings-management"
       },
       "roles": ["member"],
       "tabs": ["app", "devices"],
-      "note": "Tab devices is admin-only."
+      "note": "Tab devices is admin-only. A Settings page since 2026-09-22: configured once, so not in the sidebar."
     },
     {
       "id": "agent_manager",
       "title": "agent_manager",
       "module": "agents",
-      "level": "app",
+      "level": "settings",
       "entry": {
-        "kind": "rail"
+        "kind": "settings-management"
       },
       "roles": ["admin"],
-      "note": "The registry from the server; each agent card enters the agent level."
+      "note": "The registry from the server; each agent card enters the agent level. A Settings page since 2026-09-22."
     },
     {
       "id": "models",
       "title": "models",
       "module": "models",
-      "level": "app",
+      "level": "settings",
       "entry": {
-        "kind": "rail"
+        "kind": "settings-management"
       },
       "roles": ["member"],
       "tabs": ["general", "auxiliary", "ensembles", "stt_providers", "tts_providers"],
-      "note": "Providers, keys and voice providers live here, never in Settings."
+      "note": "Providers, keys and voice providers live here, never in a Settings tab. Its own Settings page since 2026-09-22."
     },
     {
       "id": "knowledge",
       "title": "knowledge",
       "module": "knowledge",
-      "level": "app",
+      "level": "settings",
       "entry": {
-        "kind": "rail"
+        "kind": "settings-management"
       },
       "roles": ["member"],
-      "note": "Journal, notes/memory browser, files, search (Phase 4)."
+      "note": "Journal, notes/memory browser, files, search (Phase 4). A Settings page since 2026-09-22."
     },
     {
       "id": "chat",
@@ -546,7 +546,7 @@
       "note": "No menu entry; reached from search results and the pending-actions bar."
     }
   ],
-  "rail": ["new_chat", "search", "device_connections", "agent_manager", "models", "knowledge"],
+  "rail": ["new_chat", "search"],
   "segments": ["chat", "rooms", "tasks", "schedules", "history"],
   "footer": ["settings"],
   "settingsTabs": [
@@ -559,6 +559,7 @@
     "this_device",
     "about"
   ],
+  "settingsManagement": ["agent_manager", "models", "device_connections", "knowledge"],
   "settingsTools": ["logs", "usage", "performance", "theme", "workspaces", "updates", "plugins"],
   "agentLevel": [
     "agent_skills",
@@ -600,10 +601,10 @@
     "web": {
       "new_chat": "/new",
       "search": "/search",
-      "device_connections": "/devices",
-      "agent_manager": "/agents",
-      "models": "/models",
-      "knowledge": "/knowledge",
+      "device_connections": "/settings/devices",
+      "agent_manager": "/settings/agents",
+      "models": "/settings/models",
+      "knowledge": "/settings/knowledge",
       "chat": "/chat/:sessionId?",
       "rooms": "/rooms",
       "tasks": "/tasks",
@@ -624,13 +625,13 @@
       "workspaces": "/settings/workspaces",
       "updates": "/settings/updates",
       "plugins": "/settings/plugins",
-      "agent_skills": "/agents/:agentId/skills",
-      "agent_mcp": "/agents/:agentId/mcp",
-      "agent_memory": "/agents/:agentId/memory",
-      "agent_jobs": "/agents/:agentId/jobs",
-      "agent_channels": "/agents/:agentId/channels",
-      "agent_plugins": "/agents/:agentId/plugins",
-      "agent_settings": "/agents/:agentId/settings",
+      "agent_skills": "/settings/agents/:agentId/skills",
+      "agent_mcp": "/settings/agents/:agentId/mcp",
+      "agent_memory": "/settings/agents/:agentId/memory",
+      "agent_jobs": "/settings/agents/:agentId/jobs",
+      "agent_channels": "/settings/agents/:agentId/channels",
+      "agent_plugins": "/settings/agents/:agentId/plugins",
+      "agent_settings": "/settings/agents/:agentId/settings",
       "global_agent": "/global-agent"
     }
   }

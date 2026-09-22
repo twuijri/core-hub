@@ -1874,6 +1874,33 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /sessions/working-dirs:
+    get:
+      operationId: sessions.listWorkingDirs
+      tags: [sessions]
+      summary: The folders a new session may work in
+      description: |
+        Where the hub keeps this workspace's work on disk, and the folders that already
+        exist directly under it. A client offers these for `SessionCreate.working_dir`
+        and may also send a new name; the hub creates it inside `root`. A `working_dir`
+        that resolves outside `root` is refused with `400 validation_failed` — the hub
+        never follows a symlink out of the root either.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The workspace root and its immediate folders, newest activity first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkingDirs'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /sessions/{session_id}:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -12481,6 +12508,35 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/Approval'
+    WorkingDir:
+      type: object
+      required: [name, path]
+      properties:
+        name:
+          type: string
+          description: The folder's own name, relative to `root`.
+        path:
+          type: string
+          description: Absolute path on the hub; what `SessionCreate.working_dir` carries.
+    WorkingDirs:
+      type: object
+      required: [root, items]
+      properties:
+        root:
+          type: string
+          description: |
+            The only directory a session may work in, or under. The hub creates it on demand.
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkingDir'
+      example:
+        root: /var/lib/majlis/workspaces/work
+        items:
+          - name: majlis
+            path: /var/lib/majlis/workspaces/work/majlis
+          - name: 01J8QK3ZR2W7M5N4P6T8V9X0YA
+            path: /var/lib/majlis/workspaces/work/01J8QK3ZR2W7M5N4P6T8V9X0YA
     SessionCreate:
       type: object
       required: [agent_id]

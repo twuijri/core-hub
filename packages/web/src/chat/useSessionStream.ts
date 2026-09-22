@@ -19,6 +19,9 @@ export interface StreamInfo {
   reload(): void;
 }
 
+/** How long opening a chat waits for its subscription before showing what it has. */
+export const SUBSCRIBE_GRACE_MS = 5000;
+
 export function useSessionStream(sessionId: string | undefined): StreamInfo {
   const { client, profile } = useAuth();
   const realtime = useRealtime();
@@ -79,6 +82,14 @@ export function useSessionStream(sessionId: string | undefined): StreamInfo {
 
     // The first successful subscribe is the fresh one; every later `connect` is a resume.
     let subscribedOnce = false;
+    // `status: 'ready'` must mean *subscribed*, not merely fetched: the hub replays the
+    // journal only on a resume (`after_seq > 0`), so a run started before the first
+    // subscription would lose its opening events for good. Anything that sends on open
+    // (the first message of a new chat) waits for this.
+    let markSubscribed: () => void = () => {};
+    const firstSubscription = new Promise<void>((resolve) => {
+      markSubscribed = resolve;
+    });
     const subscribe = async () => {
       const initial = !subscribedOnce;
       const afterSeq = initial ? 0 : stateRef.current.lastSeq;
@@ -86,6 +97,7 @@ export function useSessionStream(sessionId: string | undefined): StreamInfo {
       if (disposed) return;
       if (!ack.ok) throw new Error(`${ack.code ?? 'subscribe_failed'}: ${ack.error ?? ''}`);
       subscribedOnce = true;
+      markSubscribed();
       if (!initial) {
         setLastResume({ replayed: ack.replayed ?? 0, truncated: ack.truncated === true });
         if (ack.truncated && afterSeq > 0) await resync();
@@ -104,7 +116,15 @@ export function useSessionStream(sessionId: string | undefined): StreamInfo {
     (async () => {
       try {
         if (socket.connected) await subscribe();
-        else socket.connect();
+        else {
+          socket.connect();
+          // Capped: a hub we cannot reach must still show the transcript, with the
+          // connection dot telling the truth; the next `connect` resumes from `lastSeq`.
+          await Promise.race([
+            firstSubscription,
+            new Promise<void>((resolve) => setTimeout(resolve, SUBSCRIBE_GRACE_MS)),
+          ]);
+        }
         const { detail, messages } = await fetchBase();
         if (disposed) return;
         setState((current) => {
