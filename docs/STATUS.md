@@ -4,7 +4,7 @@ Measured on this branch by asking a booted hub which contract operations are
 still the built-in 501 stub. Regenerate it the same way after a phase:
 every operation that answers `501 not_implemented` is not built yet.
 
-**158 of 251 contract operations are implemented.** Nothing fakes a success:
+**169 of 251 contract operations are implemented.** Nothing fakes a success:
 an unbuilt operation answers `501` with its operation id. Measured on this
 branch, 2026-09-22, by asking a booted hub which operations are still the
 built-in stub — and `packages/server/tests/unit/status.test.ts` keeps this
@@ -26,12 +26,12 @@ number from claiming more than the hub answers.
 | schedules | 20 | 23 | schedules with a real `next_run_at` (cron, interval, once, in the schedule's own timezone), run history, workflow definitions with validation, workflow-run history and cancel, and workflow import preview/confirm. The three that would **start** something — `runNow`, `runWorkflow`, `rerunWorkflowFromNode` — answer `501` with their operation ids |
 | rooms | 0 | 28 | several agents in one room |
 | devices | 0 | 17 | device registry and push |
-| notify | 0 | 11 | notifications and webhooks |
+| notify | 11 | 11 | the inbox (nothing invents a notice — it is what other modules wrote), per-kind preferences, and webhooks whose URL is checked against private addresses before anything is sent, with an HMAC signature and a delivery record |
 
 **Phase 4 of the roadmap is complete**: `knowledge`, `plugins`, the `updates`
 channel and the `audit` dashboards all answer. Of Phase 1, `tasks` is complete
-as a board and `schedules` as definitions and history; `rooms` and `notify` are
-still 501, as is the Hermes-gateway half of `agents`. Phase 3 (phones and desktop) is last, by the
+as a board, `schedules` as definitions and history, and `notify` entirely;
+`rooms` is still 501, as is the Hermes-gateway half of `agents`. Phase 3 (phones and desktop) is last, by the
 owner's decision on 2026-09-22.
 
 **What answers is not always what works end to end.** Two places say so
