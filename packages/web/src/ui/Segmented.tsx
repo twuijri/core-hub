@@ -96,6 +96,8 @@ interface TrackContext {
   hidden: ReadonlySet<string> | null;
   tabStop: string | null;
   density: SegmentedDensity;
+  /** Every option is its symbol alone — see `icons` on the track. */
+  icons: boolean;
 }
 
 const Track = createContext<TrackContext | null>(null);
@@ -112,6 +114,13 @@ export interface SegmentedTrackProps {
   wrap?: boolean;
   /** Keep the track one line: give up labels, then move the rest into a "More" menu. */
   overflow?: boolean;
+  /**
+   * Draw every option as its symbol alone, chosen one included. Only for a set whose
+   * symbols are universally read without a word — the three theme choices are the one
+   * such set we have. Each option still carries its name in `aria-label` and in our
+   * tooltip, so neither the keyboard nor a screen reader loses it.
+   */
+  icons?: boolean;
   /**
    * A trailing action after the options — adding one, not choosing one. It sits apart,
    * keeps its own tab stop, and is never part of the radio group.
@@ -135,6 +144,7 @@ export function SegmentedTrack({
   stretch = false,
   wrap = false,
   overflow = false,
+  icons = false,
   action,
   className = '',
   testId,
@@ -249,7 +259,15 @@ export function SegmentedTrack({
     items[next]?.focus();
   };
 
-  const context: TrackContext = { value, choose: onChange, register, hidden, tabStop, density };
+  const context: TrackContext = {
+    value,
+    choose: onChange,
+    register,
+    hidden,
+    tabStop,
+    density,
+    icons,
+  };
 
   return (
     <div
@@ -261,6 +279,7 @@ export function SegmentedTrack({
       data-stretch={stretch ? 'true' : undefined}
       data-wrap={wrap ? 'true' : undefined}
       data-density={density}
+      data-icons={icons ? 'true' : undefined}
       data-overflowing={hidden ? 'true' : undefined}
       data-testid={testId}
       ref={trackRef}
@@ -372,7 +391,7 @@ export const SegmentedItem = forwardRef<HTMLButtonElement, SegmentedItemProps>(
     if (track.hidden?.has(value)) return null;
     // Compact: only the chosen option still reads as a word. The others keep their name
     // in `aria-label` and in the tooltip, so nobody has to guess what an icon means.
-    const iconOnly = track.density === 'compact' && !selected;
+    const iconOnly = track.icons || (track.density === 'compact' && !selected);
     const name = title ?? (typeof label === 'string' ? label : undefined);
     const { className: extraClass, ...extra } = (itemProps ?? {}) as {
       className?: string;

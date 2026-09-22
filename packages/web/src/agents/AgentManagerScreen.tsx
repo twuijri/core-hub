@@ -14,10 +14,11 @@ import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import { agentMenu, routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
-import { SettingsBack } from '../settings/SettingsBack.js';
+import { SettingsLayout } from '../settings/SettingsLayout.js';
 import type { Agent, Job } from '../types.js';
 import {
   Avatar,
+  agentMark,
   Badge,
   Button,
   Card,
@@ -57,26 +58,27 @@ export function AgentManagerScreen() {
   const title = t(termKey('agent_manager'));
   return (
     <AppShell title={title} wide>
-      <SettingsBack />
       <h1 className="sr-only">{title}</h1>
-      {agents.isPending && (
-        <SkeletonGroup label={t('common.loading')}>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} height="11rem" radius="md" />
-            ))}
-          </div>
-        </SkeletonGroup>
-      )}
-      {agents.isError && <Notice tone="danger">{describeError(agents.error, t)}</Notice>}
-      {agents.data && agents.data.length === 0 && (
-        <EmptyState icon={<IconAgents size={20} />} title={t('agents.empty')} />
-      )}
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {agents.data?.map((agent) => (
-          <AgentCard key={agent.id} agent={agent} jobs={jobs} />
-        ))}
-      </div>
+      <SettingsLayout current="agent_manager">
+        {agents.isPending && (
+          <SkeletonGroup label={t('common.loading')}>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {[0, 1, 2].map((i) => (
+                <Skeleton key={i} height="11rem" radius="md" />
+              ))}
+            </div>
+          </SkeletonGroup>
+        )}
+        {agents.isError && <Notice tone="danger">{describeError(agents.error, t)}</Notice>}
+        {agents.data && agents.data.length === 0 && (
+          <EmptyState icon={<IconAgents size={20} />} title={t('agents.empty')} />
+        )}
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {agents.data?.map((agent) => (
+            <AgentCard key={agent.id} agent={agent} jobs={jobs} />
+          ))}
+        </div>
+      </SettingsLayout>
     </AppShell>
   );
 }
@@ -121,7 +123,7 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
       <CardHeader
         title={agent.name}
         subtitle={`${agent.vendor ?? '—'} · ${agent.kind}${agent.install.version ? ` · ${agent.install.version}` : ''}`}
-        media={<Avatar name={agent.name} size="md" />}
+        media={<Avatar name={agent.name} size="md" mark={agentMark(agent.slug, 18)} />}
         actions={
           <Badge tone={STATUS_TONE[agent.status] ?? 'neutral'} dot={running}>
             {t(`agents.status.${agent.status}`)}

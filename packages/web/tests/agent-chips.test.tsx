@@ -23,6 +23,7 @@ import { ThemeProvider } from '../src/design/theme.js';
 import { I18nProvider } from '../src/i18n/context.js';
 import { RealtimeProvider } from '../src/realtime/context.js';
 import type { Agent } from '../src/types.js';
+import { agentMark } from '../src/ui/brand/marks.js';
 
 function memoryStorage(): Storage {
   const map = new Map<string, string>();
@@ -171,6 +172,20 @@ const chipNames = () =>
   screen.getAllByTestId('agent-chip').map((el) => el.getAttribute('data-agent-id'));
 
 afterEach(cleanup);
+
+describe("the agents' marks", () => {
+  // Every agent the catalog ships (packages/server/src/modules/agents/catalog) wears its
+  // own mark. Adding an entry there without adding one here fails this test rather than
+  // shipping a chip that says a letter — which is what the owner asked us to leave behind.
+  it('ships a mark for every agent in the catalog', () => {
+    for (const slug of ['hermes', 'direct', 'claude-code', 'codex', 'gemini-cli', 'opencode'])
+      expect(agentMark(slug), slug).not.toBeNull();
+  });
+
+  it('falls back to null for an agent we do not ship, so the chip keeps its initial', () => {
+    expect(agentMark('some-private-agent')).toBeNull();
+  });
+});
 
 describe('agent chips', () => {
   it('a fresh hub shows one chip; installing another adds one', async () => {

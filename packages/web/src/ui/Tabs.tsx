@@ -5,8 +5,6 @@
  * of *sections* that changes what the page shows, and it carries the tab semantics
  * (`role="tablist"`, arrow keys, `aria-controls`) that a segmented control must not claim.
  *
- * `TabsNav` is the same paint for tabs whose panels are separate routes: a `<nav>` of
- * links, because a link that pretends to be a tab breaks the back button.
  */
 import { Tabs as RadixTabs } from 'radix-ui';
 import type { ReactNode } from 'react';
@@ -57,22 +55,5 @@ export function TabPanel({ value, children }: { value: string; children: ReactNo
     <RadixTabs.Content className="mj-tab-panel" value={value}>
       {children}
     </RadixTabs.Content>
-  );
-}
-
-/** The tab strip for routed sections: real links, so each one has its own URL. */
-export function TabsNav({
-  label,
-  children,
-  testId,
-}: {
-  label: string;
-  children: ReactNode;
-  testId?: string;
-}) {
-  return (
-    <nav className="mj-tabs" aria-label={label} data-testid={testId}>
-      {children}
-    </nav>
   );
 }

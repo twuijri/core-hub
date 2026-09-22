@@ -6,6 +6,7 @@ import {
   GLASS_CHOICES,
   TEXT_SCALES,
   THEME_CHOICES,
+  themeIcon,
   useTheme,
   type DisplayPrefs,
 } from '../design/theme.js';
@@ -46,6 +47,7 @@ export function DisplayTab({ only }: { only?: Array<keyof DisplayPrefs> }) {
             options={THEME_CHOICES.map((choice) => ({
               value: choice,
               label: t(`display.theme.${choice}`),
+              icon: themeIcon(choice),
               itemProps: { 'data-testid': `theme-${choice}` },
             }))}
           />

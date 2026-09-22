@@ -5,7 +5,7 @@ import { Link, useParams } from 'react-router';
 import { useI18n } from '../i18n/context.js';
 import { destinationsById, navigation, routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
-import { SettingsBack } from '../settings/SettingsBack.js';
+import { SettingsLayout } from '../settings/SettingsLayout.js';
 import { Badge, Breadcrumb, EmptyState, type Crumb } from '../ui/index.js';
 import { IconSpark } from '../ui/icons.js';
 
@@ -51,10 +51,11 @@ export function PlaceholderScreen({ id }: { id: string }) {
       : []),
     { label: title },
   ];
-  return (
-    <AppShell title={title}>
-      {underSettings && <SettingsBack />}
-      <Breadcrumb label={t('ui.breadcrumb')} items={trail} />
+  const body = (
+    <>
+      {/* Under Settings the side list already says where this page sits; a crumb would
+          say it twice. Outside Settings (an agent page) the crumb is the only trail. */}
+      {!underSettings && <Breadcrumb label={t('ui.breadcrumb')} items={trail} />}
       <h1 className="mt-2 text-xl font-semibold">{title}</h1>
       {agentId && (
         <p className="mt-1 text-xs text-muted">{t('placeholder.agent', { id: agentId })}</p>
@@ -67,6 +68,11 @@ export function PlaceholderScreen({ id }: { id: string }) {
           {...(destination?.note ? { action: <Badge tone="info">{destination.note}</Badge> } : {})}
         />
       </div>
+    </>
+  );
+  return (
+    <AppShell title={title} wide={underSettings}>
+      {underSettings ? <SettingsLayout current={id}>{body}</SettingsLayout> : body}
     </AppShell>
   );
 }
