@@ -1198,7 +1198,9 @@ describe('models: one key, every agent (ADR 0010)', () => {
       // Nothing was invented for a provider that takes no key: the variable is named in
       // the block so a key added later needs no second screen, and the file holds none.
       expect(config).toContain('key_env: MAJLIS_PROVIDER_LMSTUDIO_API_KEY');
-      expect([...parseEnv(readFileSync(path.join(home, '.env'), 'utf8')).keys()]).toEqual([]);
+      // And no `.env` at all: a file holding only the marker is a file that says nothing,
+      // and the next merge would append a second marker above the first variable.
+      expect(() => readFileSync(path.join(home, '.env'), 'utf8')).toThrow();
     } finally {
       await hub.close();
     }
