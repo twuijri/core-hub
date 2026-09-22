@@ -468,3 +468,82 @@
 .session-row[data-selected='true'] {
   background: var(--mj-color-surface-2);
 }
+
+/* ------------------------------------------------ the messages held back */
+.msg-queue {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mj-space-1);
+  margin-block-end: var(--mj-space-2);
+  padding: var(--mj-space-2);
+  border: 1px solid var(--mj-color-border);
+  border-radius: var(--mj-radius-md);
+  background: var(--mj-color-surface-2);
+}
+.msg-queue-head {
+  display: flex;
+  align-items: center;
+  gap: var(--mj-space-2);
+}
+.msg-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mj-space-1);
+}
+.msg-queue-item {
+  display: flex;
+  align-items: center;
+  gap: var(--mj-space-1);
+  padding-inline: var(--mj-space-2);
+  padding-block: var(--mj-space-1);
+  border-radius: var(--mj-radius-sm);
+  background: var(--mj-color-surface);
+  font-size: var(--mj-font-size-xs);
+}
+.msg-queue-index {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  border-radius: var(--mj-radius-sm);
+  background: var(--mj-color-surface-3);
+  color: var(--mj-color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.msg-queue-text {
+  min-inline-size: 0;
+  flex: 1;
+}
+
+/* ------------------------------------------------ how full the window is */
+.context-ring {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: var(--mj-radius-full);
+  color: var(--mj-color-text-muted);
+}
+.context-ring:hover,
+.context-ring:focus-visible {
+  background: var(--mj-color-surface-2);
+  color: var(--mj-color-text);
+}
+.context-ring-track {
+  stroke: var(--mj-color-border);
+}
+.context-ring-fill {
+  stroke: var(--mj-color-accent);
+  transition: stroke-dasharray var(--mj-motion-slow) var(--mj-motion-ease);
+}
+.context-ring[data-tone='warning'] .context-ring-fill {
+  stroke: var(--mj-color-warning-soft-text);
+}
+.context-ring[data-tone='danger'] .context-ring-fill {
+  stroke: var(--mj-color-danger-soft-text);
+}
+@media (prefers-reduced-motion: reduce) {
+  .context-ring-fill {
+    transition: none;
+  }
+}
