@@ -237,6 +237,9 @@ test.describe('the rebuilt screens', () => {
     await shot(page, 'design-agents-ar-dark');
     await page.getByTestId('settings-back').click();
     await page.getByRole('link', { name: 'النماذج' }).click();
+    // Wait for the screen itself, not for the click: the navigation is client-side and a
+    // screenshot taken on the click would photograph the page it came from.
+    await expect(page.getByTestId('open-add-provider')).toBeVisible();
     await shot(page, 'design-models-ar-dark');
 
     // The sidebar, on its own, in dark: the rail, the segment row and the session list.
