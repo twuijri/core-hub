@@ -44,6 +44,9 @@ derived from Hermes Studio / Ekko Studio code (BSL 1.1). See
   entry label equals its title (`docs/clients/NAVIGATION.md`).
 - One task = one branch from `main` + one change record in `docs/changes/` +
   green checks + a PR. Only the owner merges to `main`. No auto-merge by agents.
+- Observe before you invent (ADR 0012): run the product being learned from,
+  read its screens and traffic, write a specification in our words — then
+  implement from the specification, not from anyone's source.
 - Clients are built from scratch on the contract (ADR 0007); the owner's
   earlier apps are behaviour references only, never code or constraints.
 - Never commit secrets, hostnames of the owner's servers, or third-party code.
