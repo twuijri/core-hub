@@ -1,7 +1,7 @@
 import { HubApiError } from '@majlis/contracts';
-import { useEffect, useRef } from 'react';
-import { Link, useParams } from 'react-router';
-import { usePreferences } from '../hub/queries.js';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router';
+import { usePatchSession, usePreferences } from '../hub/queries.js';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
@@ -10,11 +10,15 @@ import { AppShell } from '../shell/AppShell.js';
 import { sessionTitle } from '../sessions/SessionList.js';
 import type { ContentBlock } from '../types.js';
 import { Notice, Spinner } from '../ui/Notice.js';
+import { AgentChips } from './AgentChips.js';
 import { ApprovalCard } from './ApprovalCard.js';
 import { Composer } from './Composer.js';
+import { takeFirstMessage } from './firstMessage.js';
 import { MessageView } from './MessageView.js';
 import { activeRun, isBusy } from './transcript.js';
+import { useApprovalMode, useComposerModels } from './useComposerControls.js';
 import { useSessionStream } from './useSessionStream.js';
+import { WorkingDirPicker } from './WorkingDirPicker.js';
 
 export function ChatScreen() {
   const { t } = useI18n();
@@ -38,8 +42,10 @@ export function ChatScreen() {
 function OpenSession({ sessionId }: { sessionId: string }) {
   const { t } = useI18n();
   const { client } = useAuth();
+  const navigate = useNavigate();
   const stream = useSessionStream(sessionId);
   const preferences = usePreferences();
+  const patch = usePatchSession(sessionId);
   const bottom = useRef<HTMLDivElement>(null);
   const { state } = stream;
   const busy = isBusy(state);
@@ -49,12 +55,33 @@ function OpenSession({ sessionId }: { sessionId: string }) {
     bottom.current?.scrollIntoView({ block: 'end' });
   }, [messageCount, lastText, Object.keys(state.approvals).length]);
 
-  const send = async (blocks: ContentBlock[]) => {
-    await client.request('post', '/sessions/{session_id}/runs', {
-      params: { session_id: sessionId },
-      body: { content: blocks, when: preferences.data?.busy_input_mode ?? 'queue' },
-    });
-  };
+  const agentId = state.session?.agent_id ?? null;
+  const models = useComposerModels();
+  const approval = useApprovalMode(agentId);
+
+  const send = useCallback(
+    async (blocks: ContentBlock[]) => {
+      await client.request('post', '/sessions/{session_id}/runs', {
+        params: { session_id: sessionId },
+        body: { content: blocks, when: preferences.data?.busy_input_mode ?? 'queue' },
+      });
+    },
+    [client, sessionId, preferences.data?.busy_input_mode],
+  );
+
+  /**
+   * The message typed on the new-chat screen (`firstMessage.ts`). It is sent once, and only
+   * after the stream is ready: the run must not start before this screen is subscribed.
+   */
+  const [firstError, setFirstError] = useState<unknown>(null);
+  const sentFirst = useRef(false);
+  useEffect(() => {
+    if (sentFirst.current || stream.status !== 'ready') return;
+    const blocks = takeFirstMessage(sessionId);
+    if (!blocks) return;
+    sentFirst.current = true;
+    send(blocks).catch(setFirstError);
+  }, [sessionId, stream.status, send]);
   const cancel = async () => {
     const run = activeRun(state);
     if (!run) return;
@@ -71,9 +98,30 @@ function OpenSession({ sessionId }: { sessionId: string }) {
   const title = state.session ? sessionTitle(state.session, t) : t(termKey('chat'));
   const showReasoning = preferences.data?.show_reasoning ?? true;
   const failedRun = Object.values(state.runs).find((r) => r.status === 'failed' && r.error);
+  // The folder moves freely until the first run; after that the transcript would no longer
+  // describe where the work happened, and the hub refuses (`409 state_invalid`).
+  const hasRun = messageCount > 0 || Object.keys(state.runs).length > 0;
+  const disabledReason =
+    stream.status === 'loading'
+      ? t('common.loading')
+      : stream.status === 'error'
+        ? describeError(stream.error, t)
+        : state.deleted
+          ? t('chat.session_deleted')
+          : null;
   return (
     <AppShell title={title}>
       <div className="flex flex-1 flex-col" data-testid="chat-screen" data-session-id={sessionId}>
+        <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="chat-header">
+          <WorkingDirPicker
+            value={state.session?.working_dir ?? null}
+            onChange={(next) => patch.mutate({ working_dir: next })}
+            lockedReason={hasRun ? t('working_dir.locked') : null}
+          />
+          {patch.isError && (
+            <span className="text-xs text-danger-soft-text">{describeError(patch.error, t)}</span>
+          )}
+        </div>
         {stream.status === 'loading' && <Spinner label={t('common.loading')} />}
         {stream.status === 'error' && (
           <Notice tone="danger">
@@ -95,6 +143,7 @@ function OpenSession({ sessionId }: { sessionId: string }) {
           </Notice>
         )}
         {state.deleted && <Notice tone="warning">{t('chat.session_deleted')}</Notice>}
+        {firstError !== null && <Notice tone="danger">{describeError(firstError, t)}</Notice>}
         {stream.status === 'ready' && state.messages.length === 0 && (
           <Notice>{t('chat.empty')}</Notice>
         )}
@@ -122,9 +171,27 @@ function OpenSession({ sessionId }: { sessionId: string }) {
         </div>
         <Composer
           busy={busy}
-          disabled={stream.status !== 'ready' || state.deleted}
+          disabled={disabledReason !== null}
+          disabledReason={disabledReason}
           onSend={send}
           onCancel={cancel}
+          chips={
+            <AgentChips
+              selectedId={agentId}
+              mode="current"
+              // The chips decide the agent of a *new* chat; the open one keeps its own.
+              onSelect={(agent) => {
+                if (agent.id !== agentId) navigate(`${routeOf('new_chat')}?agent=${agent.id}`);
+              }}
+            />
+          }
+          model={state.session?.model ?? null}
+          models={models}
+          onModel={(value) => patch.mutate({ model: value })}
+          approvalMode={approval.mode}
+          approvalOptions={approval.options}
+          onApprovalMode={approval.set}
+          approvalDisabledReason={approval.disabledReason}
         />
       </div>
     </AppShell>

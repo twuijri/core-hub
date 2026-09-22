@@ -162,7 +162,9 @@
   "new_chat": {
     "pick_agent": "Pick the agent this chat talks to. The list is the hub's registry.",
     "no_agents": "No agent is enabled on this hub. Install or enable one in Agent Manager.",
-    "none_ready": "No agent is ready. Hermes ships with the hub; if it reads \"not installed\", check that it is running, or install one from the catalog in"
+    "none_ready": "No agent is ready. Hermes ships with the hub; if it reads \"not installed\", check that it is running, or install one from the catalog in",
+    "greeting": "What shall we start with?",
+    "lede": "Pick an agent from the chips, choose a working folder if you like, then type."
   },
   "chat": {
     "pick_one": "Pick a session from the list, or start a new chat.",
@@ -192,7 +194,29 @@
     "drop_here": "Drop files to attach them",
     "upload_failed": "upload failed",
     "remove_attachment": "Remove {name}",
-    "busy_hint": "A run is active; your next message is queued behind it."
+    "busy_hint": "A run is active; your next message is queued behind it.",
+    "agents": "Available agents",
+    "agent_pick": "Use {name} for this chat",
+    "agent_current": "Current agent: {name}",
+    "agent_new_chat": "Start a new chat with {name}",
+    "agent_not_ready": "{name} is not ready yet",
+    "more": "Add to the message",
+    "upload": "Upload a file",
+    "drop_hint": "Or drop files straight onto the composer.",
+    "model": "Model",
+    "model_default": "Default model",
+    "approval": "Approvals",
+    "approval_no_agent": "Pick an agent first.",
+    "approval_unsupported": "This agent declares no approval mode.",
+    "approval_mode": {
+      "ask": "Default: ask",
+      "auto_safe": "Auto-edit",
+      "auto_all": "No ask",
+      "off": "No approvals",
+      "always": "Always ask"
+    },
+    "dictate": "Dictate",
+    "dictate_unavailable": "Dictation arrives with a speech provider (models.transcribe is still 501)."
   },
   "approval": {
     "from": "{agent} is waiting for your decision",
@@ -259,7 +283,15 @@
   "settings": {
     "tools": "Tools",
     "back": "Back to Settings",
-    "global_note": "This screen is hub-wide, outside the current workspace."
+    "global_note": "This screen is hub-wide, outside the current workspace.",
+    "management": "Management",
+    "management_hint": "Configured once: whole pages, not tabs.",
+    "about": {
+      "agent_manager": "Install, update and configure each agent",
+      "models": "Providers, keys, models and voice",
+      "device_connections": "Pair a phone and trusted devices",
+      "knowledge": "Journal, notes and files"
+    }
   },
   "account": {
     "username": "Username",
@@ -280,12 +312,12 @@
       "dark": "Dark"
     },
     "glass": {
-      "label": "Glass intensity",
-      "hint": "Translucency and blur of the floating chrome only; content stays solid.",
       "0": "Solid",
       "1": "Light",
       "2": "Medium",
-      "3": "Full"
+      "3": "Full",
+      "label": "Glass intensity",
+      "hint": "Translucency and blur of the floating chrome only; content stays solid."
     },
     "language": "Language",
     "text_scale": "Text size",
@@ -410,5 +442,15 @@
       "submit": "Add",
       "loopback": "This address is loopback, and the hub runs in a container — it would reach the container itself, not your machine. Try {url}, and on a Linux host add extra_hosts: [\"host.docker.internal:host-gateway\"] to the stack."
     }
+  },
+  "working_dir": {
+    "label": "Working folder",
+    "hint": "Where this chat works on disk.",
+    "automatic": "Automatic folder",
+    "automatic_note": "the hub names it after the session",
+    "new": "New folder",
+    "new_placeholder": "New folder name",
+    "create": "Create",
+    "locked": "The folder is fixed once the chat has run."
   }
 }

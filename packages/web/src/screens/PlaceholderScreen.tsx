@@ -2,8 +2,9 @@
 // so explicitly — never a silent empty page (TEAM-RULES §4).
 import { useParams } from 'react-router';
 import { useI18n } from '../i18n/context.js';
-import { destinationsById, termKey } from '../navigation/manifest.js';
+import { destinationsById, navigation, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
+import { SettingsBack } from '../settings/SettingsBack.js';
 import { Notice } from '../ui/Notice.js';
 
 const PHASES: Record<string, number> = {
@@ -33,6 +34,7 @@ export function PlaceholderScreen({ id }: { id: string }) {
   const title = t(termKey(id));
   return (
     <AppShell title={title}>
+      {navigation.settingsManagement.includes(id) && <SettingsBack />}
       <h1 className="text-xl font-semibold">{title}</h1>
       {agentId && (
         <p className="mt-1 text-xs text-muted">{t('placeholder.agent', { id: agentId })}</p>

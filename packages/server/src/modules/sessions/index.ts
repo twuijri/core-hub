@@ -71,6 +71,7 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
       realtime,
       portsFor(request.server),
       request.log,
+      hub.config.dataDir,
     );
     const stale = created.recoverStaleRuns();
     if (stale > 0) request.log.warn({ runs: stale }, 'sessions: failed runs left by a restart');

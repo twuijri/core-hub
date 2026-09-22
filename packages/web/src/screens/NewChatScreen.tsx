@@ -1,74 +1,121 @@
-// New chat: pick an agent from the server's registry (never a client-side list) and open a
-// draft session — the server mints the id (contract: sessions.create).
-import { Link, useNavigate } from 'react-router';
-import { useAgents, useCreateSession } from '../hub/queries.js';
+/**
+ * A new chat is a chat, not a form (ADOPTION-BACKLOG 2.5, 2.10): the agent chips sit above
+ * the composer, the folder this chat will work in sits in the header, and three starters
+ * sit underneath. The session is minted by the hub on the first message — before that there
+ * is nothing to keep, so nothing is created.
+ */
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { describeError } from '../auth/client.js';
+import { AgentChips, selectableAgents } from '../chat/AgentChips.js';
+import { Composer } from '../chat/Composer.js';
+import { putFirstMessage } from '../chat/firstMessage.js';
+import { starterSuggestions } from '../chat/starters.js';
+import { useApprovalMode, useComposerModels } from '../chat/useComposerControls.js';
+import { WorkingDirPicker } from '../chat/WorkingDirPicker.js';
+import { useAgents, useCreateSession } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
-import { Notice, Spinner } from '../ui/Notice.js';
+import type { ContentBlock } from '../types.js';
+import { Notice } from '../ui/Notice.js';
 
 export function NewChatScreen() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const agents = useAgents();
   const create = useCreateSession();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const title = t(termKey('new_chat'));
-  const selectable = (agents.data ?? []).filter((a) => a.enabled && a.status !== 'disabled');
 
-  const start = async (agentId: string) => {
-    const session = await create.mutateAsync({ agent_id: agentId });
+  const ready = selectableAgents(agents.data ?? []);
+  const [agentId, setAgentId] = useState<string | null>(null);
+  const [workingDir, setWorkingDir] = useState<string | null>(null);
+  const [model, setModel] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const models = useComposerModels();
+  const approval = useApprovalMode(agentId);
+
+  // The first installable agent is chosen for the person, so a fresh hub with Hermes alone
+  // never asks a question with one answer. `?agent=` comes from a chip in an open session.
+  useEffect(() => {
+    if (agentId && ready.some((a) => a.id === agentId)) return;
+    const asked = params.get('agent');
+    const wanted =
+      ready.find((a) => a.id === asked) ?? ready.find((a) => a.status !== 'not_installed');
+    setAgentId(wanted?.id ?? null);
+  }, [ready, agentId, params]);
+
+  const noneReady = ready.length > 0 && ready.every((a) => a.status === 'not_installed');
+  const disabledReason = agents.isPending
+    ? t('common.loading')
+    : ready.length === 0
+      ? t('new_chat.no_agents')
+      : noneReady
+        ? t('new_chat.none_ready')
+        : !agentId
+          ? t('new_chat.pick_agent')
+          : null;
+
+  /**
+   * The first message mints the session and then hands the blocks to the chat screen, which
+   * sends them once it is subscribed. Posting the run here instead would start the stream
+   * before anyone is listening, and the first deltas would only be seen on a replay.
+   */
+  const send = async (blocks: ContentBlock[]) => {
+    if (!agentId) return;
+    setError(null);
+    const session = await create.mutateAsync({
+      agent_id: agentId,
+      model,
+      working_dir: workingDir,
+    });
+    putFirstMessage(session.id, blocks);
     navigate(routeOf('chat').replace(':sessionId?', session.id));
   };
 
   return (
     <AppShell title={title}>
-      <h1 className="text-xl font-semibold">{title}</h1>
-      <p className="mt-1 text-sm text-muted">{t('new_chat.pick_agent')}</p>
-      {agents.isPending && <Spinner label={t('common.loading')} />}
-      {agents.isError && <Notice tone="danger">{describeError(agents.error, t)}</Notice>}
-      {agents.data && selectable.length === 0 && (
-        <Notice tone="warning">{t('new_chat.no_agents')}</Notice>
-      )}
-      {create.isError && <Notice tone="danger">{describeError(create.error, t)}</Notice>}
-      {agents.data &&
-        selectable.length > 0 &&
-        selectable.every((agent) => agent.status === 'not_installed') && (
-          // Every card disabled with no word why is a dead end; say what to do instead.
-          <Notice tone="warning">
-            {t('new_chat.none_ready')}{' '}
-            <Link to={routeOf('agent_manager')}>{t('nav.agent_manager')}</Link>
-          </Notice>
-        )}
-      <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-        {selectable.map((agent) => (
-          <li key={agent.id}>
-            <button
-              type="button"
-              className="card flex w-full items-center gap-3 text-start hover:bg-surface-2 disabled:opacity-60"
-              onClick={() => void start(agent.id)}
-              disabled={create.isPending || agent.status === 'not_installed'}
-              data-testid="pick-agent"
-              data-agent-slug={agent.slug}
-            >
-              <span
-                className="inline-grid size-9 place-items-center rounded-md bg-accent-soft text-accent-soft-text"
-                aria-hidden
-              >
-                {agent.name.slice(0, 1)}
-              </span>
-              <span className="min-w-0">
-                <span className="block font-medium" dir="auto">
-                  {agent.name}
-                </span>
-                <span className="block text-xs text-muted">
-                  {t(`agents.status.${agent.status}`)}
-                </span>
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+      <div className="flex flex-1 flex-col" data-testid="new-chat">
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+          <h1 className="text-xl font-semibold">{t('new_chat.greeting')}</h1>
+          <p className="max-w-prose text-sm text-muted">{t('new_chat.lede')}</p>
+          <WorkingDirPicker value={workingDir} onChange={setWorkingDir} />
+          {noneReady && (
+            <Notice tone="warning">
+              {t('new_chat.none_ready')}{' '}
+              <Link to={routeOf('agent_manager')} className="link underline">
+                {t('nav.agent_manager')}
+              </Link>
+            </Notice>
+          )}
+          {(error || create.isError) && (
+            <Notice tone="danger">{describeError(error ?? create.error, t)}</Notice>
+          )}
+        </div>
+        <Composer
+          busy={false}
+          disabled={disabledReason !== null}
+          disabledReason={disabledReason}
+          onSend={send}
+          onCancel={async () => {}}
+          chips={
+            <AgentChips
+              selectedId={agentId}
+              onSelect={(agent) => setAgentId(agent.id)}
+              mode="select"
+            />
+          }
+          model={model}
+          models={models}
+          onModel={setModel}
+          approvalMode={approval.mode}
+          approvalOptions={approval.options}
+          onApprovalMode={approval.set}
+          approvalDisabledReason={approval.disabledReason}
+          starters={starterSuggestions(language)}
+        />
+      </div>
     </AppShell>
   );
 }
