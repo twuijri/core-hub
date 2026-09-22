@@ -16,11 +16,14 @@ import { ApprovalCard } from './ApprovalCard.js';
 import { Composer } from './Composer.js';
 import { starterSuggestions } from './starters.js';
 import { takeFirstMessage } from './firstMessage.js';
+import { ContextRing, contextUse } from './ContextRing.js';
+import { MessageQueue } from './MessageQueue.js';
 import { Transcript } from './MessageView.js';
+import { holdsBack, queued, type QueuedMessage } from './outbox.js';
 import { RunStatus } from './RunStatus.js';
 import { RunFailureNotice } from './RunFailureNotice.js';
 import { SessionAgent } from './SessionAgent.js';
-import { useRuntimeReport } from '../models/queries.js';
+import { useCatalogue, useRuntimeReport } from '../models/queries.js';
 import { activeRun, isBusy, textOf } from './transcript.js';
 import { runProgress, turnsOf } from './turns.js';
 import { useRecentModels } from '../models/useModelPicker.js';
@@ -72,6 +75,7 @@ function OpenSession({ sessionId }: { sessionId: string }) {
 
   const agentId = state.session?.agent_id ?? null;
   const agents = useAgents();
+  const catalogue = useCatalogue();
   const models = useComposerModels();
   const { recent, remember } = useRecentModels();
   const approval = useApprovalMode(agentId);
@@ -100,20 +104,62 @@ function OpenSession({ sessionId }: { sessionId: string }) {
     );
   };
 
-  const send = useCallback(
-    async (blocks: ContentBlock[]) => {
+  /**
+   * The messages this tab is holding back while a turn is alive (`outbox.ts`). They are
+   * not in the hub's queue: they were never sent, so each one can still be sent now,
+   * used to steer the live turn, or dropped.
+   */
+  const [outbox, setOutbox] = useState<QueuedMessage[]>([]);
+  const post = useCallback(
+    async (blocks: ContentBlock[], when: 'queue' | 'next' | 'interrupt', replyId?: string) => {
       await client.request('post', '/sessions/{session_id}/runs', {
         params: { session_id: sessionId },
         body: {
           content: blocks,
-          when: preferences.data?.busy_input_mode ?? 'queue',
-          ...(replyTo ? { reply_to_message_id: replyTo.id } : {}),
+          when,
+          ...(replyId ? { reply_to_message_id: replyId } : {}),
         },
       });
+    },
+    [client, sessionId],
+  );
+
+  const send = useCallback(
+    async (blocks: ContentBlock[]) => {
+      const mode = preferences.data?.busy_input_mode;
+      if (holdsBack(mode, busy)) {
+        setOutbox((current) => [...current, queued(blocks)]);
+        setReplyTo(null);
+        return;
+      }
+      await post(
+        blocks,
+        (mode as 'queue' | 'next' | 'interrupt' | undefined) ?? 'queue',
+        replyTo?.id,
+      );
       setReplyTo(null);
     },
-    [client, sessionId, preferences.data?.busy_input_mode, replyTo],
+    [post, preferences.data?.busy_input_mode, busy, replyTo],
   );
+
+  const [queueError, setQueueError] = useState<unknown>(null);
+  const release = useCallback(
+    (item: QueuedMessage, when: 'queue' | 'next' | 'interrupt') => {
+      setOutbox((current) => current.filter((q) => q.key !== item.key));
+      post(item.blocks, when).catch(setQueueError);
+    },
+    [post],
+  );
+
+  /**
+   * The queue drains itself: the moment nothing is running, the oldest waiting message
+   * goes. One at a time, because the next one has to wait for the turn this one starts.
+   */
+  useEffect(() => {
+    if (busy || outbox.length === 0) return;
+    const [first] = outbox;
+    if (first) release(first, 'queue');
+  }, [busy, outbox, release]);
 
   /**
    * The message typed on the new-chat screen (`firstMessage.ts`). It is sent once, and only
@@ -139,6 +185,17 @@ function OpenSession({ sessionId }: { sessionId: string }) {
       if (!(error instanceof HubApiError && error.status === 409)) throw error;
     }
   };
+
+  /**
+   * How full the window is: the catalogue's `context_window` for the session's model, and
+   * the tokens the provider counted for the last finished turn. Either missing means no
+   * ring, never an invented number.
+   */
+  const contextRing = contextUse(
+    state.runs,
+    (catalogue.data ?? []).find((model) => model.key === state.session?.model)?.context_window ??
+      null,
+  );
 
   const title = state.session ? sessionTitle(state.session, t) : t(termKey('chat'));
   const showReasoning = preferences.data?.show_reasoning ?? true;
@@ -207,6 +264,9 @@ function OpenSession({ sessionId }: { sessionId: string }) {
         )}
         {state.deleted && <Notice tone="warning">{t('chat.session_deleted')}</Notice>}
         {firstError !== null && <Notice tone="danger">{describeError(firstError, t)}</Notice>}
+        {/* A held-back message that failed on its way out says so: it is no longer in the
+            queue, so silence here would lose it without a word. */}
+        {queueError !== null && <Notice tone="danger">{describeError(queueError, t)}</Notice>}
         <div className="chat-pad" aria-hidden />
         {/* An empty chat is an invitation, centred with the composer; the first message
             docks the composer and hands the column to the transcript. */}
@@ -250,6 +310,21 @@ function OpenSession({ sessionId }: { sessionId: string }) {
           // While a run is alive the composer carries the live indicator: something moving,
           // the word, and the seconds counting up (owner decision, 2026-09-22).
           {...(progress ? { status: <RunStatus progress={progress} /> } : {})}
+          {...(outbox.length > 0
+            ? {
+                queue: (
+                  <MessageQueue
+                    items={outbox}
+                    onSendNow={(item) => release(item, 'next')}
+                    onSteer={(item) => release(item, 'interrupt')}
+                    onRemove={(item) =>
+                      setOutbox((current) => current.filter((q) => q.key !== item.key))
+                    }
+                  />
+                ),
+              }
+            : {})}
+          {...(contextRing ? { context: <ContextRing use={contextRing} /> } : {})}
           {...(replyTo
             ? {
                 reply: (

@@ -87,6 +87,10 @@ export interface ComposerProps {
   chips?: ReactNode;
   /** "Replying to …", above the surface: the message the next run answers. */
   reply?: ReactNode;
+  /** The messages this tab is holding back while a run is alive. */
+  queue?: ReactNode;
+  /** How full the model's window is, beside the mic. */
+  context?: ReactNode;
   /**
    * The live run indicator (`RunStatus.tsx`). It rides in the docked composer rather than
    * in the transcript so it stays on screen while the person scrolls back through the
@@ -129,6 +133,8 @@ export function Composer({
   onCancel,
   chips,
   reply,
+  queue,
+  context,
   status,
   model = null,
   models = [],
@@ -229,6 +235,7 @@ export function Composer({
     <div className="composer-dock" data-testid="composer-dock">
       {status}
       {chips}
+      {queue}
       {reply}
       <form
         className="composer glass"
@@ -385,6 +392,8 @@ export function Composer({
           {/* Disabled, and the reason is in the tooltip rather than left to be guessed.
               A disabled button takes no pointer events, so the tooltip hangs off a
               focusable wrapper — otherwise the explanation would never appear. */}
+          {context}
+
           <Tooltip label={t('composer.dictate_unavailable')}>
             <span tabIndex={0} aria-describedby={undefined} data-testid="composer-mic-wrap">
               <button

@@ -266,7 +266,8 @@
       "medium": "Medium",
       "high": "High",
       "max": "Max"
-    }
+    },
+    "context_ring": "Context: {percent}% — {used} of {window} tokens"
   },
   "approval": {
     "from": "{agent} is waiting for your decision",
@@ -573,5 +574,12 @@
     "close": "Close",
     "dismiss": "Dismiss this notice",
     "breadcrumb": "Breadcrumb"
+  },
+  "queue": {
+    "title": "Message queue",
+    "send_now": "Send now",
+    "steer": "Steer",
+    "steer_hint": "Stop the live turn and take this instead, in the same context.",
+    "remove": "Remove"
   }
 }

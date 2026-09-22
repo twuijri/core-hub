@@ -148,9 +148,16 @@ test.describe('the chat surface, designed', () => {
     await say(page, 'يفكّر الآن من فضلك');
     await expect(page).toHaveURL(/\/chat\/[0-9A-Z]{26}$/);
 
-    // While the run is silent, a second message queues behind it — which is how two
-    // messages from the same speaker end up next to each other.
+    // A second message typed while the turn is alive does not vanish into the hub's
+    // queue: it waits in this tab, where it can still be sent now, used to steer, or
+    // dropped (owner decision, 2026-09-22). "Send now" posts it with `when: next`, and
+    // that is how two messages from the same speaker end up next to each other.
     await say(page, 'وأضف مثالًا في النهاية');
+    await expect(page.getByTestId('queue-item')).toHaveCount(1);
+    await expect(page.getByTestId('queue-count')).toHaveText('1');
+    await shot(page, 'design-queue-ar-light');
+    await page.getByTestId('queue-send-now').click();
+    await expect(page.getByTestId('message-queue')).toHaveCount(0);
     const users = page.getByTestId('message-user');
     await expect(users).toHaveCount(2);
     await expect(users.nth(0)).toHaveAttribute('data-grouped', 'false');
