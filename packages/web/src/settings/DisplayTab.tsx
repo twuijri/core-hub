@@ -12,6 +12,7 @@ import {
 import { useI18n } from '../i18n/context.js';
 import { LANGUAGES } from '../i18n/index.js';
 import { Notice } from '../ui/Notice.js';
+import { Segmented } from '../ui/Segmented.js';
 
 export function DisplayTab({ only }: { only?: Array<keyof DisplayPrefs> }) {
   const { t } = useI18n();
@@ -38,97 +39,66 @@ export function DisplayTab({ only }: { only?: Array<keyof DisplayPrefs> }) {
       {show('theme') && (
         <fieldset className="flex flex-col gap-1">
           <legend className="text-sm font-medium">{t('display.theme.label')}</legend>
-          <div
-            className="segmented self-start"
-            role="radiogroup"
-            aria-label={t('display.theme.label')}
-          >
-            {THEME_CHOICES.map((choice) => (
-              <button
-                key={choice}
-                type="button"
-                role="radio"
-                aria-checked={prefs.theme === choice}
-                aria-pressed={prefs.theme === choice}
-                onClick={() => change({ theme: choice })}
-                data-testid={`theme-${choice}`}
-              >
-                {t(`display.theme.${choice}`)}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            className="self-start"
+            label={t('display.theme.label')}
+            value={prefs.theme}
+            onChange={(choice) => change({ theme: choice as DisplayPrefs['theme'] })}
+            options={THEME_CHOICES.map((choice) => ({
+              value: choice,
+              label: t(`display.theme.${choice}`),
+              itemProps: { 'data-testid': `theme-${choice}` },
+            }))}
+          />
         </fieldset>
       )}
       {show('glass') && (
         <fieldset className="flex flex-col gap-1">
           <legend className="text-sm font-medium">{t('display.glass.label')}</legend>
           <p className="text-xs text-muted">{t('display.glass.hint')}</p>
-          <div
-            className="segmented self-start"
-            role="radiogroup"
-            aria-label={t('display.glass.label')}
-          >
-            {GLASS_CHOICES.map((level) => (
-              <button
-                key={level}
-                type="button"
-                role="radio"
-                aria-checked={prefs.glass === level}
-                aria-pressed={prefs.glass === level}
-                onClick={() => change({ glass: level })}
-                data-testid={`glass-${level}`}
-              >
-                {t(`display.glass.${level}`)}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            className="self-start"
+            label={t('display.glass.label')}
+            value={prefs.glass}
+            onChange={(level) => change({ glass: level as DisplayPrefs['glass'] })}
+            options={GLASS_CHOICES.map((level) => ({
+              value: level,
+              label: t(`display.glass.${level}`),
+              itemProps: { 'data-testid': `glass-${level}` },
+            }))}
+          />
         </fieldset>
       )}
       {show('language') && (
         <fieldset className="flex flex-col gap-1">
           <legend className="text-sm font-medium">{t('display.language')}</legend>
-          <div
-            className="segmented self-start"
-            role="radiogroup"
-            aria-label={t('display.language')}
-          >
-            {LANGUAGES.map((language) => (
-              <button
-                key={language}
-                type="button"
-                role="radio"
-                aria-checked={prefs.language === language}
-                aria-pressed={prefs.language === language}
-                onClick={() => change({ language })}
-                data-testid={`language-${language}`}
-              >
-                {language === 'ar' ? 'العربية' : 'English'}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            className="self-start"
+            label={t('display.language')}
+            value={prefs.language}
+            onChange={(language) => change({ language: language as DisplayPrefs['language'] })}
+            options={LANGUAGES.map((language) => ({
+              value: language,
+              label: language === 'ar' ? 'العربية' : 'English',
+              itemProps: { 'data-testid': `language-${language}` },
+            }))}
+          />
         </fieldset>
       )}
       {show('textScale') && (
         <fieldset className="flex flex-col gap-1">
           <legend className="text-sm font-medium">{t('display.text_scale')}</legend>
-          <div
-            className="segmented self-start"
-            role="radiogroup"
-            aria-label={t('display.text_scale')}
-          >
-            {TEXT_SCALES.map((scale) => (
-              <button
-                key={scale}
-                type="button"
-                role="radio"
-                aria-checked={prefs.textScale === scale}
-                aria-pressed={prefs.textScale === scale}
-                onClick={() => change({ textScale: scale })}
-              >
-                {Math.round(scale * 100)}%
-              </button>
-            ))}
-          </div>
+          <Segmented
+            className="self-start"
+            label={t('display.text_scale')}
+            value={String(prefs.textScale)}
+            onChange={(scale) => change({ textScale: Number(scale) })}
+            options={TEXT_SCALES.map((scale) => ({
+              value: String(scale),
+              label: `${Math.round(scale * 100)}%`,
+              itemProps: { 'data-testid': `text-scale-${Math.round(scale * 100)}` },
+            }))}
+          />
         </fieldset>
       )}
       {save.isError && <Notice tone="danger">{describeError(save.error, t)}</Notice>}

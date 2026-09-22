@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { useI18n } from '../i18n/context.js';
 import { usePane } from '../shell/pane.js';
 import { IconCheck, IconCopy, IconPanel } from '../ui/icons.js';
+import { Tooltip } from '../ui/Tooltip.js';
 
 function textOfChildren(node: ReactNode): string {
   if (typeof node === 'string') return node;
@@ -36,30 +37,32 @@ function CodeBlock(props: ComponentProps<'pre'>) {
     <div className="group relative" dir="ltr">
       <div className="absolute end-1 top-1 flex gap-1 opacity-0 transition-ui focus-within:opacity-100 group-hover:opacity-100">
         {language && <span className="chip">{language}</span>}
-        <button
-          type="button"
-          className="btn btn-ghost px-1"
-          onClick={() => void copy()}
-          aria-label={t('chat.copy_code')}
-          title={t('chat.copy_code')}
-        >
-          {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost px-1"
-          onClick={() =>
-            pane.open({
-              kind: 'code',
-              title: language || t('pane.kind.code'),
-              node: <pre className="prose-chat whitespace-pre-wrap text-sm">{code}</pre>,
-            })
-          }
-          aria-label={t('chat.open_in_pane')}
-          title={t('chat.open_in_pane')}
-        >
-          <IconPanel size={14} />
-        </button>
+        <Tooltip label={t('chat.copy_code')}>
+          <button
+            type="button"
+            className="btn btn-ghost px-1"
+            onClick={() => void copy()}
+            aria-label={t('chat.copy_code')}
+          >
+            {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+          </button>
+        </Tooltip>
+        <Tooltip label={t('chat.open_in_pane')}>
+          <button
+            type="button"
+            className="btn btn-ghost px-1"
+            onClick={() =>
+              pane.open({
+                kind: 'code',
+                title: language || t('pane.kind.code'),
+                node: <pre className="prose-chat whitespace-pre-wrap text-sm">{code}</pre>,
+              })
+            }
+            aria-label={t('chat.open_in_pane')}
+          >
+            <IconPanel size={14} />
+          </button>
+        </Tooltip>
       </div>
       <pre {...props} />
     </div>

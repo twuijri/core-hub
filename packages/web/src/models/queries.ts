@@ -227,7 +227,7 @@ export function useSaveDefaults() {
   );
 }
 
-/** `<provider_id>|<model>` — the value a `<select>` can carry for a `ModelRef`. */
+/** `<provider_id>|<model>` — one string a picker can carry for a `ModelRef`. */
 export function refValue(ref: ModelRef | null | undefined): string {
   return ref ? `${ref.provider_id}|${ref.model}` : '';
 }
