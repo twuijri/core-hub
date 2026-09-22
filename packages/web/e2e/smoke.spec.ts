@@ -551,6 +551,47 @@ test.describe('web smoke journeys', () => {
     await page.getByTestId('settings-nav').getByRole('link', { name: 'الإشعارات' }).click();
     await page.getByTestId('mark-all-read').click();
     await expect(page.getByTestId('unread-badge')).toHaveCount(0);
+  test('13. People and Workspaces: a person added, and a workspace that archives', async ({
+    page,
+  }) => {
+    await login(page);
+    await page.getByRole('link', { name: 'الإعدادات' }).first().click();
+
+    // People: the owner's own row offers nothing, because the hub refuses all of it.
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'المستخدمون' }).click();
+    await expect(page.getByTestId('user-table')).toBeVisible();
+    await expect(page.getByTestId('owner-note')).toBeVisible();
+    await expect(page.getByTestId('user-menu')).toHaveCount(0);
+
+    await page.getByTestId('add-user').click();
+    await page.getByLabel('اسم المستخدم').fill('sara');
+    await page.getByLabel('الاسم المعروض').fill('سارة');
+    await page.getByLabel('كلمة المرور الجديدة').fill('a-long-enough-one');
+    await page.getByTestId('save-user').click();
+    const table = page.getByTestId('user-table');
+    await expect(table).toContainText('سارة');
+    // And now there is a row that is not the owner's, so a menu exists.
+    await expect(page.getByTestId('user-menu')).toHaveCount(1);
+    await shot(page, 'people-ar-light');
+
+    // Workspaces: the default one cannot be archived, so it offers no button.
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'مساحات العمل' }).click();
+    await expect(page.getByTestId('workspace-list')).toBeVisible();
+    await expect(page.getByTestId('archive-workspace')).toHaveCount(0);
+
+    await page.getByTestId('add-workspace').click();
+    await page.getByLabel('الاسم').fill('Labs');
+    // The slug followed the name without being typed.
+    await expect(page.getByLabel('المعرّف')).toHaveValue('labs');
+    await page.getByTestId('save-workspace').click();
+    await expect(page.getByTestId('workspace-list')).toContainText('Labs');
+    // A second workspace exists, so exactly one archive button appeared — the new one's.
+    await expect(page.getByTestId('archive-workspace')).toHaveCount(1);
+    await shot(page, 'workspaces-ar-light');
+
+    // Archiving says archive, and says what happens to the conversations.
+    await page.getByTestId('archive-workspace').click();
+    await expect(page.getByRole('alertdialog')).toContainText('لا تُمحى');
   });
 
   test('11. Schedules: a cron saved, its next time computed, and the button that says why', async ({
