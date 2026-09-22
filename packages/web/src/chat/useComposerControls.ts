@@ -25,6 +25,19 @@ import type { SelectOption } from '../ui/Select.js';
  */
 export const APPROVAL_FIELDS = ['approval_mode', 'approvals_mode'] as const;
 
+/**
+ * What each mode we know actually changes, and how much it gives away.
+ *
+ * "Ask", "always ask" and "no approvals" are three near-synonyms until each one says what
+ * it does (owner, 2026-09-22: «الخيارات هذي وش فرقها عن بعض»). A mode an adapter declares
+ * that is not here keeps its own label with no sentence under it — we do not invent one.
+ */
+const APPROVAL_TONES: Record<string, 'danger' | 'warning' | undefined> = {
+  auto_all: 'danger',
+  off: 'danger',
+  auto_safe: 'warning',
+};
+
 export interface ApprovalField {
   section: string;
   key: string;
@@ -35,14 +48,22 @@ export interface ApprovalField {
 export function findApprovalMode(
   sections: readonly SettingsSection[] | undefined,
   label: (value: string, fallback: string) => string = (_v, fallback) => fallback,
+  describe: (value: string) => string | null = () => null,
 ): ApprovalField | null {
   for (const section of sections ?? []) {
     for (const field of section.fields) {
       if (!(APPROVAL_FIELDS as readonly string[]).includes(field.key)) continue;
-      const options = (field.options ?? []).map((option) => ({
-        value: String(option.value),
-        label: label(String(option.value), option.label),
-      }));
+      const options = (field.options ?? []).map((option) => {
+        const value = String(option.value);
+        const hint = describe(value);
+        const tone = APPROVAL_TONES[value];
+        return {
+          value,
+          label: label(value, option.label),
+          ...(hint === null ? {} : { description: hint }),
+          ...(tone === undefined ? {} : { tone }),
+        } satisfies SelectOption;
+      });
       return {
         section: section.key,
         key: field.key,
@@ -88,7 +109,17 @@ export function useApprovalMode(agentId: string | null): ApprovalControl {
     const translated = t(key);
     return translated === key ? fallback : translated;
   };
-  const found = findApprovalMode(settings.data?.sections as SettingsSection[] | undefined, label);
+  // One line per mode, only for the modes we know; anything else keeps the adapter's word.
+  const describe = (value: string) => {
+    const key = `composer.approval_hint.${value}`;
+    const translated = t(key);
+    return translated === key ? null : translated;
+  };
+  const found = findApprovalMode(
+    settings.data?.sections as SettingsSection[] | undefined,
+    label,
+    describe,
+  );
   const off = (reason: string): ApprovalControl => ({
     mode: null,
     options: [],

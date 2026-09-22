@@ -10,9 +10,11 @@ import { NavLink, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth/context.js';
 import { useTheme, themeIcon, THEME_CHOICES, type ThemeChoice } from '../design/theme.js';
 import { useI18n } from '../i18n/context.js';
+import { useMeta } from '../hub/queries.js';
 import { navigation, routeOf, termKey, visibleEntries } from '../navigation/manifest.js';
 import { useRealtime } from '../realtime/context.js';
 import { SessionList } from '../sessions/SessionList.js';
+import { SettingsNav, settingsIdFromPath } from '../settings/SettingsNav.js';
 import {
   IconGlobe,
   IconPlus,
@@ -58,6 +60,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { user, signOut } = useAuth();
   const { prefs, update } = useTheme();
   const realtime = useRealtime();
+  const meta = useMeta();
   const location = useLocation();
   const navigate = useNavigate();
   const role = user?.role ?? 'member';
@@ -72,6 +75,12 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   })();
   // Opening a session from Search does not change the selected segment (rule §1).
   const selected = segmentFromPath(location.pathname) ?? stored ?? 'chat';
+  /**
+   * Inside Settings the sidebar becomes the settings list (owner correction, 2026-09-22):
+   * the list of places belongs here, and the page keeps the whole column for itself. The
+   * rail above stays, so leaving is one click and never a hunt for a back link.
+   */
+  const settingsId = settingsIdFromPath(location.pathname);
   const chooseSegment = (id: string) => {
     try {
       localStorage.setItem(SEGMENT_STORAGE, id);
@@ -117,24 +126,28 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         })}
       </SidebarGroup>
 
-      <div className="mx-2 mt-3">
-        <Segmented
-          label={t('shell.segments')}
-          value={selected}
-          onChange={chooseSegment}
-          size="sm"
-          stretch
-          testId="segments"
-          options={segments.map((d) => ({
-            value: d.id,
-            label: t(termKey(d.id)),
-            itemProps: { 'data-nav-id': d.id },
-          }))}
-        />
-      </div>
+      {settingsId === null && (
+        <div className="mx-2 mt-3">
+          <Segmented
+            label={t('shell.segments')}
+            value={selected}
+            onChange={chooseSegment}
+            size="sm"
+            stretch
+            testId="segments"
+            options={segments.map((d) => ({
+              value: d.id,
+              label: t(termKey(d.id)),
+              itemProps: { 'data-nav-id': d.id },
+            }))}
+          />
+        </div>
+      )}
 
       <SidebarBody>
-        {selected === 'chat' ? (
+        {settingsId !== null ? (
+          <SettingsNav current={settingsId} onNavigate={onNavigate} />
+        ) : selected === 'chat' ? (
           <SessionList {...(onNavigate ? { onOpen: onNavigate } : {})} />
         ) : (
           <p className="px-2 text-xs text-muted">
@@ -213,7 +226,11 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               itemProps: { 'data-testid': `theme-chip-${choice}` },
             }))}
           />
-          <span className="ms-auto text-faint">v{__APP_VERSION__}</span>
+          {/* The version that is *running*, which is the hub's — the browser may be
+              holding an older bundle. The build constant answers only until the hub does. */}
+          <span className="ms-auto text-faint" data-testid="app-version">
+            v{meta.data?.server_version ?? __APP_VERSION__}
+          </span>
         </div>
       </SidebarFooter>
     </SidebarFrame>

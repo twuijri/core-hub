@@ -14,6 +14,17 @@ import { Tooltip } from './Tooltip.js';
 export interface SelectOption {
   value: string;
   label: string;
+  /**
+   * One line saying what choosing this actually does. A list of near-synonyms ("ask",
+   * "always ask", "no approvals") is a list of guesses until each one says what it
+   * changes, so any option set where the labels alone are not self-evident carries these
+   * (owner, 2026-09-22).
+   */
+  description?: string;
+  /** Drawn before the label, in the list and — for the chosen one — in the trigger. */
+  icon?: ReactNode;
+  /** Paints the option, and the trigger while it is the chosen one. */
+  tone?: 'danger' | 'warning';
   /** Options that share a group name are listed under it, with a heading. */
   group?: string;
   disabled?: boolean;
@@ -53,8 +64,13 @@ export function Select({
     value !== null && !known ? [{ value, label: value }, ...options] : options;
   const chosen = shown.find((option) => option.value === value);
   const triggerNode = (
-    <RadixSelect.Trigger className="mj-select" aria-label={label} data-testid={testId}>
-      {icon}
+    <RadixSelect.Trigger
+      className="mj-select"
+      aria-label={label}
+      data-tone={chosen?.tone}
+      data-testid={testId}
+    >
+      {chosen?.icon ?? icon}
       <RadixSelect.Value>
         <span className="truncate">{chosen?.label ?? placeholder ?? label}</span>
       </RadixSelect.Value>
@@ -124,11 +140,25 @@ function Item({ option }: { option: SelectOption }) {
   return (
     <RadixSelect.Item
       className="mj-select-item"
+      data-tone={option.tone}
+      data-described={option.description ? 'true' : undefined}
       value={option.value}
       {...(option.disabled === undefined ? {} : { disabled: option.disabled })}
     >
-      <RadixSelect.ItemText>{option.label}</RadixSelect.ItemText>
-      <RadixSelect.ItemIndicator>
+      {option.icon !== undefined && (
+        <span className="mj-select-item-icon" aria-hidden>
+          {option.icon}
+        </span>
+      )}
+      <span className="mj-select-item-body">
+        <RadixSelect.ItemText>{option.label}</RadixSelect.ItemText>
+        {/* Outside `ItemText`, so the trigger keeps the label alone (Radix renders
+            `ItemText` there) and the explanation stays in the list where it belongs. */}
+        {option.description !== undefined && (
+          <span className="mj-select-item-hint">{option.description}</span>
+        )}
+      </span>
+      <RadixSelect.ItemIndicator className="mj-select-item-check">
         <IconCheck size={14} />
       </RadixSelect.ItemIndicator>
     </RadixSelect.Item>

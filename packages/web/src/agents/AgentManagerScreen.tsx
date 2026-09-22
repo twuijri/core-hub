@@ -14,12 +14,12 @@ import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import { agentMenu, routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
-import { SettingsLayout } from '../settings/SettingsLayout.js';
 import type { Agent, Job } from '../types.js';
 import {
   Avatar,
   agentMark,
   Badge,
+  buttonClass,
   Button,
   Card,
   CardFooter,
@@ -59,26 +59,24 @@ export function AgentManagerScreen() {
   return (
     <AppShell title={title} wide>
       <h1 className="sr-only">{title}</h1>
-      <SettingsLayout current="agent_manager">
-        {agents.isPending && (
-          <SkeletonGroup label={t('common.loading')}>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {[0, 1, 2].map((i) => (
-                <Skeleton key={i} height="11rem" radius="md" />
-              ))}
-            </div>
-          </SkeletonGroup>
-        )}
-        {agents.isError && <Notice tone="danger">{describeError(agents.error, t)}</Notice>}
-        {agents.data && agents.data.length === 0 && (
-          <EmptyState icon={<IconAgents size={20} />} title={t('agents.empty')} />
-        )}
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {agents.data?.map((agent) => (
-            <AgentCard key={agent.id} agent={agent} jobs={jobs} />
-          ))}
-        </div>
-      </SettingsLayout>
+      {agents.isPending && (
+        <SkeletonGroup label={t('common.loading')}>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} height="11rem" radius="md" />
+            ))}
+          </div>
+        </SkeletonGroup>
+      )}
+      {agents.isError && <Notice tone="danger">{describeError(agents.error, t)}</Notice>}
+      {agents.data && agents.data.length === 0 && (
+        <EmptyState icon={<IconAgents size={20} />} title={t('agents.empty')} />
+      )}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {agents.data?.map((agent) => (
+          <AgentCard key={agent.id} agent={agent} jobs={jobs} />
+        ))}
+      </div>
     </AppShell>
   );
 }
@@ -175,6 +173,17 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
             {t('agents.install')}
           </Button>
         ) : null}
+        {/* Every agent that is actually here can be configured, and the way in is beside
+            the button a person already came for (owner, 2026-09-22). */}
+        {installed && (
+          <Link
+            to={routeOf('agent_settings').replace(':agentId', agent.id)}
+            className={buttonClass('secondary', 'md')}
+            data-testid="agent-settings-link"
+          >
+            <span className="mj-btn-label">{t('agents.settings')}</span>
+          </Link>
+        )}
         {agent.install.update_available && (
           <Badge tone="info">
             {t('agents.update_available', { version: agent.install.latest_version ?? '' })}
