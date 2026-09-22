@@ -693,5 +693,32 @@
     "node": "Node",
     "no_samples": "No samples stored yet.",
     "samples_n": "{count} samples"
+  },
+  "notify": {
+    "inbox": "Inbox",
+    "filter": "Show",
+    "all": "All",
+    "unread": "Unread",
+    "mark_all": "Mark all read",
+    "none": "Nothing yet",
+    "none_unread": "Everything is read",
+    "none_body": "What happens in the hub appears here: a reply that finished, or an approval waiting for you.",
+    "is_unread": "unread",
+    "is_read": "read",
+    "what_reaches_me": "What reaches me",
+    "quiet": "Quiet hours",
+    "quiet_hint": "A window in which no notification is pushed to your devices.",
+    "quiet_from": "From",
+    "quiet_to": "To",
+    "push_note": "Quiet hours are about device notifications, not the inbox — what is written at night is still here in the morning. Device notifications are not built yet.",
+    "kind": {
+      "run_completed": "An agent finished",
+      "approval_requested": "An approval is waiting",
+      "room_mention": "You were mentioned",
+      "task_moved": "A task moved",
+      "schedule_failed": "A schedule failed",
+      "update_available": "An update is available",
+      "system": "System messages"
+    }
   }
 }

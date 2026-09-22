@@ -13,6 +13,7 @@ import type {
   AgentInfo,
   AgentRunner,
   AttachmentsPort,
+  SessionsNotifier,
 } from './ports.js';
 
 export const unavailableAgents: AgentDirectory = {
@@ -71,4 +72,15 @@ export const noAttachments: AttachmentsPort = {
       details: { reason: 'attachments_not_wired' },
     });
   },
+};
+
+/**
+ * No notifier wired: nothing is told to anybody.
+ *
+ * Unlike the runner above this does not throw, because the absence of a notice is not a
+ * failure of the run. A hub composed without `notify` streams exactly as it did before.
+ */
+export const noNotifier: SessionsNotifier = {
+  runFinished() {},
+  approvalRequested() {},
 };

@@ -107,6 +107,14 @@ export const notificationPreferences = sqliteTable(
     inApp: bool('in_app').notNull().default(true),
     push: bool('push').notNull().default(true),
     mutedUntil: timestampMs('muted_until'),
+    /**
+     * Quiet hours, kept on the `*` row only: `HH:MM` in `quietTimezone`, and a window
+     * that may cross midnight. They silence push, never the inbox — a notice written
+     * at 3 a.m. is still there at 8, and dropping it would lose it.
+     */
+    quietFrom: text('quiet_from', { length: 5 }),
+    quietTo: text('quiet_to', { length: 5 }),
+    quietTimezone: text('quiet_timezone', { length: 64 }),
   },
   (t) => [uniqueIndex('notification_preferences_owner_kind_uq').on(t.workspace, t.ownerId, t.kind)],
 );

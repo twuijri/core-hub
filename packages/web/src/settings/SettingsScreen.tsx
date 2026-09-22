@@ -8,6 +8,7 @@ import { AppShell } from '../shell/AppShell.js';
 import { phaseOf } from '../screens/PlaceholderScreen.js';
 import { EmptyState, Notice } from '../ui/index.js';
 import { IconSettings } from '../ui/icons.js';
+import { NotificationsTab } from '../notify/NotificationsTab.js';
 import { AccountTab } from './AccountTab.js';
 import { AuditReport } from './AuditReport.js';
 import { DisplayTab } from './DisplayTab.js';
@@ -28,6 +29,7 @@ export function SettingsScreen({ id }: { id: string }) {
           {t(termKey(current))}
         </h2>
         {current === 'account' && <AccountTab />}
+        {current === 'notifications' && <NotificationsTab />}
         {current === 'display' && <DisplayTab />}
         {current === 'theme' && <ThemeTool />}
         {/* The three reports the audit module answers; `skills` is still a 501 and stays
@@ -36,6 +38,7 @@ export function SettingsScreen({ id }: { id: string }) {
           <AuditReport kind={current} />
         )}
         {current !== 'account' &&
+          current !== 'notifications' &&
           current !== 'display' &&
           current !== 'theme' &&
           current !== 'usage' &&

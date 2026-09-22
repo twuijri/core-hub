@@ -418,3 +418,68 @@
   font-variant-numeric: tabular-nums;
   unicode-bidi: isolate;
 }
+
+/* ------------------------------------------------------------ notifications
+   A notice is a row you can act on, so it is a button — but it must read as a line of
+   text, not as a control. The unread mark is a dot in its own column rather than bold
+   text: bold changes the line's width, and a list that reflows as you read it is worse
+   than one that does not tell you anything. */
+.notice-row {
+  display: grid;
+  grid-template-columns: 0.75rem 1fr auto;
+  align-items: start;
+  gap: 0.625rem;
+  inline-size: 100%;
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--mj-radius-md);
+  text-align: start;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background var(--mj-motion-fast);
+}
+.notice-row:hover,
+.notice-row:focus-visible {
+  background: var(--mj-color-surface-2);
+}
+.notice-row[data-unread] {
+  background: var(--mj-color-surface);
+  border-color: var(--mj-color-border);
+}
+.notice-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  block-size: 1.25rem;
+}
+.notice-dot-on {
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 999px;
+  background: var(--mj-color-accent);
+}
+.notice-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-inline-size: 0;
+}
+.notice-title {
+  font-size: var(--mj-font-size-sm);
+  color: var(--mj-color-text);
+}
+.notice-row[data-unread] .notice-title {
+  font-weight: 600;
+}
+.notice-body {
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notice-time {
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-muted);
+  white-space: nowrap;
+}
