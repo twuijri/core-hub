@@ -18,6 +18,9 @@ derivative work of that code base.
   says why writing it ourselves was worse.
 - Contributors working in this repository do not have the Studio source open
   in the same task. AI agents are instructed the same way in every brief.
+  **Superseded by ADR 0012**: observation of a running product is allowed and
+  encouraged; source stays closed, and observer and implementer are separate
+  roles for the same feature.
 
 ## Consequences
 Slower first weeks, no licence exposure. A review checklist item asks "was any
