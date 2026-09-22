@@ -616,20 +616,68 @@ export class AgentsService {
       sessionRef: string | null;
       cwd: string | null;
       model: string | null;
+      provider?: string | null;
       reasoningEffort: string | null;
     },
   ): AgentTarget {
     const settings = this.settingsRow(workspaceId, row.id);
     const cwd = run.cwd ?? settings?.workingDir ?? null;
     const env = this.environmentFor(row, workspaceId, settings);
+    const selection = this.selectionFor(row, workspaceId, run);
     return {
       ...this.targetOf(row),
       ...(Object.keys(env).length > 0 ? { env } : {}),
       ...(cwd ? { cwd } : {}),
       sessionRef: run.sessionRef,
-      model: run.model ?? this.defaultModelOf(row, workspaceId)?.model ?? null,
+      model: selection.model,
+      modelProvider: selection.provider,
       reasoningEffort: run.reasoningEffort,
     };
+  }
+
+  /**
+   * What one turn should run on: the model id as its provider names it, and the name the
+   * agent's runtime knows that provider by.
+   *
+   * Three things are resolved here that used to be one raw string handed straight to the
+   * agent (the defect of 2026-09-22):
+   *
+   * 1. the composer sends a **catalogue key** (`"<provider slug>/<model>"`), which is not
+   *    a model id anything can serve — it is split back into a provider and a model;
+   * 2. the run's **provider** is named explicitly, so the agent does not fall back on
+   *    whatever its own configuration last said;
+   * 3. absent both, the agent's inherited default is used, and its provider too.
+   *
+   * A model the workspace does not know is passed through untouched rather than dropped:
+   * a person who typed a model id the catalogue has not seen still means it.
+   */
+  selectionFor(
+    row: AgentRow,
+    workspaceId: string,
+    run: { model?: string | null; provider?: string | null },
+  ): { model: string | null; provider: string | null } {
+    const port = this.options.models?.() ?? null;
+    const asked = run.model?.trim() ?? '';
+    if (asked && port) {
+      try {
+        const ref = port.resolveModelKey(workspaceId, asked);
+        if (ref) {
+          return { model: ref.model, provider: port.runtimeProviderName(workspaceId, ref.provider_id) };
+        }
+      } catch {
+        // A provider store that cannot answer must not stop a turn the agent can serve.
+      }
+    }
+    if (asked) return { model: asked, provider: null };
+    const fallback = this.defaultModelOf(row, workspaceId);
+    if (!fallback) return { model: null, provider: null };
+    let provider: string | null = null;
+    try {
+      provider = port?.runtimeProviderName(workspaceId, fallback.provider_id) ?? null;
+    } catch {
+      provider = null;
+    }
+    return { model: fallback.model, provider };
   }
 
   /**

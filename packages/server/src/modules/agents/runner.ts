@@ -21,7 +21,12 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { HubError, agentUnavailable } from '../../lib/errors.js';
 import type { AdapterSet } from './adapters/index.js';
-import type { AgentEvent, AgentSession, ApprovalOption } from './adapters/types.js';
+import type {
+  AgentEvent,
+  AgentSession,
+  ApprovalOption,
+  PromptInput as RunnerPromptInput,
+} from './adapters/types.js';
 import type {
   AgentRunnerPort,
   RunnerApprovalKind,
@@ -77,12 +82,22 @@ export class AgentRunner implements AgentRunnerPort {
     }
     const adapter = adapters.byKind(row.adapterKind);
 
+    // Resolved every turn, not only when the conversation opens. The composer can change
+    // the model between turns, and a live Hermes session is deliberately never evicted —
+    // so a selection read once at `start()` would pin the conversation to its first model
+    // for the life of the process (the defect of 2026-09-22).
+    const selection = service.selectionFor(row, request.workspace, {
+      model: request.model,
+      provider: request.provider,
+    });
+
     let live = this.sessions.get(request.sessionId);
     if (!live) {
       const target = service.targetFor(row, request.workspace, {
         sessionRef: request.agentSessionRef ?? mintSessionRef(row.adapterKind, request.sessionId),
         cwd: request.workingDir,
         model: request.model,
+        provider: request.provider,
         reasoningEffort: request.reasoningEffort,
       });
       const session = await adapter.start(target);
@@ -106,11 +121,21 @@ export class AgentRunner implements AgentRunnerPort {
     // Neither is awaited here — the engine consumes `stream()` and `send()` resolves on the
     // agent's own terms.
     void this.pump(run);
-    void live.session.send({ text: promptText(request.prompt) }).catch((error: unknown) => {
+    const prompt: RunnerPromptInput = {
+      text: promptText(request.prompt),
+      model: selection.model,
+      modelProvider: selection.provider,
+      reasoningEffort: request.reasoningEffort,
+    };
+    void live.session.send(prompt).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : 'the agent refused the turn';
+      const code = error instanceof HubError ? error.code : 'agent_error';
       this.push(run, {
         type: 'failed',
-        code: error instanceof HubError ? error.code : 'agent_error',
-        message: error instanceof Error ? error.message : 'the agent refused the turn',
+        // A refusal that is really "nothing is configured" says so, whichever side of the
+        // wire noticed it: Hermes answers 4xx here and streams the same text there.
+        code: code === 'agent_error' ? failureCode(message) : code,
+        message,
       });
     });
 
@@ -242,6 +267,30 @@ export function mintSessionRef(adapterKind: string, sessionId: string): string |
 }
 
 /** Blocks the adapters cannot carry yet are named in the text, never dropped silently. */
+/**
+ * Hermes's own words for "this host has no provider to run with", recognised so the hub
+ * can answer with a code a client branches on instead of one opaque `agent_error`.
+ *
+ * Why match on text: the run surface flattens the failure into one string
+ * (`gateway/platforms/api_server_runs.py` finishes the run with
+ * `"⚠️ Provider authentication failed: {exc}"`), so the `AuthError.code`
+ * (`no_provider_configured`, raised in `hermes_cli/auth.py` §`resolve_provider`) never
+ * reaches the wire. Both the code token and the sentence it is raised with are matched,
+ * because Hermes prints one or the other depending on the surface. Anything we do not
+ * recognise stays `agent_error` — the message is never rewritten, only labelled.
+ */
+const NO_PROVIDER_MARKERS = [
+  'no_provider_configured',
+  'no inference provider configured',
+] as const;
+
+export function failureCode(message: string | null | undefined): string {
+  const text = (message ?? '').toLowerCase();
+  return NO_PROVIDER_MARKERS.some((marker) => text.includes(marker))
+    ? 'provider_not_configured'
+    : 'agent_error';
+}
+
 export function promptText(blocks: RunnerPromptBlock[]): string {
   const parts: string[] = [];
   for (const block of blocks) {
@@ -393,7 +442,7 @@ export function toRunnerEvent(event: AgentEvent, ctx: TranslateContext): RunnerE
       }
       return { type: 'completed' };
     case 'run.failed':
-      return { type: 'failed', code: 'agent_error', message: event.error };
+      return { type: 'failed', code: failureCode(event.error), message: event.error };
     case 'plan':
       // No `/rt/sessions` event carries a plan yet; it is not a message.
       return null;

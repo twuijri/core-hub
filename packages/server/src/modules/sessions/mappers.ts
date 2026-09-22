@@ -218,6 +218,7 @@ const WIRE_ERROR_CODES = new Set([
   'unsupported_media_type',
   'agent_unavailable',
   'agent_error',
+  'provider_not_configured',
   'rate_limited',
   'internal',
   'not_implemented',

@@ -15,6 +15,7 @@
     "unsupported_media_type": "That file type is not supported.",
     "agent_unavailable": "The agent cannot serve this request right now.",
     "agent_error": "The agent reported an error.",
+    "provider_not_configured": "No model provider is configured for this workspace. Open Settings \u2192 Models \u2192 Defaults and choose a chat model.",
     "rate_limited": "Too many requests. Try again shortly.",
     "internal": "Something went wrong on the hub.",
     "not_implemented": "This operation is declared in the contract but not implemented yet.",

@@ -40,6 +40,13 @@ export interface AgentTarget {
   sessionRef?: string | null;
   /** Model and reasoning effort the session or run asks for; `null` = the agent's default. */
   model?: string | null;
+  /**
+   * The name the agent runtime knows the model's provider by — Hermes's own slug, or the
+   * `providers:` block the hub wrote for an OpenAI-compatible endpoint (ADR 0010). Sent
+   * with the model so a run is never served by whichever provider the runtime's own
+   * configuration happened to name last.
+   */
+  modelProvider?: string | null;
   reasoningEffort?: string | null;
 }
 
@@ -148,6 +155,19 @@ export interface ApprovalOption {
 export interface PromptInput {
   /** Plain text of the person's message. Attachments arrive in a later slice. */
   text: string;
+  /**
+   * What this turn should run on, resolved by the hub: the model id as its provider
+   * names it, and the name the agent runtime knows that provider by.
+   *
+   * Per turn, not per session. The person can change the model in the composer between
+   * turns, and a Hermes conversation outlives every one of them — a selection taken only
+   * at `start()` would silently keep running the first model chosen. Hermes's run surface
+   * takes both on every `POST /v1/runs` (ADR 0008 §1), which is why this is expressible
+   * at all. Absent = whatever the session was started with.
+   */
+  model?: string | null;
+  modelProvider?: string | null;
+  reasoningEffort?: string | null;
 }
 
 /** A live conversation with one agent. */

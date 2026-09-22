@@ -39,9 +39,32 @@ describe('provider catalogue', () => {
     expect(() => assertCatalogueIsWellFormed(broken)).toThrow(/names no variable/);
   });
 
-  it('catches a local entry that claims a name in Hermes it cannot have', () => {
-    const broken: ProviderCatalogueEntry[] = [{ ...entry('lmstudio'), hermesProvider: 'lmstudio' }];
-    expect(() => assertCatalogueIsWellFormed(broken)).toThrow(/claims a Hermes name/);
+  it('catches a local entry that claims Hermes variables it cannot have', () => {
+    const broken: ProviderCatalogueEntry[] = [
+      { ...entry('lmstudio'), hermesEnvVars: ['LMSTUDIO_API_KEY'] },
+    ];
+    expect(() => assertCatalogueIsWellFormed(broken)).toThrow(/claims Hermes variables/);
+  });
+
+  it('catches an entry whose Hermes slug and Hermes route disagree', () => {
+    // A slug without the route is a name nothing writes; a route without the slug is a
+    // `builtin` the hub has nothing to call. Both are the same mistake, caught twice.
+    expect(() =>
+      assertCatalogueIsWellFormed([{ ...entry('lmstudio'), hermesProvider: 'lmstudio' }]),
+    ).toThrow(/names a Hermes slug but is not routed to it/);
+    expect(() =>
+      assertCatalogueIsWellFormed([{ ...entry('anthropic'), hermesProvider: null }]),
+    ).toThrow(/builtin but names no Hermes slug/);
+  });
+
+  it('catches a chat provider the hub could not say to Hermes at all', () => {
+    // Every `llm` entry must be expressible: that a provider loaded its models and then
+    // reached nothing is the whole of the 2026-09-22 defect.
+    expect(() =>
+      assertCatalogueIsWellFormed([
+        { ...entry('lmstudio'), hermesRoute: 'none' as const, hermesApiMode: null },
+      ]),
+    ).toThrow(/must be expressible to Hermes/);
   });
 
   describe('the local providers (the owner asked for these first)', () => {

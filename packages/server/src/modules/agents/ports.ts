@@ -45,6 +45,23 @@ export interface AgentModelsPort {
     adapterKind: string,
     pinnedModelId: string | null,
   ): { provider_id: string; model: string } | null;
+  /**
+   * What a run named, resolved to a provider and the model id that provider uses.
+   *
+   * A client picks from `models.listCatalogue`, whose `Model.key` is
+   * `"<provider slug>/<model>"` — one string, so a `<Select>` has something to be the
+   * value of. That string is not a model id any provider has ever heard of, and handing
+   * it to a runtime is how the model the person chose stopped being the model that ran
+   * (the defect of 2026-09-22). A bare model id is accepted too, and resolves against
+   * the workspace's own catalogue.
+   */
+  resolveModelKey(workspace: string, key: string): { provider_id: string; model: string } | null;
+  /**
+   * The name the agent runtime knows a provider by — Hermes's own slug, or the
+   * `providers:` block the hub wrote for an OpenAI-compatible endpoint (ADR 0010).
+   * `null` when the runtime cannot be told about this provider at all.
+   */
+  runtimeProviderName(workspace: string, providerId: string): string | null;
   /** Which workspace assignment an agent of this kind inherits (`chat` / `coding`). */
   roleForAdapter(adapterKind: string): string;
 }
