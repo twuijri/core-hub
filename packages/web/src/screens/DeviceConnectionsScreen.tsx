@@ -10,7 +10,7 @@ import { termKey } from '../navigation/manifest.js';
 import { useRealtime } from '../realtime/context.js';
 import { isEnvelope } from '../realtime/envelope.js';
 import { AppShell } from '../shell/AppShell.js';
-import { SettingsBack } from '../settings/SettingsBack.js';
+import { SettingsLayout } from '../settings/SettingsLayout.js';
 import type { Pairing } from '../types.js';
 import { Button, Card, EmptyState, Notice, TabPanel, Tabs } from '../ui/index.js';
 import { IconDevices } from '../ui/icons.js';
@@ -102,78 +102,79 @@ export function DeviceConnectionsScreen() {
     : 0;
 
   return (
-    <AppShell title={title}>
-      <SettingsBack />
+    <AppShell title={title} wide>
       <h1 className="sr-only">{title}</h1>
-      {/* Two sections of one page, switched in place: that is a tab set, and it carries
+      <SettingsLayout current="device_connections">
+        {/* Two sections of one page, switched in place: that is a tab set, and it carries
           the tab semantics (`role="tablist"`, arrow keys, `aria-controls`) a segmented
           control must not claim. */}
-      <Tabs
-        label={title}
-        value={tab}
-        onValueChange={(next) => setTab(next as 'app' | 'devices')}
-        testId="devices-tabs"
-        items={[
-          { value: 'app', label: t('devices.tab.app') },
-          ...(isAdmin ? [{ value: 'devices', label: t('devices.tab.devices') }] : []),
-        ]}
-      >
-        <TabPanel value="app">
-          <section className="flex flex-col items-start gap-3">
-            <p className="text-sm text-muted">{t('devices.pair_intro')}</p>
-            <Button variant="primary" onClick={() => void start()} data-testid="start-pairing">
-              {pairing ? t('devices.pair_again') : t('devices.pair')}
-            </Button>
-            {error !== null && <Notice tone="danger">{describeError(error, t)}</Notice>}
-            {pairing && (
-              <Card
-                tone="raised"
-                className="items-center self-stretch sm:self-start"
-                testId="pairing"
-                data-status={pairing.status}
-              >
-                {pairing.status === 'pending' && secondsLeft > 0 ? (
-                  <>
-                    <QrCode text={pairing.qr_payload} />
-                    <p
-                      className="font-mono text-2xl tracking-widest"
-                      dir="ltr"
-                      data-testid="pairing-code"
-                    >
-                      {pairing.code}
-                    </p>
-                    <p className="text-xs text-muted">
-                      {t('devices.expires_in', { seconds: secondsLeft })}
-                    </p>
-                  </>
-                ) : pairing.status === 'claimed' ? (
-                  <Notice tone="success">
-                    {t('devices.claimed', { name: claimedName ?? pairing.device_id ?? '' })}
-                  </Notice>
-                ) : (
-                  <Notice tone="warning">
-                    {t(
-                      `devices.pairing_${pairing.status === 'cancelled' ? 'cancelled' : 'expired'}`,
-                    )}
-                  </Notice>
-                )}
-              </Card>
-            )}
-          </section>
-        </TabPanel>
-        {isAdmin && (
-          <TabPanel value="devices">
-            <EmptyState
-              icon={<IconDevices size={20} />}
-              title={t('devices.tab.devices')}
-              body={t('placeholder.later', {
-                name: t('devices.tab.devices'),
-                phase: phaseOf('devices'),
-              })}
-            />
+        <Tabs
+          label={title}
+          value={tab}
+          onValueChange={(next) => setTab(next as 'app' | 'devices')}
+          testId="devices-tabs"
+          items={[
+            { value: 'app', label: t('devices.tab.app') },
+            ...(isAdmin ? [{ value: 'devices', label: t('devices.tab.devices') }] : []),
+          ]}
+        >
+          <TabPanel value="app">
+            <section className="flex flex-col items-start gap-3">
+              <p className="text-sm text-muted">{t('devices.pair_intro')}</p>
+              <Button variant="primary" onClick={() => void start()} data-testid="start-pairing">
+                {pairing ? t('devices.pair_again') : t('devices.pair')}
+              </Button>
+              {error !== null && <Notice tone="danger">{describeError(error, t)}</Notice>}
+              {pairing && (
+                <Card
+                  tone="raised"
+                  className="items-center self-stretch sm:self-start"
+                  testId="pairing"
+                  data-status={pairing.status}
+                >
+                  {pairing.status === 'pending' && secondsLeft > 0 ? (
+                    <>
+                      <QrCode text={pairing.qr_payload} />
+                      <p
+                        className="font-mono text-2xl tracking-widest"
+                        dir="ltr"
+                        data-testid="pairing-code"
+                      >
+                        {pairing.code}
+                      </p>
+                      <p className="text-xs text-muted">
+                        {t('devices.expires_in', { seconds: secondsLeft })}
+                      </p>
+                    </>
+                  ) : pairing.status === 'claimed' ? (
+                    <Notice tone="success">
+                      {t('devices.claimed', { name: claimedName ?? pairing.device_id ?? '' })}
+                    </Notice>
+                  ) : (
+                    <Notice tone="warning">
+                      {t(
+                        `devices.pairing_${pairing.status === 'cancelled' ? 'cancelled' : 'expired'}`,
+                      )}
+                    </Notice>
+                  )}
+                </Card>
+              )}
+            </section>
           </TabPanel>
-        )}
-      </Tabs>
+          {isAdmin && (
+            <TabPanel value="devices">
+              <EmptyState
+                icon={<IconDevices size={20} />}
+                title={t('devices.tab.devices')}
+                body={t('placeholder.later', {
+                  name: t('devices.tab.devices'),
+                  phase: phaseOf('devices'),
+                })}
+              />
+            </TabPanel>
+          )}
+        </Tabs>
+      </SettingsLayout>
     </AppShell>
   );
 }
