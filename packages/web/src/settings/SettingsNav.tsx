@@ -21,7 +21,8 @@ import {
   webDestinations,
 } from '../navigation/manifest.js';
 import { IconAgents, IconDevices, IconKnowledge, IconModels } from '../ui/icons.js';
-import { SidebarGroup, SidebarRow } from '../ui/index.js';
+import { Badge, SidebarGroup, SidebarRow } from '../ui/index.js';
+import { useUnreadCount } from '../notify/queries.js';
 
 /**
  * Every destination that lives under Settings **and exists on the web**. `this_device` is
@@ -71,6 +72,8 @@ export function SettingsNav({
   const { t } = useI18n();
   const { user } = useAuth();
   const role = user?.role ?? 'member';
+  // The one number worth carrying outside its own page: how many notices are waiting.
+  const unread = useUnreadCount();
   // The Settings index opens on Account, so Account is the row that reads as current.
   const here = current === 'settings' ? 'account' : current;
   const groups: Array<{ id: string; label?: string; ids: readonly string[] }> = [
@@ -98,6 +101,15 @@ export function SettingsNav({
                 key={d.id}
                 label={t(termKey(d.id))}
                 {...(rowIcon(d.id) ? { icon: rowIcon(d.id) } : {})}
+                {...(d.id === 'notifications' && unread > 0
+                  ? {
+                      trailing: (
+                        <Badge tone="accent" testId="unread-badge">
+                          {String(unread)}
+                        </Badge>
+                      ),
+                    }
+                  : {})}
                 render={({ className, children }) => (
                   <NavLink
                     to={routeOf(d.id)}

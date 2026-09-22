@@ -18,8 +18,14 @@ import { registerSessionRoutes } from './routes.js';
 import { derivedScopeResolver, type ScopeResolver } from './scope.js';
 import { SessionsService } from './service.js';
 import { SessionsStore } from './store.js';
-import type { AgentDirectory, AgentRunner, AttachmentsPort, SessionsPorts } from './ports.js';
-import { noAttachments, unavailableAgents, unavailableRunner } from './unavailable.js';
+import type {
+  AgentDirectory,
+  AgentRunner,
+  AttachmentsPort,
+  SessionsNotifier,
+  SessionsPorts,
+} from './ports.js';
+import { noAttachments, noNotifier, unavailableAgents, unavailableRunner } from './unavailable.js';
 
 /**
  * A port, or a factory that builds it for one app: the real ports (`agents`, `auth`) keep
@@ -36,6 +42,8 @@ export interface SessionsModuleOptions {
   attachments?: PortOrFactory<AttachmentsPort>;
   /** `auth`'s workspace/user resolution. Default: derived from the profile slug. */
   scopes?: PortOrFactory<ScopeResolver>;
+  /** `notify`'s inbox. Default: nobody is told anything. */
+  notifier?: PortOrFactory<SessionsNotifier>;
   /** Silence from the adapter for this long ends a run as `timed_out`. */
   agentTimeoutMs?: number;
 }
@@ -49,6 +57,7 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
     agents: resolvePort(options.agents ?? unavailableAgents, app),
     runner: resolvePort(options.runner ?? unavailableRunner, app),
     attachments: resolvePort(options.attachments ?? noAttachments, app),
+    notifier: resolvePort(options.notifier ?? noNotifier, app),
     agentTimeoutMs: options.agentTimeoutMs ?? 10 * 60_000,
   });
   const scopesFor = (app: FastifyInstance): ScopeResolver =>
