@@ -16,7 +16,7 @@ export interface SelectOption {
 }
 
 export function Select({
-  value,
+  value: given,
   onValueChange,
   options,
   label,
@@ -39,8 +39,15 @@ export function Select({
   title?: string | undefined;
   testId?: string;
 }) {
+  // An empty string is "nothing chosen", not a nameless option.
+  const value = given === '' ? null : given;
   const EMPTY = '__default__';
-  const chosen = options.find((option) => option.value === value);
+  // A value the list does not know (a session running a model the catalogue no longer has)
+  // must still be readable and re-selectable, not silently blank.
+  const known = options.some((option) => option.value === value);
+  const shown: readonly SelectOption[] =
+    value !== null && !known ? [{ value, label: value }, ...options] : options;
+  const chosen = shown.find((option) => option.value === value);
   return (
     <RadixSelect.Root
       value={value ?? EMPTY}
@@ -65,7 +72,7 @@ export function Select({
         <RadixSelect.Content className="mj-select-menu glass" position="popper" sideOffset={6}>
           <RadixSelect.Viewport>
             {placeholder !== undefined && <Item value={EMPTY} label={placeholder} />}
-            {options.map((option) => (
+            {shown.map((option) => (
               <Item key={option.value} value={option.value} label={option.label} />
             ))}
           </RadixSelect.Viewport>

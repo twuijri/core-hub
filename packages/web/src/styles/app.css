@@ -516,14 +516,15 @@
 }
 
 .composer-starters {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
   gap: var(--mj-space-2);
   padding: var(--mj-space-3) var(--mj-space-1) 0;
 }
 .starter {
   display: block;
-  max-inline-size: 22rem;
+  inline-size: 100%;
+  block-size: 100%;
   padding: var(--mj-space-2) var(--mj-space-3);
   border-radius: var(--mj-radius-md);
   border: 1px solid var(--mj-color-border);

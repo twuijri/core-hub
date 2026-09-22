@@ -211,7 +211,9 @@
     "approval_mode": {
       "ask": "Default: ask",
       "auto_safe": "Auto-edit",
-      "auto_all": "No ask"
+      "auto_all": "No ask",
+      "off": "No approvals",
+      "always": "Always ask"
     },
     "dictate": "Dictate",
     "dictate_unavailable": "Dictation arrives with a speech provider (models.transcribe is still 501)."

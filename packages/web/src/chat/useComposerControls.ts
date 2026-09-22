@@ -15,16 +15,38 @@ import { useCatalogue } from '../models/queries.js';
 import type { SettingsSection } from '../types.js';
 import type { ComposerOption } from './Composer.js';
 
-export const APPROVAL_FIELD = 'approval_mode';
+/**
+ * The approval field, whatever the adapter calls it. The ACP adapters declare
+ * `approval_mode` (ask · auto_safe · auto_all — the one the `agent_settings.approval_mode`
+ * column stores); Hermes declares `approvals_mode` with its own three. The client does not
+ * decide which exist (NAVIGATION rule 5): it shows the options the descriptor declares.
+ */
+export const APPROVAL_FIELDS = ['approval_mode', 'approvals_mode'] as const;
 
-/** Where `approval_mode` lives in a descriptor, and what it is set to. */
+export interface ApprovalField {
+  section: string;
+  key: string;
+  value: string;
+  options: ComposerOption[];
+}
+
 export function findApprovalMode(
   sections: readonly SettingsSection[] | undefined,
-): { section: string; value: string } | null {
+  label: (value: string, fallback: string) => string = (_v, fallback) => fallback,
+): ApprovalField | null {
   for (const section of sections ?? []) {
     for (const field of section.fields) {
-      if (field.key !== APPROVAL_FIELD) continue;
-      return { section: section.key, value: typeof field.value === 'string' ? field.value : 'ask' };
+      if (!(APPROVAL_FIELDS as readonly string[]).includes(field.key)) continue;
+      const options = (field.options ?? []).map((option) => ({
+        value: String(option.value),
+        label: label(String(option.value), option.label),
+      }));
+      return {
+        section: section.key,
+        key: field.key,
+        value: typeof field.value === 'string' ? field.value : (options[0]?.value ?? 'ask'),
+        options,
+      };
     }
   }
   return null;
@@ -44,6 +66,8 @@ export function useComposerModels(): ComposerOption[] {
 
 export interface ApprovalControl {
   mode: string | null;
+  /** The modes the adapter declares; empty when it declares none. */
+  options: ComposerOption[];
   disabledReason: string | null;
   set(value: string): void;
 }
@@ -52,16 +76,26 @@ export function useApprovalMode(agentId: string | null): ApprovalControl {
   const { t } = useI18n();
   const settings = useAgentSettings(agentId);
   const save = useSaveAgentSetting(agentId);
-  const found = findApprovalMode(settings.data?.sections as SettingsSection[] | undefined);
-  if (!agentId)
-    return { mode: null, disabledReason: t('composer.approval_no_agent'), set: () => {} };
-  if (settings.isPending) return { mode: null, disabledReason: t('common.loading'), set: () => {} };
-  if (!found)
-    return { mode: null, disabledReason: t('composer.approval_unsupported'), set: () => {} };
+  // Our own wording for the modes we know; the adapter's own label for anything else.
+  const label = (value: string, fallback: string) => {
+    const key = `composer.approval_mode.${value}`;
+    const translated = t(key);
+    return translated === key ? fallback : translated;
+  };
+  const found = findApprovalMode(settings.data?.sections as SettingsSection[] | undefined, label);
+  const off = (reason: string): ApprovalControl => ({
+    mode: null,
+    options: [],
+    disabledReason: reason,
+    set: () => {},
+  });
+  if (!agentId) return off(t('composer.approval_no_agent'));
+  if (settings.isPending) return off(t('common.loading'));
+  if (!found || found.options.length === 0) return off(t('composer.approval_unsupported'));
   return {
     mode: found.value,
+    options: found.options,
     disabledReason: null,
-    set: (value: string) =>
-      save.mutate({ section: found.section, values: { [APPROVAL_FIELD]: value } }),
+    set: (value: string) => save.mutate({ section: found.section, values: { [found.key]: value } }),
   };
 }
