@@ -116,14 +116,19 @@ test.describe('web smoke journeys', () => {
     expect(Number(await separator.getAttribute('aria-valuenow'))).toBeGreaterThan(before);
     await page.screenshot({ path: path.join(shots, 'chat-pane-ar-light.png'), fullPage: true });
 
-    // Dark theme and English (LTR) through the settings screen; both persist on the root.
-    await page.getByRole('link', { name: 'الإعدادات' }).click();
-    // The sidebar is slim: the management pages are here, not in the rail. The rail is
-    // New chat · Search · Tasks · Schedules, and the segment row is Chat · Rooms only.
-    await expect(page.getByTestId('settings-management').getByRole('link')).toHaveCount(4);
+    // The sidebar is slim: the rail is New chat · Search · Tasks · Schedules, and the
+    // segment row is Chat · Rooms only. Both belong to the chat list, so they are checked
+    // here, before Settings replaces the list with its own.
     await expect(page.getByTestId('rail').getByRole('link')).toHaveCount(4);
     await expect(page.getByTestId('segments').getByRole('radio')).toHaveCount(2);
     await expect(page.getByTestId('segments')).not.toContainText('السجل');
+
+    // Dark theme and English (LTR) through the settings screen; both persist on the root.
+    await page.getByRole('link', { name: 'الإعدادات' }).click();
+    // Inside Settings the sidebar *is* the settings list (owner, 2026-09-22): the
+    // management pages are rows in it, and the conversation list has stepped aside.
+    await expect(page.getByTestId('settings-management').getByRole('link')).toHaveCount(4);
+    await expect(page.getByTestId('session-row')).toHaveCount(0);
     await page.screenshot({
       path: path.join(shots, 'settings-management-ar-light.png'),
       fullPage: true,
