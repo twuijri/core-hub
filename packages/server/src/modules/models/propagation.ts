@@ -184,9 +184,12 @@ function writeAtomic(file: string, text: string): void {
 export function writeHermesEnv(plan: HermesEnvPlan): HermesWriteResult {
   const existing = existsSync(plan.file) ? readFileSync(plan.file, 'utf8') : '';
   const merged = mergeEnv(existing, plan.values, plan.owned);
-  const text = merged.text === '' ? `${MANAGED_MARKER}\n` : merged.text;
+  // An empty merge over an empty file is nothing to say: creating a file that holds only
+  // the marker leaves the next merge appending a *second* marker above the first
+  // variable. Over a file that had content, the marker is what explains the emptiness.
+  const text = merged.text === '' && existing !== '' ? `${MANAGED_MARKER}\n` : merged.text;
   const dirty = text !== existing;
-  if (dirty) writeAtomic(plan.file, text);
+  if (dirty && text !== '') writeAtomic(plan.file, text);
   return { file: plan.file, changed: merged.changed, removed: merged.removed, dirty };
 }
 

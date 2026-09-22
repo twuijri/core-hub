@@ -111,8 +111,28 @@ export function httpHermesTransport(options: HermesHttpOptions): HermesTransport
     ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
   });
 
+  /**
+   * A gateway that does not answer at all is `agent_unavailable`, not `agent_error`.
+   * The hub itself recycles this process whenever a provider changes (ADR 0010), so a
+   * turn sent a second later meets a socket that is not listening yet — and `fetch
+   * failed` is not something a person can act on, where "the runtime is starting" is.
+   */
+  const reach = async (url: string, init: RequestInit): Promise<Response> => {
+    try {
+      return await doFetch(url, init);
+    } catch (error) {
+      if (error instanceof HubError) throw error;
+      throw new HubError('agent_unavailable', {
+        message: `the Hermes gateway at ${base} did not answer (${
+          error instanceof Error ? error.message : String(error)
+        })`,
+        details: { reason: 'gateway_unreachable', endpoint: base },
+      });
+    }
+  };
+
   const post = async (path: string, body: unknown, signal?: AbortSignal): Promise<Response> => {
-    const response = await doFetch(`${base}${path}`, {
+    const response = await reach(`${base}${path}`, {
       method: 'POST',
       headers: headers(),
       body: JSON.stringify(body),
@@ -139,7 +159,7 @@ export function httpHermesTransport(options: HermesHttpOptions): HermesTransport
     },
 
     async *events(runId, signal) {
-      const response = await doFetch(`${base}/v1/runs/${encodeURIComponent(runId)}/events`, {
+      const response = await reach(`${base}/v1/runs/${encodeURIComponent(runId)}/events`, {
         method: 'GET',
         headers: { ...headers(), accept: 'text/event-stream' },
         signal,
