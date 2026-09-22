@@ -10,6 +10,7 @@ import { buildServer } from '../../server/src/app/server.js';
 import { createLogger } from '../../server/src/lib/logger.js';
 import { modules as defaultModules } from '../../server/src/modules/index.js';
 import { overrideAgents } from '../../server/src/modules/agents/index.js';
+import { overrideModels } from '../../server/src/modules/models/index.js';
 import type { AgentInstaller } from '../../server/src/modules/agents/index.js';
 import { createSessionsModule } from '../../server/src/modules/sessions/index.js';
 import type {
@@ -199,6 +200,41 @@ overrideAgents({
   installer: e2eInstaller,
   adapterOptions: { hermes: { fetchImpl: scriptedGateway } },
 });
+
+/**
+ * A provider with a catalogue the size of a real one. The owner connected OpenRouter,
+ * the fetch returned 443 models, and the plain dropdown made finding one impossible —
+ * this is that list, so the searchable picker is exercised at the size that broke.
+ * Nothing here reaches the network: the provider adapters get this `fetch` and no other.
+ */
+const FAMILIES = [
+  'claude-opus',
+  'claude-sonnet',
+  'claude-haiku',
+  'gpt',
+  'gemini',
+  'llama',
+  'mistral',
+  'qwen',
+  'deepseek',
+  'command-r',
+];
+const bigCatalogue = Array.from({ length: 443 }, (_, i) => {
+  const family = FAMILIES[i % FAMILIES.length] as string;
+  const variant = i % 3 === 0 ? '-thinking' : i % 3 === 1 ? '-instruct' : '';
+  return { id: `${family}-${Math.floor(i / FAMILIES.length) + 1}${variant}`, object: 'model' };
+});
+const scriptedProvider: typeof fetch = async (input) => {
+  const url = String(input instanceof Request ? input.url : input);
+  const json = (value: unknown) =>
+    new Response(JSON.stringify(value), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  if (url.endsWith('/models')) return json({ data: bigCatalogue });
+  return json({ ok: true });
+};
+overrideModels({ fetchImpl: scriptedProvider });
 
 const sessions = createSessionsModule({
   agents: { find: async (_workspace, agentId) => fakeHermes(agentId) },

@@ -4,7 +4,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { chooseOption, closeControl, optionLabels } from './helpers/ui.js';
+import {
+  chooseInCombobox,
+  chooseOption,
+  closeControl,
+  optionLabels,
+  stubListViewport,
+} from './helpers/ui.js';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AuthProvider } from '../src/auth/context.js';
@@ -399,8 +405,13 @@ describe('models screen', () => {
         'Connection refused at 127.0.0.1:1234',
       ),
     );
-    // A failure is a failure: no models were invented for the select.
-    expect(screen.getByTestId('add-default-model')).toBeDisabled();
+    // A failure is a failure: no models were invented for the picker, and the picker
+    // shows the provider's own sentence rather than an empty list.
+    await userEvent.click(screen.getByTestId('add-default-model'));
+    expect(await screen.findByTestId('combobox-error')).toHaveTextContent(
+      'Connection refused at 127.0.0.1:1234',
+    );
+    await userEvent.keyboard('{Escape}');
     const probe = state.sent.find((call) => call.url.includes('provider-probes'));
     expect(probe?.body).toMatchObject({ preset: 'lmstudio', base_url: 'http://127.0.0.1:1234/v1' });
   });
@@ -412,12 +423,13 @@ describe('models screen', () => {
     await chooseOption(userEvent, screen.getByTestId('add-preset'), 'LM Studio');
     await userEvent.click(screen.getByTestId('add-fetch-models'));
 
-    await waitFor(() => expect(screen.getByTestId('add-default-model')).toBeEnabled());
-    await chooseOption(
+    const undo = stubListViewport();
+    await chooseInCombobox(
       userEvent,
       screen.getByTestId('add-default-model'),
       'qwen2.5-coder-7b-instruct',
     );
+    undo();
     await userEvent.click(screen.getByTestId('add-submit'));
 
     await waitFor(() => {
@@ -545,7 +557,9 @@ describe('models screen', () => {
     await userEvent.click(screen.getByText('Defaults'));
 
     await waitFor(() => expect(screen.getByTestId('default-chat')).toBeTruthy());
-    await chooseOption(userEvent, screen.getByTestId('default-chat'), 'claude-sonnet-4-5');
+    const undo = stubListViewport();
+    await chooseInCombobox(userEvent, screen.getByTestId('default-chat'), 'claude-sonnet-4-5');
+    undo();
     await waitFor(() => {
       const put = state.sent.find((call) => call.url.endsWith('/models/defaults') && call.body);
       expect(put?.body).toEqual({
