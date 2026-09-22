@@ -483,3 +483,34 @@
   color: var(--mj-color-text-muted);
   white-space: nowrap;
 }
+
+/* ---------------------------------------------------------------- knowledge
+   A row is a card without being a Card: three tables share this list, and a border that
+   changes with the kind is how you tell a journal entry from an attached file at a
+   glance, without a column of icons. */
+.knowledge-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mj-space-2);
+  padding: var(--mj-space-3);
+  border: 1px solid var(--mj-color-border);
+  border-inline-start-width: 3px;
+  border-radius: var(--mj-radius-md);
+  background: var(--mj-color-surface);
+}
+.knowledge-row[data-kind='journal'] {
+  border-inline-start-color: var(--mj-color-accent);
+}
+.knowledge-row[data-kind='file'] {
+  border-inline-start-color: var(--mj-color-text-faint);
+}
+.knowledge-content {
+  font-size: var(--mj-font-size-sm);
+  color: var(--mj-color-text-muted);
+  /* Two lines of the entry, so the list stays a list. The whole of it is one click away
+     in the conversation it came from. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

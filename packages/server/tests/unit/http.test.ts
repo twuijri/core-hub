@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { OpenApiDocument } from '@majlis/contracts';
+import { loadOpenApiDocument, type OpenApiDocument } from '@majlis/contracts';
 import { defineModule } from '../../src/lib/module.js';
-import { testHub, type TestHub } from './helpers.js';
+import { signedInHub, testHub, type TestHub } from './helpers.js';
 
 const contract: OpenApiDocument = {
   openapi: '3.1.0',
@@ -82,6 +82,40 @@ describe('http composition', () => {
       expect(work.json()).toEqual({ profile: 'work' });
     } finally {
       await scoped.close();
+    }
+  });
+});
+
+describe('meta.get: who this server is', () => {
+  it('answers without a token, because a client compares the contract before signing in', async () => {
+    const hub = await testHub();
+    try {
+      const response = await hub.app.inject({ method: 'GET', url: '/api/v1/meta' });
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as Record<string, unknown>;
+      expect(body.name).toBe('Majlis');
+      // The contract it actually loaded, not a number written twice.
+      expect(body.contract_version).toBe(
+        (loadOpenApiDocument()?.info as { version: string }).version,
+      );
+      expect(body.api_versions).toEqual(['v1']);
+      expect(body.locales).toEqual(['ar', 'en']);
+      // The namespaces this process really opened.
+      expect(body.realtime_namespaces).toContain('/rt/sessions');
+      // A hub with no owner says so: it is what the first-run screen asks (ADR 0011).
+      expect(body.setup_required).toBe(true);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('stops asking for setup once an owner exists', async () => {
+    const hub = await signedInHub();
+    try {
+      const response = await hub.app.inject({ method: 'GET', url: '/api/v1/meta' });
+      expect((response.json() as { setup_required: boolean }).setup_required).toBe(false);
+    } finally {
+      await hub.close();
     }
   });
 });

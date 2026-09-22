@@ -37,12 +37,14 @@ const SPECIAL: Record<string, () => ReactElement> = {
 function elementFor(id: string): ReactElement {
   const special = SPECIAL[id];
   if (special) return special();
-  // The management pages (agents, models, devices, knowledge) live under /settings but are
-  // screens of their own, not sections of the Settings screen: they keep their own component.
+  // The management pages that need a screen of their own (agents, models, devices) are in
+  // SPECIAL above. Everything else under /settings — tabs, tools, and `knowledge`, which
+  // is a list and not a manager — is a section of the Settings screen.
   if (
     id === 'settings' ||
     navigation.settingsTabs.includes(id) ||
-    navigation.settingsTools.includes(id)
+    navigation.settingsTools.includes(id) ||
+    navigation.settingsManagement.includes(id)
   )
     return <SettingsScreen id={id} />;
   return <PlaceholderScreen id={id} />;
