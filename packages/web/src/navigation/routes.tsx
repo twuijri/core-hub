@@ -3,6 +3,7 @@
 // (tests/navigation.parity.test.ts) compares this list with the manifest.
 import type { ReactElement } from 'react';
 import { AgentManagerScreen } from '../agents/AgentManagerScreen.js';
+import { AgentSettingsScreen } from '../agents/AgentSettingsScreen.js';
 import { ChatScreen } from '../chat/ChatScreen.js';
 import { ModelsScreen } from '../models/ModelsScreen.js';
 import { DeviceConnectionsScreen } from '../screens/DeviceConnectionsScreen.js';
@@ -24,6 +25,7 @@ const SPECIAL: Record<string, () => ReactElement> = {
   search: () => <SearchScreen />,
   device_connections: () => <DeviceConnectionsScreen />,
   agent_manager: () => <AgentManagerScreen />,
+  agent_settings: () => <AgentSettingsScreen />,
   chat: () => <ChatScreen />,
   models: () => <ModelsScreen />,
 };
