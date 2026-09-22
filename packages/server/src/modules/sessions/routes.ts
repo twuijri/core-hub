@@ -211,10 +211,18 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     const scope = await scopeOf(request);
     const session_id = pathId(request.params, 'session_id', 'session');
     const body = parse(
-      z.object({ at_message_id: ulid.nullish(), title: z.string().max(200).nullish() }),
+      z.object({
+        at_message_id: ulid.nullish(),
+        title: z.string().max(200).nullish(),
+        // Continuing with another agent (contract decision §26); all three are optional
+        // and a body without them is the fork that existed before, unchanged.
+        agent_id: ulid.nullish(),
+        model: z.string().nullish(),
+        provider: z.string().nullish(),
+      }),
       request.body ?? {},
     );
-    return reply.status(201).send(deps.service(request).fork(scope, session_id, body));
+    return reply.status(201).send(await deps.service(request).fork(scope, session_id, body));
   });
 
   app.get('/sessions/:session_id/export', async (request, reply: FastifyReply) => {

@@ -2449,6 +2449,10 @@ paths:
       operationId: sessions.fork
       tags: [sessions]
       summary: Fork a session into a new one that shares its history
+      description: |
+        The fork carries the transcript, starts no run, and leaves the source session
+        exactly as it was. With `agent_id` it is also how a conversation continues with a
+        different agent (contract decision §26).
       requestBody:
         required: false
         content:
@@ -2458,6 +2462,7 @@ paths:
             example:
               at_message_id: 01J8QK3ZR2W7M5N4P6T8V9X0MB
               title: 'تجربة بديلة'
+              agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AH
       x-rt-events: [session.created]
       responses:
         '201':
@@ -2500,6 +2505,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/AgentUnavailable'
   /sessions/{session_id}/export:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -12615,6 +12622,11 @@ components:
         title:
           type: [string, 'null']
           maxLength: 200
+          description: |
+            A non-empty title is the person's own and the hub never replaces it.
+            `null` gives the naming back to the hub: the session is renamed from its
+            own first turn, and the new title arrives as `session.updated`
+            (contract decision §26).
         pinned:
           type: boolean
         archived:
@@ -12658,6 +12670,14 @@ components:
                 - type: 'null'
     SessionForkRequest:
       type: object
+      description: |
+        Every field is optional and every one of them defaults to the source session's own
+        value, so an empty body still means "the same conversation, twice".
+
+        `agent_id` is how a person continues a conversation with a different agent
+        (contract decision §26): the transcript is copied, the fork runs on the named agent,
+        no run is started, and the original is untouched. Changing only the **model** is not
+        a fork — that is `sessions.update`.
       properties:
         at_message_id:
           oneOf:
@@ -12666,6 +12686,19 @@ components:
           description: Copy history up to and including this message; default the whole session.
         title:
           type: [string, 'null']
+        agent_id:
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+          description: |
+            Run the fork on this agent instead of the source session's. Unknown id -> `404`;
+            an agent this hub has not installed -> `422 agent_unavailable`.
+        model:
+          type: [string, 'null']
+          description: Model for the fork; omit to inherit the source session's.
+        provider:
+          type: [string, 'null']
+          description: Provider for the fork; omit to inherit the source session's.
     BulkResult:
       type: object
       required: [results]

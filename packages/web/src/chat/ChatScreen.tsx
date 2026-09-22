@@ -19,6 +19,7 @@ import { takeFirstMessage } from './firstMessage.js';
 import { Transcript } from './MessageView.js';
 import { RunStatus } from './RunStatus.js';
 import { RunFailureNotice } from './RunFailureNotice.js';
+import { SessionAgent } from './SessionAgent.js';
 import { useRuntimeReport } from '../models/queries.js';
 import { activeRun, isBusy } from './transcript.js';
 import { runProgress, turnsOf } from './turns.js';
@@ -143,6 +144,9 @@ function OpenSession({ sessionId }: { sessionId: string }) {
         data-session-id={sessionId}
       >
         <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="chat-header">
+          {/* Who this conversation is with, stated quietly now that the chip row is gone
+              (owner decision, 2026-09-22). Changing it here forks the session. */}
+          <SessionAgent sessionId={sessionId} agentId={agentId} />
           <WorkingDirPicker
             value={state.session?.working_dir ?? null}
             onChange={(next) => patch.mutate({ working_dir: next })}
@@ -214,16 +218,24 @@ function OpenSession({ sessionId }: { sessionId: string }) {
           // While a run is alive the composer carries the live indicator: something moving,
           // the word, and the seconds counting up (owner decision, 2026-09-22).
           {...(progress ? { status: <RunStatus progress={progress} /> } : {})}
-          chips={
-            <AgentChips
-              selectedId={agentId}
-              mode="current"
-              // The chips decide the agent of a *new* chat; the open one keeps its own.
-              onSelect={(agent) => {
-                if (agent.id !== agentId) navigate(`${routeOf('new_chat')}?agent=${agent.id}`);
-              }}
-            />
-          }
+          // The row belongs to an empty chat only (owner decision, 2026-09-22): once the
+          // conversation has turns, its agent is in the header and changing it is a fork.
+          {...(messageCount === 0
+            ? {
+                chips: (
+                  <AgentChips
+                    selectedId={agentId}
+                    mode="current"
+                    // Before the first message nothing has been said yet, so another agent
+                    // simply means another (still empty) chat.
+                    onSelect={(agent) => {
+                      if (agent.id !== agentId)
+                        navigate(`${routeOf('new_chat')}?agent=${agent.id}`);
+                    }}
+                  />
+                ),
+              }
+            : {})}
           model={state.session?.model ?? null}
           models={models}
           recentModels={recent}

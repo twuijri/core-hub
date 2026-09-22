@@ -14,6 +14,7 @@ import { overrideModels } from '../../server/src/modules/models/index.js';
 import type { AgentInstaller } from '../../server/src/modules/agents/index.js';
 import { createSessionsModule } from '../../server/src/modules/sessions/index.js';
 import type {
+  AgentAskRequest,
   AgentEvent,
   AgentRunAccepted,
   AgentRunInput,
@@ -183,6 +184,18 @@ class ScriptedRunner implements AgentRunner {
     live.queue = [];
     live.closed = true;
     live.wake?.();
+  }
+
+  /**
+   * The one-shot question the hub asks to name a session (contract decision §26). The
+   * scripted agent answers in the language of the prompt it is naming, and dresses the
+   * answer the way a real model does — quotes and a full stop — so the journey proves the
+   * hub's own cleanup, not a fixture that was already clean.
+   */
+  async ask(request: AgentAskRequest): Promise<string | null> {
+    return /[\u0600-\u06FF]/.test(request.prompt)
+      ? '«خطة الإطلاق في ثلاث مراحل».'
+      : '"A launch plan in three stages."';
   }
 }
 

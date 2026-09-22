@@ -22,7 +22,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useMemo, useState } from 'react';
 import { NavLink, useNavigate, useParams, useSearchParams } from 'react-router';
-import { useDeleteSession, useSessions, useUpdateSession } from '../hub/queries.js';
+import { useDeleteSession, useUpdateSession } from '../hub/queries.js';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
@@ -31,8 +31,10 @@ import type { Session } from '../types.js';
 import {
   IconArchive,
   IconGrip,
+  IconMore,
   IconPin,
   IconSearch,
+  IconSpark,
   IconTrash,
   IconUnarchive,
 } from '../ui/icons.js';
@@ -44,13 +46,19 @@ import {
   ContextMenuSeparator,
   EmptyState,
   Input,
+  Menu,
+  MenuItem,
+  MenuNote,
+  MenuSeparator,
   Notice,
   Segmented,
   Skeleton,
   SkeletonGroup,
   useConfirm,
+  usePrompt,
 } from '../ui/index.js';
 import { arrange, move, readOrder, writeOrder } from './order.js';
+import { useLiveSessions } from './useSessionList.js';
 
 export function sessionTitle(session: Pick<Session, 'title'>, t: (k: string) => string): string {
   return session.title ?? t('sessions.untitled');
@@ -92,8 +100,11 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
   const [filter, setFilter] = useState('');
   const [params, setParams] = useSearchParams();
   const { ask, dialog } = useConfirm();
+  const { ask: askName, dialog: nameDialog } = usePrompt();
   const scope = scopeFromParams(params);
-  const sessions = useSessions({ archived: archivedFor(scope) });
+  // Live, not polled: a session that names itself after its first reply (contract
+  // decision §26) changes this list with nothing on this screen having been clicked.
+  const sessions = useLiveSessions({ archived: archivedFor(scope) });
   const update = useUpdateSession();
   const remove = useDeleteSession();
   const navigate = useNavigate();
@@ -138,6 +149,30 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
     if (!sure) return;
     await remove.mutateAsync(session.id);
     if (sessionId === session.id) navigate(routeOf('new_chat'));
+  };
+
+  /**
+   * Rename: the person's own words. The hub marks the row and never renames it again
+   * (contract decision §26).
+   */
+  const onRename = async (session: Session) => {
+    const typed = await askName({
+      title: t('sessions.rename'),
+      label: t('sessions.rename_label'),
+      initialValue: session.title ?? '',
+      confirmLabel: t('common.save'),
+    });
+    if (typed === null) return;
+    update.mutate({ id: session.id, patch: { title: typed } });
+  };
+
+  /**
+   * Retitle: hand the naming back to the hub. `title: null` is the whole of the gesture —
+   * the hub names the session from its own first turn and announces it on `/rt/sessions`,
+   * so the row here changes on its own.
+   */
+  const onRetitle = (session: Session) => {
+    update.mutate({ id: session.id, patch: { title: null } });
   };
 
   const chooseScope = (next: string) => {
@@ -203,6 +238,8 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
                 session={session}
                 active={session.id === sessionId}
                 onOpen={onOpen}
+                onRename={() => void onRename(session)}
+                onRetitle={() => onRetitle(session)}
                 onPin={() => update.mutate({ id: session.id, patch: { pinned: !session.pinned } })}
                 onArchive={() =>
                   update.mutate({ id: session.id, patch: { archived: !session.archived } })
@@ -214,6 +251,7 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
         </SortableContext>
       </DndContext>
       {dialog}
+      {nameDialog}
     </div>
   );
 }
@@ -222,6 +260,8 @@ function SessionRow({
   session,
   active,
   onOpen,
+  onRename,
+  onRetitle,
   onPin,
   onArchive,
   onDelete,
@@ -229,6 +269,8 @@ function SessionRow({
   session: Session;
   active: boolean;
   onOpen?: (() => void) | undefined;
+  onRename: () => void;
+  onRetitle: () => void;
   onPin: () => void;
   onArchive: () => void;
   onDelete: () => void;
@@ -290,9 +332,35 @@ function SessionRow({
               </span>
             )}
           </NavLink>
-          {/* The same three actions the right-click menu offers, always visible to the
-              keyboard and to touch — a context menu is never the only way to reach one. */}
+          {/* Everything the right-click menu offers is reachable here too, by keyboard and
+              by touch — a context menu is never the only way to reach an action. The two
+              that name the session live behind "more" because they are rarer than pinning
+              and they open something. */}
           <span className="session-actions">
+            <Menu
+              align="end"
+              testId="session-more"
+              tooltip={t('common.more')}
+              trigger={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  iconOnly
+                  aria-label={t('sessions.more', { title })}
+                  icon={<IconMore size={14} />}
+                  data-testid="session-more-button"
+                />
+              }
+            >
+              <MenuItem icon={<IconGrip size={14} />} onSelect={onRename}>
+                {t('sessions.rename')}
+              </MenuItem>
+              <MenuSeparator />
+              <MenuNote>{t('sessions.retitle_hint')}</MenuNote>
+              <MenuItem icon={<IconSpark size={14} />} onSelect={onRetitle}>
+                {t('sessions.retitle')}
+              </MenuItem>
+            </Menu>
             <Button
               variant="ghost"
               size="sm"
@@ -324,6 +392,14 @@ function SessionRow({
         </li>
       }
     >
+      <ContextMenuItem icon={<IconGrip size={14} />} onSelect={onRename}>
+        {t('sessions.rename')}
+      </ContextMenuItem>
+      {/* The other half of decision §26: give the naming back to the hub. */}
+      <ContextMenuItem icon={<IconSpark size={14} />} onSelect={onRetitle}>
+        {t('sessions.retitle')}
+      </ContextMenuItem>
+      <ContextMenuSeparator />
       <ContextMenuItem icon={<IconPin size={14} />} onSelect={onPin}>
         {pinLabel}
       </ContextMenuItem>

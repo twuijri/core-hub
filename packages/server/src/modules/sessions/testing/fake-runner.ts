@@ -13,6 +13,7 @@
  * test (or a demo) passes it explicitly to `createSessionsModule`.
  */
 import type {
+  AgentAskRequest,
   AgentDirectory,
   AgentEvent,
   AgentInfo,
@@ -55,6 +56,13 @@ export interface FakeRunnerOptions {
    * writing into `request.files.outputDir`.
    */
   onStart?(request: AgentRunRequest): void | Promise<void>;
+  /**
+   * What the agent answers a one-shot question with (`AgentRunner.ask`) — the session
+   * title, in the tests that exercise naming. A function may throw to play an agent that
+   * refuses; `undefined` leaves the runner without an `ask` at all, which is how a test
+   * proves the fallback.
+   */
+  answer?: string | null | ((request: AgentAskRequest) => string | null | Promise<string | null>);
 }
 
 interface RunChannel {
@@ -67,13 +75,29 @@ interface RunChannel {
 
 export class FakeAgentRunner implements AgentRunner {
   readonly started: AgentRunRequest[] = [];
+  /** Every one-shot question this runner was asked, in order. */
+  readonly asked: AgentAskRequest[] = [];
   readonly inputs: Array<{ runId: string; input: AgentRunInput }> = [];
   readonly interrupted: string[] = [];
   private readonly channels = new Map<string, RunChannel>();
   private script: ScriptStep[];
 
+  /**
+   * Assigned, not declared: an adapter with no one-shot surface declares no `ask` at all
+   * (the port is optional precisely so that is expressible), and an absent own property
+   * is the only faithful way to play one.
+   */
+  readonly ask?: (request: AgentAskRequest) => Promise<string | null>;
+
   constructor(private readonly options: FakeRunnerOptions = {}) {
     this.script = [...(options.script ?? [])];
+    if (options.answer !== undefined) {
+      this.ask = async (request: AgentAskRequest) => {
+        this.asked.push(request);
+        const answer = options.answer;
+        return typeof answer === 'function' ? answer(request) : (answer ?? null);
+      };
+    }
   }
 
   /** Replace the script used by the next `start()`. */

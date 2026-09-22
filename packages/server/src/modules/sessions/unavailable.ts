@@ -41,6 +41,14 @@ export const unavailableRunner: AgentRunner = {
   async interrupt() {
     throw unavailable();
   },
+  /**
+   * Naming a session is the one thing here that does *not* throw: it is optional work
+   * on behalf of a person who asked for nothing, and the caller already has a fallback
+   * (`titles.ts`). An error would only be logged and thrown away.
+   */
+  async ask() {
+    return null;
+  },
 };
 
 /**
