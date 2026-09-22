@@ -503,7 +503,10 @@ export function hermesRouteOf(entry: ProviderCatalogueEntry | undefined): Hermes
  */
 export function hermesKeyEnvOf(slug: string, entry: ProviderCatalogueEntry | undefined): string {
   if (entry?.envVar) return entry.envVar;
-  const sanitized = slug.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const sanitized = slug
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
   return `MAJLIS_PROVIDER_${sanitized || 'CUSTOM'}_API_KEY`;
 }
 

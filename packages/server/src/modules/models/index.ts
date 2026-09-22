@@ -114,11 +114,7 @@ export {
   writeHermesModel,
   writeHermesProviders,
 } from './propagation.js';
-export type {
-  HermesProviderRoute,
-  PropagationState,
-  ResolvedCredential,
-} from './propagation.js';
+export type { HermesProviderRoute, PropagationState, ResolvedCredential } from './propagation.js';
 export { mergeEnv, parseEnv, quoteValue } from './dotenv.js';
 export { providerAdapter } from './adapters/index.js';
 

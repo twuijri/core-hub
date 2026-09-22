@@ -1059,8 +1059,9 @@ describe('models: one key, every agent (ADR 0010)', () => {
       // Its first model became the workspace chat default with nobody asking, and that
       // is what Hermes is told to run.
       const defaults = await authed(hub, hub.token, { url: '/api/v1/models/defaults' });
-      expect((defaults.json() as { default: { provider_id: string; model: string } }).default)
-        .toEqual({ provider_id: groq.id, model: 'llama-3.3-70b-versatile' });
+      expect(
+        (defaults.json() as { default: { provider_id: string; model: string } }).default,
+      ).toEqual({ provider_id: groq.id, model: 'llama-3.3-70b-versatile' });
       expect(config).toContain('default: llama-3.3-70b-versatile');
       expect(config).toContain('provider: majlis-groq');
     } finally {
@@ -1109,6 +1110,122 @@ describe('models: one key, every agent (ADR 0010)', () => {
       expect(after).toEqual(first);
     } finally {
       await hub.close();
+    }
+  });
+
+  it('carries a local, keyless provider to Hermes as an endpoint it can call', async () => {
+    // LM Studio needs no key and Hermes ships no provider for it — but Hermes *is* one of
+    // its canonical provider names, so an unprefixed `providers:` block would be ignored
+    // outright (`runtime_provider_custom.py` §_shadowed_by_builtin).
+    const lm = scriptedFetch((url) =>
+      url.startsWith('http://127.0.0.1:1234/v1')
+        ? { json: { data: [{ id: 'qwen3-30b' }] } }
+        : { status: 503, json: {} },
+    );
+    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    homes.push(home);
+    const hub = await signedInHub(
+      {},
+      {
+        models: {
+          fetchImpl: lm.fetchImpl,
+          hermes: { home: () => home, restart: () => Promise.resolve(true) },
+        },
+      },
+    );
+    try {
+      await addProvider(hub, 'lmstudio', { base_url: 'http://127.0.0.1:1234/v1' });
+      await drainJobs(hub.app);
+      const config = readFileSync(path.join(home, 'config.yaml'), 'utf8');
+      expect(config).toContain('majlis-lmstudio:');
+      expect(config).toContain('base_url: http://127.0.0.1:1234/v1');
+      expect(config).toContain('provider: majlis-lmstudio');
+      expect(config).toContain('default: qwen3-30b');
+      // Nothing was invented for a provider that takes no key: the variable is named in
+      // the block so a key added later needs no second screen, and the file holds none.
+      expect(config).toContain('key_env: MAJLIS_PROVIDER_LMSTUDIO_API_KEY');
+      expect([...parseEnv(readFileSync(path.join(home, '.env'), 'utf8')).keys()]).toEqual([]);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('carries somebody’s own endpoint, key and all, under a name minted for it', async () => {
+    // The repeatable `openai-compatible` preset: its row has a slug of its own and **no
+    // catalogue entry at all**, which is exactly the shape that used to reach Hermes as
+    // nothing — no variable name, no slug, no block.
+    const mine = scriptedFetchWithAuth('https://lab.example/v1/models', () => 'sk-my-own', {
+      data: [{ id: 'my-model' }],
+    });
+    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    homes.push(home);
+    const hub = await signedInHub(
+      {},
+      {
+        models: {
+          fetchImpl: mine.fetchImpl,
+          hermes: { home: () => home, restart: () => Promise.resolve(true) },
+        },
+      },
+    );
+    try {
+      const provider = await addProvider(hub, 'openai-compatible', {
+        label: 'Lab',
+        base_url: 'https://lab.example/v1',
+        api_key: 'sk-my-own',
+      });
+      expect(provider.slug).toBe('custom-lab');
+      await drainJobs(hub.app);
+
+      const variable = 'MAJLIS_PROVIDER_CUSTOM_LAB_API_KEY';
+      expect(parseEnv(readFileSync(path.join(home, '.env'), 'utf8')).get(variable)).toBe(
+        'sk-my-own',
+      );
+      const config = readFileSync(path.join(home, 'config.yaml'), 'utf8');
+      expect(config).toContain('majlis-custom-lab:');
+      expect(config).toContain('base_url: https://lab.example/v1');
+      expect(config).toContain(`key_env: ${variable}`);
+      expect(config).toContain('provider: majlis-custom-lab');
+      expect(config).toContain('default: my-model');
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('rewrites the Hermes home at boot when the volume no longer matches the rows', async () => {
+    // A restored backup, an image upgrade, a hand-edited config: the rows are right and
+    // the files are not. Writing only on change meant that state could never heal.
+    const { fetchImpl } = anthropicOnly();
+    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    homes.push(home);
+    const hermes = { home: () => home, restart: () => Promise.resolve(true) };
+
+    const first = await signedInHub({}, { models: { fetchImpl, hermes } });
+    const dataDir = first.dataDir;
+    try {
+      await addProvider(first, 'anthropic', { api_key: 'sk-ant-boot' });
+      await drainJobs(first.app);
+      expect(readFileSync(path.join(home, 'config.yaml'), 'utf8')).toContain('provider: anthropic');
+    } finally {
+      // Not `close()`: the data volume has to survive for the second boot.
+      await first.app.close();
+    }
+
+    rmSync(path.join(home, '.env'), { force: true });
+    rmSync(path.join(home, 'config.yaml'), { force: true });
+
+    const second = await signedInHub({ DATA_DIR: dataDir }, { models: { fetchImpl, hermes } });
+    try {
+      // Any request drives Fastify's `onReady`, which is where the reconciliation runs.
+      await authed(second, second.token, { method: 'GET', url: '/api/v1/models/providers' });
+      expect(parseEnv(readFileSync(path.join(home, '.env'), 'utf8')).get('ANTHROPIC_API_KEY')).toBe(
+        'sk-ant-boot',
+      );
+      const config = readFileSync(path.join(home, 'config.yaml'), 'utf8');
+      expect(config).toContain('provider: anthropic');
+      expect(config).toContain('default: claude-haiku-4-5');
+    } finally {
+      await second.close();
     }
   });
 

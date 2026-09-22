@@ -259,7 +259,7 @@ function editHermesConfig(
   const file = path.join(home, 'config.yaml');
   const result: HermesWriteResult = { file, changed: [], removed: [], dirty: false };
   const existing = existsSync(file) ? readFileSync(file, 'utf8') : '';
-  const document = YAML.parseDocument(existing);
+  const document: YAML.Document = YAML.parseDocument(existing);
   if (document.errors.length > 0) {
     // A config we cannot parse is a config we must not rewrite: Hermes serves the last
     // known good one, and a clobbered file would take that away too.
@@ -269,8 +269,9 @@ function editHermesConfig(
   // throws. Hermes ships exactly that on a fresh install, so make it a mapping first —
   // and only when there is something to put in it (below).
   const empty =
-    document.contents === null || (YAML.isScalar(document.contents) && document.contents.value == null);
-  if (empty) document.contents = document.createNode({}) as YAML.Document['contents'];
+    document.contents === null ||
+    (YAML.isScalar(document.contents) && document.contents.value == null);
+  if (empty) document.contents = new YAML.YAMLMap();
   mutate(document, result);
   // Nothing to say, nothing to write. Without this a hub with no chat default would
   // *create* a `config.yaml` saying `null`, which Hermes then cannot be given a model in
