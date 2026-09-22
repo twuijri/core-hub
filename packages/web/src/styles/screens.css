@@ -244,31 +244,91 @@
 }
 
 /* ------------------------------------------------------------------- tasks */
-/* Nine columns that scroll sideways as one board. Each column scrolls on its own so a
-   long column never pushes the others off the screen. */
+/* An intake strip and four columns. A column that is usually empty shrinks to a strip
+   with a vertical title, and grows the moment it has a card — an empty column that keeps
+   a full slot pushes the work off the screen. */
 .task-board {
+  --task-column-width: 16rem;
   display: flex;
+  align-items: stretch;
   gap: var(--mj-space-3);
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
   padding-block-end: var(--mj-space-2);
-  align-items: start;
 }
-.task-column {
+.task-column,
+.task-intake {
   display: flex;
-  min-inline-size: 15rem;
-  max-inline-size: 15rem;
+  flex: 0 0 var(--task-column-width);
+  inline-size: var(--task-column-width);
   flex-direction: column;
   gap: var(--mj-space-2);
   padding: var(--mj-space-2);
   border: 1px solid var(--mj-color-border);
   border-radius: var(--mj-radius-md);
   background: var(--mj-color-surface-2);
+  transition-duration: var(--mj-motion-normal);
+  transition-timing-function: var(--mj-motion-ease);
+  transition-property: flex-basis, inline-size, border-color, opacity;
+}
+/* The strip: 2.75rem wide, its title turned on its side. */
+.task-column[data-collapsed='true'],
+.task-intake:not([data-open='true']) {
+  flex-basis: 2.75rem;
+  inline-size: 2.75rem;
+  padding: var(--mj-space-1);
+}
+.task-column[data-over='true'] {
+  border-color: var(--mj-color-accent);
+}
+/* A column this card cannot go to steps back rather than pretending it can take it. */
+.task-column[data-refuses='true'] {
+  opacity: 0.45;
 }
 .task-column-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--mj-space-2);
   font-size: var(--mj-font-size-sm);
+}
+.task-strip-toggle,
+.task-intake-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--mj-space-2);
+  inline-size: 100%;
+  padding: var(--mj-space-1);
+  border-radius: var(--mj-radius-sm);
+  color: var(--mj-color-text);
+  font-size: var(--mj-font-size-sm);
+  cursor: pointer;
+}
+.task-strip-toggle:hover,
+.task-intake-toggle:hover {
+  background: var(--mj-color-surface-3);
+}
+.task-column[data-collapsed='true'] .task-strip-toggle,
+.task-intake:not([data-open='true']) .task-intake-toggle {
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+.task-column[data-collapsed='true'] .task-strip-title,
+.task-intake:not([data-open='true']) .task-strip-title {
+  writing-mode: vertical-rl;
+  color: var(--mj-color-text-muted);
+}
+.task-strip-count {
+  min-inline-size: 1.375rem;
+  padding-inline: var(--mj-space-1);
+  border: 1px solid var(--mj-color-border);
+  border-radius: var(--mj-radius-full);
+  color: var(--mj-color-text-muted);
+  font-size: var(--mj-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 .task-column-body {
   display: flex;
@@ -277,10 +337,11 @@
   flex-direction: column;
   gap: var(--mj-space-2);
   overflow-y: auto;
+  overscroll-behavior-y: contain;
 }
+.task-intake-hint,
 .task-column-empty {
-  padding-block: var(--mj-space-3);
-  text-align: center;
+  padding-block: var(--mj-space-2);
   color: var(--mj-color-text-faint);
   font-size: var(--mj-font-size-xs);
 }
@@ -290,8 +351,19 @@
   gap: var(--mj-space-1);
   padding: var(--mj-space-2);
   border: 1px solid var(--mj-color-border);
+  border-inline-start: 2px solid transparent;
   border-radius: var(--mj-radius-sm);
   background: var(--mj-color-surface);
+}
+/* The stage a card is in, readable from across the board without opening anything. */
+.task-card.status-ready {
+  border-inline-start-color: var(--mj-color-warning-soft-text);
+}
+.task-card.status-running {
+  border-inline-start-color: var(--mj-color-accent);
+}
+.task-card.status-blocked {
+  border-inline-start-color: var(--mj-color-danger-soft-text);
 }
 .task-card-grip {
   display: inline-grid;
@@ -309,6 +381,25 @@
   align-items: center;
   gap: var(--mj-space-1);
   margin-block-start: var(--mj-space-1);
+}
+/* The one action a card offers appears when it is reachable, not always. */
+.task-card-quick {
+  opacity: 0;
+}
+.task-card:hover .task-card-quick,
+.task-card:focus-within .task-card-quick {
+  opacity: 1;
+}
+@media (hover: none) {
+  .task-card-quick {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-column,
+  .task-intake {
+    transition: none;
+  }
 }
 
 /* --------------------------------------------------------------- the logs */

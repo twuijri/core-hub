@@ -616,6 +616,29 @@
       "high": "مرتفعة",
       "normal": "عادية",
       "low": "منخفضة"
+    },
+    "columns": {
+      "queue": "الطابور",
+      "waiting": "انتظار",
+      "review": "مراجعة",
+      "done": "منتهية"
+    },
+    "intake_hint": "مهمة تصل هنا تُحدَّد أولًا، ثم تدخل الطابور.",
+    "nothing": "لا شيء",
+    "which_waiting": "انتظارٌ على ماذا؟",
+    "action": {
+      "promote": "جاهزة",
+      "archive": "أرشفة",
+      "schedule": "جدولة",
+      "block": "موقوفة",
+      "unblock": "ارفع الإيقاف",
+      "requestReview": "للمراجعة",
+      "reopenReview": "أعد فتحها",
+      "complete": "تمّت",
+      "queue": "إلى الطابور"
+    },
+    "confirm": {
+      "archive": "أرشفة «{title}»؟"
     }
   },
   "schedules": {

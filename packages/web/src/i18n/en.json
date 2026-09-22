@@ -616,6 +616,29 @@
       "high": "High",
       "normal": "Normal",
       "low": "Low"
+    },
+    "columns": {
+      "queue": "Queue",
+      "waiting": "Waiting",
+      "review": "Review",
+      "done": "Done"
+    },
+    "intake_hint": "A task arrives here, is specified, and then joins the queue.",
+    "nothing": "Nothing",
+    "which_waiting": "Waiting on what?",
+    "action": {
+      "promote": "Ready",
+      "archive": "Archive",
+      "schedule": "Schedule",
+      "block": "Blocked",
+      "unblock": "Unblock",
+      "requestReview": "For review",
+      "reopenReview": "Reopen",
+      "complete": "Done",
+      "queue": "To the queue"
+    },
+    "confirm": {
+      "archive": "Archive “{title}”?"
     }
   },
   "schedules": {
