@@ -138,6 +138,7 @@ export class AgentRunner implements AgentRunnerPort {
         code: code === 'agent_error' ? failureCode(message) : code,
         message,
       });
+    });
 
     return { agentSessionRef: live.session.id, agentRunRef: null };
   }
@@ -324,7 +325,7 @@ export function failureCode(message: string | null | undefined): string {
   return 'agent_error';
 }
 
-export function promptText(blocks: RunnerPromptBlock[]): string {
+export function promptText(blocks: RunnerPromptBlock[], files?: RunnerFileExchange | null): string {
   const parts: string[] = [];
   const attachments: string[] = [];
   for (const block of blocks) {
