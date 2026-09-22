@@ -11,6 +11,10 @@ The vocabulary is the contract's: `adapter_kind`, `capabilities`, `sections` and
 `AgentInstall.source` in `packages/contracts/openapi.yaml`, so no translation table sits
 between the database and the API.
 
+A fresh install shows **two** agents, not one (ADOPTION-BACKLOG §2.15, owner's decision
+of 2026-09-22): Hermes, and `direct` — the hub talking to the model provider with no
+runtime in between. See §The direct agent below.
+
 Which agents exist is not open: the hub ships a **curated catalog**
 (`packages/server/src/modules/agents/catalog/`, one reviewed file per agent with an id, an
 install recipe, a pinned version, a health check and a licence). The registry is seeded
@@ -107,6 +111,43 @@ Indexes: unique (workspace, agent_id).
 - Install / update: create a job, set `install_state`, stream `job.progress`.
 - Settings form: the adapter's declared settings schema (from code) + the
   `agent_settings` row; secrets shown as `[stored]`.
+
+## The direct agent (ADOPTION-BACKLOG §2.15)
+
+`direct` is a catalog entry like any other — slug `direct`, name "Direct" / «مباشر»,
+adapter kind `builtin`, `source: builtin`, `install_state: installed` from the first
+boot. It is the hub itself, so:
+
+- **It is never installed or removed.** `install`/`update`/`uninstall` answer
+  `422 agent_unavailable`, the same guard that protects the bundled Hermes runtime.
+- **It declares no `credentials`** and starts no process. Where a coding agent inherits
+  the workspace's keys as environment variables, this one resolves the workspace's
+  provider *per turn* through the same `models` port (ADR 0010) and never sees a key:
+  `AgentModelsPort.directChat(workspace, { provider_id, model, messages })` hands back
+  events, not rows.
+- **The model decides the provider.** The session's model, or the workspace's `chat`
+  default, resolves to a `providers` row; that row's protocol picks which `models`
+  adapter streams the turn. The person configures nothing new for this agent.
+- **Capabilities are `streaming`, `vision`, `resume` — and nothing else.** No `tools`,
+  no `approvals`, no `mcp`, no `skills`: skills and MCP over the direct path are backlog
+  §2.16 and are not half-built here. Whether an *image* may be sent is the chosen model
+  row's own `vision` capability, checked per turn.
+- **Attachments** are read off disk and put in the request, because there is no file
+  tool to point at a path with. The limits and the refusals are in
+  `docs/domain/models.md` §الاتصال المباشر.
+- **Errors are the contract's codes with the provider's own sentence**: the adapter made
+  the request itself, so it reports the code rather than leaving the runner to read one
+  out of the wording (`agents/runner.ts` §`failureCode`, which is still how the gateway
+  adapters work).
+- **Usage and cost are written like any other run's.** The provider's token counts,
+  multiplied by the model row's published prices, land in the audit ledger as
+  `cost_source: estimated`. A model row with no prices reports no number, never zero.
+
+**Not stored: the conversation.** A live `AgentSession` holds the turns in the server
+process, exactly as a Hermes gateway holds its own and an ACP child holds its own. A
+restart therefore starts a fresh context — the transcript in `sessions` is intact, but
+the model has not read it. Closing that is a transcript port from `sessions` to the
+runner, which is a change to `sessions/ports.ts` and its own task.
 
 ## The Hermes runtime (ADR 0008, ADR 0010)
 

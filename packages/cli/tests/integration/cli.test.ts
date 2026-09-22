@@ -33,6 +33,7 @@ const AGENT_ID = '01J8QK3ZR2W7M5N4P6T8V9X0AG';
 let app: Awaited<ReturnType<typeof buildServer>>;
 let baseUrl: string;
 let runner: FakeAgentRunner;
+let directory: FakeAgentDirectory;
 const temps: string[] = [];
 const temp = (name: string) => {
   const dir = mkdtempSync(path.join(tmpdir(), `majlis-cli-${name}-`));
@@ -123,8 +124,9 @@ const scriptedProviders: typeof fetch = (input) => {
 beforeAll(async () => {
   runner = new FakeAgentRunner();
   overrideModels({ fetchImpl: scriptedProviders });
+  directory = new FakeAgentDirectory([fakeHermes(AGENT_ID)]);
   const sessions = createSessionsModule({
-    agents: new FakeAgentDirectory([fakeHermes(AGENT_ID)]),
+    agents: directory,
     runner,
     // The real file registry, so `files …` and `chat --attach` are exercised for real —
     // with `auth`'s own scope resolver, because attachments and sessions must agree on
@@ -204,6 +206,37 @@ describe('the reference client against the hub', () => {
     const missing = await cli(['agents', 'get', '01J8QK3ZR2W7M5N4P6T8V9X0ZZ']);
     expect(missing.code).toBe(1);
     expect(missing.stderr).toContain('not_found');
+  });
+
+  it('shows the direct agent and can open a session on it like any other', async () => {
+    // A fresh install has two agents (ADOPTION-BACKLOG §2.15): Hermes, and the hub
+    // itself. The second one is usable before anything has been installed.
+    const listed = await cli(['agents', 'list', '--kind', 'builtin', '--json']);
+    expect(listed.code, listed.stderr).toBe(0);
+    const items = (
+      JSON.parse(listed.stdout) as { items: { id: string; slug: string; status: string }[] }
+    ).items;
+    expect(items.map((item) => item.slug)).toEqual(['direct']);
+    const direct = items[0]!;
+    expect(direct.status).toBe('available');
+
+    const arabic = await cli(['agents', 'get', direct.id, '--lang', 'ar']);
+    expect(arabic.stdout).toContain('مباشر');
+
+    // Selecting it is the same command as selecting any other agent.
+    directory.add({
+      id: direct.id,
+      name: 'Direct',
+      adapterKind: 'builtin',
+      defaultModel: null,
+      defaultProvider: null,
+      available: true,
+    });
+    const opened = await cli(['sessions', 'new', '--agent', direct.id, '--json']);
+    expect(opened.code, opened.stderr).toBe(0);
+    const session = JSON.parse(opened.stdout) as { id: string; agent_id: string };
+    expect(session.agent_id).toBe(direct.id);
+    await cli(['sessions', 'delete', session.id]);
   });
 
   it('adds a provider from a preset, with the key from a prompt, and lists its models', async () => {

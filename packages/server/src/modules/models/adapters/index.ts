@@ -10,12 +10,14 @@ import { openAiAdapter } from './openai.js';
 import type { ProviderAdapter } from './types.js';
 
 export * from './types.js';
-export { anthropicAdapter } from './anthropic.js';
+export { anthropicAdapter, anthropicChat } from './anthropic.js';
 export { elevenLabsAdapter } from './elevenlabs.js';
-export { googleAdapter } from './google.js';
+export { googleAdapter, googleChat } from './google.js';
 export { ollamaAdapter } from './ollama.js';
-export { openAiAdapter, perMillionMicroUsd } from './openai.js';
+export { openAiAdapter, openAiChat, perMillionMicroUsd } from './openai.js';
 export { joinUrl, requestJson, requestBytes } from './http.js';
+export { chatFailure, openStream, parseFrame, readLines, sseData } from './stream.js';
+export type { StreamOpen, StreamRequest } from './stream.js';
 
 const ADAPTERS: Record<ProviderProtocol, ProviderAdapter> = {
   anthropic: anthropicAdapter,

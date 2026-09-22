@@ -64,6 +64,79 @@ export interface AgentModelsPort {
   runtimeProviderName(workspace: string, providerId: string): string | null;
   /** Which workspace assignment an agent of this kind inherits (`chat` / `coding`). */
   roleForAdapter(adapterKind: string): string;
+  /**
+   * What the `direct` agent must know before it builds a prompt (ADOPTION-BACKLOG
+   * §2.15). `null` when the workspace has no such model row — the turn is then refused
+   * rather than sent on a guess.
+   */
+  modelFacts(workspace: string, providerId: string, model: string): DirectModelFacts | null;
+  /**
+   * One streamed turn, hub to provider, with no agent runtime in between.
+   *
+   * This is the whole of the direct path across the module boundary: a provider row id,
+   * a model, the conversation, and events back. `agents` still never sees a provider
+   * row and never sees a key (ADR 0010) — it names what to run and reads what comes out.
+   */
+  directChat(workspace: string, request: DirectChatRequest): AsyncIterable<DirectChatEvent>;
+}
+
+// ------------------------------------------------- the direct path (ADOPTION §2.15)
+
+/** An image sent inline with a turn; the caller read the bytes and encoded them. */
+export interface DirectChatImage {
+  mime: string;
+  dataBase64: string;
+  name: string;
+}
+
+export interface DirectChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  text: string;
+  images?: DirectChatImage[];
+}
+
+export interface DirectChatRequest {
+  providerId: string;
+  model: string;
+  messages: DirectChatMessage[];
+  reasoningEffort?: string | null;
+  /** Aborting it closes the provider socket; the stream then ends as `cancelled`. */
+  signal?: AbortSignal;
+}
+
+export type DirectChatEvent =
+  | { type: 'delta'; text: string }
+  | { type: 'reasoning'; text: string }
+  | {
+      type: 'usage';
+      modelLabel: string;
+      providerId: string;
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
+      reasoningTokens?: number;
+      costMicroUsd?: number;
+      costSource?: 'provider' | 'estimated' | 'unknown';
+    }
+  | { type: 'completed' }
+  | {
+      /**
+       * `code` is one of the contract's `ErrorCode`s, except for `cancelled`, which
+       * means the hub's own abort landed and the run ended on request.
+       */
+      type: 'failed';
+      code: string;
+      message: string;
+    };
+
+export interface DirectModelFacts {
+  providerSlug: string;
+  providerLabel: string;
+  modelLabel: string;
+  /** Declared on the model row; never inferred from the model's name. */
+  vision: boolean;
+  maxOutputTokens: number | null;
 }
 
 /** A registry entry, reduced to what starting a turn needs. */

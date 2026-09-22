@@ -96,6 +96,11 @@ export function serializeAgent(
      * "inherits nothing yet" rather than a guess.
      */
     defaultModel?: { provider_id: string; model: string } | null;
+    /**
+     * The name to show, when it is not the row's own: the catalog's Arabic name for an
+     * agent whose name is a word rather than a brand (`service.ts` §`displayName`).
+     */
+    name?: string;
   },
 ): ContractAgent {
   const enabled = options.settings?.enabled ?? true;
@@ -106,7 +111,7 @@ export function serializeAgent(
     created_at: iso(row.createdAt),
     updated_at: iso(row.updatedAt),
     slug: row.slug,
-    name: row.name,
+    name: options.name ?? row.name,
     vendor: row.vendor,
     kind: row.adapterKind,
     // No avatar store yet (attachments are Phase 4), so every agent is drawn from its slug.

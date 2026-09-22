@@ -68,6 +68,9 @@ export type {
   Actor,
   ContractProviderPreset,
   DefaultsWriteInput,
+  DirectChatEvent,
+  DirectChatRequest,
+  DirectModelFacts,
   EnsembleWriteInput,
   HermesTarget,
   ModelPatchInput,
@@ -249,6 +252,15 @@ export const modelsModule = defineModule({
         return contextOf(app).hermesProviderName(workspace, providerId);
       },
       roleForAdapter,
+      // The `direct` agent's whole connection to this module (ADOPTION-BACKLOG §2.15).
+      // It hands over a provider row id and a model and reads events; the row, the key
+      // and the adapter that answered stay on this side of the line (ADR 0010).
+      modelFacts(workspace, providerId, model) {
+        return contextOf(app).modelFacts(workspace, providerId, model);
+      },
+      directChat(workspace, request) {
+        return contextOf(app).chat(workspace, request);
+      },
     };
     registerAgentModelsPort(app.hub.io, port);
 

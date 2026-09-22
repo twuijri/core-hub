@@ -185,6 +185,13 @@ function contextOf(app: FastifyInstance): AgentsContext {
     createAdapterSet({
       ...own.adapterOptions,
       hermes: { apiKey: () => runtime.apiKey(), ...own.adapterOptions?.hermes },
+      // The hub's own agent reaches the providers through the same port every other
+      // agent's credentials come from, looked up per turn because `models` registers it
+      // after this module mounts (ADR 0010; ADOPTION-BACKLOG §2.15).
+      direct: {
+        models: () => modelsPorts.get(hub.io) ?? null,
+        ...own.adapterOptions?.direct,
+      },
       host,
     });
   const service = new AgentsService({
@@ -277,13 +284,17 @@ export const agentsModule = defineModule({
       handler: (request, { query }) => ({
         items: service.list(scopeOf(request), {
           ...(query.kind ? { kind: query.kind as AdapterKind } : {}),
+          // An agent whose name is a word, not a brand, reads in the caller's language
+          // (`service.ts` §`displayName`).
+          language: request.language,
         }),
       }),
     });
 
     defineRoute(app, deps, {
       operationId: 'agents.get',
-      handler: (request, { params }) => service.get(scopeOf(request), params.agent_id as string),
+      handler: (request, { params }) =>
+        service.get(scopeOf(request), params.agent_id as string, request.language),
     });
 
     defineRoute(app, deps, {

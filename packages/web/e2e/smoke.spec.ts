@@ -177,10 +177,19 @@ test.describe('web smoke journeys', () => {
     await login(page);
     await newChat(page);
     const row = page.getByTestId('agent-chips');
-    // Five agents from the catalog, and a trailing "+" that goes to the Agent Manager.
-    await expect(page.getByTestId('agent-chip')).toHaveCount(5);
+    // Six agents from the catalog — Hermes, the hub's own `direct` agent
+    // (ADOPTION-BACKLOG §2.15) and the four coding CLIs — and a trailing "+" that goes
+    // to the Agent Manager.
+    await expect(page.getByTestId('agent-chip')).toHaveCount(6);
     await expect(page.getByTestId('agent-add')).toBeVisible();
-    await expect(row).toHaveAttribute('data-density', 'comfortable');
+    // At its widest the chat column is `--mj-layout-reading-max` (48rem), and six
+    // Arabic labels no longer fit in it, so the row opens one rung down the ladder:
+    // compact, with the chosen agent still a word and the rest icon-only. Nothing wraps
+    // and nothing scrolls, which is what the ladder is for. The comfortable rung is
+    // covered by `tests/segmented-fit.test.ts`; whether six labelled chips *should* fit
+    // is the chip row's own question and a parallel branch owns it.
+    await page.setViewportSize({ width: 1600, height: 720 });
+    await expect(row).toHaveAttribute('data-density', 'compact');
     await shot(page, 'agents-comfortable-ar-light');
 
     // Narrow enough that the labels no longer fit: only the chosen agent keeps its word,
@@ -191,8 +200,10 @@ test.describe('web smoke journeys', () => {
     await expect(chips.first()).toHaveAttribute('aria-checked', 'true');
     await expect(chips.first()).toContainText('Hermes');
     await expect(chips.nth(1)).toHaveClass(/mj-segment-icon-only/);
-    // An icon is not a mystery: the name is still the accessible name.
-    await expect(chips.nth(1)).toHaveAttribute('aria-label', /Claude Code/);
+    // An icon is not a mystery: the name is still the accessible name. Chip 1 is the
+    // direct agent, which sits second in every list (`agents/service.ts` §order).
+    await expect(chips.nth(1)).toHaveAttribute('aria-label', /مباشر/);
+    await expect(chips.nth(2)).toHaveAttribute('aria-label', /Claude Code/);
     // The hairline is drawn between icon-only neighbours and never beside the raised
     // surface, and it is decorative: a pseudo-element, nothing in the accessibility tree.
     const dividerOn = (index: number) =>
