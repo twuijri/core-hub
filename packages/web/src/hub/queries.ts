@@ -222,6 +222,29 @@ export function usePatchSession(sessionId: string) {
 }
 
 /**
+ * Continue this conversation with a different agent (contract decision §26).
+ *
+ * Not a patch: `Session.agent_id` is who the conversation is *with*, and rewriting it in
+ * place would leave a transcript half of which the row no longer accounts for. The hub
+ * forks — the messages travel, the fork runs on the new agent, no run starts, and the
+ * original is left exactly as it was. Changing the **model** is still `sessions.update`.
+ */
+export function useForkSession(sessionId: string) {
+  const { client, profile } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { agent_id?: string; model?: string | null }) =>
+      (
+        await client.request('post', '/sessions/{session_id}/fork', {
+          params: { session_id: sessionId },
+          body,
+        })
+      ).data,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['sessions', profile] }),
+  });
+}
+
+/**
  * `agent_settings` as the adapter describes them (ADR 0002). The composer reads one field
  * out of them — `approval_mode` in the `session` section — and writes it back the same way;
  * an adapter that does not declare it simply has no selector to offer.
