@@ -67,9 +67,17 @@ export const IconSettings = (p: IconProps) => (
     <path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.3 3h-4.6l-.3 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.3 2.7h4.6l.3-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z" />
   </Svg>
 );
+// A pushpin seen head-on: the cap, the shoulders, the needle. The old drawing was the pin
+// seen at an angle and read as an arrow or a kite (owner, 2026-09-22: "مهب واضح وغريب").
 export const IconPin = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M15 3 21 9l-5 2-3 3v5l-2 2-3-6-6-3 2-2h5l3-3z" />
+    <path d="M9 3h6M12 3v5M8.5 8h7l-1 5h-5l-1-5ZM12 13v8" />
+  </Svg>
+);
+export const IconSelect = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3.5" y="3.5" width="17" height="17" rx="3" />
+    <path d="m8 12 3 3 5-6" />
   </Svg>
 );
 export const IconArchive = (p: IconProps) => (
@@ -178,6 +186,25 @@ export const IconDisplay = (p: IconProps) => (
     <path d="M9 20h6M12 16v4" />
   </Svg>
 );
+export const IconReply = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8 1.6 10 5.1-.8-5-3.3-10-10-10Z" />
+  </Svg>
+);
+export const IconFork = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="7" cy="5" r="2.2" />
+    <circle cx="7" cy="19" r="2.2" />
+    <circle cx="17" cy="9" r="2.2" />
+    <path d="M7 7.2v9.6M17 11.2c0 3.2-3.3 3.6-6 4.2" />
+  </Svg>
+);
+export const IconSpeak = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M11 5 6.5 9H3v6h3.5L11 19V5Z" />
+    <path d="M15.5 9.2a4 4 0 0 1 0 5.6M18.4 6.3a8 8 0 0 1 0 11.4" />
+  </Svg>
+);
 export const IconGlobe = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="12" cy="12" r="9" />
@@ -188,6 +215,12 @@ export const IconMic = (p: IconProps) => (
   <Svg {...p}>
     <rect x="9" y="3" width="6" height="11" rx="3" />
     <path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />
+  </Svg>
+);
+export const IconAlert = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M10.3 3.9 2.6 17.4A2 2 0 0 0 4.3 20.4h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+    <path d="M12 9v4M12 17h.01" />
   </Svg>
 );
 export const IconShield = (p: IconProps) => (

@@ -52,14 +52,17 @@ export function Menu({
 export function MenuItem({
   icon,
   onSelect,
+  tone,
   children,
 }: {
   icon?: ReactNode;
   onSelect(): void;
+  /** An item that destroys something says so in its colour, as `ContextMenuItem` does. */
+  tone?: 'danger';
   children: ReactNode;
 }) {
   return (
-    <DropdownMenu.Item className="mj-menu-item" onSelect={() => onSelect()}>
+    <DropdownMenu.Item className="mj-menu-item" data-tone={tone} onSelect={() => onSelect()}>
       {icon}
       <span>{children}</span>
     </DropdownMenu.Item>
