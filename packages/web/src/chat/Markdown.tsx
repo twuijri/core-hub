@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { useI18n } from '../i18n/context.js';
 import { usePane } from '../shell/pane.js';
 import { IconCheck, IconCopy, IconPanel } from '../ui/icons.js';
-import { Tooltip } from '../ui/Tooltip.js';
+import { Button, useToast } from '../ui/index.js';
 
 function textOfChildren(node: ReactNode): string {
   if (typeof node === 'string') return node;
@@ -18,6 +18,7 @@ function textOfChildren(node: ReactNode): string {
 function CodeBlock(props: ComponentProps<'pre'>) {
   const { t } = useI18n();
   const pane = usePane();
+  const toast = useToast();
   const [copied, setCopied] = useState(false);
   const code = textOfChildren(props.children);
   const child = Array.isArray(props.children) ? props.children[0] : props.children;
@@ -28,41 +29,41 @@ function CodeBlock(props: ComponentProps<'pre'>) {
     try {
       await navigator.clipboard.writeText(code);
       setCopied(true);
+      // The tick on the button is easy to miss when the pointer has already moved on.
+      toast({ title: t('chat.copied'), tone: 'success', durationMs: 2000 });
       setTimeout(() => setCopied(false), 1500);
     } catch {
       // Clipboard denied: the code is still selectable.
     }
   };
   return (
-    <div className="group relative" dir="ltr">
-      <div className="absolute end-1 top-1 flex gap-1 opacity-0 transition-ui focus-within:opacity-100 group-hover:opacity-100">
-        {language && <span className="chip">{language}</span>}
-        <Tooltip label={t('chat.copy_code')}>
-          <button
-            type="button"
-            className="btn btn-ghost px-1"
-            onClick={() => void copy()}
-            aria-label={t('chat.copy_code')}
-          >
-            {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
-          </button>
-        </Tooltip>
-        <Tooltip label={t('chat.open_in_pane')}>
-          <button
-            type="button"
-            className="btn btn-ghost px-1"
-            onClick={() =>
-              pane.open({
-                kind: 'code',
-                title: language || t('pane.kind.code'),
-                node: <pre className="prose-chat whitespace-pre-wrap text-sm">{code}</pre>,
-              })
-            }
-            aria-label={t('chat.open_in_pane')}
-          >
-            <IconPanel size={14} />
-          </button>
-        </Tooltip>
+    <div className="code-block" dir="ltr">
+      <div className="code-tools">
+        {language && <span className="code-lang">{language}</span>}
+        <Button
+          variant="ghost"
+          size="sm"
+          iconOnly
+          tooltip={t('chat.copy_code')}
+          aria-label={t('chat.copy_code')}
+          icon={copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+          onClick={() => void copy()}
+        />
+        <Button
+          variant="ghost"
+          size="sm"
+          iconOnly
+          tooltip={t('chat.open_in_pane')}
+          aria-label={t('chat.open_in_pane')}
+          icon={<IconPanel size={14} />}
+          onClick={() =>
+            pane.open({
+              kind: 'code',
+              title: language || t('pane.kind.code'),
+              node: <pre className="prose-chat whitespace-pre-wrap text-sm">{code}</pre>,
+            })
+          }
+        />
       </div>
       <pre {...props} />
     </div>

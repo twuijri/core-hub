@@ -83,6 +83,12 @@ export interface ComposerProps {
   onCancel(): Promise<void>;
   /** The agent chips row; rendered above the surface so it reads as part of the composer. */
   chips?: ReactNode;
+  /**
+   * The live run indicator (`RunStatus.tsx`). It rides in the docked composer rather than
+   * in the transcript so it stays on screen while the person scrolls back through the
+   * conversation — the whole point is that they can see the agent is alive.
+   */
+  status?: ReactNode;
   /** The model this message runs on. `null` = the workspace default. */
   model?: string | null;
   models?: readonly ComboboxOption[];
@@ -109,6 +115,7 @@ export function Composer({
   onSend,
   onCancel,
   chips,
+  status,
   model = null,
   models = [],
   recentModels = [],
@@ -204,6 +211,7 @@ export function Composer({
 
   return (
     <div className="composer-dock" data-testid="composer-dock">
+      {status}
       {chips}
       <form
         className="composer glass"
@@ -391,7 +399,7 @@ export function Composer({
           {disabledReason}
         </p>
       )}
-      {busy && <p className="composer-reason">{t('composer.busy_hint')}</p>}
+      {busy && status === undefined && <p className="composer-reason">{t('composer.busy_hint')}</p>}
       {!disabled && !busy && !hasContent && starters.length > 0 && (
         <ul className="composer-starters" data-testid="composer-starters">
           {starters.map((suggestion) => (

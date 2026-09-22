@@ -1,0 +1,399 @@
+/* =============================================================================
+   The conversation.
+   ----------------------------------------------------------------------------
+   Owner decision, 2026-09-22 (docs/clients/DESIGN.md §The conversation): the person
+   is always on the **right**, the agent always on the **left**, in every locale.
+
+   That is a physical rule, not a logical one, so the row that carries a message
+   fixes its own direction to `ltr` and then uses ordinary logical properties
+   inside it. Everything that decides *which edge* — the justification, the
+   tightened corner, the side the avatar is on — resolves against that fixed
+   direction, which is why an Arabic transcript and an English one put the same
+   speaker on the same side. The *content* still decides its own direction: every
+   bubble's text carries `dir="auto"`, and the bubble isolates it, so an Arabic
+   sentence reads right-to-left inside a bubble that is itself on the right.
+   ============================================================================= */
+
+.chat-turns {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+/* ------------------------------------------------------------------ one message */
+.msg {
+  /* The sides are physical on purpose — see the note at the top of this file. */
+  direction: ltr;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--mj-space-2);
+  min-inline-size: 0;
+  /* A new speaker opens a turn; the next message from the same speaker is grouped
+     under it, and the difference between the two gaps is what makes a turn read as
+     one thing. */
+  margin-block-start: var(--mj-layout-turn-gap);
+}
+.msg[data-grouped='true'] {
+  margin-block-start: var(--mj-layout-group-gap);
+}
+.chat-turns > .msg:first-child {
+  margin-block-start: 0;
+}
+.msg[data-side='user'] {
+  justify-content: flex-end;
+}
+.msg[data-side='agent'] {
+  justify-content: flex-start;
+}
+
+/* The avatar column: reserved even when the avatar is not drawn, so a grouped
+   message lines up under the first one instead of sliding under the name. */
+.msg-gutter {
+  inline-size: var(--mj-layout-avatar-sm);
+  flex: 0 0 auto;
+}
+
+.msg-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mj-space-1);
+  min-inline-size: 0;
+}
+.msg[data-side='user'] .msg-stack {
+  align-items: flex-end;
+  max-inline-size: var(--mj-layout-bubble-max);
+}
+.msg[data-side='agent'] .msg-stack {
+  align-items: flex-start;
+  /* The agent can use the whole column: code blocks and tables need it. */
+  flex: 1;
+}
+
+/* ------------------------------------------------------------------ the header */
+.msg-head {
+  display: flex;
+  align-items: center;
+  gap: var(--mj-space-2);
+  min-block-size: var(--mj-layout-avatar-sm);
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-muted);
+}
+.msg-name {
+  font-weight: 600;
+  color: var(--mj-color-text);
+}
+
+/* ------------------------------------------------------------------ the bubbles */
+.msg-bubble {
+  position: relative;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  padding: var(--mj-space-3) var(--mj-space-4);
+  border-radius: var(--mj-radius-lg);
+  border: 1px solid transparent;
+  line-height: var(--mj-font-leading-normal);
+  overflow-wrap: anywhere;
+  /* The bubble's own text direction comes from its content, not from the row. */
+  unicode-bidi: isolate;
+}
+.msg-bubble > p {
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+/* The person: a filled bubble on the right, with the corner nearest its own side
+   tightened so the shape leans towards the speaker. No tail — a tail is a chat-app
+   affectation that fights a reading column. */
+.msg-user {
+  background: var(--mj-color-user-bubble);
+  border-color: var(--mj-color-user-bubble-border);
+  color: var(--mj-color-user-bubble-text);
+  border-end-end-radius: var(--mj-radius-sm);
+}
+.msg-user[data-role='command'] {
+  font-family: var(--mj-font-mono);
+  font-size: var(--mj-font-size-sm);
+}
+
+/* The agent: a different surface, not a different shade of the same one, so the two
+   voices are told apart at a glance and not by their position alone. */
+.msg-agent-body {
+  inline-size: 100%;
+  padding: var(--mj-space-3) var(--mj-space-4);
+  border-radius: var(--mj-radius-lg);
+  border: 1px solid var(--mj-color-agent-bubble-border);
+  background: var(--mj-color-agent-bubble);
+  color: var(--mj-color-agent-bubble-text);
+  border-end-start-radius: var(--mj-radius-sm);
+}
+.msg-agent-body > * + * {
+  margin-block-start: var(--mj-space-3);
+}
+.msg[data-status='failed'] .msg-agent-body {
+  border-color: var(--mj-color-danger);
+}
+
+/* A message the hub wrote about the conversation, not in it. */
+.msg-system {
+  display: flex;
+  align-items: center;
+  gap: var(--mj-space-3);
+  margin-block: var(--mj-space-4);
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-faint);
+}
+.msg-system::before,
+.msg-system::after {
+  content: '';
+  flex: 1;
+  block-size: 1px;
+  background: var(--mj-color-border);
+}
+
+.msg-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mj-space-1);
+  margin-block-start: var(--mj-space-2);
+}
+.msg-usage {
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* =============================================================================
+   The thinking indicator.
+   ----------------------------------------------------------------------------
+   Reasoning used to be a fold in the transcript, which read as the agent writing
+   prose about itself. While a run is alive it is not prose — it is a *state*, and
+   it belongs above the composer, where the person is already looking.
+
+   Three things, always together: something moving, the word, and the seconds. A
+   spinner with no elapsed time cannot tell you whether it is alive or stuck, so
+   the count is not optional. Under `prefers-reduced-motion` the dots stop moving
+   and the seconds keep counting — the information stays, the animation goes.
+   ============================================================================= */
+.run-status {
+  display: flex;
+  align-items: center;
+  gap: var(--mj-space-2);
+  /* It hugs its own words: a pill stretched across the column would read as a banner,
+     and the point of it is to be a small live thing beside the composer. */
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  margin-block-end: var(--mj-space-2);
+  padding: var(--mj-space-1) var(--mj-space-3);
+  border-radius: var(--mj-radius-full);
+  border: 1px solid color-mix(in srgb, var(--mj-color-thinking) 28%, transparent);
+  background: var(--mj-color-accent-soft);
+  color: var(--mj-color-accent-soft-text);
+  font-size: var(--mj-font-size-xs);
+}
+.run-status-word {
+  font-weight: 500;
+}
+.run-status-time {
+  font-variant-numeric: tabular-nums;
+  /* A duration is a Latin number beside Arabic words: isolate it so the digits keep
+     their order without dragging the line's own direction with them. */
+  unicode-bidi: isolate;
+  opacity: 0.85;
+}
+.run-status-step {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.85;
+  border-inline-start: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  padding-inline-start: var(--mj-space-2);
+}
+.run-status-step[data-mono='true'] {
+  font-family: var(--mj-font-mono);
+}
+
+/* Three dots breathing in turn: alive, and quiet enough to sit under a transcript. */
+.run-dots {
+  display: inline-flex;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+.run-dot {
+  inline-size: 5px;
+  block-size: 5px;
+  border-radius: var(--mj-radius-full);
+  background: currentColor;
+  animation: mj-think 1.2s var(--mj-motion-ease) infinite;
+}
+.run-dot:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.run-dot:nth-child(3) {
+  animation-delay: 0.32s;
+}
+@keyframes mj-think {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    scale: 0.8;
+  }
+  30% {
+    opacity: 1;
+    scale: 1.15;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-dot {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* ------------------------------------------- what the thinking leaves behind
+   Once the run is over the line collapses into one quiet sentence — "thought for
+   12s" — and the reasoning itself waits behind a disclosure. It is history now, so
+   it is not allowed to look like the reply. */
+.reason {
+  inline-size: 100%;
+  border-radius: var(--mj-radius-md);
+}
+.reason-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mj-space-1);
+  padding: 2px var(--mj-space-2);
+  border-radius: var(--mj-radius-full);
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-faint);
+  cursor: pointer;
+  list-style: none;
+  transition-duration: var(--mj-motion-fast);
+  transition-timing-function: var(--mj-motion-ease);
+  transition-property: background-color, color;
+}
+.reason-summary::-webkit-details-marker {
+  display: none;
+}
+.reason-summary:hover {
+  background: var(--mj-color-surface-2);
+  color: var(--mj-color-text-muted);
+}
+.reason-caret {
+  transition: rotate var(--mj-motion-fast) var(--mj-motion-ease);
+}
+.reason[open] .reason-caret {
+  rotate: 180deg;
+}
+.reason-text {
+  margin-block-start: var(--mj-space-2);
+  padding: var(--mj-space-2) var(--mj-space-3);
+  border-inline-start: 2px solid var(--mj-color-border);
+  white-space: pre-wrap;
+  font-size: var(--mj-font-size-sm);
+  color: var(--mj-color-text-muted);
+  line-height: var(--mj-font-leading-relaxed);
+}
+
+/* ------------------------------------------------------------- the tool card
+   Folded into the agent's turn, on the code surface so it reads as machinery
+   rather than as something the agent said. */
+.tool-card {
+  inline-size: 100%;
+  border: 1px solid var(--mj-color-border);
+  border-radius: var(--mj-radius-md);
+  background: var(--mj-color-bg-raised);
+  overflow: hidden;
+}
+.tool-head {
+  display: flex;
+  align-items: center;
+  gap: var(--mj-space-2);
+  padding: var(--mj-space-2) var(--mj-space-3);
+  font-size: var(--mj-font-size-xs);
+  cursor: pointer;
+  list-style: none;
+}
+.tool-head::-webkit-details-marker {
+  display: none;
+}
+.tool-head:hover {
+  background: var(--mj-color-surface-2);
+}
+.tool-name {
+  font-family: var(--mj-font-mono);
+  font-weight: 500;
+}
+.tool-preview {
+  min-inline-size: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mj-font-mono);
+  color: var(--mj-color-text-muted);
+  unicode-bidi: isolate;
+}
+.tool-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--mj-color-text-faint);
+  unicode-bidi: isolate;
+}
+.tool-body {
+  border-block-start: 1px solid var(--mj-color-border);
+  padding: var(--mj-space-2) var(--mj-space-3);
+  background: var(--mj-color-surface);
+}
+.tool-output {
+  max-block-size: 16rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: var(--mj-font-mono);
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text);
+}
+
+/* ------------------------------------------------------------- a code block
+   The tools ride in the block's own corner and appear on hover or on focus, so
+   the code itself is never covered while it is being read. */
+.code-block {
+  position: relative;
+}
+.code-tools {
+  position: absolute;
+  inset-inline-end: var(--mj-space-1);
+  inset-block-start: var(--mj-space-1);
+  display: flex;
+  align-items: center;
+  gap: var(--mj-space-1);
+  opacity: 0;
+  transition: opacity var(--mj-motion-normal) var(--mj-motion-ease);
+}
+.code-block:hover .code-tools,
+.code-tools:focus-within {
+  opacity: 1;
+}
+.code-lang {
+  padding-inline: var(--mj-space-2);
+  border-radius: var(--mj-radius-full);
+  background: var(--mj-color-surface-2);
+  color: var(--mj-color-text-muted);
+  font-size: var(--mj-font-size-xs);
+}
+
+/* ------------------------------------------------------- the approval card
+   The one thing in the transcript that is not a message: an accent card, so it is
+   found at a glance among the turns. */
+.approval-card {
+  margin-block-start: var(--mj-layout-turn-gap);
+}
+.approval-command {
+  overflow-x: auto;
+  padding: var(--mj-space-2);
+  border-radius: var(--mj-radius-sm);
+  background: var(--mj-color-code-bg);
+  color: var(--mj-color-code-text);
+  font-family: var(--mj-font-mono);
+  font-size: var(--mj-font-size-xs);
+}
