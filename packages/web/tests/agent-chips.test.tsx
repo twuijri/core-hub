@@ -167,8 +167,11 @@ describe('agent chips', () => {
     const onSelect = renderChips([agent(HERMES, 'Hermes'), agent(CODEX, 'Codex')], vi.fn(), HERMES);
     await waitFor(() => expect(chipNames()).toHaveLength(2));
     const chips = screen.getAllByTestId('agent-chip');
-    expect(chips[0]).toHaveAttribute('aria-pressed', 'true');
-    expect(chips[1]).toHaveAttribute('aria-pressed', 'false');
+    // The row is the shared segmented control: Radix marks the chosen option as the
+    // checked radio, which is what `.mj-segment[aria-checked='true']` paints. (`data-state`
+    // cannot be used here: the tooltip trigger composed onto the same button owns it.)
+    expect(chips[0]).toHaveAttribute('aria-checked', 'true');
+    expect(chips[1]).toHaveAttribute('aria-checked', 'false');
     await user.click(chips[1] as HTMLElement);
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: CODEX }));
   });
@@ -178,7 +181,9 @@ describe('agent chips', () => {
     await waitFor(() => expect(chipNames()).toHaveLength(2));
     const [, codex] = screen.getAllByTestId('agent-chip');
     expect(codex).toBeDisabled();
-    expect(codex?.getAttribute('title')).toBe('Codex is not ready yet');
+    // The reason is the accessible name now; `title=` (the browser tooltip) is banned
+    // from screens by the UI policy, and our tooltip carries the same words.
+    expect(codex).toHaveAttribute('aria-label', 'Codex is not ready yet');
   });
 
   it('with nothing to pick it says so instead of rendering an empty row', async () => {

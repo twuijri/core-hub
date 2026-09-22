@@ -10,6 +10,8 @@
   --color-surface: var(--mj-color-surface);
   --color-surface-2: var(--mj-color-surface-2);
   --color-surface-3: var(--mj-color-surface-3);
+  --color-control-track: var(--mj-color-control-track);
+  --color-control-raised: var(--mj-color-control-raised);
   --color-ink: var(--mj-color-text);
   --color-muted: var(--mj-color-text-muted);
   --color-faint: var(--mj-color-text-faint);
@@ -41,6 +43,9 @@
   --radius-md: var(--mj-radius-md);
   --radius-lg: var(--mj-radius-lg);
   --radius-xl: var(--mj-radius-xl);
+  --shadow-sm: var(--mj-shadow-sm);
+  --shadow-md: var(--mj-shadow-md);
+  --shadow-lg: var(--mj-shadow-lg);
   --font-sans: var(--mj-font-sans);
   --font-mono: var(--mj-font-mono);
   --text-xs: var(--mj-font-size-xs);
@@ -161,19 +166,204 @@
     background: var(--mj-color-surface-2);
     color: var(--mj-color-text-muted);
   }
-  .segmented {
-    @apply inline-flex rounded-md p-0.5;
-    background: var(--mj-color-surface-2);
-  }
-  .segmented > button {
-    @apply rounded-sm px-2 py-1 text-xs;
-    color: var(--mj-color-text-muted);
-  }
-  .segmented > button[aria-pressed='true'] {
-    background: var(--mj-color-surface);
-    color: var(--mj-color-text);
-    box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
-  }
+}
+
+/* ------------------------------------------------------ the segmented control
+   src/ui/Segmented.tsx. One track, one lifted pill, three sizes — every value a
+   `control.*` or `shadow.*` token so the control is designed in one place and used
+   everywhere. Logical properties only, so the track reads correctly in both directions. */
+.mj-segmented {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mj-control-gap);
+  padding: var(--mj-control-track-pad);
+  border-radius: var(--mj-control-track-radius);
+  background: var(--mj-color-control-track);
+  max-inline-size: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mj-segmented::-webkit-scrollbar {
+  display: none;
+}
+.mj-segmented[data-wrap='true'] {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+.mj-segmented[data-overflowing='true'],
+.mj-segmented[data-density='compact'] {
+  overflow-x: visible;
+  flex-wrap: nowrap;
+}
+.mj-segmented[data-stretch='true'] {
+  display: flex;
+  inline-size: 100%;
+}
+.mj-segmented[data-stretch='true'] > .mj-segment {
+  flex: 1 1 0;
+  min-inline-size: 0;
+}
+
+.mj-segment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--mj-space-2);
+  flex: 0 0 auto;
+  min-inline-size: 0;
+  block-size: var(--mj-control-height-md);
+  padding-inline: var(--mj-control-pad-md);
+  font-size: var(--mj-control-font-md);
+  border: 0;
+  border-radius: var(--mj-control-item-radius);
+  background: transparent;
+  color: var(--mj-color-text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+  /* The lift and the colour move together, on the motion tokens — 0 ms when the person
+     asked the OS for less motion. */
+  transition-duration: var(--mj-motion-normal);
+  transition-timing-function: var(--mj-motion-ease);
+  transition-property: background-color, color, box-shadow, opacity;
+}
+.mj-segment:hover:not([disabled]):not([aria-checked='true']) {
+  color: var(--mj-color-text);
+  background: color-mix(in srgb, var(--mj-color-control-raised) 45%, transparent);
+}
+.mj-segment[aria-checked='true'] {
+  background: var(--mj-color-control-raised);
+  color: var(--mj-color-text);
+  font-weight: 500;
+  box-shadow: var(--mj-shadow-sm);
+}
+.mj-segment[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.mj-segment-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mj-segmented[data-size='sm'] > .mj-segment {
+  block-size: var(--mj-control-height-sm);
+  padding-inline: var(--mj-control-pad-sm);
+  font-size: var(--mj-control-font-sm);
+  gap: var(--mj-space-1);
+}
+.mj-segmented[data-size='lg'] > .mj-segment {
+  block-size: var(--mj-control-height-lg);
+  padding-inline: var(--mj-control-pad-lg);
+  font-size: var(--mj-control-font-lg);
+}
+
+/* ---- compact density: only the chosen option keeps its label ------------------
+   The rest collapse to their icon, separated by a hairline. The hairline is drawn
+   with a pseudo-element so it is decorative by construction — nothing to announce —
+   and it never appears beside the raised surface, where it would fight the shadow. */
+.mj-segmented[data-density='compact'] .mj-segment-icon-only,
+.mj-segment-icon-only {
+  padding-inline: var(--mj-space-2);
+  gap: 0;
+  position: relative;
+}
+.mj-segmented[data-density='compact'] > .mj-segment-icon-only + .mj-segment-icon-only::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: calc(var(--mj-control-gap) / -2 - 0.5px);
+  inset-block: 22%;
+  inline-size: 1px;
+  background: var(--mj-color-border);
+}
+/* No hairline next to the raised surface. */
+.mj-segmented[data-density='compact'] > [aria-checked='true'] + .mj-segment-icon-only::before {
+  content: none;
+}
+
+/* ---- the overflow control and the trailing action ---------------------------- */
+.mj-segment-more {
+  color: var(--mj-color-text-muted);
+  gap: var(--mj-space-1);
+}
+.mj-segment-action {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: var(--mj-control-height-md);
+  block-size: var(--mj-control-height-md);
+  margin-inline-start: var(--mj-space-2);
+  border: 1px dashed var(--mj-color-border-strong);
+  border-radius: var(--mj-control-item-radius);
+  background: transparent;
+  color: var(--mj-color-text-muted);
+  cursor: pointer;
+  transition-duration: var(--mj-motion-fast);
+  transition-timing-function: var(--mj-motion-ease);
+  transition-property: background-color, color, border-color;
+}
+.mj-segment-action:hover {
+  background: var(--mj-color-surface-2);
+  color: var(--mj-color-text);
+  border-color: var(--mj-color-accent);
+}
+.mj-segmented[data-size='sm'] .mj-segment-action {
+  inline-size: var(--mj-control-height-sm);
+  block-size: var(--mj-control-height-sm);
+}
+
+/* The measuring row: real type and real padding, off the screen, never read aloud. */
+.mj-segmented-measure {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  visibility: hidden;
+  pointer-events: none;
+  display: flex;
+  gap: var(--mj-control-gap);
+  white-space: nowrap;
+}
+
+.mj-menu-choice {
+  justify-content: space-between;
+}
+.mj-menu-choice-label {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mj-menu-check {
+  display: grid;
+  place-items: center;
+  color: var(--mj-color-accent);
+}
+
+/* An option that is being dragged (the agent row) keeps its place in the track. */
+.mj-segment.sortable-dragging {
+  opacity: 0.5;
+}
+.mj-segment[data-drag='true'] {
+  cursor: grab;
+}
+.mj-segment[data-drag='true']:active {
+  cursor: grabbing;
+}
+/* The agent's initial, inside its option. */
+.mj-segment-mark {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.375rem;
+  block-size: 1.375rem;
+  border-radius: var(--mj-radius-full);
+  background: var(--mj-color-surface-3);
+  color: var(--mj-color-text);
+  font-size: var(--mj-font-size-xs);
+  font-weight: 500;
+}
+.mj-segment[aria-checked='true'] .mj-segment-mark {
+  background: var(--mj-color-accent);
+  color: var(--mj-color-accent-text);
 }
 
 /* Markdown rendering (solid content surface). */
@@ -280,6 +470,63 @@
 }
 .sortable-dragging {
   opacity: 0.5;
+}
+
+/* ------------------------------------------- an empty chat, and a chat that has begun
+   An empty chat is a centred invitation; a chat with a transcript is a column with the
+   composer docked at the bottom. It is the same column either way, and the move between
+   the two is a transition, not a jump: the two flexible pads around the composer lose
+   their growth while the transcript gains it, all on `--mj-motion-slow`, which is 0 ms
+   when the person asked the OS for less motion. */
+.chat-flow {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-block-size: 0;
+}
+.chat-pad,
+.chat-stream {
+  flex-basis: 0;
+  transition-duration: var(--mj-motion-slow);
+  transition-timing-function: var(--mj-motion-ease);
+  transition-property: flex-grow;
+}
+.chat-pad {
+  flex-grow: 0;
+}
+.chat-stream {
+  flex-grow: 1;
+}
+.chat-flow[data-empty='true'] .chat-pad {
+  flex-grow: 1;
+}
+.chat-flow[data-empty='true'] .chat-stream {
+  flex-grow: 0;
+}
+/* The invitation fades with the same timing, and stops taking space once it is gone. */
+.chat-lede {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--mj-space-3);
+  text-align: center;
+  padding-block-end: var(--mj-space-6);
+  transition-duration: var(--mj-motion-normal);
+  transition-timing-function: var(--mj-motion-ease);
+  transition-property: opacity;
+}
+.chat-flow:not([data-empty='true']) .chat-lede {
+  display: none;
+}
+/* Docked only once there is something to dock over. */
+.composer-dock {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: var(--mj-z-sticky);
+  padding-block: var(--mj-space-2) var(--mj-space-3);
+}
+.chat-flow[data-empty='true'] .composer-dock {
+  position: static;
 }
 
 /* ------------------------------------------------------------------ composer
@@ -436,7 +683,7 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
-.mj-select[data-state='open'] {
+.mj-select[aria-expanded='true'] {
   border-color: var(--mj-color-accent);
   color: var(--mj-color-text);
 }
@@ -542,52 +789,6 @@
   border-color: var(--mj-color-border-strong);
 }
 
-/* ------------------------------------------------------------- agent chips */
-.chip-agent {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--mj-space-2);
-  max-inline-size: 12rem;
-  padding: 0.3rem var(--mj-space-3) 0.3rem 0.3rem;
-  border-radius: var(--mj-radius-full);
-  border: 1px solid var(--mj-color-border);
-  background: var(--mj-color-surface);
-  color: var(--mj-color-text-muted);
-  font-size: var(--mj-font-size-sm);
-  cursor: grab;
-  transition-duration: var(--mj-motion-fast);
-  transition-timing-function: var(--mj-motion-ease);
-  transition-property: background-color, color, border-color;
-}
-.chip-agent:hover:not(:disabled) {
-  background: var(--mj-color-surface-2);
-  color: var(--mj-color-text);
-}
-.chip-agent[aria-pressed='true'] {
-  border-color: var(--mj-color-accent);
-  background: var(--mj-color-accent-soft);
-  color: var(--mj-color-accent-soft-text);
-  font-weight: 500;
-}
-.chip-agent:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-.chip-agent-mark {
-  display: inline-grid;
-  place-items: center;
-  inline-size: 1.5rem;
-  block-size: 1.5rem;
-  border-radius: var(--mj-radius-full);
-  background: var(--mj-color-surface-2);
-  color: var(--mj-color-text);
-  font-size: var(--mj-font-size-xs);
-}
-.chip-agent[aria-pressed='true'] .chip-agent-mark {
-  background: var(--mj-color-accent);
-  color: var(--mj-color-accent-text);
-}
-
 /* -------------------------------------------------- the session's folder */
 .working-dir {
   position: relative;
@@ -644,4 +845,268 @@
   gap: var(--mj-space-2);
   border-block-start: 1px solid var(--mj-color-border);
   padding-block-start: var(--mj-space-2);
+}
+
+/* --------------------------------------------------- tooltip, checkbox, dialog
+   The three surfaces that used to be the browser's own (`title=`, a native
+   checkbox, `confirm()`). All three are ours now, on the same tokens, the same
+   radii and the one shadow scale. */
+.mj-tooltip {
+  z-index: var(--mj-z-popover);
+  max-inline-size: 18rem;
+  padding: var(--mj-space-1) var(--mj-space-2);
+  border-radius: var(--mj-radius-sm);
+  background: var(--mj-color-text);
+  color: var(--mj-color-bg);
+  font-size: var(--mj-font-size-xs);
+  line-height: var(--mj-font-leading-normal);
+  box-shadow: var(--mj-shadow-md);
+  text-align: start;
+}
+.mj-tooltip-arrow {
+  fill: var(--mj-color-text);
+}
+
+.mj-check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--mj-space-2);
+}
+.mj-check {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
+  flex: 0 0 auto;
+  margin-block-start: 0.125rem;
+  border: 1px solid var(--mj-color-border-strong);
+  border-radius: var(--mj-radius-sm);
+  background: var(--mj-color-surface);
+  color: var(--mj-color-accent-text);
+  transition-duration: var(--mj-motion-fast);
+  transition-timing-function: var(--mj-motion-ease);
+  transition-property: background-color, border-color;
+}
+.mj-check:hover:not([disabled]) {
+  border-color: var(--mj-color-accent);
+}
+.mj-check[data-state='checked'] {
+  background: var(--mj-color-accent);
+  border-color: var(--mj-color-accent);
+}
+.mj-check[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.mj-check-mark {
+  display: grid;
+  place-items: center;
+}
+.mj-check-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--mj-font-size-sm);
+  cursor: pointer;
+}
+.mj-check-hint {
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-muted);
+}
+
+.mj-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--mj-z-overlay);
+  background: var(--mj-color-scrim);
+}
+.mj-dialog {
+  position: fixed;
+  z-index: var(--mj-z-overlay);
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  transform: translate(-50%, -50%);
+  inline-size: min(28rem, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  gap: var(--mj-space-3);
+  padding: var(--mj-space-5);
+  border-radius: var(--mj-radius-lg);
+  border: 1px solid var(--mj-color-border);
+  background: var(--mj-color-surface);
+  color: var(--mj-color-text);
+  box-shadow: var(--mj-shadow-lg);
+}
+/* `translate(-50%, …)` is physical by nature; in RTL the inline start is the right edge,
+   so the sign flips with the direction rather than with a hard-coded side. */
+:root[dir='rtl'] .mj-dialog {
+  transform: translate(50%, -50%);
+}
+.mj-dialog-title {
+  font-size: var(--mj-font-size-lg);
+  font-weight: 600;
+}
+.mj-dialog-body {
+  font-size: var(--mj-font-size-sm);
+  color: var(--mj-color-text-muted);
+}
+.mj-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--mj-space-2);
+}
+
+.mj-select-group {
+  padding: var(--mj-space-2) var(--mj-space-2) var(--mj-space-1);
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-faint);
+}
+
+/* ------------------------------------------------------- the searchable picker
+   src/ui/Combobox.tsx. A trigger with two lines, a field pinned at the top of the
+   popup, and a virtualized list under it. Every size is a token; the rows are
+   absolutely positioned by the virtualizer, so their height is fixed here and in
+   the component (ROW / GROUP_ROW) and must stay in step. */
+.mj-combo-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mj-space-2);
+  min-inline-size: 12rem;
+  max-inline-size: 22rem;
+  padding: var(--mj-space-1) var(--mj-space-3);
+  min-block-size: var(--mj-control-height-lg);
+  border: 1px solid var(--mj-color-border);
+  border-radius: var(--mj-control-item-radius);
+  background: var(--mj-color-surface);
+  color: var(--mj-color-text);
+  text-align: start;
+  cursor: pointer;
+  transition-duration: var(--mj-motion-fast);
+  transition-timing-function: var(--mj-motion-ease);
+  transition-property: background-color, border-color;
+}
+.mj-combo-trigger:hover:not(:disabled) {
+  background: var(--mj-color-surface-2);
+}
+.mj-combo-trigger[data-state='open'] {
+  border-color: var(--mj-color-accent);
+}
+.mj-combo-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.mj-combo-value {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.mj-combo-name {
+  font-size: var(--mj-font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mj-combo-sub {
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* A model id is a Latin identifier that must keep its own character order while the
+     line stays on the page's own edge — isolation, not a direction of its own. */
+  unicode-bidi: isolate;
+}
+
+.mj-combo-popup {
+  inline-size: min(26rem, calc(100vw - 2rem));
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.mj-combo-field {
+  display: flex;
+  align-items: center;
+  gap: var(--mj-space-2);
+  padding: var(--mj-space-2) var(--mj-space-3);
+  border-block-end: 1px solid var(--mj-color-border);
+  color: var(--mj-color-text-muted);
+}
+.mj-combo-field > input {
+  flex: 1;
+  min-inline-size: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mj-color-text);
+  font-size: var(--mj-font-size-sm);
+  outline: none; /* the popup carries the focus; one ring, not two */
+}
+.mj-combo-field > input::placeholder {
+  color: var(--mj-color-text-faint);
+}
+
+.mj-combo-list {
+  max-block-size: 18rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.mj-combo-option {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: var(--mj-space-1) var(--mj-space-3);
+  cursor: pointer;
+}
+.mj-combo-option[data-active='true'] {
+  background: var(--mj-color-surface-2);
+}
+.mj-combo-option[aria-selected='true'] .mj-combo-name {
+  color: var(--mj-color-accent-soft-text);
+  font-weight: 500;
+}
+.mj-combo-option[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.mj-combo-group,
+.mj-combo-sticky {
+  display: flex;
+  align-items: center;
+  padding: var(--mj-space-1) var(--mj-space-3);
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-faint);
+  background: var(--mj-color-bg-raised);
+}
+/* The header of the group being scrolled through, held above its rows. */
+.mj-combo-sticky {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  block-size: 26px;
+  border-block-end: 1px solid var(--mj-color-border);
+}
+.mj-combo-hit {
+  background: var(--mj-color-accent-soft);
+  color: var(--mj-color-accent-soft-text);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.mj-combo-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--mj-space-2);
+  padding: var(--mj-space-4) var(--mj-space-3);
+  font-size: var(--mj-font-size-sm);
+  color: var(--mj-color-text-muted);
+}
+.mj-combo-error {
+  color: var(--mj-color-danger-soft-text);
+}
+.mj-combo-count {
+  padding: var(--mj-space-1) var(--mj-space-3);
+  border-block-start: 1px solid var(--mj-color-border);
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-faint);
 }

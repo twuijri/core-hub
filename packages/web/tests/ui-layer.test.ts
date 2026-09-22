@@ -18,8 +18,8 @@ function walk(dir: string): string[] {
   });
 }
 
-/** Where a primitive may be imported: our own wrapper layer, and the direction provider. */
-const ALLOWED = new Set(['ui', 'i18n']);
+/** Where a primitive may be imported: our own wrapper layer, and nowhere else. */
+const ALLOWED = new Set(['ui']);
 
 describe('the UI layer', () => {
   it('is the only place that imports radix-ui', () => {
@@ -32,9 +32,52 @@ describe('the UI layer', () => {
   });
 
   it('exports a wrapper for every primitive the client uses', () => {
-    for (const name of ['Menu.tsx', 'Select.tsx', 'Popover.tsx']) {
+    for (const name of [
+      'Menu.tsx',
+      'Select.tsx',
+      'Popover.tsx',
+      'Tooltip.tsx',
+      'Checkbox.tsx',
+      'ConfirmDialog.tsx',
+      'Direction.tsx',
+    ]) {
       const text = readFileSync(path.join(src, 'ui', name), 'utf8');
       expect(text, name).toMatch(/from 'radix-ui'/);
+    }
+  });
+
+  it('has no native popup or OS-painted control left in a screen', () => {
+    // `pnpm lint` fails on these too (eslint.config.js §UI policy). This says the same
+    // thing from the other side, so deleting the rule cannot quietly pass.
+    const offenders: string[] = [];
+    for (const file of walk(src).filter((f) => /\.tsx?$/.test(f))) {
+      const rel = path.relative(src, file);
+      if (ALLOWED.has(rel.split(path.sep)[0] ?? '')) continue;
+      const text = readFileSync(file, 'utf8');
+      for (const [what, pattern] of [
+        ['a native <select>', /<select[\s>]/],
+        ['a native <dialog>', /<dialog[\s>]/],
+        ['a native checkbox or radio', /type="(checkbox|radio)"/],
+        ['window.confirm/alert/prompt', /\b(window\.)?(confirm|alert|prompt)\(/],
+        // `title` on a host element only: <AppShell title={…}> is a prop, not a tooltip.
+        ['a native title tooltip', /<[a-z][a-zA-Z0-9-]*\s[^>]*\stitle=/],
+      ] as const) {
+        if (pattern.test(text)) offenders.push(`${rel}: ${what}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('the policy is in the lint config, so CI fails on it and not only this test', () => {
+    const config = readFileSync(path.resolve(src, '../../../eslint.config.js'), 'utf8');
+    for (const fragment of [
+      "JSXOpeningElement[name.name='select']",
+      "JSXOpeningElement[name.name='dialog']",
+      "JSXAttribute[name.name='title']",
+      'no-restricted-globals',
+      'radix-ui',
+    ]) {
+      expect(config, fragment).toContain(fragment);
     }
   });
 });

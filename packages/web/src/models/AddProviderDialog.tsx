@@ -19,6 +19,9 @@ import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import type { ProviderHost, ProviderPreset } from '../types.js';
 import { Notice, Spinner } from '../ui/Notice.js';
+import { Segmented } from '../ui/Segmented.js';
+import { Combobox } from '../ui/Combobox.js';
+import { Select } from '../ui/Select.js';
 import { needsLoopbackWarning, suggestedHostUrl } from './loopback.js';
 import {
   useCreateProvider,
@@ -154,56 +157,50 @@ export function AddProviderDialog({
 
         <fieldset className="flex flex-col gap-1">
           <legend className="text-xs text-muted">{t('models.add.type')}</legend>
-          <div className="segmented self-start" role="group">
-            <button
-              type="button"
-              ref={firstField}
-              aria-pressed={mode === 'preset'}
-              onClick={() => {
+          <Segmented
+            className="self-start"
+            label={t('models.add.type')}
+            value={mode}
+            onChange={(next) => {
+              if (next === 'preset') {
                 setMode('preset');
                 setBaseUrl(preset?.base_url ?? '');
-              }}
-              data-testid="add-mode-preset"
-            >
-              {t('models.add.type_preset')}
-            </button>
-            <button
-              type="button"
-              aria-pressed={mode === 'custom'}
-              onClick={() => {
-                setMode('custom');
-                // A custom endpoint does not inherit a preset's address: it is a
-                // different provider, and a leftover URL is the wrong one.
-                setBaseUrl('');
-                setModels([]);
-                setModel('');
-                setProbeError(null);
-              }}
-              data-testid="add-mode-custom"
-            >
-              {t('models.add.type_custom')}
-            </button>
-          </div>
+                return;
+              }
+              setMode('custom');
+              // A custom endpoint does not inherit a preset's address: it is a
+              // different provider, and a leftover URL is the wrong one.
+              setBaseUrl('');
+              setModels([]);
+              setModel('');
+              setProbeError(null);
+            }}
+            options={[
+              {
+                value: 'preset',
+                label: t('models.add.type_preset'),
+                ref: firstField,
+                itemProps: { 'data-testid': 'add-mode-preset' },
+              },
+              {
+                value: 'custom',
+                label: t('models.add.type_custom'),
+                itemProps: { 'data-testid': 'add-mode-custom' },
+              },
+            ]}
+          />
         </fieldset>
 
         {mode === 'preset' ? (
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted" htmlFor={`${ids}-preset`}>
-              {t('models.add.select_provider')}
-            </label>
-            <select
-              id={`${ids}-preset`}
-              className="field"
+            <span className="text-xs text-muted">{t('models.add.select_provider')}</span>
+            <Select
               value={presetId}
-              onChange={(event) => setPresetId(event.target.value)}
-              data-testid="add-preset"
-            >
-              {offered.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
+              onValueChange={(next) => next && setPresetId(next)}
+              label={t('models.add.select_provider')}
+              testId="add-preset"
+              options={offered.map((item) => ({ value: item.id, label: item.label }))}
+            />
             {preset?.keys_url && (
               <a
                 className="link text-xs underline"
@@ -285,25 +282,37 @@ export function AddProviderDialog({
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs text-muted" htmlFor={`${ids}-model`}>
-            {t('models.add.default_model')}
-          </label>
+          <span className="text-xs text-muted">{t('models.add.default_model')}</span>
           <div className="flex items-center gap-2">
-            <select
-              id={`${ids}-model`}
-              className="field"
-              value={model}
-              disabled={models.length === 0}
-              onChange={(event) => setModel(event.target.value)}
-              data-testid="add-default-model"
-            >
-              <option value="">{t('models.add.model_placeholder')}</option>
-              {models.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
+            {/* The list is empty until the provider is asked, so the picker says so and
+                keeps Fetch inside the popup, where the person already is. */}
+            <Combobox
+              value={model === '' ? null : model}
+              onChange={(next) => setModel(next ?? '')}
+              label={t('models.add.default_model')}
+              placeholder={t('models.add.model_placeholder')}
+              testId="add-default-model"
+              status={
+                probe.isPending
+                  ? 'loading'
+                  : probeError !== null
+                    ? 'error'
+                    : models.length === 0
+                      ? 'unfetched'
+                      : 'ready'
+              }
+              errorMessage={probeError}
+              fetchAction={{
+                label: t('models.add.fetch'),
+                onSelect: fetchModels,
+                disabled: probe.isPending || baseUrl.trim() === '',
+              }}
+              options={models.map((item) => ({
+                value: item.id,
+                label: item.label,
+                detail: item.id,
+              }))}
+            />
             <button
               type="button"
               className="btn"

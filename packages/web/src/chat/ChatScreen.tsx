@@ -13,9 +13,11 @@ import { Notice, Spinner } from '../ui/Notice.js';
 import { AgentChips } from './AgentChips.js';
 import { ApprovalCard } from './ApprovalCard.js';
 import { Composer } from './Composer.js';
+import { starterSuggestions } from './starters.js';
 import { takeFirstMessage } from './firstMessage.js';
 import { MessageView } from './MessageView.js';
 import { activeRun, isBusy } from './transcript.js';
+import { useRecentModels } from '../models/useModelPicker.js';
 import { useApprovalMode, useComposerModels } from './useComposerControls.js';
 import { useSessionStream } from './useSessionStream.js';
 import { WorkingDirPicker } from './WorkingDirPicker.js';
@@ -40,7 +42,7 @@ export function ChatScreen() {
 }
 
 function OpenSession({ sessionId }: { sessionId: string }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const { client } = useAuth();
   const navigate = useNavigate();
   const stream = useSessionStream(sessionId);
@@ -57,6 +59,7 @@ function OpenSession({ sessionId }: { sessionId: string }) {
 
   const agentId = state.session?.agent_id ?? null;
   const models = useComposerModels();
+  const { recent, remember } = useRecentModels();
   const approval = useApprovalMode(agentId);
 
   const send = useCallback(
@@ -111,7 +114,12 @@ function OpenSession({ sessionId }: { sessionId: string }) {
           : null;
   return (
     <AppShell title={title}>
-      <div className="flex flex-1 flex-col" data-testid="chat-screen" data-session-id={sessionId}>
+      <div
+        className="chat-flow"
+        data-empty={messageCount === 0 ? 'true' : 'false'}
+        data-testid="chat-screen"
+        data-session-id={sessionId}
+      >
         <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="chat-header">
           <WorkingDirPicker
             value={state.session?.working_dir ?? null}
@@ -144,10 +152,14 @@ function OpenSession({ sessionId }: { sessionId: string }) {
         )}
         {state.deleted && <Notice tone="warning">{t('chat.session_deleted')}</Notice>}
         {firstError !== null && <Notice tone="danger">{describeError(firstError, t)}</Notice>}
-        {stream.status === 'ready' && state.messages.length === 0 && (
-          <Notice>{t('chat.empty')}</Notice>
-        )}
-        <div className="flex-1">
+        <div className="chat-pad" aria-hidden />
+        {/* An empty chat is an invitation, centred with the composer; the first message
+            docks the composer and hands the column to the transcript. */}
+        <div className="chat-lede">
+          <h2 className="text-xl font-semibold">{t('chat.empty_title')}</h2>
+          <p className="max-w-prose text-sm text-muted">{t('chat.empty')}</p>
+        </div>
+        <div className="chat-stream">
           {state.messages.map((message) => (
             <MessageView key={message.id} message={message} showReasoning={showReasoning} />
           ))}
@@ -187,12 +199,18 @@ function OpenSession({ sessionId }: { sessionId: string }) {
           }
           model={state.session?.model ?? null}
           models={models}
-          onModel={(value) => patch.mutate({ model: value })}
+          recentModels={recent}
+          onModel={(value) => {
+            remember(value);
+            patch.mutate({ model: value });
+          }}
           approvalMode={approval.mode}
           approvalOptions={approval.options}
           onApprovalMode={approval.set}
           approvalDisabledReason={approval.disabledReason}
+          starters={messageCount === 0 ? starterSuggestions(language) : []}
         />
+        <div className="chat-pad" aria-hidden />
       </div>
     </AppShell>
   );

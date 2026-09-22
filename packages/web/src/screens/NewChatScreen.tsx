@@ -12,6 +12,7 @@ import { Composer } from '../chat/Composer.js';
 import { putFirstMessage } from '../chat/firstMessage.js';
 import { starterSuggestions } from '../chat/starters.js';
 import { useApprovalMode, useComposerModels } from '../chat/useComposerControls.js';
+import { useRecentModels } from '../models/useModelPicker.js';
 import { WorkingDirPicker } from '../chat/WorkingDirPicker.js';
 import { useAgents, useCreateSession } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
@@ -34,6 +35,7 @@ export function NewChatScreen() {
   const [model, setModel] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const models = useComposerModels();
+  const { recent, remember } = useRecentModels();
   const approval = useApprovalMode(agentId);
 
   // The first installable agent is chosen for the person, so a fresh hub with Hermes alone
@@ -76,8 +78,11 @@ export function NewChatScreen() {
 
   return (
     <AppShell title={title}>
-      <div className="flex flex-1 flex-col" data-testid="new-chat">
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+      {/* The same column an empty chat uses (`.chat-flow`), so nothing shifts when the
+          first message turns this draft into a session. */}
+      <div className="chat-flow" data-empty="true" data-testid="new-chat">
+        <div className="chat-pad" aria-hidden />
+        <div className="chat-lede">
           <h1 className="text-xl font-semibold">{t('new_chat.greeting')}</h1>
           <p className="max-w-prose text-sm text-muted">{t('new_chat.lede')}</p>
           <WorkingDirPicker value={workingDir} onChange={setWorkingDir} />
@@ -108,13 +113,18 @@ export function NewChatScreen() {
           }
           model={model}
           models={models}
-          onModel={setModel}
+          recentModels={recent}
+          onModel={(value) => {
+            remember(value);
+            setModel(value);
+          }}
           approvalMode={approval.mode}
           approvalOptions={approval.options}
           onApprovalMode={approval.set}
           approvalDisabledReason={approval.disabledReason}
           starters={starterSuggestions(language)}
         />
+        <div className="chat-pad" aria-hidden />
       </div>
     </AppShell>
   );

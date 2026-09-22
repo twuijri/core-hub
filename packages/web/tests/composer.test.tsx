@@ -10,6 +10,7 @@ import { SessionStore } from '../src/auth/store.js';
 import { Composer } from '../src/chat/Composer.js';
 import { canSend, composerState } from '../src/chat/composer-state.js';
 import { starterSuggestions } from '../src/chat/starters.js';
+import { stubListViewport } from './helpers/ui.js';
 import { ThemeProvider } from '../src/design/theme.js';
 import { I18nProvider } from '../src/i18n/context.js';
 import { RealtimeProvider } from '../src/realtime/context.js';
@@ -256,34 +257,57 @@ describe('composer', () => {
     expect(onApprovalMode).toHaveBeenCalledWith('auto_all');
   });
 
-  it('a selector with no answer is disabled and says why', () => {
+  it('a selector with no answer is disabled and says why', async () => {
     renderComposer({ approvalDisabledReason: 'This agent declares no approval mode.' });
     const trigger = screen.getByTestId('composer-approval');
     expect(trigger).toBeDisabled();
-    expect(trigger).toHaveAttribute('title', 'This agent declares no approval mode.');
+    // A disabled control takes no pointer events, so the reason hangs off a focusable
+    // wrapper — otherwise the explanation could never be read.
+    const wrap = screen.getByTestId('composer-approval-wrap');
+    fireEvent.focus(wrap);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'This agent declares no approval mode.',
+    );
   });
 
-  it('the model selector offers the workspace default plus the catalogue', async () => {
+  it('the model picker is searchable, and what it picks is what the run gets', async () => {
     const user = userEvent.setup();
     const onModel = vi.fn();
-    renderComposer({
-      model: null,
-      models: [{ value: 'anthropic/sonnet', label: 'Sonnet' }],
-      onModel,
-    });
-    const trigger = screen.getByTestId('composer-model');
-    expect(trigger).toHaveTextContent('Default model');
-    await open(user, trigger);
-    const options = await screen.findAllByRole('option');
-    expect(options.map((option) => option.textContent)).toEqual(['Default model', 'Sonnet']);
-    await user.click(options[1] as HTMLElement);
-    expect(onModel).toHaveBeenCalledWith('anthropic/sonnet');
+    const undo = stubListViewport();
+    try {
+      renderComposer({
+        model: null,
+        models: [
+          {
+            value: 'anthropic/sonnet',
+            label: 'Sonnet',
+            detail: 'anthropic/sonnet',
+            group: 'anthropic',
+          },
+          { value: 'openai/gpt-5', label: 'GPT-5', detail: 'openai/gpt-5', group: 'openai' },
+        ],
+        onModel,
+      });
+      const trigger = screen.getByTestId('composer-model');
+      expect(trigger).toHaveTextContent('Default model');
+      await open(user, trigger);
+      // Typing narrows; the value that reaches the caller is the model's own key, which
+      // is what `sessions.createRun` stores.
+      await user.type(await screen.findByTestId('combobox-field'), 'gpt');
+      const rows = await screen.findAllByTestId('combobox-option');
+      expect(rows).toHaveLength(1);
+      await user.click(rows[0] as HTMLElement);
+      expect(onModel).toHaveBeenCalledWith('openai/gpt-5');
+    } finally {
+      undo();
+    }
   });
 
-  it('dictation is present but honestly disabled while models.transcribe is a stub', () => {
+  it('dictation is present but honestly disabled while models.transcribe is a stub', async () => {
     renderComposer();
     expect(screen.getByTestId('composer-mic')).toBeDisabled();
-    expect(screen.getByTestId('composer-mic').getAttribute('title')).toMatch(/501/);
+    fireEvent.focus(screen.getByTestId('composer-mic-wrap'));
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/501/);
   });
 
   it('starters: three on an empty chat, in the UI language, and one fills the field', async () => {

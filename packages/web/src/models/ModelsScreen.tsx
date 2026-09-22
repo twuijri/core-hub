@@ -22,6 +22,11 @@ import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { navigation, routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
+import { Checkbox } from '../ui/Checkbox.js';
+import { Segmented } from '../ui/Segmented.js';
+import { Combobox } from '../ui/Combobox.js';
+import { Select } from '../ui/Select.js';
+import { modelOption, useRecentModels } from './useModelPicker.js';
 import type { Agent, Model, Provider, ProviderHost } from '../types.js';
 import { SettingsBack } from '../settings/SettingsBack.js';
 import { Notice, Spinner } from '../ui/Notice.js';
@@ -97,26 +102,19 @@ export function ModelsScreen() {
         )}
       </header>
 
-      <nav
-        className="mb-4 flex flex-wrap gap-1 border-b border-line pb-2"
-        aria-label={title}
-        data-testid="models-tabs"
-      >
-        {tabs.map((id) => (
-          <button
-            key={id}
-            type="button"
-            aria-current={tab === id ? 'page' : undefined}
-            onClick={() => setTab(id)}
-            data-tab-id={id}
-            className={`rounded-md px-3 py-1 text-sm ${
-              tab === id ? 'bg-surface-2 font-medium' : 'text-muted hover:bg-surface-2'
-            }`}
-          >
-            {t(`models.tab.${id}`)}
-          </button>
-        ))}
-      </nav>
+      <Segmented
+        className="mb-4"
+        label={title}
+        value={tab}
+        onChange={setTab}
+        wrap
+        testId="models-tabs"
+        options={tabs.map((id) => ({
+          value: id,
+          label: t(`models.tab.${id}`),
+          itemProps: { 'data-tab-id': id },
+        }))}
+      />
 
       {providers.isPending && <Spinner label={t('common.loading')} />}
       {providers.isError && <Notice tone="danger">{describeError(providers.error, t)}</Notice>}
@@ -189,21 +187,19 @@ function ProvidersTab({
       )}
       {!kindOfTab && providers.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <label className="text-xs text-muted" htmlFor="provider-filter">
-            {t('models.filter')}
-          </label>
-          <select
-            id="provider-filter"
-            className="field max-w-60"
+          <span className="text-xs text-muted">{t('models.filter')}</span>
+          <Select
             value={filter}
-            onChange={(event) => setFilter(event.target.value as typeof filter)}
-            data-testid="provider-filter"
-          >
-            <option value="all">{t('models.filter_all')}</option>
-            <option value="llm">{t('models.tab.general')}</option>
-            <option value="stt">{t('models.tab.stt_providers')}</option>
-            <option value="tts">{t('models.tab.tts_providers')}</option>
-          </select>
+            onValueChange={(next) => setFilter((next ?? 'all') as typeof filter)}
+            label={t('models.filter')}
+            testId="provider-filter"
+            options={[
+              { value: 'all', label: t('models.filter_all') },
+              { value: 'llm', label: t('models.tab.general') },
+              { value: 'stt', label: t('models.tab.stt_providers') },
+              { value: 'tts', label: t('models.tab.tts_providers') },
+            ]}
+          />
         </div>
       )}
       <ul className="grid gap-3 lg:grid-cols-2" data-testid="provider-list">
@@ -257,6 +253,7 @@ function ProviderCard({
   const refresh = useRefreshProvider();
   const remove = useDeleteProvider();
   const saveDefaults = useSaveDefaults();
+  const { recent, remember } = useRecentModels();
   const [outcome, setOutcome] = useState<TestResult | null>(null);
   const [panel, setPanel] = useState<'none' | 'edit' | 'models'>('none');
   const stored = provider.api_key !== null;
@@ -332,29 +329,22 @@ function ProviderCard({
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <label className="text-xs text-muted" htmlFor={`default-model-${provider.id}`}>
-          {t('models.add.default_model')}
-        </label>
-        <select
-          id={`default-model-${provider.id}`}
-          className="field max-w-72"
-          value={defaultModel ?? ''}
+        <span className="text-xs text-muted">{t('models.add.default_model')}</span>
+        <Combobox
+          value={defaultModel ?? null}
           disabled={provider.models.length === 0 || saveDefaults.isPending}
-          onChange={(event) => {
-            const model = event.target.value;
+          onChange={(model) => {
+            remember(model);
             saveDefaults.mutate({
               default: model ? { provider_id: provider.id, model } : null,
             });
           }}
-          data-testid="card-default-model"
-        >
-          <option value="">{t('models.defaults.none')}</option>
-          {provider.models.map((model) => (
-            <option key={model.key} value={model.model}>
-              {model.alias ?? model.model}
-            </option>
-          ))}
-        </select>
+          label={t('models.add.default_model')}
+          placeholder={t('models.defaults.none')}
+          testId="card-default-model"
+          recent={recent}
+          options={provider.models.map((model) => modelOption(model, model.model))}
+        />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -536,16 +526,12 @@ function EditPanel({ provider, onDone }: { provider: Provider; onDone(): void })
           {t(showKey ? 'models.add.hide_key' : 'models.add.show_key')}
         </button>
       </div>
-      <label className="flex items-center gap-1 text-sm">
-        <input
-          type="checkbox"
-          checked={provider.enabled}
-          onChange={(event) =>
-            void save.mutateAsync({ id: provider.id, enabled: event.target.checked })
-          }
-        />
-        {t('models.provider.enabled')}
-      </label>
+      <Checkbox
+        checked={provider.enabled}
+        onChange={(enabled) => void save.mutateAsync({ id: provider.id, enabled })}
+        label={t('models.provider.enabled')}
+        testId="provider-enabled"
+      />
       {save.isError && <Notice tone="danger">{describeError(save.error, t)}</Notice>}
       <div className="flex gap-2">
         <button type="submit" className="btn btn-primary" disabled={save.isPending}>
@@ -637,11 +623,11 @@ function ModelsPanel({ provider, onDone }: { provider: Provider; onDone(): void 
                 />
               </td>
               <td>
-                <input
-                  type="checkbox"
-                  aria-label={t('models.panel.visible_for', { model: model.model })}
+                <Checkbox
+                  label={t('models.panel.visible_for', { model: model.model })}
+                  labelHidden
                   checked={visible.has(model.model)}
-                  onChange={(event) => toggle(model.model, event.target.checked)}
+                  onChange={(next) => toggle(model.model, next)}
                 />
               </td>
             </tr>
@@ -747,36 +733,29 @@ function ModelSelect({
   onChange(ref: ModelRef | null): void;
 }) {
   const { t } = useI18n();
-  const groups = new Map<string, Model[]>();
-  for (const model of models) {
-    if (model.kind !== 'chat') continue;
-    const list = groups.get(model.provider) ?? [];
-    list.push(model);
-    groups.set(model.provider, list);
-  }
+  const { recent, remember } = useRecentModels();
+  // Grouped by provider, in the catalogue's order, so the headers do not interleave.
+  const chat = models.filter((model) => model.kind === 'chat');
+  const byProvider = new Map<string, Model[]>();
+  for (const model of chat)
+    byProvider.set(model.provider, [...(byProvider.get(model.provider) ?? []), model]);
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <label className="min-w-40 text-sm" htmlFor={id}>
-        {label}
-      </label>
-      <select
-        id={id}
-        className="field"
-        value={value}
-        onChange={(event) => onChange(parseRef(event.target.value))}
-        data-testid={id}
-      >
-        <option value="">{t('models.defaults.none')}</option>
-        {[...groups.entries()].map(([provider, list]) => (
-          <optgroup key={provider} label={provider}>
-            {list.map((model) => (
-              <option key={model.key} value={refValue(model)}>
-                {model.alias ?? model.model}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
+      <span className="min-w-40 text-sm">{label}</span>
+      <Combobox
+        value={value === '' ? null : value}
+        onChange={(next) => {
+          remember(next);
+          onChange(parseRef(next ?? ''));
+        }}
+        label={label}
+        placeholder={t('models.defaults.none')}
+        testId={id}
+        recent={recent}
+        options={[...byProvider.values()].flatMap((list) =>
+          list.map((model) => modelOption(model, refValue(model))),
+        )}
+      />
     </div>
   );
 }

@@ -55,6 +55,7 @@ more than owning our components. We stand on a headless layer and keep our own s
 |---|---|---|---|
 | Interaction primitives | `radix-ui` 1.6.x (single package) | MIT | dialog, menu, popover, tooltip, tabs, select, toggle group, scroll area, focus management — behaviour, accessibility and RTL, no styling |
 | Drag and drop | `@dnd-kit` | MIT | the one drag library; every drag keeps a keyboard equivalent |
+| Virtualized lists | `@tanstack/react-virtual` | MIT | the model picker's list; a real catalogue is hundreds of rows |
 | Markdown | `react-markdown` + `remark-gfm` | MIT | message rendering |
 
 **Composition rule (binding):** a Radix primitive is always wrapped in our own component

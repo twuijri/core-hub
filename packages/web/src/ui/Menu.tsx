@@ -9,23 +9,30 @@
  * otherwise get wrong by hand.
  */
 import { DropdownMenu } from 'radix-ui';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
+import { IconCheck } from './icons.js';
+import { Tooltip } from './Tooltip.js';
 
 export function Menu({
   trigger,
+  tooltip,
   children,
   align = 'start',
   testId,
 }: {
   /** The button, already styled by the caller; Radix only adds behaviour to it. */
-  trigger: ReactNode;
+  trigger: ReactElement;
+  /** Words for our tooltip. It wraps the trigger here so the two behaviours compose. */
+  tooltip?: string | undefined;
   children: ReactNode;
   align?: 'start' | 'center' | 'end';
-  testId?: string;
+  testId?: string | undefined;
 }) {
   return (
     <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>{trigger}</DropdownMenu.Trigger>
+      <Tooltip label={tooltip}>
+        <DropdownMenu.Trigger asChild>{trigger}</DropdownMenu.Trigger>
+      </Tooltip>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           className="mj-menu glass"
@@ -62,4 +69,38 @@ export function MenuItem({
 /** A line of explanation inside a menu; not an item, so it is skipped by the keyboard. */
 export function MenuNote({ children }: { children: ReactNode }) {
   return <p className="mj-menu-note">{children}</p>;
+}
+
+/**
+ * A menu row that is one of a set — the overflow of a segmented control, say. It carries
+ * the same check mark as the select's chosen row, so "this is the current one" looks the
+ * same wherever it is said.
+ */
+export function MenuChoice({
+  checked,
+  icon,
+  disabled,
+  onSelect,
+  children,
+}: {
+  checked: boolean;
+  icon?: ReactNode;
+  disabled?: boolean | undefined;
+  onSelect(): void;
+  children: ReactNode;
+}) {
+  return (
+    <DropdownMenu.CheckboxItem
+      className="mj-menu-item mj-menu-choice"
+      checked={checked}
+      disabled={disabled ?? false}
+      onSelect={() => onSelect()}
+    >
+      {icon}
+      <span className="mj-menu-choice-label">{children}</span>
+      <DropdownMenu.ItemIndicator className="mj-menu-check">
+        <IconCheck size={14} />
+      </DropdownMenu.ItemIndicator>
+    </DropdownMenu.CheckboxItem>
+  );
 }

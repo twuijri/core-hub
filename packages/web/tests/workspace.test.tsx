@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { chooseOption } from './helpers/ui.js';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { AuthProvider, useAuth } from '../src/auth/context.js';
@@ -84,9 +85,9 @@ describe('workspace chip', () => {
         </QueryClientProvider>
       </I18nProvider>,
     );
-    const select = await screen.findByTestId('workspace-switcher');
-    await waitFor(() => expect(screen.getByRole('option', { name: 'العمل' })).toBeInTheDocument());
-    await userEvent.selectOptions(select, 'work');
+    const switcher = await screen.findByTestId('workspace-switcher');
+    await waitFor(() => expect(switcher).toHaveTextContent('Default'));
+    await chooseOption(userEvent, switcher, 'العمل');
     await userEvent.click(screen.getByText('fetch'));
     await waitFor(() =>
       expect(seen.some((line) => line.includes('/v1/sessions') && line.endsWith(' work'))).toBe(
