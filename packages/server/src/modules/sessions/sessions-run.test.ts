@@ -254,6 +254,9 @@ describe('a whole run, streamed', () => {
     });
 
     await harness.waitFor('run.completed');
+    // The first reply is followed by the session naming itself (contract decision §26);
+    // this runner declares no `ask`, so the name is the fallback and arrives at once.
+    await harness.waitFor('session.updated', 3);
 
     expect(harness.events.map((e) => e.event)).toEqual([
       'session.created', // profile-wide: the sidebar gains a row
@@ -270,6 +273,7 @@ describe('a whole run, streamed', () => {
       'context.updated',
       'run.completed',
       'session.updated', // back to `idle`, with the new preview and usage
+      'session.updated', // and the session has named itself
     ]);
 
     // seq is monotonic per (namespace, profile).
@@ -411,6 +415,7 @@ describe('approvals inside a run', () => {
     });
 
     await harness.waitFor('run.completed');
+    await harness.waitFor('session.updated', 5);
     expect(harness.runner.inputs).toEqual([
       {
         runId: expect.any(String),
@@ -433,6 +438,7 @@ describe('approvals inside a run', () => {
       'message.delta',
       'run.completed',
       'session.updated', // -> idle
+      'session.updated', // the session named itself (decision §26)
     ]);
   });
 

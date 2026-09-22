@@ -198,6 +198,28 @@ export interface AgentRunInput {
   answer: string | null;
 }
 
+/**
+ * One question put to an agent **outside** any run: no `Run` row, no job, no
+ * `/rt/sessions` events, no tools, no folder, and no place in the conversation the
+ * question is about. The hub uses it to ask a session's own agent for a title
+ * (contract decision §26).
+ *
+ * It is a separate verb rather than a run because everything a run is for — ordering,
+ * queueing, approvals, cancellation, the audit ledger, a person watching — is exactly
+ * what this must not have.
+ */
+export interface AgentAskRequest {
+  workspace: string;
+  agentId: string;
+  /** The conversation the question is *about*; never the one it is asked in. */
+  sessionId: string;
+  prompt: string;
+  model: string | null;
+  provider: string | null;
+  /** Give up after this long; the caller then uses its own fallback. */
+  timeoutMs: number;
+}
+
 export interface AgentRunner {
   /** Hand the turn to the agent. Throws to fail the run before it streams. */
   start(request: AgentRunRequest): Promise<AgentRunAccepted>;
@@ -207,6 +229,12 @@ export interface AgentRunner {
   send(runId: string, input: AgentRunInput): Promise<void>;
   /** Ask the agent to stop. The stream ends on its own terms afterwards. */
   interrupt(runId: string): Promise<void>;
+  /**
+   * Optional (see `AgentAskRequest`). An adapter that has no one-shot surface simply does
+   * not declare it, and the caller falls back to something it can compute itself — a
+   * hub that cannot name a session prettily still names it.
+   */
+  ask?(request: AgentAskRequest): Promise<string | null>;
 }
 
 export interface SessionsPorts {
