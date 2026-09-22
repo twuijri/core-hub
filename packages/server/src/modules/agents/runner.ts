@@ -142,6 +142,15 @@ export class AgentRunner implements AgentRunnerPort {
     return { agentSessionRef: live.session.id, agentRunRef: null };
   }
 
+  /**
+   * Whether any turn is in flight. The `models` module asks before recycling the agent
+   * runtime: a restart mid-turn kills the run the person is watching, and a provider
+   * change can wait the few seconds a turn takes (ADR 0010 §Consequences).
+   */
+  get busy(): boolean {
+    return this.runs.size > 0;
+  }
+
   stream(runId: string): AsyncIterable<RunnerEvent> {
     const run = this.runs.get(runId);
     const next = (): Promise<IteratorResult<RunnerEvent>> => {
@@ -266,7 +275,6 @@ export function mintSessionRef(adapterKind: string, sessionId: string): string |
   return adapterKind === 'hermes' ? `majlis-${sessionId.toLowerCase()}` : null;
 }
 
-/** Blocks the adapters cannot carry yet are named in the text, never dropped silently. */
 /**
  * Hermes's own words for "this host has no provider to run with", recognised so the hub
  * can answer with a code a client branches on instead of one opaque `agent_error`.
@@ -279,13 +287,41 @@ export function mintSessionRef(adapterKind: string, sessionId: string): string |
  * because Hermes prints one or the other depending on the surface. Anything we do not
  * recognise stays `agent_error` — the message is never rewritten, only labelled.
  */
-const NO_PROVIDER_MARKERS = ['no_provider_configured', 'no inference provider configured'] as const;
+const NO_PROVIDER_MARKERS = [
+  'no_provider_configured',
+  'no inference provider configured',
+  // Hermes's own name for "the request went out with no Authorization header at all"
+  // (`hermes_cli/auth.py` §_openrouter_auto_detected quotes this exact string as the
+  // symptom of a credential that never reached the resolver). It is the upstream's 401,
+  // but its cause is entirely ours: the key did not reach the runtime.
+  'missing authentication header',
+] as const;
+
+/**
+ * A key the provider looked at and refused. Different from the above in the one way that
+ * matters to the person: the credential *did* travel, so the thing to change is the key,
+ * not the workspace's defaults. A 401 on the hub-to-gateway hop never reaches here — the
+ * transport turns that into `agent_unavailable` before a run is started.
+ */
+const REJECTED_KEY_MARKERS = [
+  'invalid api key',
+  'incorrect api key',
+  'no auth credentials found',
+  'invalid_api_key',
+  'unauthorized',
+  'http 401',
+  'http 403',
+] as const;
 
 export function failureCode(message: string | null | undefined): string {
   const text = (message ?? '').toLowerCase();
-  return NO_PROVIDER_MARKERS.some((marker) => text.includes(marker))
-    ? 'provider_not_configured'
-    : 'agent_error';
+  if (NO_PROVIDER_MARKERS.some((marker) => text.includes(marker))) {
+    return 'provider_not_configured';
+  }
+  if (REJECTED_KEY_MARKERS.some((marker) => text.includes(marker))) {
+    return 'provider_unauthorized';
+  }
+  return 'agent_error';
 }
 
 export function promptText(blocks: RunnerPromptBlock[]): string {

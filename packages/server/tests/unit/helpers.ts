@@ -21,6 +21,17 @@ import type { AgentAdapter, AgentProbe } from '../../src/modules/agents/adapters
 
 export const TEST_ADMIN_PASSWORD = 'owner-password-1';
 
+/**
+ * The debounce the suite runs with: long enough that the several writes one save makes
+ * still coalesce into one restart (which is the behaviour under test), short enough that
+ * no test waits for it.
+ */
+export const TEST_RESTART_DELAY_MS = 30;
+
+/** Lets the debounced Hermes restart fire. */
+export const settle = (): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, TEST_RESTART_DELAY_MS * 4));
+
 /** Every request refuses to connect, like a port with nothing behind it. */
 export const unreachableFetch: typeof fetch = () =>
   Promise.reject(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }));
@@ -56,7 +67,13 @@ export async function testHub(env: EnvSource = {}, options: TestHubOptions = {})
   });
   // No provider adapter may reach the network from a test, for the same reason: the
   // suite must say the same thing on every machine.
-  overrideModels({ fetchImpl: unreachableFetch, ...modelOverrides });
+  // A restart is debounced in production (a save is several writes); in a test it must
+  // be one macrotask away, or every assertion about it would need a sleep.
+  overrideModels({
+    fetchImpl: unreachableFetch,
+    restartDelayMs: TEST_RESTART_DELAY_MS,
+    ...modelOverrides,
+  });
   const app = await buildServer({
     config,
     logger: createLogger({ level: 'silent' }),

@@ -43,6 +43,7 @@ import {
 } from '../auth/index.js';
 import { auditFor, jobRunnerFor } from '../audit/index.js';
 import {
+  agentRunnerFor,
   hermesRuntimeFor,
   registerAgentModelsPort,
   type AgentModelsPort,
@@ -128,6 +129,11 @@ export interface ModelsOverrides {
    * process does not have; this is how the propagation path is exercised end to end.
    */
   hermes?: HermesTarget;
+  /**
+   * How long the service waits after the last write before recycling Hermes. Tests set
+   * 0 so a restart is one macrotask away instead of a second and a half.
+   */
+  restartDelayMs?: number;
 }
 
 let pendingOverrides: ModelsOverrides | null = null;
@@ -161,6 +167,16 @@ function contextOf(app: FastifyInstance): ModelsService {
       await runtime.restart();
       return true;
     },
+    // `undecided` only exists before `onReady`; to a person looking at the screen that
+    // is the same as "nothing found yet".
+    mode: () => {
+      const decided = runtime.status().mode;
+      return decided === 'undecided' ? 'absent' : decided;
+    },
+    reloadedAt: () => runtime.status().startedAt,
+    // A restart kills whatever turn is in flight; the runner is the only one who knows.
+    busy: () => agentRunnerFor(app).busy,
+    applyEnvironment: (env) => runtime.setProviderEnv(env),
   };
   const service = new ModelsService({
     db,
@@ -170,6 +186,7 @@ function contextOf(app: FastifyInstance): ModelsService {
     jobs: jobRunnerFor(app),
     hermes,
     ...(own.fetchImpl ? { fetchImpl: own.fetchImpl } : {}),
+    ...(own.restartDelayMs === undefined ? {} : { restartDelayMs: own.restartDelayMs }),
   });
   contexts.set(hub.io, service);
   return service;
@@ -312,17 +329,17 @@ export const modelsModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'models.createProvider',
       status: 201,
-      handler: (request, { body }) => {
+      handler: async (request, { body }) => {
         const { service, scope, actor } = enter(request);
-        return service.createProvider(scope, actor, body as ProviderCreateInput).provider;
+        return (await service.createProvider(scope, actor, body as ProviderCreateInput)).provider;
       },
     });
 
     defineRoute(app, deps, {
       operationId: 'models.updateProvider',
-      handler: (request, { params, body }) => {
+      handler: async (request, { params, body }) => {
         const { service, scope, actor } = enter(request);
-        return service.updateProvider(
+        return await service.updateProvider(
           scope,
           actor,
           params.provider_id as string,
@@ -419,6 +436,14 @@ export const modelsModule = defineModule({
     });
 
     // ---------------------------------------------------------------- defaults
+
+    defineRoute(app, deps, {
+      operationId: 'models.getRuntime',
+      handler: (request) => {
+        const { service, scope } = enter(request);
+        return service.runtimeReport(scope.id);
+      },
+    });
 
     defineRoute(app, deps, {
       operationId: 'models.getDefaults',

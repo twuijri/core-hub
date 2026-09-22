@@ -9,6 +9,7 @@ import type {
   ProviderHost,
   ProviderPreset,
   ProviderProbeResult,
+  RuntimeReport,
   SpeechSettings,
 } from '../types.js';
 
@@ -18,6 +19,7 @@ export const modelKeys = {
   catalogue: (profile: string) => ['models', 'catalogue', profile] as const,
   defaults: (profile: string) => ['models', 'defaults', profile] as const,
   speech: (profile: string) => ['models', 'speech', profile] as const,
+  runtime: (profile: string) => ['models', 'runtime', profile] as const,
 };
 
 export function useProviders() {
@@ -45,6 +47,26 @@ export function useProviderPresets() {
         host: ProviderHost;
       },
     enabled: !!session,
+  });
+}
+
+/**
+ * Did the runtime actually take what was configured (ADR 0010)?
+ *
+ * The answer is about files and a process, not rows, so it is never cached for long: a
+ * gateway that is restarting says one thing a second before it says another, and a stale
+ * "all good" is exactly the silence this check exists to end.
+ */
+export function useRuntimeReport(options: { enabled?: boolean } = {}) {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: modelKeys.runtime(profile),
+    queryFn: async () => (await client.request('get', '/models/runtime')).data as RuntimeReport,
+    // The chat screen asks only once a run has actually failed for want of a provider:
+    // a check nobody is looking at is a request nobody needed.
+    enabled: !!session && (options.enabled ?? true),
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -84,7 +106,7 @@ function useModelsMutation<TInput, TResult>(run: (input: TInput) => Promise<TRes
   return useMutation({
     mutationFn: run,
     onSuccess: () => {
-      for (const key of ['providers', 'catalogue', 'defaults', 'speech'] as const) {
+      for (const key of ['providers', 'catalogue', 'defaults', 'speech', 'runtime'] as const) {
         void queryClient.invalidateQueries({ queryKey: ['models', key, profile] });
       }
       // An inherited model is shown on every agent card (ADR 0010 §4).

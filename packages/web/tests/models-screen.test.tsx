@@ -194,6 +194,22 @@ function hub(state: Partial<HubState> = {}) {
       ];
       return json(hubState.providers[0]);
     }
+    if (url.includes('/models/runtime')) {
+      // The self-check strip under the provider list (ADR 0010): a hub that took the
+      // providers reports every step passing.
+      return json({
+        agent: 'hermes',
+        mode: 'managed',
+        ready: true,
+        reloaded_at: '2026-09-22T09:00:00Z',
+        checks: [
+          { id: 'runtime_writable', ok: true, detail: 'managed' },
+          { id: 'provider_keys', ok: true, detail: '1' },
+          { id: 'model_selected', ok: true, detail: 'anthropic/claude-sonnet-4-5' },
+          { id: 'gateway_reloaded', ok: true, detail: null },
+        ],
+      });
+    }
     if (url.includes('/models/defaults')) return json(hubState.defaults);
     if (url.includes('/models/speech')) {
       return json({

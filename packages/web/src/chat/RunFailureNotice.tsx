@@ -15,7 +15,9 @@
  */
 import { Link } from 'react-router';
 import { useI18n } from '../i18n/context.js';
+import { RuntimeChecks } from '../models/RuntimeChecks.js';
 import { routeOf } from '../navigation/manifest.js';
+import type { RuntimeReport } from '../types.js';
 import { Notice } from '../ui/Notice.js';
 
 export interface RunFailure {
@@ -26,7 +28,18 @@ export interface RunFailure {
 /** The Defaults tab of the Models screen, by name — no client invents a path. */
 export const DEFAULTS_ROUTE = `${routeOf('models')}?tab=auxiliary`;
 
-export function RunFailureNotice({ failure }: { failure: RunFailure }) {
+export function RunFailureNotice({
+  failure,
+  runtime,
+}: {
+  failure: RunFailure;
+  /**
+   * Which step of propagation is missing, read now rather than remembered from when the
+   * run failed — the person may already have fixed half of it in another tab. Passed in
+   * rather than fetched here so this component stays a pure rendering of one decision.
+   */
+  runtime?: RuntimeReport | undefined;
+}) {
   const { t } = useI18n();
   if (failure.code !== 'provider_not_configured') {
     return (
@@ -43,6 +56,7 @@ export function RunFailureNotice({ failure }: { failure: RunFailure }) {
           {t('chat.no_provider_action')}
         </Link>
       </p>
+      {runtime && <RuntimeChecks report={runtime} only="failing" />}
       <p className="text-xs opacity-80" data-testid="run-failed-detail">
         {failure.error}
       </p>
