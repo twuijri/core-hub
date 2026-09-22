@@ -1,4 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
+import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { migrate as migrateSqlite } from 'drizzle-orm/better-sqlite3/migrator';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Writable } from 'node:stream';
@@ -6,6 +9,8 @@ import type { FastifyInstance } from 'fastify';
 import { expect, vi } from 'vitest';
 import { loadConfig, type EnvSource } from '../../src/app/config.js';
 import { buildServer, type BuildOptions } from '../../src/app/server.js';
+import { packageRoot } from '../../src/app/db.js';
+import type { ModuleDatabase } from '../../src/db/handle.js';
 import { createLogger } from '../../src/lib/logger.js';
 import type { HubModule } from '../../src/lib/module.js';
 import { REALTIME_NAMESPACES } from '../../src/lib/module.js';
@@ -88,6 +93,19 @@ export async function testHub(env: EnvSource = {}, options: TestHubOptions = {})
       rmSync(dataDir, { recursive: true, force: true });
     },
   };
+}
+
+/**
+ * A bare module database: the real schema on an in-memory SQLite file, with no hub in
+ * front of it. For the rules a module can state without a request — a report's sums, a
+ * store's ordering — where booting a whole hub would only make the test slower and the
+ * failure harder to read.
+ */
+export function memoryDb(): ModuleDatabase {
+  const sqlite = new Database(':memory:');
+  const db = drizzle(sqlite);
+  migrateSqlite(db, { migrationsFolder: path.join(packageRoot, 'drizzle') });
+  return db;
 }
 
 /** A hub with the owner account already created, plus a signed-in access token. */
