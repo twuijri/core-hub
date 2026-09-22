@@ -662,7 +662,10 @@ export class AgentsService {
       try {
         const ref = port.resolveModelKey(workspaceId, asked);
         if (ref) {
-          return { model: ref.model, provider: port.runtimeProviderName(workspaceId, ref.provider_id) };
+          return {
+            model: ref.model,
+            provider: port.runtimeProviderName(workspaceId, ref.provider_id),
+          };
         }
       } catch {
         // A provider store that cannot answer must not stop a turn the agent can serve.
@@ -671,13 +674,14 @@ export class AgentsService {
     if (asked) return { model: asked, provider: null };
     const fallback = this.defaultModelOf(row, workspaceId);
     if (!fallback) return { model: null, provider: null };
-    let provider: string | null = null;
     try {
-      provider = port?.runtimeProviderName(workspaceId, fallback.provider_id) ?? null;
+      return {
+        model: fallback.model,
+        provider: port?.runtimeProviderName(workspaceId, fallback.provider_id) ?? null,
+      };
     } catch {
-      provider = null;
+      return { model: fallback.model, provider: null };
     }
-    return { model: fallback.model, provider };
   }
 
   /**

@@ -279,10 +279,7 @@ export function mintSessionRef(adapterKind: string, sessionId: string): string |
  * because Hermes prints one or the other depending on the surface. Anything we do not
  * recognise stays `agent_error` — the message is never rewritten, only labelled.
  */
-const NO_PROVIDER_MARKERS = [
-  'no_provider_configured',
-  'no inference provider configured',
-] as const;
+const NO_PROVIDER_MARKERS = ['no_provider_configured', 'no inference provider configured'] as const;
 
 export function failureCode(message: string | null | undefined): string {
   const text = (message ?? '').toLowerCase();
