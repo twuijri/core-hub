@@ -1,6 +1,9 @@
 // The Chat segment list: pinned, then recent, with search, pin, archive, delete and drag
 // reordering (dnd-kit; the keyboard sensor gives every drag a keyboard equivalent: focus the
 // grip, Space to pick up, arrows to move, Space to drop).
+//
+// Assembled from the kit (`src/ui/`): the field, the segmented scope, the row buttons, the
+// empty state and the right-click menu are all components, not markup written here.
 import {
   DndContext,
   KeyboardSensor,
@@ -25,11 +28,28 @@ import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import { routeOf } from '../navigation/manifest.js';
 import type { Session } from '../types.js';
-import { IconArchive, IconGrip, IconPin, IconTrash, IconUnarchive } from '../ui/icons.js';
-import { Notice, Spinner } from '../ui/Notice.js';
-import { Segmented } from '../ui/Segmented.js';
-import { useConfirm } from '../ui/ConfirmDialog.js';
-import { Tooltip } from '../ui/Tooltip.js';
+import {
+  IconArchive,
+  IconGrip,
+  IconPin,
+  IconSearch,
+  IconTrash,
+  IconUnarchive,
+} from '../ui/icons.js';
+import {
+  Badge,
+  Button,
+  ContextMenu,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  EmptyState,
+  Input,
+  Notice,
+  Segmented,
+  Skeleton,
+  SkeletonGroup,
+  useConfirm,
+} from '../ui/index.js';
 import { arrange, move, readOrder, writeOrder } from './order.js';
 
 export function sessionTitle(session: Pick<Session, 'title'>, t: (k: string) => string): string {
@@ -129,9 +149,10 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
 
   return (
     <div className="flex flex-col gap-2" data-testid="session-list">
-      <input
+      <Input
         type="search"
-        className="field py-1 text-sm"
+        inputSize="sm"
+        icon={<IconSearch size={14} />}
         placeholder={t('sessions.filter')}
         aria-label={t('sessions.filter')}
         value={filter}
@@ -150,16 +171,25 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
           itemProps: { 'data-scope-id': id },
         }))}
       />
-      {sessions.isPending && <Spinner label={t('common.loading')} />}
+      {sessions.isPending && (
+        <SkeletonGroup label={t('common.loading')}>
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} height="2.25rem" radius="md" />
+          ))}
+        </SkeletonGroup>
+      )}
       {sessions.isError && <Notice tone="danger">{describeError(sessions.error, t)}</Notice>}
       {sessions.data && items.length === 0 && (
-        <Notice>
-          {filter
-            ? t('sessions.none_match')
-            : scope === 'archived'
-              ? t('sessions.none_archived')
-              : t('sessions.empty')}
-        </Notice>
+        <EmptyState
+          size="sm"
+          title={
+            filter
+              ? t('sessions.none_match')
+              : scope === 'archived'
+                ? t('sessions.none_archived')
+                : t('sessions.empty')
+          }
+        />
       )}
       {(update.isError || remove.isError) && (
         <Notice tone="danger">{describeError(update.error ?? remove.error, t)}</Notice>
@@ -215,78 +245,98 @@ function SessionRow({
   } = useSortable({ id: session.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const title = sessionTitle(session, t);
+  const pinLabel = session.pinned ? t('sessions.unpin') : t('sessions.pin');
+  const archiveLabel = session.archived ? t('sessions.unarchive') : t('sessions.archive');
   return (
-    <li
-      ref={setNodeRef}
-      style={style}
-      className={`group flex items-center gap-1 rounded-md ${isDragging ? 'sortable-dragging' : ''} ${active ? 'bg-surface-2' : 'hover:bg-surface-2'}`}
-      data-testid="session-row"
-    >
-      <button
-        ref={setActivatorNodeRef}
-        type="button"
-        className="cursor-grab px-1 text-faint opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
-        aria-label={t('sessions.reorder', { title })}
-        {...attributes}
-        {...listeners}
-      >
-        <IconGrip size={14} />
-      </button>
-      <NavLink
-        to={routeOf('chat').replace(':sessionId?', session.id)}
-        onClick={onOpen}
-        className="min-w-0 flex-1 py-1.5 text-sm"
-      >
-        <span className="flex items-center gap-1">
-          {session.pinned && <IconPin size={12} label={t('sessions.pinned')} />}
-          {session.status !== 'idle' && (
-            <span
-              className="inline-block size-1.5 rounded-full bg-accent"
-              aria-label={t(`sessions.status.${session.status}`)}
+    <ContextMenu
+      testId="session-menu"
+      trigger={
+        <li
+          ref={setNodeRef}
+          style={style}
+          className={`session-row ${isDragging ? 'sortable-dragging' : ''}`}
+          data-active={active ? 'true' : undefined}
+          data-testid="session-row"
+        >
+          <button
+            ref={setActivatorNodeRef}
+            type="button"
+            className="session-grip"
+            aria-label={t('sessions.reorder', { title })}
+            {...attributes}
+            {...listeners}
+          >
+            <IconGrip size={14} />
+          </button>
+          <NavLink
+            to={routeOf('chat').replace(':sessionId?', session.id)}
+            onClick={onOpen}
+            className="session-link"
+          >
+            <span className="session-title-row">
+              {session.pinned && <IconPin size={12} label={t('sessions.pinned')} />}
+              {session.status !== 'idle' && (
+                <Badge tone="accent" dot testId="session-live">
+                  {t(`sessions.status.${session.status}`)}
+                </Badge>
+              )}
+              <span className="truncate" dir="auto">
+                {title}
+              </span>
+            </span>
+            {session.preview && (
+              <span className="session-preview" dir="auto">
+                {plainPreview(session.preview)}
+              </span>
+            )}
+          </NavLink>
+          {/* The same three actions the right-click menu offers, always visible to the
+              keyboard and to touch — a context menu is never the only way to reach one. */}
+          <span className="session-actions">
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              tooltip={pinLabel}
+              aria-label={pinLabel}
+              icon={<IconPin size={14} />}
+              onClick={onPin}
             />
-          )}
-          <span className="truncate" dir="auto">
-            {title}
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              tooltip={archiveLabel}
+              aria-label={archiveLabel}
+              icon={session.archived ? <IconUnarchive size={14} /> : <IconArchive size={14} />}
+              onClick={onArchive}
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              tooltip={t('sessions.delete')}
+              aria-label={t('sessions.delete')}
+              icon={<IconTrash size={14} />}
+              onClick={onDelete}
+            />
           </span>
-        </span>
-        {session.preview && (
-          <span className="block truncate text-xs text-faint" dir="auto">
-            {plainPreview(session.preview)}
-          </span>
-        )}
-      </NavLink>
-      <span className="flex opacity-0 focus-within:opacity-100 group-hover:opacity-100">
-        <Tooltip label={session.pinned ? t('sessions.unpin') : t('sessions.pin')}>
-          <button
-            type="button"
-            className="btn btn-ghost px-1"
-            onClick={onPin}
-            aria-label={session.pinned ? t('sessions.unpin') : t('sessions.pin')}
-          >
-            <IconPin size={14} />
-          </button>
-        </Tooltip>
-        <Tooltip label={session.archived ? t('sessions.unarchive') : t('sessions.archive')}>
-          <button
-            type="button"
-            className="btn btn-ghost px-1"
-            onClick={onArchive}
-            aria-label={session.archived ? t('sessions.unarchive') : t('sessions.archive')}
-          >
-            {session.archived ? <IconUnarchive size={14} /> : <IconArchive size={14} />}
-          </button>
-        </Tooltip>
-        <Tooltip label={t('sessions.delete')}>
-          <button
-            type="button"
-            className="btn btn-ghost px-1"
-            onClick={onDelete}
-            aria-label={t('sessions.delete')}
-          >
-            <IconTrash size={14} />
-          </button>
-        </Tooltip>
-      </span>
-    </li>
+        </li>
+      }
+    >
+      <ContextMenuItem icon={<IconPin size={14} />} onSelect={onPin}>
+        {pinLabel}
+      </ContextMenuItem>
+      <ContextMenuItem
+        icon={session.archived ? <IconUnarchive size={14} /> : <IconArchive size={14} />}
+        onSelect={onArchive}
+      >
+        {archiveLabel}
+      </ContextMenuItem>
+      <ContextMenuSeparator />
+      <ContextMenuItem icon={<IconTrash size={14} />} tone="danger" onSelect={onDelete}>
+        {t('sessions.delete')}
+      </ContextMenuItem>
+    </ContextMenu>
   );
 }
