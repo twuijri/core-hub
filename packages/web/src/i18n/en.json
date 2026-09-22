@@ -157,7 +157,13 @@
     "rename_label": "Session name",
     "retitle": "Retitle",
     "more": "More for {title}",
-    "retitle_hint": "Let the hub name this chat again, from its own first turn."
+    "retitle_hint": "Let the hub name this chat again, from its own first turn.",
+    "select": "Select",
+    "select_all": "Select all",
+    "select_none": "Clear selection",
+    "select_one": "Select {title}",
+    "selected_count": "{count} selected",
+    "confirm_delete_many": "Delete {count} conversations?"
   },
   "search": {
     "placeholder": "Search titles and messages…",
@@ -197,12 +203,19 @@
     "seconds": "{seconds}s",
     "thought_for": "Thought for {seconds}s",
     "pick_one_body": "Every chat keeps its own agent, its folder and its history.",
-    "copied": "Code copied.",
+    "copied": "Copied",
     "agent_menu": "Agent: {name} — continue with another one",
     "agent_of_session": "This chat's agent",
     "fork_explains": "Another agent copies this conversation into a new chat with it and leaves this one as it is. The model selector below changes only this chat.",
     "continue_with": "Continue with {name}",
-    "no_other_agent": "No other agent is installed."
+    "no_other_agent": "No other agent is installed.",
+    "copy": "Copy",
+    "reply": "Reply to this",
+    "fork_here": "Fork from here",
+    "speak": "Listen",
+    "speak_later": "Speech arrives in a later phase.",
+    "replying_to": "Replying to: {text}",
+    "estimated": "≈ {amount}"
   },
   "composer": {
     "label": "Message composer",
@@ -236,7 +249,24 @@
     },
     "dictate": "Dictate",
     "dictate_unavailable": "Dictation arrives with a speech provider (models.transcribe is still 501).",
-    "add_agent": "Add an agent"
+    "add_agent": "Add an agent",
+    "approval_hint": {
+      "ask": "Asks before a command or a write outside the working folder.",
+      "always": "Asks before everything, reads included — slowest, safest.",
+      "auto_safe": "Runs what it judges safe, asks about the rest.",
+      "auto_all": "Runs everything without asking; nothing to object to.",
+      "off": "No gate at all: commands, files and network without permission."
+    },
+    "effort": {
+      "label": "Thinking effort",
+      "default": "Automatic",
+      "none": "None",
+      "minimal": "Minimal",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "max": "Max"
+    }
   },
   "approval": {
     "from": "{agent} is waiting for your decision",
@@ -291,7 +321,22 @@
       "tasks": "Tasks",
       "tools": "tools",
       "worktrees": "worktrees"
-    }
+    },
+    "settings_of": "{name} settings",
+    "settings_none": "This agent declares no settings.",
+    "restart_required": "Changing these restarts the agent.",
+    "settings": "Settings",
+    "field_hint": {
+      "list": "One item per line.",
+      "json": "Valid JSON."
+    },
+    "updates": "Updates",
+    "version_now": "Installed: {version}",
+    "up_to_date": "No update available.",
+    "check_update": "Check for updates",
+    "update_now": "Update now",
+    "auto_update": "Update automatically",
+    "auto_update_hint": "Takes a new version as soon as it ships, without asking."
   },
   "jobs": {
     "status": {
