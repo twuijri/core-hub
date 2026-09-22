@@ -17,6 +17,8 @@ Capability comparison: `FEATURE-MATRIX.md`.
 | Proliferate | AGPL-3.0 — **no code** | frozen workflow invocations; human-in-loop nodes; subagent laws; budget envelopes | `proliferate.md` |
 | agenthub | Apache-2.0 | structured, replayable ACP timelines; remote execution nodes; task/attempt/run vocabulary | `agenthub.md` |
 | Claw-Kanban | Apache-2.0 | role-based auto-assignment of tasks to agents; fail-closed runs; chat-to-card | `claw-kanban.md` |
+| shadcn/ui | MIT — **no code** (the way of working, not the files) | own the component files in your own repository, Radix for behaviour, one styling layer you control | `shadcn-ui.md` |
+| assistant-ui | MIT — **no code, not adopted** (2026-09-22) | the external-store runtime shape (`onNew` + `isRunning` + `onCancel`) as proof our server-owned run model is a normal one; the server-side approval gate vocabulary | `assistant-ui.md` |
 | Hubcode | AGPL-3.0 — **no code** (repo located 2026-09-21 at github.com/hubtool/hubcode; the earlier "repo not located" entry was wrong) | shared live sessions with voice; kanban per worktree; worker+verifier loops | `hubcode.md` |
 
 ## ما نأخذه ومتى
