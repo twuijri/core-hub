@@ -141,7 +141,13 @@ export function createContractIndex(document: OpenApiDocument): ContractIndex {
     const bodySchema =
       (op.operation.requestBody?.content?.['application/json']?.schema as
         Record<string, unknown> | undefined) ?? null;
-    const bodyRequired = op.operation.requestBody?.required === true;
+    /**
+     * Only a JSON body is checked here. An operation whose body is
+     * `multipart/form-data` or `application/octet-stream` (the attachment uploads)
+     * never reaches Fastify as a parsed object, so "required" would always fail; its
+     * handler reads the stream and refuses on its own terms.
+     */
+    const bodyRequired = op.operation.requestBody?.required === true && bodySchema !== null;
 
     const validateBodyFn = compile(bodyAjv, bodySchema);
     const validateQueryFn = compile(inputAjv, objectSchemaFor(parameters, 'query'));

@@ -16,6 +16,7 @@
     "db:migrate": "node scripts/db.mjs migrate"
   },
   "dependencies": {
+    "@fastify/multipart": "^10.1.1",
     "@fastify/static": "^10.1.4",
     "@majlis/contracts": "workspace:*",
     "ajv": "^8.20.0",

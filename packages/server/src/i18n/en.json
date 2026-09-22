@@ -67,7 +67,8 @@
     "approval_choice_once": "Once",
     "approval_choice_session": "For this session",
     "approval_choice_always": "Always",
-    "approval_choice_deny": "Deny"
+    "approval_choice_deny": "Deny",
+    "produced_refused": "{files} — too many or too large to attach here; they are still in the run folder."
   },
   "jobs": {
     "queued": "Queued.",
@@ -124,5 +125,8 @@
     "probe": {
       "failed": "The endpoint did not return a model list."
     }
+  },
+  "knowledge": {
+    "attachment_in_use": "A message already points at this file, so it cannot be deleted."
   }
 }

@@ -5,7 +5,7 @@
  * piped streams. `--strict` is on for every chat, so each envelope the server sends is
  * validated against its JSON Schema in packages/contracts/events before it is rendered.
  */
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -22,6 +22,8 @@ import {
   fakeHermes,
   type ScriptStep,
 } from '../../../server/src/modules/sessions/testing/fake-runner.js';
+import { principalScopeResolver } from '../../../server/src/modules/auth/index.js';
+import { attachmentsPort } from '../../../server/src/modules/knowledge/index.js';
 import { main } from '../../src/main.js';
 import { EnvelopeValidator } from '../../src/realtime.js';
 
@@ -124,6 +126,11 @@ beforeAll(async () => {
   const sessions = createSessionsModule({
     agents: new FakeAgentDirectory([fakeHermes(AGENT_ID)]),
     runner,
+    // The real file registry, so `files …` and `chat --attach` are exercised for real —
+    // with `auth`'s own scope resolver, because attachments and sessions must agree on
+    // which workspace a row belongs to (the derived placeholder would not).
+    attachments: attachmentsPort,
+    scopes: principalScopeResolver,
     agentTimeoutMs: 20_000,
   });
   const config = loadConfig({ DATA_DIR: temp('data'), PORT: '0', HUB_ADMIN_PASSWORD: PASSWORD });
@@ -573,6 +580,70 @@ describe('the reference client against the hub', () => {
     );
     expect(unknown.code).toBe(1);
     expect(unknown.stderr).toContain('not_found');
+  });
+
+  it('uploads a file, shows it, downloads it byte for byte, and deletes it', async () => {
+    const dir = temp('files');
+    const source = path.join(dir, 'تقرير.txt');
+    const bytes = Buffer.from('رقم الطلب: 4417\n');
+    writeFileSync(source, bytes);
+
+    const uploaded = await cli(['files', 'upload', source, '--json']);
+    expect(uploaded.code).toBe(0);
+    const attachment = JSON.parse(uploaded.stdout) as {
+      id: string;
+      name: string;
+      mime: string;
+      size_bytes: number;
+    };
+    expect(attachment).toMatchObject({
+      name: 'تقرير.txt',
+      mime: 'text/plain; charset=utf-8',
+      size_bytes: bytes.length,
+    });
+
+    const shown = await cli(['files', 'show', attachment.id]);
+    expect(shown.code).toBe(0);
+    expect(shown.stdout).toContain(attachment.id);
+
+    const target = path.join(dir, 'back.txt');
+    const downloaded = await cli(['files', 'download', attachment.id, '--out', target]);
+    expect(downloaded.code).toBe(0);
+    expect(readFileSync(target)).toEqual(bytes);
+
+    const removed = await cli(['files', 'delete', attachment.id]);
+    expect(removed.code).toBe(0);
+    const gone = await cli(['files', 'show', attachment.id]);
+    expect(gone.code).toBe(1);
+    expect(gone.stderr).toContain('not_found');
+  });
+
+  it('attaches a file to a chat turn, and the agent is handed its path', async () => {
+    const dir = temp('attach');
+    const source = path.join(dir, 'order.csv');
+    writeFileSync(source, 'id,total\n1,42\n');
+    runner.play([{ type: 'message_delta', text: 'قرأته.' }, { type: 'completed' }]);
+
+    const created = await cli(['sessions', 'new', '--agent', AGENT_ID, '--json']);
+    const attachSession = (JSON.parse(created.stdout) as { id: string }).id;
+    const chat = await cli([
+      'chat',
+      attachSession,
+      '--message',
+      'لخّص الملف',
+      '--once',
+      '--attach',
+      source,
+    ]);
+    expect(chat.stderr).toContain('order.csv');
+    expect(chat.code).toBe(0);
+
+    const request = runner.started.at(-1)!;
+    const block = request.prompt.find((part) => part.type === 'attachment');
+    expect(block).toMatchObject({ kind: 'file', name: 'order.csv' });
+    // The bytes really are where the agent was told to look.
+    expect(readFileSync((block as { path: string }).path, 'utf8')).toBe('id,total\n1,42\n');
+    await cli(['sessions', 'delete', attachSession]);
   });
 
   it('deletes the session, signs out, and is then refused again', async () => {

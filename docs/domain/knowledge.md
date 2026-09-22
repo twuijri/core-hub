@@ -56,11 +56,57 @@ The single file registry (`DECISIONS.md` §15).
 | kind | enum(image, audio, video, file, diff, log) | |
 | source_kind | enum(upload, agent_output, tool_output, device, journal, export) | |
 | source_id | ulid? | the message, tool call, device command or journal entry |
-| meta | json<AttachmentMeta> | width, height, durationMs, entryName |
+| meta | json<AttachmentMeta> | width, height, durationMs, entryName, `purpose`, `producedPath` |
 | expires_at | ms? | temporary files (tool output) |
 | deleted_at | ms? | bytes gone; row kept so references render "removed" |
 
 Indexes: `storage_key` unique; (workspace, sha256); `expires_at`.
+
+`purpose` (the contract's `AttachmentPurpose`) lives in `meta` rather than in a
+column: it is a rendering hint the client sends and reads back, never something the
+hub filters or indexes by, so a column would cost a migration for nothing.
+`producedPath` is set for a file an agent wrote, and holds its path relative to the
+run's output folder.
+
+### What the store actually enforces
+
+Implemented in `packages/server/src/modules/knowledge/` and exercised by
+`attachments.test.ts` / `attachments-api.test.ts`:
+
+- **Names are never paths.** `media.sanitiseFilename` keeps the basename only, strips
+  control characters and NUL, refuses a leading dot, escapes Windows-reserved stems and
+  caps the length at 255. The bytes are addressed by their hash, never by the name.
+- **Types are sniffed, not believed.** `media.sniffMime` reads the first 64 bytes; the
+  signature wins, then the extension for text, then `application/octet-stream`. A `.exe`
+  announced as `image/png` is stored as `application/x-msdownload`, and the mismatch is
+  logged.
+- **Limits** are the contract's: 25 MB for `sessions.uploadAttachment`, 50 MB and
+  256 KiB chunks for the resumable flow, and a refusal carries `payload_too_large` with
+  `details.max_bytes`.
+- **Bytes stream.** Uploads go through a hash and a temp file into
+  `${DATA_DIR}/attachments/<workspace>/<aa>/<sha256>`; downloads answer a read stream and
+  honour one `Range`. Nothing is buffered whole.
+- **De-duplication** is per workspace, by `(sha256, size)`: the same screenshot in ten
+  messages is one file on disk.
+- **Deletion** is refused with `409` while a message points at the attachment
+  (`sessions` answers that question through a port); otherwise the row is marked
+  `deleted_at` and the bytes go once nothing else shares them.
+
+### Attachments and a run
+
+`sessions` holds ids and asks `knowledge` for the bytes
+(`modules/sessions/ports.ts` §`AttachmentsPort`). One turn owns two folders under the
+session's working directory:
+
+```
+<session.working_dir>/.majlis/runs/<run id>/in     the person's attachments, copied
+<session.working_dir>/.majlis/runs/<run id>/out    what the agent writes back
+```
+
+The prompt names both, because Hermes's run surface takes one text `input` and no
+files (ADR 0008). Files left in `out` when the turn ends become attachments of the
+reply, capped at 20 files, 25 MB each and 100 MB in total; what the caps refused is
+named in the message, never dropped in silence.
 
 ## Search
 

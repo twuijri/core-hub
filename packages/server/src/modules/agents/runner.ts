@@ -33,6 +33,7 @@ import type {
   RunnerChoice,
   RunnerDecision,
   RunnerEvent,
+  RunnerFileExchange,
   RunnerPromptBlock,
   RunnerRunAccepted,
   RunnerRunInput,
@@ -122,7 +123,7 @@ export class AgentRunner implements AgentRunnerPort {
     // agent's own terms.
     void this.pump(run);
     const prompt: RunnerPromptInput = {
-      text: promptText(request.prompt),
+      text: promptText(request.prompt, request.files),
       model: selection.model,
       modelProvider: selection.provider,
       reasoningEffort: request.reasoningEffort,
@@ -137,7 +138,6 @@ export class AgentRunner implements AgentRunnerPort {
         code: code === 'agent_error' ? failureCode(message) : code,
         message,
       });
-    });
 
     return { agentSessionRef: live.session.id, agentRunRef: null };
   }
@@ -326,13 +326,37 @@ export function failureCode(message: string | null | undefined): string {
 
 export function promptText(blocks: RunnerPromptBlock[]): string {
   const parts: string[] = [];
+  const attachments: string[] = [];
   for (const block of blocks) {
-    if (block.type === 'text') parts.push(block.text);
-    else if (block.type === 'attachment')
-      parts.push(`[attachment ${block.kind} ${block.attachmentId}]`);
-    else parts.push(`[location ${block.latitude},${block.longitude}]`);
+    if (block.type === 'text') {
+      parts.push(block.text);
+    } else if (block.type === 'attachment') {
+      attachments.push(describeAttachment(block));
+    } else {
+      parts.push(`[location ${block.latitude},${block.longitude}]`);
+    }
+  }
+  if (attachments.length > 0) {
+    parts.push(`Attached files (read them from these paths):\n${attachments.join('\n')}`);
+  }
+  if (files) {
+    parts.push(
+      `Write any file the user should be able to download into: ${files.outputDir}\n` +
+        'Files left there when the turn ends are attached to your reply automatically.',
+    );
   }
   return parts.join('\n\n');
+}
+
+function describeAttachment(block: Extract<RunnerPromptBlock, { type: 'attachment' }>): string {
+  const name = block.name ?? block.attachmentId;
+  const facts = [block.mime, block.sizeBytes === undefined ? null : `${block.sizeBytes} bytes`]
+    .filter((value): value is string => typeof value === 'string' && value !== '')
+    .join(', ');
+  const described = facts ? `${name} (${facts})` : name;
+  return block.path
+    ? `- ${described} — ${block.path}`
+    : `- ${described} — [attachment ${block.kind} ${block.attachmentId}, not available on disk]`;
 }
 
 const TOOL_KINDS: Array<[RegExp, RunnerToolKind]> = [
