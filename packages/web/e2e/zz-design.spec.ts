@@ -123,6 +123,8 @@ test.describe('the chat surface, designed', () => {
     // And in English (LTR). The sides must not move.
     await setDisplay(page, 'الإعدادات', 'العرض', 'language-en');
     await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
+    // Settings owns the sidebar while it is open; leaving it brings the list back.
+    await page.getByRole('link', { name: 'New chat' }).first().click();
     await page.getByTestId('session-row').first().getByRole('link').click();
     await expect(page.getByTestId('message-assistant').first()).toBeVisible();
     for (const node of await page.getByTestId('message-user').all())
