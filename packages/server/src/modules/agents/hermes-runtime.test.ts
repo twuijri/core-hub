@@ -98,7 +98,12 @@ describe('Hermes runtime: choosing a mode', () => {
     });
     expect(await runtime.start()).toBe('external');
     expect(spawned).toHaveLength(0);
-    expect(runtime.status()).toMatchObject({ mode: 'external', state: 'running', home: null });
+    // A home is still reported. `external` means a gateway answers **on this host**, and
+    // the home this hub prepared is the one it would be using; the screens that read
+    // files there show the path, so a gateway somebody else started with a different
+    // home reads as the wrong folder rather than as an agent with nothing in it.
+    expect(runtime.status()).toMatchObject({ mode: 'external', state: 'running' });
+    expect(runtime.status().home).not.toBeNull();
     await runtime.stop();
   });
 

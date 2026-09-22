@@ -4,6 +4,9 @@
 import type { ReactElement } from 'react';
 import { AgentManagerScreen } from '../agents/AgentManagerScreen.js';
 import { AgentSettingsScreen } from '../agents/AgentSettingsScreen.js';
+import { AgentMcpScreen } from '../agents/AgentMcpScreen.js';
+import { AgentMemoryScreen } from '../agents/AgentMemoryScreen.js';
+import { AgentSkillsScreen } from '../agents/AgentSkillsScreen.js';
 import { SchedulesScreen } from '../schedules/SchedulesScreen.js';
 import { TasksScreen } from '../tasks/TasksScreen.js';
 import { ChatScreen } from '../chat/ChatScreen.js';
@@ -28,6 +31,9 @@ const SPECIAL: Record<string, () => ReactElement> = {
   device_connections: () => <DeviceConnectionsScreen />,
   agent_manager: () => <AgentManagerScreen />,
   agent_settings: () => <AgentSettingsScreen />,
+  agent_skills: () => <AgentSkillsScreen />,
+  agent_mcp: () => <AgentMcpScreen />,
+  agent_memory: () => <AgentMemoryScreen />,
   chat: () => <ChatScreen />,
   tasks: () => <TasksScreen />,
   schedules: () => <SchedulesScreen />,

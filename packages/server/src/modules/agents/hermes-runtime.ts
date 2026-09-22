@@ -148,7 +148,12 @@ export class HermesRuntime {
       mode: this.mode,
       state: this.state,
       endpoint: this.endpoint,
-      home: this.mode === 'managed' ? this.home : null,
+      // Reported for `external` too, because that mode means "a gateway answers on this
+      // host" — and the home this hub prepared is the one it was told to use. `absent`
+      // is the only mode with no home at all. A caller that reads files there shows the
+      // path, so a Hermes started by somebody else with a different home is visible as a
+      // wrong folder rather than as an empty list.
+      home: this.mode === 'absent' || this.mode === 'undecided' ? null : this.home,
       pid: this.child?.pid ?? null,
       restarts: this.restarts,
       startedAt: this.startedAt,
