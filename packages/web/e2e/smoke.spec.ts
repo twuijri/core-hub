@@ -497,6 +497,19 @@ test.describe('web smoke journeys', () => {
     page,
   }) => {
     await login(page);
+
+    // Every journey before this one finished a run, so the hub's inbox is not empty. The
+    // journey starts by clearing it: what is being proved is that **this** run adds one,
+    // not that the suite ran in a particular order.
+    const openNotices = async () => {
+      await page.getByRole('link', { name: 'الإعدادات' }).first().click();
+      await page.getByTestId('settings-nav').getByRole('link', { name: 'الإشعارات' }).click();
+    };
+    await openNotices();
+    const markAll = page.getByTestId('mark-all-read');
+    if (await markAll.isEnabled()) await markAll.click();
+    await expect(page.getByTestId('unread-badge')).toHaveCount(0);
+
     await newChat(page);
     await firstMessage(page, 'اكتب سطرًا واحدًا');
     // The reply has to be over before there is anything to be told about: the composer
@@ -505,10 +518,11 @@ test.describe('web smoke journeys', () => {
 
     // The count travels with the Settings list, so it is visible before the page is open.
     await page.getByRole('link', { name: 'الإعدادات' }).first().click();
-    const badge = page.getByTestId('unread-badge');
-    await expect(badge).toHaveText('1');
+    await expect(page.getByTestId('unread-badge')).toHaveText('1');
 
     await page.getByTestId('settings-nav').getByRole('link', { name: 'الإشعارات' }).click();
+    // Unread only, so the assertion is about this run and not about the suite's history.
+    await page.getByRole('radio', { name: 'غير المقروء' }).click();
     const list = page.getByTestId('notice-list');
     await expect(list.getByRole('listitem')).toHaveCount(1);
     // The hub's own words, about the agent that answered.
@@ -525,11 +539,11 @@ test.describe('web smoke journeys', () => {
     await firstMessage(page, 'ومرة أخرى');
     await expect(page.getByTestId('stop-run')).toHaveCount(0, { timeout: 15_000 });
     await page.getByRole('link', { name: 'الإعدادات' }).first().click();
-    await page.getByTestId('settings-nav').getByRole('link', { name: 'الإشعارات' }).click();
     // Still one: silenced means never written, not written and hidden.
-    await expect(page.getByTestId('notice-list').getByRole('listitem')).toHaveCount(1);
+    await expect(page.getByTestId('unread-badge')).toHaveText('1');
 
     // And reading it clears the count everywhere, including the list it came from.
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'الإشعارات' }).click();
     await page.getByTestId('mark-all-read').click();
     await expect(page.getByTestId('unread-badge')).toHaveCount(0);
   });
