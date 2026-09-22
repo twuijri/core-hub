@@ -461,7 +461,6 @@ export function createDirectAdapter(options: DirectAdapterOptions): AgentAdapter
     },
 
     probe(_target: AgentTarget): Promise<AgentProbe> {
-      const wired = options.models() !== null;
       return Promise.resolve({
         // Always installed: it ships as part of the hub and there is nothing to install
         // or remove (ADR 0006's `bundled`). Whether a *provider* is configured is a
@@ -472,7 +471,12 @@ export function createDirectAdapter(options: DirectAdapterOptions): AgentAdapter
         version: DIRECT_ADAPTER_VERSION,
         runtime: { state: 'not_applicable', url: null, error: null },
         capabilities: ['streaming', 'vision', 'resume'],
-        error: wired ? null : 'the provider store is not wired yet',
+        // A bundled agent has no install to go wrong, so it has no install error to
+        // report (owner, 2026-09-22: «برق ما يكون له خطأ... لانه هو شي مضمن»). Whether a
+        // provider is configured is a different question, and a turn answers it out loud
+        // at the moment it matters — a probe that ran before the models module mounted
+        // must not leave a red line on the card for ever.
+        error: null,
       });
     },
 
