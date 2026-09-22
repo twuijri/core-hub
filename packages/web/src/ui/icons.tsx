@@ -129,6 +129,12 @@ export const IconMenu = (p: IconProps) => (
     <path d="M4 7h16M4 12h16M4 17h16" />
   </Svg>
 );
+/** Three dots: "more actions on this row", the overflow of a list row's controls. */
+export const IconMore = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5 12h.01M12 12h.01M19 12h.01" />
+  </Svg>
+);
 export const IconChevron = (p: IconProps) => (
   <Svg {...p}>
     <path d="m6 9 6 6 6-6" />

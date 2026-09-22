@@ -1,6 +1,8 @@
-// The agent chips above the composer: a fresh hub shows Hermes alone, installing an agent
-// adds a chip, the order a person drags into survives a reload, and picking a chip decides
-// which agent the next session uses.
+// The agent chips above the composer. Owner decision, 2026-09-22: **only installed agents**
+// are here — a fresh hub shows Hermes alone, installing an agent adds a chip, and an agent
+// still in the catalog gets no chip at all (it is an errand for the Agent Manager, which the
+// trailing "+" opens). The order a person drags into survives a reload, and picking a chip
+// decides which agent the next session uses.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -8,7 +10,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../src/auth/context.js';
 import { SessionStore } from '../src/auth/store.js';
-import { AgentChips, selectableAgents } from '../src/chat/AgentChips.js';
+import { AgentChips, enabledAgents, installedAgents } from '../src/chat/AgentChips.js';
 import {
   agentOrderKey,
   arrangeAgents,
@@ -100,13 +102,30 @@ describe('agent order (pure)', () => {
     expect(() => writeAgentOrder(hostile, 'work', [HERMES])).not.toThrow();
   });
 
-  it('hides only what cannot be chosen', () => {
+  it('separates "enabled here" from "on this host"', () => {
     const agents = [
       agent(HERMES, 'Hermes'),
       agent(CODEX, 'Codex', { enabled: false }),
       agent(GEMINI, 'Gemini', { status: 'disabled' }),
     ];
-    expect(selectableAgents(agents).map((a) => a.id)).toEqual([HERMES]);
+    expect(enabledAgents(agents).map((a: Agent) => a.id)).toEqual([HERMES]);
+    expect(installedAgents(agents).map((a: Agent) => a.id)).toEqual([HERMES]);
+  });
+
+  it('counts as installed exactly the three states with a working agent behind them', () => {
+    const states: Array<[Agent['status'], boolean]> = [
+      ['available', true],
+      ['updating', true], // it is here; a newer one is on the way
+      ['limited', true], // the process harness, but it does run
+      ['not_installed', false],
+      ['installing', false], // not yet
+      ['error', false], // the install did not take
+      ['disabled', false],
+    ];
+    for (const [status, installed] of states) {
+      const only = installedAgents([agent(HERMES, 'Hermes', { status })]);
+      expect(only.length === 1, status).toBe(installed);
+    }
   });
 });
 
@@ -176,18 +195,24 @@ describe('agent chips', () => {
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: CODEX }));
   });
 
-  it('an agent that is not installed is visible but cannot be chosen, and says why', async () => {
+  it('an agent that is not installed gets no chip at all', async () => {
     renderChips([agent(HERMES, 'Hermes'), agent(CODEX, 'Codex', { status: 'not_installed' })]);
-    await waitFor(() => expect(chipNames()).toHaveLength(2));
-    const [, codex] = screen.getAllByTestId('agent-chip');
-    expect(codex).toBeDisabled();
-    // The reason is the accessible name now; `title=` (the browser tooltip) is banned
-    // from screens by the UI policy, and our tooltip carries the same words.
-    expect(codex).toHaveAttribute('aria-label', 'Codex is not ready yet');
+    await waitFor(() => expect(chipNames()).toEqual([HERMES]));
+    // And the way to it is the row's own trailing action, which opens the Agent Manager.
+    expect(screen.getByTestId('agent-add')).toBeTruthy();
+    // Nothing in the row is a control a person cannot press.
+    for (const chip of screen.getAllByTestId('agent-chip')) expect(chip).not.toBeDisabled();
   });
 
-  it('with nothing to pick it says so instead of rendering an empty row', async () => {
+  it('with nothing to pick it says which silence this is', async () => {
     renderChips([]);
     await waitFor(() => expect(screen.getByTestId('agent-chips-empty')).toBeTruthy());
+    expect(screen.getByTestId('agent-chips-empty').textContent).toContain('No agent is enabled');
+    cleanup();
+    // A registry full of agents, none of them installed: a different sentence, and one
+    // that points at the Agent Manager instead of at enabling something.
+    renderChips([agent(CODEX, 'Codex', { status: 'not_installed' })]);
+    await waitFor(() => expect(screen.getByTestId('agent-chips-empty')).toBeTruthy());
+    expect(screen.getByTestId('agent-chips-empty').textContent).toContain('No agent is installed');
   });
 });

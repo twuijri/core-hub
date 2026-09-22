@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { describeError } from '../auth/client.js';
-import { AgentChips, selectableAgents } from '../chat/AgentChips.js';
+import { AgentChips, enabledAgents, installedAgents } from '../chat/AgentChips.js';
 import { Composer } from '../chat/Composer.js';
 import { putFirstMessage } from '../chat/firstMessage.js';
 import { starterSuggestions } from '../chat/starters.js';
@@ -29,7 +29,10 @@ export function NewChatScreen() {
   const [params] = useSearchParams();
   const title = t(termKey('new_chat'));
 
-  const ready = selectableAgents(agents.data ?? []);
+  // Only installed agents can start a chat (owner decision, 2026-09-22); the rest are an
+  // errand for the Agent Manager, and the notice below is that errand, not a chip.
+  const ready = installedAgents(agents.data ?? []);
+  const enabled = enabledAgents(agents.data ?? []);
   const [agentId, setAgentId] = useState<string | null>(null);
   const [workingDir, setWorkingDir] = useState<string | null>(null);
   const [model, setModel] = useState<string | null>(null);
@@ -38,23 +41,24 @@ export function NewChatScreen() {
   const { recent, remember } = useRecentModels();
   const approval = useApprovalMode(agentId);
 
-  // The first installable agent is chosen for the person, so a fresh hub with Hermes alone
-  // never asks a question with one answer. `?agent=` comes from a chip in an open session.
+  // The first agent is chosen for the person, so a fresh hub with Hermes alone never asks
+  // a question with one answer. `?agent=` comes from a chip in an open session.
   useEffect(() => {
     if (agentId && ready.some((a) => a.id === agentId)) return;
     const asked = params.get('agent');
-    const wanted =
-      ready.find((a) => a.id === asked) ?? ready.find((a) => a.status !== 'not_installed');
+    const wanted = ready.find((a) => a.id === asked) ?? ready[0];
     setAgentId(wanted?.id ?? null);
   }, [ready, agentId, params]);
 
-  const noneReady = ready.length > 0 && ready.every((a) => a.status === 'not_installed');
+  // The registry has agents but none of them is on this host: the way out is the Agent
+  // Manager, and saying so is the whole of this screen's job until one is installed.
+  const noneInstalled = ready.length === 0 && enabled.length > 0;
   const disabledReason = agents.isPending
     ? t('common.loading')
-    : ready.length === 0
-      ? t('new_chat.no_agents')
-      : noneReady
-        ? t('new_chat.none_ready')
+    : noneInstalled
+      ? t('new_chat.none_installed')
+      : enabled.length === 0
+        ? t('new_chat.no_agents')
         : !agentId
           ? t('new_chat.pick_agent')
           : null;
@@ -86,9 +90,9 @@ export function NewChatScreen() {
           <h1 className="text-xl font-semibold">{t('new_chat.greeting')}</h1>
           <p className="max-w-prose text-sm text-muted">{t('new_chat.lede')}</p>
           <WorkingDirPicker value={workingDir} onChange={setWorkingDir} />
-          {noneReady && (
+          {noneInstalled && (
             <Notice tone="warning">
-              {t('new_chat.none_ready')}{' '}
+              {t('new_chat.none_installed')}{' '}
               <Link to={routeOf('agent_manager')} className="link underline">
                 {t('nav.agent_manager')}
               </Link>

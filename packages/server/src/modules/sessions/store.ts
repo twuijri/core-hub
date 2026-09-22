@@ -61,6 +61,8 @@ export interface NewSession {
   workingDir: string | null;
   categoryId: string | null;
   parentSessionId: string | null;
+  /** The person named it themselves; the hub then never renames it (decision §26). */
+  titleSetByUser?: boolean;
 }
 
 export interface NewMessage {
@@ -115,6 +117,7 @@ export class SessionsStore {
         workingDir: input.workingDir,
         categoryId: input.categoryId,
         parentSessionId: input.parentSessionId,
+        titleSetByUser: input.titleSetByUser ?? false,
       })
       .run();
     return this.getSession(input.workspace, id) as SessionRow;

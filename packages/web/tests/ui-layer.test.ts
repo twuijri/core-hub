@@ -63,6 +63,7 @@ const KIT: Array<[component: string, file: string]> = [
   ['Notice', 'Notice.tsx'],
   ['Spinner', 'Notice.tsx'],
   ['Popover', 'Popover.tsx'],
+  ['usePrompt', 'PromptDialog.tsx'],
   ['Radio', 'Radio.tsx'],
   ['ScrollArea', 'ScrollArea.tsx'],
   ['Segmented', 'Segmented.tsx'],

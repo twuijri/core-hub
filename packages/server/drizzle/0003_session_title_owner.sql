@@ -1,0 +1,1 @@
+ALTER TABLE `sessions` ADD `title_set_by_user` integer DEFAULT false NOT NULL;
