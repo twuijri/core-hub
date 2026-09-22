@@ -4,7 +4,7 @@ Measured on this branch by asking a booted hub which contract operations are
 still the built-in 501 stub. Regenerate it the same way after a phase:
 every operation that answers `501 not_implemented` is not built yet.
 
-**111 of 251 contract operations are implemented.** Nothing fakes a success:
+**138 of 251 contract operations are implemented.** Nothing fakes a success:
 an unbuilt operation answers `501` with its operation id. Measured on this
 branch, 2026-09-22, by asking a booted hub which operations are still the
 built-in stub — and `packages/server/tests/unit/status.test.ts` keeps this
@@ -22,17 +22,23 @@ number from claiming more than the hub answers.
 | knowledge | 1 | 1 | `knowledge.listItems` — journal, notes and files in one page; the attachment operations it also implements are counted under `sessions`, whose tag declares them |
 | audit | 1 | 1 | the Logs, Usage and Performance reports; `skills` still answers `501`, because nothing records skill use and zeros would read as a measurement |
 | plugins | 1 | 1 | what is installed on this hub — an empty list until an installer exists |
+| tasks | 27 | 27 | projects, the nine-column board with fractional ordering, subtasks, dependencies, comments, activity, worktree rows. Assigning does **not** start a run: the worker that opens a session is not built, and `TaskAssigned` answers `null` rather than an invented id |
 | rooms | 0 | 28 | several agents in one room |
-| tasks | 0 | 27 | the Tasks section |
 | schedules | 0 | 23 | scheduled and recurring work |
 | devices | 0 | 17 | device registry and push |
 | notify | 0 | 11 | notifications and webhooks |
 
 **Phase 4 of the roadmap is complete**: `knowledge`, `plugins`, the `updates`
-channel and the `audit` dashboards all answer. What is left before the phones
-and the desktop (Phase 3, which the owner put last on 2026-09-22) is Phase 1 —
-`rooms`, `tasks`, `schedules`, `notify` — and the Hermes-gateway half of
-`agents`.
+channel and the `audit` dashboards all answer. Of Phase 1, `tasks` is complete
+as a board; `rooms`, `schedules` and `notify` are still 501, as is the
+Hermes-gateway half of `agents`. Phase 3 (phones and desktop) is last, by the
+owner's decision on 2026-09-22.
+
+**What answers is not always what works end to end.** Two places say so
+themselves rather than in a footnote: assigning a task records the assignee and
+returns `null` for the job, the run and the session, because nothing starts a
+run from a task yet; and a task worktree is recorded in `creating`, because
+making a git worktree belongs to whatever runs the task.
 
 ## Clients
 - **Web** (`packages/web`): first-run setup, login, chat with streaming,
