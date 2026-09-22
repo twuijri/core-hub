@@ -438,4 +438,46 @@ test.describe('web smoke journeys', () => {
     await setDisplay(page, 'Settings', 'Display', 'theme-light');
     await page.getByTestId('language-ar').click();
   });
+
+  test('10. the Tasks board: a project, a task, and a move that is not a drag', async ({
+    page,
+  }) => {
+    await login(page);
+    await page.getByRole('link', { name: 'المهام' }).click();
+    await expect(page).toHaveURL(/\/tasks$/);
+
+    // A hub with no project says so, and offers the one thing to do about it.
+    await expect(page.getByTestId('tasks-empty')).toBeVisible();
+    await page.getByTestId('new-project').click();
+    await page.getByRole('textbox').fill('إعادة بناء المركز');
+    await page.getByRole('button', { name: 'حفظ' }).click();
+
+    // Nine columns, in workflow order.
+    const board = page.getByTestId('task-board');
+    await expect(board).toBeVisible();
+    await expect(board.locator('.task-column')).toHaveCount(9);
+
+    await page.getByTestId('new-task-input').fill('اكتب خطة الإطلاق');
+    await page.getByTestId('new-task').click();
+    await expect(page.getByTestId('task-card')).toHaveCount(1);
+    await shot(page, 'tasks-board-ar-light');
+
+    // Moving without dragging: the card's own menu, which is what a phone and a keyboard
+    // both use.
+    await page.getByTestId('task-more').click();
+    await page.getByRole('menuitem', { name: 'انقل إلى للعمل' }).click();
+    await expect(
+      page.locator('.task-column-body[data-column="todo"] [data-testid="task-card"]'),
+    ).toHaveCount(1);
+
+    // `blocked` asks why, because the hub refuses a blocked task with no reason.
+    await page.getByTestId('task-more').click();
+    await page.getByRole('menuitem', { name: 'انقل إلى متوقّفة' }).click();
+    await page.getByRole('textbox').fill('ننتظر المفتاح');
+    await page.getByRole('button', { name: 'حفظ' }).click();
+    await expect(
+      page.locator('.task-column-body[data-column="blocked"] [data-testid="task-card"]'),
+    ).toContainText('ننتظر المفتاح');
+    await shot(page, 'tasks-blocked-ar-light');
+  });
 });

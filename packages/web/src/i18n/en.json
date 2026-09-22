@@ -581,5 +581,41 @@
     "steer": "Steer",
     "steer_hint": "Stop the live turn and take this instead, in the same context.",
     "remove": "Remove"
+  },
+  "tasks": {
+    "project": "Project",
+    "count": "{count} tasks",
+    "new_task": "New task",
+    "add": "Add",
+    "no_projects": "No project yet",
+    "no_projects_body": "Tasks live inside a project. Create one to start.",
+    "new_project": "New project",
+    "project_name": "Project name",
+    "rename": "Rename",
+    "title_label": "Task title",
+    "reorder": "Reorder {title}",
+    "more": "More for {title}",
+    "move_to": "Move to {column}",
+    "blocked_why": "What is blocking it?",
+    "reason": "Reason",
+    "confirm_delete": "Delete “{title}”?",
+    "confirm_delete_body": "This cannot be undone.",
+    "status": {
+      "triage": "Triage",
+      "todo": "To do",
+      "ready": "Ready",
+      "scheduled": "Scheduled",
+      "running": "Running",
+      "blocked": "Blocked",
+      "review": "Review",
+      "done": "Done",
+      "archived": "Archived"
+    },
+    "priority": {
+      "urgent": "Urgent",
+      "high": "High",
+      "normal": "Normal",
+      "low": "Low"
+    }
   }
 }
