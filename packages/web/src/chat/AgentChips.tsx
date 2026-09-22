@@ -51,6 +51,7 @@ import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { routeOf } from '../navigation/manifest.js';
 import type { Agent } from '../types.js';
+import { agentMark } from '../ui/brand/marks.js';
 import { IconPlus } from '../ui/icons.js';
 import { Notice } from '../ui/Notice.js';
 import { SegmentedItem, SegmentedTrack } from '../ui/Segmented.js';
@@ -198,9 +199,10 @@ function AgentOption({
       value={agent.id}
       title={hint}
       icon={
-        // The generated initial is the agent's icon, so compact mode never shows a blank.
+        // An agent we ship wears its own mark; one we do not know keeps its initial, so
+        // compact mode never shows a blank either way (owner decision, 2026-09-22).
         <span className="mj-segment-mark" aria-hidden>
-          {agent.name.slice(0, 1)}
+          {agentMark(agent.slug, 14) ?? agent.name.slice(0, 1)}
         </span>
       }
       label={<span dir="auto">{agent.name}</span>}
