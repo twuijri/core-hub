@@ -16,6 +16,7 @@ export function Popover({
   onOpenChange,
   align = 'start',
   side = 'bottom',
+  className = '',
   testId,
 }: {
   /**
@@ -29,6 +30,7 @@ export function Popover({
   onOpenChange?: (open: boolean) => void;
   align?: 'start' | 'center' | 'end';
   side?: 'top' | 'bottom';
+  className?: string;
   testId?: string;
 }) {
   return (
@@ -41,7 +43,7 @@ export function Popover({
       </Tooltip>
       <RadixPopover.Portal>
         <RadixPopover.Content
-          className="mj-popover glass"
+          className={`mj-popover glass ${className}`}
           align={align}
           side={side}
           sideOffset={8}
