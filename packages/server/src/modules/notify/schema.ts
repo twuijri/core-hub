@@ -119,6 +119,28 @@ export const webhooks = sqliteTable(
     url: text('url').notNull(),
     /** HMAC-SHA256 signing key (models.secrets); null = unsigned. */
     signingSecretId: ulid('signing_secret_id'),
+    /**
+     * The signing key itself, when the hub holds it rather than the models store.
+     *
+     * ADR 0010's one credential store is about *provider* credentials — a key added once
+     * that every agent inherits. A webhook's HMAC key is not that: it belongs to one
+     * webhook and nothing else ever reads it. It is stored here, never returned, and read
+     * back as the contract's `[stored]`.
+     */
+    signingSecret: text('signing_secret'),
+    /** Workspaces this webhook fires for; empty means every one of them. */
+    profiles: json<string[]>('profiles').notNull().default(EMPTY_ARRAY),
+    /** Include message text in payloads; off means ids only. */
+    includeContent: bool('include_content').notNull().default(false),
+    /**
+     * Allow a URL that resolves to a private address. Off by default: a webhook is a URL
+     * a person typed, and a hub that will POST to `127.0.0.1` on request is a hub that
+     * can be asked to knock on doors inside its own network.
+     */
+    allowPrivateNetwork: bool('allow_private_network').notNull().default(false),
+    maxRetries: integer('max_retries').notNull().default(3),
+    deliveredCount: integer('delivered_count').notNull().default(0),
+    lastError: text('last_error'),
     /** Realtime event names to forward, e.g. ["task.moved", "run.failed"]. */
     events: json<string[]>('events').notNull().default(EMPTY_ARRAY),
     /** Non-secret static headers. */
