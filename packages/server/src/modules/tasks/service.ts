@@ -229,13 +229,36 @@ export class TasksService {
 
   /** The tasks of one column, in `position` order — what the board draws. */
   column(scope: Scope, projectId: string, status: TaskStatus, includeArchived: boolean): TaskRow[] {
+    return this.columnAcross([scope.workspace], { projectId }, status, includeArchived);
+  }
+
+  /**
+   * One column of the **whole** board: every workspace the person may enter, narrowed by
+   * whatever they asked for.
+   *
+   * The board is one page for every workspace and every agent (owner decision,
+   * 2026-09-23) — so the query takes a set of workspaces rather than one, and a project
+   * is a filter rather than the thing that makes the query possible.
+   *
+   * Order within a column stays `position`, then id. Two workspaces' fractional keys are
+   * not comparable in any meaningful way, so the tie-break is the id — which is a ULID,
+   * so cards from different workspaces interleave by age rather than by accident.
+   */
+  columnAcross(
+    workspaces: readonly string[],
+    filter: { projectId?: string | undefined; agentId?: string | undefined },
+    status: TaskStatus,
+    includeArchived: boolean,
+  ): TaskRow[] {
+    if (workspaces.length === 0) return [];
     return this.db
       .select()
       .from(tasks)
       .where(
         and(
-          eq(tasks.workspace, scope.workspace),
-          eq(tasks.projectId, projectId),
+          inArray(tasks.workspace, [...workspaces]),
+          filter.projectId ? eq(tasks.projectId, filter.projectId) : undefined,
+          filter.agentId ? eq(tasks.assigneeAgentId, filter.agentId) : undefined,
           eq(tasks.status, status),
           includeArchived ? undefined : isNull(tasks.archivedAt),
         ),
@@ -261,8 +284,30 @@ export class TasksService {
     return row?.position ?? null;
   }
 
+  /**
+   * The workspace's own project, made the first time somebody needs one.
+   *
+   * A person writing down something to do should not have to invent a container for it
+   * first (owner decision, 2026-09-23). A task still belongs to a project — the schema
+   * and every count depend on it — so the hub supplies one instead of asking.
+   */
+  defaultProject(scope: Scope): ProjectRow {
+    const existing = this.db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.workspace, scope.workspace), isNull(projects.archivedAt)))
+      .orderBy(asc(projects.id))
+      .get();
+    if (existing) return existing;
+    return this.createProject(scope, { name: 'المهام' });
+  }
+
   createTask(scope: Scope, actor: Actor, input: Record<string, unknown>): TaskRow {
-    const project = this.project(scope, String(input.project_id));
+    const asked = input.project_id;
+    const project =
+      typeof asked === 'string' && asked !== ''
+        ? this.project(scope, asked)
+        : this.defaultProject(scope);
     const title = String(input.title ?? '').trim();
     if (title === '') throw conflict({ reason: 'title_required' });
     const status = (input.status as TaskStatus | undefined) ?? 'triage';
