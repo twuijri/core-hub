@@ -89,21 +89,39 @@ export type ScheduleDelivery = {
   webhookId?: string;
 };
 
+/**
+ * A node of a workflow, exactly as the contract's `WorkflowNode` describes it. The column
+ * is JSON, so the shape is this type and nothing has to migrate when the contract adds a
+ * field — which is why the definition was stored as a document in the first place.
+ */
 export type WorkflowNode = {
-  key: string;
-  type: (typeof NODE_TYPES)[number];
-  name?: string;
-  /** Node-type specific: agentId+prompt, approval title, condition expression, delaySeconds, ... */
-  config: Record<string, unknown>;
+  id: string;
+  /** The contract's five kinds; the table's `node_runs.node_type` carries the longer list. */
+  kind: 'agent' | 'approval' | 'condition' | 'delay' | 'notify';
+  title: string;
+  agentId?: string | null;
+  model?: string | null;
+  provider?: string | null;
+  reasoningEffort?: string | null;
+  skills?: string[];
+  /** Prompt template; `{{input}}` and `{{steps.<id>.output}}` are substituted at run time. */
+  input?: string | null;
+  approvalRequired?: boolean;
+  position?: { x: number; y: number };
 };
 
-export type WorkflowEdge = { from: string; to: string; when?: string };
+export type WorkflowEdge = {
+  id: string;
+  from: string;
+  to: string;
+  route: 'always' | 'success' | 'failure';
+};
 
 export type WorkflowDefinition = {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
-  /** Declared inputs with defaults; a run's `input` is validated against them. */
-  inputs?: Record<string, { type: 'string' | 'number' | 'boolean'; default?: unknown }>;
+  /** Where the workflow's agents work, when it is tied to a checkout. */
+  workingDir?: string | null;
 };
 
 export const schedules = sqliteTable(
