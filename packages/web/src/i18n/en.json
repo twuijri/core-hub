@@ -43,7 +43,8 @@
     "setup": "First-run setup",
     "agent_skills": "Skills",
     "agent_mcp": "MCP",
-    "agent_memory": "Memory"
+    "agent_memory": "Memory",
+    "agent_channels": "Channels"
   },
   "common": {
     "loading": "Loading…",
@@ -898,5 +899,21 @@
     "empty_soul": "Not written yet — the agent has no particular character.",
     "empty_memory": "It has kept nothing yet.",
     "empty_user": "It has written nothing about you yet."
+  },
+  "channels": {
+    "title_of": "{name} channels",
+    "enabled": "Enabled",
+    "exclusive": "one identity",
+    "not_configured": "not configured",
+    "fields_n": "{count} fields",
+    "clear": "Forget identity",
+    "none": "No channels",
+    "none_body": "Channels are added in the agent's config file. Whatever is in it appears here.",
+    "restart_note": "This page writes to the agent's config file. Hermes connects to these platforms when it starts, so restart it for a change to take effect.",
+    "editor_note": "The fields come from the agent's file, not from a form we wrote. A secret reads as [stored]; leaving it keeps the one on file.",
+    "secret_hint": "Leave it to keep the one already stored.",
+    "no_fields": "This channel has no fields yet.",
+    "clear_title": "Forget the {name} identity?",
+    "clear_body": "The tokens and secrets are removed and the channel is switched off. Its other settings stay."
   }
 }
