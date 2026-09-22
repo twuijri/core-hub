@@ -52,6 +52,8 @@ ${themeBlock(tokens.themes.light)}
 ${glassBlock(String(tokens.glass.default))}
 ${scalar('space', 'space')}
 ${scalar('radius', 'radius')}
+${scalar('shadow', 'shadow')}
+${scalar('control', 'control')}
 ${scalar('font', 'font')}
 ${scalar('layout', 'layout')}
 ${scalar('motion', 'motion')}
@@ -117,6 +119,8 @@ export interface Tokens {
   glass: { default: number; levels: Record<GlassLevel, GlassSpec> };
   space: Record<string, string>;
   radius: Record<string, string>;
+  shadow: Record<string, string>;
+  control: Record<string, string>;
   font: Record<string, string>;
   layout: Record<string, string>;
   motion: Record<string, string>;
