@@ -596,6 +596,38 @@ test.describe('web smoke journeys', () => {
     await expect(page.getByRole('alertdialog')).toContainText('لا تُمحى');
   });
 
+  test('14. the last four settings pages say what is true about themselves', async ({ page }) => {
+    await login(page);
+    await page.getByRole('link', { name: 'الإعدادات' }).first().click();
+    const nav = page.getByTestId('settings-nav');
+
+    // About: two versions, because they are two different things.
+    await nav.getByRole('link', { name: 'حول' }).click();
+    await expect(page.getByTestId('about-facts')).toBeVisible();
+    // The real build, from a hub that is actually running — not a constant in the page.
+    await expect(page.getByTestId('about-server')).not.toBeEmpty();
+    await expect(page.getByTestId('about-namespaces')).toContainText('/rt/sessions');
+
+    // Knowledge: a workspace where nothing has happened says so.
+    await nav.getByRole('link', { name: 'المعرفة' }).click();
+    await expect(page.getByText('لا شيء بعد')).toBeVisible();
+    await expect(page.getByTestId('knowledge-list')).toHaveCount(0);
+
+    // Plugins: the hub answers the list and has no installer.
+    await nav.getByRole('link', { name: 'الإضافات' }).click();
+    await expect(page.getByText('لا إضافات')).toBeVisible();
+
+    // Updates: the sentence that stops the page being misread, then an empty shelf.
+    await nav.getByRole('link', { name: 'التحديثات' }).click();
+    await expect(page.getByText(/يخدمه المجلس نفسه/)).toBeVisible();
+    await expect(page.getByText('لا إصدارات')).toBeVisible();
+    // The source fields are not there until the hub is told to fetch from one.
+    await expect(page.getByTestId('updates-source-fields')).toHaveCount(0);
+    await page.getByTestId('updates-from-source').click();
+    await expect(page.getByTestId('updates-source-fields')).toBeVisible();
+    await shot(page, 'updates-ar-light');
+  });
+
   test('11. Schedules: a cron saved, its next time computed, and the button that says why', async ({
     page,
   }) => {
