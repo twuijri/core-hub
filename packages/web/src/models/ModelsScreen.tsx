@@ -24,7 +24,9 @@ import { navigation, routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import { Checkbox } from '../ui/Checkbox.js';
 import { Segmented } from '../ui/Segmented.js';
+import { Combobox } from '../ui/Combobox.js';
 import { Select } from '../ui/Select.js';
+import { modelOption, useRecentModels } from './useModelPicker.js';
 import type { Agent, Model, Provider, ProviderHost } from '../types.js';
 import { SettingsBack } from '../settings/SettingsBack.js';
 import { Notice, Spinner } from '../ui/Notice.js';
@@ -251,6 +253,7 @@ function ProviderCard({
   const refresh = useRefreshProvider();
   const remove = useDeleteProvider();
   const saveDefaults = useSaveDefaults();
+  const { recent, remember } = useRecentModels();
   const [outcome, setOutcome] = useState<TestResult | null>(null);
   const [panel, setPanel] = useState<'none' | 'edit' | 'models'>('none');
   const stored = provider.api_key !== null;
@@ -327,21 +330,20 @@ function ProviderCard({
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted">{t('models.add.default_model')}</span>
-        <Select
+        <Combobox
           value={defaultModel ?? null}
           disabled={provider.models.length === 0 || saveDefaults.isPending}
-          onValueChange={(model) =>
+          onChange={(model) => {
+            remember(model);
             saveDefaults.mutate({
               default: model ? { provider_id: provider.id, model } : null,
-            })
-          }
+            });
+          }}
           label={t('models.add.default_model')}
           placeholder={t('models.defaults.none')}
           testId="card-default-model"
-          options={provider.models.map((model) => ({
-            value: model.model,
-            label: model.alias ?? model.model,
-          }))}
+          recent={recent}
+          options={provider.models.map((model) => modelOption(model, model.model))}
         />
       </div>
 
@@ -731,28 +733,27 @@ function ModelSelect({
   onChange(ref: ModelRef | null): void;
 }) {
   const { t } = useI18n();
-  const groups = new Map<string, Model[]>();
-  for (const model of models) {
-    if (model.kind !== 'chat') continue;
-    const list = groups.get(model.provider) ?? [];
-    list.push(model);
-    groups.set(model.provider, list);
-  }
+  const { recent, remember } = useRecentModels();
+  // Grouped by provider, in the catalogue's order, so the headers do not interleave.
+  const chat = models.filter((model) => model.kind === 'chat');
+  const byProvider = new Map<string, Model[]>();
+  for (const model of chat)
+    byProvider.set(model.provider, [...(byProvider.get(model.provider) ?? []), model]);
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="min-w-40 text-sm">{label}</span>
-      <Select
+      <Combobox
         value={value === '' ? null : value}
-        onValueChange={(next) => onChange(parseRef(next ?? ''))}
+        onChange={(next) => {
+          remember(next);
+          onChange(parseRef(next ?? ''));
+        }}
         label={label}
         placeholder={t('models.defaults.none')}
         testId={id}
-        options={[...groups.entries()].flatMap(([provider, list]) =>
-          list.map((model) => ({
-            value: refValue(model),
-            label: model.alias ?? model.model,
-            group: provider,
-          })),
+        recent={recent}
+        options={[...byProvider.values()].flatMap((list) =>
+          list.map((model) => modelOption(model, refValue(model))),
         )}
       />
     </div>

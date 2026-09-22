@@ -20,6 +20,7 @@ import { useI18n } from '../i18n/context.js';
 import type { ProviderHost, ProviderPreset } from '../types.js';
 import { Notice, Spinner } from '../ui/Notice.js';
 import { Segmented } from '../ui/Segmented.js';
+import { Combobox } from '../ui/Combobox.js';
 import { Select } from '../ui/Select.js';
 import { needsLoopbackWarning, suggestedHostUrl } from './loopback.js';
 import {
@@ -283,14 +284,34 @@ export function AddProviderDialog({
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted">{t('models.add.default_model')}</span>
           <div className="flex items-center gap-2">
-            <Select
+            {/* The list is empty until the provider is asked, so the picker says so and
+                keeps Fetch inside the popup, where the person already is. */}
+            <Combobox
               value={model === '' ? null : model}
-              disabled={models.length === 0}
-              onValueChange={(next) => setModel(next ?? '')}
+              onChange={(next) => setModel(next ?? '')}
               label={t('models.add.default_model')}
               placeholder={t('models.add.model_placeholder')}
               testId="add-default-model"
-              options={models.map((item) => ({ value: item.id, label: item.label }))}
+              status={
+                probe.isPending
+                  ? 'loading'
+                  : probeError !== null
+                    ? 'error'
+                    : models.length === 0
+                      ? 'unfetched'
+                      : 'ready'
+              }
+              errorMessage={probeError}
+              fetchAction={{
+                label: t('models.add.fetch'),
+                onSelect: fetchModels,
+                disabled: probe.isPending || baseUrl.trim() === '',
+              }}
+              options={models.map((item) => ({
+                value: item.id,
+                label: item.label,
+                detail: item.id,
+              }))}
             />
             <button
               type="button"
