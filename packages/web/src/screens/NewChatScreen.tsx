@@ -12,6 +12,7 @@ import { Composer } from '../chat/Composer.js';
 import { putFirstMessage } from '../chat/firstMessage.js';
 import { starterSuggestions } from '../chat/starters.js';
 import { useApprovalMode, useComposerModels } from '../chat/useComposerControls.js';
+import { useRecentModels } from '../models/useModelPicker.js';
 import { WorkingDirPicker } from '../chat/WorkingDirPicker.js';
 import { useAgents, useCreateSession } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
@@ -34,6 +35,7 @@ export function NewChatScreen() {
   const [model, setModel] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const models = useComposerModels();
+  const { recent, remember } = useRecentModels();
   const approval = useApprovalMode(agentId);
 
   // The first installable agent is chosen for the person, so a fresh hub with Hermes alone
@@ -111,7 +113,11 @@ export function NewChatScreen() {
           }
           model={model}
           models={models}
-          onModel={setModel}
+          recentModels={recent}
+          onModel={(value) => {
+            remember(value);
+            setModel(value);
+          }}
           approvalMode={approval.mode}
           approvalOptions={approval.options}
           onApprovalMode={approval.set}

@@ -17,6 +17,7 @@ import { starterSuggestions } from './starters.js';
 import { takeFirstMessage } from './firstMessage.js';
 import { MessageView } from './MessageView.js';
 import { activeRun, isBusy } from './transcript.js';
+import { useRecentModels } from '../models/useModelPicker.js';
 import { useApprovalMode, useComposerModels } from './useComposerControls.js';
 import { useSessionStream } from './useSessionStream.js';
 import { WorkingDirPicker } from './WorkingDirPicker.js';
@@ -58,6 +59,7 @@ function OpenSession({ sessionId }: { sessionId: string }) {
 
   const agentId = state.session?.agent_id ?? null;
   const models = useComposerModels();
+  const { recent, remember } = useRecentModels();
   const approval = useApprovalMode(agentId);
 
   const send = useCallback(
@@ -197,7 +199,11 @@ function OpenSession({ sessionId }: { sessionId: string }) {
           }
           model={state.session?.model ?? null}
           models={models}
-          onModel={(value) => patch.mutate({ model: value })}
+          recentModels={recent}
+          onModel={(value) => {
+            remember(value);
+            patch.mutate({ model: value });
+          }}
           approvalMode={approval.mode}
           approvalOptions={approval.options}
           onApprovalMode={approval.set}
