@@ -1,13 +1,17 @@
 // The decision the agent is blocked on: once / this session / always / deny for tool and
 // write approvals (`always` only when the hub allows it), a free answer or a choice for
 // questions. Every answer goes over HTTP (`sessions.respondApproval`).
+//
+// It is the one card in the transcript that is not a message, so it says so: an accent
+// card with the agent named above the question, and the answer a real multi-line field —
+// an agent that asks "what should I call it?" may be answered in a sentence.
 import { HubApiError } from '@majlis/contracts';
-import { useState } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import type { Approval, ApprovalDecision } from '../types.js';
-import { Notice } from '../ui/Notice.js';
+import { Badge, Button, Card, Label, Notice, Textarea } from '../ui/index.js';
 
 export const DECISIONS: ReadonlyArray<{
   id: 'once' | 'session' | 'always' | 'deny';
@@ -47,99 +51,110 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
     }
   };
 
+  const sendAnswer = () => {
+    const text = answer.trim();
+    void respond(text ? { decision: null, answer: text } : { decision: 'deny', answer: null });
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Enter sends, Shift+Enter is a new line — the same bargain the composer makes.
+    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      sendAnswer();
+    }
+  };
+
   return (
-    <section
-      className="card my-3 border-warning-soft-text/40 bg-warning-soft/40"
+    <Card
+      as="section"
+      tone="accent"
+      className="approval-card"
       aria-live="polite"
-      data-testid="approval-card"
+      testId="approval-card"
     >
-      <p className="text-xs text-muted">{t('approval.from', { agent: approval.agent.name })}</p>
-      <h3 className="mt-1 font-semibold" dir="auto">
+      <header className="flex flex-wrap items-center gap-2">
+        <Badge tone="warning">{t('approval.waiting')}</Badge>
+        <span className="text-xs text-muted">
+          {t('approval.from', { agent: approval.agent.name })}
+        </span>
+      </header>
+      <h3 className="font-semibold" dir="auto">
         {approval.title}
       </h3>
       {approval.description && (
-        <p className="mt-1 text-sm" dir="auto">
+        <p className="text-sm text-muted" dir="auto">
           {approval.description}
         </p>
       )}
       {approval.command && (
-        <pre
-          className="mt-2 overflow-x-auto rounded-md bg-code-bg p-2 font-mono text-xs text-code-text"
-          dir="ltr"
-        >
+        <pre className="approval-command" dir="ltr">
           {approval.command}
         </pre>
       )}
-      {error !== null && (
-        <Notice tone="danger" className="mt-2">
-          {describeError(error, t)}
-        </Notice>
-      )}
+      {error !== null && <Notice tone="danger">{describeError(error, t)}</Notice>}
       {isQuestion ? (
         <form
-          className="mt-3 flex flex-col gap-2"
+          className="flex flex-col gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            const text = answer.trim();
-            void respond(
-              text ? { decision: null, answer: text } : { decision: 'deny', answer: null },
-            );
+            sendAnswer();
           }}
         >
           {approval.choices.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {approval.choices.map((choice) => (
-                <button
+                <Button
                   key={choice.value}
-                  type="button"
-                  className="btn"
                   disabled={busy}
                   onClick={() => void respond({ decision: null, answer: choice.value })}
                 >
                   {choice.label}
-                </button>
+                </Button>
               ))}
             </div>
           )}
           {approval.answer_mode !== 'choice' && (
-            <div className="flex gap-2">
-              <input
-                className="field"
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`approval-answer-${approval.id}`}>{t('approval.answer')}</Label>
+              <Textarea
+                id={`approval-answer-${approval.id}`}
+                rows={2}
+                dir="auto"
                 value={answer}
                 onChange={(e) => setAnswer(e.target.value)}
-                placeholder={t('approval.answer')}
-                aria-label={t('approval.answer')}
+                onKeyDown={onKeyDown}
+                placeholder={t('approval.answer_hint')}
+                data-testid="approval-answer"
               />
-              <button type="submit" className="btn btn-primary" disabled={busy}>
+              <Button type="submit" variant="primary" className="self-start" loading={busy}>
                 {t('approval.send')}
-              </button>
+              </Button>
             </div>
           )}
-          <button
-            type="button"
-            className="btn btn-ghost self-start text-xs"
+          <Button
+            variant="ghost"
+            size="sm"
+            className="self-start"
             disabled={busy}
             onClick={() => void respond({ decision: 'deny', answer: null })}
           >
             {t('approval.skip')}
-          </button>
+          </Button>
         </form>
       ) : (
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           {decisionsFor(approval).map((d) => (
-            <button
+            <Button
               key={d.id}
-              type="button"
-              className={`btn ${d.id === 'deny' ? 'btn-danger' : d.id === 'once' ? 'btn-primary' : ''}`}
+              variant={d.id === 'deny' ? 'danger' : d.id === 'once' ? 'primary' : 'secondary'}
               disabled={busy}
               onClick={() => void respond({ decision: d.value, answer: null })}
               data-testid={`approve-${d.id}`}
             >
               {t(`approval.${d.id}`)}
-            </button>
+            </Button>
           ))}
         </div>
       )}
-    </section>
+    </Card>
   );
 }
