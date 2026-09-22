@@ -126,6 +126,13 @@ export const sessions = sqliteTable(
     ...scopedColumns(),
     agentId: ulid('agent_id').notNull(),
     title: text('title', { length: 200 }),
+    /**
+     * The person named this session themselves (`SessionPatch.title` with text), so the
+     * hub never renames it (contract decision §26). `title: null` clears the mark and
+     * hands the naming back. Not on the wire: no client renders it, and the one question
+     * a client asks — "may I ask for a new title?" — is answered by sending `null`.
+     */
+    titleSetByUser: bool('title_set_by_user').notNull().default(false),
     /** Contract `Session.source`; drives the grouping on the history screen. */
     source: text('source', { enum: SESSION_SOURCES }).notNull().default('chat'),
     /** Messaging platform slug when `source = channel` (telegram, whatsapp, …). */

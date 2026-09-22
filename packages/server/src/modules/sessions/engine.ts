@@ -55,6 +55,7 @@ import type {
   AttachmentsPort,
   SessionsPorts,
 } from './ports.js';
+import { SessionNamer } from './naming.js';
 import { OutputWatcher, ensureRunFolders, type ProducedRefusal } from './run-files.js';
 import {
   initialRunState,
@@ -103,8 +104,19 @@ export class RunEngine {
   private readonly active = new Map<string, ActiveRun>();
   /** One chain per session guarantees runs execute in order, never in parallel. */
   private readonly chains = new Map<string, Promise<void>>();
+  /** Naming a session (decision §26). Deliberately *outside* the chains: a title must
+      never make the next queued run wait. */
+  readonly namer: SessionNamer;
 
-  constructor(private readonly deps: EngineDeps) {}
+  constructor(private readonly deps: EngineDeps) {
+    this.namer = new SessionNamer({
+      store: deps.store,
+      realtime: deps.realtime,
+      ports: deps.ports,
+      log: deps.log,
+      render: (scope, session) => this.sessionPayload(scope, session),
+    });
+  }
 
   /** Start the session's next queued run, after whatever is already chained. */
   kick(scope: EngineScope, sessionId: string): Promise<void> {
@@ -132,6 +144,9 @@ export class RunEngine {
 
   async settledAll(): Promise<void> {
     await Promise.all([...this.chains.keys()].map((id) => this.settled(id)));
+    // A title asked for by the last run is still in flight here; a shutdown that dropped
+    // it would leave a session named "New chat" for no reason a person could see.
+    await this.namer.settled();
   }
 
   isActive(runId: string): boolean {
@@ -693,6 +708,9 @@ export class RunEngine {
       }
     }
     this.emitSession(scope, run.sessionId);
+    // The session names itself from its first exchange (decision §26). After the run, not
+    // inside it: `schedule` returns at once and the work is tracked separately.
+    if (terminal === 'succeeded') this.namer.schedule(scope, run.sessionId);
   }
 
   // ------------------------------------------------------------- emitters
