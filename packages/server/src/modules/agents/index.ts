@@ -212,6 +212,11 @@ export function hermesRuntimeFor(app: FastifyInstance): HermesRuntime {
   return contextOf(app).runtime;
 }
 
+/** The live turns, for anything that must not interrupt one (`models` recycles Hermes). */
+export function agentRunnerFor(app: FastifyInstance): AgentRunner {
+  return contextOf(app).runner;
+}
+
 const scopeOf = (request: FastifyRequest): WorkspaceScope => {
   const workspace = request.workspace;
   if (!workspace) throw new HubError('internal', { message: 'route has no workspace' });

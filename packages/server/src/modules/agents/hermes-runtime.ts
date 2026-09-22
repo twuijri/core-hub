@@ -40,6 +40,12 @@ export interface HermesRuntimeStatus {
   home: string | null;
   pid: number | null;
   restarts: number;
+  /**
+   * When the process last started, in ms — null when nothing is running. It is the only
+   * honest answer to "did the runtime take the file the hub just wrote": the gateway
+   * reads its `.env` and `config.yaml` at start (`gateway/run.py` §load_hermes_dotenv).
+   */
+  startedAt: number | null;
   lastError: string | null;
 }
 
@@ -104,6 +110,18 @@ export class HermesRuntime {
   private state: RuntimeState = 'not_applicable';
   private lastError: string | null = null;
   private restarts = 0;
+  private startedAt: number | null = null;
+  /**
+   * The workspace's provider credentials, put into the child's environment at spawn.
+   *
+   * Hermes does read `${HERMES_HOME}/.env` itself (`hermes_cli/env_loader.py`, at import,
+   * with override), and the hub keeps writing that file because `hermes model`, `hermes
+   * config` and a shell inside the container all expect it. But a running gateway that
+   * depends on somebody else's loader running in the right entrypoint, in the right
+   * order, over a file with the right encoding, is a chain with four links where there
+   * could be one. The environment is the one: the process cannot start without it.
+   */
+  private providerEnv: Record<string, string> = {};
   private healthyAt: number | null = null;
   private stopping = false;
   private restartRequested = false;
@@ -133,8 +151,26 @@ export class HermesRuntime {
       home: this.mode === 'managed' ? this.home : null,
       pid: this.child?.pid ?? null,
       restarts: this.restarts,
+      startedAt: this.startedAt,
       lastError: this.lastError,
     };
+  }
+
+  /**
+   * Hands the runtime the workspace's provider credentials. Returns true when they
+   * changed, which is the caller's signal that a restart is what makes them live — this
+   * process holds its environment from spawn time and there is no reload surface
+   * (ADR 0008 §2: the API server on 8642 exposes no configuration write at all).
+   */
+  setProviderEnv(env: Record<string, string>): boolean {
+    const before = Object.keys(this.providerEnv).sort();
+    const after = Object.keys(env).sort();
+    const same =
+      before.length === after.length &&
+      before.every((key, index) => key === after[index] && this.providerEnv[key] === env[key]);
+    if (same) return false;
+    this.providerEnv = { ...env };
+    return true;
   }
 
   /** Decide the mode and, when managed, start the child. Never throws. */
@@ -193,6 +229,9 @@ export class HermesRuntime {
     const url = new URL(this.endpoint);
     const env: NodeJS.ProcessEnv = {
       ...(this.options.host.inherited ?? {}),
+      // The shared provider keys first: the hub's own variables below are not
+      // negotiable, and a provider named `API_SERVER_KEY` would be a very bad joke.
+      ...this.providerEnv,
       HERMES_HOME: this.home,
       API_SERVER_ENABLED: 'true',
       API_SERVER_KEY: this.apiKey() ?? '',
@@ -210,6 +249,7 @@ export class HermesRuntime {
       return;
     }
     this.child = child;
+    this.startedAt = Date.now();
     this.setState('starting', null);
     this.log.info({ pid: child.pid, home: this.home }, 'hermes: gateway started (managed)');
     this.pipe(child.stdout, 'info');
