@@ -29,6 +29,7 @@ import type {
 } from './adapters/types.js';
 import type {
   AgentRunnerPort,
+  RunnerAskRequest,
   RunnerApprovalKind,
   RunnerChoice,
   RunnerDecision,
@@ -196,6 +197,68 @@ export class AgentRunner implements AgentRunnerPort {
     await run.live.session.interrupt();
   }
 
+  /**
+   * One question, answered once, in a conversation of its own that is closed again
+   * immediately (`RunnerAskRequest`). The hub names a session with it.
+   *
+   * Three things make it safe to run beside a live chat:
+   *
+   * - its agent session is **never** put in `this.sessions`, and its ref is not the hub
+   *   session's, so the question is not appended to the conversation it asks about and
+   *   nothing evicts the live one;
+   * - it produces no `LiveRun`, so `busy` stays false and the models module may still
+   *   recycle the runtime — a title is not work worth blocking a provider change for;
+   * - it is bounded. Past `timeoutMs` the session is closed and the caller gets `null`,
+   *   which every caller must already handle.
+   */
+  async ask(request: RunnerAskRequest): Promise<string | null> {
+    const { service, adapters } = this.deps;
+    const row = service.loadAgent(request.agentId);
+    if (row.installState !== 'installed') return null;
+    const target = service.targetFor(row, request.workspace, {
+      // A conversation of its own: `-ask-` keeps it apart from the chat's own ref for
+      // every adapter that keys conversations by the id we hand it.
+      sessionRef: mintSessionRef(row.adapterKind, `ask-${request.sessionId}`),
+      cwd: null,
+      model: request.model,
+      provider: request.provider,
+      reasoningEffort: null,
+    });
+    const session = await adapters.byKind(row.adapterKind).start(target);
+    let text = '';
+    try {
+      const collect = (async () => {
+        for await (const event of session.stream()) {
+          if (event.type === 'message.delta') text += event.text;
+          if (event.type === 'run.completed' || event.type === 'run.failed') return;
+        }
+      })();
+      const selection = service.selectionFor(row, request.workspace, {
+        model: request.model,
+        provider: request.provider,
+      });
+      await withDeadline(
+        Promise.all([
+          session.send({
+            text: request.prompt,
+            model: selection.model,
+            modelProvider: selection.provider,
+          }),
+          collect,
+        ]),
+        request.timeoutMs,
+      );
+    } catch (error) {
+      this.deps.log.info(
+        { err: error, agentId: row.id, sessionId: request.sessionId },
+        'agents: the agent answered no question',
+      );
+    } finally {
+      await session.close().catch(() => undefined);
+    }
+    return text.trim() === '' ? null : text;
+  }
+
   /** Shutdown: end every live agent session (ACP children exit, Hermes streams close). */
   async closeAll(): Promise<void> {
     const open = [...this.sessions.values()];
@@ -263,6 +326,24 @@ export class AgentRunner implements AgentRunnerPort {
     if (run.live.adapterKind === 'acp' && isClosed(run.live.session)) {
       this.sessions.delete(run.sessionId);
     }
+  }
+}
+
+/** Resolve, or give up. The work behind it is abandoned, never awaited. */
+async function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+        // Optional work: a title still being waited for must never be the reason a
+        // process stays alive.
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
