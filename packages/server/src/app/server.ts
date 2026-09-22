@@ -44,7 +44,18 @@ export interface BuildOptions {
   webDir?: string | null;
 }
 
-export function readVersion(): string {
+/**
+ * The version this hub is running.
+ *
+ * The workspace's `package.json` files stay at `0.0.0` on purpose — a release is a git tag,
+ * not a commit that bumps five files — so the number a person sees has to come from the
+ * build. `MAJLIS_VERSION` is stamped into the image by `packages/server/Dockerfile` from
+ * the tag being released, and is what `/api/v1/health` and `/api/v1/meta` then report.
+ * Outside an image there is no release, and `0.0.0` is the honest answer for a working
+ * tree (owner decision, 2026-09-22: the footer must say which version is running).
+ */
+export function readVersion(stamped?: string | undefined): string {
+  if (stamped && stamped.trim() !== '') return stamped.trim();
   try {
     const pkg = JSON.parse(readFileSync(path.join(packageRoot, 'package.json'), 'utf8')) as {
       version?: string;
@@ -67,7 +78,7 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   });
   const modules = options.modules ?? allModules;
   const contract = options.contract === undefined ? loadOpenApiDocument() : options.contract;
-  const version = readVersion();
+  const version = readVersion(config.version);
 
   const io = createSockets(app);
   // Decorated before the modules register so a module can reach the database and the
