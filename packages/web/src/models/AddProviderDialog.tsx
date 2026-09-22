@@ -14,14 +14,22 @@
  * - a loopback address on a containerized hub is called out, in both languages, with the
  *   address that would work. Nothing is rewritten silently.
  */
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import type { ProviderHost, ProviderPreset } from '../types.js';
-import { Notice, Spinner } from '../ui/Notice.js';
-import { Segmented } from '../ui/Segmented.js';
-import { Combobox } from '../ui/Combobox.js';
-import { Select } from '../ui/Select.js';
+import {
+  Button,
+  Combobox,
+  Dialog,
+  Field,
+  Input,
+  Label,
+  Notice,
+  Segmented,
+  Select,
+  Spinner,
+} from '../ui/index.js';
 import { needsLoopbackWarning, suggestedHostUrl } from './loopback.js';
 import {
   useCreateProvider,
@@ -48,7 +56,6 @@ export function AddProviderDialog({
   const probe = useProbeProvider();
   const saveModel = useSaveModel();
   const saveDefaults = useSaveDefaults();
-  const ids = useId();
   const firstField = useRef<HTMLButtonElement>(null);
 
   const offered = useMemo(
@@ -133,30 +140,19 @@ export function AddProviderDialog({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[var(--mj-z-overlay)] flex items-start justify-center overflow-y-auto bg-scrim p-4"
-      // A click on the scrim is a cancel; the dialog itself stops the bubble.
-      onClick={onClose}
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      size="lg"
+      title={t('models.provider.add')}
+      closeLabel={t('ui.close')}
+      testId="add-provider-dialog"
     >
-      <form
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={`${ids}-title`}
-        data-testid="add-provider-dialog"
-        // Glass belongs to floating chrome, and a dialog is exactly that (DESIGN.md).
-        className="glass mt-10 flex w-full max-w-lg flex-col gap-3 rounded-lg p-4"
-        onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') onClose();
-        }}
-        onSubmit={submit}
-      >
-        <h2 id={`${ids}-title`} className="text-lg font-semibold">
-          {t('models.provider.add')}
-        </h2>
-
+      <form className="flex flex-col gap-3" onSubmit={submit}>
         <fieldset className="flex flex-col gap-1">
-          <legend className="text-xs text-muted">{t('models.add.type')}</legend>
+          <legend className="mj-label">{t('models.add.type')}</legend>
           <Segmented
             className="self-start"
             label={t('models.add.type')}
@@ -192,8 +188,8 @@ export function AddProviderDialog({
         </fieldset>
 
         {mode === 'preset' ? (
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-muted">{t('models.add.select_provider')}</span>
+          <div className="mj-field-row">
+            <Label>{t('models.add.select_provider')}</Label>
             <Select
               value={presetId}
               onValueChange={(next) => next && setPresetId(next)}
@@ -213,76 +209,67 @@ export function AddProviderDialog({
             )}
           </div>
         ) : (
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted" htmlFor={`${ids}-label`}>
-              {t('models.provider.label')}
-            </label>
-            <input
-              id={`${ids}-label`}
-              className="field"
-              dir="auto"
-              value={label}
-              onChange={(event) => setLabel(event.target.value)}
-              required
-              data-testid="add-label"
-            />
-          </div>
+          <Field label={t('models.provider.label')}>
+            {(props) => (
+              <Input
+                {...props}
+                dir="auto"
+                value={label}
+                onChange={(event) => setLabel(event.target.value)}
+                required
+                data-testid="add-label"
+              />
+            )}
+          </Field>
         )}
 
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-muted" htmlFor={`${ids}-url`}>
-            {t('models.provider.base_url')}
-          </label>
-          <input
-            id={`${ids}-url`}
-            className="field"
-            dir="ltr"
-            inputMode="url"
-            placeholder="http://host.docker.internal:1234/v1"
-            value={baseUrl}
-            onChange={(event) => setBaseUrl(event.target.value)}
-            required
-            data-testid="add-base-url"
-          />
-          {warn && host && (
-            <Notice tone="warning" className="mt-1">
-              <span data-testid="loopback-warning">
-                {t('models.add.loopback', { url: suggestedHostUrl(baseUrl, host) })}
-              </span>
-            </Notice>
+        <Field label={t('models.provider.base_url')}>
+          {(props) => (
+            <>
+              <Input
+                {...props}
+                dir="ltr"
+                inputMode="url"
+                placeholder="http://host.docker.internal:1234/v1"
+                value={baseUrl}
+                onChange={(event) => setBaseUrl(event.target.value)}
+                required
+                data-testid="add-base-url"
+              />
+              {warn && host && (
+                <Notice tone="warning" className="mt-1">
+                  <span data-testid="loopback-warning">
+                    {t('models.add.loopback', { url: suggestedHostUrl(baseUrl, host) })}
+                  </span>
+                </Notice>
+              )}
+            </>
           )}
-        </div>
+        </Field>
 
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-muted" htmlFor={`${ids}-key`}>
-            {keyOptional ? t('models.add.key_optional') : t('models.add.key_required')}
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              id={`${ids}-key`}
-              className="field"
-              type={showKey ? 'text' : 'password'}
-              autoComplete="off"
-              spellCheck={false}
-              dir="ltr"
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-              required={!keyOptional}
-              data-testid="add-api-key"
-            />
-            <button
-              type="button"
-              className="btn"
-              aria-pressed={showKey}
-              onClick={() => setShowKey((shown) => !shown)}
-            >
-              {t(showKey ? 'models.add.hide_key' : 'models.add.show_key')}
-            </button>
-          </div>
-        </div>
+        <Field label={keyOptional ? t('models.add.key_optional') : t('models.add.key_required')}>
+          {(props) => (
+            <span className="field-row-inline">
+              <Input
+                {...props}
+                type={showKey ? 'text' : 'password'}
+                autoComplete="off"
+                spellCheck={false}
+                dir="ltr"
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+                required={!keyOptional}
+                data-testid="add-api-key"
+              />
+              <Button aria-pressed={showKey} onClick={() => setShowKey((shown) => !shown)}>
+                {t(showKey ? 'models.add.hide_key' : 'models.add.show_key')}
+              </Button>
+            </span>
+          )}
+        </Field>
 
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted">{t('models.add.default_model')}</span>
+        <div className="mj-field-row">
+          <Label>{t('models.add.default_model')}</Label>
           <div className="flex items-center gap-2">
             {/* The list is empty until the provider is asked, so the picker says so and
                 keeps Fetch inside the popup, where the person already is. */}
@@ -313,15 +300,13 @@ export function AddProviderDialog({
                 detail: item.id,
               }))}
             />
-            <button
-              type="button"
-              className="btn"
+            <Button
               disabled={probe.isPending || baseUrl.trim() === ''}
               onClick={fetchModels}
               data-testid="add-fetch-models"
             >
               {t('models.add.fetch')}
-            </button>
+            </Button>
           </div>
           {probe.isPending && <Spinner label={t('models.add.fetching')} />}
           {probeError && (
@@ -330,28 +315,24 @@ export function AddProviderDialog({
             </Notice>
           )}
           {models.length > 0 && !probeError && (
-            <p className="text-xs text-muted">
-              {t('models.add.fetched', { count: models.length })}
-            </p>
+            <p className="mj-field-hint">{t('models.add.fetched', { count: models.length })}</p>
           )}
         </div>
 
         {create.isError && <Notice tone="danger">{describeError(create.error, t)}</Notice>}
 
-        <div className="flex justify-end gap-2">
-          <button type="button" className="btn" onClick={onClose}>
-            {t('common.cancel')}
-          </button>
-          <button
+        <div className="mj-dialog-actions">
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
+          <Button
             type="submit"
-            className="btn btn-primary"
+            variant="primary"
             disabled={!canSubmit || create.isPending}
             data-testid="add-submit"
           >
             {t('models.add.submit')}
-          </button>
+          </Button>
         </div>
       </form>
-    </div>
+    </Dialog>
   );
 }

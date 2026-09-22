@@ -11,8 +11,7 @@ import {
 } from '../design/theme.js';
 import { useI18n } from '../i18n/context.js';
 import { LANGUAGES } from '../i18n/index.js';
-import { Notice } from '../ui/Notice.js';
-import { Segmented } from '../ui/Segmented.js';
+import { Notice, Segmented, Switch } from '../ui/index.js';
 
 export function DisplayTab({ only }: { only?: Array<keyof DisplayPrefs> }) {
   const { t } = useI18n();
@@ -100,6 +99,18 @@ export function DisplayTab({ only }: { only?: Array<keyof DisplayPrefs> }) {
             }))}
           />
         </fieldset>
+      )}
+      {/* A setting that takes effect the instant it is flipped: a switch, not a tick box.
+          It decides whether a finished turn shows "thought for …" above the reply
+          (chat/Reasoning.tsx); the live indicator while a run is alive is not optional. */}
+      {only === undefined && preferences.data && (
+        <Switch
+          checked={preferences.data.show_reasoning}
+          onChange={(next) => save.mutate({ ...preferences.data, show_reasoning: next })}
+          label={t('display.reasoning.label')}
+          hint={t('display.reasoning.hint')}
+          testId="show-reasoning"
+        />
       )}
       {save.isError && <Notice tone="danger">{describeError(save.error, t)}</Notice>}
       {preferences.isError && <Notice tone="warning">{t('display.local_only')}</Notice>}

@@ -172,7 +172,7 @@
     "streaming": "typing…",
     "failed": "failed",
     "interrupted": "stopped",
-    "thinking": "Thinking…",
+    "thinking": "Thinking",
     "reasoning": "Reasoning",
     "copy_code": "Copy code",
     "open_in_pane": "Open in side pane",
@@ -186,7 +186,13 @@
     "no_provider": "No model provider is configured for this workspace, so the agent has nothing to run on.",
     "no_provider_action": "Open Settings → Models → Defaults",
     "no_key": "The provider rejected the stored key, so the agent could not reach it.",
-    "no_key_action": "Open Settings → Models"
+    "no_key_action": "Open Settings → Models",
+    "you": "You",
+    "queued": "Queued",
+    "seconds": "{seconds}s",
+    "thought_for": "Thought for {seconds}s",
+    "pick_one_body": "Every chat keeps its own agent, its folder and its history.",
+    "copied": "Code copied."
   },
   "composer": {
     "label": "Message composer",
@@ -231,7 +237,9 @@
     "deny": "Deny",
     "answer": "Your answer",
     "send": "Answer",
-    "skip": "Skip (deny)"
+    "skip": "Skip (deny)",
+    "waiting": "Waiting on you",
+    "answer_hint": "Type your answer… (Enter to send, Shift+Enter for a new line)"
   },
   "tool": {
     "status": {
@@ -302,7 +310,9 @@
     "username": "Username",
     "display_name": "Display name",
     "role": "Role",
-    "workspaces": "Workspaces"
+    "workspaces": "Workspaces",
+    "field": "Field",
+    "value": "Value"
   },
   "roles": {
     "owner": "Owner",
@@ -326,7 +336,11 @@
     },
     "language": "Language",
     "text_scale": "Text size",
-    "local_only": "Saved on this device only; the hub could not store the preference."
+    "local_only": "Saved on this device only; the hub could not store the preference.",
+    "reasoning": {
+      "label": "Show the agent's reasoning",
+      "hint": "A \"thought for …\" line above the reply, with the text behind a disclosure."
+    }
   },
   "theme": {
     "intro": "Theme and background of this device. The footer chip changes the same preference.",
@@ -380,7 +394,9 @@
       "label": "Name",
       "base_url": "Base URL",
       "model_count": "{count} models",
-      "key_optional": "Key optional"
+      "key_optional": "Key optional",
+      "confirm_remove": "Remove the provider \"{label}\"?",
+      "confirm_remove_body": "Its key and its model list go with it, and there is no undo."
     },
     "defaults": {
       "hint": "One chat model and one coding model. Every agent inherits them unless it is pinned to something else.",
@@ -425,7 +441,14 @@
       "alias_for": "Display name for {model}",
       "visible_for": "Show {model} in pickers",
       "no_models": "No models yet. Refresh the model list first.",
-      "done": "Done"
+      "done": "Done",
+      "visibility": "Visible models",
+      "visibility_all": "Every model",
+      "visibility_all_hint": "Including whatever the provider adds later.",
+      "visibility_include": "Only the chosen ones",
+      "visibility_include_hint": "Pick them in the table below.",
+      "caption": "Models of {provider}",
+      "alias_saved": "Display name saved."
     },
     "add": {
       "type": "Provider type",
@@ -491,5 +514,10 @@
     "no_match": "Nothing matches “{query}”.",
     "error": "The list could not be fetched.",
     "count": "{count} models"
+  },
+  "ui": {
+    "close": "Close",
+    "dismiss": "Dismiss this notice",
+    "breadcrumb": "Breadcrumb"
   }
 }
