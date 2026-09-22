@@ -39,11 +39,74 @@ export interface AgentDirectory {
   find(workspace: string, agentId: string): Promise<AgentInfo | null>;
 }
 
-/** One block of the prompt handed to the agent. Attachments travel by id. */
+/**
+ * One block of the prompt handed to the agent.
+ *
+ * An attachment travels by id **and** by the path it was written to inside the run's
+ * input folder: Hermes's run surface takes text, not files (`POST /v1/runs` reads one
+ * `input`), and its file tools take absolute paths. So the hub puts the bytes where the
+ * agent can reach them and names the place. An adapter that grows a real attachment
+ * channel later uses `attachmentId` instead; nothing else changes.
+ */
 export type AgentPromptBlock =
   | { type: 'text'; text: string }
-  | { type: 'attachment'; attachmentId: string; kind: 'image' | 'file' | 'audio' }
+  | {
+      type: 'attachment';
+      attachmentId: string;
+      kind: 'image' | 'file' | 'audio';
+      /** Original name, sanitised by `knowledge`. */
+      name?: string;
+      mime?: string;
+      sizeBytes?: number;
+      /** Absolute path inside the run's input folder; absent when nothing was written. */
+      path?: string;
+    }
   | { type: 'location'; latitude: number; longitude: number };
+
+/** The folders one turn exchanges files through, told to the agent in the prompt. */
+export interface AgentFileExchange {
+  /** Where the attachments of this turn were copied. */
+  inputDir: string;
+  /** Where anything the agent wants the person to download must be written. */
+  outputDir: string;
+}
+
+/**
+ * `knowledge`'s file registry, as `sessions` needs it (ARCHITECTURE §Modules: the
+ * consumer declares the port, `src/modules/index.ts` wires the owner's implementation).
+ * The default is `noAttachments` in `unavailable.ts`: ids resolve to nothing and no
+ * file is ever written, which is honest for a hub whose knowledge module is not wired.
+ */
+export interface AttachmentSummary {
+  id: string;
+  name: string;
+  mime: string;
+  sizeBytes: number;
+  kind: string;
+  url: string;
+}
+
+export interface MaterialisedAttachment {
+  id: string;
+  name: string;
+  path: string;
+  mime: string;
+  sizeBytes: number;
+}
+
+export interface AttachmentsPort {
+  resolve(workspace: string, ids: readonly string[]): Map<string, AttachmentSummary>;
+  materialise(
+    workspace: string,
+    ids: readonly string[],
+    directory: string,
+  ): MaterialisedAttachment[];
+  capture(
+    scope: { workspace: string; userId: string },
+    file: { path: string; relativePath: string; sizeBytes: number },
+    sourceId: string,
+  ): Promise<Omit<AttachmentSummary, 'url'>>;
+}
 
 export interface AgentRunRequest {
   runId: string;
@@ -57,6 +120,8 @@ export interface AgentRunRequest {
   provider: string | null;
   reasoningEffort: string | null;
   prompt: AgentPromptBlock[];
+  /** Where this turn reads files from and writes files to; `null` when files are off. */
+  files: AgentFileExchange | null;
   /** Tool names the user already approved for the rest of this session. */
   allowedTools: string[];
 }
@@ -147,6 +212,8 @@ export interface AgentRunner {
 export interface SessionsPorts {
   agents: AgentDirectory;
   runner: AgentRunner;
+  /** `knowledge`'s file registry; the default stores nothing. */
+  attachments: AttachmentsPort;
   /** No event for this long ends the run as `timed_out` (run state machine). */
   agentTimeoutMs: number;
 }

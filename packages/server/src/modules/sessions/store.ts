@@ -286,6 +286,29 @@ export class SessionsStore {
     return { items, hasMore };
   }
 
+  /**
+   * Does any message in this workspace point at that attachment?
+   *
+   * `sessions.deleteAttachment` is documented as "delete an attachment that no message
+   * references yet", so `knowledge` asks this before it removes the bytes. The column
+   * is a JSON array, so the test is a substring of the serialised form — which is exact
+   * here because a ULID is 26 fixed characters and cannot be a prefix of another id.
+   */
+  isAttachmentReferenced(workspace: string, attachmentId: string): boolean {
+    const row = this.db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.workspace, workspace),
+          sql`${messages.attachmentIds} like ${`%"${attachmentId}"%`}`,
+        ),
+      )
+      .limit(1)
+      .get();
+    return row !== undefined;
+  }
+
   allMessages(workspace: string, sessionId: string): MessageRow[] {
     return this.db
       .select()

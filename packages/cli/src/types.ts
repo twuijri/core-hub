@@ -23,4 +23,5 @@ export type SessionDetail = Schemas['SessionDetail'];
 export type TokenPair = Schemas['TokenPair'];
 export type ToolCall = Schemas['ToolCall'];
 export type Usage = Schemas['Usage'];
+export type Attachment = Schemas['Attachment'];
 export type User = Schemas['User'];

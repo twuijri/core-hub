@@ -89,8 +89,23 @@ export interface AgentDirectoryPort {
 
 export type RunnerPromptBlock =
   | { type: 'text'; text: string }
-  | { type: 'attachment'; attachmentId: string; kind: 'image' | 'file' | 'audio' }
+  | {
+      type: 'attachment';
+      attachmentId: string;
+      kind: 'image' | 'file' | 'audio';
+      name?: string;
+      mime?: string;
+      sizeBytes?: number;
+      /** Absolute path the hub wrote the bytes to, inside the run's input folder. */
+      path?: string;
+    }
   | { type: 'location'; latitude: number; longitude: number };
+
+/** The folders one turn exchanges files through (`sessions`' `AgentFileExchange`). */
+export interface RunnerFileExchange {
+  inputDir: string;
+  outputDir: string;
+}
 
 export interface RunnerRunRequest {
   runId: string;
@@ -103,6 +118,7 @@ export interface RunnerRunRequest {
   provider: string | null;
   reasoningEffort: string | null;
   prompt: RunnerPromptBlock[];
+  files: RunnerFileExchange | null;
   allowedTools: string[];
 }
 
