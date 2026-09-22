@@ -17,8 +17,15 @@ ENV PNPM_HOME=/pnpm \
 RUN corepack enable
 WORKDIR /app
 
+# The version being released, stamped into both halves of the image: the web bundle prints it
+# before the hub answers, and the hub reports it on /api/v1/health and /api/v1/meta. The
+# workspace's package.json files stay at 0.0.0 — a release is a tag, not a commit.
+ARG MAJLIS_VERSION=0.0.0
+
 # ---- all dependencies + build -------------------------------------------------------------
 FROM base AS build
+ARG MAJLIS_VERSION
+ENV MAJLIS_VERSION=${MAJLIS_VERSION}
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/server/package.json packages/server/
@@ -120,7 +127,9 @@ RUN set -eu; \
 # node image's own apt layer (wget, gnupg) — nothing here uses them. npm stays: the hub installs
 # catalog agents with `npm install --global --prefix` (modules/agents/installer.ts).
 FROM debian:bookworm-slim AS runtime
-ENV NODE_ENV=production \
+ARG MAJLIS_VERSION
+ENV MAJLIS_VERSION=${MAJLIS_VERSION} \
+    NODE_ENV=production \
     DATA_DIR=/data \
     PORT=8080 \
     HERMES_HOME=/data/hermes \
