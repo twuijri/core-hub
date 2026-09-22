@@ -14,7 +14,7 @@ operations added here.)
 |---|---|---|---|
 | auth | 34 | 34 | first-run setup, sign-in, refresh, users, workspaces, app tokens, QR pairing, profiles |
 | sessions | 25 | 29 | sessions, messages, streamed runs, approvals, resume, and the eight attachment operations (implemented by `knowledge`, which owns the bytes); only session categories are not built |
-| agents | 11 | 40 | registry, curated catalog, install/remove/upgrade, discovery, restart; the Hermes-gateway screens (skills, MCP, memory, channels, plugins, presets) are not built |
+| agents | 11 | 40 | registry, curated catalog (Hermes, the hub's own `direct` agent, four coding CLIs), install/remove/upgrade, discovery, restart; the Hermes-gateway screens (skills, MCP, memory, channels, plugins, presets) are not built |
 | jobs | 3 | 3 | list, get, cancel, with `/rt/jobs` events |
 | meta | 1 | 2 | health |
 | models | 23 | 23 | providers, keys, catalogue, defaults, speech (ADR 0010) |
@@ -44,13 +44,28 @@ logs it once, and the owner account is created from `/setup` in the browser or
 owner unattended and skips the screen.
 
 ## Runtime
-Hermes runs inside the image, supervised by the hub (ADR 0008), and a run
-reaches it over its real API. A model provider must be configured before it
-can answer; until then a run fails with Hermes's own message. Coding agents
-install on demand from the curated catalog into the data volume (ADR 0006).
+A fresh install has **two** agents (ADOPTION-BACKLOG §2.15, owner's decision of
+2026-09-22):
+
+- **Hermes** runs inside the image, supervised by the hub (ADR 0008), and a run
+  reaches it over its real API.
+- **Direct** («مباشر») is the hub itself: a turn is one request from the hub to
+  the model provider, with no runtime in between. It runs no tools — skills and
+  MCP over this path are backlog §2.16 — and it inlines a text attachment or
+  sends an image to a model that accepts one, refusing anything else by name
+  (`docs/domain/models.md` §الاتصال المباشر). Its conversation lives in the
+  server process, so a restart starts a fresh context.
+
+Either way a model provider must be configured before anything can answer;
+until then a run fails with the provider's own message and a named code, never
+silently. Coding agents install on demand from the curated catalog into the
+data volume (ADR 0006).
 
 ## Proven against fakes, not yet against the real thing
 - A full turn with a real model reply (needs a provider key on the owner's box).
+  The direct path is proven end to end against a scripted provider, in the
+  container as well as the test suite; a real provider key is still the owner's
+  own check.
 - The catalog's pinned versions actually installing and starting on a machine.
 - PostgreSQL: the schema is SQLite-shaped so far; the hub refuses rather than
   pretending.

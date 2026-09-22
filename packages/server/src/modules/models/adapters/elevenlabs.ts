@@ -8,7 +8,9 @@
  * elsewhere rather than pretending.
  */
 import { detailOf, joinUrl, reasonOf, requestBytes, requestJson } from './http.js';
+import { chatUnsupported } from './types.js';
 import type {
+  ChatEvent,
   DiscoveredVoice,
   ListModelsResult,
   ListVoicesResult,
@@ -34,6 +36,12 @@ function genderOf(labels: unknown): DiscoveredVoice['gender'] {
 
 export const elevenLabsAdapter: ProviderAdapter = {
   protocol: 'elevenlabs',
+
+  // A speech provider has no chat surface; the `direct` agent says so rather than
+  // posting a turn to an endpoint that was never going to answer with words.
+  chat(): AsyncIterable<ChatEvent> {
+    return chatUnsupported('this provider speaks; it does not answer');
+  },
 
   async test(ctx: ProviderContext): Promise<ProviderTestResult> {
     if (!ctx.apiKey) {

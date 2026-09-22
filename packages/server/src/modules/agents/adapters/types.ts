@@ -24,6 +24,16 @@ export type AdapterKind = 'hermes' | 'acp' | 'harness' | 'builtin';
 export interface AgentTarget {
   slug: string;
   name: string;
+  /**
+   * The workspace this conversation belongs to.
+   *
+   * A process agent needs none of this — its workspace was already resolved into `env`
+   * and `cwd` before the target was built. The `builtin` adapter does: it has no process
+   * to hand an environment to, and resolves the workspace's provider and key at the
+   * moment of each turn, through the `models` port. Absent outside a run (a probe, a
+   * settings form), which is why it is optional.
+   */
+  workspace?: string;
   /** argv to start the agent; never a shell string (AGENTS.md hard rules). */
   command: readonly string[];
   executablePath: string | null;
@@ -31,6 +41,13 @@ export interface AgentTarget {
   endpoint: string | null;
   /** Non-secret environment for the process. */
   env?: Record<string, string>;
+  /**
+   * The workspace's stored settings for this agent, exactly as the adapter's own
+   * `settings()` form declared them. A process adapter has no use for them — its
+   * configuration is its argv and its environment — but an adapter the hub *is* reads
+   * its own fields from here.
+   */
+  settings?: Readonly<Record<string, unknown>>;
   /** Working directory for a session. */
   cwd?: string;
   /**
@@ -47,6 +64,8 @@ export interface AgentTarget {
    * configuration happened to name last.
    */
   modelProvider?: string | null;
+  /** The hub's own `providers` row id behind that model; see `PromptInput`. */
+  modelProviderId?: string | null;
   reasoningEffort?: string | null;
 }
 
@@ -137,10 +156,28 @@ export type AgentEvent =
       cacheReadTokens?: number;
       cacheWriteTokens?: number;
       reasoningTokens?: number;
+      /**
+       * What the turn cost, when the adapter can say. The gateway adapters cannot — they
+       * report tokens and the runtime keeps the invoice — so they leave it unset and the
+       * ledger records `unknown`. The `builtin` adapter made the request against a model
+       * row that carries published prices, so it reports an `estimated` number.
+       */
+      costMicroUsd?: number;
+      costSource?: 'provider' | 'estimated' | 'unknown';
     }
   | { type: 'context'; usedTokens: number; windowTokens?: number | null }
   | { type: 'run.completed'; stopReason: string; interrupted?: boolean }
-  | { type: 'run.failed'; error: string };
+  | {
+      type: 'run.failed';
+      error: string;
+      /**
+       * One of the contract's `ErrorCode`s, when the adapter already knows which. The
+       * gateway adapters do not — they get one flattened sentence and the runner reads
+       * the code out of its wording (`runner.ts` §`failureCode`). The `builtin` adapter
+       * made the request itself, so it says so instead of leaving it to be guessed.
+       */
+      code?: string;
+    };
 
 export interface ApprovalOption {
   id: string;
@@ -152,9 +189,37 @@ export interface ApprovalOption {
   kind: string;
 }
 
+/**
+ * One block of the turn's prompt, as `sessions` handed it over.
+ *
+ * The process adapters read `PromptInput.text`, where the hub has already flattened
+ * these into one string naming each attachment's path — Hermes's run surface and ACP's
+ * prompt both take text, and both agents have file tools to open a path with. The
+ * `builtin` adapter has neither, so it reads the blocks and puts the bytes in the
+ * request itself.
+ */
+export type PromptBlock =
+  | { type: 'text'; text: string }
+  | {
+      type: 'attachment';
+      attachmentId: string;
+      kind: 'image' | 'file' | 'audio';
+      name?: string;
+      mime?: string;
+      sizeBytes?: number;
+      /** Absolute path the hub wrote the bytes to, inside the run's input folder. */
+      path?: string;
+    }
+  | { type: 'location'; latitude: number; longitude: number };
+
 export interface PromptInput {
-  /** Plain text of the person's message. Attachments arrive in a later slice. */
+  /** Plain text of the person's message, attachments named by path. */
   text: string;
+  /**
+   * The same turn, unflattened. Set on every run; read only by an adapter that carries
+   * the bytes itself rather than pointing the agent at a path.
+   */
+  blocks?: readonly PromptBlock[];
   /**
    * What this turn should run on, resolved by the hub: the model id as its provider
    * names it, and the name the agent runtime knows that provider by.
@@ -167,6 +232,15 @@ export interface PromptInput {
    */
   model?: string | null;
   modelProvider?: string | null;
+  /**
+   * The hub's own `providers` row id behind that model.
+   *
+   * `modelProvider` above is a *name* the agent's runtime knows — Hermes's slug, or the
+   * `providers:` block the hub wrote for it — and it is meaningless to an adapter that
+   * has no runtime. The `builtin` adapter needs the row, because it is the hub itself
+   * that will make the request.
+   */
+  modelProviderId?: string | null;
   reasoningEffort?: string | null;
 }
 

@@ -7,7 +7,11 @@
  * follows whatever Anthropic ships next is a provider row that breaks without a commit.
  */
 import { detailOf, joinUrl, reasonOf, requestJson } from './http.js';
+import { chatFailure, openStream, parseFrame, sseData } from './stream.js';
 import type {
+  ChatEvent,
+  ChatMessage,
+  ChatRequest,
   DiscoveredModel,
   ListModelsResult,
   ListVoicesResult,
@@ -28,8 +32,142 @@ function headers(ctx: ProviderContext): Record<string, string> {
   };
 }
 
+// ------------------------------------------------------------------- streamed chat
+
+/**
+ * Anthropic has no `max_tokens`-less mode: the field is required on `/v1/messages`. This
+ * is the ceiling used when the caller names none, and it is a ceiling, not a target.
+ */
+const DEFAULT_MAX_TOKENS = 8_192;
+
+function content(message: ChatMessage): unknown {
+  if (!message.images || message.images.length === 0) return message.text;
+  return [
+    ...message.images.map((image) => ({
+      type: 'image',
+      source: { type: 'base64', media_type: image.mime, data: image.dataBase64 },
+    })),
+    ...(message.text ? [{ type: 'text', text: message.text }] : []),
+  ];
+}
+
+interface AnthropicFrame {
+  type?: unknown;
+  delta?: { type?: unknown; text?: unknown; thinking?: unknown };
+  message?: { usage?: { input_tokens?: unknown; output_tokens?: unknown } };
+  usage?: {
+    input_tokens?: unknown;
+    output_tokens?: unknown;
+    cache_read_input_tokens?: unknown;
+    cache_creation_input_tokens?: unknown;
+  };
+  error?: { message?: unknown };
+}
+
+function count(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? Math.trunc(value)
+    : undefined;
+}
+
+/**
+ * One turn against `POST {base}/v1/messages` with `stream: true`
+ * (<https://docs.claude.com/en/api/messages-streaming>).
+ *
+ * Anthropic separates the system prompt from the conversation, so a `system` message is
+ * lifted out rather than sent as a turn — sending it as a `user` turn is how a system
+ * prompt quietly becomes something the model can argue with.
+ *
+ * Token totals arrive twice: `message_start` carries the input count, and
+ * `message_delta` the output count. Both are cumulative for the turn, so each is emitted
+ * as it lands and the last one the run saw wins.
+ */
+export async function* anthropicChat(
+  ctx: ProviderContext,
+  request: ChatRequest,
+): AsyncIterable<ChatEvent> {
+  if (!ctx.apiKey && ctx.requiresKey !== false) {
+    yield { type: 'failed', reason: 'no_key', detail: null, status: null };
+    return;
+  }
+  const system = request.messages
+    .filter((message) => message.role === 'system')
+    .map((message) => message.text)
+    .filter(Boolean)
+    .join('\n\n');
+  const turns = request.messages
+    .filter((message) => message.role !== 'system')
+    .map((message) => ({ role: message.role, content: content(message) }));
+  const open = await openStream({
+    url: joinUrl(ctx.baseUrl, 'v1/messages'),
+    headers: headers(ctx),
+    body: {
+      model: request.model,
+      messages: turns,
+      max_tokens: request.maxOutputTokens ?? DEFAULT_MAX_TOKENS,
+      stream: true,
+      ...(system ? { system } : {}),
+    },
+    fetchImpl: ctx.fetchImpl,
+    ...(request.signal ? { signal: request.signal } : {}),
+  });
+  if (!open.ok) {
+    yield chatFailure(open);
+    return;
+  }
+  for await (const payload of sseData(open.lines)) {
+    const frame = parseFrame(payload) as AnthropicFrame | null;
+    if (!frame) continue;
+    if (frame.type === 'error') {
+      const detail = typeof frame.error?.message === 'string' ? frame.error.message : null;
+      yield {
+        type: 'failed',
+        reason: 'http_error',
+        detail: detail?.slice(0, 500) ?? null,
+        status: null,
+      };
+      return;
+    }
+    if (frame.type === 'content_block_delta') {
+      if (typeof frame.delta?.text === 'string' && frame.delta.text) {
+        yield { type: 'delta', text: frame.delta.text };
+      }
+      if (typeof frame.delta?.thinking === 'string' && frame.delta.thinking) {
+        yield { type: 'reasoning', text: frame.delta.thinking };
+      }
+      continue;
+    }
+    const usage = frame.type === 'message_start' ? frame.message?.usage : frame.usage;
+    if (usage) {
+      const event: Extract<ChatEvent, { type: 'usage' }> = { type: 'usage' };
+      const input = count(usage.input_tokens);
+      const output = count(usage.output_tokens);
+      const cacheRead = count(
+        (usage as { cache_read_input_tokens?: unknown }).cache_read_input_tokens,
+      );
+      const cacheWrite = count(
+        (usage as { cache_creation_input_tokens?: unknown }).cache_creation_input_tokens,
+      );
+      if (input !== undefined) event.inputTokens = input;
+      if (output !== undefined) event.outputTokens = output;
+      if (cacheRead !== undefined) event.cacheReadTokens = cacheRead;
+      if (cacheWrite !== undefined) event.cacheWriteTokens = cacheWrite;
+      yield event;
+    }
+  }
+  if (request.signal?.aborted) {
+    yield { type: 'failed', reason: 'cancelled', detail: null, status: null };
+    return;
+  }
+  yield { type: 'completed' };
+}
+
 export const anthropicAdapter: ProviderAdapter = {
   protocol: 'anthropic',
+
+  chat(ctx: ProviderContext, request: ChatRequest): AsyncIterable<ChatEvent> {
+    return anthropicChat(ctx, request);
+  },
 
   async test(ctx: ProviderContext): Promise<ProviderTestResult> {
     if (!ctx.apiKey) {

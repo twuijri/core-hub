@@ -42,15 +42,28 @@ export type HealthCheck =
 export interface CatalogEntry {
   /** Stable identifier; also the agent's `slug` in the contract and its directory name. */
   id: string;
+  /** English display name; also the name stored on a fresh registry row. */
   name: string;
+  /**
+   * Arabic display name, for an entry whose name is a word rather than a brand.
+   *
+   * "Hermes" and "Codex" are names and stay as they are in both languages; "Direct" is
+   * an ordinary adjective and an Arabic reader should read «مباشر». Absent means the
+   * name is the same in both, which is true of every third-party agent here.
+   */
+  nameAr?: string;
   vendor: string | null;
   /** SPDX identifier of the agent's own licence, recorded when the owner approved it. */
   licence: string;
-  /** Which adapter drives it (ADR 0002). */
-  adapter: 'hermes' | 'acp' | 'harness';
-  /** Executable to look for, inside the agent's own `bin` directory or on PATH. */
+  /**
+   * Which adapter drives it (ADR 0002). `builtin` is the hub itself: no process, no
+   * gateway, no binary — the entry exists so the hub's own agent is listed, installed
+   * and chosen through exactly the same registry as every other one.
+   */
+  adapter: 'hermes' | 'acp' | 'harness' | 'builtin';
+  /** Executable to look for, inside the agent's own `bin` directory or on PATH. Empty for `builtin`. */
   binary: string;
-  /** Arguments that make the CLI speak its protocol on stdio. */
+  /** Arguments that make the CLI speak its protocol on stdio. Empty for `builtin`. */
   protocolArgs: string[];
   /** Arguments that print a version. */
   versionArgs: string[];
