@@ -46,6 +46,7 @@ import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './insta
 import type { AgentDirectoryPort, AgentInfo, AgentModelsPort, AgentRunnerPort } from './ports.js';
 import { AgentRunner } from './runner.js';
 import { AgentsService, type AgentPatchInput } from './service.js';
+import { ChannelError, clearChannel, listChannels, putChannel, type Channel } from './channels.js';
 import { MemoryError, deleteMemory, listMemory, putMemory, type MemoryDocument } from './memory.js';
 import {
   McpError,
@@ -697,6 +698,93 @@ export const agentsModule = defineModule({
           return memoryFault(error);
         }
         return null;
+      },
+    });
+
+    /**
+     * Channels: the other block of `config.yaml` (`channels.ts`).
+     *
+     * `agents.loginChannel` is **not** here and stays a documented 501: pairing by QR is
+     * a conversation with the running gateway, not an edit to a file.
+     *
+     * `status` is `unknown`, deliberately. The hub writes the file; whether Telegram is
+     * actually answering is something only the gateway knows, and `online` would be a
+     * word nobody checked.
+     */
+    const channelFault = (error: unknown): never => {
+      if (error instanceof ChannelError) {
+        if (error.reason === 'channel_not_found') throw notFound({ resource: 'channel' });
+        throw new HubError('bad_request', { details: { reason: error.reason } });
+      }
+      throw error;
+    };
+
+    const toChannel = (channel: Channel): Record<string, unknown> => ({
+      platform: channel.platform,
+      // The platform's own name. A table of pretty labels would go stale the moment
+      // Hermes adds one, and the slug is what the person put in the file.
+      label: channel.platform,
+      enabled: channel.enabled,
+      configured: channel.configured,
+      exclusive: channel.exclusive,
+      status: 'unknown',
+      error: null,
+      login: null,
+      fields: channel.fields.map((field) => ({
+        key: field.key,
+        label: { ar: field.key, en: field.key },
+        kind: field.kind === 'boolean' ? 'toggle' : field.kind,
+        target: field.kind === 'secret' ? 'credentials' : 'configuration',
+        value: field.value,
+        hint: null,
+      })),
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.listChannels',
+      handler: (request, { params }) => {
+        const home = skillHome(request, params.agent_id as string);
+        try {
+          return { items: listChannels(home).map(toChannel) };
+        } catch (error) {
+          return channelFault(error);
+        }
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.updateChannel',
+      handler: (request, { params, body }) => {
+        const home = skillHome(request, params.agent_id as string);
+        const input = body as {
+          enabled?: boolean;
+          credentials?: Record<string, string>;
+          configuration?: Record<string, unknown>;
+        };
+        try {
+          return toChannel(
+            putChannel(home, params.platform as string, {
+              ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
+              // The contract splits them by where they go; the file does not, so they
+              // are merged back into the one node they came from.
+              values: { ...(input.configuration ?? {}), ...(input.credentials ?? {}) },
+            }),
+          );
+        } catch (error) {
+          return channelFault(error);
+        }
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.clearChannel',
+      handler: (request, { params }) => {
+        const home = skillHome(request, params.agent_id as string);
+        try {
+          return toChannel(clearChannel(home, params.platform as string));
+        } catch (error) {
+          return channelFault(error);
+        }
       },
     });
 

@@ -277,3 +277,90 @@ export function useDeleteMemory(agentId: string | undefined) {
     onSuccess: invalidate,
   });
 }
+
+// -------------------------------------------------------------- channels
+
+export interface ChannelField {
+  key: string;
+  label: { ar: string; en: string };
+  kind: 'text' | 'secret' | 'toggle' | 'list';
+  target: 'credentials' | 'configuration';
+  value: unknown;
+  hint: string | null;
+}
+
+export interface Channel {
+  platform: string;
+  label: string;
+  enabled: boolean;
+  configured: boolean;
+  exclusive: boolean;
+  status: 'online' | 'offline' | 'error' | 'unknown';
+  error: string | null;
+  login: 'qr' | null;
+  fields: ChannelField[];
+}
+
+export const channelKeys = {
+  list: (profile: string, agentId: string) => ['agent-channels', profile, agentId] as const,
+};
+
+export function useChannels(agentId: string | undefined) {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: channelKeys.list(profile, agentId ?? ''),
+    queryFn: async () =>
+      (
+        await client.request('get', '/agents/{agent_id}/channels', {
+          params: { agent_id: agentId ?? '' },
+        })
+      ).data as unknown as { items: Channel[] },
+    enabled: !!session && !!agentId,
+  });
+}
+
+function useChannelInvalidation(agentId: string | undefined) {
+  const queryClient = useQueryClient();
+  const { profile } = useAuth();
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: channelKeys.list(profile, agentId ?? '') });
+  };
+}
+
+export function useUpdateChannel(agentId: string | undefined) {
+  const { client } = useAuth();
+  const invalidate = useChannelInvalidation(agentId);
+  return useMutation({
+    mutationFn: async (input: {
+      platform: string;
+      enabled?: boolean;
+      credentials?: Record<string, string>;
+      configuration?: Record<string, unknown>;
+    }) =>
+      (
+        await client.request('put', '/agents/{agent_id}/channels/{platform}', {
+          params: { agent_id: agentId ?? '', platform: input.platform },
+          body: {
+            ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
+            ...(input.credentials ? { credentials: input.credentials } : {}),
+            ...(input.configuration ? { configuration: input.configuration } : {}),
+          } as never,
+        })
+      ).data,
+    onSuccess: invalidate,
+  });
+}
+
+export function useClearChannel(agentId: string | undefined) {
+  const { client } = useAuth();
+  const invalidate = useChannelInvalidation(agentId);
+  return useMutation({
+    mutationFn: async (platform: string) =>
+      (
+        await client.request('delete', '/agents/{agent_id}/channels/{platform}', {
+          params: { agent_id: agentId ?? '', platform },
+        })
+      ).data,
+    onSuccess: invalidate,
+  });
+}

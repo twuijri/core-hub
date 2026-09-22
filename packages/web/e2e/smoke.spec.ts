@@ -711,6 +711,13 @@ test.describe('web smoke journeys', () => {
     // Still three: writing one does not add a row, and there is no delete to offer.
     await expect(docs.getByRole('listitem')).toHaveCount(3);
     await shot(page, 'agent-memory-ar-light');
+
+    // Channels: the fields come from the agent's own file, not from a form we wrote.
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'مدير الوكلاء' }).click();
+    await page.getByTestId('agent-menu').getByRole('link', { name: 'القنوات' }).first().click();
+    await expect(page).toHaveURL(/\/channels$/);
+    await expect(page.getByText('لا قنوات')).toBeVisible();
+    await shot(page, 'agent-channels-ar-light');
   });
 
   test('11. Schedules: a cron saved, its next time computed, and the button that says why', async ({
