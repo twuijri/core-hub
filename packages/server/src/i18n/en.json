@@ -118,6 +118,9 @@
     },
     "signin": {
       "not_implemented": "No provider here signs in by browser yet; every one of them takes an API key."
+    },
+    "probe": {
+      "failed": "The endpoint did not return a model list."
     }
   }
 }

@@ -22,6 +22,16 @@ export interface ProviderContext {
   baseUrl: string;
   /** Plaintext, resolved from the secret store at the moment of the call. Never logged. */
   apiKey: string | null;
+  /**
+   * Whether this provider *requires* a key. Default `true`, because most do.
+   *
+   * When it is false the adapter asks with no key and reports whatever the endpoint
+   * answers — including its 401 if it does want one after all. An adapter must never
+   * invent "no API key" for a provider the hub did not demand a key from: that is the
+   * contradiction the owner hit on 2026-09-22 (a card badged "No key needed" and, on the
+   * same card, a red "Missing API key").
+   */
+  requiresKey?: boolean;
   headers: Record<string, string>;
   /** STT/TTS settings of the provider row (model, language, voice). */
   settings: { model?: string | null; language?: string | null; voice?: string | null };

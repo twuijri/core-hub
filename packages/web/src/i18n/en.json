@@ -321,8 +321,9 @@
       "tts_providers": "Text to speech"
     },
     "providers": {
-      "hint": "Add a provider key once here. Every agent uses it — you never enter it again.",
-      "empty": "No provider of this kind is available."
+      "hint": "The providers you added. A key is typed once here; every agent uses it.",
+      "empty": "No provider of this kind is configured.",
+      "none": "No providers yet. Add the first one and its models arrive with it."
     },
     "provider": {
       "key": "API key",
@@ -341,7 +342,8 @@
       "add": "Add a provider",
       "label": "Name",
       "base_url": "Base URL",
-      "model_count": "{count} models"
+      "model_count": "{count} models",
+      "key_optional": "Key optional"
     },
     "defaults": {
       "hint": "One chat model and one coding model. Every agent inherits them unless it is pinned to something else.",
@@ -357,6 +359,56 @@
     "test": {
       "ok": "The provider answered.",
       "http_error": "The provider answered with an error."
+    },
+    "refresh_all": "Refresh model cache",
+    "filter": "Show",
+    "filter_all": "All providers",
+    "more_models": "+{count} more",
+    "row": {
+      "provider": "Provider",
+      "models": "Models"
+    },
+    "badge": {
+      "builtin": "Built-in",
+      "custom": "Custom",
+      "default": "Current default",
+      "disabled": "Switched off"
+    },
+    "action": {
+      "set_default": "Set default provider",
+      "display_names": "Display names",
+      "visible_models": "Manage visible models",
+      "edit": "Edit",
+      "clear_credentials": "Clear credentials"
+    },
+    "panel": {
+      "model": "Model",
+      "alias": "Display name",
+      "visible": "Visible",
+      "alias_for": "Display name for {model}",
+      "visible_for": "Show {model} in pickers",
+      "no_models": "No models yet. Refresh the model list first.",
+      "done": "Done"
+    },
+    "add": {
+      "type": "Provider type",
+      "type_preset": "Preset",
+      "type_custom": "Custom",
+      "select_provider": "Select provider",
+      "where_key": "Where to get a key",
+      "key_required": "API key",
+      "key_optional": "API key (optional)",
+      "show_key": "Show",
+      "hide_key": "Hide",
+      "default_model": "Default model",
+      "model_placeholder": "Fetch the list first",
+      "fetch": "Fetch",
+      "fetching": "Asking the provider…",
+      "fetched": "{count} models found.",
+      "fetch_failed": "The provider did not return a model list.",
+      "fetch_empty": "The provider answered, but listed no models.",
+      "submit": "Add",
+      "loopback": "This address is loopback, and the hub runs in a container — it would reach the container itself, not your machine. Try {url}, and on a Linux host add extra_hosts: [\"host.docker.internal:host-gateway\"] to the stack."
     }
   }
 }
