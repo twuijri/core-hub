@@ -402,3 +402,51 @@ so `127.0.0.1` in a base URL is the container, not the person's machine. The
 hub reports the fact; the client warns and suggests `host.docker.internal`.
 Rewriting the URL silently was rejected — a hub that edits what you typed is a
 hub you cannot debug.
+
+## 26. Changing a conversation's agent is a fork; changing its model is a patch
+
+Owner direction, 2026-09-22. Mid-conversation, "talk to a different agent" and
+"run on a different model" look like the same gesture and are not the same act.
+
+A model is a setting of the running conversation: the same agent, the same
+tools, the same memory, a different engine behind the next turn. It stays
+`PATCH /sessions/{id}` (`SessionPatch.model`, `provider`) and the transcript is
+untouched.
+
+An agent is *who* the conversation is with. Its tools, its permissions, its
+notion of a session and its side of the transcript all change. Rewriting
+`Session.agent_id` in place would leave a transcript half of which was produced
+by an agent the row no longer names, and would abandon the first agent's live
+session with no way back. So it forks: `POST /sessions/{id}/fork` gained
+optional `agent_id`, `model` and `provider`. The fork copies the messages, sets
+the agent, starts **no** run, and points `parent_session_id` at the original,
+which is left exactly as it was — the person can go back to it.
+
+The refusals are explicit rather than silent: an unknown `agent_id` is `404
+not_found`, and an agent the hub has not installed is `422 agent_unavailable`
+with the agent id and its status in `details`. A fork with no `agent_id` is the
+fork that existed before this entry, unchanged.
+
+Rejected: a dedicated `POST /sessions/{id}/handoff`. It would be `fork` with one
+more field and a second copy of the copy-the-transcript rule, and §7's shape
+rules do not want a second verb under `/sessions/{id}` for an act the existing
+one already performs.
+
+### The hub names a session, unless a person did
+
+`Session.title` stays `null` until something names it, and "New chat" in a
+sidebar of twenty rows is a list with no information in it. After the first
+assistant reply of a session completes, the hub asks the session's *own* agent
+for a short title in the conversation's language, through a separate one-shot
+call that is not a run: no `Run` row, no job, no `/rt/sessions` run events, and
+a failure costs the caller nothing. The fallback, whenever that call is refused
+or unsupported by the adapter, is the first user message trimmed on a word
+boundary.
+
+No field was added for it. A person's own title is one they sent in
+`SessionPatch.title`, so the hub marks the row when the patch carries a
+non-empty string and never overwrites it afterwards; `title: null` hands the
+naming back and the hub names it again, emitting `session.updated` on
+`/rt/sessions`. Rejected: a `title_source` enum on `Session`. Every client would
+have to render a state nobody displays, and the one question a client actually
+asks — "may I ask for a new title?" — is answered by sending `title: null`.
