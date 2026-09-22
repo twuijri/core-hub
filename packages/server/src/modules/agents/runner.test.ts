@@ -198,6 +198,9 @@ describe('agent runner: a Hermes turn through the composed app', () => {
     });
     expect(accepted.statusCode).toBe(202);
     await harness.waitFor('run.completed');
+    // The first reply is followed by the session naming itself (contract decision §26):
+    // one more `session.updated`, from a question asked in a conversation of its own.
+    await harness.waitFor('session.updated', 3);
 
     expect(harness.events.map((e) => e.event)).toEqual([
       'session.created',
@@ -213,7 +216,14 @@ describe('agent runner: a Hermes turn through the composed app', () => {
       'message.delta',
       'run.completed',
       'session.updated',
+      'session.updated',
     ]);
+    // The title question went to Hermes as a conversation of its own, never appended to
+    // the one it is about.
+    expect(harness.hermes.calls.ask).toHaveLength(1);
+    expect(harness.hermes.calls.ask[0]).toMatchObject({
+      session_id: `majlis-ask-${sessionId.toLowerCase()}`,
+    });
     const completed = harness.events.find((e) => e.event === 'run.completed')!;
     expect(completed.payload.run).toMatchObject({
       status: 'succeeded',
@@ -303,12 +313,15 @@ describe('agent runner: a Hermes turn through the composed app', () => {
     expect(responded.statusCode).toBe(200);
     expect(harness.hermes.calls.approve).toEqual(['run_1:session']);
     await harness.waitFor('run.completed');
-    expect(harness.events.map((e) => e.event).slice(-6)).toEqual([
+    // …and then the session names itself (contract decision §26).
+    await harness.waitFor('session.updated', 4);
+    expect(harness.events.map((e) => e.event).slice(-7)).toEqual([
       'approval.resolved',
       'session.updated',
       'tool.completed',
       'message.delta',
       'run.completed',
+      'session.updated',
       'session.updated',
     ]);
   });

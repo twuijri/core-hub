@@ -14,20 +14,46 @@ import {
 } from './hermes.js';
 import type { AgentEvent } from './types.js';
 
-/** A Hermes that answers `createRun` with a run id and plays `frames` on `events`. */
-export function scriptedHermes(frames: HermesRunEvent[] | (() => HermesRunEvent[])) {
-  const calls: { createRun: unknown[]; approve: string[]; stop: string[] } = {
+/**
+ * A Hermes that answers `createRun` with a run id and plays `frames` on `events`.
+ *
+ * It also answers the hub's **title question** (contract decision §26), which arrives as
+ * an ordinary run in a conversation of its own (`majlis-ask-…`). It is kept apart from
+ * `calls.createRun` and answered from `title` in one frame, so a test's script stays a
+ * script of the conversation it is about and naming never races it.
+ */
+export function scriptedHermes(
+  frames: HermesRunEvent[] | (() => HermesRunEvent[]),
+  options: { title?: string } = {},
+) {
+  const calls: { createRun: unknown[]; ask: unknown[]; approve: string[]; stop: string[] } = {
     createRun: [],
+    ask: [],
     approve: [],
     stop: [],
   };
+  const asks = new Set<string>();
   let gate: (() => void) | null = null;
   const transport: HermesTransport = {
     async createRun(body) {
+      if (body.session_id.startsWith('majlis-ask-')) {
+        calls.ask.push(body);
+        const runId = `ask_${calls.ask.length}`;
+        asks.add(runId);
+        return { run_id: runId };
+      }
       calls.createRun.push(body);
       return { run_id: `run_${calls.createRun.length}` };
     },
-    async *events() {
+    async *events(runId) {
+      if (asks.has(runId)) {
+        yield {
+          event: 'run.completed',
+          completed: true,
+          output: options.title ?? 'عنوان من الوكيل',
+        };
+        return;
+      }
       const script = typeof frames === 'function' ? frames() : frames;
       for (const frame of script) {
         if (frame.event === '__wait__') {

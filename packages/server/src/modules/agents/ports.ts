@@ -189,9 +189,24 @@ export interface RunnerRunInput {
   answer: string | null;
 }
 
+/**
+ * One question outside any run (`modules/sessions/ports.ts` §AgentAskRequest): no run
+ * row, no job, no events, no tools. The hub asks a session's own agent to name it.
+ */
+export interface RunnerAskRequest {
+  workspace: string;
+  agentId: string;
+  sessionId: string;
+  prompt: string;
+  model: string | null;
+  provider: string | null;
+  timeoutMs: number;
+}
+
 export interface AgentRunnerPort {
   start(request: RunnerRunRequest): Promise<RunnerRunAccepted>;
   stream(runId: string): AsyncIterable<RunnerEvent>;
   send(runId: string, input: RunnerRunInput): Promise<void>;
   interrupt(runId: string): Promise<void>;
+  ask(request: RunnerAskRequest): Promise<string | null>;
 }
