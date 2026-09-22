@@ -89,6 +89,15 @@ test.describe('web smoke journeys', () => {
     await expect(assistant).toHaveAttribute('data-status', 'complete');
     await expect(page.getByTestId('reasoning')).toBeVisible();
     await expect(page.getByTestId('session-row')).toHaveCount(1);
+    // The chip row belongs to an empty chat (owner decision, 2026-09-22): now that the
+    // conversation has turns it is gone, and the agent is named in the header instead.
+    await expect(page.getByTestId('agent-chips')).toHaveCount(0);
+    await expect(page.getByTestId('session-agent')).toContainText('Hermes');
+    // And the session named itself from its first exchange (contract decision §26), so
+    // the sidebar row is no longer "محادثة جديدة".
+    await expect(page.getByTestId('session-row').first()).toContainText(
+      'خطة الإطلاق في ثلاث مراحل',
+    );
     // Once the chat has run, the folder is fixed and says so instead of going quiet.
     await expect(page.getByTestId('working-dir-button')).toBeDisabled();
     await expect(page.getByTestId('working-dir-locked')).toBeVisible();
@@ -277,6 +286,73 @@ test.describe('web smoke journeys', () => {
     await expect(page.getByTestId('message-assistant')).not.toContainText(
       'هذا الجزء لا يجب أن يصل بعد الإيقاف',
     );
+  });
+
+  test('8. changing the agent mid-conversation forks the session and carries the transcript', async ({
+    page,
+  }) => {
+    await login(page);
+    await newChat(page);
+    const original = await firstMessage(page, 'مرحبا');
+    await expect(page.getByTestId('message-assistant')).toHaveAttribute('data-status', 'complete');
+    await expect(page.getByTestId('session-agent')).toContainText('Hermes');
+    await shot(page, 'chat-agent-header-ar-light');
+
+    // The header control offers the other installed agents, and says in one line that
+    // choosing one copies the conversation — which is what keeps it apart from the
+    // composer's model selector, where nothing is copied.
+    await page.getByTestId('session-agent').click();
+    const menu = page.getByTestId('session-agent-menu');
+    await expect(menu).toContainText('ينسخ هذه المحادثة');
+    await shot(page, 'chat-agent-menu-ar-light');
+    await menu.getByTestId('continue-with').first().click();
+
+    // The fork is what opens, it is a different session, and the transcript came with it.
+    await expect(page).toHaveURL(/\/chat\/[0-9A-Z]{26}$/);
+    await expect(page.getByTestId('chat-screen')).not.toHaveAttribute('data-session-id', original);
+    await expect(page.getByTestId('message-user')).toContainText('مرحبا');
+    await expect(page.getByTestId('message-assistant')).toContainText('رد');
+    // The fork starts no run: it is a conversation waiting for its next turn.
+    await expect(page.getByTestId('run-status')).toHaveCount(0);
+    await expect(page.getByTestId('session-agent')).not.toContainText('Hermes');
+    await shot(page, 'chat-forked-ar-light');
+
+    // The original is untouched and still there, on its own agent, with its own transcript.
+    await page.goto(`/chat/${original}`);
+    await expect(page.getByTestId('chat-screen')).toHaveAttribute('data-session-id', original);
+    await expect(page.getByTestId('session-agent')).toContainText('Hermes');
+    await expect(page.getByTestId('message-user')).toHaveCount(1);
+  });
+
+  test('9. a session names itself, a person can rename it, and can hand the naming back', async ({
+    page,
+  }) => {
+    await login(page);
+    await newChat(page);
+    await firstMessage(page, 'مرحبا');
+    const row = page.getByTestId('session-row').first();
+    await expect(row).toContainText('خطة الإطلاق في ثلاث مراحل');
+
+    // Rename: our own dialog, never the browser's prompt (UI policy).
+    await row.getByTestId('session-more-button').click();
+    await page.getByRole('menuitem', { name: 'إعادة التسمية' }).click();
+    const field = page.getByTestId('prompt-field');
+    await expect(field).toBeVisible();
+    await field.fill('اسم كتبته بنفسي');
+    await shot(page, 'session-rename-ar-light');
+    await page.getByTestId('prompt-confirm').click();
+    await expect(row).toContainText('اسم كتبته بنفسي');
+
+    // A name a person typed survives the next turn: the hub does not rename over it.
+    await page.getByTestId('composer-input').fill('ومرة أخرى');
+    await page.getByTestId('send').click();
+    await expect(page.getByTestId('message-assistant')).toHaveCount(2);
+    await expect(row).toContainText('اسم كتبته بنفسي');
+
+    // Retitle hands the naming back, and the new name arrives on /rt/sessions.
+    await row.getByTestId('session-more-button').click();
+    await page.getByRole('menuitem', { name: 'أعد التسمية تلقائيًا' }).click();
+    await expect(row).toContainText('خطة الإطلاق في ثلاث مراحل');
   });
 
   test('7. 443 models: the picker searches, and the list never stops being usable', async ({
