@@ -10,6 +10,21 @@ const PASSWORD = 'e2e-owner-password';
 const shots = process.env.MAJLIS_SHOTS ?? path.resolve('e2e/shots');
 mkdirSync(shots, { recursive: true });
 
+const shot = (page: Page, name: string) =>
+  page.screenshot({ path: path.join(shots, `${name}.png`), fullPage: true });
+/** The sidebar on its own: the rail, the segment row and the list, at their real size. */
+const sidebarShot = (page: Page, name: string) =>
+  page
+    .getByRole('navigation', { name: /القائمة الرئيسية|Main menu/ })
+    .screenshot({ path: path.join(shots, `${name}.png`) });
+
+/** Display preferences live on one Settings page; the journey uses it to change the skin. */
+async function setDisplay(page: Page, settings: string, display: string, testId: string) {
+  await page.getByRole('link', { name: settings }).click();
+  await page.getByRole('link', { name: display }).click();
+  await page.getByTestId(testId).click();
+}
+
 async function login(page: Page) {
   await page.goto('/');
   await expect(page).toHaveURL(/\/login$/);
@@ -45,10 +60,12 @@ test.describe('web smoke journeys', () => {
     await page.screenshot({ path: path.join(shots, 'chat-empty-ar-light.png'), fullPage: true });
 
     await newChat(page);
-    // The empty chat offers three starters and a composer in its `empty` state.
+    // The empty chat is centred: the composer is not docked until there is a transcript.
+    await expect(page.getByTestId('new-chat')).toHaveAttribute('data-empty', 'true');
     await expect(page.getByTestId('composer')).toHaveAttribute('data-state', 'empty');
     await expect(page.getByTestId('composer-starters').getByRole('button')).toHaveCount(3);
-    await page.screenshot({ path: path.join(shots, 'new-chat-ar-light.png'), fullPage: true });
+    await shot(page, 'new-chat-ar-light');
+    await sidebarShot(page, 'sidebar-ar-light');
 
     // Name the folder this chat works in; the hub creates it under the workspace root.
     await page.getByTestId('working-dir-button').click();
@@ -74,7 +91,9 @@ test.describe('web smoke journeys', () => {
     // Once the chat has run, the folder is fixed and says so instead of going quiet.
     await expect(page.getByTestId('working-dir-button')).toBeDisabled();
     await expect(page.getByTestId('working-dir-locked')).toBeVisible();
-    await page.screenshot({ path: path.join(shots, 'chat-reply-ar-light.png'), fullPage: true });
+    // The column has handed itself to the transcript: the composer is docked.
+    await expect(page.getByTestId('chat-screen')).toHaveAttribute('data-empty', 'false');
+    await shot(page, 'chat-reply-ar-light');
 
     // The tool card opens its output in the split pane; the divider is a keyboard separator.
     await page.getByTestId('tool-call').locator('summary').click();
@@ -89,9 +108,12 @@ test.describe('web smoke journeys', () => {
 
     // Dark theme and English (LTR) through the settings screen; both persist on the root.
     await page.getByRole('link', { name: 'الإعدادات' }).click();
-    // The sidebar is slim now: the management pages are here, not in the rail.
+    // The sidebar is slim: the management pages are here, not in the rail. The rail is
+    // New chat · Search · Tasks · Schedules, and the segment row is Chat · Rooms only.
     await expect(page.getByTestId('settings-management').getByRole('link')).toHaveCount(4);
-    await expect(page.getByTestId('rail').getByRole('link')).toHaveCount(2);
+    await expect(page.getByTestId('rail').getByRole('link')).toHaveCount(4);
+    await expect(page.getByTestId('segments').getByRole('radio')).toHaveCount(2);
+    await expect(page.getByTestId('segments')).not.toContainText('السجل');
     await page.screenshot({
       path: path.join(shots, 'settings-management-ar-light.png'),
       fullPage: true,
@@ -101,25 +123,100 @@ test.describe('web smoke journeys', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await page.getByTestId('glass-3').click();
     await expect(page.locator('html')).toHaveAttribute('data-glass', '3');
-    await page.screenshot({ path: path.join(shots, 'settings-ar-dark.png'), fullPage: true });
-    await page.getByTestId('language-en').click();
-    await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
-    await expect(page.locator('#settings-section')).toHaveText('Display');
+    await shot(page, 'settings-ar-dark');
+
+    // Arabic, dark: the same two views and the sidebar.
     await page.goBack();
     await page.goBack();
     await expect(page.getByTestId('message-assistant')).toBeVisible();
-    await page.screenshot({ path: path.join(shots, 'chat-reply-en-dark.png'), fullPage: true });
+    await shot(page, 'chat-reply-ar-dark');
+    await sidebarShot(page, 'sidebar-ar-dark');
+    await page.getByRole('link', { name: 'محادثة جديدة' }).first().click();
+    await expect(page.getByTestId('new-chat')).toHaveAttribute('data-empty', 'true');
+    await shot(page, 'new-chat-ar-dark');
 
-    // The composer in English and dark: the tool row, the chips and the model selector.
+    // English, dark (LTR): the segmented tracks have to read correctly in both directions.
+    await setDisplay(page, 'الإعدادات', 'العرض', 'language-en');
+    await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
+    await expect(page.locator('#settings-section')).toHaveText('Display');
     await page.getByRole('link', { name: 'New chat' }).first().click();
     await expect(page.getByTestId('agent-chip').first()).toBeVisible();
-    await page.screenshot({ path: path.join(shots, 'new-chat-en-dark.png'), fullPage: true });
+    await shot(page, 'new-chat-en-dark');
+    await sidebarShot(page, 'sidebar-en-dark');
+    await page.getByTestId('session-row').first().getByRole('link').click();
+    await expect(page.getByTestId('message-assistant')).toBeVisible();
+    await shot(page, 'chat-reply-en-dark');
 
-    await page.getByRole('link', { name: 'Settings' }).click();
-    await page.getByRole('link', { name: 'Display' }).click();
-    await page.getByTestId('theme-light').click();
-    await page.screenshot({ path: path.join(shots, 'settings-en-light.png'), fullPage: true });
+    // The list filter is a link, not a mode: the URL carries it.
+    const scope = page.getByTestId('session-scope');
+    await scope.getByRole('radio', { name: 'Archived' }).click();
+    await expect(page).toHaveURL(/sessions=archived/);
+    await expect(page.getByTestId('session-list')).toContainText('Nothing archived.');
+    await scope.getByRole('radio', { name: 'Active' }).click();
+    await expect(page).not.toHaveURL(/sessions=/);
+    await expect(page.getByTestId('session-row')).toHaveCount(1);
+
+    await setDisplay(page, 'Settings', 'Display', 'theme-light');
+    await shot(page, 'settings-en-light');
     await page.getByTestId('language-ar').click();
+  });
+
+  test('6. the agent row gives up labels before options, then overflows into More', async ({
+    page,
+  }) => {
+    await login(page);
+    await newChat(page);
+    const row = page.getByTestId('agent-chips');
+    // Five agents from the catalog, and a trailing "+" that goes to the Agent Manager.
+    await expect(page.getByTestId('agent-chip')).toHaveCount(5);
+    await expect(page.getByTestId('agent-add')).toBeVisible();
+    await expect(row).toHaveAttribute('data-density', 'comfortable');
+    await shot(page, 'agents-comfortable-ar-light');
+
+    // Narrow enough that the labels no longer fit: only the chosen agent keeps its word,
+    // the rest collapse to their initial, and nothing wraps or scrolls.
+    await page.setViewportSize({ width: 860, height: 720 });
+    await expect(row).toHaveAttribute('data-density', 'compact');
+    const chips = page.getByTestId('agent-chip');
+    await expect(chips.first()).toHaveAttribute('aria-checked', 'true');
+    await expect(chips.first()).toContainText('Hermes');
+    await expect(chips.nth(1)).toHaveClass(/mj-segment-icon-only/);
+    // An icon is not a mystery: the name is still the accessible name.
+    await expect(chips.nth(1)).toHaveAttribute('aria-label', /Claude Code/);
+    // The hairline is drawn between icon-only neighbours and never beside the raised
+    // surface, and it is decorative: a pseudo-element, nothing in the accessibility tree.
+    const dividerOn = (index: number) =>
+      chips.nth(index).evaluate((el) => window.getComputedStyle(el, '::before').content !== 'none');
+    expect(await dividerOn(1)).toBe(false); // right after the selected option
+    expect(await dividerOn(2)).toBe(true);
+    expect(await dividerOn(3)).toBe(true);
+    await shot(page, 'agents-compact-ar-light');
+
+    // A phone: even the icons no longer fit, so the rest move into More and the chosen
+    // agent stays on screen.
+    await page.setViewportSize({ width: 340, height: 720 });
+    const more = page.getByTestId('agent-chips-more');
+    await expect(more).toBeVisible();
+    await expect(page.getByTestId('agent-chip').first()).toHaveAttribute('aria-checked', 'true');
+    await shot(page, 'agents-overflow-ar-light');
+
+    // The menu lists the rest, each with a check on the current one.
+    await more.click();
+    await expect(page.getByRole('menuitemcheckbox').first()).toBeVisible();
+    await shot(page, 'agents-overflow-menu-ar-light');
+    await page.keyboard.press('Escape');
+
+    // Dark and English, back at a width where the sidebar is on screen, then narrowed
+    // again: the compact row has to read in both themes and both directions.
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await setDisplay(page, 'الإعدادات', 'العرض', 'theme-dark');
+    await page.getByTestId('language-en').click();
+    await page.getByRole('link', { name: 'New chat' }).first().click();
+    await expect(page.getByTestId('agent-chips')).toBeVisible();
+    await page.setViewportSize({ width: 860, height: 720 });
+    await expect(page.getByTestId('agent-chips')).toHaveAttribute('data-density', 'compact');
+    await shot(page, 'agents-compact-en-dark');
+    await page.setViewportSize({ width: 1280, height: 720 });
   });
 
   test('2. an approval card answers once / session / always / deny through the hub', async ({
