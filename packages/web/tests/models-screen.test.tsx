@@ -618,7 +618,8 @@ describe('models screen', () => {
       expect(screen.getByRole('button', { name }).tagName).toBe('BUTTON');
     }
     await userEvent.click(screen.getByTestId('provider-edit'));
-    expect(screen.getByRole('checkbox', { name: 'Enabled' })).toBeTruthy();
+    // Enablement takes effect the moment it is flipped, so it is a switch, not a tick box.
+    expect(screen.getByRole('switch', { name: 'Enabled' })).toBeTruthy();
     // The dialog is a dialog, and Escape closes it.
     await userEvent.click(screen.getByTestId('open-add-provider'));
     expect(screen.getByRole('dialog')).toBeTruthy();
