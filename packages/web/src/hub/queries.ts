@@ -3,6 +3,7 @@
 import { HubApiError } from '@majlis/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/context.js';
+import type { ReasoningEffort } from '../types.js';
 import type { Preferences, Session } from '../types.js';
 
 export const keys = {
@@ -206,7 +207,11 @@ export function usePatchSession(sessionId: string) {
   const { client, profile } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (patch: { model?: string | null; working_dir?: string | null }) =>
+    mutationFn: async (patch: {
+      model?: string | null;
+      working_dir?: string | null;
+      reasoning_effort?: ReasoningEffort | null;
+    }) =>
       (
         await client.request('patch', '/sessions/{session_id}', {
           params: { session_id: sessionId },
@@ -233,7 +238,11 @@ export function useForkSession(sessionId: string) {
   const { client, profile } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { agent_id?: string; model?: string | null }) =>
+    mutationFn: async (body: {
+      agent_id?: string;
+      model?: string | null;
+      at_message_id?: string;
+    }) =>
       (
         await client.request('post', '/sessions/{session_id}/fork', {
           params: { session_id: sessionId },

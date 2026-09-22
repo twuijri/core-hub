@@ -15,11 +15,30 @@ import { useI18n } from '../i18n/context.js';
 import type { Message, Run } from '../types.js';
 import { Avatar } from '../ui/Avatar.js';
 import { Badge } from '../ui/Badge.js';
+import { agentMark } from '../ui/brand/marks.js';
+import { MessageActions } from './MessageActions.js';
 import { Markdown } from './Markdown.js';
 import { Reasoning } from './Reasoning.js';
 import { ToolCallCard } from './ToolCallCard.js';
 import { textOf } from './transcript.js';
 import { sideOf, thoughtSeconds, type Turn } from './turns.js';
+
+/**
+ * What the turn cost, in words a person can read — or nothing at all.
+ *
+ * The hub sends micro-USD as a six-decimal string and `null` when the model carries no
+ * price (`modules/models/service.ts` §costOf). Three cases, and none of them is a lie:
+ * no price is no line, a free model says so, and anything else is rounded to where the
+ * digits stop being noise. It is an estimate either way, and the caller says so.
+ */
+export function costLabel(cost: { amount: string; currency: string } | null): string | null {
+  if (!cost) return null;
+  const value = Number(cost.amount);
+  if (!Number.isFinite(value)) return null;
+  if (value === 0) return `0 ${cost.currency}`;
+  const digits = value < 0.01 ? 4 : 2;
+  return `${value.toFixed(digits)} ${cost.currency}`;
+}
 
 function Attachments({ message }: { message: Message }) {
   const { t } = useI18n();
@@ -44,14 +63,28 @@ export function MessageView({
   message,
   grouped = false,
   showReasoning,
+  showCost = false,
   runs = {},
+  markSlug,
+  onReply,
+  onFork,
 }: {
   message: Message;
   /** Continues the turn above it: no name, no avatar, the tighter gap. */
   grouped?: boolean;
   showReasoning: boolean;
+  /** `preferences.show_cost`: the estimate is off by default and says it is an estimate. */
+  showCost?: boolean;
   /** The session's runs, so a finished turn can say how long it thought. */
   runs?: Record<string, Run>;
+  /**
+   * The catalog slug of the agent that wrote this, so the reply can wear its mark.
+   * Resolved by the caller from the registry: `Author` carries an id, not a slug, and a
+   * message must stay a thing that can be drawn without a hub behind it.
+   */
+  markSlug?: string | undefined;
+  onReply?: ((message: Message) => void) | undefined;
+  onFork?: ((message: Message) => void) | undefined;
 }) {
   const { t } = useI18n();
   const side = sideOf(message);
@@ -84,6 +117,7 @@ export function MessageView({
             <p dir="auto">{text}</p>
             <Attachments message={message} />
           </div>
+          <MessageActions message={message} onFork={onFork} />
         </div>
       </article>
     );
@@ -103,7 +137,12 @@ export function MessageView({
       {grouped ? (
         <span className="msg-gutter" aria-hidden />
       ) : (
-        <Avatar name={name} src={message.author.avatar?.url ?? null} size="sm" />
+        <Avatar
+          name={name}
+          src={message.author.avatar?.url ?? null}
+          size="sm"
+          mark={agentMark(markSlug ?? '', 16)}
+        />
       )}
       <div className="msg-stack">
         {!grouped && (
@@ -129,17 +168,18 @@ export function MessageView({
           ))}
           {text ? <Markdown text={text} /> : null}
         </div>
-        {message.usage && (
+        {message.usage && !streaming && (
           <p className="msg-usage" dir="auto">
             {t('chat.usage', {
               input: message.usage.input_tokens,
               output: message.usage.output_tokens,
             })}
-            {message.usage.cost
-              ? ` · ${message.usage.cost.amount} ${message.usage.cost.currency}`
+            {showCost && costLabel(message.usage.cost) !== null
+              ? ` · ${t('chat.estimated', { amount: costLabel(message.usage.cost) as string })}`
               : ''}
           </p>
         )}
+        {!streaming && <MessageActions message={message} onReply={onReply} onFork={onFork} />}
       </div>
     </article>
   );
@@ -149,11 +189,20 @@ export function MessageView({
 export function Transcript({
   turns,
   showReasoning,
+  showCost = false,
   runs,
+  slugOf,
+  onReply,
+  onFork,
 }: {
   turns: readonly Turn[];
   showReasoning: boolean;
+  showCost?: boolean;
   runs: Record<string, Run>;
+  /** The registry's answer for an author id; the transcript itself asks no questions. */
+  slugOf?: ((authorId: string | null) => string | undefined) | undefined;
+  onReply?: ((message: Message) => void) | undefined;
+  onFork?: ((message: Message) => void) | undefined;
 }) {
   return (
     <>
@@ -163,7 +212,11 @@ export function Transcript({
           message={turn.message}
           grouped={turn.grouped}
           showReasoning={showReasoning}
+          showCost={showCost}
           runs={runs}
+          markSlug={slugOf?.(turn.message.author.id ?? null)}
+          onReply={onReply}
+          onFork={onFork}
         />
       ))}
     </>
