@@ -29,7 +29,15 @@ export interface RoutesOptions {
   database: HubDatabase;
   modules: readonly HubModule[];
   contract: OpenApiDocument | null;
+  /** Whether this hub still has no owner (ADR 0011). Injected: `auth` owns the answer. */
+  setupRequired?: () => boolean;
 }
+
+/** The display name. One hub, one name; an owner-set one is a later setting, not a guess. */
+const HUB_NAME = 'Majlis';
+
+/** The two languages this client and this server are written in (`docs/CONTENT-DIRECTION`). */
+const LOCALES = ['ar', 'en'] as const;
 
 export interface RoutesReport {
   modules: string[];
@@ -91,6 +99,32 @@ export async function registerRoutes(
           ok: true,
           server_version: options.version,
           uptime_seconds: Math.floor(process.uptime()),
+        };
+      });
+
+      /**
+       * `meta.get`: who this server is and what it speaks. Unauthenticated, because a
+       * client compares `contract_version` **before** it signs in — that is the whole
+       * point of the call, and putting it behind a token would mean discovering the
+       * mismatch only after a login that was never going to work.
+       *
+       * It lives beside `/health` rather than in a module: every field is the app's own
+       * (the stamped build, the contract it loaded, the namespaces it opened), and a
+       * module that owned it would have to be told all three.
+       */
+      api.get('/meta', async (_request: FastifyRequest, _reply: FastifyReply) => {
+        const info = (options.contract?.info ?? {}) as { version?: string };
+        return {
+          name: HUB_NAME,
+          // A working tree is not a release, so it says 0.0.0 rather than inventing one.
+          server_version: options.version,
+          contract_version: info.version ?? '0.0.0',
+          api_versions: ['v1'],
+          // What this process actually opened, not a list written twice.
+          realtime_namespaces: [...app.hub.namespaces].sort(),
+          locales: [...LOCALES],
+          // The owner account decides; `auth` owns that question and answers it here.
+          setup_required: options.setupRequired?.() ?? false,
         };
       });
 

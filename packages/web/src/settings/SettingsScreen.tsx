@@ -12,9 +12,13 @@ import { IconSettings } from '../ui/icons.js';
 import { NotificationsTab } from '../notify/NotificationsTab.js';
 import { UsersTab } from '../people/UsersTab.js';
 import { WorkspacesTab } from '../people/WorkspacesTab.js';
+import { AboutTab } from './AboutTab.js';
 import { AccountTab } from './AccountTab.js';
 import { AuditReport } from './AuditReport.js';
 import { DisplayTab } from './DisplayTab.js';
+import { KnowledgeTab } from './KnowledgeTab.js';
+import { PluginsTab } from './PluginsTab.js';
+import { UpdatesTab } from './UpdatesTab.js';
 import { ThemeTool } from './ThemeTool.js';
 
 /**
@@ -31,6 +35,10 @@ const SECTIONS: Record<string, () => ReactElement> = {
   users: () => <UsersTab />,
   workspaces: () => <WorkspacesTab />,
   notifications: () => <NotificationsTab />,
+  knowledge: () => <KnowledgeTab />,
+  plugins: () => <PluginsTab />,
+  updates: () => <UpdatesTab />,
+  about: () => <AboutTab />,
   display: () => <DisplayTab />,
   theme: () => <ThemeTool />,
   // The three reports the audit module answers; `skills` is still a 501 and stays a
