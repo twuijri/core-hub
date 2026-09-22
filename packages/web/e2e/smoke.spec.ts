@@ -551,6 +551,8 @@ test.describe('web smoke journeys', () => {
     await page.getByTestId('settings-nav').getByRole('link', { name: 'الإشعارات' }).click();
     await page.getByTestId('mark-all-read').click();
     await expect(page.getByTestId('unread-badge')).toHaveCount(0);
+  });
+
   test('13. People and Workspaces: a person added, and a workspace that archives', async ({
     page,
   }) => {
