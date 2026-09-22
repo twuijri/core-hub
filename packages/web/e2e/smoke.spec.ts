@@ -506,9 +506,14 @@ test.describe('web smoke journeys', () => {
       await page.getByTestId('settings-nav').getByRole('link', { name: 'الإشعارات' }).click();
     };
     await openNotices();
-    const markAll = page.getByTestId('mark-all-read');
-    if (await markAll.isEnabled()) await markAll.click();
-    await expect(page.getByTestId('unread-badge')).toHaveCount(0);
+    // Retried rather than done once: the button is disabled until the count arrives, and
+    // on a slow machine a run from an earlier journey can land a notice after the click.
+    // "Clear it until it is clear" is the only form of this that is not a race.
+    const badge = page.getByTestId('unread-badge');
+    await expect(async () => {
+      if (await badge.count()) await page.getByTestId('mark-all-read').click();
+      await expect(badge).toHaveCount(0, { timeout: 2_000 });
+    }).toPass({ timeout: 20_000 });
 
     await newChat(page);
     await firstMessage(page, 'اكتب سطرًا واحدًا');
