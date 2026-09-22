@@ -46,14 +46,14 @@ chat.**
 ## Clients
 - **Web** (`packages/web`): first-run setup, login, chat with streaming,
   approvals and resume, sessions list, agents, models, the Tasks board,
-  schedules, notifications, settings, pairing. Screens whose module is still
-  501 say so explicitly instead of showing an empty page.
-  Sixteen destinations are still that placeholder, and they are two different
+  schedules, notifications, people, workspaces, settings, pairing. Screens
+  whose module is still 501 say so explicitly instead of showing an empty page.
+  Fourteen destinations are still that placeholder, and they are two different
   things. Nine wait on a **module**: `rooms`, and the seven Hermes-gateway
   pages of `agents` (skills, MCP, memory, jobs, channels, plugins, the global
-  agent). Seven wait only on a **screen**, because the hub already answers
-  them: `knowledge`, `users`, `workspaces`, `webhooks`, `updates`, `plugins`
-  and `about` (`privacy` has no operations of its own).
+  agent). Five wait only on a **screen**, because the hub already answers
+  them: `knowledge`, `webhooks`, `updates`, `plugins` and `about` (`privacy`
+  has no operations of its own).
 - **Terminal** (`packages/cli`): the reference client — `setup`, login, pairing,
   agents, models, sessions, an interactive `chat` with resume and approvals.
 - Desktop, Android and iOS: not started (ADR 0007, ADR 0009).

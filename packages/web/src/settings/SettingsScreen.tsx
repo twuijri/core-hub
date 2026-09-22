@@ -2,6 +2,7 @@
 // sidebar, which becomes that list while you are here (`settings/SettingsNav.tsx`), so the
 // page itself carries one destination and nothing else. Each row is its own URL, so the
 // back button works and a settings page can be linked to.
+import type { ReactElement } from 'react';
 import { useI18n } from '../i18n/context.js';
 import { destinationsById, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
@@ -9,16 +10,42 @@ import { phaseOf } from '../screens/PlaceholderScreen.js';
 import { EmptyState, Notice } from '../ui/index.js';
 import { IconSettings } from '../ui/icons.js';
 import { NotificationsTab } from '../notify/NotificationsTab.js';
+import { UsersTab } from '../people/UsersTab.js';
+import { WorkspacesTab } from '../people/WorkspacesTab.js';
 import { AccountTab } from './AccountTab.js';
 import { AuditReport } from './AuditReport.js';
 import { DisplayTab } from './DisplayTab.js';
 import { ThemeTool } from './ThemeTool.js';
+
+/**
+ * Which section draws which destination.
+ *
+ * A map rather than a chain of `&&`, because a chain has to be edited in three places to
+ * add one page — the branch, the negated list below it, and the import — and three
+ * branches adding three pages conflict three times in the same file. Here a page is one
+ * entry, and a destination with no entry is the placeholder by default rather than by an
+ * `if` somebody has to remember to extend.
+ */
+const SECTIONS: Record<string, () => ReactElement> = {
+  account: () => <AccountTab />,
+  users: () => <UsersTab />,
+  workspaces: () => <WorkspacesTab />,
+  notifications: () => <NotificationsTab />,
+  display: () => <DisplayTab />,
+  theme: () => <ThemeTool />,
+  // The three reports the audit module answers; `skills` is still a 501 and stays a
+  // placeholder, which is what the hub itself says about it.
+  usage: () => <AuditReport kind="usage" />,
+  logs: () => <AuditReport kind="logs" />,
+  performance: () => <AuditReport kind="performance" />,
+};
 
 export function SettingsScreen({ id }: { id: string }) {
   const { t } = useI18n();
   const current = id === 'settings' ? 'account' : id;
   const destination = destinationsById.get(id);
   const title = t(termKey(id));
+  const section = SECTIONS[current];
 
   return (
     <AppShell title={title}>
@@ -28,31 +55,18 @@ export function SettingsScreen({ id }: { id: string }) {
         <h2 id="settings-section" className="mb-3 text-lg font-semibold">
           {t(termKey(current))}
         </h2>
-        {current === 'account' && <AccountTab />}
-        {current === 'notifications' && <NotificationsTab />}
-        {current === 'display' && <DisplayTab />}
-        {current === 'theme' && <ThemeTool />}
-        {/* The three reports the audit module answers; `skills` is still a 501 and stays
-            a placeholder, which is what the hub itself says about it. */}
-        {(current === 'usage' || current === 'logs' || current === 'performance') && (
-          <AuditReport kind={current} />
+        {section ? (
+          section()
+        ) : (
+          <EmptyState
+            icon={<IconSettings size={20} />}
+            title={t(termKey(current))}
+            body={t('placeholder.later', {
+              name: t(termKey(current)),
+              phase: phaseOf(destination?.module),
+            })}
+          />
         )}
-        {current !== 'account' &&
-          current !== 'notifications' &&
-          current !== 'display' &&
-          current !== 'theme' &&
-          current !== 'usage' &&
-          current !== 'logs' &&
-          current !== 'performance' && (
-            <EmptyState
-              icon={<IconSettings size={20} />}
-              title={t(termKey(current))}
-              body={t('placeholder.later', {
-                name: t(termKey(current)),
-                phase: phaseOf(destination?.module),
-              })}
-            />
-          )}
       </section>
     </AppShell>
   );
