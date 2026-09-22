@@ -5,10 +5,12 @@
  * never `radix-ui` (owner decision, 2026-09-22).
  */
 import { Popover as RadixPopover } from 'radix-ui';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
+import { Tooltip } from './Tooltip.js';
 
 export function Popover({
   trigger,
+  tooltip,
   children,
   open,
   onOpenChange,
@@ -16,7 +18,12 @@ export function Popover({
   side = 'bottom',
   testId,
 }: {
-  trigger: ReactNode;
+  /**
+   * The button. One element: Radix clones it, so it must not be wrapped by the caller —
+   * pass `tooltip` instead and the two behaviours compose here, in the right order.
+   */
+  trigger: ReactElement;
+  tooltip?: string | undefined;
   children: ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -29,7 +36,9 @@ export function Popover({
       {...(open === undefined ? {} : { open })}
       {...(onOpenChange ? { onOpenChange } : {})}
     >
-      <RadixPopover.Trigger asChild>{trigger}</RadixPopover.Trigger>
+      <Tooltip label={tooltip}>
+        <RadixPopover.Trigger asChild>{trigger}</RadixPopover.Trigger>
+      </Tooltip>
       <RadixPopover.Portal>
         <RadixPopover.Content
           className="mj-popover glass"
