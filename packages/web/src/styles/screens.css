@@ -242,39 +242,3 @@
   min-inline-size: 10rem;
   font-size: var(--mj-font-size-sm);
 }
-
-/* ------------------------------------------------------------------ settings */
-/* Settings is a list and a page. Wide enough, they stand side by side and the list
-   stays put while the page scrolls; on a phone there is room for one, so the list is
-   the index and an opened page offers the way back instead. */
-.mj-settings {
-  display: grid;
-  gap: var(--mj-space-5);
-  align-items: start;
-  grid-template-columns: minmax(0, 1fr);
-}
-.mj-settings-body {
-  min-inline-size: 0;
-}
-.mj-settings-back {
-  display: none;
-}
-@media (max-width: 59.999rem) {
-  /* One column: the list is the Settings index itself, and every other settings page
-     shows the way back to it instead of carrying the list. */
-  .mj-settings:not([data-index='true']) > .mj-sidebar-panel {
-    display: none;
-  }
-  .mj-settings:not([data-index='true']) .mj-settings-back {
-    display: inline-flex;
-  }
-}
-@media (min-width: 60rem) {
-  .mj-settings {
-    grid-template-columns: var(--mj-layout-settings-nav) minmax(0, 1fr);
-  }
-  .mj-settings > .mj-sidebar-panel {
-    position: sticky;
-    inset-block-start: var(--mj-space-2);
-  }
-}

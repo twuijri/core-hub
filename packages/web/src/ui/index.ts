@@ -55,7 +55,6 @@ export {
   SidebarFooter,
   SidebarFrame,
   SidebarGroup,
-  SidebarPanel,
   SidebarRow,
 } from './SidebarShell.js';
 export { Skeleton, SkeletonGroup, SkeletonText } from './Skeleton.js';
