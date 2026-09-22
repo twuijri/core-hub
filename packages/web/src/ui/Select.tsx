@@ -7,12 +7,16 @@
  * never `radix-ui` (owner decision, 2026-09-22).
  */
 import { Select as RadixSelect } from 'radix-ui';
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { IconCheck, IconChevron } from './icons.js';
+import { Tooltip } from './Tooltip.js';
 
 export interface SelectOption {
   value: string;
   label: string;
+  /** Options that share a group name are listed under it, with a heading. */
+  group?: string;
+  disabled?: boolean;
 }
 
 export function Select({
@@ -48,32 +52,52 @@ export function Select({
   const shown: readonly SelectOption[] =
     value !== null && !known ? [{ value, label: value }, ...options] : options;
   const chosen = shown.find((option) => option.value === value);
+  const triggerNode = (
+    <RadixSelect.Trigger className="mj-select" aria-label={label} data-testid={testId}>
+      {icon}
+      <RadixSelect.Value>
+        <span className="truncate">{chosen?.label ?? placeholder ?? label}</span>
+      </RadixSelect.Value>
+      <RadixSelect.Icon>
+        <IconChevron size={12} />
+      </RadixSelect.Icon>
+    </RadixSelect.Trigger>
+  );
+
   return (
     <RadixSelect.Root
       value={value ?? EMPTY}
       disabled={disabled}
       onValueChange={(next) => onValueChange(next === EMPTY ? null : next)}
     >
-      <RadixSelect.Trigger
-        className="mj-select"
-        aria-label={label}
-        title={title ?? label}
-        data-testid={testId}
-      >
-        {icon}
-        <RadixSelect.Value>
-          <span className="truncate">{chosen?.label ?? placeholder ?? label}</span>
-        </RadixSelect.Value>
-        <RadixSelect.Icon>
-          <IconChevron size={12} />
-        </RadixSelect.Icon>
-      </RadixSelect.Trigger>
+      <Tooltip label={title ?? label}>
+        {/* A disabled trigger receives no pointer events, so when it is disabled the
+            tooltip — which is where the reason lives — hangs off a focusable wrapper. */}
+        {disabled ? (
+          <span tabIndex={0} className="mj-select-wrap" data-testid={`${testId ?? 'select'}-wrap`}>
+            {triggerNode}
+          </span>
+        ) : (
+          triggerNode
+        )}
+      </Tooltip>
       <RadixSelect.Portal>
         <RadixSelect.Content className="mj-select-menu glass" position="popper" sideOffset={6}>
           <RadixSelect.Viewport>
-            {placeholder !== undefined && <Item value={EMPTY} label={placeholder} />}
-            {shown.map((option) => (
-              <Item key={option.value} value={option.value} label={option.label} />
+            {placeholder !== undefined && <Item option={{ value: EMPTY, label: placeholder }} />}
+            {groupsOf(shown).map(([group, items]) => (
+              <Fragment key={group ?? '__ungrouped__'}>
+                {group === null ? (
+                  items.map((option) => <Item key={option.value} option={option} />)
+                ) : (
+                  <RadixSelect.Group>
+                    <RadixSelect.Label className="mj-select-group">{group}</RadixSelect.Label>
+                    {items.map((option) => (
+                      <Item key={option.value} option={option} />
+                    ))}
+                  </RadixSelect.Group>
+                )}
+              </Fragment>
             ))}
           </RadixSelect.Viewport>
         </RadixSelect.Content>
@@ -82,10 +106,28 @@ export function Select({
   );
 }
 
-function Item({ value, label }: { value: string; label: string }) {
+/** Keep the caller's order, but put the options of one group together under its heading. */
+function groupsOf(
+  options: readonly SelectOption[],
+): Array<[string | null, readonly SelectOption[]]> {
+  const out: Array<[string | null, SelectOption[]]> = [];
+  for (const option of options) {
+    const key = option.group ?? null;
+    const last = out[out.length - 1];
+    if (last && last[0] === key) last[1].push(option);
+    else out.push([key, [option]]);
+  }
+  return out;
+}
+
+function Item({ option }: { option: SelectOption }) {
   return (
-    <RadixSelect.Item className="mj-select-item" value={value}>
-      <RadixSelect.ItemText>{label}</RadixSelect.ItemText>
+    <RadixSelect.Item
+      className="mj-select-item"
+      value={option.value}
+      {...(option.disabled === undefined ? {} : { disabled: option.disabled })}
+    >
+      <RadixSelect.ItemText>{option.label}</RadixSelect.ItemText>
       <RadixSelect.ItemIndicator>
         <IconCheck size={14} />
       </RadixSelect.ItemIndicator>
