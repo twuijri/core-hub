@@ -66,6 +66,11 @@ export function MenuItem({
   );
 }
 
+/** The hairline between two groups of items; decorative, skipped by the keyboard. */
+export function MenuSeparator() {
+  return <DropdownMenu.Separator className="mj-menu-sep" />;
+}
+
 /** A line of explanation inside a menu; not an item, so it is skipped by the keyboard. */
 export function MenuNote({ children }: { children: ReactNode }) {
   return <p className="mj-menu-note">{children}</p>;

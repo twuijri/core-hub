@@ -1,19 +1,18 @@
 /**
- * Our "are you sure", over Radix `AlertDialog` — and the reason `window.confirm` is banned
- * from screens (docs/clients/DESIGN.md §UI policy).
+ * "Are you sure", in the imperative shape a list row wants — and the reason
+ * `window.confirm` is banned from screens (docs/clients/DESIGN.md §UI policy).
  *
  * `confirm()` is the browser's own modal: it says the page's hostname, it cannot say what
  * is being deleted in the person's language beside our own type, it freezes the tab, and
- * it looks like a phishing warning. This is a dialog of ours, with the focus trapped, the
- * destructive action styled as destructive, Escape to cancel, and focus returned to
- * whatever opened it.
+ * it looks like a phishing warning.
  *
- * `useConfirm()` keeps the imperative shape the old call sites had — `if (await ask(…))` —
- * so a list row does not have to grow its own dialog state.
+ * The surface is `AlertDialog.tsx` — one alert dialog in the client, not two. This adds
+ * only the promise, so a call site keeps `if (await ask(…))` instead of growing its own
+ * open state.
  */
-import { AlertDialog } from 'radix-ui';
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { useI18n } from '../i18n/context.js';
+import { AlertDialog } from './AlertDialog.js';
 
 export interface ConfirmRequest {
   title: string;
@@ -51,42 +50,20 @@ export function useConfirm(): {
   };
 
   const dialog = pending && (
-    <AlertDialog.Root
+    <AlertDialog
       open
+      // Escape, the overlay, or the browser back button: all of them mean "no".
       onOpenChange={(open) => {
-        // Escape, the overlay, or the browser back button: all of them mean "no".
         if (!open) close(false);
       }}
-    >
-      <AlertDialog.Portal>
-        <AlertDialog.Overlay className="mj-overlay" />
-        <AlertDialog.Content className="mj-dialog" data-testid="confirm-dialog">
-          <AlertDialog.Title className="mj-dialog-title">{pending.title}</AlertDialog.Title>
-          {pending.body !== undefined && (
-            <AlertDialog.Description className="mj-dialog-body">
-              {pending.body}
-            </AlertDialog.Description>
-          )}
-          <div className="mj-dialog-actions">
-            <AlertDialog.Cancel asChild>
-              <button type="button" className="btn" data-testid="confirm-no">
-                {t('common.cancel')}
-              </button>
-            </AlertDialog.Cancel>
-            <AlertDialog.Action asChild>
-              <button
-                type="button"
-                className={pending.tone === 'default' ? 'btn btn-primary' : 'btn btn-danger'}
-                onClick={() => close(true)}
-                data-testid="confirm-yes"
-              >
-                {pending.confirmLabel ?? t('common.delete')}
-              </button>
-            </AlertDialog.Action>
-          </div>
-        </AlertDialog.Content>
-      </AlertDialog.Portal>
-    </AlertDialog.Root>
+      title={pending.title}
+      {...(pending.body === undefined ? {} : { body: pending.body })}
+      confirmLabel={pending.confirmLabel ?? t('common.delete')}
+      cancelLabel={t('common.cancel')}
+      tone={pending.tone ?? 'danger'}
+      onConfirm={() => close(true)}
+      testId="confirm-dialog"
+    />
   );
 
   return { ask, dialog };
