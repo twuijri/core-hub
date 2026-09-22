@@ -14,9 +14,18 @@ import {
 } from 'react';
 import { DEFAULT_GLASS, type GlassLevel } from '@majlis/ui-tokens';
 import { browserLanguage, directionOf, isLanguage, type Language } from '../i18n/index.js';
+import { IconDisplay, IconMoon, IconSun } from '../ui/icons.js';
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
-export const THEME_CHOICES: readonly ThemeChoice[] = ['system', 'light', 'dark'];
+// Light, dark, then "follow the system" — the order every desktop shows them in, and the
+// order their three symbols read in: sun, moon, screen.
+export const THEME_CHOICES: readonly ThemeChoice[] = ['light', 'dark', 'system'];
+
+/** The symbol for a theme choice. One drawing, so the footer and the Display page agree. */
+export function themeIcon(choice: ThemeChoice, size = 14) {
+  const Icon = choice === 'light' ? IconSun : choice === 'dark' ? IconMoon : IconDisplay;
+  return <Icon size={size} />;
+}
 export const GLASS_CHOICES: readonly GlassLevel[] = ['0', '1', '2', '3'];
 export const TEXT_SCALES: readonly number[] = [0.9, 1, 1.1, 1.25];
 

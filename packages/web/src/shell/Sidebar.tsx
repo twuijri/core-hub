@@ -8,7 +8,7 @@
 import type { ReactElement } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth/context.js';
-import { useTheme, THEME_CHOICES } from '../design/theme.js';
+import { useTheme, themeIcon, THEME_CHOICES, type ThemeChoice } from '../design/theme.js';
 import { useI18n } from '../i18n/context.js';
 import { navigation, routeOf, termKey, visibleEntries } from '../navigation/manifest.js';
 import { useRealtime } from '../realtime/context.js';
@@ -80,8 +80,6 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     }
     if (segmentFromPath(location.pathname) !== id) navigate(routeOf(id).split('/:')[0] ?? '/');
   };
-  const nextTheme =
-    THEME_CHOICES[(THEME_CHOICES.indexOf(prefs.theme) + 1) % THEME_CHOICES.length] ?? 'system';
   const connectionTone =
     realtime.state === 'connected'
       ? 'success'
@@ -199,15 +197,22 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           >
             {language === 'ar' ? 'العربية' : 'English'}
           </Button>
-          <Button
-            variant="ghost"
+          {/* Three symbols, no word: sun, moon, screen. The word "System" read as a
+              label for the whole row rather than as one choice among three. */}
+          <Segmented
+            icons
             size="sm"
-            aria-label={t('shell.theme_chip')}
-            data-testid="theme-chip"
-            onClick={() => update({ theme: nextTheme })}
-          >
-            {t(`display.theme.${prefs.theme}`)}
-          </Button>
+            label={t('shell.theme_chip')}
+            testId="theme-chip"
+            value={prefs.theme}
+            onChange={(choice) => update({ theme: choice as ThemeChoice })}
+            options={THEME_CHOICES.map((choice) => ({
+              value: choice,
+              label: t(`display.theme.${choice}`),
+              icon: themeIcon(choice),
+              itemProps: { 'data-testid': `theme-chip-${choice}` },
+            }))}
+          />
           <span className="ms-auto text-faint">v{__APP_VERSION__}</span>
         </div>
       </SidebarFooter>
