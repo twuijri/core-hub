@@ -24,6 +24,7 @@ import {
 import {
   EMPTY_ARRAY,
   EMPTY_OBJECT,
+  bool,
   inList,
   json,
   scopedColumns,
@@ -31,17 +32,32 @@ import {
   ulid,
 } from '../../db/columns.js';
 
-export const PROJECT_STATUSES = ['active', 'paused', 'completed'] as const;
+export const PROJECT_STATUSES = ['active', 'paused', 'archived'] as const;
+/**
+ * The nine columns of the Tasks section, in workflow order (contract `TaskStatus`).
+ * `triage` is intake and `running` belongs to the worker: a person moves a task *to*
+ * `ready`, and the hub moves it to `running` when a run starts.
+ */
 export const TASK_STATUSES = [
-  'backlog',
+  'triage',
   'todo',
-  'in_progress',
+  'ready',
+  'scheduled',
+  'running',
   'blocked',
   'review',
   'done',
-  'cancelled',
+  'archived',
 ] as const;
-export const TASK_TERMINAL_STATUSES = ['done', 'cancelled'] as const;
+export const TASK_TERMINAL_STATUSES = ['done', 'archived'] as const;
+export const SUBTASK_STATUSES = [
+  'todo',
+  'in_progress',
+  'review',
+  'done',
+  'blocked',
+  'skipped',
+] as const;
 export const TASK_PRIORITIES = ['urgent', 'high', 'normal', 'low'] as const;
 export const ASSIGNEE_KINDS = ['none', 'user', 'agent'] as const;
 export const TRANSITION_FIELDS = ['status', 'assignee', 'priority', 'project'] as const;
@@ -88,6 +104,10 @@ export const projects = sqliteTable(
     localPath: text('local_path'),
     defaultBranch: text('default_branch', { length: 120 }).notNull().default('main'),
     defaultAgentId: ulid('default_agent_id'),
+    /** Room where assigned agents post progress (rooms module). */
+    reportRoomId: ulid('report_room_id'),
+    /** Assign `ready` tasks automatically — the `/task-dispatches` switch. */
+    autoDispatch: bool('auto_dispatch').notNull().default(false),
     status: text('status', { enum: PROJECT_STATUSES }).notNull().default('active'),
     settings: json<ProjectSettings>('settings').notNull().default(EMPTY_OBJECT),
     /** Last task number handed out; incremented in the same transaction as the insert. */
@@ -112,7 +132,7 @@ export const tasks = sqliteTable(
     title: text('title', { length: 300 }).notNull(),
     /** Markdown brief the agent receives verbatim. */
     description: text('description'),
-    status: text('status', { enum: TASK_STATUSES }).notNull().default('backlog'),
+    status: text('status', { enum: TASK_STATUSES }).notNull().default('triage'),
     priority: text('priority', { enum: TASK_PRIORITIES }).notNull().default('normal'),
     assigneeKind: text('assignee_kind', { enum: ASSIGNEE_KINDS }).notNull().default('none'),
     assigneeUserId: ulid('assignee_user_id'),
@@ -120,9 +140,23 @@ export const tasks = sqliteTable(
     parentId: ulid('parent_id').references((): AnySQLiteColumn => tasks.id, {
       onDelete: 'set null',
     }),
-    /** Fractional-ordering key for the column; the client never sends positions. */
-    sortKey: text('sort_key', { length: 64 }).notNull().default('n'),
-    labels: json<string[]>('labels').notNull().default(EMPTY_ARRAY),
+    /**
+     * Fractional-ordering key for the column; the client never computes one.
+     *
+     * The column is still `sort_key` and the tag column is still `labels`: the contract
+     * settled on `position` and `tags` after these tables were written, and renaming a
+     * column in SQLite is a table rebuild for a pair of names nobody sees. The property
+     * reads as the contract does; the column keeps the name the migration gave it.
+     */
+    position: text('sort_key', { length: 64 }).notNull().default('n'),
+    tags: json<string[]>('labels').notNull().default(EMPTY_ARRAY),
+    /** Start a run as soon as the task is `ready` and assigned. */
+    autoStart: bool('auto_start').notNull().default(false),
+    /** Why the task is where it is, for any status; `blockedReason` is the `blocked` one. */
+    statusReason: text('status_reason'),
+    /** The assignee's last progress summary. */
+    latestSummary: text('latest_summary'),
+    attachmentIds: json<string[]>('attachment_ids').notNull().default(EMPTY_ARRAY),
     dueAt: timestampMs('due_at'),
     startedAt: timestampMs('started_at'),
     completedAt: timestampMs('completed_at'),
@@ -138,13 +172,57 @@ export const tasks = sqliteTable(
   },
   (t) => [
     uniqueIndex('tasks_project_number_uq').on(t.projectId, t.number),
-    index('tasks_workspace_status_idx').on(t.workspace, t.archivedAt, t.status, t.sortKey),
+    index('tasks_workspace_status_idx').on(t.workspace, t.archivedAt, t.status, t.position),
     index('tasks_project_status_idx').on(t.projectId, t.status),
     index('tasks_assignee_agent_idx').on(t.assigneeAgentId, t.status),
     index('tasks_parent_idx').on(t.parentId),
     check('tasks_status_check', inList(t.status, TASK_STATUSES)),
     check('tasks_priority_check', inList(t.priority, TASK_PRIORITIES)),
     check('tasks_assignee_kind_check', inList(t.assigneeKind, ASSIGNEE_KINDS)),
+  ],
+);
+
+/**
+ * A checklist inside a task. Separate from `tasks` on purpose: a subtask is a line in a
+ * list, not a task of its own — it has no assignee, no worktree and no run.
+ */
+export const subtasks = sqliteTable(
+  'subtasks',
+  {
+    ...scopedColumns(),
+    taskId: ulid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    /** Position in the checklist, from 0; the hub renumbers, the client never sends gaps. */
+    index: integer('index').notNull().default(0),
+    title: text('title', { length: 300 }).notNull(),
+    status: text('status', { enum: SUBTASK_STATUSES }).notNull().default('todo'),
+    note: text('note'),
+    blockedReason: text('blocked_reason'),
+    completedAt: timestampMs('completed_at'),
+  },
+  (t) => [
+    index('subtasks_task_idx').on(t.taskId, t.index),
+    check('subtasks_status_check', inList(t.status, SUBTASK_STATUSES)),
+  ],
+);
+
+/** What people (and agents) said on a task. */
+export const taskComments = sqliteTable(
+  'task_comments',
+  {
+    ...scopedColumns(),
+    taskId: ulid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    authorKind: text('author_kind', { enum: TRANSITION_ACTORS }).notNull().default('user'),
+    authorId: ulid('author_id'),
+    authorName: text('author_name', { length: 120 }),
+    body: text('body').notNull(),
+  },
+  (t) => [
+    index('task_comments_task_idx').on(t.taskId, t.createdAt),
+    check('task_comments_author_kind_check', inList(t.authorKind, TRANSITION_ACTORS)),
   ],
 );
 
