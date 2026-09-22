@@ -210,3 +210,78 @@ describe('audit: /rt/jobs', () => {
     }
   });
 });
+
+describe('audit: the report route', () => {
+  it('answers the usage report for the workspace the header names', async () => {
+    const hub = await signedInHub();
+    try {
+      const response = await authed(hub, hub.token, {
+        method: 'GET',
+        url: '/api/v1/audit/reports/usage?days=7',
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        kind: string;
+        period: { from: string; to: string };
+        data: Record<string, unknown>;
+      };
+      expect(body.kind).toBe('usage');
+      expect(body.period.from < body.period.to).toBe(true);
+      // A hub that has run nothing reports zeros, not an absence.
+      expect(body.data.totals).toMatchObject({ input_tokens: 0, runs: 0 });
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('falls back to the caller’s own workspace when no header names one', async () => {
+    // `X-Hub-Profile` is optional on this operation, and the hub resolves the caller's
+    // default workspace when it is absent — so a usage report is still one workspace's
+    // own, never every workspace added together.
+    const hub = await signedInHub();
+    try {
+      const response = await hub.app.inject({
+        method: 'GET',
+        url: '/api/v1/audit/reports/usage',
+        headers: { authorization: `Bearer ${hub.token}` },
+      });
+      expect(response.statusCode).toBe(200);
+      expect((response.json() as { kind: string }).kind).toBe('usage');
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('gives the hub-wide reports without a workspace at all', async () => {
+    const hub = await signedInHub();
+    try {
+      for (const kind of ['logs', 'performance']) {
+        const response = await hub.app.inject({
+          method: 'GET',
+          url: `/api/v1/audit/reports/${kind}`,
+          headers: { authorization: `Bearer ${hub.token}` },
+        });
+        expect(response.statusCode, kind).toBe(200);
+      }
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('still says 501 for the one report nothing feeds, and names the operation', async () => {
+    const hub = await signedInHub();
+    try {
+      const response = await authed(hub, hub.token, {
+        method: 'GET',
+        url: '/api/v1/audit/reports/skills',
+      });
+      expect(response.statusCode).toBe(501);
+      expect(response.json()).toMatchObject({
+        code: 'not_implemented',
+        details: { operationId: 'audit.getReport', kind: 'skills' },
+      });
+    } finally {
+      await hub.close();
+    }
+  });
+});

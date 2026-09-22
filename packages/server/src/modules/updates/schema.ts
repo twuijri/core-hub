@@ -47,6 +47,13 @@ export const releases = sqliteTable(
     notesAr: text('notes_ar'),
     notesEn: text('notes_en'),
     artifactUrl: text('artifact_url'),
+    /**
+     * The uploaded artefact, when the release was published from one. Releases are global
+     * and attachments are a workspace's, so the workspace travels with the id — otherwise
+     * the download route would have to guess which workspace owns the bytes.
+     */
+    artifactAttachmentId: ulid('artifact_attachment_id'),
+    artifactWorkspace: ulid('artifact_workspace'),
     artifactSha256: text('artifact_sha256', { length: 64 }),
     artifactSizeBytes: integer('artifact_size_bytes'),
     /** Oldest server this client build can talk to. */
@@ -61,6 +68,24 @@ export const releases = sqliteTable(
     check('releases_platform_check', inList(t.platform, RELEASE_PLATFORMS)),
   ],
 );
+
+/**
+ * The hub's own update settings: one row, because a hub has one answer to "where do
+ * client builds come from".
+ *
+ * The source token is kept here and **never sent back**: `updates.getSettings` answers
+ * `'[stored]'` when one is set and `null` when none is, exactly as the contract models it.
+ */
+export const updateSettings = sqliteTable('update_settings', {
+  ...globalColumns(),
+  /** `stable` or `test`; what a client that names no channel gets. */
+  defaultChannel: text('default_channel', { length: 32 }).notNull().default('stable'),
+  sourceKind: text('source_kind', { length: 32 }).notNull().default('manual'),
+  sourceRepo: text('source_repo'),
+  /** Write-only: read back as `[stored]`. */
+  sourceToken: text('source_token'),
+  autoPublish: bool('auto_publish').notNull().default(false),
+});
 
 export const channelSubscriptions = sqliteTable(
   'channel_subscriptions',

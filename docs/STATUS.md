@@ -4,29 +4,35 @@ Measured on this branch by asking a booted hub which contract operations are
 still the built-in 501 stub. Regenerate it the same way after a phase:
 every operation that answers `501 not_implemented` is not built yet.
 
-**97 of 247 contract operations are implemented.** Nothing fakes a success:
-an unbuilt operation answers `501` with its operation id. (Measured on this
-branch, 2026-09-22; the jump from the 64 recorded before is the `models` module
-landing in `main`, the two first-run operations, and the eight attachment
-operations added here.)
+**111 of 251 contract operations are implemented.** Nothing fakes a success:
+an unbuilt operation answers `501` with its operation id. Measured on this
+branch, 2026-09-22, by asking a booted hub which operations are still the
+built-in stub — and `packages/server/tests/unit/status.test.ts` keeps this
+number from claiming more than the hub answers.
 
 | module | implemented | total | what that means |
 |---|---|---|---|
 | auth | 34 | 34 | first-run setup, sign-in, refresh, users, workspaces, app tokens, QR pairing, profiles |
-| sessions | 25 | 29 | sessions, messages, streamed runs, approvals, resume, and the eight attachment operations (implemented by `knowledge`, which owns the bytes); only session categories are not built |
-| agents | 11 | 40 | registry, curated catalog (Hermes, the hub's own `direct` agent, four coding CLIs), install/remove/upgrade, discovery, restart; the Hermes-gateway screens (skills, MCP, memory, channels, plugins, presets) are not built |
+| sessions | 26 | 30 | sessions, messages, streamed runs, approvals, resume, fork, and the eight attachment operations (implemented by `knowledge`, which owns the bytes); only session categories are not built |
+| models | 26 | 26 | providers, keys, catalogue, defaults, verification on save, speech (ADR 0010) |
+| agents | 11 | 40 | registry, curated catalog (Hermes, the hub's own `direct` agent, four coding CLIs), install/remove/upgrade, discovery, restart, per-agent settings; the Hermes-gateway screens (skills, MCP, memory, channels, plugins, presets) are not built |
+| updates | 7 | 7 | release channels, publishing from an upload or a source URL the hub fetches itself, check, download with `Range`, settings whose token never comes back |
 | jobs | 3 | 3 | list, get, cancel, with `/rt/jobs` events |
 | meta | 1 | 2 | health |
-| models | 23 | 23 | providers, keys, catalogue, defaults, speech (ADR 0010) |
-| tasks | 0 | 27 | the Tasks section |
+| knowledge | 1 | 1 | `knowledge.listItems` — journal, notes and files in one page; the attachment operations it also implements are counted under `sessions`, whose tag declares them |
+| audit | 1 | 1 | the Logs, Usage and Performance reports; `skills` still answers `501`, because nothing records skill use and zeros would read as a measurement |
+| plugins | 1 | 1 | what is installed on this hub — an empty list until an installer exists |
 | rooms | 0 | 28 | several agents in one room |
+| tasks | 0 | 27 | the Tasks section |
 | schedules | 0 | 23 | scheduled and recurring work |
 | devices | 0 | 17 | device registry and push |
 | notify | 0 | 11 | notifications and webhooks |
-| updates | 0 | 7 | in-app updates |
-| knowledge | 0 | 1 | `knowledge.listItems` (journal + notes + files in one page); the attachment operations it implements are counted under `sessions`, whose tag declares them |
-| audit | 0 | 1 | the usage report screen |
-| plugins | 0 | 1 | plugin bindings |
+
+**Phase 4 of the roadmap is complete**: `knowledge`, `plugins`, the `updates`
+channel and the `audit` dashboards all answer. What is left before the phones
+and the desktop (Phase 3, which the owner put last on 2026-09-22) is Phase 1 —
+`rooms`, `tasks`, `schedules`, `notify` — and the Hermes-gateway half of
+`agents`.
 
 ## Clients
 - **Web** (`packages/web`): first-run setup, login, chat with streaming,

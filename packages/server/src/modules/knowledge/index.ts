@@ -16,9 +16,11 @@
  *   sessions.abortUpload         DELETE /attachment-uploads/{id}
  *   sessions.completeUpload      POST   /attachment-uploads/{id}/complete
  *
- * Still a documented `501`: `knowledge.listItems` (journal, notes and files in one
- * page) — the journal and notes tables have no service yet, and answering with files
- * alone would be a page that lies about what it lists.
+ * Also implemented (Phase 4): `knowledge.listItems` — the journal, the notes and the
+ * files of one workspace merged into a single page, newest first (`items.ts`). Nothing
+ * writes journal entries or notes yet, so today the page is the files; the shape and the
+ * paging are the real ones, and the other two kinds appear the moment something writes
+ * them, with no change here.
  *
  * What the rest of the hub gets is `attachmentsPortFor(app)`: resolve ids, put a
  * person's files where an agent can read them, and take back what the agent wrote.
@@ -29,6 +31,7 @@ import type { Server as SocketServer } from 'socket.io';
 import multipart from '@fastify/multipart';
 import { loadOpenApiDocument } from '@majlis/contracts';
 import { createContractIndex } from '../../lib/contract.js';
+import { clampLimit, decodeCursor, encodeCursor } from '../../lib/pagination.js';
 import { requireSqlite } from '../../lib/db.js';
 import { HubError } from '../../lib/errors.js';
 import { defineModule } from '../../lib/module.js';
@@ -36,10 +39,13 @@ import { defineRoute } from '../../lib/route.js';
 import { requireRole, requireUser, requireWorkspace } from '../auth/index.js';
 import { MAX_UPLOAD_BYTES } from './limits.js';
 import { sanitiseFilename } from './media.js';
+import { KnowledgeItems, type ItemKind } from './items.js';
 import { KnowledgeService, type AttachmentScope } from './service.js';
 import { attachmentUrl, toAttachment } from './serialize.js';
 import type { AttachmentRow } from './store.js';
 
+export { KnowledgeItems } from './items.js';
+export type { ItemKind, ItemQuery, KnowledgeItem } from './items.js';
 export { KnowledgeService } from './service.js';
 export type { AttachmentScope, DownloadHandle } from './service.js';
 export { attachmentUrl, toAttachment } from './serialize.js';
@@ -200,6 +206,29 @@ export const knowledgeModule = defineModule({
     const knowledge = () => knowledgeServiceFor(app);
     app.addHook('onClose', async () => {
       knowledge().closeUploads();
+    });
+
+    // ------------------------------------------------------- what is stored
+
+    defineRoute(app, deps, {
+      operationId: 'knowledge.listItems',
+      handler: (request, { query }) => {
+        const scope = scopeOf(request);
+        const items = new KnowledgeItems(requireSqlite(request.server.hub.database));
+        const limit = clampLimit(query.limit as number | undefined);
+        const page = items.list({
+          workspace: scope.workspace,
+          profile: scope.profile,
+          kind: query.kind as ItemKind | undefined,
+          q: query.q as string | undefined,
+          cursor: decodeCursor(query.cursor as string | undefined),
+          limit,
+        });
+        return {
+          items: page.items,
+          next_cursor: page.lastId ? encodeCursor(page.lastId) : null,
+        };
+      },
     });
 
     // ------------------------------------------------------------ one shot
