@@ -11,9 +11,9 @@ import { useRealtime } from '../realtime/context.js';
 import { isEnvelope } from '../realtime/envelope.js';
 import { AppShell } from '../shell/AppShell.js';
 import { SettingsBack } from '../settings/SettingsBack.js';
-import { Segmented } from '../ui/Segmented.js';
 import type { Pairing } from '../types.js';
-import { Notice } from '../ui/Notice.js';
+import { Button, Card, EmptyState, Notice, TabPanel, Tabs } from '../ui/index.js';
+import { IconDevices } from '../ui/icons.js';
 import { phaseOf } from './PlaceholderScreen.js';
 
 export function qrSvgPath(text: string): { path: string; size: number } {
@@ -105,65 +105,75 @@ export function DeviceConnectionsScreen() {
     <AppShell title={title}>
       <SettingsBack />
       <h1 className="sr-only">{title}</h1>
-      <Segmented
-        className="mb-4"
+      {/* Two sections of one page, switched in place: that is a tab set, and it carries
+          the tab semantics (`role="tablist"`, arrow keys, `aria-controls`) a segmented
+          control must not claim. */}
+      <Tabs
         label={title}
         value={tab}
-        onChange={(next) => setTab(next as 'app' | 'devices')}
-        options={[
+        onValueChange={(next) => setTab(next as 'app' | 'devices')}
+        testId="devices-tabs"
+        items={[
           { value: 'app', label: t('devices.tab.app') },
           ...(isAdmin ? [{ value: 'devices', label: t('devices.tab.devices') }] : []),
         ]}
-      />
-      {tab === 'app' ? (
-        <section className="flex flex-col items-start gap-3">
-          <p className="text-sm text-muted">{t('devices.pair_intro')}</p>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => void start()}
-            data-testid="start-pairing"
-          >
-            {pairing ? t('devices.pair_again') : t('devices.pair')}
-          </button>
-          {error !== null && <Notice tone="danger">{describeError(error, t)}</Notice>}
-          {pairing && (
-            <div
-              className="card flex flex-col items-center gap-3 self-stretch sm:self-start"
-              data-testid="pairing"
-              data-status={pairing.status}
-            >
-              {pairing.status === 'pending' && secondsLeft > 0 ? (
-                <>
-                  <QrCode text={pairing.qr_payload} />
-                  <p
-                    className="font-mono text-2xl tracking-widest"
-                    dir="ltr"
-                    data-testid="pairing-code"
-                  >
-                    {pairing.code}
-                  </p>
-                  <p className="text-xs text-muted">
-                    {t('devices.expires_in', { seconds: secondsLeft })}
-                  </p>
-                </>
-              ) : pairing.status === 'claimed' ? (
-                <Notice tone="success">
-                  {t('devices.claimed', { name: claimedName ?? pairing.device_id ?? '' })}
-                </Notice>
-              ) : (
-                <Notice tone="warning">
-                  {t(`devices.pairing_${pairing.status === 'cancelled' ? 'cancelled' : 'expired'}`)}
-                </Notice>
-              )}
-            </div>
-          )}
-        </section>
-      ) : (
-        <Notice>
-          {t('placeholder.later', { name: t('devices.tab.devices'), phase: phaseOf('devices') })}
-        </Notice>
-      )}
+      >
+        <TabPanel value="app">
+          <section className="flex flex-col items-start gap-3">
+            <p className="text-sm text-muted">{t('devices.pair_intro')}</p>
+            <Button variant="primary" onClick={() => void start()} data-testid="start-pairing">
+              {pairing ? t('devices.pair_again') : t('devices.pair')}
+            </Button>
+            {error !== null && <Notice tone="danger">{describeError(error, t)}</Notice>}
+            {pairing && (
+              <Card
+                tone="raised"
+                className="items-center self-stretch sm:self-start"
+                testId="pairing"
+                data-status={pairing.status}
+              >
+                {pairing.status === 'pending' && secondsLeft > 0 ? (
+                  <>
+                    <QrCode text={pairing.qr_payload} />
+                    <p
+                      className="font-mono text-2xl tracking-widest"
+                      dir="ltr"
+                      data-testid="pairing-code"
+                    >
+                      {pairing.code}
+                    </p>
+                    <p className="text-xs text-muted">
+                      {t('devices.expires_in', { seconds: secondsLeft })}
+                    </p>
+                  </>
+                ) : pairing.status === 'claimed' ? (
+                  <Notice tone="success">
+                    {t('devices.claimed', { name: claimedName ?? pairing.device_id ?? '' })}
+                  </Notice>
+                ) : (
+                  <Notice tone="warning">
+                    {t(
+                      `devices.pairing_${pairing.status === 'cancelled' ? 'cancelled' : 'expired'}`,
+                    )}
+                  </Notice>
+                )}
+              </Card>
+            )}
+          </section>
+        </TabPanel>
+        {isAdmin && (
+          <TabPanel value="devices">
+            <EmptyState
+              icon={<IconDevices size={20} />}
+              title={t('devices.tab.devices')}
+              body={t('placeholder.later', {
+                name: t('devices.tab.devices'),
+                phase: phaseOf('devices'),
+              })}
+            />
+          </TabPanel>
+        )}
+      </Tabs>
     </AppShell>
   );
 }

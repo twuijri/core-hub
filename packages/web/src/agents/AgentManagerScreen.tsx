@@ -1,3 +1,9 @@
+// The Agent Manager: one card per agent in the catalog, with its health, its capabilities
+// and the one action it can take right now.
+//
+// Assembled from the kit (`src/ui/`): the card, its header with the avatar, the status
+// badge, the capability badges, the buttons and the empty state all come from there, so
+// this screen decides *what* is on it and nothing about how a card is painted.
 import type { Translator } from '../i18n/index.js';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -10,7 +16,21 @@ import { agentMenu, routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import { SettingsBack } from '../settings/SettingsBack.js';
 import type { Agent, Job } from '../types.js';
-import { Notice, Spinner } from '../ui/Notice.js';
+import {
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  CardFooter,
+  CardHeader,
+  EmptyState,
+  Notice,
+  Separator,
+  Skeleton,
+  SkeletonGroup,
+  type BadgeTone,
+} from '../ui/index.js';
+import { IconAgents } from '../ui/icons.js';
 import { useJobs } from './useJobs.js';
 
 /** A capability's label, falling back to the raw name the catalog declared. */
@@ -20,14 +40,14 @@ function capabilityLabel(t: Translator, capability: string): string {
   return label === key ? capability : label;
 }
 
-const STATUS_TONE: Record<Agent['status'], string> = {
-  available: 'bg-success-soft text-success-soft-text',
-  not_installed: '',
-  installing: 'bg-info-soft text-info-soft-text',
-  updating: 'bg-info-soft text-info-soft-text',
-  error: 'bg-danger-soft text-danger-soft-text',
-  limited: 'bg-warning-soft text-warning-soft-text',
-  disabled: '',
+const STATUS_TONE: Record<Agent['status'], BadgeTone> = {
+  available: 'success',
+  not_installed: 'neutral',
+  installing: 'info',
+  updating: 'info',
+  error: 'danger',
+  limited: 'warning',
+  disabled: 'neutral',
 };
 
 export function AgentManagerScreen() {
@@ -39,9 +59,19 @@ export function AgentManagerScreen() {
     <AppShell title={title} wide>
       <SettingsBack />
       <h1 className="sr-only">{title}</h1>
-      {agents.isPending && <Spinner label={t('common.loading')} />}
+      {agents.isPending && (
+        <SkeletonGroup label={t('common.loading')}>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} height="11rem" radius="md" />
+            ))}
+          </div>
+        </SkeletonGroup>
+      )}
       {agents.isError && <Notice tone="danger">{describeError(agents.error, t)}</Notice>}
-      {agents.data && agents.data.length === 0 && <Notice>{t('agents.empty')}</Notice>}
+      {agents.data && agents.data.length === 0 && (
+        <EmptyState icon={<IconAgents size={20} />} title={t('agents.empty')} />
+      )}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {agents.data?.map((agent) => (
           <AgentCard key={agent.id} agent={agent} jobs={jobs} />
@@ -81,46 +111,38 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
   const menu = agentMenu(agent.capabilities, user?.role ?? 'member');
 
   return (
-    <article
-      className="card flex flex-col gap-2"
-      data-testid="agent-card"
+    <Card
+      as="article"
+      tone="raised"
+      testId="agent-card"
+      className="agent-card"
       data-agent-slug={agent.slug}
     >
-      <header className="flex items-center gap-2">
-        <span
-          className="inline-grid size-9 place-items-center rounded-md bg-accent-soft text-accent-soft-text"
-          aria-hidden
-        >
-          {agent.name.slice(0, 1)}
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate font-semibold" dir="auto">
-            {agent.name}
-          </h2>
-          <p className="truncate text-xs text-muted">
-            {agent.vendor ?? '—'} · {agent.kind}
-            {agent.install.version ? ` · ${agent.install.version}` : ''}
-          </p>
-        </div>
-        <span className={`chip ${STATUS_TONE[agent.status]}`}>
-          {t(`agents.status.${agent.status}`)}
-        </span>
-      </header>
+      <CardHeader
+        title={agent.name}
+        subtitle={`${agent.vendor ?? '—'} · ${agent.kind}${agent.install.version ? ` · ${agent.install.version}` : ''}`}
+        media={<Avatar name={agent.name} size="md" />}
+        actions={
+          <Badge tone={STATUS_TONE[agent.status] ?? 'neutral'} dot={running}>
+            {t(`agents.status.${agent.status}`)}
+          </Badge>
+        }
+      />
       {agent.limited && <Notice tone="warning">{t('agents.limited')}</Notice>}
       {agent.runtime.error && <Notice tone="danger">{agent.runtime.error}</Notice>}
       {agent.install.error && <Notice tone="danger">{agent.install.error}</Notice>}
-      <p className="flex flex-wrap gap-1">
+      <ul className="flex flex-wrap gap-1">
         {agent.capabilities.map((c) => (
-          <span key={c} className="chip">
-            {capabilityLabel(t, c)}
-          </span>
+          <li key={c}>
+            <Badge>{capabilityLabel(t, c)}</Badge>
+          </li>
         ))}
-      </p>
+      </ul>
       {job && (
         <div aria-live="polite" data-testid="job-progress">
-          <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+          <div className="agent-progress">
             <div
-              className="h-full bg-accent transition-ui"
+              className="agent-progress-bar"
               style={{ inlineSize: `${job.progress.percent ?? (running ? 30 : 100)}%` }}
             />
           </div>
@@ -132,60 +154,52 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
         </div>
       )}
       {error !== null && <Notice tone="danger">{describeError(error, t)}</Notice>}
-      <div className="flex flex-wrap gap-2">
+      <CardFooter>
         {agent.kind === 'hermes' ? (
-          <button
-            type="button"
-            className="btn"
-            disabled={running}
-            onClick={() => void act('restart')}
-          >
+          <Button disabled={running} onClick={() => void act('restart')}>
             {t('agents.restart')}
-          </button>
+          </Button>
         ) : installed && managed ? (
-          <button
-            type="button"
-            className="btn btn-danger"
-            disabled={running}
-            onClick={() => void act('uninstall')}
-          >
+          <Button variant="danger" disabled={running} onClick={() => void act('uninstall')}>
             {t('agents.remove')}
-          </button>
+          </Button>
         ) : !installed ? (
-          <button
-            type="button"
-            className="btn btn-primary"
+          <Button
+            variant="primary"
             disabled={running}
             onClick={() => void act('install')}
             data-testid="install"
           >
             {t('agents.install')}
-          </button>
+          </Button>
         ) : null}
         {agent.install.update_available && (
-          <span className="chip">
+          <Badge tone="info">
             {t('agents.update_available', { version: agent.install.latest_version ?? '' })}
-          </span>
+          </Badge>
         )}
-      </div>
+      </CardFooter>
       {menu.length > 0 && (
-        <nav
-          aria-label={t('agents.under_agent')}
-          className="flex flex-wrap gap-1 border-t border-line pt-2 text-xs"
-          data-testid="agent-menu"
-        >
-          {menu.map((d) => (
-            <Link
-              key={d.id}
-              to={routeOf(d.id).replace(':agentId', agent.id)}
-              className="chip hover:bg-surface-3"
-              data-nav-id={d.id}
-            >
-              {t(termKey(d.id))}
-            </Link>
-          ))}
-        </nav>
+        <>
+          <Separator />
+          <nav
+            aria-label={t('agents.under_agent')}
+            className="flex flex-wrap gap-1"
+            data-testid="agent-menu"
+          >
+            {menu.map((d) => (
+              <Link
+                key={d.id}
+                to={routeOf(d.id).replace(':agentId', agent.id)}
+                className="agent-menu-link"
+                data-nav-id={d.id}
+              >
+                {t(termKey(d.id))}
+              </Link>
+            ))}
+          </nav>
+        </>
       )}
-    </article>
+    </Card>
   );
 }

@@ -1,11 +1,13 @@
 // A destination whose module has not landed yet still has a screen (parity rule 1) that says
-// so explicitly — never a silent empty page (TEAM-RULES §4).
-import { useParams } from 'react-router';
+// so explicitly — never a silent empty page (TEAM-RULES §4). The kit's `EmptyState` is the
+// shape of "nothing here yet", and the breadcrumb says where "here" is.
+import { Link, useParams } from 'react-router';
 import { useI18n } from '../i18n/context.js';
-import { destinationsById, navigation, termKey } from '../navigation/manifest.js';
+import { destinationsById, navigation, routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import { SettingsBack } from '../settings/SettingsBack.js';
-import { Notice } from '../ui/Notice.js';
+import { Badge, Breadcrumb, EmptyState, type Crumb } from '../ui/index.js';
+import { IconSpark } from '../ui/icons.js';
 
 const PHASES: Record<string, number> = {
   rooms: 1,
@@ -32,21 +34,39 @@ export function PlaceholderScreen({ id }: { id: string }) {
   const { agentId } = useParams();
   const destination = destinationsById.get(id);
   const title = t(termKey(id));
+  const underSettings = navigation.settingsManagement.includes(id);
+  const trail: Crumb[] = [
+    ...(underSettings
+      ? [
+          {
+            label: t('nav.settings'),
+            href: routeOf('settings'),
+            render: ({ href, children, className }) => (
+              <Link to={href} className={className}>
+                {children}
+              </Link>
+            ),
+          } satisfies Crumb,
+        ]
+      : []),
+    { label: title },
+  ];
   return (
     <AppShell title={title}>
-      {navigation.settingsManagement.includes(id) && <SettingsBack />}
-      <h1 className="text-xl font-semibold">{title}</h1>
+      {underSettings && <SettingsBack />}
+      <Breadcrumb label={t('ui.breadcrumb')} items={trail} />
+      <h1 className="mt-2 text-xl font-semibold">{title}</h1>
       {agentId && (
         <p className="mt-1 text-xs text-muted">{t('placeholder.agent', { id: agentId })}</p>
       )}
-      <Notice className="mt-3">
-        {t('placeholder.later', { name: title, phase: phaseOf(destination?.module) })}
-      </Notice>
-      {destination?.note && (
-        <p className="mt-3 text-sm text-muted" dir="ltr">
-          {destination.note}
-        </p>
-      )}
+      <div className="mt-4">
+        <EmptyState
+          icon={<IconSpark size={20} />}
+          title={title}
+          body={t('placeholder.later', { name: title, phase: phaseOf(destination?.module) })}
+          {...(destination?.note ? { action: <Badge tone="info">{destination.note}</Badge> } : {})}
+        />
+      </div>
     </AppShell>
   );
 }
