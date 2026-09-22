@@ -13,7 +13,6 @@
     "rooms": "الغرف",
     "tasks": "المهام",
     "schedules": "الجدولة",
-    "history": "السجل",
     "settings": "الإعدادات",
     "account": "الحساب",
     "users": "المستخدمون",
@@ -47,7 +46,9 @@
     "loading": "جارٍ التحميل…",
     "retry": "إعادة المحاولة",
     "save": "حفظ",
-    "cancel": "إلغاء"
+    "cancel": "إلغاء",
+    "delete": "حذف",
+    "more": "المزيد"
   },
   "errors": {
     "not_implemented": "المركز يعلن {operation} في العقد لكنه لم ينفّذها بعد.",
@@ -93,7 +94,6 @@
     "model_default": "النموذج الافتراضي",
     "open_menu": "فتح القائمة",
     "close_menu": "إغلاق القائمة",
-    "history_is_page": "السجل يُفتح كصفحة.",
     "segment_later": "{name} يصل مع وحدته في مرحلة لاحقة.",
     "language_chip": "تبديل لغة الواجهة",
     "theme_chip": "تبديل السمة",
@@ -143,21 +143,20 @@
       "channel": "القنوات",
       "cli": "الطرفية",
       "api": "API"
-    }
+    },
+    "unarchive": "إلغاء الأرشفة",
+    "none_archived": "لا محادثة مؤرشفة.",
+    "scope": {
+      "label": "نطاق القائمة",
+      "active": "النشطة",
+      "archived": "المؤرشفة",
+      "all": "الكل"
+    },
+    "confirm_delete_body": "تُحذف الرسائل معها، ولا رجوع."
   },
   "search": {
     "placeholder": "ابحث في العناوين والرسائل…",
     "none": "لا نتائج."
-  },
-  "history": {
-    "archive": "أرشفة",
-    "unarchive": "إخراج من الأرشيف",
-    "delete": "حذف",
-    "selected": "المحدد: {count}",
-    "select": "تحديد {title}",
-    "confirm_delete": "حذف {count} جلسة؟",
-    "pinned": "المثبّتة",
-    "archived": "الأرشيف"
   },
   "new_chat": {
     "pick_agent": "اختر الوكيل الذي تحادثه. القائمة من سجلّ المركز.",
@@ -182,7 +181,8 @@
     "resumed": "أُعيد الاتصال؛ أُعيد إرسال {replayed} حدثًا فائتًا.",
     "resynced": "أُعيد الاتصال؛ أُعيد تحميل المحادثة من المركز.",
     "session_deleted": "حُذفت هذه الجلسة.",
-    "run_failed": "فشل التشغيل: {error} ({code})"
+    "run_failed": "فشل التشغيل: {error} ({code})",
+    "empty_title": "بم نبدأ؟"
   },
   "composer": {
     "label": "محرّر الرسالة",
@@ -216,7 +216,8 @@
       "always": "يسأل دائمًا"
     },
     "dictate": "إملاء صوتي",
-    "dictate_unavailable": "الإملاء يصل مع مزوّد صوت (models.transcribe ما زال 501)."
+    "dictate_unavailable": "الإملاء يصل مع مزوّد صوت (models.transcribe ما زال 501).",
+    "add_agent": "إضافة وكيل"
   },
   "approval": {
     "from": "{agent} ينتظر قرارك",
