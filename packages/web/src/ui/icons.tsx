@@ -106,6 +106,12 @@ export const IconSend = (p: IconProps) => (
     <path d="M12 19V5M5 12l7-7 7 7" />
   </Svg>
 );
+export const IconSteer = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 5h7a5 5 0 0 1 5 5v6" />
+    <path d="m12.5 12.5 3.5 4 3.5-4" />
+  </Svg>
+);
 export const IconStop = (p: IconProps) => (
   <Svg {...p}>
     <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none" />
