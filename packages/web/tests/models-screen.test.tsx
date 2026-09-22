@@ -4,6 +4,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { chooseOption, closeControl, optionLabels } from './helpers/ui.js';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AuthProvider } from '../src/auth/context.js';
@@ -243,12 +244,15 @@ function renderScreen(fetchImpl: typeof fetch, language: 'ar' | 'en' = 'en') {
 async function openDialog() {
   await waitFor(() => expect(screen.getByTestId('open-add-provider')).toBeTruthy());
   await userEvent.click(screen.getByTestId('open-add-provider'));
-  await waitFor(() =>
-    expect(
-      (screen.getByTestId('add-preset') as HTMLSelectElement).options.length,
-    ).toBeGreaterThanOrEqual(1),
-  );
+  await waitFor(() => expect(screen.getByTestId('add-preset')).toBeTruthy());
   return screen.getByTestId('add-provider-dialog');
+}
+
+/** The provider presets the dialog currently offers, by their visible names. */
+async function presetLabels(): Promise<string[]> {
+  const labels = await optionLabels(userEvent, screen.getByTestId('add-preset'));
+  await closeControl(userEvent);
+  return labels;
 }
 
 afterEach(cleanup);
@@ -282,12 +286,10 @@ describe('models screen', () => {
 
     // A preset already added is not offered again: adding it twice is a 409.
     await openDialog();
-    const offered = [...(screen.getByTestId('add-preset') as HTMLSelectElement).options].map(
-      (option) => option.value,
-    );
-    expect(offered).not.toContain('anthropic');
-    expect(offered).not.toContain('lmstudio');
-    expect(offered).toContain('litellm');
+    const offered = await presetLabels();
+    expect(offered).not.toContain('Anthropic');
+    expect(offered).not.toContain('LM Studio');
+    expect(offered).toContain('LiteLLM');
   });
 
   it('says a fresh workspace has no providers and offers the first one', async () => {
@@ -310,10 +312,10 @@ describe('models screen', () => {
     const url = () => screen.getByTestId('add-base-url') as HTMLInputElement;
     // Anthropic is first: its address is known.
     expect(url().value).toBe('https://api.anthropic.com');
-    await userEvent.selectOptions(screen.getByTestId('add-preset'), 'lmstudio');
+    await chooseOption(userEvent, screen.getByTestId('add-preset'), 'LM Studio');
     expect(url().value).toBe('http://127.0.0.1:1234/v1');
     // LiteLLM has no address anybody could guess, so the field is empty and required.
-    await userEvent.selectOptions(screen.getByTestId('add-preset'), 'litellm');
+    await chooseOption(userEvent, screen.getByTestId('add-preset'), 'LiteLLM');
     expect(url().value).toBe('');
     expect(url().required).toBe(true);
     expect((screen.getByTestId('add-submit') as HTMLButtonElement).disabled).toBe(true);
@@ -324,7 +326,7 @@ describe('models screen', () => {
     renderScreen(fetchImpl);
     await openDialog();
 
-    await userEvent.selectOptions(screen.getByTestId('add-preset'), 'lmstudio');
+    await chooseOption(userEvent, screen.getByTestId('add-preset'), 'LM Studio');
     // The field is there — always — and it says it is optional.
     const key = screen.getByTestId('add-api-key') as HTMLInputElement;
     expect(key.required).toBe(false);
@@ -351,7 +353,7 @@ describe('models screen', () => {
     renderScreen(fetchImpl);
     await openDialog();
 
-    await userEvent.selectOptions(screen.getByTestId('add-preset'), 'anthropic');
+    await chooseOption(userEvent, screen.getByTestId('add-preset'), 'Anthropic');
     expect(screen.getByLabelText('API key')).toBeTruthy();
     expect((screen.getByTestId('add-submit') as HTMLButtonElement).disabled).toBe(true);
     await userEvent.type(screen.getByTestId('add-api-key'), 'sk-ant-typed');
@@ -389,7 +391,7 @@ describe('models screen', () => {
     });
     renderScreen(fetchImpl);
     await openDialog();
-    await userEvent.selectOptions(screen.getByTestId('add-preset'), 'lmstudio');
+    await chooseOption(userEvent, screen.getByTestId('add-preset'), 'LM Studio');
 
     await userEvent.click(screen.getByTestId('add-fetch-models'));
     await waitFor(() =>
@@ -398,7 +400,7 @@ describe('models screen', () => {
       ),
     );
     // A failure is a failure: no models were invented for the select.
-    expect((screen.getByTestId('add-default-model') as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.getByTestId('add-default-model')).toBeDisabled();
     const probe = state.sent.find((call) => call.url.includes('provider-probes'));
     expect(probe?.body).toMatchObject({ preset: 'lmstudio', base_url: 'http://127.0.0.1:1234/v1' });
   });
@@ -407,13 +409,12 @@ describe('models screen', () => {
     const { state, fetchImpl } = hub({ providers: [] });
     renderScreen(fetchImpl);
     await openDialog();
-    await userEvent.selectOptions(screen.getByTestId('add-preset'), 'lmstudio');
+    await chooseOption(userEvent, screen.getByTestId('add-preset'), 'LM Studio');
     await userEvent.click(screen.getByTestId('add-fetch-models'));
 
-    await waitFor(() =>
-      expect((screen.getByTestId('add-default-model') as HTMLSelectElement).disabled).toBe(false),
-    );
-    await userEvent.selectOptions(
+    await waitFor(() => expect(screen.getByTestId('add-default-model')).toBeEnabled());
+    await chooseOption(
+      userEvent,
       screen.getByTestId('add-default-model'),
       'qwen2.5-coder-7b-instruct',
     );
@@ -438,7 +439,7 @@ describe('models screen', () => {
     const { fetchImpl } = hub({ providers: [], containerized: true });
     renderScreen(fetchImpl);
     await openDialog();
-    await userEvent.selectOptions(screen.getByTestId('add-preset'), 'lmstudio');
+    await chooseOption(userEvent, screen.getByTestId('add-preset'), 'LM Studio');
 
     const warning = await screen.findByTestId('loopback-warning');
     expect(warning.textContent).toContain('http://host.docker.internal:1234/v1');
@@ -544,10 +545,7 @@ describe('models screen', () => {
     await userEvent.click(screen.getByText('Defaults'));
 
     await waitFor(() => expect(screen.getByTestId('default-chat')).toBeTruthy());
-    await userEvent.selectOptions(
-      screen.getByTestId('default-chat'),
-      `${PROVIDER_ID}|claude-sonnet-4-5`,
-    );
+    await chooseOption(userEvent, screen.getByTestId('default-chat'), 'claude-sonnet-4-5');
     await waitFor(() => {
       const put = state.sent.find((call) => call.url.endsWith('/models/defaults') && call.body);
       expect(put?.body).toEqual({
@@ -576,7 +574,7 @@ describe('models screen', () => {
     const { fetchImpl } = hub({ providers: [], containerized: true });
     renderScreen(fetchImpl, 'ar');
     await openDialog();
-    await userEvent.selectOptions(screen.getByTestId('add-preset'), 'lmstudio');
+    await chooseOption(userEvent, screen.getByTestId('add-preset'), 'LM Studio');
     const warning = await screen.findByTestId('loopback-warning');
     expect(warning.textContent).toContain('حاوية');
     expect(warning.textContent).toContain('http://host.docker.internal:1234/v1');

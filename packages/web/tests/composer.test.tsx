@@ -256,11 +256,17 @@ describe('composer', () => {
     expect(onApprovalMode).toHaveBeenCalledWith('auto_all');
   });
 
-  it('a selector with no answer is disabled and says why', () => {
+  it('a selector with no answer is disabled and says why', async () => {
     renderComposer({ approvalDisabledReason: 'This agent declares no approval mode.' });
     const trigger = screen.getByTestId('composer-approval');
     expect(trigger).toBeDisabled();
-    expect(trigger).toHaveAttribute('title', 'This agent declares no approval mode.');
+    // A disabled control takes no pointer events, so the reason hangs off a focusable
+    // wrapper — otherwise the explanation could never be read.
+    const wrap = screen.getByTestId('composer-approval-wrap');
+    fireEvent.focus(wrap);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'This agent declares no approval mode.',
+    );
   });
 
   it('the model selector offers the workspace default plus the catalogue', async () => {
@@ -280,10 +286,11 @@ describe('composer', () => {
     expect(onModel).toHaveBeenCalledWith('anthropic/sonnet');
   });
 
-  it('dictation is present but honestly disabled while models.transcribe is a stub', () => {
+  it('dictation is present but honestly disabled while models.transcribe is a stub', async () => {
     renderComposer();
     expect(screen.getByTestId('composer-mic')).toBeDisabled();
-    expect(screen.getByTestId('composer-mic').getAttribute('title')).toMatch(/501/);
+    fireEvent.focus(screen.getByTestId('composer-mic-wrap'));
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/501/);
   });
 
   it('starters: three on an empty chat, in the UI language, and one fills the field', async () => {

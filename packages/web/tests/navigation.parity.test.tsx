@@ -14,6 +14,7 @@ import {
   webDestinations,
 } from '../src/navigation/manifest.js';
 import { LOGIN_PATH, SETUP_PATH, routes } from '../src/navigation/routes.js';
+import { archivedFor, scopeFromParams } from '../src/sessions/SessionList.js';
 import { segmentFromPath } from '../src/shell/Sidebar.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -84,13 +85,30 @@ describe('navigation parity (web)', () => {
     }
   });
 
-  it('5. secondary entries only where allowed: chat is reached from history and search, global_agent from search', () => {
-    expect(raw.secondaryEntries.chat).toEqual(['history', 'search']);
+  it('5. secondary entries only where allowed: chat is reached from search, global_agent from search', () => {
+    expect(raw.secondaryEntries.chat).toEqual(['search']);
     expect(raw.secondaryEntries.global_agent).toEqual(['search']);
-    // Opening a session from History keeps the selected segment (Sidebar.segmentFromPath).
-    expect(segmentFromPath(routeOf('history'))).toBe('history');
     expect(segmentFromPath('/chat/01J8QK3ZR2W7M5N4P6T8V9X0YA')).toBe('chat');
+    // Search is not a segment: opening a session from it keeps the selected one (rule §1).
     expect(segmentFromPath(routeOf('search'))).toBeNull();
+  });
+
+  it('History is gone: the conversation list is the history (owner, 2026-09-22)', () => {
+    const ids = navigation.destinations.map((d) => d.id);
+    expect(ids).not.toContain('history');
+    expect(raw.terms.history).toBeUndefined();
+    expect(navigation.segments).toEqual(['chat', 'rooms']);
+    // Tasks and Schedules took the rail places the management pages left.
+    expect(navigation.rail).toEqual(['new_chat', 'search', 'tasks', 'schedules']);
+    expect(Object.keys(raw.surfaceRoutes.web ?? {})).not.toContain('history');
+    // What it offered is a filter on the list, carried in the URL.
+    expect(scopeFromParams(new URLSearchParams(''))).toBe('active');
+    expect(scopeFromParams(new URLSearchParams('?sessions=archived'))).toBe('archived');
+    expect(scopeFromParams(new URLSearchParams('?sessions=all'))).toBe('all');
+    expect(scopeFromParams(new URLSearchParams('?sessions=nonsense'))).toBe('active');
+    expect(archivedFor('active')).toBe('false');
+    expect(archivedFor('archived')).toBe('true');
+    expect(archivedFor('all')).toBe('all');
   });
 
   it('6. roles: admin entries are hidden from members', () => {
@@ -99,6 +117,8 @@ describe('navigation parity (web)', () => {
     expect(visibleEntries(navigation.rail, 'owner').map((d) => d.id)).toEqual([
       'new_chat',
       'search',
+      'tasks',
+      'schedules',
     ]);
     const memberManagement = visibleEntries(navigation.settingsManagement, 'member').map(
       (d) => d.id,
