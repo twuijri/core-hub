@@ -439,45 +439,57 @@ test.describe('web smoke journeys', () => {
     await page.getByTestId('language-ar').click();
   });
 
-  test('10. the Tasks board: a project, a task, and a move that is not a drag', async ({
+  test('10. the Tasks board: an intake strip, four columns, and a drop that asks what it means', async ({
     page,
   }) => {
     await login(page);
     await page.getByRole('link', { name: 'المهام' }).click();
     await expect(page).toHaveURL(/\/tasks$/);
 
-    // A hub with no project says so, and offers the one thing to do about it.
     await expect(page.getByTestId('tasks-empty')).toBeVisible();
     await page.getByTestId('new-project').click();
     await page.getByRole('textbox').fill('إعادة بناء المركز');
     await page.getByRole('button', { name: 'حفظ' }).click();
 
-    // Nine columns, in workflow order.
+    // The board is the shape of the work: an intake strip and four columns.
     const board = page.getByTestId('task-board');
     await expect(board).toBeVisible();
-    await expect(board.locator('.task-column')).toHaveCount(9);
+    await expect(board.locator('.task-column')).toHaveCount(4);
+    await expect(page.getByTestId('task-intake')).toBeVisible();
 
+    // Waiting and review are empty, so they are strips rather than full columns.
+    await expect(page.locator('[data-column="waiting"]')).toHaveAttribute('data-collapsed', 'true');
+    await expect(page.locator('[data-column="review"]')).toHaveAttribute('data-collapsed', 'true');
+
+    // A new task lands in intake, which is where a task is specified before it queues.
     await page.getByTestId('new-task-input').fill('اكتب خطة الإطلاق');
     await page.getByTestId('new-task').click();
+    await page.getByTestId('task-intake-toggle').click();
     await expect(page.getByTestId('task-card')).toHaveCount(1);
+    // A column grows and shrinks with an animation; the screenshot waits for it to land
+    // rather than photographing a column half-way open.
+    await page.waitForTimeout(400);
     await shot(page, 'tasks-board-ar-light');
 
-    // Moving without dragging: the card's own menu, which is what a phone and a keyboard
-    // both use.
-    await page.getByTestId('task-more').click();
-    await page.getByRole('menuitem', { name: 'انقل إلى للعمل' }).click();
-    await expect(
-      page.locator('.task-column-body[data-column="todo"] [data-testid="task-card"]'),
-    ).toHaveCount(1);
+    // Its one quick action moves it on; the menu only offers moves the hub would accept.
+    await page.getByTestId('task-quick').click();
+    await expect(page.locator('[data-column-body="queue"] [data-testid="task-card"]')).toHaveCount(
+      1,
+    );
 
-    // `blocked` asks why, because the hub refuses a blocked task with no reason.
+    // Waiting means two things, so the menu names both rather than the code choosing.
     await page.getByTestId('task-more').click();
-    await page.getByRole('menuitem', { name: 'انقل إلى متوقّفة' }).click();
+    await page.getByRole('menuitem', { name: 'موقوفة' }).click();
     await page.getByRole('textbox').fill('ننتظر المفتاح');
     await page.getByRole('button', { name: 'حفظ' }).click();
+    await expect(page.locator('[data-column="waiting"]')).not.toHaveAttribute(
+      'data-collapsed',
+      'true',
+    );
     await expect(
-      page.locator('.task-column-body[data-column="blocked"] [data-testid="task-card"]'),
+      page.locator('[data-column-body="waiting"] [data-testid="task-card"]'),
     ).toContainText('ننتظر المفتاح');
+    await page.waitForTimeout(400);
     await shot(page, 'tasks-blocked-ar-light');
   });
 
