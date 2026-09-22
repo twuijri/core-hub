@@ -67,7 +67,8 @@
     "approval_choice_once": "مرة واحدة",
     "approval_choice_session": "لهذه الجلسة",
     "approval_choice_always": "دائمًا",
-    "approval_choice_deny": "رفض"
+    "approval_choice_deny": "رفض",
+    "produced_refused": "{files} — تجاوزت حدّ المرفقات حجمًا أو عددًا، وهي باقية في مجلد الدور."
   },
   "jobs": {
     "queued": "في الانتظار.",
@@ -124,5 +125,8 @@
     "probe": {
       "failed": "لم يُرجِع العنوان قائمة نماذج."
     }
+  },
+  "knowledge": {
+    "attachment_in_use": "هناك رسالة تشير إلى هذا الملف، فلا يمكن حذفه."
   }
 }

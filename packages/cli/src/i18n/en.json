@@ -58,7 +58,10 @@
     "base_url": "The endpoint's base URL (required when the preset has no default).",
     "provider_name": "A name for this provider, instead of the preset label.",
     "no_key": "Add it without asking for a key.",
-    "clear_key": "Forget the stored key but keep the provider."
+    "clear_key": "Forget the stored key but keep the provider.",
+    "purpose": "What the file is for: message, avatar, task, import, background, skill or release",
+    "out": "Where to write it; `-` writes to stdout",
+    "attach": "Attach a local file to the first message (repeatable)"
   },
   "cmd": {
     "setup": "Create the owner account on a hub that has none yet",
@@ -83,7 +86,11 @@
     "providers_remove": "Remove a provider, or (--clear-key) only forget its stored key.",
     "models_list": "List the models the providers reported.",
     "models_default": "Show the workspace's default models, or set one.",
-    "providers_presets": "List the provider types you can add, local model servers included."
+    "providers_presets": "List the provider types you can add, local model servers included.",
+    "files_upload": "Upload a file and print its attachment id",
+    "files_show": "Show one attachment",
+    "files_download": "Download an attachment to a file (or `-` for stdout)",
+    "files_delete": "Delete an attachment no message references yet"
   },
   "arg": {
     "code": "Pairing code (XXXX-XXXX) or the full QR JSON",
@@ -92,7 +99,9 @@
     "command": "Command name",
     "provider": "Provider slug or id (`anthropic`).",
     "model_key": "Model key as `<provider>/<model>`; omit to show the current defaults.",
-    "provider_or_preset": "A provider you already added, or a preset id from `providers presets`."
+    "provider_or_preset": "A provider you already added, or a preset id from `providers presets`.",
+    "file": "Path of the local file",
+    "attachment_id": "Attachment id"
   },
   "errors": {
     "not_signed_in": "Not signed in. Run `majlis login --server URL` first.",
@@ -261,5 +270,16 @@
     "key_required_for": "{provider} needs a key to answer; nothing was stored.",
     "container_note": "The hub runs in a container: 127.0.0.1 here is the container, not your machine.",
     "loopback_warning": "This address is loopback, and the hub runs in a container: it will reach the container itself. Try {url} (and add {alias} to the stack on a Linux host)."
+  },
+  "files": {
+    "id": "Id",
+    "name": "Name",
+    "kind": "Kind",
+    "size": "Size (bytes)",
+    "created": "Created",
+    "saved": "Saved to {path}",
+    "deleted": "Deleted {id}",
+    "attached": "Attached {name}",
+    "too_large": "The file is larger than the hub accepts ({max} bytes)."
   }
 }

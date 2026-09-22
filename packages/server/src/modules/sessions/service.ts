@@ -411,6 +411,15 @@ export class SessionsService {
     if (active && when === 'interrupt') await this.engine.requestInterrupt(active.id);
 
     const { content, parts, attachmentIds } = readContent(input.content);
+    // An id that names nothing would reach the agent as a promise of a file that is
+    // not there. A 404 before the message is written is the honest answer.
+    if (attachmentIds.length > 0) {
+      const known = this.ports.attachments.resolve(scope.workspace, attachmentIds);
+      const missing = attachmentIds.filter((id) => !known.has(id));
+      if (missing.length > 0) {
+        throw notFound({ resource: 'attachment', id: missing[0], missing });
+      }
+    }
     const message = this.store.appendMessage({
       workspace: scope.workspace,
       ownerId: scope.userId,
@@ -646,6 +655,12 @@ export class SessionsService {
         row,
         author,
         toolCalls,
+        // `ContentBlock` carries `name`, `mime` and `size_bytes` on read; they live in
+        // `knowledge`, so the row is resolved here rather than guessed in the mapper.
+        attachments:
+          row.attachmentIds.length > 0
+            ? this.ports.attachments.resolve(scope.workspace, row.attachmentIds)
+            : undefined,
         status:
           row.role === 'assistant' && run ? messageStatusOf(run.status) : ('complete' as const),
         usage:

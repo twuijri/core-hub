@@ -414,12 +414,16 @@ describe('sessions: what is deliberately not implemented', () => {
     }
   });
 
-  it('answers 501 for attachment storage, which `knowledge` owns', async () => {
+  it('hands attachment storage to `knowledge`, which asks for a token', async () => {
+    // The eight attachment operations are declared on the `sessions` tag and mounted
+    // by `knowledge` (which owns the bytes), so they are no longer the app's 501 stub.
+    // Reached without a bearer they answer `401`, which is what the contract documents;
+    // `modules/knowledge/attachments-api.test.ts` exercises them signed in.
     const hub = await hubWithAgent();
     try {
       const res = await call(hub.app, 'GET', '/attachments/01J8QK3ZR2W7M5N4P6T8V9X0AT');
-      expect(res.status).toBe(501);
-      expect(res.json()).toMatchObject({ code: 'not_implemented' });
+      expect(res.status).toBe(401);
+      expect(res.json()).toMatchObject({ code: 'unauthorized' });
     } finally {
       await hub.close();
     }

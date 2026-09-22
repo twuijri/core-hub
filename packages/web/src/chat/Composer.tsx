@@ -29,8 +29,8 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
-import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
+import { blocksFor as toContentBlocks, useUploadAttachment } from '../attachments/queries.js';
 import { useI18n } from '../i18n/context.js';
 import type { Attachment, ContentBlock } from '../types.js';
 import {
@@ -58,21 +58,20 @@ interface Pending {
   status: 'uploading' | 'done' | 'error';
   attachment?: Attachment;
   error?: string;
+  /** 0…1 while it is uploading; the surface may or may not draw it. */
+  progress?: number;
+  /** Cancels this upload; the attachment row is dropped with it. */
+  cancel?: () => void;
 }
 
+/** The blocks `sessions.createRun` takes, from what finished uploading. */
 export function blocksFor(text: string, pending: readonly Pending[]): ContentBlock[] {
-  const blocks: ContentBlock[] = [];
-  const trimmed = text.trim();
-  if (trimmed) blocks.push({ type: 'text', text: trimmed });
-  for (const item of pending) {
-    if (item.status !== 'done' || !item.attachment) continue;
-    const a = item.attachment;
-    const fields = { attachment_id: a.id, name: a.name, mime: a.mime, size_bytes: a.size_bytes };
-    if (a.kind === 'image') blocks.push({ type: 'image', ...fields });
-    else if (a.kind === 'audio') blocks.push({ type: 'audio', ...fields });
-    else blocks.push({ type: 'file', ...fields });
-  }
-  return blocks;
+  return toContentBlocks(
+    text,
+    pending
+      .filter((item) => item.status === 'done' && item.attachment)
+      .map((item) => item.attachment as Attachment),
+  );
 }
 
 export interface ComposerProps {
@@ -121,7 +120,7 @@ export function Composer({
   starters = [],
 }: ComposerProps) {
   const { t } = useI18n();
-  const { client } = useAuth();
+  const { upload: uploadAttachment } = useUploadAttachment();
   const [text, setText] = useState('');
   const [pending, setPending] = useState<Pending[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -138,34 +137,36 @@ export function Composer({
 
   const upload = useCallback(
     async (files: FileList | File[]) => {
+      // The data layer lives in `attachments/queries.ts`; this only tracks the rows.
       const items: Pending[] = Array.from(files).map((file) => ({
         key: `${file.name}-${file.size}-${Date.now()}-${Math.random()}`,
         file,
         status: 'uploading',
+        progress: 0,
       }));
       setPending((current) => [...current, ...items]);
+      const patch = (key: string, next: Partial<Pending>) =>
+        setPending((current) => current.map((p) => (p.key === key ? { ...p, ...next } : p)));
       for (const item of items) {
-        const form = new FormData();
-        form.append('file', item.file, item.file.name);
-        form.append('purpose', 'message');
+        const controller = new AbortController();
+        patch(item.key, { cancel: () => controller.abort() });
         try {
-          const { data } = await client.raw('post', '/attachments', { body: form });
-          setPending((current) =>
-            current.map((p) =>
-              p.key === item.key ? { ...p, status: 'done', attachment: data as Attachment } : p,
-            ),
-          );
+          const attachment = await uploadAttachment({
+            file: item.file,
+            onProgress: ({ ratio }) => patch(item.key, { progress: ratio }),
+            signal: controller.signal,
+          });
+          patch(item.key, { status: 'done', attachment, progress: 1 });
         } catch (err) {
-          const message = describeError(err, t);
-          setPending((current) =>
-            current.map((p) =>
-              p.key === item.key ? { ...p, status: 'error', error: message } : p,
-            ),
-          );
+          if (controller.signal.aborted) {
+            setPending((current) => current.filter((p) => p.key !== item.key));
+            continue;
+          }
+          patch(item.key, { status: 'error', error: describeError(err, t) });
         }
       }
     },
-    [client, t],
+    [uploadAttachment, t],
   );
 
   const send = async () => {

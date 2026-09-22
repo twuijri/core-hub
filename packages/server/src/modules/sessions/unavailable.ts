@@ -7,7 +7,13 @@
  * `src/modules/index.ts`; nothing else in this module changes.
  */
 import { HubError } from '../../lib/errors.js';
-import type { AgentDirectory, AgentEvent, AgentInfo, AgentRunner } from './ports.js';
+import type {
+  AgentDirectory,
+  AgentEvent,
+  AgentInfo,
+  AgentRunner,
+  AttachmentsPort,
+} from './ports.js';
 
 export const unavailableAgents: AgentDirectory = {
   async find(_workspace: string, _agentId: string): Promise<AgentInfo | null> {
@@ -34,5 +40,27 @@ export const unavailableRunner: AgentRunner = {
   },
   async interrupt() {
     throw unavailable();
+  },
+};
+
+/**
+ * No file registry wired: ids resolve to nothing and no bytes are ever written.
+ *
+ * This is the honest default rather than an in-memory store, for the same reason the
+ * runner above throws: a hub whose `knowledge` module is not composed has nowhere to
+ * put a file, and pretending otherwise would lose it. With the real port in place
+ * (`src/modules/index.ts`) every path below is the `knowledge` service's.
+ */
+export const noAttachments: AttachmentsPort = {
+  resolve() {
+    return new Map();
+  },
+  materialise() {
+    return [];
+  },
+  async capture() {
+    throw new HubError('service_unavailable', {
+      details: { reason: 'attachments_not_wired' },
+    });
   },
 };

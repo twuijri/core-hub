@@ -17,9 +17,12 @@
  *   approval only).
  * - every attachment operation (`uploadAttachment`, `getAttachment`,
  *   `downloadAttachment`, `deleteAttachment`, `startUpload`, `uploadChunk`,
- *   `abortUpload`, `completeUpload`) — `knowledge` owns attachment storage.
- *   Messages still carry attachment ids: they are recorded as opaque
- *   references and rendered with the download URL the contract declares.
+ *   `abortUpload`, `completeUpload`) — they are declared on this module's tag
+ *   but implemented in `modules/knowledge/index.ts`, which owns the bytes and
+ *   the limits (docs/domain/knowledge.md §attachment). This module holds ids:
+ *   it refuses a run whose attachment does not exist, materialises the ones it
+ *   does into the run's folder, and renders every one with the download URL
+ *   the contract declares.
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';

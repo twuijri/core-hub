@@ -32,7 +32,7 @@
  */
 import { HubError } from '../../lib/errors.js';
 import type { FastifyBaseLogger } from 'fastify';
-import type { Language } from '../../i18n/index.js';
+import { t, type Language } from '../../i18n/index.js';
 import { newUlid } from '../../db/ids.js';
 import type { AuditService } from '../audit/index.js';
 import {
@@ -47,7 +47,15 @@ import {
   type SessionRow,
   type ToolCallRow,
 } from './mappers.js';
-import type { AgentEvent, AgentInfo, AgentPromptBlock, SessionsPorts } from './ports.js';
+import type {
+  AgentEvent,
+  AgentFileExchange,
+  AgentInfo,
+  AgentPromptBlock,
+  AttachmentsPort,
+  SessionsPorts,
+} from './ports.js';
+import { OutputWatcher, ensureRunFolders, type ProducedRefusal } from './run-files.js';
 import {
   initialRunState,
   isTerminal,
@@ -61,6 +69,7 @@ import {
 import type { SessionsRealtime } from './realtime.js';
 import type { SessionsStore } from './store.js';
 import { preview } from './store.js';
+import type { MessagePart } from './schema.js';
 
 export interface EngineScope {
   workspace: string;
@@ -78,6 +87,8 @@ interface ActiveRun {
   scope: EngineScope;
   agent: AgentInfo;
   state: RunState;
+  /** The run's output folder, watched while it is live; `null` when files are off. */
+  outputs: OutputWatcher | null;
 }
 
 export interface EngineDeps {
@@ -251,6 +262,10 @@ export class RunEngine {
       attachmentIds: [],
     });
 
+    // Files in and files out. A session always has a working directory
+    // (`working-dir.ts`), so the only reason this is `null` is a disk that refused.
+    const exchange = this.prepareFiles(scope, session.workingDir, runRow);
+
     const active: ActiveRun = {
       runId: runRow.id,
       jobId: runRow.jobId,
@@ -258,6 +273,7 @@ export class RunEngine {
       scope,
       agent,
       state: initialRunState(shell.id),
+      outputs: exchange ? new OutputWatcher(exchange.files.outputDir).start() : null,
     };
     this.active.set(runRow.id, active);
 
@@ -272,7 +288,8 @@ export class RunEngine {
         model: runRow.modelLabel,
         provider: runRow.provider,
         reasoningEffort: runRow.reasoningEffort,
-        prompt: promptOf(store, scope.workspace, runRow),
+        prompt: exchange?.prompt ?? promptOf(store, scope.workspace, runRow),
+        files: exchange?.files ?? null,
         allowedTools: allowedToolsOf(session),
       });
       if (accepted.agentSessionRef && accepted.agentSessionRef !== session.agentSessionRef) {
@@ -285,6 +302,7 @@ export class RunEngine {
       }
     } catch (error) {
       this.active.delete(runRow.id);
+      active.outputs?.stop();
       store.updateMessage(scope.workspace, shell.id, { content: '' });
       this.failBeforeStart(scope, runRow, {
         code: error instanceof HubError ? error.code : 'agent_error',
@@ -320,8 +338,90 @@ export class RunEngine {
       });
     } finally {
       this.active.delete(runRow.id);
-      this.finalise(active, shell.id);
+      await this.finalise(active, shell.id);
     }
+  }
+
+  /**
+   * Put this turn's attachments where the agent can read them, make the folder it
+   * writes back into, and build the prompt that names both.
+   *
+   * A failure here never fails the run: the turn still happens, without files, and the
+   * reason is logged. Losing a conversation because a disk was full would be worse
+   * than losing the attachment that came with it.
+   */
+  private prepareFiles(
+    scope: EngineScope,
+    workingDir: string | null,
+    runRow: RunRow,
+  ): { files: AgentFileExchange; prompt: AgentPromptBlock[] } | null {
+    const { store, ports, log } = this.deps;
+    if (!workingDir) return null;
+    try {
+      const folders = ensureRunFolders(workingDir, runRow.id);
+      const files: AgentFileExchange = { inputDir: folders.in, outputDir: folders.out };
+      return {
+        files,
+        prompt: promptOf(store, scope.workspace, runRow, {
+          attachments: ports.attachments,
+          files,
+        }),
+      };
+    } catch (error) {
+      log.warn(
+        { err: error, runId: runRow.id, workingDir },
+        'sessions: the run works without file exchange',
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Everything the agent wrote into this run's output folder becomes an attachment on
+   * the reply, so the person can download it. What the caps refused is named in the
+   * message rather than dropped in silence.
+   */
+  private async collectProduced(
+    run: ActiveRun,
+  ): Promise<{ parts: MessagePart[]; ids: string[]; refused: ProducedRefusal[] }> {
+    const empty = {
+      parts: [] as MessagePart[],
+      ids: [] as string[],
+      refused: [] as ProducedRefusal[],
+    };
+    if (!run.outputs) return empty;
+    const collected = run.outputs.collect();
+    if (collected.files.length === 0 && collected.refused.length === 0) return empty;
+    const parts: MessagePart[] = [];
+    const ids: string[] = [];
+    for (const file of collected.files) {
+      try {
+        const attachment = await this.deps.ports.attachments.capture(
+          { workspace: run.scope.workspace, userId: run.scope.userId },
+          file,
+          run.state.messageId,
+        );
+        parts.push(
+          attachment.kind === 'image'
+            ? { type: 'image', attachmentId: attachment.id }
+            : attachment.kind === 'audio'
+              ? { type: 'audio', attachmentId: attachment.id }
+              : { type: 'file', attachmentId: attachment.id },
+        );
+        ids.push(attachment.id);
+      } catch (error) {
+        this.deps.log.warn(
+          { err: error, runId: run.runId, file: file.relativePath },
+          'sessions: a produced file could not be stored',
+        );
+        collected.refused.push({
+          relativePath: file.relativePath,
+          reason: 'too_large',
+          sizeBytes: file.sizeBytes,
+        });
+      }
+    }
+    return { parts, ids, refused: collected.refused };
   }
 
   /** Reduce one input and carry out everything it implies. */
@@ -534,15 +634,20 @@ export class RunEngine {
   }
 
   /** Write the final message and run, then emit the one terminal event. */
-  private finalise(run: ActiveRun, messageId: string): void {
+  private async finalise(run: ActiveRun, messageId: string): Promise<void> {
     const { store, audit } = this.deps;
     const { scope, state } = run;
     const status = state.status;
     const terminal = isTerminal(status) ? status : 'failed';
 
+    const produced = await this.collectProduced(run);
+    const note = refusalNote(produced.refused, scope.language);
+    const text = note ? [state.text, note].filter(Boolean).join('\n\n') : state.text;
+
     const message = store.updateMessage(scope.workspace, messageId, {
-      content: state.text,
-      parts: state.text ? [{ type: 'text', text: state.text }] : [],
+      content: text,
+      parts: [...(text ? [{ type: 'text', text } as MessagePart] : []), ...produced.parts],
+      attachmentIds: produced.ids,
       reasoning: state.reasoning || null,
     });
 
@@ -559,7 +664,7 @@ export class RunEngine {
       store.updateSession(scope.workspace, session.id, {
         lastRunId: run.runId,
         lastMessageAt: new Date(),
-        preview: preview(state.text) ?? session.preview,
+        preview: preview(text) ?? session.preview,
       });
     }
 
@@ -674,6 +779,10 @@ export class RunEngine {
         row,
         author: { kind: 'agent', id: run.agent.id, name: run.agent.name, avatar: null },
         toolCalls: calls,
+        attachments:
+          row.attachmentIds.length > 0
+            ? this.deps.ports.attachments.resolve(scope.workspace, row.attachmentIds)
+            : undefined,
         status: messageStatusOf(run.state.status),
         usage: this.deps.audit.totalsForRun(scope.workspace, run.runId),
       },
@@ -718,21 +827,71 @@ function allowedToolsOf(session: SessionRow): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
 }
 
-/** The prompt handed to the adapter: the content blocks of the trigger message. */
-function promptOf(store: SessionsStore, workspace: string, run: RunRow): AgentPromptBlock[] {
+/**
+ * The prompt handed to the adapter: the content blocks of the trigger message.
+ *
+ * With a file exchange (`exchange`), every attachment is first copied into the run's
+ * input folder and then carried as a block that names both its id and its path, so an
+ * adapter whose wire is text — Hermes's `POST /v1/runs` — can still hand the agent
+ * something it can open. Attachments the registry no longer has are named by id and
+ * not invented.
+ */
+function promptOf(
+  store: SessionsStore,
+  workspace: string,
+  run: RunRow,
+  exchange?: { attachments: AttachmentsPort; files: AgentFileExchange },
+): AgentPromptBlock[] {
   if (!run.triggerMessageId) return [];
   const message = store.getMessage(workspace, run.triggerMessageId);
   if (!message) return [];
+
+  const wanted = message.parts
+    .filter((part) => part.type === 'image' || part.type === 'file' || part.type === 'audio')
+    .map((part) => (part as { attachmentId: string }).attachmentId);
+  const landed = new Map<string, { name: string; path: string; mime: string; sizeBytes: number }>();
+  if (exchange && wanted.length > 0) {
+    for (const file of exchange.attachments.materialise(
+      workspace,
+      wanted,
+      exchange.files.inputDir,
+    )) {
+      landed.set(file.id, file);
+    }
+  }
+
   const blocks: AgentPromptBlock[] = [];
   for (const part of message.parts) {
-    if (part.type === 'text') blocks.push({ type: 'text', text: part.text });
-    else if (part.type === 'image')
-      blocks.push({ type: 'attachment', attachmentId: part.attachmentId, kind: 'image' });
-    else if (part.type === 'file')
-      blocks.push({ type: 'attachment', attachmentId: part.attachmentId, kind: 'file' });
+    if (part.type === 'text') {
+      blocks.push({ type: 'text', text: part.text });
+      continue;
+    }
+    if (part.type !== 'image' && part.type !== 'file' && part.type !== 'audio') continue;
+    const file = landed.get(part.attachmentId);
+    blocks.push({
+      type: 'attachment',
+      attachmentId: part.attachmentId,
+      kind: part.type,
+      ...(file
+        ? { name: file.name, mime: file.mime, sizeBytes: file.sizeBytes, path: file.path }
+        : {}),
+    });
   }
   if (blocks.length === 0 && message.content) blocks.push({ type: 'text', text: message.content });
   return blocks;
+}
+
+/**
+ * What the reply says about files the caps refused.
+ *
+ * It is appended to the assistant's own text, in the language of the request, because
+ * "where is my file?" must never be answered by an empty space (TEAM-RULES §4: no
+ * silent dead end).
+ */
+export function refusalNote(refused: readonly ProducedRefusal[], language: Language): string {
+  if (refused.length === 0) return '';
+  const names = refused.map((item) => item.relativePath).join('، ');
+  return t('sessions.produced_refused', language).replace('{files}', names);
 }
 
 export const TIMEOUT = Symbol('agent-timeout');

@@ -49,6 +49,12 @@ export interface FakeRunnerOptions {
   failOnStart?: Error;
   /** Do not end the stream on `interrupt()`; used to test the timeout arrow. */
   ignoreInterrupt?: boolean;
+  /**
+   * Called when the turn is accepted, before its events are read: a test's stand-in
+   * for the agent doing work — reading what was put in `request.files.inputDir` and
+   * writing into `request.files.outputDir`.
+   */
+  onStart?(request: AgentRunRequest): void | Promise<void>;
 }
 
 interface RunChannel {
@@ -78,6 +84,7 @@ export class FakeAgentRunner implements AgentRunner {
   async start(request: AgentRunRequest): Promise<AgentRunAccepted> {
     if (this.options.failOnStart) throw this.options.failOnStart;
     this.started.push(request);
+    await this.options.onStart?.(request);
     this.channels.set(request.runId, {
       queue: [...this.script],
       waiting: [],

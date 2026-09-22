@@ -68,7 +68,7 @@ Indexes: (workspace, archived_at, last_message_at) for the list;
 | content | text | Markdown; always present |
 | parts | json<MessagePart[]> | text / image / file / tool_call / approval references for rich rendering |
 | reasoning | text? | shown when the user enables it |
-| attachment_ids | json<string[]> | knowledge.attachment ids |
+| attachment_ids | json<string[]> | knowledge.attachment ids: what the person sent, and what the run produced |
 | agent_message_ref | text(200)? | de-duplication on reconnect |
 | edited_at | ms? | |
 
@@ -157,6 +157,19 @@ Indexes: (workspace, status, requested_at) for the inbox; `run_id`.
   on acknowledgement.
 - Cost so far: ask audit for `sum(cost_micro_usd) where session_id`.
 - Task/schedule/seat runs: `runs where origin_kind, origin_id`.
+
+## Files in a turn
+
+`sessions` owns ids, `knowledge` owns bytes (docs/domain/knowledge.md §Attachments and
+a run). Before a run starts, its attachments are copied into
+`<working_dir>/.majlis/runs/<run id>/in` and the prompt names their absolute paths;
+`out/` beside it is the folder the agent is told to write into, and whatever is there
+when the turn ends becomes the reply's attachments. A run whose `content` names an
+attachment the workspace does not have is `404` before the message is written.
+
+On the wire the files are `ContentBlock`s (`image` / `file` / `audio`) carrying
+`attachment_id`, `name`, `mime`, `size_bytes` and the `url` that serves the bytes; the
+row keeps the same ids in `attachment_ids`.
 
 ## Not stored
 
