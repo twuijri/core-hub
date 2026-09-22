@@ -493,6 +493,47 @@ test.describe('web smoke journeys', () => {
     await shot(page, 'tasks-blocked-ar-light');
   });
 
+  test('12. a finished run reaches the inbox, and a switch stops the next one', async ({
+    page,
+  }) => {
+    await login(page);
+    await newChat(page);
+    await firstMessage(page, 'اكتب سطرًا واحدًا');
+    // The reply has to be over before there is anything to be told about: the composer
+    // leaves `streaming` when the run reaches a terminal state.
+    await expect(page.getByTestId('stop-run')).toHaveCount(0, { timeout: 15_000 });
+
+    // The count travels with the Settings list, so it is visible before the page is open.
+    await page.getByRole('link', { name: 'الإعدادات' }).first().click();
+    const badge = page.getByTestId('unread-badge');
+    await expect(badge).toHaveText('1');
+
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'الإشعارات' }).click();
+    const list = page.getByTestId('notice-list');
+    await expect(list.getByRole('listitem')).toHaveCount(1);
+    // The hub's own words, about the agent that answered.
+    await expect(list).toContainText('Hermes');
+    await shot(page, 'notifications-ar-light');
+
+    // Turning the kind off is the whole point of the page: the next run says nothing.
+    await page.getByTestId('notify-kind-run_completed').click();
+    await expect(page.getByTestId('notify-kind-run_completed')).toHaveAttribute(
+      'data-state',
+      'unchecked',
+    );
+    await newChat(page);
+    await firstMessage(page, 'ومرة أخرى');
+    await expect(page.getByTestId('stop-run')).toHaveCount(0, { timeout: 15_000 });
+    await page.getByRole('link', { name: 'الإعدادات' }).first().click();
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'الإشعارات' }).click();
+    // Still one: silenced means never written, not written and hidden.
+    await expect(page.getByTestId('notice-list').getByRole('listitem')).toHaveCount(1);
+
+    // And reading it clears the count everywhere, including the list it came from.
+    await page.getByTestId('mark-all-read').click();
+    await expect(page.getByTestId('unread-badge')).toHaveCount(0);
+  });
+
   test('11. Schedules: a cron saved, its next time computed, and the button that says why', async ({
     page,
   }) => {

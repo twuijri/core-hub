@@ -73,12 +73,18 @@ export function SidebarRow({
   icon,
   label,
   emphasis = 'normal',
+  trailing,
   render,
 }: {
   icon?: ReactNode;
   label: ReactNode;
   /** `primary` is the one filled row at the top; `normal` is everything else. */
   emphasis?: 'primary' | 'normal';
+  /**
+   * What sits at the row's end: a count, a state dot. It follows the label and so lands
+   * on the left in Arabic and the right in English without a rule of its own.
+   */
+  trailing?: ReactNode;
   /** Renders the row as whatever element it must be: a link, a button. */
   render(props: { className: string; children: ReactNode }): ReactNode;
 }) {
@@ -86,6 +92,7 @@ export function SidebarRow({
     <>
       {icon}
       <span className="mj-sidebar-row-label">{label}</span>
+      {trailing}
     </>
   );
   return render({ className: `mj-sidebar-row mj-sidebar-row-${emphasis}`, children });
