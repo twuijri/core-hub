@@ -1,6 +1,10 @@
 /**
- * The bundled provider catalogue: the providers a fresh workspace is offered, and the one
+ * The bundled provider catalogue: the provider **types** a person can add, and the one
  * place that says what each provider's credential is *called* in the outside world.
+ *
+ * Nothing here is a provider the workspace *has*. A row in `providers` exists because
+ * somebody added it (`models.createProvider`); this file is what the "Add provider"
+ * dialog and `majlis providers presets` list (contract decision §26).
  *
  * Two things live on an entry and nowhere else:
  *
@@ -40,12 +44,22 @@ export const CREDENTIAL_FAMILIES = [
   'xai',
   'elevenlabs',
   'ollama',
+  'lmstudio',
+  'litellm',
   'custom',
 ] as const;
 export type CredentialFamily = (typeof CREDENTIAL_FAMILIES)[number];
 
 /** How a provider's HTTP surface is driven (`adapters/`). */
 export type ProviderProtocol = 'anthropic' | 'openai' | 'google' | 'ollama' | 'elevenlabs';
+
+/**
+ * Whether the endpoint needs a key. There is deliberately no third value meaning "a key
+ * is refused": LM Studio, LiteLLM, `cli-proxy-api` and vLLM are all routinely put behind
+ * one, so `optional` means *the hub does not demand it*, never *you may not type it*
+ * (contract decision §26).
+ */
+export type KeyRequirement = 'required' | 'optional';
 
 export interface ProviderCatalogueEntry {
   slug: string;
@@ -74,9 +88,19 @@ export interface ProviderCatalogueEntry {
    */
   hermesProvider: string | null;
   apiMode: ApiMode;
-  authKind: AuthKind;
-  baseUrl: string;
+  /** Whether the hub demands a key. A key is always *accepted* (`KeyRequirement`). */
+  keyRequirement: KeyRequirement;
+  /**
+   * What to prefill in the dialog, or null when no default could be right — LiteLLM and
+   * a bare OpenAI-compatible endpoint have no address anybody could guess, so the person
+   * must supply one (`base_url_required` in the contract is `baseUrl === null`).
+   */
+  baseUrl: string | null;
   capabilities: ProviderCapabilities;
+  /** Runs on the person's own machine or network: the loopback warning applies. */
+  local?: boolean;
+  /** May be added more than once, each instance named by the person (custom endpoints). */
+  repeatable?: boolean;
   /** Defaults for a speech provider's `settings` (model, language, voice). */
   settings?: SpeechProviderSettings;
   /** Documentation link shown next to the key field, so nobody has to search for it. */
@@ -84,9 +108,17 @@ export interface ProviderCatalogueEntry {
 }
 
 /**
- * The seed. Every entry is a provider the hub knows how to talk to today: it has an
+ * The row's `auth.kind`. `none` is the contract's "no key is required" — the client still
+ * offers the field, and only the endpoint's own 401 may say a key is missing.
+ */
+export function authKindOf(entry: Pick<ProviderCatalogueEntry, 'keyRequirement'>): AuthKind {
+  return entry.keyRequirement === 'required' ? 'api_key' : 'none';
+}
+
+/**
+ * The presets. Every entry is a provider the hub knows how to talk to today: it has an
  * adapter in `adapters/`, a real model list endpoint (or an honest `listModels: false`),
- * and a documented place to get a key.
+ * and a documented place to get a key when it needs one.
  */
 export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
   {
@@ -99,7 +131,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     hermesProvider: 'anthropic',
     protocol: 'anthropic',
     apiMode: 'native',
-    authKind: 'api_key',
+    keyRequirement: 'required',
     baseUrl: 'https://api.anthropic.com',
     capabilities: { chat: true, listModels: true },
     keysUrl: 'https://console.anthropic.com/settings/keys',
@@ -114,7 +146,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     hermesProvider: 'openai-api',
     protocol: 'openai',
     apiMode: 'responses',
-    authKind: 'api_key',
+    keyRequirement: 'required',
     baseUrl: 'https://api.openai.com/v1',
     capabilities: { chat: true, embeddings: true, listModels: true },
     keysUrl: 'https://platform.openai.com/api-keys',
@@ -129,7 +161,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     hermesProvider: 'openrouter',
     protocol: 'openai',
     apiMode: 'chat_completions',
-    authKind: 'api_key',
+    keyRequirement: 'required',
     baseUrl: 'https://openrouter.ai/api/v1',
     capabilities: { chat: true, listModels: true },
     keysUrl: 'https://openrouter.ai/keys',
@@ -144,7 +176,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     hermesProvider: 'gemini',
     protocol: 'google',
     apiMode: 'native',
-    authKind: 'api_key',
+    keyRequirement: 'required',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     capabilities: { chat: true, embeddings: true, listModels: true },
     keysUrl: 'https://aistudio.google.com/apikey',
@@ -159,7 +191,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     hermesProvider: null,
     protocol: 'openai',
     apiMode: 'chat_completions',
-    authKind: 'api_key',
+    keyRequirement: 'required',
     baseUrl: 'https://api.groq.com/openai/v1',
     capabilities: { chat: true, listModels: true },
     keysUrl: 'https://console.groq.com/keys',
@@ -174,7 +206,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     hermesProvider: null,
     protocol: 'openai',
     apiMode: 'chat_completions',
-    authKind: 'api_key',
+    keyRequirement: 'required',
     baseUrl: 'https://api.mistral.ai/v1',
     capabilities: { chat: true, embeddings: true, listModels: true },
     keysUrl: 'https://console.mistral.ai/api-keys',
@@ -189,7 +221,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     hermesProvider: 'deepseek',
     protocol: 'openai',
     apiMode: 'chat_completions',
-    authKind: 'api_key',
+    keyRequirement: 'required',
     baseUrl: 'https://api.deepseek.com/v1',
     capabilities: { chat: true, listModels: true },
     keysUrl: 'https://platform.deepseek.com/api_keys',
@@ -204,7 +236,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     hermesProvider: 'xai',
     protocol: 'openai',
     apiMode: 'chat_completions',
-    authKind: 'api_key',
+    keyRequirement: 'required',
     baseUrl: 'https://api.x.ai/v1',
     capabilities: { chat: true, listModels: true },
     keysUrl: 'https://console.x.ai',
@@ -220,9 +252,69 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     hermesProvider: null,
     protocol: 'ollama',
     apiMode: 'chat_completions',
-    authKind: 'none',
+    // Ollama itself authenticates nothing, but people put it behind a reverse proxy that
+    // does; `optional` is "not demanded", never "not accepted" (the defect of 2026-09-22).
+    keyRequirement: 'optional',
     baseUrl: 'http://127.0.0.1:11434',
     capabilities: { chat: true, embeddings: true, listModels: true },
+    local: true,
+    keysUrl: null,
+  },
+  {
+    slug: 'lmstudio',
+    label: 'LM Studio',
+    kind: 'llm',
+    family: 'lmstudio',
+    // A local server's key, if it has one, is nobody else's variable: stored here, and
+    // propagated nowhere (there is no LM Studio slug in Hermes and no world-wide name).
+    envVar: null,
+    hermesEnvVars: [],
+    hermesProvider: null,
+    protocol: 'openai',
+    apiMode: 'chat_completions',
+    keyRequirement: 'optional',
+    // LM Studio's developer server, as its own UI prints it.
+    baseUrl: 'http://127.0.0.1:1234/v1',
+    capabilities: { chat: true, embeddings: true, listModels: true },
+    local: true,
+    keysUrl: null,
+  },
+  {
+    slug: 'litellm',
+    label: 'LiteLLM',
+    kind: 'llm',
+    family: 'litellm',
+    envVar: null,
+    hermesEnvVars: [],
+    hermesProvider: null,
+    protocol: 'openai',
+    apiMode: 'chat_completions',
+    // LiteLLM proxies are commonly run with a master key, and just as commonly without.
+    keyRequirement: 'optional',
+    // No default: a LiteLLM proxy is wherever its owner put it, and a wrong guess here
+    // would be a URL the person has to notice and undo.
+    baseUrl: null,
+    capabilities: { chat: true, embeddings: true, listModels: true },
+    local: true,
+    keysUrl: 'https://docs.litellm.ai/docs/proxy/virtual_keys',
+  },
+  {
+    slug: 'openai-compatible',
+    label: 'OpenAI-compatible',
+    kind: 'llm',
+    // Somebody's own endpoint is its own credential family (`custom:<slug>` per row):
+    // sharing a key with a built-in provider of a similar name would be a guess.
+    family: 'custom',
+    envVar: null,
+    hermesEnvVars: [],
+    hermesProvider: null,
+    protocol: 'openai',
+    apiMode: 'chat_completions',
+    keyRequirement: 'optional',
+    baseUrl: null,
+    capabilities: { chat: true, listModels: true },
+    local: false,
+    repeatable: true,
     keysUrl: null,
   },
   {
@@ -235,7 +327,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     hermesProvider: null,
     protocol: 'openai',
     apiMode: 'native',
-    authKind: 'api_key',
+    keyRequirement: 'required',
     baseUrl: 'https://api.openai.com/v1',
     capabilities: { stt: true, listModels: true },
     settings: { model: 'whisper-1', language: null, voice: null },
@@ -251,7 +343,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     hermesProvider: null,
     protocol: 'openai',
     apiMode: 'native',
-    authKind: 'api_key',
+    keyRequirement: 'required',
     baseUrl: 'https://api.openai.com/v1',
     capabilities: { tts: true, listModels: true, listVoices: false },
     settings: { model: 'gpt-4o-mini-tts', language: null, voice: 'alloy' },
@@ -267,7 +359,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     hermesProvider: null,
     protocol: 'elevenlabs',
     apiMode: 'native',
-    authKind: 'api_key',
+    keyRequirement: 'required',
     baseUrl: 'https://api.elevenlabs.io/v1',
     capabilities: { tts: true, listModels: false, listVoices: true },
     settings: { model: 'eleven_multilingual_v2', language: null, voice: null },
@@ -306,11 +398,15 @@ export function assertCatalogueIsWellFormed(
     }
     if (seen.has(entry.slug)) throw new Error(`provider catalogue: duplicate "${entry.slug}"`);
     seen.add(entry.slug);
-    if (entry.authKind === 'api_key' && !entry.envVar) {
+    if (entry.keyRequirement === 'required' && !entry.envVar) {
       throw new Error(`provider catalogue: "${entry.slug}" needs a key but names no variable`);
     }
-    if (entry.authKind === 'none' && entry.envVar) {
-      throw new Error(`provider catalogue: "${entry.slug}" needs no key but names a variable`);
+    // An entry with no variable is one whose key the hub stores and propagates nowhere:
+    // a local server has no world-wide name for its key, and no slug in Hermes either.
+    if (!entry.envVar && (entry.hermesEnvVars.length > 0 || entry.hermesProvider)) {
+      throw new Error(
+        `provider catalogue: "${entry.slug}" names no variable but claims a Hermes name`,
+      );
     }
     const known = envByFamily.get(entry.family);
     if (known !== undefined && known !== entry.envVar) {
@@ -320,10 +416,16 @@ export function assertCatalogueIsWellFormed(
       );
     }
     envByFamily.set(entry.family, entry.envVar);
-    try {
-      void new URL(entry.baseUrl);
-    } catch {
-      throw new Error(`provider catalogue: "${entry.slug}" has no usable base URL`);
+    if (entry.baseUrl !== null) {
+      try {
+        void new URL(entry.baseUrl);
+      } catch {
+        throw new Error(`provider catalogue: "${entry.slug}" has no usable base URL`);
+      }
+    }
+    // A repeatable entry is added more than once, so it cannot own a shared family row.
+    if (entry.repeatable && entry.family !== 'custom') {
+      throw new Error(`provider catalogue: repeatable "${entry.slug}" must be its own family`);
     }
   }
 }

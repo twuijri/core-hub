@@ -8387,7 +8387,10 @@ paths:
     get:
       operationId: models.listProviders
       tags: [models]
-      summary: List providers with their catalogue (the General Models tab, the provider-keys tab)
+      summary: List the providers this workspace has added (the General Models tab)
+      description: >-
+        Only configured providers: a fresh workspace answers with an empty list and the
+        client offers "Add provider" (`models.listProviderPresets`).
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: kind
@@ -8457,7 +8460,12 @@ paths:
     post:
       operationId: models.createProvider
       tags: [models]
-      summary: Add a custom OpenAI-compatible (or STT/TTS) provider (admin)
+      summary: Add a provider — from a preset, or a custom OpenAI-compatible endpoint (admin)
+      description: >-
+        The one way a provider row comes into existence: `models.listProviders` returns
+        what was added here, not the bundled catalogue. With `preset` the hub also creates
+        the sibling rows of the same credential family (OpenAI chat, dictation and speech
+        are three rows and one key, ADR 0010).
       parameters:
         - $ref: '#/components/parameters/Profile'
       x-roles: [owner, admin]
@@ -8468,6 +8476,7 @@ paths:
             schema:
               $ref: '#/components/schemas/ProviderCreate'
             example:
+              preset: openai-compatible
               label: 'خادم محلي'
               kind: llm
               base_url: http://ollama.local:11434/v1
@@ -8583,7 +8592,10 @@ paths:
     delete:
       operationId: models.deleteProvider
       tags: [models]
-      summary: Remove a custom provider (built-in providers can only be disabled) (admin)
+      summary: Remove a provider the workspace added (admin)
+      description: >-
+        A provider a person added is a provider they can remove, preset or not. The stored
+        key goes with the last row of its credential family.
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
@@ -8653,6 +8665,105 @@ paths:
                 ok: true
                 message: 'استجاب المزوّد بنجاح'
                 duration_ms: 640
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /models/provider-presets:
+    get:
+      operationId: models.listProviderPresets
+      tags: [models]
+      summary: The provider types a person can add (the "Add provider" dialog)
+      description: >-
+        The bundled catalogue of provider *types*, which is not the same list as
+        `models.listProviders`: that one answers "what have I configured", this one answers
+        "what can I add". `host` says whether the hub is running inside a container, so a
+        client can warn that a `127.0.0.1` base URL is the container itself.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - name: kind
+          in: query
+          schema:
+            $ref: '#/components/schemas/ProviderKind'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The presets (not paged).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, host]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProviderPreset'
+                  host:
+                    $ref: '#/components/schemas/ProviderHost'
+              example:
+                items:
+                  - id: lmstudio
+                    label: LM Studio
+                    kind: llm
+                    api_mode: chat_completions
+                    base_url: http://127.0.0.1:1234/v1
+                    base_url_required: true
+                    key: optional
+                    local: true
+                    repeatable: false
+                    keys_url: null
+                host:
+                  containerized: true
+                  loopback_alias: host.docker.internal
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /models/provider-probes:
+    post:
+      operationId: models.probeProvider
+      tags: [models]
+      summary: Ask an endpoint for its model list before adding it (admin)
+      description: >-
+        The "Fetch" button of the add-provider dialog. Nothing is stored: the hub makes the
+        same model-list request the provider would get after being added and reports what
+        came back. A provider that cannot be reached is `ok: false` with the endpoint's own
+        words, never an empty list presented as success.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      x-roles: [owner, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderProbe'
+            example:
+              preset: lmstudio
+              base_url: http://host.docker.internal:1234/v1
+              api_key: null
+      x-rt-events: []
+      responses:
+        '200':
+          description: 'What the endpoint answered (a failure is still 200 with `ok: false`).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderProbeResult'
+              example:
+                ok: true
+                message: null
+                duration_ms: 31
+                models:
+                  - id: qwen2.5-coder-7b-instruct
+                    label: qwen2.5-coder-7b-instruct
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -15365,6 +15476,11 @@ components:
             auth:
               type: object
               required: [kind, signed_in]
+              description: >-
+                `kind` is what the provider *requires*: `none` means no key is required —
+                it never means a key is refused. Every provider accepts one (a local proxy
+                behind a master key is the common case), so a client always offers the
+                field, and a missing key is only ever reported by the endpoint itself.
               properties:
                 kind:
                   type: string
@@ -15392,10 +15508,103 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/Model'
+    ProviderPreset:
+      type: object
+      description: One provider *type* a person can add, with everything the dialog prefills.
+      required:
+        [id, label, kind, api_mode, base_url, base_url_required, key, local, repeatable, keys_url]
+      properties:
+        id:
+          type: string
+          description: 'The catalogue id, sent back as `ProviderCreate.preset`.'
+        label:
+          type: string
+        kind:
+          $ref: '#/components/schemas/ProviderKind'
+        api_mode:
+          type: string
+          enum: [native, chat_completions, responses]
+        base_url:
+          type: [string, 'null']
+          description: What to prefill; `null` when no default could be right (LiteLLM).
+        base_url_required:
+          type: boolean
+          description: Whether the person must supply one before the provider can be added.
+        key:
+          type: string
+          enum: [required, optional]
+          description: >-
+            `optional` providers are added and used with no key; one may still be typed,
+            because a local proxy is often put behind a master key. There is no value that
+            means "a key is refused".
+        local:
+          type: boolean
+          description: Runs on the person's own machine or network (loopback warning applies).
+        repeatable:
+          type: boolean
+          description: 'May be added more than once; the person gives each instance its own name.'
+        keys_url:
+          type: [string, 'null']
+    ProviderHost:
+      type: object
+      required: [containerized, loopback_alias]
+      properties:
+        containerized:
+          type: boolean
+          description: >-
+            The hub is running inside a container, so `127.0.0.1` in a base URL is the
+            container itself and not the person's machine.
+        loopback_alias:
+          type: string
+          description: 'The host name to suggest instead of loopback (`host.docker.internal`).'
+    ProviderProbe:
+      type: object
+      description: 'Either `preset` or `base_url` must say where to ask; both may be given.'
+      properties:
+        preset:
+          type: [string, 'null']
+        base_url:
+          type: [string, 'null']
+        api_key:
+          type: [string, 'null']
+          description: 'Sent as typed; never stored by this operation. `null` asks with no key.'
+        api_mode:
+          type: string
+          enum: [native, chat_completions, responses]
+        kind:
+          $ref: '#/components/schemas/ProviderKind'
+    ProviderProbeResult:
+      type: object
+      required: [ok, message, duration_ms, models]
+      properties:
+        ok:
+          type: boolean
+        message:
+          type: [string, 'null']
+          description: "Why it failed, ending in the endpoint's own words. `null` when it worked."
+        duration_ms:
+          type: integer
+        models:
+          type: array
+          items:
+            type: object
+            required: [id, label]
+            properties:
+              id:
+                type: string
+              label:
+                type: string
     ProviderCreate:
       type: object
       required: [label, kind]
       properties:
+        preset:
+          type: [string, 'null']
+          description: >-
+            A `ProviderPreset.id`. With it the slug, protocol, credential family and
+            default base URL come from the catalogue and only what the person typed is
+            taken from this body. Without it the provider is an OpenAI-compatible endpoint
+            described entirely by `base_url` and `api_mode`.
         label:
           type: string
           maxLength: 80

@@ -1,17 +1,17 @@
 /**
- * Row access for the `models` module: the seeding of a workspace's provider rows from the
- * bundled catalogue, and the small typed reads every operation shares.
+ * Row access for the `models` module: the small typed reads and writes every operation
+ * shares.
  *
- * Seeding is lazy and idempotent. The first request a workspace makes creates one row per
- * catalogue entry — disabled providers included, because ADR 0006's rule for agents holds
- * for providers too: something the hub supports is *visible and unconfigured*, never
- * hidden. Re-seeding adds entries a newer hub version shipped and never touches a row a
- * person has edited.
+ * There is no seeding. A row in `providers` exists because somebody added it
+ * (`models.createProvider`); the bundled catalogue is a list of *presets* a client offers
+ * in its "Add provider" dialog, not a list of rows (contract decision §26). ADR 0006's
+ * "visible and unconfigured, never hidden" still holds — it is the preset list that is
+ * visible now, and the Models screen shows what the person actually configured.
  */
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { ModuleDb } from '../../lib/db.js';
 import { newUlid } from '../../db/ids.js';
-import { PROVIDER_CATALOGUE, catalogueEntry, type ProviderCatalogueEntry } from './catalogue.js';
+import { catalogueEntry, type ProviderCatalogueEntry } from './catalogue.js';
 import {
   ensembles,
   modelDefaults,
@@ -34,61 +34,10 @@ export interface StoreOptions {
 export class ModelsStore {
   private readonly db: ModuleDb;
   private readonly now: () => Date;
-  /** Workspaces already seeded in this process; the query below is idempotent anyway. */
-  private readonly seeded = new Set<string>();
 
   constructor(options: StoreOptions) {
     this.db = options.db;
     this.now = options.now ?? (() => new Date());
-  }
-
-  /** Creates the rows a fresh workspace is offered. Safe to call on every request. */
-  seed(workspace: string, ownerId: string): void {
-    if (this.seeded.has(workspace)) return;
-    const existing = new Set(
-      this.db
-        .select({ slug: providers.slug })
-        .from(providers)
-        .where(eq(providers.workspace, workspace))
-        .all()
-        .map((row) => row.slug),
-    );
-    const at = this.now();
-    for (const entry of PROVIDER_CATALOGUE) {
-      if (existing.has(entry.slug)) continue;
-      this.db
-        .insert(providers)
-        .values({
-          id: newUlid(),
-          ownerId,
-          workspace,
-          createdAt: at,
-          updatedAt: at,
-          slug: entry.slug,
-          label: entry.label,
-          kind: entry.kind,
-          builtin: true,
-          enabled: true,
-          baseUrl: entry.baseUrl,
-          apiMode: entry.apiMode,
-          authKind: entry.authKind,
-          family: entry.family,
-          capabilities: entry.capabilities,
-          settings: entry.settings ?? {},
-          // Nothing has been asked of the provider yet; `loading` would claim a refresh
-          // is running, so an unconfigured provider starts `unsupported` until it has a
-          // key and a first catalogue refresh has actually happened.
-          catalogueStatus: entry.capabilities.listModels ? 'loading' : 'unsupported',
-          status: entry.authKind === 'none' ? 'unconfigured' : 'unconfigured',
-        })
-        .run();
-    }
-    this.seeded.add(workspace);
-  }
-
-  /** Forget the in-process seed marker (used when a workspace is deleted in a test). */
-  forgetSeed(workspace: string): void {
-    this.seeded.delete(workspace);
   }
 
   listProviders(workspace: string, kind?: string): ProviderRow[] {

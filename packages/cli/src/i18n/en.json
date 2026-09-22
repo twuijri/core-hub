@@ -54,7 +54,11 @@
     "provider": "Only this provider's models.",
     "role": "Which default to set: chat (the default), coding, title, summary or embedding.",
     "display_name": "Display name for the owner (asked for when omitted)",
-    "workspace_name": "Name of the first workspace (asked for when omitted)"
+    "workspace_name": "Name of the first workspace (asked for when omitted)",
+    "base_url": "The endpoint's base URL (required when the preset has no default).",
+    "provider_name": "A name for this provider, instead of the preset label.",
+    "no_key": "Add it without asking for a key.",
+    "clear_key": "Forget the stored key but keep the provider."
   },
   "cmd": {
     "setup": "Create the owner account on a hub that has none yet",
@@ -73,12 +77,13 @@
     "sessions_delete": "Delete a session",
     "chat": "Chat in a session and stream the reply",
     "help": "Show help for a command",
-    "providers_list": "List the workspace's model providers and whether each has a key.",
-    "providers_add": "Store a provider's API key (asked for, never given as an argument).",
+    "providers_list": "List the providers this workspace added, with their address and whether a key is stored.",
+    "providers_add": "Add a provider from a preset, or store a key for one you already added.",
     "providers_test": "Ask the provider whether the stored key works.",
-    "providers_remove": "Clear a provider's key, or remove a custom provider.",
+    "providers_remove": "Remove a provider, or (--clear-key) only forget its stored key.",
     "models_list": "List the models the providers reported.",
-    "models_default": "Show the workspace's default models, or set one."
+    "models_default": "Show the workspace's default models, or set one.",
+    "providers_presets": "List the provider types you can add, local model servers included."
   },
   "arg": {
     "code": "Pairing code (XXXX-XXXX) or the full QR JSON",
@@ -86,7 +91,8 @@
     "session_id": "Session id",
     "command": "Command name",
     "provider": "Provider slug or id (`anthropic`).",
-    "model_key": "Model key as `<provider>/<model>`; omit to show the current defaults."
+    "model_key": "Model key as `<provider>/<model>`; omit to show the current defaults.",
+    "provider_or_preset": "A provider you already added, or a preset id from `providers presets`."
   },
   "errors": {
     "not_signed_in": "Not signed in. Run `majlis login --server URL` first.",
@@ -230,10 +236,10 @@
     "model": "Model",
     "context": "Context",
     "empty": "No models yet. Add a provider key and the hub fetches its model list.",
-    "providers_empty": "No providers in this workspace.",
+    "providers_empty": "No providers added yet. `majlis providers presets` lists what you can add.",
     "key_stored": "stored",
     "key_missing": "missing",
-    "key_not_needed": "not needed",
+    "key_not_needed": "optional",
     "prompt_key": "API key for {provider}: ",
     "key_saved": "Key stored for {provider}.",
     "key_cleared": "Key removed from {provider}.",
@@ -241,6 +247,19 @@
     "shared_note": "Every agent uses this key; you do not enter it again per agent.",
     "unknown_provider": "No provider \"{provider}\". Known: {known}",
     "role_chat": "Chat",
-    "default_set": "Default for {role} is now {model}."
+    "default_set": "Default for {role} is now {model}.",
+    "preset": "Type",
+    "base_url": "Base URL",
+    "base_url_needed": "— you give it",
+    "key_required": "required",
+    "key_optional": "optional",
+    "prompt_key_optional": "API key for {provider} (optional, Enter to skip): ",
+    "key_unchanged": "Nothing typed; {provider} is unchanged.",
+    "provider_added": "Provider {provider} added at {url}. Its model list is being fetched.",
+    "unknown_preset": "No provider type \"{provider}\". Known: {known}",
+    "base_url_required": "This provider has no default address; pass --base-url.",
+    "key_required_for": "{provider} needs a key to answer; nothing was stored.",
+    "container_note": "The hub runs in a container: 127.0.0.1 here is the container, not your machine.",
+    "loopback_warning": "This address is loopback, and the hub runs in a container: it will reach the container itself. Try {url} (and add {alias} to the stack on a Linux host)."
   }
 }

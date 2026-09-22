@@ -1,15 +1,30 @@
 /**
- * providers list · add · test · remove, and models list · default.
+ * providers presets · list · add · test · remove, and models list · default.
  *
  * A key is never a command-line argument (`args.ts` §SECRET_OPTIONS refuses `--token` and
  * friends for the same reason): it would land in the shell history and in `ps`. `providers
  * add` reads it from the prompt, hidden, or from stdin when stdout is a pipe — so a script
  * can do `printf '%s' "$KEY" | majlis providers add anthropic`.
+ *
+ * Two rules the web client obeys too (contract decision §26):
+ * - `providers list` shows the providers this workspace **added**; `providers presets`
+ *   shows what can be added, local model servers included.
+ * - a key is *never refused*. A provider whose preset says `key: optional` is added and
+ *   used without one, and the prompt still lets a key be typed for it — a local proxy
+ *   behind a master key is ordinary. Only the endpoint's own answer may say a key is
+ *   missing.
  */
 import type { CommandSpec } from '../args.js';
 import type { CommandContext } from '../context.js';
 import { CliError, UsageError } from '../errors.js';
-import type { Model, ModelDefaults, ModelRef, Provider } from '../types.js';
+import type {
+  Model,
+  ModelDefaults,
+  ModelRef,
+  Provider,
+  ProviderHost,
+  ProviderPreset,
+} from '../types.js';
 import { optionString, requireSession } from './shared.js';
 
 /** The provider a person named, by slug or by id. A miss lists what there is. */
@@ -27,8 +42,41 @@ async function loadProviders(ctx: CommandContext): Promise<Provider[]> {
   return data.items as Provider[];
 }
 
-function configured(provider: Provider): boolean {
-  return provider.auth.kind === 'none' || provider.api_key !== null;
+async function loadPresets(
+  ctx: CommandContext,
+): Promise<{ items: ProviderPreset[]; host: ProviderHost }> {
+  const { data } = await requireSession(ctx).client.request('get', '/models/provider-presets');
+  return data as { items: ProviderPreset[]; host: ProviderHost };
+}
+
+/** `127.0.0.1` inside a container is the container. Say so; never rewrite what was typed. */
+function warnIfLoopback(ctx: CommandContext, url: string, host: ProviderHost): void {
+  if (!host.containerized || !isLoopback(url)) return;
+  ctx.out.notice(
+    ctx.out.style.dim(
+      ctx.t('models.loopback_warning', { alias: host.loopback_alias, url: suggestHost(url, host) }),
+    ),
+  );
+}
+
+export function isLoopback(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  } catch {
+    return false;
+  }
+}
+
+/** The same URL with the container-to-host alias in place of loopback, as a suggestion. */
+export function suggestHost(url: string, host: ProviderHost): string {
+  try {
+    const parsed = new URL(url);
+    parsed.hostname = host.loopback_alias;
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return url;
+  }
 }
 
 export const providersListCommand: CommandSpec = {
@@ -55,6 +103,7 @@ export const providersListCommand: CommandSpec = {
         { key: 'slug', label: t('models.slug') },
         { key: 'label', label: t('models.label') },
         { key: 'kind', label: t('models.kind') },
+        { key: 'base_url', label: t('models.base_url') },
         { key: 'key', label: t('models.key') },
         { key: 'models', label: t('models.count') },
       ],
@@ -62,14 +111,13 @@ export const providersListCommand: CommandSpec = {
         slug: provider.slug,
         label: provider.label,
         kind: provider.kind,
-        // Never the value, and never a length: only whether one is stored.
-        key: t(
-          provider.auth.kind === 'none'
-            ? 'models.key_not_needed'
-            : configured(provider)
-              ? 'models.key_stored'
-              : 'models.key_missing',
-        ),
+        base_url: provider.base_url ?? '—',
+        // Never the value, and never a length: only whether one is stored — and for a
+        // provider that does not require one, that it is optional rather than missing.
+        key:
+          provider.api_key !== null
+            ? t('models.key_stored')
+            : t(provider.auth.kind === 'none' ? 'models.key_optional' : 'models.key_missing'),
         models: String(provider.models.length),
       })),
     );
@@ -77,40 +125,141 @@ export const providersListCommand: CommandSpec = {
   },
 };
 
+export const providersPresetsCommand: CommandSpec = {
+  path: ['providers', 'presets'],
+  description: 'cmd.providers_presets',
+  options: { kind: { type: 'string', description: 'option.provider_kind', value: 'KIND' } },
+  async run(ctx: CommandContext): Promise<number> {
+    const { t } = ctx;
+    const kind = optionString(ctx, 'kind');
+    if (kind && !['llm', 'stt', 'tts'].includes(kind)) {
+      throw new UsageError('usage.invalid_option', { option: '--kind', value: kind });
+    }
+    const { items, host } = await loadPresets(ctx);
+    const presets = items.filter((preset) => !kind || preset.kind === kind);
+    if (ctx.globals.json) {
+      ctx.out.json({ items: presets, host });
+      return 0;
+    }
+    ctx.out.table(
+      [
+        { key: 'id', label: t('models.preset') },
+        { key: 'label', label: t('models.label') },
+        { key: 'kind', label: t('models.kind') },
+        { key: 'key', label: t('models.key') },
+        { key: 'base_url', label: t('models.base_url') },
+      ],
+      presets.map((preset) => ({
+        id: preset.id,
+        label: preset.label,
+        kind: preset.kind,
+        key: t(preset.key === 'required' ? 'models.key_required' : 'models.key_optional'),
+        base_url: preset.base_url ?? t('models.base_url_needed'),
+      })),
+    );
+    if (host.containerized) ctx.out.notice(ctx.out.style.dim(t('models.container_note')));
+    return 0;
+  },
+};
+
 export const providersAddCommand: CommandSpec = {
   path: ['providers', 'add'],
   description: 'cmd.providers_add',
-  positionals: [{ name: 'PROVIDER', description: 'arg.provider', required: true }],
+  positionals: [{ name: 'PROVIDER', description: 'arg.provider_or_preset', required: true }],
+  options: {
+    'base-url': { type: 'string', description: 'option.base_url', value: 'URL' },
+    name: { type: 'string', description: 'option.provider_name', value: 'NAME' },
+    'no-key': { type: 'boolean', description: 'option.no_key' },
+  },
   async run(ctx: CommandContext): Promise<number> {
     const { t } = ctx;
-    const provider = findProvider(await loadProviders(ctx), ctx.positionals[0] ?? '');
-    if (provider.auth.kind === 'none') {
-      ctx.out.line(t('models.key_not_needed'));
-      return 0;
-    }
-    // Hidden prompt on a terminal; a piped line when it is a script. Either way the key
-    // never reaches argv (`args.ts` §SECRET_OPTIONS).
-    const key = await ctx.prompter.ask(t('models.prompt_key', { provider: provider.slug }), {
-      hidden: true,
-    });
-    if (key === null || key.trim() === '') throw new CliError('errors.interrupted');
+    const needle = ctx.positionals[0] ?? '';
+    const client = requireSession(ctx).client;
+    const existing = (await loadProviders(ctx)).find((p) => p.slug === needle || p.id === needle);
 
-    const { data } = await requireSession(ctx).client.request(
-      'patch',
-      '/models/providers/{provider_id}',
-      { params: { provider_id: provider.id }, body: { api_key: key.trim() } },
-    );
-    const saved = data as Provider;
-    if (ctx.globals.json) {
-      ctx.out.json(saved);
+    // Already added: this is "give it a key" — allowed for every provider, including the
+    // ones that do not require one (the defect of 2026-09-22).
+    if (existing) {
+      const key = await askKey(ctx, existing.slug, existing.auth.kind === 'api_key');
+      if (key === null) {
+        ctx.out.line(t('models.key_unchanged', { provider: existing.slug }));
+        return 0;
+      }
+      const { data } = await client.request('patch', '/models/providers/{provider_id}', {
+        params: { provider_id: existing.id },
+        body: { api_key: key },
+      });
+      const saved = data as Provider;
+      if (ctx.globals.json) ctx.out.json(saved);
+      else {
+        ctx.out.line(t('models.key_saved', { provider: saved.slug }));
+        ctx.out.notice(ctx.out.style.dim(t('models.shared_note')));
+      }
       return 0;
     }
-    ctx.out.line(t('models.key_saved', { provider: saved.slug }));
-    // The point of the module, said once where the person just did the work.
+
+    const { items, host } = await loadPresets(ctx);
+    const preset = items.find((item) => item.id === needle);
+    if (!preset) {
+      throw new CliError('models.unknown_preset', {
+        provider: needle,
+        known: items.map((item) => item.id).join(', '),
+      });
+    }
+
+    const baseUrl = optionString(ctx, 'base-url') ?? preset.base_url ?? '';
+    if (!baseUrl) throw new CliError('models.base_url_required', { provider: preset.id });
+    warnIfLoopback(ctx, baseUrl, host);
+
+    const key = await askKey(ctx, preset.id, preset.key === 'required');
+    if (preset.key === 'required' && !key)
+      throw new CliError('models.key_required_for', {
+        provider: preset.id,
+      });
+
+    const { data } = await client.request('post', '/models/providers', {
+      body: {
+        preset: preset.id,
+        label: optionString(ctx, 'name') ?? preset.label,
+        kind: preset.kind,
+        base_url: baseUrl,
+        // The hub takes the mode from the preset; the generated type still wants the
+        // field, and the OpenAI-shaped one is the only mode a client here would pick.
+        api_mode:
+          preset.api_mode === 'responses' ? ('responses' as const) : ('chat_completions' as const),
+        ...(key ? { api_key: key } : {}),
+      },
+    });
+    const added = data as Provider;
+    if (ctx.globals.json) {
+      ctx.out.json(added);
+      return 0;
+    }
+    ctx.out.line(t('models.provider_added', { provider: added.slug, url: added.base_url ?? '' }));
+    // The model list is fetched as a job; `providers list` shows the count once it lands.
     ctx.out.notice(ctx.out.style.dim(t('models.shared_note')));
     return 0;
   },
 };
+
+/**
+ * The key, hidden on a terminal and piped in a script. `null` means "leave it alone":
+ * an empty answer is a skip, never an error, unless the provider says it needs one.
+ */
+async function askKey(
+  ctx: CommandContext,
+  provider: string,
+  required: boolean,
+): Promise<string | null> {
+  if (ctx.options['no-key'] === true) return null;
+  const answer = await ctx.prompter.ask(
+    ctx.t(required ? 'models.prompt_key' : 'models.prompt_key_optional', { provider }),
+    { hidden: true },
+  );
+  if (answer === null) throw new CliError('errors.interrupted');
+  const key = answer.trim();
+  return key === '' ? null : key;
+}
 
 export const providersTestCommand: CommandSpec = {
   path: ['providers', 'test'],
@@ -140,12 +289,13 @@ export const providersRemoveCommand: CommandSpec = {
   path: ['providers', 'remove'],
   description: 'cmd.providers_remove',
   positionals: [{ name: 'PROVIDER', description: 'arg.provider', required: true }],
+  options: { 'clear-key': { type: 'boolean', description: 'option.clear_key' } },
   async run(ctx: CommandContext): Promise<number> {
     const { t } = ctx;
     const provider = findProvider(await loadProviders(ctx), ctx.positionals[0] ?? '');
     const client = requireSession(ctx).client;
-    if (provider.builtin) {
-      // A built-in provider is part of the catalogue: clearing its key is the removal.
+    if (ctx.options['clear-key'] === true) {
+      // Keep the provider, forget its credentials — the "Clear credentials" of the UI.
       await client.request('patch', '/models/providers/{provider_id}', {
         params: { provider_id: provider.id },
         body: { api_key: '' },
@@ -153,6 +303,7 @@ export const providersRemoveCommand: CommandSpec = {
       ctx.out.line(t('models.key_cleared', { provider: provider.slug }));
       return 0;
     }
+    // What a person added, a person removes — preset or custom alike.
     await client.request('delete', '/models/providers/{provider_id}', {
       params: { provider_id: provider.id },
     });

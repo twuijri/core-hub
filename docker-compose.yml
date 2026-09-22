@@ -3,8 +3,8 @@
 #   docker compose logs hub     # prints the first-run setup token once; open the site and paste it
 # Upgrades replace only the image; /data (SQLite, keys, Hermes's home, coding agents) lives in
 # the named volume. The image bundles Hermes; the hub starts it on 127.0.0.1:8642 inside the
-# container (ADR 0008). Model provider keys are set in Hermes, inside the volume, never here:
-#   docker compose exec hub hermes model        (see docs/DEPLOY.md §3)
+# container (ADR 0008). Model provider keys are added once on the Models screen and the hub
+# propagates them to every agent, Hermes included (ADR 0010; docs/DEPLOY.md §3).
 services:
   hub:
     image: ghcr.io/twuijri/majlis:latest
@@ -26,6 +26,13 @@ services:
       # DATABASE_URL: postgres://hub:password@db:5432/hub
     volumes:
       - hub-data:/data
+    # A model server on the host (LM Studio, Ollama, LiteLLM) is not on 127.0.0.1 from
+    # in here — that is the container. This line gives the container a name for the host
+    # machine, which is what the Models screen suggests when you type a loopback address.
+    # Docker Desktop resolves the name already; on a Linux host this mapping is what
+    # creates it (docs/DEPLOY.md §3b).
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
 
 volumes:
   hub-data:
