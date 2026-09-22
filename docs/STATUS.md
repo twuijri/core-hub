@@ -4,7 +4,7 @@ Measured on this branch by asking a booted hub which contract operations are
 still the built-in 501 stub. Regenerate it the same way after a phase:
 every operation that answers `501 not_implemented` is not built yet.
 
-**169 of 251 contract operations are implemented.** Nothing fakes a success:
+**170 of 251 contract operations are implemented.** Nothing fakes a success:
 an unbuilt operation answers `501` with its operation id. Measured on this
 branch, 2026-09-22, by asking a booted hub which operations are still the
 built-in stub — and `packages/server/tests/unit/status.test.ts` keeps this
@@ -18,7 +18,7 @@ number from claiming more than the hub answers.
 | agents | 11 | 40 | registry, curated catalog (Hermes, the hub's own `direct` agent, four coding CLIs), install/remove/upgrade, discovery, restart, per-agent settings; the Hermes-gateway screens (skills, MCP, memory, channels, plugins, presets) are not built |
 | updates | 7 | 7 | release channels, publishing from an upload or a source URL the hub fetches itself, check, download with `Range`, settings whose token never comes back |
 | jobs | 3 | 3 | list, get, cancel, with `/rt/jobs` events |
-| meta | 1 | 2 | health |
+| meta | 2 | 2 | health, and `meta.get` — the hub's name, its build, the contract version it loaded, the realtime namespaces it actually opened, and whether it still needs an owner. Unauthenticated, because a client compares the contract version before it signs in |
 | knowledge | 1 | 1 | `knowledge.listItems` — journal, notes and files in one page; the attachment operations it also implements are counted under `sessions`, whose tag declares them |
 | audit | 1 | 1 | the Logs, Usage and Performance reports; `skills` still answers `501`, because nothing records skill use and zeros would read as a measurement |
 | plugins | 1 | 1 | what is installed on this hub — an empty list until an installer exists |
@@ -46,14 +46,14 @@ chat.**
 ## Clients
 - **Web** (`packages/web`): first-run setup, login, chat with streaming,
   approvals and resume, sessions list, agents, models, the Tasks board,
-  schedules, notifications, people, workspaces, settings, pairing. Screens
-  whose module is still 501 say so explicitly instead of showing an empty page.
-  Fourteen destinations are still that placeholder, and they are two different
+  schedules, notifications, people, workspaces, knowledge, plugins, updates,
+  about, settings, pairing. Screens whose module is still 501 say so explicitly
+  instead of showing an empty page.
+  Ten destinations are still that placeholder, and they are two different
   things. Nine wait on a **module**: `rooms`, and the seven Hermes-gateway
   pages of `agents` (skills, MCP, memory, jobs, channels, plugins, the global
-  agent). Five wait only on a **screen**, because the hub already answers
-  them: `knowledge`, `webhooks`, `updates`, `plugins` and `about` (`privacy`
-  has no operations of its own).
+  agent). One waits only on a **screen**, because the hub already answers it:
+  `webhooks` (`privacy` has no operations of its own).
 - **Terminal** (`packages/cli`): the reference client — `setup`, login, pairing,
   agents, models, sessions, an interactive `chat` with resume and approvals.
 - Desktop, Android and iOS: not started (ADR 0007, ADR 0009).

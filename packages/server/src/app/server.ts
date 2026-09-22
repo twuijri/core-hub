@@ -9,6 +9,8 @@ import { loadOpenApiDocument, type OpenApiDocument } from '@majlis/contracts';
 import { createLogger, type Logger } from '../lib/logger.js';
 import type { HubModule } from '../lib/module.js';
 import { modules as allModules } from '../modules/index.js';
+import { ownerUser } from '../modules/auth/index.js';
+import { requireSqlite } from '../lib/db.js';
 import { loadConfig, type HubConfig } from './config.js';
 import { createDatabase, packageRoot, type HubDatabase } from './db.js';
 import { registerRoutes, type RoutesReport } from './routes.js';
@@ -95,7 +97,15 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   };
   app.decorate('hub', hub);
   const events = await registerModuleEvents(io, modules);
-  const routes: RoutesReport = await registerRoutes(app, { version, database, modules, contract });
+  const routes: RoutesReport = await registerRoutes(app, {
+    version,
+    database,
+    modules,
+    contract,
+    // `auth` owns the question; the app only forwards it, so `/meta` does not have to
+    // know what an owner is (ADR 0011).
+    setupRequired: () => ownerUser(requireSqlite(database)) === null,
+  });
   hub.modules = routes.modules.filter((name) => events.includes(name));
   hub.namespaces = listNamespaces(io);
   hub.stubs = routes.stubs;
