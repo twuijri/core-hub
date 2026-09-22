@@ -482,6 +482,8 @@
   font-size: var(--mj-font-size-xs);
   color: var(--mj-color-text-muted);
   white-space: nowrap;
+}
+
 /* ---------------------------------------------------------------- knowledge
    A row is a card without being a Card: three tables share this list, and a border that
    changes with the kind is how you tell a journal entry from an attached file at a
