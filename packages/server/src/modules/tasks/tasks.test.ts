@@ -394,3 +394,104 @@ describe('tasks: a task never leaks out of its workspace', () => {
     }
   });
 });
+
+describe('one board for everything (owner decision, 2026-09-23)', () => {
+  it('shows tasks from every workspace the person may enter, not just the header one', async () => {
+    const hub = await signedInHub();
+    try {
+      const auth = { 'X-Hub-Profile': 'default' };
+      // A second workspace, and a task in each.
+      const made = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/profiles',
+        payload: { slug: 'work', name: 'العمل' },
+        headers: auth,
+      });
+      expect(made.statusCode).toBe(201);
+
+      for (const profile of ['default', 'work']) {
+        const created = await authed(hub, hub.token, {
+          method: 'POST',
+          url: '/api/v1/tasks',
+          payload: { title: `شيء في ${profile}` },
+          headers: { 'X-Hub-Profile': profile },
+        });
+        // No project was made first: the hub supplies the workspace's own.
+        expect(created.statusCode).toBe(201);
+      }
+
+      const board = await authed(hub, hub.token, {
+        method: 'GET',
+        url: '/api/v1/task-columns',
+        headers: auth,
+      });
+      expect(board.statusCode).toBe(200);
+      const body = board.json() as {
+        counts: { total: number };
+        columns: Array<{ status: string; tasks: Array<{ title: string; profile: string }> }>;
+      };
+      expect(body.counts.total).toBe(2);
+      const titles = body.columns.flatMap((column) => column.tasks.map((task) => task.title));
+      expect(titles).toContain('شيء في default');
+      expect(titles).toContain('شيء في work');
+      // Each card says where it is from, so one board is not a pile.
+      const profiles = body.columns.flatMap((column) => column.tasks.map((task) => task.profile));
+      expect([...new Set(profiles)].sort()).toEqual(['default', 'work']);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('narrows to one workspace when asked, and refuses one nobody may enter', async () => {
+    const hub = await signedInHub();
+    try {
+      const auth = { 'X-Hub-Profile': 'default' };
+      await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/tasks',
+        payload: { title: 'واحدة' },
+        headers: auth,
+      });
+      const one = await authed(hub, hub.token, {
+        method: 'GET',
+        url: '/api/v1/task-columns?profile=default',
+        headers: auth,
+      });
+      expect((one.json() as { counts: { total: number } }).counts.total).toBe(1);
+
+      // A profile nobody may enter is a wrong request, not an empty board.
+      const ghost = await authed(hub, hub.token, {
+        method: 'GET',
+        url: '/api/v1/task-columns?profile=nowhere',
+        headers: auth,
+      });
+      expect(ghost.statusCode).toBe(404);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('puts every task of a workspace in one project without being asked to make one', async () => {
+    const hub = await signedInHub();
+    try {
+      const auth = { 'X-Hub-Profile': 'default' };
+      for (const title of ['أولى', 'ثانية']) {
+        await authed(hub, hub.token, {
+          method: 'POST',
+          url: '/api/v1/tasks',
+          payload: { title },
+          headers: auth,
+        });
+      }
+      const projects = await authed(hub, hub.token, {
+        method: 'GET',
+        url: '/api/v1/projects',
+        headers: auth,
+      });
+      // One project, made once — not one per task and not none.
+      expect((projects.json() as { items: unknown[] }).items).toHaveLength(1);
+    } finally {
+      await hub.close();
+    }
+  });
+});

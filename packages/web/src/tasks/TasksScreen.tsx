@@ -36,13 +36,13 @@ import { CSS } from '@dnd-kit/utilities';
 import { useMemo, useState } from 'react';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
+import { useProfiles } from '../hub/queries.js';
 import { termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import {
   Badge,
   Button,
   Dialog,
-  EmptyState,
   Input,
   Menu,
   MenuItem,
@@ -54,7 +54,7 @@ import {
   useConfirm,
   usePrompt,
 } from '../ui/index.js';
-import { IconGrip, IconMore, IconPlus, IconTasks, IconTrash } from '../ui/icons.js';
+import { IconGrip, IconMore, IconPlus, IconTrash } from '../ui/icons.js';
 import {
   COLUMNS,
   INTAKE_STATUS,
@@ -69,7 +69,6 @@ import {
 } from './board.js';
 import {
   useBoard,
-  useCreateProject,
   useCreateTask,
   useDeleteTask,
   useMoveTask,
@@ -82,15 +81,20 @@ export function TasksScreen() {
   const { t } = useI18n();
   const title = t(termKey('tasks'));
   const projects = useProjects();
-  const [chosen, setChosen] = useState<string | null>(null);
-  const items = projects.data?.items ?? [];
-  const projectId = chosen ?? items[0]?.id ?? null;
-  const board = useBoard(projectId);
-  const createProject = useCreateProject();
-  const createTask = useCreateTask(projectId);
-  const move = useMoveTask(projectId);
-  const update = useUpdateTask(projectId);
-  const remove = useDeleteTask(projectId);
+  const workspaces = useProfiles().data ?? [];
+  const projectItems = projects.data?.items ?? [];
+  // Filters, not prerequisites. The board opens on everything — every workspace, every
+  // agent — and these narrow it (owner decision, 2026-09-23).
+  const [profile, setProfile] = useState<string>('');
+  const [projectId, setProjectId] = useState<string>('');
+  const board = useBoard({
+    ...(profile ? { profile } : {}),
+    ...(projectId ? { projectId } : {}),
+  });
+  const createTask = useCreateTask();
+  const move = useMoveTask();
+  const update = useUpdateTask();
+  const remove = useDeleteTask();
   const { ask, dialog } = useConfirm();
   const { ask: askText, dialog: textDialog } = usePrompt();
   const [draft, setDraft] = useState('');
@@ -192,49 +196,35 @@ export function TasksScreen() {
     );
   }
 
-  if (items.length === 0) {
-    return (
-      <AppShell title={title} wide>
-        <h1 className="sr-only">{title}</h1>
-        <EmptyState
-          icon={<IconTasks size={20} />}
-          title={t('tasks.no_projects')}
-          body={t('tasks.no_projects_body')}
-          action={
-            <Button
-              loading={createProject.isPending}
-              onClick={() => {
-                void askText({
-                  title: t('tasks.new_project'),
-                  label: t('tasks.project_name'),
-                  confirmLabel: t('common.save'),
-                }).then((name) => {
-                  if (name) createProject.mutate({ name });
-                });
-              }}
-              data-testid="new-project"
-            >
-              {t('tasks.new_project')}
-            </Button>
-          }
-          testId="tasks-empty"
-        />
-        {textDialog}
-      </AppShell>
-    );
-  }
-
   return (
     <AppShell title={title} wide>
       <h1 className="sr-only">{title}</h1>
       <header className="mb-3 flex flex-wrap items-center gap-2">
-        <Select
-          value={projectId}
-          onValueChange={(value) => setChosen(value)}
-          options={items.map((project) => ({ value: project.id, label: project.name }))}
-          label={t('tasks.project')}
-          testId="project-picker"
-        />
+        {/* Filters, and only when there is something to filter: a picker with one option
+            is a control that costs a glance and answers nothing. */}
+        {workspaces.length > 1 && (
+          <Select
+            value={profile}
+            placeholder={t('tasks.all_workspaces')}
+            onValueChange={(value) => setProfile(value ?? '')}
+            options={workspaces.map((workspace) => ({
+              value: workspace.slug,
+              label: workspace.name,
+            }))}
+            label={t('tasks.workspace')}
+            testId="profile-filter"
+          />
+        )}
+        {projectItems.length > 1 && (
+          <Select
+            value={projectId}
+            placeholder={t('tasks.all_projects')}
+            onValueChange={(value) => setProjectId(value ?? '')}
+            options={projectItems.map((project) => ({ value: project.id, label: project.name }))}
+            label={t('tasks.project')}
+            testId="project-filter"
+          />
+        )}
         <Badge>{t('tasks.count', { count: board.data?.counts.total ?? 0 })}</Badge>
         <span className="ms-auto flex items-center gap-2">
           <Input

@@ -6330,11 +6330,25 @@ paths:
       operationId: tasks.getColumns
       tags: [tasks]
       summary: The Tasks section in one call — columns with their ordered tasks and counts
+      description: >-
+        Global, so one board shows every workspace a person may enter (owner decision,
+        2026-09-23: "صفحه واحده فيها كل المهام لكل البروفايلات وكل الاجنتات"). Narrow it
+        with `profile`, `project_id` or `agent_id`; omit all three and it is everything.
+      x-scope: global
       parameters:
-        - $ref: '#/components/parameters/Profile'
+        - name: profile
+          in: query
+          description: One workspace instead of every workspace the caller may enter.
+          schema:
+            $ref: '#/components/schemas/ProfileSlug'
         - name: project_id
           in: query
-          required: true
+          description: One project instead of all of them.
+          schema:
+            $ref: '#/components/schemas/Ulid'
+        - name: agent_id
+          in: query
+          description: Only the tasks assigned to this agent.
           schema:
             $ref: '#/components/schemas/Ulid'
         - name: include_archived
@@ -14828,10 +14842,17 @@ components:
                 $ref: '#/components/schemas/Run'
     TaskCreate:
       type: object
-      required: [project_id, title]
+      required: [title]
       properties:
         project_id:
-          $ref: '#/components/schemas/Ulid'
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+          description: >-
+            Omit it and the task lands in the workspace's own project, created on first
+            use. A person writing down something to do should not have to invent a
+            container for it first.
+
         title:
           type: string
           minLength: 1
