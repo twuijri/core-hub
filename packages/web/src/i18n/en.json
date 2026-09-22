@@ -182,7 +182,9 @@
     "resynced": "Reconnected; the transcript was reloaded from the hub.",
     "session_deleted": "This session was deleted.",
     "run_failed": "The run failed: {error} ({code})",
-    "empty_title": "What shall we start with?"
+    "empty_title": "What shall we start with?",
+    "no_provider": "No model provider is configured for this workspace, so the agent has nothing to run on.",
+    "no_provider_action": "Open Settings → Models → Defaults"
   },
   "composer": {
     "label": "Message composer",

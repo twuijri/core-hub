@@ -42,13 +42,39 @@ export interface HermesModelChoice {
   model: string;
 }
 
+/**
+ * One OpenAI-compatible endpoint, as a block under Hermes's `providers:`.
+ *
+ * This is Hermes's own vocabulary for "an endpoint I do not ship a provider for", read
+ * from its MIT source (`hermes_cli/config_providers.py` declares the accepted keys;
+ * `hermes_cli/runtime_provider_custom.py` §`_match_new_style_provider` resolves the block
+ * into a runtime with this `base_url`, this transport and the key named by `key_env`).
+ * Writing it is what lets LM Studio, LiteLLM, Groq, Mistral and somebody's own endpoint
+ * be the model that actually runs.
+ */
+export interface HermesProviderRoute {
+  /** The block's key and `name`, always prefixed (`catalogue.ts` §HERMES_PROVIDER_PREFIX). */
+  name: string;
+  baseUrl: string;
+  /** null leaves the transport to Hermes's own URL detection. */
+  apiMode: 'chat_completions' | 'responses' | null;
+  /** The variable Hermes reads this endpoint's key from; the `.env` merge owns it. */
+  keyEnv: string;
+}
+
 /** What the workspace currently wants every agent to use. */
 export interface PropagationState {
   credentials: ResolvedCredential[];
   /**
+   * Every OpenAI-compatible endpoint the workspace has, as Hermes's `providers:` blocks.
+   * Written whether or not one of them is the current default: a provider the owner added
+   * is one they may switch to, and a run may name any of them per request.
+   */
+  hermesProviders: HermesProviderRoute[];
+  /**
    * The chat default in Hermes's vocabulary, or null — either because the owner set
-   * none, or because the provider it names is one Hermes has no slug for. Null means
-   * "leave Hermes's own selection alone", never "guess".
+   * none, or because the provider it names is one Hermes cannot be told about at all.
+   * Null means "leave Hermes's own selection alone", never "guess".
    */
   hermesModel: HermesModelChoice | null;
   /** Why `hermesModel` is null, when the owner did choose a default. */
@@ -177,9 +203,61 @@ export function writeHermesModel(
   home: string,
   choice: HermesModelChoice | null,
 ): HermesWriteResult {
+  return editHermesConfig(home, (document, result) => applyModel(document, choice, result));
+}
+
+/**
+ * Writes the workspace's OpenAI-compatible endpoints as `providers:` blocks.
+ *
+ * Only blocks whose key carries the hub's prefix are ours: one that is gone from the
+ * workspace is removed, one a person wrote by hand is copied through untouched. Every
+ * field is one Hermes documents (`_KNOWN_PROVIDER_KEYS`), so the gateway logs no
+ * "unknown config keys ignored" warning about a file the hub wrote.
+ */
+export function writeHermesProviders(
+  home: string,
+  routes: readonly HermesProviderRoute[],
+): HermesWriteResult {
+  return editHermesConfig(home, (document, result) => applyProviders(document, routes, result));
+}
+
+export interface HermesPropagation {
+  env: HermesWriteResult;
+  /** `config.yaml`: the `providers:` blocks and the model selection, written once. */
+  config: HermesWriteResult;
+  /** True when either file changed and the gateway should be recycled. */
+  dirty: boolean;
+}
+
+/**
+ * Both files, in one call. `config.yaml` is opened once and written once: the endpoints
+ * and the selection that names one of them must never be two writes, or a crash between
+ * them leaves Hermes pointed at a provider block that does not exist yet.
+ *
+ * Throws only on a corrupt `config.yaml`; the caller logs it.
+ */
+export function writeHermesConfiguration(home: string, state: PropagationState): HermesPropagation {
+  const env = writeHermesEnv(hermesEnvPlan(home, state));
+  const config = editHermesConfig(home, (document, result) => {
+    applyProviders(document, state.hermesProviders, result);
+    applyModel(document, state.hermesModel, result);
+  });
+  return { env, config, dirty: env.dirty || config.dirty };
+}
+
+// ---------------------------------------------------------------- config.yaml
+
+/**
+ * One round-trip over Hermes's `config.yaml`: parse, mutate key by key, write when the
+ * text actually changed. The round-trip is the point — comments, ordering and every
+ * sibling key survive, which is the rule Hermes's own `persist_model_selection()` states.
+ */
+function editHermesConfig(
+  home: string,
+  mutate: (document: YAML.Document, result: HermesWriteResult) => void,
+): HermesWriteResult {
   const file = path.join(home, 'config.yaml');
   const result: HermesWriteResult = { file, changed: [], removed: [], dirty: false };
-  if (!choice) return result;
   const existing = existsSync(file) ? readFileSync(file, 'utf8') : '';
   const document = YAML.parseDocument(existing);
   if (document.errors.length > 0) {
@@ -187,46 +265,113 @@ export function writeHermesModel(
     // known good one, and a clobbered file would take that away too.
     throw new Error(`${file} is not valid YAML; refusing to rewrite it`);
   }
-  // A fresh install ships `model: ""` (an empty-string sentinel). Replace it with the
-  // mapping Hermes itself upgrades it to, rather than setting a key inside a string.
-  const current = document.get('model');
-  if (typeof current === 'string' || current === null || current === undefined) {
-    document.set('model', { default: choice.model, provider: choice.provider });
-    result.changed.push('model.default', 'model.provider');
-  } else {
-    if (document.getIn(['model', 'default']) !== choice.model) {
-      document.setIn(['model', 'default'], choice.model);
-      result.changed.push('model.default');
-    }
-    const previousProvider = document.getIn(['model', 'provider']);
-    if (previousProvider !== choice.provider) {
-      document.setIn(['model', 'provider'], choice.provider);
-      result.changed.push('model.provider');
-      // The route of the provider we just left does not belong to the new one.
-      for (const key of ['base_url', 'api_mode'] as const) {
-        if (document.hasIn(['model', key])) {
-          document.deleteIn(['model', key]);
-          result.removed.push(`model.${key}`);
-        }
-      }
-    }
-  }
+  // An empty file parses to a null scalar, which is not a collection: setting a key on it
+  // throws. Hermes ships exactly that on a fresh install, so make it a mapping first —
+  // and only when there is something to put in it (below).
+  const empty =
+    document.contents === null || (YAML.isScalar(document.contents) && document.contents.value == null);
+  if (empty) document.contents = document.createNode({}) as YAML.Document['contents'];
+  mutate(document, result);
+  // Nothing to say, nothing to write. Without this a hub with no chat default would
+  // *create* a `config.yaml` saying `null`, which Hermes then cannot be given a model in
+  // at all — the file the next write has to parse is already not a mapping.
+  if (result.changed.length === 0 && result.removed.length === 0) return result;
   const text = document.toString();
   result.dirty = text !== existing;
   if (result.dirty) writeAtomic(file, text);
   return result;
 }
 
-export interface HermesPropagation {
-  env: HermesWriteResult;
-  model: HermesWriteResult;
-  /** True when either file changed and the gateway should be recycled. */
-  dirty: boolean;
+/** `model.default` + `model.provider`; null leaves Hermes's own selection alone. */
+function applyModel(
+  document: YAML.Document,
+  choice: HermesModelChoice | null,
+  result: HermesWriteResult,
+): void {
+  if (!choice) return;
+  // A fresh install ships `model: ""` (an empty-string sentinel). Replace it with the
+  // mapping Hermes itself upgrades it to, rather than setting a key inside a string.
+  const current = document.get('model');
+  if (typeof current === 'string' || current === null || current === undefined) {
+    document.set('model', { default: choice.model, provider: choice.provider });
+    result.changed.push('model.default', 'model.provider');
+    return;
+  }
+  if (document.getIn(['model', 'default']) !== choice.model) {
+    document.setIn(['model', 'default'], choice.model);
+    result.changed.push('model.default');
+  }
+  const previousProvider = document.getIn(['model', 'provider']);
+  if (previousProvider !== choice.provider) {
+    document.setIn(['model', 'provider'], choice.provider);
+    result.changed.push('model.provider');
+    // The route of the provider we just left does not belong to the new one.
+    for (const key of ['base_url', 'api_mode'] as const) {
+      if (document.hasIn(['model', key])) {
+        document.deleteIn(['model', key]);
+        result.removed.push(`model.${key}`);
+      }
+    }
+  }
 }
 
-/** Both files, in one call. Throws only on a corrupt `config.yaml`; the caller logs it. */
-export function writeHermesConfiguration(home: string, state: PropagationState): HermesPropagation {
-  const env = writeHermesEnv(hermesEnvPlan(home, state));
-  const model = writeHermesModel(home, state.hermesModel);
-  return { env, model, dirty: env.dirty || model.dirty };
+/** Which `providers:` keys the hub owns — and no others. */
+function isOwnedProviderKey(key: unknown): boolean {
+  return typeof key === 'string' && key.startsWith(OWNED_PROVIDER_PREFIX);
+}
+
+/**
+ * Kept here rather than imported from `catalogue.ts` so this file stays a pure writer
+ * with no opinion about which providers exist. The two are compared by a unit test.
+ */
+const OWNED_PROVIDER_PREFIX = 'majlis-';
+
+function applyProviders(
+  document: YAML.Document,
+  routes: readonly HermesProviderRoute[],
+  result: HermesWriteResult,
+): void {
+  const wanted = new Map(routes.map((route) => [route.name, route]));
+  const existing = document.get('providers');
+  const hasBlock = YAML.isMap(existing);
+  if (!hasBlock && routes.length === 0) return;
+  if (!hasBlock && existing !== undefined && existing !== null) {
+    // Somebody's `providers:` is not a mapping. Rewriting it would lose whatever it is.
+    throw new Error('config.yaml: `providers` is not a mapping; refusing to rewrite it');
+  }
+  // A real node, not a plain object: `setIn` below has to descend into it.
+  if (!hasBlock) document.set('providers', new YAML.YAMLMap());
+
+  for (const [name, route] of wanted) {
+    const desired: Record<string, string> = {
+      name,
+      base_url: route.baseUrl,
+      key_env: route.keyEnv,
+    };
+    if (route.apiMode) desired.api_mode = route.apiMode;
+    const current = document.getIn(['providers', name]);
+    const currentPlain = YAML.isMap(current) ? (current.toJSON() as Record<string, unknown>) : null;
+    if (currentPlain && sameBlock(currentPlain, desired)) continue;
+    document.setIn(['providers', name], desired);
+    result.changed.push(`providers.${name}`);
+  }
+
+  const block = document.get('providers');
+  if (!YAML.isMap(block)) return;
+  for (const item of [...block.items]) {
+    const key = YAML.isScalar(item.key) ? item.key.value : item.key;
+    if (!isOwnedProviderKey(key) || wanted.has(key as string)) continue;
+    document.deleteIn(['providers', key as string]);
+    result.removed.push(`providers.${String(key)}`);
+  }
+  const after = document.get('providers');
+  if (YAML.isMap(after) && after.items.length === 0) document.delete('providers');
+}
+
+/** A block is unchanged when it says exactly what we want it to say, and nothing else. */
+function sameBlock(current: Record<string, unknown>, desired: Record<string, string>): boolean {
+  const currentKeys = Object.keys(current);
+  const desiredKeys = Object.keys(desired);
+  if (currentKeys.length !== desiredKeys.length) return false;
+  return desiredKeys.every((key) => current[key] === desired[key]);
 }

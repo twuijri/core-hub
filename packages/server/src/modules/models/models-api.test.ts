@@ -1020,7 +1020,11 @@ describe('models: one key, every agent (ADR 0010)', () => {
     }
   });
 
-  it('leaves Hermes alone for a provider it has no slug for, and says so', async () => {
+  it('gives Hermes a providers: block for an endpoint it ships no provider for', async () => {
+    // Groq is not one of Hermes's chat providers — before this, the hub logged "no slug"
+    // and wrote nothing, so a workspace whose default was Groq ran on nothing at all.
+    // Hermes does understand an arbitrary OpenAI-compatible endpoint, named under
+    // `providers:` and pointed at by `model.provider` (ADR 0010, re-read 2026-09-22).
     const groqModels = scriptedFetch((url) =>
       url.startsWith('https://api.groq.com')
         ? { json: { data: [{ id: 'llama-3.3-70b-versatile' }] } }
@@ -1040,18 +1044,69 @@ describe('models: one key, every agent (ADR 0010)', () => {
     try {
       const groq = await addProvider(hub, 'groq', { api_key: 'gsk-scripted' });
       await drainJobs(hub.app);
-      await authed(hub, hub.token, {
-        method: 'PUT',
-        url: '/api/v1/models/defaults',
-        payload: { default: { provider_id: groq.id, model: 'llama-3.3-70b-versatile' } },
-      });
 
-      // Hermes reads GROQ_API_KEY (for Whisper), so the key still goes across…
+      // The key still goes across under the name the world knows it by…
       expect(parseEnv(readFileSync(path.join(home, '.env'), 'utf8')).get('GROQ_API_KEY')).toBe(
         'gsk-scripted',
       );
-      // …but Groq is not one of its chat providers, so no model selection is invented.
-      expect(() => readFileSync(path.join(home, 'config.yaml'), 'utf8')).toThrow();
+      // …and now the endpoint does too, prefixed so it cannot collide with one of
+      // Hermes's own provider names.
+      const config = readFileSync(path.join(home, 'config.yaml'), 'utf8');
+      expect(config).toContain('majlis-groq:');
+      expect(config).toContain('base_url: https://api.groq.com/openai/v1');
+      expect(config).toContain('key_env: GROQ_API_KEY');
+
+      // Its first model became the workspace chat default with nobody asking, and that
+      // is what Hermes is told to run.
+      const defaults = await authed(hub, hub.token, { url: '/api/v1/models/defaults' });
+      expect((defaults.json() as { default: { provider_id: string; model: string } }).default)
+        .toEqual({ provider_id: groq.id, model: 'llama-3.3-70b-versatile' });
+      expect(config).toContain('default: llama-3.3-70b-versatile');
+      expect(config).toContain('provider: majlis-groq');
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('sets the first chat default once, and a second provider never steals it', async () => {
+    const both = scriptedFetch((url) =>
+      url.startsWith('https://api.anthropic.com')
+        ? { json: { data: [{ id: 'claude-sonnet-4-5' }] } }
+        : url.startsWith('https://api.groq.com')
+          ? { json: { data: [{ id: 'llama-3.3-70b-versatile' }] } }
+          : { status: 503, json: {} },
+    );
+    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    homes.push(home);
+    const hub = await signedInHub(
+      {},
+      {
+        models: {
+          fetchImpl: both.fetchImpl,
+          hermes: { home: () => home, restart: () => Promise.resolve(true) },
+        },
+      },
+    );
+    try {
+      const anthropic = await addProvider(hub, 'anthropic', { api_key: 'sk-ant' });
+      await drainJobs(hub.app);
+      const first = (
+        (await authed(hub, hub.token, { url: '/api/v1/models/defaults' })).json() as {
+          default: { provider_id: string; model: string };
+        }
+      ).default;
+      expect(first).toEqual({ provider_id: anthropic.id, model: 'claude-sonnet-4-5' });
+
+      await addProvider(hub, 'groq', { api_key: 'gsk' });
+      await drainJobs(hub.app);
+      const after = (
+        (await authed(hub, hub.token, { url: '/api/v1/models/defaults' })).json() as {
+          default: { provider_id: string; model: string };
+        }
+      ).default;
+      // The owner's first choice survives: a provider added later is available, not
+      // promoted.
+      expect(after).toEqual(first);
     } finally {
       await hub.close();
     }
