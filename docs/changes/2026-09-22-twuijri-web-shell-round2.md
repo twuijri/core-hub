@@ -117,6 +117,37 @@
 4. **قيمة فارغة في المنتقي**: `''` كانت تُعامَل خيارًا بلا اسم فتظهر شريحة
    فارغة؛ صارت تعني «لا اختيار».
 
+### ٨) منتقي نماذج قابل للبحث (طلب المالك بعد رؤية 443 نموذجًا من OpenRouter)
+
+وصل المالك OpenRouter فأعادت القائمة **٤٤٣ نموذجًا**، وصارت القائمة المنسدلة
+البسيطة عاجزة عن إيجاد أي شيء. الحل عنصر جديد في `src/ui/`، وكل مكان يُختار فيه
+نموذج صار يستعمله.
+
+- `packages/web/src/ui/Combobox.tsx` (جديد): زرّ بسطرين (اسم النموذج وتحته
+  مزوّده)، وفي النافذة حقل بحث مثبَّت في الأعلى وقائمة تحته. الحقل يأخذ التركيز
+  عند الفتح **ولا يفقده أبدًا**: الأسهم تحرّك صفًّا مميَّزًا عبر
+  `aria-activedescendant` لا التركيز نفسه، وEnter يختار، وHome/End يقفزان،
+  وEscape يغلق ويعيد التركيز إلى الزر.
+- `packages/web/src/ui/combobox-filter.ts` (جديد): أي صفوف وبأي ترتيب وأي حروف
+  مظلَّلة — بلا DOM فتُختبر مباشرة. المطابقة في **اسم العرض ومعرّف النموذج معًا**،
+  في أي موضع، بلا حساسية لحالة الأحرف: كتابة `opus` تجد
+  `anthropic/claude-opus-4-6-thinking`. كل تطابق يُظلَّل، لا الأول فقط.
+- **`@tanstack/react-virtual` (MIT) اعتُمدت هنا**، وهذا موضعها: ٤٤٣ صفًّا تصير
+  بضعة عشر عنصرًا في DOM. رؤوس المجموعات تبقى ملتصقة عبر `rangeExtractor`
+  الخاص بالمكتبة لا عبر مستمع تمرير ثانٍ.
+- المجموعات بحسب المزوّد، ورأس لكل مجموعة **فقط إن كان في النطاق أكثر من مزوّد**،
+  ومعرّف النموذج سطر ثانٍ خافت تحت الاسم.
+- الحالات كلها مرسومة: جارٍ التحميل، لم تُجلب بعد (**وزر «اجلب» داخل النافذة**
+  حيث المستخدم أصلًا)، لا نتيجة للبحث، وخطأ المزوّد **بنصّه كما وصل**.
+- `packages/web/src/models/recentModels.ts` (جديد): آخر خمسة نماذج اختيرت في
+  مساحة العمل، في `localStorage` كترتيبَي الجلسات والوكلاء، تظهر في مجموعة
+  «المستعملة أخيرًا» في الأعلى.
+- المواضع الأربعة: النموذج الافتراضي في نافذة إضافة مزوّد، والنموذج الافتراضي في
+  بطاقة المزوّد، وتبويب «الافتراضيات»، ومنتقي النموذج في الملحن.
+- تصحيح اتجاه: معرّف النموذج كان `dir="ltr"` فكان يلتصق بالحافة الخطأ في العربية
+  ويترك السطرين مبعثرين؛ صار `unicode-bidi: isolate` — حروفه تُقرأ يسارًا إلى
+  يمين والسطر يبقى على حافة الصفحة نفسها.
+
 ## الفحوص (الأوامر ونواتجها الفعلية)
 
 على الفرع بعد كل التغييرات، Node 24.21.0:
@@ -128,7 +159,7 @@ nav:check  OK — 34 destinations, 2 pre-auth screens (login, setup), 38 terms, 
 $ pnpm i18n:check
 i18n:check  server: 96 keys, ar/en in parity
 i18n:check  cli: 231 keys, ar/en in parity
-i18n:check  web: 353 keys, ar/en in parity
+i18n:check  web: 361 keys, ar/en in parity
 i18n:check  OK
 
 $ pnpm contracts:lint
@@ -145,7 +176,7 @@ $ pnpm test
       Tests  95 passed (95)            # ui-tokens (تباين WCAG، ومعه اللونان الجديدان)
       Tests  61 passed (61)            # cli
       Tests  305 passed | 2 skipped    # server
-      Tests  171 passed (171)          # web
+      Tests  200 passed (200)          # web
 
 $ pnpm contract:test
       Tests  253 passed (253)
@@ -158,21 +189,26 @@ $ pnpm build
 ✓ built in 662ms
 
 $ PLAYWRIGHT_CHANNEL=chrome pnpm web:e2e
-Running 6 tests using 1 worker
+Running 7 tests using 1 worker
   ✓  1 … 4. first run: the setup token from /data creates the owner and signs in (1.1s)
   ✓  2 … 1. new chat → pick a folder → streamed markdown reply … (3.4s)
   ✓  3 … 6. the agent row gives up labels before options, then overflows into More (1.3s)
   ✓  4 … 2. an approval card answers once / session / always / deny through the hub (945ms)
   ✓  5 … 3. a socket drop mid-run resumes with after_seq and loses nothing (9.0s)
-  ✓  6 … 5. the send button becomes stop mid-stream, and stop ends the run (1.2s)
-  6 passed (21.2s)
+  ✓  6 … 5. the send button becomes stop mid-stream, and stop ends the run (1.3s)
+  ✓  7 … 7. 443 models: the picker searches, and the list never stops being usable (2.1s)
+  7 passed (23.9s)
 ```
 
 قواعد اللينت أُثبتت بملف تحقّق مؤقّت يخالفها كلها: أطلقت عشر مخالفات (منتقٍ،
 خيار، مجموعة خيارات، مربّع حوار، مربّعا اختيار، `alert`، `confirm`، تلميحان
 أصليان، استيراد بدائية) ثم حُذف الملف.
 
-اللقطات في `packages/web/e2e/shots/`: المحادثة الفارغة المتوسّطة
+لقطات المنتقي: `model-picker-unfetched-ar-light` (قبل الجلب، والزر داخل النافذة)،
+`model-picker-long-ar-light` (٤٤٣ نموذجًا مفتوحة)، `model-picker-search-ar-light`
+(كتابة `opus` → ٤٥ نتيجة بتظليل المطابق)، و`model-picker-long-en-dark`.
+
+بقية اللقطات في `packages/web/e2e/shots/`: المحادثة الفارغة المتوسّطة
 (`new-chat-ar-light`, `new-chat-ar-dark`, `new-chat-en-dark`)، والمحادثة بعد أول
 رد بالملحن الراسي (`chat-reply-ar-light`, `chat-reply-ar-dark`,
 `chat-reply-en-dark`)، والشريط الجانبي (`sidebar-ar-light`, `sidebar-ar-dark`,
@@ -190,6 +226,11 @@ Running 6 tests using 1 worker
   `packages/web/tests/helpers/ui.ts`.
 - **الاختيار المتعدد** الذي كان في صفحة السجل (أرشفة/حذف دفعةً) لم يُنقل: الطلب
   كان مرشّحًا، والعمليات الدفعية في العقد موجودة وتنتظر مهمّتها.
+- **رحلة المنتقي تستعمل مزوّدًا مكتوبًا بالسيناريو** يعيد ٤٤٣ نموذجًا
+  (`e2e/hub.ts`)، لا OpenRouter الحقيقي: لا يجوز أن تقرّر الشبكة نتيجة اختبار،
+  ولا أن يحمل المستودع مفتاح أحد. الحجم هو الحجم الذي كسر عند المالك.
+- **«المستعملة أخيرًا» محلية** لا في العقد: تفضيل شخصي لكل مساحة عمل، مذكور
+  هنا كما طُلب.
 
 ## المخاطر والرجوع
 
