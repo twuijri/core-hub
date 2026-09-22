@@ -1,8 +1,17 @@
 /**
- * The agents of this workspace, as one segmented control directly above the composer
- * (ADOPTION-BACKLOG 2.5, 2.9): a fresh hub shows Hermes alone and every agent that is
- * installed adds an option. The list comes from the server registry — the client never
- * keeps one (NAVIGATION rule 5).
+ * The **installed** agents of this workspace, as one segmented control directly above the
+ * composer of an empty chat (ADOPTION-BACKLOG 2.5, 2.9).
+ *
+ * Owner decision, 2026-09-22: an agent that is not installed does not belong above the
+ * composer — it is not a choice, it is an errand. Discovery and installation live in the
+ * Agent Manager, which the trailing "+" already opens, and the moment an agent is
+ * installed the registry says so and a chip appears. The row is therefore
+ * `agents.list` filtered, never a list the client keeps (NAVIGATION rule 5), so an agent
+ * added to the hub needs no change here at all.
+ *
+ * It belongs to an *empty* chat. Once a session has messages the question "which agent?"
+ * has been answered, and the answer is shown quietly in the chat header instead
+ * (`SessionAgent.tsx`), where changing it is a fork rather than a new chat.
  *
  * It is the shared control (`src/ui/Segmented.tsx`), so it is the same object as the
  * sidebar's section row and the session filter, with two additions:
@@ -55,9 +64,22 @@ import {
 
 const storage = () => (typeof localStorage === 'undefined' ? null : localStorage);
 
-/** The agents a person may actually start a chat with. */
-export function selectableAgents(agents: readonly Agent[]): Agent[] {
+/**
+ * The three `AgentStatus` values that mean "the hub has this agent on this host and can
+ * run a turn with it". Stated as a positive list on purpose: `not_installed`, `installing`
+ * (not yet) and `error` (the install did not take) all mean the same thing to a person
+ * about to type a message — there is nothing here to talk to.
+ */
+const INSTALLED: ReadonlySet<Agent['status']> = new Set(['available', 'updating', 'limited']);
+
+/** Enabled for this workspace: in the registry and not switched off. */
+export function enabledAgents(agents: readonly Agent[]): Agent[] {
   return agents.filter((agent) => agent.enabled && agent.status !== 'disabled');
+}
+
+/** Enabled *and* on this host — the only agents a person may actually start a chat with. */
+export function installedAgents(agents: readonly Agent[]): Agent[] {
+  return enabledAgents(agents).filter((agent) => INSTALLED.has(agent.status));
 }
 
 export function AgentChips({
@@ -77,9 +99,11 @@ export function AgentChips({
   const [manual, setManual] = useState<string[]>(() => readAgentOrder(storage(), profile));
 
   const items = useMemo(
-    () => arrangeAgents(selectableAgents(agents.data ?? []), manual),
+    () => arrangeAgents(installedAgents(agents.data ?? []), manual),
     [agents.data, manual],
   );
+  /** Told apart so the empty row can say which of the two silences this is. */
+  const anyEnabled = enabledAgents(agents.data ?? []).length > 0;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -103,10 +127,11 @@ export function AgentChips({
     );
   }
   if (items.length === 0) {
-    // Never a silent empty row: say why there is nothing to pick.
+    // Never a silent empty row: say which silence this is — a hub with no agent enabled,
+    // or one whose agents are all still in the catalog waiting to be installed.
     return agents.isPending ? null : (
       <p className="mb-2 px-1 text-xs text-muted" data-testid="agent-chips-empty">
-        {t('new_chat.no_agents')}
+        {anyEnabled ? t('new_chat.none_installed') : t('new_chat.no_agents')}
       </p>
     );
   }
@@ -160,19 +185,17 @@ function AgentOption({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: agent.id,
   });
-  const ready = agent.status !== 'not_installed' && agent.status !== 'error';
-  const hint = !ready
-    ? t('composer.agent_not_ready', { name: agent.name })
-    : selected
-      ? t('composer.agent_current', { name: agent.name })
-      : mode === 'current'
-        ? t('composer.agent_new_chat', { name: agent.name })
-        : t('composer.agent_pick', { name: agent.name });
+  // Every option here is installed, so none of them is ever disabled: a chip a person
+  // cannot press is exactly what this row no longer contains.
+  const hint = selected
+    ? t('composer.agent_current', { name: agent.name })
+    : mode === 'current'
+      ? t('composer.agent_new_chat', { name: agent.name })
+      : t('composer.agent_pick', { name: agent.name });
   return (
     <SegmentedItem
       ref={setNodeRef}
       value={agent.id}
-      disabled={!ready}
       title={hint}
       icon={
         // The generated initial is the agent's icon, so compact mode never shows a blank.
@@ -180,12 +203,7 @@ function AgentOption({
           {agent.name.slice(0, 1)}
         </span>
       }
-      label={
-        <span dir="auto">
-          {agent.name}
-          {!ready && ` · ${t(`agents.status.${agent.status}`)}`}
-        </span>
-      }
+      label={<span dir="auto">{agent.name}</span>}
       itemProps={{
         ...attributes,
         ...listeners,
