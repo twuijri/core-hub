@@ -42,6 +42,7 @@ export { Field, Label } from './Label.js';
 export { Menu, MenuChoice, MenuItem, MenuNote, MenuSeparator } from './Menu.js';
 export { Notice, Spinner } from './Notice.js';
 export { Popover } from './Popover.js';
+export { usePrompt, type PromptRequest } from './PromptDialog.js';
 export { Radio, type RadioOption } from './Radio.js';
 export { ScrollArea } from './ScrollArea.js';
 export { Segmented, SegmentedItem, SegmentedTrack } from './Segmented.js';
