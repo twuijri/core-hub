@@ -184,7 +184,9 @@
     "run_failed": "The run failed: {error} ({code})",
     "empty_title": "What shall we start with?",
     "no_provider": "No model provider is configured for this workspace, so the agent has nothing to run on.",
-    "no_provider_action": "Open Settings → Models → Defaults"
+    "no_provider_action": "Open Settings → Models → Defaults",
+    "no_key": "The provider rejected the stored key, so the agent could not reach it.",
+    "no_key_action": "Open Settings → Models"
   },
   "composer": {
     "label": "Message composer",
@@ -444,6 +446,30 @@
       "fetch_empty": "The provider answered, but listed no models.",
       "submit": "Add",
       "loopback": "This address is loopback, and the hub runs in a container — it would reach the container itself, not your machine. Try {url}, and on a Linux host add extra_hosts: [\"host.docker.internal:host-gateway\"] to the stack."
+    },
+    "runtime": {
+      "title": "Runtime",
+      "hint": "What the agent runtime received from this workspace.",
+      "runtime_writable": {
+        "ok": "The hub manages the agent runtime.",
+        "missing": "No agent runtime this hub can configure."
+      },
+      "provider_keys": {
+        "ok": "Provider keys are in the runtime's environment.",
+        "missing": "A provider key has not reached the runtime."
+      },
+      "provider_verified": {
+        "ok": "Every provider answered its last check.",
+        "missing": "A provider refused its last check — open it and fix the key."
+      },
+      "model_selected": {
+        "ok": "A chat model is selected for the runtime.",
+        "missing": "No chat model is selected — choose one under Defaults."
+      },
+      "gateway_reloaded": {
+        "ok": "The runtime restarted after the last change.",
+        "missing": "The runtime has not restarted since the last change."
+      }
     }
   },
   "working_dir": {

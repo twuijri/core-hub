@@ -9,7 +9,13 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { authed, drainJobs, signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
+import {
+  authed,
+  drainJobs,
+  settle,
+  signedInHub,
+  type TestHub,
+} from '../../../tests/unit/helpers.js';
 import { agentsServiceFor } from '../agents/index.js';
 import { parseEnv } from './dotenv.js';
 
@@ -263,15 +269,52 @@ describe('models: providers over HTTP', () => {
     }
   });
 
-  it('tests a provider for real and reports a failure as 200 with ok: false', async () => {
+  it('refuses a key the provider itself refuses, in the provider’s own words', async () => {
+    // The whole of the owner's 2026-09-22 episode: a key for one provider pasted into
+    // another's dialog, stored without a word, written into the runtime, and surfaced
+    // twelve minutes later as an agent error. The check now happens on save.
     const { fetchImpl, calls } = scriptedFetch(() => ({
       status: 401,
       json: { error: { message: 'invalid x-api-key' } },
     }));
     const hub = await signedInHub({}, { models: { fetchImpl } });
     try {
-      const anthropic = await addProvider(hub, 'anthropic', { api_key: 'sk-wrong' });
+      const refused = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/models/providers',
+        payload: { preset: 'anthropic', label: 'anthropic', kind: 'llm', api_key: 'sk-wrong' },
+      });
+      expect(refused.statusCode).toBe(422);
+      expect(refused.json()).toMatchObject({
+        code: 'provider_unauthorized',
+        // Ours says what happened; the provider's own words say why, untouched.
+        details: { provider: 'anthropic', detail: 'invalid x-api-key' },
+      });
+      // It really asked, with the key it was given.
+      expect(calls.some((call) => call.url.startsWith('https://api.anthropic.com'))).toBe(true);
+      expect(calls[0]!.headers['x-api-key']).toBe('sk-wrong');
+      // And nothing was stored: a refused key is not a key.
+      expect(await providers(hub, hub.token)).toEqual([]);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('tests a provider for real and reports a failure as 200 with ok: false', async () => {
+    // An endpoint that answers while the key is being saved and refuses later — a
+    // revoked key, a changed plan. `Test` is still the surface that says so, and a
+    // failure is still a `200` carrying the provider's words.
+    let accept = true;
+    const { fetchImpl, calls } = scriptedFetch(() =>
+      accept
+        ? { json: { data: [{ id: 'claude-sonnet-4-5' }] } }
+        : { status: 401, json: { error: { message: 'invalid x-api-key' } } },
+    );
+    const hub = await signedInHub({}, { models: { fetchImpl } });
+    try {
+      const anthropic = await addProvider(hub, 'anthropic', { api_key: 'sk-was-good' });
       await drainJobs(hub.app);
+      accept = false;
       calls.length = 0;
 
       const tested = await authed(hub, hub.token, {
@@ -284,9 +327,17 @@ describe('models: providers over HTTP', () => {
       expect(body.message).toContain('rejected the stored key');
       expect(body.message).toContain('invalid x-api-key');
       expect(typeof body.duration_ms).toBe('number');
-      // It really asked: this is a connectivity check, not a guess.
       expect(calls.some((call) => call.url.startsWith('https://api.anthropic.com'))).toBe(true);
-      expect(calls[0]!.headers['x-api-key']).toBe('sk-wrong');
+      expect(calls[0]!.headers['x-api-key']).toBe('sk-was-good');
+
+      // And the self-check says so too: a provider that refused its last check is a
+      // reason the runtime is not ready, visible without reading a log.
+      const report = (
+        await authed(hub, hub.token, { method: 'GET', url: '/api/v1/models/runtime' })
+      ).json() as { checks: { id: string; ok: boolean; detail: string | null }[] };
+      const verified = report.checks.find((c) => c.id === 'provider_verified')!;
+      expect(verified.ok).toBe(false);
+      expect(verified.detail).toBe('anthropic');
     } finally {
       await hub.close();
     }
@@ -1003,7 +1054,10 @@ describe('models: one key, every agent (ADR 0010)', () => {
       // The key landed in Hermes's own `.env`, under the name Hermes reads it from.
       const env = parseEnv(readFileSync(path.join(home, '.env'), 'utf8'));
       expect(env.get('ANTHROPIC_API_KEY')).toBe('sk-ant-for-hermes');
-      expect(restarts).toBeGreaterThan(0);
+      // One restart, not one per write: the key, the model list and the default that
+      // follows from them are one action to the person who saved the provider.
+      await settle();
+      expect(restarts).toBe(1);
 
       // The chat default landed in `config.yaml`, as Hermes's own `model` mapping.
       await authed(hub, hub.token, {
@@ -1226,6 +1280,183 @@ describe('models: one key, every agent (ADR 0010)', () => {
       expect(config).toContain('default: claude-haiku-4-5');
     } finally {
       await second.close();
+    }
+  });
+
+  it('keeps a model id exactly as the provider spelled it, slashes and suffixes and all', async () => {
+    // OpenRouter's router ids carry a vendor prefix and a `:free` suffix; the catalogue
+    // key the client holds adds a second prefix of our own. Neither may reach the wire
+    // rewritten: a provider's id is opaque to us (the owner's report of 2026-09-22).
+    const ids = ['openrouter/free', 'z-ai/glm-5.2:free'];
+    const or = scriptedFetch((url) =>
+      url.startsWith('https://openrouter.ai')
+        ? { json: { data: ids.map((id) => ({ id })) } }
+        : { status: 503, json: {} },
+    );
+    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    homes.push(home);
+    const hub = await signedInHub(
+      {},
+      {
+        models: {
+          fetchImpl: or.fetchImpl,
+          hermes: { home: () => home, restart: () => Promise.resolve(true) },
+        },
+      },
+    );
+    try {
+      const provider = await addProvider(hub, 'openrouter', { api_key: 'sk-or-v1-scripted' });
+      await drainJobs(hub.app);
+
+      // Stored byte for byte, and offered to a client as `<slug>/<id>` — two prefixes,
+      // neither of which is part of the id.
+      const catalogue = (
+        (await authed(hub, hub.token, { url: '/api/v1/models', method: 'GET' })).json() as {
+          items: { key: string; model: string }[];
+        }
+      ).items;
+      expect(catalogue.map((m) => m.model).sort()).toEqual([...ids].sort());
+      expect(catalogue.find((m) => m.model === 'openrouter/free')!.key).toBe(
+        'openrouter/openrouter/free',
+      );
+
+      await authed(hub, hub.token, {
+        method: 'PUT',
+        url: '/api/v1/models/defaults',
+        payload: { default: { provider_id: provider.id, model: 'z-ai/glm-5.2:free' } },
+      });
+      const config = readFileSync(path.join(home, 'config.yaml'), 'utf8');
+      expect(config).toContain('default: z-ai/glm-5.2:free');
+      expect(config).toContain('provider: openrouter');
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('refuses a chat default the runtime could not be told about, out loud', async () => {
+    // Silence was the defect: the hub logged one line, wrote nothing, and the run went
+    // out on a different provider's configuration.
+    const eleven = scriptedFetch(() => ({ status: 503, json: {} }));
+    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    homes.push(home);
+    const hub = await signedInHub(
+      {},
+      {
+        models: {
+          fetchImpl: eleven.fetchImpl,
+          hermes: { home: () => home, restart: () => Promise.resolve(true) },
+        },
+      },
+    );
+    try {
+      const tts = await addProvider(hub, 'elevenlabs', { api_key: 'el-key', kind: 'tts' });
+      await authed(hub, hub.token, {
+        method: 'PUT',
+        url: `/api/v1/models/providers/${tts.id}/models/${encodeURIComponent('eleven_v3')}`,
+        payload: { custom: true },
+      });
+      const refused = await authed(hub, hub.token, {
+        method: 'PUT',
+        url: '/api/v1/models/defaults',
+        payload: { default: { provider_id: tts.id, model: 'eleven_v3' } },
+      });
+      expect(refused.statusCode).toBe(400);
+      expect(refused.json()).toMatchObject({
+        code: 'validation_failed',
+        details: { field: 'default', provider: 'elevenlabs' },
+      });
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('shows, check by check, whether the runtime actually took any of it', async () => {
+    const { fetchImpl } = anthropicOnly();
+    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    homes.push(home);
+    let startedAt: number | null = null;
+    const hub = await signedInHub(
+      {},
+      {
+        models: {
+          fetchImpl,
+          hermes: {
+            home: () => home,
+            mode: () => 'managed',
+            reloadedAt: () => startedAt,
+            restart: () => {
+              startedAt = Date.now();
+              return Promise.resolve(true);
+            },
+          },
+        },
+      },
+    );
+    const report = async () =>
+      (await authed(hub, hub.token, { method: 'GET', url: '/api/v1/models/runtime' })).json() as {
+        ready: boolean;
+        mode: string;
+        checks: { id: string; ok: boolean; detail: string | null }[];
+      };
+    const check = (r: Awaited<ReturnType<typeof report>>, id: string) =>
+      r.checks.find((c) => c.id === id)!;
+    try {
+      // Before anything is configured: a runtime to write to, and nothing written.
+      const empty = await report();
+      expect(empty.mode).toBe('managed');
+      expect(empty.ready).toBe(false);
+      expect(check(empty, 'runtime_writable').ok).toBe(true);
+      expect(check(empty, 'model_selected').ok).toBe(false);
+
+      await addProvider(hub, 'anthropic', { api_key: 'sk-ant-report' });
+      await drainJobs(hub.app);
+      await settle();
+      const after = await report();
+      expect(check(after, 'provider_keys').ok).toBe(true);
+      expect(check(after, 'model_selected').ok).toBe(true);
+      // The value is the pair the runtime was given, in its own vocabulary.
+      expect(check(after, 'model_selected').detail).toBe('anthropic/claude-haiku-4-5');
+      expect(check(after, 'gateway_reloaded').ok).toBe(true);
+      expect(after.ready).toBe(true);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('waits for a turn to finish before recycling the runtime', async () => {
+    const { fetchImpl } = anthropicOnly();
+    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    homes.push(home);
+    let restarts = 0;
+    let busy = true;
+    const hub = await signedInHub(
+      {},
+      {
+        models: {
+          fetchImpl,
+          hermes: {
+            home: () => home,
+            busy: () => busy,
+            restart: () => {
+              restarts += 1;
+              return Promise.resolve(true);
+            },
+          },
+        },
+      },
+    );
+    try {
+      await addProvider(hub, 'anthropic', { api_key: 'sk-ant-busy' });
+      await drainJobs(hub.app);
+      await settle();
+      // The files are written; the process is not interrupted mid-turn.
+      expect(readFileSync(path.join(home, '.env'), 'utf8')).toContain('ANTHROPIC_API_KEY');
+      expect(restarts).toBe(0);
+      busy = false;
+      await settle();
+      expect(restarts).toBe(1);
+    } finally {
+      await hub.close();
     }
   });
 

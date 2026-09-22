@@ -9043,6 +9043,52 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /models/runtime:
+    get:
+      operationId: models.getRuntime
+      tags: [models]
+      summary: Whether the agent runtime actually received this workspace's providers
+      description: >-
+        The self-check behind "I added a provider and nothing happened". The hub writes a
+        provider into the runtime's own configuration and restarts it (ADR 0010); this
+        says, in the runtime's terms, whether each step of that landed — the runtime is
+        one the hub may write to, the keys are in its environment file, a model is
+        selected, and the gateway was recycled since the last write. Every check is
+        answered from the files and the process as they are now, not from a snapshot.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The runtime's state, check by check.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeReport'
+              example:
+                agent: hermes
+                mode: managed
+                ready: false
+                reloaded_at: '2026-09-22T09:14:00Z'
+                checks:
+                  - id: runtime_writable
+                    ok: true
+                    detail: null
+                  - id: provider_keys
+                    ok: true
+                    detail: '1 key'
+                  - id: model_selected
+                    ok: false
+                    detail: null
+                  - id: gateway_reloaded
+                    ok: true
+                    detail: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /models/defaults:
     get:
       operationId: models.getDefaults
@@ -11528,6 +11574,7 @@ components:
         - agent_unavailable
         - agent_error
         - provider_not_configured
+        - provider_unauthorized
         - rate_limited
         - internal
         - not_implemented
@@ -15711,6 +15758,54 @@ components:
           description: Whether the provider hands the user a code to paste back.
         expires_at:
           $ref: '#/components/schemas/Timestamp'
+    RuntimeReport:
+      type: object
+      description: >-
+        Whether the agent runtime received what this workspace configured. `ready` is
+        every check passing; a client shows the failing ones rather than a single word.
+      required: [agent, mode, ready, checks]
+      properties:
+        agent:
+          type: string
+          description: The runtime these checks are about (`hermes` today).
+        mode:
+          type: string
+          enum: [managed, external, absent]
+          description: >-
+            `managed` — the hub started it and owns its files; `external` — somebody
+            else's process, which the hub reads and never writes; `absent` — none found.
+        ready:
+          type: boolean
+        reloaded_at:
+          type: [string, 'null']
+          format: date-time
+          description: When the hub last recycled the runtime after writing to it.
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuntimeCheck'
+    RuntimeCheck:
+      type: object
+      description: One step of propagation, answered from the runtime as it is now.
+      required: [id, ok, detail]
+      properties:
+        id:
+          type: string
+          enum:
+            [
+              runtime_writable,
+              provider_keys,
+              provider_verified,
+              model_selected,
+              gateway_reloaded,
+            ]
+        ok:
+          type: boolean
+        detail:
+          type: [string, 'null']
+          description: >-
+            A short fact, never a sentence to render on its own: a count, a provider
+            slug, a model id. The wording belongs to the client's own catalogue.
     ModelDefaults:
       type: object
       required: [default, fallbacks, auxiliary]

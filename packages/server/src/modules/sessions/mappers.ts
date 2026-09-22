@@ -219,6 +219,7 @@ const WIRE_ERROR_CODES = new Set([
   'agent_unavailable',
   'agent_error',
   'provider_not_configured',
+  'provider_unauthorized',
   'rate_limited',
   'internal',
   'not_implemented',
