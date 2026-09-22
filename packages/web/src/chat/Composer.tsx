@@ -46,6 +46,7 @@ import {
 } from '../ui/icons.js';
 import { Menu, MenuItem, MenuNote } from '../ui/Menu.js';
 import { Notice } from '../ui/Notice.js';
+import { Tooltip } from '../ui/Tooltip.js';
 import { Select } from '../ui/Select.js';
 import { canSend, composerState } from './composer-state.js';
 
@@ -201,7 +202,7 @@ export function Composer({
   };
 
   return (
-    <div className="sticky bottom-0 z-[var(--mj-z-sticky)] pb-3 pt-2" data-testid="composer-dock">
+    <div className="composer-dock" data-testid="composer-dock">
       {chips}
       <form
         className="composer glass"
@@ -231,11 +232,14 @@ export function Composer({
               <li
                 key={item.key}
                 className={`chip ${item.status === 'error' ? 'bg-danger-soft text-danger-soft-text' : ''}`}
-                title={item.error}
               >
                 <span dir="auto">{item.file.name}</span>
                 {item.status === 'uploading' && <span aria-hidden>…</span>}
-                {item.status === 'error' && <span>{t('composer.upload_failed')}</span>}
+                {item.status === 'error' && (
+                  <Tooltip label={item.error}>
+                    <span tabIndex={0}>{t('composer.upload_failed')}</span>
+                  </Tooltip>
+                )}
                 <button
                   type="button"
                   className="ms-1"
@@ -279,12 +283,12 @@ export function Composer({
           />
           <Menu
             testId="composer-menu"
+            tooltip={t('composer.more')}
             trigger={
               <button
                 type="button"
                 className="composer-btn"
                 aria-label={t('composer.more')}
-                title={t('composer.more')}
                 disabled={disabled}
                 data-testid="composer-plus"
               >
@@ -326,6 +330,7 @@ export function Composer({
               }))
             }
             label={t('composer.approval')}
+            // A disabled selector must say why; `Select` shows it in our tooltip.
             title={approvalDisabledReason ?? t('composer.approval')}
             icon={<IconShield size={14} />}
             disabled={disabled || !onApprovalMode || approvalDisabledReason !== null}
@@ -334,40 +339,48 @@ export function Composer({
 
           <span className="composer-spacer" />
 
-          <button
-            type="button"
-            className="composer-btn"
-            disabled
-            aria-label={t('composer.dictate')}
-            title={t('composer.dictate_unavailable')}
-            data-testid="composer-mic"
-          >
-            <IconMic />
-          </button>
+          {/* Disabled, and the reason is in the tooltip rather than left to be guessed.
+              A disabled button takes no pointer events, so the tooltip hangs off a
+              focusable wrapper — otherwise the explanation would never appear. */}
+          <Tooltip label={t('composer.dictate_unavailable')}>
+            <span tabIndex={0} aria-describedby={undefined} data-testid="composer-mic-wrap">
+              <button
+                type="button"
+                className="composer-btn"
+                disabled
+                aria-label={t('composer.dictate')}
+                data-testid="composer-mic"
+              >
+                <IconMic />
+              </button>
+            </span>
+          </Tooltip>
 
           {busy ? (
-            <button
-              type="button"
-              className="composer-btn composer-btn-stop"
-              onClick={() => void onCancel()}
-              aria-label={t('composer.stop')}
-              title={t('composer.stop')}
-              data-testid="stop-run"
-            >
-              <IconStop />
-            </button>
+            <Tooltip label={t('composer.stop')}>
+              <button
+                type="button"
+                className="composer-btn composer-btn-stop"
+                onClick={() => void onCancel()}
+                aria-label={t('composer.stop')}
+                data-testid="stop-run"
+              >
+                <IconStop />
+              </button>
+            </Tooltip>
           ) : (
-            <button
-              type="submit"
-              className="composer-btn composer-btn-send"
-              aria-label={t('composer.send')}
-              title={t('composer.send')}
-              disabled={!sendable}
-              data-busy={sending ? 'true' : undefined}
-              data-testid="send"
-            >
-              <IconSend />
-            </button>
+            <Tooltip label={t('composer.send')}>
+              <button
+                type="submit"
+                className="composer-btn composer-btn-send"
+                aria-label={t('composer.send')}
+                disabled={!sendable}
+                data-busy={sending ? 'true' : undefined}
+                data-testid="send"
+              >
+                <IconSend />
+              </button>
+            </Tooltip>
           )}
         </div>
       </form>

@@ -1,12 +1,22 @@
 /**
- * The agents of this workspace, as chips directly above the composer (ADOPTION-BACKLOG 2.5,
- * 2.9): a fresh hub shows Hermes alone and every agent that is installed adds a chip. The
- * list itself comes from the server registry — the client never keeps one (NAVIGATION rule 5).
+ * The agents of this workspace, as one segmented control directly above the composer
+ * (ADOPTION-BACKLOG 2.5, 2.9): a fresh hub shows Hermes alone and every agent that is
+ * installed adds an option. The list comes from the server registry — the client never
+ * keeps one (NAVIGATION rule 5).
  *
- * The row is draggable and the order is remembered per workspace (`agentOrder.ts`). Every
- * drag has a keyboard equivalent, as DESIGN requires: focus the chip, Space to pick it up,
- * arrows to move, Space to drop — dnd-kit's keyboard sensor, the same one the session list
- * uses.
+ * It is the shared control (`src/ui/Segmented.tsx`), so it is the same object as the
+ * sidebar's section row and the session filter, with two additions:
+ *
+ * - the options can be dragged into the order a person wants, remembered per workspace
+ *   (`agentOrder.ts`). The track's arrows move between options; dnd-kit's keyboard sensor
+ *   picks one up with Space and drops it with Space, so the drag keeps a keyboard
+ *   equivalent as DESIGN requires;
+ * - the trailing "+" is an action, not an agent: it goes to the Agent Manager, where an
+ *   agent is installed from the catalog.
+ *
+ * With many agents installed the track gives up labels before it gives up options, and
+ * only then moves the rest into its More menu — all of that is the control's own rule
+ * (`src/ui/segmented-fit.ts`), not something the agent row decides.
  */
 import {
   DndContext,
@@ -25,12 +35,16 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
+import { routeOf } from '../navigation/manifest.js';
 import type { Agent } from '../types.js';
+import { IconPlus } from '../ui/icons.js';
 import { Notice } from '../ui/Notice.js';
+import { SegmentedItem, SegmentedTrack } from '../ui/Segmented.js';
 import {
   arrangeAgents,
   moveAgent,
@@ -49,7 +63,7 @@ export function selectableAgents(agents: readonly Agent[]): Agent[] {
 export function AgentChips({
   selectedId,
   onSelect,
-  /** In an open session the chip of its agent is the current one; the others start a new chat. */
+  /** In an open session the agent of that session is the current one; the others start a new chat. */
   mode = 'select',
 }: {
   selectedId: string | null;
@@ -58,6 +72,7 @@ export function AgentChips({
 }) {
   const { t } = useI18n();
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const agents = useAgents();
   const [manual, setManual] = useState<string[]>(() => readAgentOrder(storage(), profile));
 
@@ -99,36 +114,47 @@ export function AgentChips({
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
       <SortableContext items={items.map((a) => a.id)} strategy={horizontalListSortingStrategy}>
-        <ul
-          className="mb-2 flex flex-wrap items-center gap-1.5 px-1"
-          aria-label={t('composer.agents')}
-          data-testid="agent-chips"
-        >
-          {items.map((agent) => (
-            <AgentChip
-              key={agent.id}
-              agent={agent}
-              selected={agent.id === selectedId}
-              mode={mode}
-              onSelect={() => onSelect(agent)}
-            />
-          ))}
-        </ul>
+        <div className="mb-2 flex min-w-0 px-1">
+          <SegmentedTrack
+            label={t('composer.agents')}
+            value={selectedId}
+            onChange={(id) => {
+              const agent = items.find((a) => a.id === id);
+              if (agent) onSelect(agent);
+            }}
+            overflow
+            className="min-w-0 flex-1"
+            testId="agent-chips"
+            action={{
+              label: t('composer.add_agent'),
+              icon: <IconPlus size={16} />,
+              onSelect: () => navigate(routeOf('agent_manager')),
+              testId: 'agent-add',
+            }}
+          >
+            {items.map((agent) => (
+              <AgentOption
+                key={agent.id}
+                agent={agent}
+                selected={agent.id === selectedId}
+                mode={mode}
+              />
+            ))}
+          </SegmentedTrack>
+        </div>
       </SortableContext>
     </DndContext>
   );
 }
 
-function AgentChip({
+function AgentOption({
   agent,
   selected,
   mode,
-  onSelect,
 }: {
   agent: Agent;
   selected: boolean;
   mode: 'select' | 'current';
-  onSelect(): void;
 }) {
   const { t } = useI18n();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -143,35 +169,34 @@ function AgentChip({
         ? t('composer.agent_new_chat', { name: agent.name })
         : t('composer.agent_pick', { name: agent.name });
   return (
-    <li
+    <SegmentedItem
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={isDragging ? 'sortable-dragging' : ''}
-    >
-      <button
-        type="button"
-        className="chip-agent"
-        aria-current={selected && mode === 'current' ? 'true' : undefined}
-        aria-label={hint}
-        title={hint}
-        disabled={!ready}
-        data-testid="agent-chip"
-        data-agent-id={agent.id}
-        data-agent-slug={agent.slug}
-        onClick={onSelect}
-        {...attributes}
-        {...listeners}
-        // dnd-kit's sortable also sets aria-pressed; ours (is this the chosen agent?) wins.
-        aria-pressed={selected}
-      >
-        <span className="chip-agent-mark" aria-hidden>
+      value={agent.id}
+      disabled={!ready}
+      title={hint}
+      icon={
+        // The generated initial is the agent's icon, so compact mode never shows a blank.
+        <span className="mj-segment-mark" aria-hidden>
           {agent.name.slice(0, 1)}
         </span>
-        <span className="truncate" dir="auto">
+      }
+      label={
+        <span dir="auto">
           {agent.name}
+          {!ready && ` · ${t(`agents.status.${agent.status}`)}`}
         </span>
-        {!ready && <span className="text-xs text-muted">{t(`agents.status.${agent.status}`)}</span>}
-      </button>
-    </li>
+      }
+      itemProps={{
+        ...attributes,
+        ...listeners,
+        style: { transform: CSS.Transform.toString(transform), transition },
+        className: isDragging ? 'sortable-dragging' : '',
+        'data-drag': 'true',
+        'aria-label': hint,
+        'data-testid': 'agent-chip',
+        'data-agent-id': agent.id,
+        'data-agent-slug': agent.slug,
+      }}
+    />
   );
 }
