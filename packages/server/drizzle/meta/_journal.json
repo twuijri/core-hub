@@ -50,6 +50,13 @@
       "when": 1790090679022,
       "tag": "0006_webhook_delivery",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790099720869,
+      "tag": "0007_quiet_hours",
+      "breakpoints": true
     }
   ]
 }

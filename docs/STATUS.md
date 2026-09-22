@@ -26,7 +26,7 @@ number from claiming more than the hub answers.
 | schedules | 20 | 23 | schedules with a real `next_run_at` (cron, interval, once, in the schedule's own timezone), run history, workflow definitions with validation, workflow-run history and cancel, and workflow import preview/confirm. The three that would **start** something — `runNow`, `runWorkflow`, `rerunWorkflowFromNode` — answer `501` with their operation ids |
 | rooms | 0 | 28 | several agents in one room |
 | devices | 0 | 17 | device registry and push |
-| notify | 11 | 11 | the inbox (nothing invents a notice — it is what other modules wrote), per-kind preferences, and webhooks whose URL is checked against private addresses before anything is sent, with an HMAC signature and a delivery record |
+| notify | 11 | 11 | the inbox — and since 2026-09-22 something actually writes to it: a run that finishes and an approval that is raised, in the recipient's own language, announced on `/rt/devices`. Per-kind preferences decide whether a notice is written at all, quiet hours are stored as given, and webhooks check their URL against private addresses before anything is sent, with an HMAC signature and a delivery record |
 
 **Phase 4 of the roadmap is complete**: `knowledge`, `plugins`, the `updates`
 channel and the `audit` dashboards all answer. Of Phase 1, `tasks` is complete
@@ -45,9 +45,15 @@ chat.**
 
 ## Clients
 - **Web** (`packages/web`): first-run setup, login, chat with streaming,
-  approvals and resume, sessions list, agents, models, settings, pairing.
-  Screens whose module is still 501 say so explicitly instead of showing an
-  empty page.
+  approvals and resume, sessions list, agents, models, the Tasks board,
+  schedules, notifications, settings, pairing. Screens whose module is still
+  501 say so explicitly instead of showing an empty page.
+  Sixteen destinations are still that placeholder, and they are two different
+  things. Nine wait on a **module**: `rooms`, and the seven Hermes-gateway
+  pages of `agents` (skills, MCP, memory, jobs, channels, plugins, the global
+  agent). Seven wait only on a **screen**, because the hub already answers
+  them: `knowledge`, `users`, `workspaces`, `webhooks`, `updates`, `plugins`
+  and `about` (`privacy` has no operations of its own).
 - **Terminal** (`packages/cli`): the reference client — `setup`, login, pairing,
   agents, models, sessions, an interactive `chat` with resume and approvals.
 - Desktop, Android and iOS: not started (ADR 0007, ADR 0009).

@@ -306,6 +306,63 @@ describe('a run on the direct agent', () => {
     expect((usage.json() as { usage: { input_tokens: number } }).usage.input_tokens).toBe(12);
   }, 20_000);
 
+  it('puts the finished run in the person’s inbox, in their language', async () => {
+    harness = await configuredHub();
+    const sessionId = await newSession(harness);
+    const before = await authed(harness.hub, harness.hub.token, {
+      method: 'GET',
+      url: '/api/v1/notify/notices',
+    });
+    // Nothing has happened yet, so there is nothing to be told about.
+    expect((before.json() as { unread_count: number }).unread_count).toBe(0);
+
+    await authed(harness.hub, harness.hub.token, {
+      method: 'POST',
+      url: `/api/v1/sessions/${sessionId}/runs`,
+      payload: { content: [{ type: 'text', text: 'قل مرحبًا' }] },
+    });
+    await harness.waitFor('run.completed');
+
+    const inbox = await authed(harness.hub, harness.hub.token, {
+      method: 'GET',
+      url: '/api/v1/notify/notices',
+    });
+    const page = inbox.json() as {
+      unread_count: number;
+      items: Array<{ kind: string; title: string; resource: { kind: string; id: string } | null }>;
+    };
+    expect(page.unread_count).toBe(1);
+    const notice = page.items[0];
+    expect(notice?.kind).toBe('run_completed');
+    // The agent by name, written in Arabic because that is this owner's locale.
+    expect(notice?.title).toContain('Direct');
+    expect(notice?.title).toMatch(/[\u0600-\u06FF]/);
+    // And it points at the conversation, so tapping it has somewhere to go.
+    expect(notice?.resource).toEqual({ kind: 'session', id: sessionId });
+
+    // Turned off, the same run says nothing — and records nothing either.
+    const off = await authed(harness.hub, harness.hub.token, {
+      method: 'PUT',
+      url: '/api/v1/notify/preferences',
+      payload: {
+        events: { run_completed: { in_app: false, push: false } },
+        quiet_hours: { enabled: false, from: '22:00', to: '07:00', timezone: 'Asia/Riyadh' },
+      },
+    });
+    expect(off.statusCode).toBe(200);
+    await authed(harness.hub, harness.hub.token, {
+      method: 'POST',
+      url: `/api/v1/sessions/${sessionId}/runs`,
+      payload: { content: [{ type: 'text', text: 'ومرة أخرى' }] },
+    });
+    await harness.waitFor('run.completed');
+    const after = await authed(harness.hub, harness.hub.token, {
+      method: 'GET',
+      url: '/api/v1/notify/notices',
+    });
+    expect((after.json() as { items: unknown[] }).items).toHaveLength(1);
+  }, 20_000);
+
   it('fails the run with the provider’s own words when the key is refused', async () => {
     harness = await configuredHub();
     // The endpoint changes its mind about the key between the catalogue refresh and the

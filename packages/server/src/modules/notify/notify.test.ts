@@ -124,6 +124,68 @@ describe('notify: the inbox', () => {
 });
 
 describe('notify: preferences', () => {
+  it('remembers the quiet window it was given, in the zone it was given', async () => {
+    const hub = await signedInHub();
+    try {
+      const window = {
+        enabled: true,
+        from: '23:30',
+        to: '06:15',
+        timezone: 'Asia/Riyadh',
+      };
+      const saved = await authed(hub, hub.token, {
+        method: 'PUT',
+        url: '/api/v1/notify/preferences',
+        payload: { events: {}, quiet_hours: window },
+      });
+      expect(saved.statusCode).toBe(200);
+      expect((saved.json() as Json).quiet_hours).toEqual(window);
+      // And on the way back out — a window that answers 22:00–07:00 whatever you typed
+      // is not a setting, it is a decoration.
+      const read = await authed(hub, hub.token, {
+        method: 'GET',
+        url: '/api/v1/notify/preferences',
+      });
+      expect((read.json() as Json).quiet_hours).toEqual(window);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('keeps a window that was switched off, because it will be switched back on', async () => {
+    const hub = await signedInHub();
+    try {
+      await authed(hub, hub.token, {
+        method: 'PUT',
+        url: '/api/v1/notify/preferences',
+        payload: {
+          events: {},
+          quiet_hours: { enabled: true, from: '23:00', to: '05:00', timezone: 'UTC' },
+        },
+      });
+      await authed(hub, hub.token, {
+        method: 'PUT',
+        url: '/api/v1/notify/preferences',
+        payload: {
+          events: {},
+          quiet_hours: { enabled: false, from: '23:00', to: '05:00', timezone: 'UTC' },
+        },
+      });
+      const read = await authed(hub, hub.token, {
+        method: 'GET',
+        url: '/api/v1/notify/preferences',
+      });
+      expect((read.json() as Json).quiet_hours).toEqual({
+        enabled: false,
+        from: '23:00',
+        to: '05:00',
+        timezone: 'UTC',
+      });
+    } finally {
+      await hub.close();
+    }
+  });
+
   it('stores only what was changed, because a missing kind means "on"', async () => {
     const hub = await signedInHub();
     try {

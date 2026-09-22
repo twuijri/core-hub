@@ -708,6 +708,22 @@ export class RunEngine {
       }
     }
     this.emitSession(scope, run.sessionId);
+    // Tell the person. Not for a run they cancelled themselves — they were watching — and
+    // never in a way that can fail the run, which is why it is wrapped.
+    if (terminal !== 'cancelled') {
+      this.tell(() =>
+        this.deps.ports.notifier.runFinished({
+          workspace: scope.workspace,
+          profile: scope.profile,
+          userId: scope.userId,
+          sessionId: run.sessionId,
+          sessionTitle: session?.title ?? '',
+          agentName: run.agent.name,
+          outcome: terminal === 'succeeded' ? 'succeeded' : 'failed',
+          reason: state.error?.message ?? null,
+        }),
+      );
+    }
     // The session names itself from its first exchange (decision §26). After the run, not
     // inside it: `schedule` returns at once and the work is tracked separately.
     if (terminal === 'succeeded') this.namer.schedule(scope, run.sessionId);
@@ -763,6 +779,18 @@ export class RunEngine {
     );
   }
 
+  /**
+   * A notice must never break a run. Anything the notifier throws is logged and dropped,
+   * because the run's outcome is the truth and the notice is a courtesy about it.
+   */
+  private tell(action: () => void): void {
+    try {
+      action();
+    } catch (error) {
+      this.deps.log.warn({ err: error }, 'notice not delivered');
+    }
+  }
+
   private emitApproval(
     scope: EngineScope,
     row: ApprovalRow,
@@ -783,6 +811,20 @@ export class RunEngine {
     // Profile-wide (the pending-actions bar shows it from any screen), and
     // journaled under the session so a reconnecting client is told about it.
     this.deps.realtime.emitToProfileFor(scope.profile, sessionId, event, payload);
+    // An approval is the one event that stops the work until somebody answers, so it is
+    // also the one worth a notice — and only when it is raised, not when it is resolved.
+    if (event === 'approval.requested') {
+      this.tell(() =>
+        this.deps.ports.notifier.approvalRequested({
+          workspace: scope.workspace,
+          profile: scope.profile,
+          userId: scope.userId,
+          sessionId,
+          agentName: agent?.name ?? '',
+          what: row.title,
+        }),
+      );
+    }
   }
 
   private messageView(

@@ -19,22 +19,25 @@
 import { createHmac } from 'node:crypto';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { Server as SocketServer } from 'socket.io';
 import { loadOpenApiDocument } from '@majlis/contracts';
 import { newUlid } from '../../db/ids.js';
 import { createContractIndex } from '../../lib/contract.js';
 import { requireSqlite, type ModuleDb } from '../../lib/db.js';
 import { HubError, notFound } from '../../lib/errors.js';
-import { defineModule } from '../../lib/module.js';
+import { REALTIME_NAMESPACES, defineModule } from '../../lib/module.js';
 import { clampLimit } from '../../lib/pagination.js';
 import { defineRoute } from '../../lib/route.js';
 import { jobRunnerFor, serializeJob } from '../audit/index.js';
 import {
   DEFAULT_WORKSPACE_SLUG,
+  emitToUser,
   requireRole,
   requireUser,
   requireWorkspace,
   resolveWorkspaceFor,
 } from '../auth/index.js';
+import { deliver, unreadCount, type NoticeEvent, type Recipient } from './notices.js';
 import { checkAddress } from './address.js';
 import {
   notificationPreferences,
@@ -45,6 +48,29 @@ import {
 } from './schema.js';
 
 export { checkAddress, isPrivateAddress } from './address.js';
+export { quietNow, sentenceFor, type NoticeEvent, type Recipient } from './notices.js';
+
+/**
+ * What another module holds to put something in somebody's inbox. One method, named after
+ * what happened rather than what is shown, because the wording belongs to `notices.ts`
+ * and a caller that could choose it would eventually choose it differently.
+ */
+export interface HubNotifier {
+  announce(
+    recipient: Recipient,
+    event: NoticeEvent,
+    resource: { kind: string; id: string } | null,
+  ): void;
+}
+
+/** A notifier bound to this hub's database and sockets. Composed in `bootstrap`. */
+export function createNotifier(db: ModuleDb, io: () => SocketServer | null): HubNotifier {
+  return {
+    announce(recipient, event, resource) {
+      deliver({ db, io: io(), record }, recipient, event, resource);
+    },
+  };
+}
 
 /** Injected so a test can exercise delivery without reaching the network. */
 export interface NotifyOverrides {
@@ -150,6 +176,94 @@ function toWebhook(row: typeof webhooks.$inferSelect): Record<string, unknown> {
 /** The `*` row holds quiet hours; every other row is one kind's two switches. */
 const ALL = '*';
 
+/** Nobody's night is 00:00–00:00, so a hub that was never asked answers a sane window. */
+const DEFAULT_QUIET = { enabled: false, from: '22:00', to: '07:00', timezone: 'UTC' };
+
+type PreferenceRow = typeof notificationPreferences.$inferSelect;
+
+function readQuiet(row: PreferenceRow): {
+  enabled: boolean;
+  from: string;
+  to: string;
+  timezone: string;
+} {
+  return {
+    // `muted_until` predates the window and still means "silenced": a row muted by the
+    // older path reads as enabled rather than as a window nobody set.
+    enabled: row.mutedUntil !== null,
+    from: row.quietFrom ?? DEFAULT_QUIET.from,
+    to: row.quietTo ?? DEFAULT_QUIET.to,
+    timezone: row.quietTimezone ?? DEFAULT_QUIET.timezone,
+  };
+}
+
+function preferenceRow(db: ModuleDb, scope: Scope, kind: string): PreferenceRow | undefined {
+  return db
+    .select()
+    .from(notificationPreferences)
+    .where(
+      and(
+        eq(notificationPreferences.workspace, scope.workspace),
+        eq(notificationPreferences.ownerId, scope.userId),
+        eq(notificationPreferences.kind, kind),
+      ),
+    )
+    .get();
+}
+
+function writeQuiet(
+  db: ModuleDb,
+  scope: Scope,
+  window: { enabled: boolean; from: string; to: string; timezone: string },
+): void {
+  const values = {
+    quietFrom: window.from,
+    quietTo: window.to,
+    quietTimezone: window.timezone,
+    mutedUntil: window.enabled ? new Date(0) : null,
+  };
+  const existing = preferenceRow(db, scope, ALL);
+  if (existing) {
+    db.update(notificationPreferences)
+      .set({ ...values, updatedAt: new Date() })
+      .where(eq(notificationPreferences.id, existing.id))
+      .run();
+    return;
+  }
+  db.insert(notificationPreferences)
+    .values({
+      id: newUlid(),
+      ownerId: scope.userId,
+      workspace: scope.workspace,
+      kind: ALL,
+      ...values,
+    })
+    .run();
+}
+
+/** Every kind somebody changed. A kind with no row was never changed, so it is not listed. */
+function readEvents(
+  db: ModuleDb,
+  scope: Scope,
+): Record<string, { in_app: boolean; push: boolean }> {
+  const events: Record<string, { in_app: boolean; push: boolean }> = {};
+  const rows = db
+    .select()
+    .from(notificationPreferences)
+    .where(
+      and(
+        eq(notificationPreferences.workspace, scope.workspace),
+        eq(notificationPreferences.ownerId, scope.userId),
+      ),
+    )
+    .all();
+  for (const row of rows) {
+    if (row.kind === ALL) continue;
+    events[row.kind] = { in_app: row.inApp, push: row.push };
+  }
+  return events;
+}
+
 export interface NoticeInput {
   workspace: string;
   userId: string;
@@ -183,6 +297,27 @@ export function record(db: ModuleDb, input: NoticeInput): string {
     })
     .run();
   return id;
+}
+
+/**
+ * Tell the person's own clients that their inbox changed, on `/rt/devices` — the
+ * namespace the contract gives user-level events. `notice` is null for mark-all: the
+ * count is the news, and a hundred envelopes saying the same thing is not.
+ */
+function announce(
+  request: FastifyRequest,
+  scope: Scope,
+  notice: Record<string, unknown> | null,
+  now: Date,
+): void {
+  emitToUser(
+    request.server.hub.io,
+    scope.userId,
+    REALTIME_NAMESPACES.devices,
+    'notice.updated',
+    { notice, unread_count: unreadCount(dbOf(request), scope) },
+    now.getTime(),
+  );
 }
 
 /** The events a webhook may subscribe to, served from the contract rather than a list here. */
@@ -278,6 +413,9 @@ export const notifyModule = defineModule({
             .where(eq(notifications.id, row.id))
             .run();
         }
+        // One event for the lot: what another client needs is the new count, not a
+        // hundred envelopes saying the same thing.
+        if (rows.length > 0) announce(request, scope, null, now);
         return { updated: rows.length };
       },
     });
@@ -303,11 +441,14 @@ export const notifyModule = defineModule({
         if (!row) throw notFound({ resource: 'notice', id });
         const patch = body as { read?: boolean };
         const now = new Date();
+        const readAt = patch.read === false ? null : now;
         db.update(notifications)
-          .set({ readAt: patch.read === false ? null : now, updatedAt: now })
+          .set({ readAt, updatedAt: now })
           .where(eq(notifications.id, id))
           .run();
-        return toNotice({ ...row, readAt: patch.read === false ? null : now }, scope.profile);
+        const notice = toNotice({ ...row, readAt }, scope.profile);
+        announce(request, scope, notice, now);
+        return notice;
       },
     });
 
@@ -328,15 +469,10 @@ export const notifyModule = defineModule({
           )
           .all();
         const events: Record<string, { in_app: boolean; push: boolean }> = {};
-        let quiet = { enabled: false, from: '22:00', to: '07:00', timezone: 'UTC' };
+        let quiet = DEFAULT_QUIET;
         for (const row of rows) {
           if (row.kind === ALL) {
-            quiet = {
-              enabled: row.mutedUntil !== null,
-              from: '22:00',
-              to: '07:00',
-              timezone: 'UTC',
-            };
+            quiet = readQuiet(row);
             continue;
           }
           events[row.kind] = { in_app: row.inApp, push: row.push };
@@ -354,7 +490,7 @@ export const notifyModule = defineModule({
         const db = dbOf(request);
         const input = body as {
           events?: Record<string, { in_app?: boolean; push?: boolean }>;
-          quiet_hours?: { enabled?: boolean };
+          quiet_hours?: { enabled?: boolean; from?: string; to?: string; timezone?: string };
         };
         for (const [kind, value] of Object.entries(input.events ?? {})) {
           const existing = db
@@ -386,15 +522,16 @@ export const notifyModule = defineModule({
               .run();
           }
         }
-        return {
-          events: input.events ?? {},
-          quiet_hours: {
-            enabled: input.quiet_hours?.enabled ?? false,
-            from: '22:00',
-            to: '07:00',
-            timezone: 'UTC',
-          },
+        // Quiet hours live on the `*` row. They are written even when disabled, because a
+        // window you switched off is still the window you will switch back on.
+        const window = {
+          enabled: input.quiet_hours?.enabled ?? false,
+          from: input.quiet_hours?.from ?? DEFAULT_QUIET.from,
+          to: input.quiet_hours?.to ?? DEFAULT_QUIET.to,
+          timezone: input.quiet_hours?.timezone ?? DEFAULT_QUIET.timezone,
         };
+        if (input.quiet_hours) writeQuiet(db, scope, window);
+        return { events: readEvents(db, scope), quiet_hours: window };
       },
     });
 

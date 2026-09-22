@@ -237,11 +237,46 @@ export interface AgentRunner {
   ask?(request: AgentAskRequest): Promise<string | null>;
 }
 
+/**
+ * Telling the person something happened while they were not looking.
+ *
+ * Sessions names the **event**, never the sentence: the wording, the person's language
+ * and whether they asked to be told at all belong to `notify`. There is deliberately no
+ * locale here — the notice is read later, by the recipient, whose own account says which
+ * language that is; the language of the request that started the run is irrelevant. The default does nothing,
+ * so a hub composed without it runs exactly as before rather than failing at 3 a.m.
+ *
+ * It is deliberately synchronous and returns nothing: a notice must never be able to
+ * fail a run or make it wait.
+ */
+export interface SessionsNotifier {
+  runFinished(input: {
+    workspace: string;
+    profile: string;
+    userId: string;
+    sessionId: string;
+    sessionTitle: string;
+    agentName: string;
+    outcome: 'succeeded' | 'failed';
+    reason: string | null;
+  }): void;
+  approvalRequested(input: {
+    workspace: string;
+    profile: string;
+    userId: string;
+    sessionId: string;
+    agentName: string;
+    what: string;
+  }): void;
+}
+
 export interface SessionsPorts {
   agents: AgentDirectory;
   runner: AgentRunner;
   /** `knowledge`'s file registry; the default stores nothing. */
   attachments: AttachmentsPort;
+  /** Who to tell when a run ends or an approval is waiting; the default tells nobody. */
+  notifier: SessionsNotifier;
   /** No event for this long ends the run as `timed_out` (run state machine). */
   agentTimeoutMs: number;
 }

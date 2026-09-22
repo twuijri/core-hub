@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../../server/src/app/config.js';
 import { buildServer } from '../../server/src/app/server.js';
 import { createLogger } from '../../server/src/lib/logger.js';
-import { modules as defaultModules } from '../../server/src/modules/index.js';
+import { modules as defaultModules, notifierPort } from '../../server/src/modules/index.js';
+import { principalScopeResolver } from '../../server/src/modules/auth/index.js';
 import { overrideAgents } from '../../server/src/modules/agents/index.js';
 import { overrideModels } from '../../server/src/modules/models/index.js';
 import type { AgentInstaller } from '../../server/src/modules/agents/index.js';
@@ -292,6 +293,12 @@ overrideModels({ fetchImpl: scriptedProvider });
 const sessions = createSessionsModule({
   agents: { find: async (_workspace, agentId) => fakeHermes(agentId) },
   runner: new ScriptedRunner(),
+  // The real wiring, not a stub: the journeys then prove that a finished run actually
+  // reaches the inbox, which is the only claim worth making about notifications. The
+  // scope resolver has to be the real one too — the derived one invents a local owner id,
+  // and a notice written for a person who is not signed in is a notice nobody sees.
+  scopes: principalScopeResolver,
+  notifier: notifierPort,
   agentTimeoutMs: 30_000,
 });
 const app = await buildServer({
