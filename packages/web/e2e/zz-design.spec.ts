@@ -206,19 +206,19 @@ test.describe('the rebuilt screens', () => {
     await expect(page.getByTestId('agent-card').first().locator('.mj-badge').first()).toBeVisible();
     await shot(page, 'design-agents-ar-light');
 
-    // Settings: the tab strip, the management cards and the Display switch.
-    await page.getByTestId('settings-back').click();
+    // Settings: the side list — its three groups — and the Display switch. The list is on
+    // every settings page, so there is no "back to Settings" to click at this width.
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'الحساب' }).click();
     await expect(page.getByTestId('settings-tabs')).toBeVisible();
     await expect(page.getByTestId('settings-management').getByRole('link')).toHaveCount(4);
+    await expect(page.getByTestId('settings-tools').getByRole('link')).toHaveCount(7);
     await shot(page, 'design-settings-ar-light');
     await page.getByRole('link', { name: 'العرض' }).click();
     await expect(page.getByRole('switch', { name: /تفكير/ })).toBeVisible();
     await shot(page, 'design-display-ar-light');
 
     // Models: the provider card, and the model panel's table inside a scroll area.
-    // (A settings *tab* has no "back to Settings" link — it is already there.)
-    await page.getByRole('link', { name: 'الإعدادات' }).first().click();
-    await page.getByRole('link', { name: 'النماذج' }).click();
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'النماذج' }).click();
     await expect(page.getByTestId('open-add-provider')).toBeVisible();
     await shot(page, 'design-models-ar-light');
 
@@ -235,8 +235,7 @@ test.describe('the rebuilt screens', () => {
     await page.getByRole('link', { name: 'الوكلاء' }).click();
     await expect(page.getByTestId('agent-card').first()).toBeVisible();
     await shot(page, 'design-agents-ar-dark');
-    await page.getByTestId('settings-back').click();
-    await page.getByRole('link', { name: 'النماذج' }).click();
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'النماذج' }).click();
     // Wait for the screen itself, not for the click: the navigation is client-side and a
     // screenshot taken on the click would photograph the page it came from.
     await expect(page.getByTestId('open-add-provider')).toBeVisible();

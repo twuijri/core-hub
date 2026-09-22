@@ -54,11 +54,12 @@ export {
   SidebarFooter,
   SidebarFrame,
   SidebarGroup,
+  SidebarPanel,
   SidebarRow,
 } from './SidebarShell.js';
 export { Skeleton, SkeletonGroup, SkeletonText } from './Skeleton.js';
 export { Switch } from './Switch.js';
 export { Table, type Column } from './Table.js';
-export { TabPanel, Tabs, TabsNav, type TabItem } from './Tabs.js';
+export { TabPanel, Tabs, type TabItem } from './Tabs.js';
 export { ToastProvider, useToast, type ToastRequest, type ToastTone } from './Toast.js';
 export { Tooltip } from './Tooltip.js';

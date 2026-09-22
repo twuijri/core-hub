@@ -27,6 +27,28 @@ export function SidebarFrame({
   );
 }
 
+/**
+ * The same rows, inside a page instead of beside it: no glass, no full height, no brand —
+ * the column that stands next to a settings page. It exists so the settings navigation is
+ * assembled from the sidebar's own pieces rather than drawn a second time.
+ */
+export function SidebarPanel({
+  label,
+  children,
+  testId,
+  ...rest
+}: {
+  label: string;
+  children: ReactNode;
+  testId?: string;
+} & Record<`data-${string}`, string | undefined>) {
+  return (
+    <nav className="mj-sidebar-panel" aria-label={label} data-testid={testId} {...rest}>
+      {children}
+    </nav>
+  );
+}
+
 export function SidebarBrand({ mark, name }: { mark: ReactNode; name: ReactNode }) {
   return (
     <div className="mj-sidebar-brand">

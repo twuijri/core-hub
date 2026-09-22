@@ -147,8 +147,8 @@ One import (`src/ui/index.ts`) reaches all of it:
 | Action | `Button` (5 variants × 3 sizes, icon-only, loading, a disabled reason), `buttonClass()` for a link that must look like one |
 | Form | `Input`, `Textarea`, `Label`, `Field`, `Select`, `Combobox`, `Checkbox`, `Radio`, `Switch`, `Segmented` |
 | Overlay | `Dialog`, `Sheet`, `AlertDialog`, `useConfirm()`, `Menu`, `ContextMenu`, `Popover`, `Tooltip`, `Toast` + `useToast()` |
-| Display | `Card` + `CardHeader`/`CardFooter`/`cardClass()`, `Badge`, `Avatar`, `Separator`, `Table`, `ScrollArea`, `Skeleton`, `EmptyState`, `Notice`, `Spinner`, `Breadcrumb`, `Tabs`/`TabPanel`/`TabsNav` |
-| Shell | `SidebarFrame`/`Brand`/`Group`/`Row`/`Body`/`Footer`, `UiDirection` |
+| Display | `Card` + `CardHeader`/`CardFooter`/`cardClass()`, `Badge`, `Avatar`, `Separator`, `Table`, `ScrollArea`, `Skeleton`, `EmptyState`, `Notice`, `Spinner`, `Breadcrumb`, `Tabs`/`TabPanel` |
+| Shell | `SidebarFrame`/`Brand`/`Group`/`Row`/`Body`/`Footer`, `SidebarPanel` (the same rows inside a page — the settings list), `UiDirection` |
 
 Three rules keep it a kit and not a folder, each one a test in
 `packages/web/tests/ui-layer.test.ts`:
