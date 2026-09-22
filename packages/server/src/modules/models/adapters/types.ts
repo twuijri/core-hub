@@ -1,11 +1,12 @@
 /**
  * `ProviderAdapter` — the one interface the models service sees for a provider's HTTP
- * surface. Four verbs, each of which either did a real thing or says why it could not:
+ * surface. Five verbs, each of which either did a real thing or says why it could not:
  *
  *     adapter.test(ctx)        -> one small authenticated request; `ok` is the truth
  *     adapter.listModels(ctx)  -> the provider's own model list, or `supported: false`
  *     adapter.listVoices(ctx)  -> a TTS provider's voices, or `supported: false`
  *     adapter.synthesize(ctx)  -> audio bytes, or `supported: false`
+ *     adapter.chat(ctx, req)   -> a streamed turn, for the `direct` agent
  *
  * There is deliberately no "assume it worked" path: `test` returning `ok: true` means a
  * request left this process and the provider answered it.
@@ -90,10 +91,90 @@ export type SynthesizeResult =
   | { supported: true; audio: Uint8Array; contentType: string }
   | { supported: false; reason: string; detail?: string | null };
 
+// ------------------------------------------------------------------- streamed chat
+
+/** An image handed to the model inline, already read off disk by the caller. */
+export interface ChatImage {
+  mime: string;
+  /** Base64 of the file's bytes, with no `data:` prefix. */
+  dataBase64: string;
+  name: string;
+}
+
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  text: string;
+  /** Only ever set on a `user` message, and only for a model that accepts images. */
+  images?: ChatImage[];
+}
+
+export interface ChatRequest {
+  /** The provider's own model id, never the catalogue's `"<slug>/<model>"` key. */
+  model: string;
+  messages: ChatMessage[];
+  reasoningEffort?: string | null;
+  /** Aborting it closes the socket; the stream then ends as `cancelled`. */
+  signal?: AbortSignal;
+  maxOutputTokens?: number | null;
+}
+
+/**
+ * Why a streamed turn stopped, in the vocabulary the service maps to the contract's
+ * error codes. It is deliberately the same list `ProviderTestResult.reason` uses, plus
+ * the two a turn can hit that a connectivity check cannot.
+ */
+export type ChatFailureReason =
+  | 'no_key'
+  | 'unauthorized'
+  | 'rate_limited'
+  | 'unreachable'
+  | 'http_error'
+  | 'unsupported'
+  | 'model_not_found'
+  | 'cancelled';
+
+/**
+ * One streamed item of a direct turn. Deliberately smaller than `AgentEvent`: there are
+ * no tools on this path (ADOPTION-BACKLOG §2.16), so there is nothing to approve and
+ * nothing to report running.
+ */
+export type ChatEvent =
+  | { type: 'delta'; text: string }
+  | { type: 'reasoning'; text: string }
+  | {
+      /** Cumulative totals for the turn, as the provider reports them. */
+      type: 'usage';
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
+      reasoningTokens?: number;
+    }
+  | { type: 'completed' }
+  | {
+      type: 'failed';
+      reason: ChatFailureReason;
+      /** The provider's own words, kept verbatim and capped. Null when it sent none. */
+      detail: string | null;
+      status: number | null;
+    };
+
 export interface ProviderAdapter {
   readonly protocol: string;
   test(ctx: ProviderContext): Promise<ProviderTestResult>;
   listModels(ctx: ProviderContext): Promise<ListModelsResult>;
   listVoices(ctx: ProviderContext): Promise<ListVoicesResult>;
   synthesize(ctx: ProviderContext, request: SynthesizeRequest): Promise<SynthesizeResult>;
+  /**
+   * One streamed turn against the provider's chat surface, for the `direct` agent.
+   *
+   * Never throws: every way this can go wrong is a final `failed` event, so the run
+   * loop that consumes it has one shape to handle.
+   */
+  chat(ctx: ProviderContext, request: ChatRequest): AsyncIterable<ChatEvent>;
+}
+
+/** The `chat` of a provider that is not a chat provider at all. */
+export async function* chatUnsupported(why: string): AsyncIterable<ChatEvent> {
+  yield { type: 'failed', reason: 'unsupported', detail: why, status: null };
 }

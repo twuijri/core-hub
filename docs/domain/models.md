@@ -206,9 +206,51 @@ with a key"; `reason` is an i18n key, never a sentence in one language.
   `agent_settings.secret_refs` win over the shared store; absent both, the
   agent inherits.
 
+## الاتصال المباشر — streaming a turn from the hub (ADOPTION-BACKLOG §2.15)
+
+The `direct` agent (`docs/domain/agents.md` §The direct agent) has no runtime of its
+own, so this module streams its turns. `ProviderAdapter` gained a fifth verb beside
+`test`, `listModels`, `listVoices` and `synthesize`:
+
+    adapter.chat(ctx, request) -> AsyncIterable<ChatEvent>
+
+- **Which protocols answer.** `openai` (and therefore every OpenAI-compatible
+  endpoint — OpenRouter, Groq, Mistral, DeepSeek, xAI, LM Studio, LiteLLM,
+  cli-proxy-api, a typed-in URL), `anthropic`, `google`, and `ollama` through its own
+  `/v1` surface (ADR 0012's reasoning, applied to us). `elevenlabs` refuses: a speech
+  provider has no chat surface, and saying so is better than posting to one.
+- **Nothing throws.** Every refusal is a final `failed` event carrying the provider's
+  own sentence and one of the contract's error codes: `provider_not_configured` (no key
+  stored for a provider that requires one, or no model chosen), `provider_unauthorized`
+  (401/403), `rate_limited` (429), `not_found` (a model the provider does not know —
+  its 404, or its 400 saying so), `agent_unavailable` (nothing listening),
+  `agent_error` (anything else). The text is never rewritten; the code is a label over
+  it.
+- **Cancel.** The caller's `AbortSignal` closes the socket mid-stream and the turn ends
+  as `cancelled`, which the run state machine reports as an interrupted run, not a
+  failure.
+- **Cost.** `costMicroUsd` is the provider's own token counts against the model row's
+  published prices, reported as `cost_source: estimated`. A model row with no prices
+  reports no number rather than zero.
+
+### Attachment limits on the direct path
+
+There is no file tool on this path, so a file either goes into the request or the turn
+is refused **by name**. Nothing is silently dropped and nothing is silently truncated.
+
+| what | behaviour | limit |
+|---|---|---|
+| text-like (`text/*`, `application/json`, `*+json`, `*+xml`, `*+yaml`, or a known code/text extension) | inlined into the prompt inside a fence naming the file | 64 KB per file, 256 KB per turn |
+| image (`image/png`, `image/jpeg`, `image/webp`, `image/gif`) | sent inline, base64, to a model whose row declares `vision` | 5 MB per image, 20 MB per turn |
+| image, but the chosen model has no `vision` | run fails `unsupported_media_type`, naming the file and the model | — |
+| anything else (PDF, audio, binary) | run fails `unsupported_media_type`, naming the file and its type | — |
+| over a limit | run fails `payload_too_large`, naming the size and the limit | — |
+
 ## Not stored
 
 - Plain API keys; the data key itself (a file under the data directory, never
   a row).
+- The direct agent's conversation: it lives in the server process for the life of the
+  session's adapter object (`docs/domain/agents.md` §The direct agent).
 - Provider responses, rate-limit state (in memory).
 - The full public catalogue: only rows the workspace discovered or typed.

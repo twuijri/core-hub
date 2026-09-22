@@ -88,6 +88,23 @@ export interface ReconcileReport {
   interrupted: string[];
 }
 
+/**
+ * What one turn runs on. Two names for the provider, deliberately:
+ *
+ * - `provider` is what the *agent's runtime* calls it (Hermes's slug, or the
+ *   `providers:` block the hub wrote for it — ADR 0012);
+ * - `providerId` is the hub's own row, which only an adapter that makes the request
+ *   itself can use (`adapters/direct.ts`).
+ *
+ * A runtime that has never heard of the provider gets `provider: null` and still gets
+ * the model; the hub's own adapter gets the row and needs no name at all.
+ */
+export interface AgentSelection {
+  model: string | null;
+  provider: string | null;
+  providerId: string | null;
+}
+
 export class AgentsService {
   private readonly catalog: readonly CatalogEntry[];
   private readonly language: Language;
@@ -139,7 +156,10 @@ export class AgentsService {
 
   // ----------------------------------------------------------------- reads
 
-  list(scope: WorkspaceScope, filter: { kind?: AdapterKind }): ContractAgent[] {
+  list(
+    scope: WorkspaceScope,
+    filter: { kind?: AdapterKind; language?: Language },
+  ): ContractAgent[] {
     return (
       this.db
         .select()
@@ -151,13 +171,13 @@ export class AgentsService {
         // yet, and a row nobody can choose would be noise in every picker.
         .filter((row) => row.selectable)
         .sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name))
-        .map((row) => this.present(row, scope, this.settingsRow(scope.id, row.id)))
+        .map((row) => this.present(row, scope, this.settingsRow(scope.id, row.id), filter.language))
     );
   }
 
-  get(scope: WorkspaceScope, id: string): ContractAgent {
+  get(scope: WorkspaceScope, id: string, language?: Language): ContractAgent {
     const row = this.loadAgent(id);
-    return this.present(row, scope, this.settingsRow(scope.id, row.id));
+    return this.present(row, scope, this.settingsRow(scope.id, row.id), language);
   }
 
   /** `Profile.agent_count`: agents this workspace can actually pick right now. */
@@ -628,9 +648,14 @@ export class AgentsService {
       ...this.targetOf(row),
       ...(Object.keys(env).length > 0 ? { env } : {}),
       ...(cwd ? { cwd } : {}),
+      // The hub's own adapter has no process to hand an environment to: it resolves the
+      // workspace's provider at the moment of each turn (`adapters/direct.ts`).
+      workspace: workspaceId,
+      ...(settings ? { settings: settings.settings } : {}),
       sessionRef: run.sessionRef,
       model: selection.model,
       modelProvider: selection.provider,
+      modelProviderId: selection.providerId,
       reasoningEffort: run.reasoningEffort,
     };
   }
@@ -655,7 +680,7 @@ export class AgentsService {
     row: AgentRow,
     workspaceId: string,
     run: { model?: string | null; provider?: string | null },
-  ): { model: string | null; provider: string | null } {
+  ): AgentSelection {
     const port = this.options.models?.() ?? null;
     const asked = run.model?.trim() ?? '';
     if (asked && port) {
@@ -665,22 +690,24 @@ export class AgentsService {
           return {
             model: ref.model,
             provider: port.runtimeProviderName(workspaceId, ref.provider_id),
+            providerId: ref.provider_id,
           };
         }
       } catch {
         // A provider store that cannot answer must not stop a turn the agent can serve.
       }
     }
-    if (asked) return { model: asked, provider: null };
+    if (asked) return { model: asked, provider: null, providerId: null };
     const fallback = this.defaultModelOf(row, workspaceId);
-    if (!fallback) return { model: null, provider: null };
+    if (!fallback) return { model: null, provider: null, providerId: null };
     try {
       return {
         model: fallback.model,
         provider: port?.runtimeProviderName(workspaceId, fallback.provider_id) ?? null,
+        providerId: fallback.provider_id,
       };
     } catch {
-      return { model: fallback.model, provider: null };
+      return { model: fallback.model, provider: null, providerId: fallback.provider_id };
     }
   }
 
@@ -752,13 +779,30 @@ export class AgentsService {
     row: AgentRow,
     scope: WorkspaceScope,
     settings: AgentSettingsRow | undefined,
+    language: Language = this.language,
   ): ContractAgent {
     return serializeAgent(row, {
       profile: scope.slug,
       settings,
       runtime: this.runtimes.get(row.id) ?? NOT_APPLICABLE,
       defaultModel: this.defaultModelOf(row, scope.id),
+      name: this.displayName(row, language),
     });
+  }
+
+  /**
+   * The name a client shows. Brands ("Hermes", "Codex") read the same in both
+   * languages and have no second name; the hub's own agent is an ordinary word and does
+   * (TEAM-RULES §4: no user-facing string without Arabic and English).
+   *
+   * A row somebody renamed keeps the name they gave it: the catalog's Arabic is offered
+   * only while the row still carries the catalog's English.
+   */
+  private displayName(row: AgentRow, language: Language): string {
+    if (language !== 'ar') return row.name;
+    const entry = this.catalog.find((candidate) => candidate.id === row.slug);
+    if (!entry?.nameAr || row.name !== entry.name) return row.name;
+    return entry.nameAr;
   }
 
   private announce(row: AgentRow, scope: WorkspaceScope): ContractAgent {
@@ -945,6 +989,14 @@ export class AgentsService {
 }
 
 /** Hermes is pinned to the top of the registry (ADR 0006); the rest sort by name. */
+/**
+ * Hermes first (ADR 0006), the hub's own agent second, then everything installable.
+ *
+ * Those two are the whole of a fresh install (ADOPTION-BACKLOG §2.15), and they are the
+ * two a person can use before they have installed anything, so they lead the list.
+ */
 function order(row: AgentRow): number {
-  return row.adapterKind === 'hermes' ? 0 : 1;
+  if (row.adapterKind === 'hermes') return 0;
+  if (row.adapterKind === 'builtin') return 1;
+  return 2;
 }

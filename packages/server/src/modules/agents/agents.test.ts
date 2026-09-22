@@ -114,18 +114,75 @@ describe('agents: the shape a client reads', () => {
 });
 
 describe('agents: the registry a hub boots with', () => {
-  it('always lists Hermes first and every known coding agent as not_installed', async () => {
+  it('lists Hermes first, the direct agent second, and every coding agent as not_installed', async () => {
     const hub = await signedInHub();
     try {
       const response = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/agents' });
       expect(response.statusCode).toBe(200);
       const items = (response.json() as { items: { slug: string; status: string }[] }).items;
-      expect(items[0]?.slug).toBe('hermes');
+      // The two a fresh install shows (ADR 0006; ADOPTION-BACKLOG §2.15).
+      expect(items.slice(0, 2).map((item) => item.slug)).toEqual(['hermes', 'direct']);
       expect(items.map((item) => item.slug).sort()).toEqual(
         CATALOG.map((entry) => entry.id).sort(),
       );
       // Nothing is installed in the test environment: the PATH points at an empty dir.
-      for (const item of items) expect(item.status).toBe('not_installed');
+      // The hub's own agent is the exception — it *is* the hub, so it is always there.
+      for (const item of items) {
+        expect(item.status).toBe(item.slug === 'direct' ? 'available' : 'not_installed');
+      }
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('never offers to install or remove the direct agent: it is the hub (ADR 0006)', async () => {
+    const hub = await signedInHub();
+    try {
+      const items = (
+        (await authed(hub, hub.token, { method: 'GET', url: '/api/v1/agents' })).json() as {
+          items: {
+            id: string;
+            slug: string;
+            install: { source: string; package: string | null };
+          }[];
+        }
+      ).items;
+      const direct = items.find((item) => item.slug === 'direct');
+      expect(direct?.install).toMatchObject({ source: 'builtin', package: null });
+      const lifecycle: [string, string][] = [
+        ['POST', 'install'],
+        ['DELETE', 'install'],
+        ['POST', 'update'],
+      ];
+      for (const [method, operation] of lifecycle) {
+        const response = await authed(hub, hub.token, {
+          method,
+          url: `/api/v1/agents/${direct?.id}/${operation}`,
+        });
+        expect(response.statusCode).toBe(422);
+        expect((response.json() as { code: string }).code).toBe('agent_unavailable');
+      }
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it("names the direct agent in the reader's language (TEAM-RULES §4)", async () => {
+    const hub = await signedInHub();
+    try {
+      const read = async (language: string): Promise<Record<string, string>> => {
+        const response = await authed(hub, hub.token, {
+          method: 'GET',
+          url: '/api/v1/agents',
+          headers: { 'accept-language': language },
+        });
+        const items = (response.json() as { items: { slug: string; name: string }[] }).items;
+        return Object.fromEntries(items.map((item) => [item.slug, item.name]));
+      };
+      expect((await read('en')).direct).toBe('Direct');
+      expect((await read('ar')).direct).toBe('مباشر');
+      // A brand is a brand in both: nothing is translated that should not be.
+      expect((await read('ar')).hermes).toBe('Hermes');
     } finally {
       await hub.close();
     }
@@ -428,7 +485,12 @@ describe('agents: reconciling the table with the data volume (ADR 0006)', () => 
     try {
       // First boot: nothing on the volume, so nothing claims to be installed.
       const first = await testHub(env, { agents: { installer: fakeInstaller() } });
-      expect((await listAgents(first)).every((item) => item.status === 'not_installed')).toBe(true);
+      // The hub's own agent is always installed; it is the hub, not a directory.
+      expect(
+        (await listAgents(first))
+          .filter((item) => item.slug !== 'direct')
+          .every((item) => item.status === 'not_installed'),
+      ).toBe(true);
       await first.app.close();
 
       // The agent's directory now exists on the volume: a restart must find it.
