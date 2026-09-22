@@ -15,6 +15,7 @@
  */
 import { claudeCode } from './claude-code.js';
 import { codex } from './codex.js';
+import { direct } from './direct.js';
 import { geminiCli } from './gemini-cli.js';
 import { hermes } from './hermes.js';
 import { opencode } from './opencode.js';
@@ -22,10 +23,22 @@ import type { CatalogEntry } from './types.js';
 
 export * from './types.js';
 
-/** Hermes stays first: ADR 0006 pins it to the top of the registry. */
-export const CATALOG: readonly CatalogEntry[] = [hermes, claudeCode, codex, geminiCli, opencode];
+/**
+ * Hermes stays first: ADR 0006 pins it to the top of the registry. `direct` is second,
+ * because a fresh install shows exactly these two and nothing else is installed yet
+ * (ADOPTION-BACKLOG §2.15, owner's decision of 2026-09-22).
+ */
+export const CATALOG: readonly CatalogEntry[] = [
+  hermes,
+  direct,
+  claudeCode,
+  codex,
+  geminiCli,
+  opencode,
+];
 
 export const HERMES_ENTRY = hermes;
+export const DIRECT_ENTRY = direct;
 
 /** Every entry the hub can install on demand (everything except the bundled runtime). */
 export const INSTALLABLE = CATALOG.filter((entry) => entry.install.kind === 'npm');
@@ -54,6 +67,20 @@ export function assertCatalogIsWellFormed(catalog: readonly CatalogEntry[] = CAT
       );
     }
     if (!entry.licence) throw new Error(`catalog: "${entry.id}" has no licence`);
+    // The hub's own agent is the hub: it has no process to start and nothing to fetch,
+    // so an entry that claimed either would make the registry promise an install that
+    // cannot happen.
+    if (entry.adapter === 'builtin') {
+      if (entry.install.kind !== 'bundled') {
+        throw new Error(`catalog: builtin "${entry.id}" cannot be installed; it is the hub`);
+      }
+      if (entry.binary || entry.protocolArgs.length > 0) {
+        throw new Error(`catalog: builtin "${entry.id}" must name no binary`);
+      }
+      if (!entry.nameAr) {
+        throw new Error(`catalog: builtin "${entry.id}" needs an Arabic name (TEAM-RULES §4)`);
+      }
+    }
     // ADR 0010: an agent's credential line is the only place a variable is renamed, so a
     // typo here would silently start the agent without a key it was supposed to inherit.
     for (const [family, variable] of Object.entries(entry.credentials)) {

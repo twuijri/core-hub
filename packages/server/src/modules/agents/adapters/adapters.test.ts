@@ -408,14 +408,16 @@ describe('process harness', () => {
 });
 
 describe('the adapter set', () => {
-  it('registers exactly the three implementations ADR 0002 names', () => {
+  it('registers the three implementations ADR 0002 names, plus the hub itself', () => {
     const set = createAdapterSet({ host: { pathValue: '/nowhere-at-all' } });
     expect(
       set
         .all()
         .map((adapter) => adapter.kind)
         .sort(),
-    ).toEqual(['acp', 'harness', 'hermes']);
-    expect(() => set.byKind('builtin')).toThrow(/no adapter registered/);
+    ).toEqual(['acp', 'builtin', 'harness', 'hermes']);
+    // `builtin` is the direct agent (ADOPTION-BACKLOG §2.15): the contract reserved the
+    // kind from the start and it is filled now.
+    expect(set.byKind('builtin').capabilities()).toEqual(['streaming', 'vision', 'resume']);
   });
 });

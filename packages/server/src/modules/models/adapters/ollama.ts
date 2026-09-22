@@ -7,7 +7,10 @@
  * message says so instead of hinting at a key.
  */
 import { detailOf, joinUrl, reasonOf, requestJson } from './http.js';
+import { openAiChat } from './openai.js';
 import type {
+  ChatEvent,
+  ChatRequest,
   DiscoveredModel,
   ListModelsResult,
   ListVoicesResult,
@@ -25,6 +28,20 @@ interface OllamaModel {
 
 export const ollamaAdapter: ProviderAdapter = {
   protocol: 'ollama',
+
+  /**
+   * Ollama's *native* API is what `listModels` reads, because `/api/tags` is the only
+   * place the pulled models are listed. For a turn there is a second surface — the
+   * OpenAI-compatible one under `/v1` — and it is the one used here, for the same
+   * reason ADR 0012 §Consequences gives for Hermes: it speaks the shape everything else
+   * already speaks, so a turn is not a second wire format to keep correct.
+   *
+   * `requiresKey: false` is forwarded untouched: a bare Ollama wants no key, and one
+   * behind somebody's reverse proxy answers its own 401.
+   */
+  chat(ctx: ProviderContext, request: ChatRequest): AsyncIterable<ChatEvent> {
+    return openAiChat(ctx, request, { baseUrl: joinUrl(ctx.baseUrl, 'v1') });
+  },
 
   async test(ctx: ProviderContext): Promise<ProviderTestResult> {
     const answer = await requestJson({

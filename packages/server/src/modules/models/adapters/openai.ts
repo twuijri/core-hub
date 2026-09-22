@@ -11,7 +11,11 @@
  * fields are read when present and left null when not.
  */
 import { detailOf, joinUrl, reasonOf, requestBytes, requestJson } from './http.js';
+import { chatFailure, openStream, parseFrame, sseData } from './stream.js';
 import type {
+  ChatEvent,
+  ChatMessage,
+  ChatRequest,
   ListModelsResult,
   ListVoicesResult,
   ProviderAdapter,
@@ -91,8 +95,132 @@ function numberOf(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? Math.trunc(value) : null;
 }
 
+// ------------------------------------------------------------------- streamed chat
+
+/** A `chat/completions` message, in the two shapes the surface accepts. */
+function chatMessage(message: ChatMessage): Record<string, unknown> {
+  if (!message.images || message.images.length === 0) {
+    return { role: message.role, content: message.text };
+  }
+  // The multimodal shape: an array of parts. Used only when there is an image, because
+  // some OpenAI-compatible servers accept only the plain-string form.
+  return {
+    role: message.role,
+    content: [
+      ...(message.text ? [{ type: 'text', text: message.text }] : []),
+      ...message.images.map((image) => ({
+        type: 'image_url',
+        image_url: { url: `data:${image.mime};base64,${image.dataBase64}` },
+      })),
+    ],
+  };
+}
+
+interface OpenAiChatFrame {
+  choices?: { delta?: { content?: unknown; reasoning?: unknown; reasoning_content?: unknown } }[];
+  usage?: {
+    prompt_tokens?: unknown;
+    completion_tokens?: unknown;
+    prompt_tokens_details?: { cached_tokens?: unknown };
+    completion_tokens_details?: { reasoning_tokens?: unknown };
+  } | null;
+  error?: { message?: unknown } | string;
+}
+
+function count(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? Math.trunc(value)
+    : undefined;
+}
+
+function textOf(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+/**
+ * One turn against `POST {base}/chat/completions` with `stream: true` — the surface
+ * OpenAI defined and every "OpenAI-compatible" endpoint copied, which is why this one
+ * function serves OpenAI, OpenRouter, Groq, Mistral, DeepSeek, xAI, LM Studio, LiteLLM,
+ * cli-proxy-api, a typed-in endpoint, and Ollama's own `/v1` (ADR 0012).
+ *
+ * `stream_options.include_usage` asks for the token totals in a final frame. A server
+ * that ignores the field simply sends no usage, and the turn reports none rather than
+ * an invented number.
+ */
+export async function* openAiChat(
+  ctx: ProviderContext,
+  request: ChatRequest,
+  options: { baseUrl?: string } = {},
+): AsyncIterable<ChatEvent> {
+  if (!ctx.apiKey && ctx.requiresKey !== false) {
+    yield { type: 'failed', reason: 'no_key', detail: null, status: null };
+    return;
+  }
+  const open = await openStream({
+    url: joinUrl(options.baseUrl ?? ctx.baseUrl, 'chat/completions'),
+    headers: authHeaders(ctx),
+    body: {
+      model: request.model,
+      messages: request.messages.map(chatMessage),
+      stream: true,
+      stream_options: { include_usage: true },
+      ...(request.maxOutputTokens ? { max_tokens: request.maxOutputTokens } : {}),
+      ...(request.reasoningEffort && request.reasoningEffort !== 'none'
+        ? { reasoning_effort: request.reasoningEffort }
+        : {}),
+    },
+    fetchImpl: ctx.fetchImpl,
+    ...(request.signal ? { signal: request.signal } : {}),
+  });
+  if (!open.ok) {
+    yield chatFailure(open);
+    return;
+  }
+  for await (const payload of sseData(open.lines)) {
+    const frame = parseFrame(payload) as OpenAiChatFrame | null;
+    if (!frame) continue;
+    // Some gateways report a mid-stream failure as a frame rather than a status.
+    const inline =
+      typeof frame.error === 'string'
+        ? frame.error
+        : typeof frame.error?.message === 'string'
+          ? frame.error.message
+          : null;
+    if (inline) {
+      yield { type: 'failed', reason: 'http_error', detail: inline.slice(0, 500), status: null };
+      return;
+    }
+    const delta = frame.choices?.[0]?.delta;
+    const text = textOf(delta?.content);
+    if (text) yield { type: 'delta', text };
+    const reasoning = textOf(delta?.reasoning) || textOf(delta?.reasoning_content);
+    if (reasoning) yield { type: 'reasoning', text: reasoning };
+    if (frame.usage) {
+      const usage: Extract<ChatEvent, { type: 'usage' }> = { type: 'usage' };
+      const input = count(frame.usage.prompt_tokens);
+      const output = count(frame.usage.completion_tokens);
+      const cached = count(frame.usage.prompt_tokens_details?.cached_tokens);
+      const reasoned = count(frame.usage.completion_tokens_details?.reasoning_tokens);
+      if (input !== undefined) usage.inputTokens = input;
+      if (output !== undefined) usage.outputTokens = output;
+      if (cached !== undefined) usage.cacheReadTokens = cached;
+      if (reasoned !== undefined) usage.reasoningTokens = reasoned;
+      yield usage;
+    }
+  }
+  if (request.signal?.aborted) {
+    yield { type: 'failed', reason: 'cancelled', detail: null, status: null };
+    return;
+  }
+  yield { type: 'completed' };
+}
+
 export const openAiAdapter: ProviderAdapter = {
   protocol: 'openai',
+
+  chat(ctx: ProviderContext, request: ChatRequest): AsyncIterable<ChatEvent> {
+    return openAiChat(ctx, request);
+  },
 
   async test(ctx: ProviderContext): Promise<ProviderTestResult> {
     // Only a provider that *requires* a key is told it is missing one. A local server

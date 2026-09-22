@@ -125,8 +125,12 @@ export class AgentRunner implements AgentRunnerPort {
     void this.pump(run);
     const prompt: RunnerPromptInput = {
       text: promptText(request.prompt, request.files),
+      // The same turn, unflattened, for an adapter that carries the bytes itself
+      // instead of pointing an agent at a path (`adapters/direct.ts`).
+      blocks: request.prompt,
       model: selection.model,
       modelProvider: selection.provider,
+      modelProviderId: selection.providerId,
       reasoningEffort: request.reasoningEffort,
     };
     void live.session.send(prompt).catch((error: unknown) => {
@@ -566,7 +570,10 @@ export function toRunnerEvent(event: AgentEvent, ctx: TranslateContext): RunnerE
           ? { cacheWriteTokens: event.cacheWriteTokens }
           : {}),
         ...(event.reasoningTokens !== undefined ? { reasoningTokens: event.reasoningTokens } : {}),
-        costSource: 'unknown',
+        ...(event.costMicroUsd !== undefined ? { costMicroUsd: event.costMicroUsd } : {}),
+        // `unknown` stays the default: an adapter that reports tokens and no price has
+        // not told us what the turn cost, and zero would be a claim.
+        costSource: event.costSource ?? 'unknown',
       };
     case 'context':
       return {
@@ -581,7 +588,13 @@ export function toRunnerEvent(event: AgentEvent, ctx: TranslateContext): RunnerE
       }
       return { type: 'completed' };
     case 'run.failed':
-      return { type: 'failed', code: failureCode(event.error), message: event.error };
+      // An adapter that made the request itself already knows the code; only the
+      // gateway adapters, which get one flattened sentence, have it read out of text.
+      return {
+        type: 'failed',
+        code: event.code ?? failureCode(event.error),
+        message: event.error,
+      };
     case 'plan':
       // No `/rt/sessions` event carries a plan yet; it is not a message.
       return null;

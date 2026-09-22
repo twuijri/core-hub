@@ -24,7 +24,13 @@ import { newUlid } from '../../db/ids.js';
 import type { WorkspaceScope } from '../auth/index.js';
 import type { AuditService, JobRow, JobRunner } from '../audit/index.js';
 import { providerAdapter } from './adapters/index.js';
-import type { DiscoveredVoice, ProviderContext, SynthesizeResult } from './adapters/types.js';
+import type {
+  ChatFailureReason,
+  ChatMessage,
+  DiscoveredVoice,
+  ProviderContext,
+  SynthesizeResult,
+} from './adapters/types.js';
 import {
   PROVIDER_CATALOGUE,
   authKindOf,
@@ -56,6 +62,7 @@ import {
   providers,
   speechSettings,
   type EnsembleMemberValue,
+  type ModelPricing,
   type ModelRole,
   type ModelRow,
   type ProviderCapabilities,
@@ -1539,6 +1546,90 @@ export class ModelsService {
     return null;
   }
 
+  // ------------------------------------------------- the direct path (ADOPTION §2.15)
+
+  /**
+   * What the `direct` agent needs to know about a model before it builds a prompt: the
+   * names to show, and whether an image may be sent at all.
+   *
+   * `null` when this workspace has no such model row. The caller then refuses the turn
+   * rather than guessing — an image posted to a model that cannot see is a paid request
+   * that comes back confused.
+   */
+  modelFacts(workspace: string, providerId: string, model: string): DirectModelFacts | null {
+    const provider = this.store.provider(workspace, providerId);
+    if (!provider || provider.archivedAt) return null;
+    const row = this.store.model(provider.id, model);
+    if (!row || row.archivedAt) return null;
+    return {
+      providerSlug: provider.slug,
+      providerLabel: provider.label,
+      modelLabel: row.alias ?? row.label,
+      vision: row.capabilities.includes('vision'),
+      maxOutputTokens: row.maxOutputTokens,
+    };
+  }
+
+  /**
+   * One streamed turn, straight from the hub to the provider (ADOPTION-BACKLOG §2.15).
+   *
+   * This is the whole of what crosses the module boundary for the `direct` agent: the
+   * caller names a provider row and a model, and gets events. It never sees the row, the
+   * key, or which adapter answered — ADR 0010's direction, unchanged.
+   *
+   * Nothing thrown: every refusal is a final `failed` event with one of the contract's
+   * error codes and the provider's own sentence, because a run loop that has to catch is
+   * a run loop that will one day forget to.
+   */
+  async *chat(workspace: string, request: DirectChatRequest): AsyncIterable<DirectChatEvent> {
+    const provider = this.store.provider(workspace, request.providerId);
+    if (!provider || provider.archivedAt || !provider.enabled) {
+      yield {
+        type: 'failed',
+        code: 'provider_not_configured',
+        message: provider
+          ? `the provider "${provider.label}" is disabled in this profile`
+          : 'this profile has no such provider',
+      };
+      return;
+    }
+    const entry = this.entryOf(provider);
+    const ctx = this.contextOf({ id: workspace } as WorkspaceScope, provider);
+    const adapter = providerAdapter(entry?.protocol ?? 'openai');
+    const row = this.store.model(provider.id, request.model);
+    const modelLabel = row?.alias ?? row?.label ?? request.model;
+
+    for await (const event of adapter.chat(ctx, {
+      model: request.model,
+      messages: request.messages,
+      ...(request.reasoningEffort !== undefined
+        ? { reasoningEffort: request.reasoningEffort }
+        : {}),
+      ...(request.signal ? { signal: request.signal } : {}),
+      ...(row?.maxOutputTokens ? { maxOutputTokens: row.maxOutputTokens } : {}),
+    })) {
+      if (event.type === 'usage') {
+        yield {
+          ...event,
+          modelLabel,
+          providerId: provider.id,
+          ...costOf(row?.pricing, event),
+        };
+        continue;
+      }
+      if (event.type === 'failed') {
+        yield {
+          type: 'failed',
+          code: DIRECT_ERROR_CODES[event.reason],
+          // The provider's own words when it sent any; ours only when it sent none.
+          message: event.detail ?? directFailureText(event.reason, provider.label),
+        };
+        return;
+      }
+      yield event;
+    }
+  }
+
   /**
    * Writes the shared credentials and the chat default into the Hermes home this hub
    * supervises, then recycles the gateway so the change is live. Never throws: a hub
@@ -1905,6 +1996,121 @@ export function hostInfo(exists: (path: string) => boolean = existsSync): Provid
   // (ARCHITECTURE invariant 5), and a fifth one people had to set would be a trap.
   const containerized = exists('/.dockerenv') || exists('/run/.containerenv');
   return { containerized, loopback_alias: LOOPBACK_ALIAS };
+}
+
+// ------------------------------------------------- the direct path (ADOPTION §2.15)
+
+/** What `modelFacts` tells the `direct` agent about the model a turn will run on. */
+export interface DirectModelFacts {
+  providerSlug: string;
+  providerLabel: string;
+  modelLabel: string;
+  /** True only when the model row itself declares `vision`. Never inferred from a name. */
+  vision: boolean;
+  maxOutputTokens: number | null;
+}
+
+export interface DirectChatRequest {
+  /** A `providers` row id in this workspace, as `resolveModelKey` returned it. */
+  providerId: string;
+  model: string;
+  messages: ChatMessage[];
+  reasoningEffort?: string | null;
+  signal?: AbortSignal;
+}
+
+export type DirectChatEvent =
+  | { type: 'delta'; text: string }
+  | { type: 'reasoning'; text: string }
+  | {
+      type: 'usage';
+      modelLabel: string;
+      providerId: string;
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
+      reasoningTokens?: number;
+      costMicroUsd?: number;
+      costSource?: 'provider' | 'estimated' | 'unknown';
+    }
+  | { type: 'completed' }
+  | { type: 'failed'; code: string; message: string };
+
+/**
+ * An adapter's reason for stopping, as one of the contract's `ErrorCode`s.
+ *
+ * `cancelled` is not a contract code and never reaches a client as one: the caller (the
+ * `direct` adapter) reads it as "the hub asked for this" and reports an interrupted run,
+ * which is what the run state machine already knows how to end.
+ */
+const DIRECT_ERROR_CODES: Record<ChatFailureReason, string> = {
+  no_key: 'provider_not_configured',
+  unauthorized: 'provider_unauthorized',
+  rate_limited: 'rate_limited',
+  unreachable: 'agent_unavailable',
+  http_error: 'agent_error',
+  unsupported: 'agent_error',
+  model_not_found: 'not_found',
+  cancelled: 'cancelled',
+};
+
+/** Used only when the provider sent no words of its own. */
+function directFailureText(reason: ChatFailureReason, provider: string): string {
+  switch (reason) {
+    case 'no_key':
+      return `${provider} needs an API key and this profile has none stored`;
+    case 'unauthorized':
+      return `${provider} refused the stored key`;
+    case 'rate_limited':
+      return `${provider} is rate limiting this key`;
+    case 'unreachable':
+      return `${provider} could not be reached`;
+    case 'model_not_found':
+      return `${provider} does not know this model`;
+    case 'cancelled':
+      return 'the turn was cancelled';
+    default:
+      return `${provider} refused the turn`;
+  }
+}
+
+/**
+ * What the turn cost, from the model row's own prices.
+ *
+ * `costSource: 'estimated'` is the honest label: the number is the hub multiplying the
+ * provider's published price by the provider's own token counts, not an invoice. A model
+ * whose row carries no price reports `unknown` and no number, rather than zero — zero is
+ * a claim, and a wrong one.
+ */
+function costOf(
+  pricing: ModelPricing | undefined,
+  usage: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  },
+): { costMicroUsd?: number; costSource: 'estimated' | 'unknown' } {
+  if (!pricing) return { costSource: 'unknown' };
+  const parts: Array<[number | undefined, number | undefined]> = [
+    [usage.inputTokens, pricing.inputPerMillion],
+    [usage.outputTokens, pricing.outputPerMillion],
+    [usage.cacheReadTokens, pricing.cacheReadPerMillion],
+    [usage.cacheWriteTokens, pricing.cacheWritePerMillion],
+  ];
+  let total = 0;
+  let priced = false;
+  for (const [tokens, perMillion] of parts) {
+    if (!tokens || perMillion === undefined) continue;
+    priced = true;
+    // `perMillion` is micro-USD per million tokens (`adapters/openai.ts`
+    // §perMillionMicroUsd), so micro-USD for n tokens is n × perMillion ÷ 1e6.
+    total += (tokens * perMillion) / 1_000_000;
+  }
+  return priced
+    ? { costMicroUsd: Math.round(total), costSource: 'estimated' }
+    : { costSource: 'unknown' };
 }
 
 /**
