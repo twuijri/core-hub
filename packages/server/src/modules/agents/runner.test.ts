@@ -229,9 +229,14 @@ describe('agent runner: a Hermes turn through the composed app', () => {
     });
     // The first turn opened the conversation under the hub's own id; Hermes echoed its own.
     expect(harness.hermes.calls.createRun[0]).toMatchObject({
-      input: 'قل مرحبا',
       session_id: `majlis-${sessionId.toLowerCase()}`,
     });
+    // The person's text comes first; the file exchange is named after it, because
+    // Hermes's run surface has no attachment channel (ADR 0008, `promptText`).
+    const firstInput = harness.hermes.calls.createRun[0]!.input;
+    expect(firstInput.startsWith('قل مرحبا')).toBe(true);
+    expect(firstInput).toContain('/.majlis/runs/');
+    expect(firstInput).toContain('/out');
 
     // The rows are scoped by the real workspace and owned by the signed-in user.
     const detail = await authed(harness.hub, harness.hub.token, {
@@ -247,8 +252,8 @@ describe('agent runner: a Hermes turn through the composed app', () => {
       payload: { content: [{ type: 'text', text: 'ومرة أخرى' }] },
     });
     await harness.waitFor('run.completed', 2);
+    expect(harness.hermes.calls.createRun[1]!.input.startsWith('ومرة أخرى')).toBe(true);
     expect(harness.hermes.calls.createRun[1]).toMatchObject({
-      input: 'ومرة أخرى',
       session_id: 'majlis-continued',
     });
   });

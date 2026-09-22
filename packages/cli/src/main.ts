@@ -11,6 +11,12 @@ import {
 import { loginCommand, logoutCommand, setupCommand, whoamiCommand } from './commands/auth.js';
 import { chatCommand } from './commands/chat.js';
 import {
+  filesDeleteCommand,
+  filesDownloadCommand,
+  filesShowCommand,
+  filesUploadCommand,
+} from './commands/files.js';
+import {
   modelsDefaultCommand,
   modelsListCommand,
   providersAddCommand,
@@ -65,6 +71,10 @@ export const COMMANDS: readonly CommandSpec[] = [
   sessionsShowCommand,
   sessionsDeleteCommand,
   chatCommand,
+  filesUploadCommand,
+  filesShowCommand,
+  filesDownloadCommand,
+  filesDeleteCommand,
   helpCommand,
 ];
 

@@ -286,10 +286,19 @@ export interface MessageAuthor {
   avatar: { kind: 'image' | 'generated'; url: string | null; seed: string | null } | null;
 }
 
+/** What the `knowledge` registry knows about one attachment id, for a content block. */
+export interface AttachmentFacts {
+  name: string;
+  mime: string;
+  sizeBytes: number;
+}
+
 export interface MessageView {
   row: MessageRow;
   author: MessageAuthor;
   toolCalls: ToolCallRow[];
+  /** Resolved attachments of this message; absent when it carries none. */
+  attachments?: ReadonlyMap<string, AttachmentFacts> | undefined;
   /** `streaming` while the run that writes it is still live. */
   status: 'complete' | 'streaming' | 'failed' | 'interrupted';
   usage: UsageTotals | undefined;
@@ -308,7 +317,7 @@ export function toMessage(view: MessageView, profile: string): Record<string, un
     seq: row.seq,
     role: wireRole(row.role),
     author: view.author,
-    content: contentBlocks(row),
+    content: contentBlocks(row, view.attachments),
     reasoning: row.reasoning ? { text: row.reasoning, duration_ms: null } : null,
     tool_calls: view.toolCalls.map(toToolCall),
     run_id: row.runId ?? null,
@@ -338,10 +347,20 @@ function wireRole(role: MessageRow['role']): string {
  * in `content` and the structure in `parts`; text always wins position 0 when
  * there are no parts, so a client never sees an empty message body.
  */
-function contentBlocks(row: MessageRow): Array<Record<string, unknown>> {
+function contentBlocks(
+  row: MessageRow,
+  attachments?: ReadonlyMap<string, AttachmentFacts>,
+): Array<Record<string, unknown>> {
   const parts = Array.isArray(row.parts) ? row.parts : [];
   const blocks: Array<Record<string, unknown>> = [];
   let textEmitted = false;
+  // `AttachmentBlockFields` says `name`, `mime` and `size_bytes` are filled on read;
+  // an id whose row is gone keeps the id and the url, so the client renders "removed"
+  // rather than an invented name.
+  const facts = (id: string): Record<string, unknown> => {
+    const known = attachments?.get(id);
+    return known ? { name: known.name, mime: known.mime, size_bytes: known.sizeBytes } : {};
+  };
   for (const part of parts) {
     if (part.type === 'text') {
       blocks.push({ type: 'text', text: part.text });
@@ -351,12 +370,14 @@ function contentBlocks(row: MessageRow): Array<Record<string, unknown>> {
         type: part.type,
         attachment_id: part.attachmentId,
         url: attachmentUrl(part.attachmentId),
+        ...facts(part.attachmentId),
       });
     } else if (part.type === 'audio') {
       blocks.push({
         type: 'audio',
         attachment_id: part.attachmentId,
         url: attachmentUrl(part.attachmentId),
+        ...facts(part.attachmentId),
         duration_ms: part.durationMs ?? null,
         transcript: part.transcript ?? null,
       });

@@ -24,7 +24,7 @@ export interface GlobalValues {
   version: boolean;
 }
 
-export type OptionValue = string | boolean | undefined;
+export type OptionValue = string | boolean | string[] | undefined;
 
 export interface CommandContext {
   options: Record<string, OptionValue>;

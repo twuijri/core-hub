@@ -13,6 +13,8 @@ export interface OptionSpec {
   description: string;
   /** Placeholder shown in help for string options. */
   value?: string;
+  /** May be repeated (`--attach a --attach b`); the value arrives as an array. */
+  multiple?: boolean;
 }
 
 export interface PositionalSpec {
@@ -58,7 +60,11 @@ type ParseOptions = NonNullable<ParseArgsConfig['options']>;
 function toParseOptions(specs: Readonly<Record<string, OptionSpec>>): ParseOptions {
   const out: ParseOptions = {};
   for (const [name, spec] of Object.entries(specs))
-    out[name] = { type: spec.type, ...(spec.short ? { short: spec.short } : {}) };
+    out[name] = {
+      type: spec.type,
+      ...(spec.short ? { short: spec.short } : {}),
+      ...(spec.multiple ? { multiple: true } : {}),
+    };
   return out;
 }
 

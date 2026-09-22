@@ -47,6 +47,18 @@ export type AttachmentMeta = {
   durationMs?: number;
   /** Original name of the file inside a diff/log bundle. */
   entryName?: string;
+  /**
+   * The contract's `AttachmentPurpose` (`message`, `avatar`, `task`, …). It lives in
+   * `meta` rather than in a column of its own because it is a rendering hint the client
+   * sends and reads back, never something the hub queries or filters by; a column would
+   * cost a migration for a value no index would ever use.
+   */
+  purpose?: string;
+  /**
+   * For a file an agent produced: its path relative to the run's output folder, so a
+   * client can show `report/summary.md` rather than a bare name.
+   */
+  producedPath?: string;
 };
 
 export const knowledgeNotes = sqliteTable(

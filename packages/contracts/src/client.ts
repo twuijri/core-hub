@@ -40,13 +40,32 @@ type RequestBody<Op> = Op extends { requestBody: infer B }
     ? JsonOf<NonNullable<B>> | undefined
     : undefined;
 
+/**
+ * How the response body is read.
+ *
+ * `json` (the default) parses the text, which is right for every operation whose
+ * response is `application/json`. `bytes` is for the ones that are not — the only one
+ * today is `sessions.downloadAttachment`, whose body is a file and whose bearer token
+ * must travel in the header, so a plain `<a href>` cannot fetch it.
+ */
+export type ResponseKind = 'json' | 'bytes';
+
 export interface RequestInitOptions<Op> {
   params?: PathParams<Op>;
   query?: QueryParams<Op>;
-  body?: RequestBody<Op>;
+  body?: RequestBody<Op> | BinaryBody;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  responseKind?: ResponseKind;
 }
+
+/**
+ * A body that must reach the server byte for byte, never through `JSON.stringify`.
+ *
+ * `Blob` and `ArrayBuffer` only: both are `BodyInit` on every runtime the clients run
+ * on (browsers and Node 24), and a typed array is one `new Blob([view])` away.
+ */
+export type BinaryBody = Blob | ArrayBuffer;
 
 export interface RawRequestInit {
   params?: Record<string, string | number>;
@@ -54,6 +73,7 @@ export interface RawRequestInit {
   body?: unknown;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  responseKind?: ResponseKind;
 }
 
 export interface HubResponse<T> {
@@ -104,6 +124,11 @@ export interface HubClient {
 const resolve = (value: string | (() => string | undefined) | undefined): string | undefined =>
   typeof value === 'function' ? value() : value;
 
+function isBinaryBody(value: unknown): value is BinaryBody {
+  if (typeof Blob !== 'undefined' && value instanceof Blob) return true;
+  return value instanceof ArrayBuffer;
+}
+
 export function fillPath(template: string, params?: Record<string, unknown>): string {
   return template.replace(/\{([^}]+)\}/g, (_match, name: string) => {
     const value = params?.[name];
@@ -133,9 +158,14 @@ export function createHubClient(options: HubClientOptions): HubClient {
     const profile = resolve(options.profile);
     if (profile) headers['X-Hub-Profile'] = profile;
     if (options.language) headers['Accept-Language'] = options.language;
-    let body: string | FormData | undefined;
+    let body: string | FormData | Blob | ArrayBuffer | undefined;
     if (typeof FormData !== 'undefined' && init.body instanceof FormData) {
       // Multipart (attachments): the runtime sets the boundary header itself.
+      body = init.body;
+    } else if (isBinaryBody(init.body)) {
+      // Raw bytes (a resumable upload's chunk): never stringified, and the caller's
+      // own `Content-Type` stands, because the contract declares one per operation.
+      headers['Content-Type'] ??= 'application/octet-stream';
       body = init.body;
     } else if (init.body !== undefined) {
       headers['Content-Type'] = 'application/json';
@@ -147,6 +177,15 @@ export function createHubClient(options: HubClientOptions): HubClient {
       ...(body !== undefined ? { body } : {}),
       ...(init.signal ? { signal: init.signal } : {}),
     });
+    // A binary response is only read as bytes when it succeeded: an error is still the
+    // `{ error, code }` envelope, and the caller must be able to read it.
+    if (init.responseKind === 'bytes' && response.ok) {
+      return {
+        status: response.status,
+        data: (await response.arrayBuffer()) as unknown,
+        headers: response.headers,
+      };
+    }
     const text = await response.text();
     let data: unknown = undefined;
     if (text.length > 0) {

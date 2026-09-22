@@ -33,6 +33,7 @@ import {
 } from '../chat/approvals.js';
 import type { Approval, ApprovalDecision, SessionDetail } from '../types.js';
 import { optionEnum, optionInteger, optionString, requireSession } from './shared.js';
+import { uploadFile } from './files.js';
 
 const SESSION_EVENTS = [
   'session.created',
@@ -66,6 +67,7 @@ export const chatCommand: CommandSpec = {
     reasoning: { type: 'boolean', description: 'option.reasoning' },
     approve: { type: 'string', description: 'option.approve', value: 'DECISION' },
     timeout: { type: 'string', description: 'option.timeout', value: 'SECONDS' },
+    attach: { type: 'string', multiple: true, description: 'option.attach', value: 'FILE' },
   },
   async run(ctx: CommandContext): Promise<number> {
     const chat = new Chat(ctx);
@@ -101,6 +103,8 @@ class Chat {
   private timer: NodeJS.Timeout | undefined;
   private fatal: ((error: unknown) => void) | undefined;
   private closing = false;
+  /** `--attach` paths, uploaded with the first message and then forgotten. */
+  private pendingAttachments: string[] = [];
 
   constructor(private readonly ctx: CommandContext) {
     this.auth = requireSession(ctx);
@@ -111,6 +115,12 @@ class Chat {
     this.autoApprove =
       approve === undefined ? undefined : optionEnum(ctx, 'approve', DECISIONS, 'deny');
     this.timeoutMs = optionInteger(ctx, 'timeout', 0, { min: 0, max: 86_400 }) * 1000;
+    const attach = ctx.options.attach;
+    this.pendingAttachments = Array.isArray(attach)
+      ? attach.filter((value): value is string => typeof value === 'string')
+      : typeof attach === 'string'
+        ? [attach]
+        : [];
     this.options = {
       sessionId: this.sessionId,
       t: ctx.t,
@@ -411,10 +421,16 @@ class Chat {
     this.ownTexts.add(text);
     let accepted;
     try {
+      // `--attach` files are uploaded first and travel as ids, exactly as the web
+      // composer sends them; the agent reads them from the run's input folder.
+      const content = [
+        ...(text ? [{ type: 'text' as const, text }] : []),
+        ...(await this.attachments()),
+      ];
       accepted = (
         await this.auth.client.request('post', '/sessions/{session_id}/runs', {
           params: { session_id: this.sessionId },
-          body: { content: [{ type: 'text', text }], when: 'queue' },
+          body: { content, when: 'queue' },
         })
       ).data;
     } catch (error) {
@@ -425,6 +441,30 @@ class Chat {
     this.ownMessageIds.add(accepted.message_id);
     if (this.json) ctx.out.jsonLine({ accepted });
     return this.waitFor(accepted.run_id);
+  }
+
+  /** Upload every `--attach` once, on the first message of the session. */
+  private async attachments(): Promise<
+    Array<{ type: 'image' | 'file' | 'audio'; attachment_id: string }>
+  > {
+    const files = this.pendingAttachments;
+    if (files.length === 0) return [];
+    this.pendingAttachments = [];
+    const blocks = [];
+    for (const file of files) {
+      const attachment = await uploadFile(this.auth, file);
+      this.ctx.out.notice(this.ctx.t('files.attached', { name: attachment.name }));
+      blocks.push({
+        type:
+          attachment.kind === 'image'
+            ? ('image' as const)
+            : attachment.kind === 'audio'
+              ? ('audio' as const)
+              : ('file' as const),
+        attachment_id: attachment.id,
+      });
+    }
+    return blocks;
   }
 
   private waitFor(runId: string): Promise<Terminal> {
