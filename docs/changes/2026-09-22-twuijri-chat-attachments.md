@@ -204,9 +204,15 @@ $ MAJLIS_E2E_PORT=8891 MAJLIS_E2E_SETUP_PORT=8892 PLAYWRIGHT_CHANNEL=chrome pnpm
 الصورة، المركز، المصادقة، الرفع multipart، متجر البايتات، محرّك الدور، محوّل Hermes،
 والتنزيل. النموذج وحده مكتوب بالسيناريو لأن مفتاح المزوّد ليس بحوزتي.
 
+السكربتان محفوظان في المستودع كي يُعاد التشغيل بلا ثقة عمياء:
+`packages/server/proof/attachments/` (`hermes-stub.mjs`، `proof.mjs`، و`README.md` يشرح
+بالضبط ما يثبته وما لا يثبته). ليسا جزءًا من الصورة: `Dockerfile` لا ينسخ هذا المجلد
+ولا يستورده شيء في `src/`.
+
 ```
 $ docker run -d --name majlis-attach -p 127.0.0.1:18090:8080 \
-    -e HUB_ADMIN_PASSWORD=… -v majlis-attach-data:/data -v <proof>:/opt/proof:ro \
+    -e HUB_ADMIN_PASSWORD=… -v majlis-attach-data:/data \
+    -v "$PWD/packages/server/proof/attachments:/opt/proof:ro" \
     --entrypoint sh majlis:attachments -c 'node /opt/proof/hermes-stub.mjs & exec node packages/server/dist/main.js'
 
 # سجل المركز:
