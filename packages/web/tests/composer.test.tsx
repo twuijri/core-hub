@@ -10,6 +10,7 @@ import { SessionStore } from '../src/auth/store.js';
 import { Composer } from '../src/chat/Composer.js';
 import { canSend, composerState } from '../src/chat/composer-state.js';
 import { starterSuggestions } from '../src/chat/starters.js';
+import { stubListViewport } from './helpers/ui.js';
 import { ThemeProvider } from '../src/design/theme.js';
 import { I18nProvider } from '../src/i18n/context.js';
 import { RealtimeProvider } from '../src/realtime/context.js';
@@ -269,21 +270,37 @@ describe('composer', () => {
     );
   });
 
-  it('the model selector offers the workspace default plus the catalogue', async () => {
+  it('the model picker is searchable, and what it picks is what the run gets', async () => {
     const user = userEvent.setup();
     const onModel = vi.fn();
-    renderComposer({
-      model: null,
-      models: [{ value: 'anthropic/sonnet', label: 'Sonnet' }],
-      onModel,
-    });
-    const trigger = screen.getByTestId('composer-model');
-    expect(trigger).toHaveTextContent('Default model');
-    await open(user, trigger);
-    const options = await screen.findAllByRole('option');
-    expect(options.map((option) => option.textContent)).toEqual(['Default model', 'Sonnet']);
-    await user.click(options[1] as HTMLElement);
-    expect(onModel).toHaveBeenCalledWith('anthropic/sonnet');
+    const undo = stubListViewport();
+    try {
+      renderComposer({
+        model: null,
+        models: [
+          {
+            value: 'anthropic/sonnet',
+            label: 'Sonnet',
+            detail: 'anthropic/sonnet',
+            group: 'anthropic',
+          },
+          { value: 'openai/gpt-5', label: 'GPT-5', detail: 'openai/gpt-5', group: 'openai' },
+        ],
+        onModel,
+      });
+      const trigger = screen.getByTestId('composer-model');
+      expect(trigger).toHaveTextContent('Default model');
+      await open(user, trigger);
+      // Typing narrows; the value that reaches the caller is the model's own key, which
+      // is what `sessions.createRun` stores.
+      await user.type(await screen.findByTestId('combobox-field'), 'gpt');
+      const rows = await screen.findAllByTestId('combobox-option');
+      expect(rows).toHaveLength(1);
+      await user.click(rows[0] as HTMLElement);
+      expect(onModel).toHaveBeenCalledWith('openai/gpt-5');
+    } finally {
+      undo();
+    }
   });
 
   it('dictation is present but honestly disabled while models.transcribe is a stub', async () => {

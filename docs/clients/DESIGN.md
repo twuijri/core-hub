@@ -73,7 +73,8 @@ the HTML attribute.
 | Component | Over | Used for |
 |---|---|---|
 | `Segmented` / `SegmentedTrack` + `SegmentedItem` | our own keyboard, our own fit rule | the one row-of-choices: agents, sections, tabs, display preferences, the session filter. Two densities and a More overflow (`segmented-fit.ts`) |
-| `Select` | Radix Select | every picker; grouped options, a check on the chosen row |
+| `Select` | Radix Select | a short, fixed list — grouped options, a check on the chosen row |
+| `Combobox` | Radix Popover + `@tanstack/react-virtual` | a list too long to scan: a field that filters as you type, virtualized rows, sticky provider headers, Recent. **Every model picker uses it.** |
 | `Menu` / `MenuItem` / `MenuChoice` | Radix DropdownMenu | the composer's "+", a segmented control's overflow |
 | `Popover` | Radix Popover | an anchored sheet (the working folder) |
 | `Tooltip` | Radix Tooltip | every icon-only control, and the reason a disabled one is disabled |

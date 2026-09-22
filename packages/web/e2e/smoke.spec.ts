@@ -20,7 +20,8 @@ const sidebarShot = (page: Page, name: string) =>
 
 /** Display preferences live on one Settings page; the journey uses it to change the skin. */
 async function setDisplay(page: Page, settings: string, display: string, testId: string) {
-  await page.getByRole('link', { name: settings }).click();
+  // A management page carries its own "back to Settings" link, so the name is not unique.
+  await page.getByRole('link', { name: settings }).first().click();
   await page.getByRole('link', { name: display }).click();
   await page.getByTestId(testId).click();
 }
@@ -276,5 +277,73 @@ test.describe('web smoke journeys', () => {
     await expect(page.getByTestId('message-assistant')).not.toContainText(
       'هذا الجزء لا يجب أن يصل بعد الإيقاف',
     );
+  });
+
+  test('7. 443 models: the picker searches, and the list never stops being usable', async ({
+    page,
+  }) => {
+    await login(page);
+    // Models lives inside Settings now (round two); add a provider and ask for its list.
+    await page.getByRole('link', { name: 'الإعدادات' }).first().click();
+    await page.getByRole('link', { name: 'النماذج' }).click();
+    await page.getByTestId('open-add-provider').click();
+    await page.getByTestId('add-preset').click();
+    await page.getByRole('option', { name: 'LM Studio' }).click();
+
+    // Before the fetch, the picker says what is missing and offers the fetch itself.
+    await page.getByTestId('add-default-model').click();
+    await expect(page.getByTestId('combobox-unfetched')).toBeVisible();
+    await shot(page, 'model-picker-unfetched-ar-light');
+    await page.getByTestId('combobox-fetch').click();
+
+    // 443 models, and the popup is still a list a person can read.
+    await expect(page.getByTestId('combobox-list')).toBeVisible();
+    const shown = await page.getByTestId('combobox-option').count();
+    expect(shown).toBeGreaterThan(0);
+    // Virtualized: a fraction of the catalogue is in the DOM, not all of it.
+    expect(shown).toBeLessThan(60);
+    await shot(page, 'model-picker-long-ar-light');
+
+    // The owner's own example: typing `opus` finds the thinking variant.
+    await page.getByTestId('combobox-field').fill('opus');
+    const matches = page.getByTestId('combobox-option');
+    await expect(matches.first()).toContainText('opus');
+    // Every row still on screen is a match — the list narrowed, it did not merely re-sort.
+    // (The count itself cannot shrink: the virtualizer always fills the viewport.)
+    for (const text of await matches.allTextContents()) expect(text).toContain('opus');
+    // The matched characters are marked, not merely ordered first.
+    await expect(matches.first().locator('mark').first()).toBeVisible();
+    await shot(page, 'model-picker-search-ar-light');
+
+    // Keyboard: the field keeps the focus while the arrows move the highlight.
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByTestId('combobox-field')).toBeFocused();
+    await expect(page.locator('[data-testid="combobox-option"][data-active="true"]')).toHaveCount(
+      1,
+    );
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('combobox-field')).toHaveCount(0);
+    await expect(page.getByTestId('add-default-model')).toContainText('opus');
+
+    // English and dark, at the same size. The add-provider dialog is modal, so it has to
+    // be closed before the sidebar can be reached again.
+    await page.getByRole('button', { name: 'إلغاء' }).click();
+    await expect(page.getByTestId('add-provider-dialog')).toHaveCount(0);
+    await setDisplay(page, 'الإعدادات', 'العرض', 'theme-dark');
+    await page.getByTestId('language-en').click();
+    await page.getByRole('link', { name: 'Settings' }).first().click();
+    await page.getByRole('link', { name: 'Models' }).click();
+    await page.getByTestId('open-add-provider').click();
+    await page.getByTestId('add-preset').click();
+    await page.getByRole('option', { name: 'LM Studio' }).click();
+    await page.getByTestId('add-default-model').click();
+    await page.getByTestId('combobox-fetch').click();
+    await expect(page.getByTestId('combobox-list')).toBeVisible();
+    await page.getByTestId('combobox-field').fill('claude');
+    await shot(page, 'model-picker-long-en-dark');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await setDisplay(page, 'Settings', 'Display', 'theme-light');
+    await page.getByTestId('language-ar').click();
   });
 });
