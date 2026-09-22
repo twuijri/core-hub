@@ -242,3 +242,71 @@
   min-inline-size: 10rem;
   font-size: var(--mj-font-size-sm);
 }
+
+/* ------------------------------------------------------------------- tasks */
+/* Nine columns that scroll sideways as one board. Each column scrolls on its own so a
+   long column never pushes the others off the screen. */
+.task-board {
+  display: flex;
+  gap: var(--mj-space-3);
+  overflow-x: auto;
+  padding-block-end: var(--mj-space-2);
+  align-items: start;
+}
+.task-column {
+  display: flex;
+  min-inline-size: 15rem;
+  max-inline-size: 15rem;
+  flex-direction: column;
+  gap: var(--mj-space-2);
+  padding: var(--mj-space-2);
+  border: 1px solid var(--mj-color-border);
+  border-radius: var(--mj-radius-md);
+  background: var(--mj-color-surface-2);
+}
+.task-column-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--mj-font-size-sm);
+}
+.task-column-body {
+  display: flex;
+  min-block-size: 3rem;
+  max-block-size: 60vh;
+  flex-direction: column;
+  gap: var(--mj-space-2);
+  overflow-y: auto;
+}
+.task-column-empty {
+  padding-block: var(--mj-space-3);
+  text-align: center;
+  color: var(--mj-color-text-faint);
+  font-size: var(--mj-font-size-xs);
+}
+.task-card {
+  display: flex;
+  align-items: start;
+  gap: var(--mj-space-1);
+  padding: var(--mj-space-2);
+  border: 1px solid var(--mj-color-border);
+  border-radius: var(--mj-radius-sm);
+  background: var(--mj-color-surface);
+}
+.task-card-grip {
+  display: inline-grid;
+  place-items: center;
+  padding-block-start: 2px;
+  color: var(--mj-color-text-faint);
+  cursor: grab;
+}
+.task-card-grip:hover {
+  color: var(--mj-color-text);
+}
+.task-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mj-space-1);
+  margin-block-start: var(--mj-space-1);
+}

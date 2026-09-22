@@ -4,6 +4,7 @@
 import type { ReactElement } from 'react';
 import { AgentManagerScreen } from '../agents/AgentManagerScreen.js';
 import { AgentSettingsScreen } from '../agents/AgentSettingsScreen.js';
+import { TasksScreen } from '../tasks/TasksScreen.js';
 import { ChatScreen } from '../chat/ChatScreen.js';
 import { ModelsScreen } from '../models/ModelsScreen.js';
 import { DeviceConnectionsScreen } from '../screens/DeviceConnectionsScreen.js';
@@ -27,6 +28,7 @@ const SPECIAL: Record<string, () => ReactElement> = {
   agent_manager: () => <AgentManagerScreen />,
   agent_settings: () => <AgentSettingsScreen />,
   chat: () => <ChatScreen />,
+  tasks: () => <TasksScreen />,
   models: () => <ModelsScreen />,
 };
 
