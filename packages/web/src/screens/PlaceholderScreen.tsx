@@ -5,7 +5,6 @@ import { Link, useParams } from 'react-router';
 import { useI18n } from '../i18n/context.js';
 import { destinationsById, navigation, routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
-import { SettingsLayout } from '../settings/SettingsLayout.js';
 import { Badge, Breadcrumb, EmptyState, type Crumb } from '../ui/index.js';
 import { IconSpark } from '../ui/icons.js';
 
@@ -72,7 +71,7 @@ export function PlaceholderScreen({ id }: { id: string }) {
   );
   return (
     <AppShell title={title} wide={underSettings}>
-      {underSettings ? <SettingsLayout current={id}>{body}</SettingsLayout> : body}
+      {body}
     </AppShell>
   );
 }
