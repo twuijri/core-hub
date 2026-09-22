@@ -90,8 +90,10 @@ export interface ComposerProps {
   model?: string | null;
   models?: readonly ComposerOption[];
   onModel?: ((value: string | null) => void) | undefined;
-  /** `agent_settings.approval_mode`: ask · auto_safe · auto_all. */
+  /** `agent_settings.approval_mode` (or the adapter's own field, ADR 0002). */
   approvalMode?: string | null;
+  /** The modes the agent's descriptor declares; the client invents none. */
+  approvalOptions?: readonly ComposerOption[];
   onApprovalMode?: ((value: string) => void) | undefined;
   /** Disabled when the agent adapter does not declare the setting. */
   approvalDisabledReason?: string | null;
@@ -112,6 +114,7 @@ export function Composer({
   models = [],
   onModel,
   approvalMode = null,
+  approvalOptions,
   onApprovalMode,
   approvalDisabledReason = null,
   starters = [],
@@ -315,10 +318,13 @@ export function Composer({
           <Select
             value={approvalMode ?? 'ask'}
             onValueChange={(value) => value && onApprovalMode?.(value)}
-            options={APPROVAL_MODES.map((mode) => ({
-              value: mode,
-              label: t(`composer.approval_mode.${mode}`),
-            }))}
+            options={
+              approvalOptions ??
+              APPROVAL_MODES.map((mode) => ({
+                value: mode,
+                label: t(`composer.approval_mode.${mode}`),
+              }))
+            }
             label={t('composer.approval')}
             title={approvalDisabledReason ?? t('composer.approval')}
             icon={<IconShield size={14} />}

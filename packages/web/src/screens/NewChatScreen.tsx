@@ -9,11 +9,11 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 import { describeError } from '../auth/client.js';
 import { AgentChips, selectableAgents } from '../chat/AgentChips.js';
 import { Composer } from '../chat/Composer.js';
+import { putFirstMessage } from '../chat/firstMessage.js';
 import { starterSuggestions } from '../chat/starters.js';
 import { useApprovalMode, useComposerModels } from '../chat/useComposerControls.js';
 import { WorkingDirPicker } from '../chat/WorkingDirPicker.js';
 import { useAgents, useCreateSession } from '../hub/queries.js';
-import { useAuth } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';
 import { routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
@@ -22,7 +22,6 @@ import { Notice } from '../ui/Notice.js';
 
 export function NewChatScreen() {
   const { t, language } = useI18n();
-  const { client } = useAuth();
   const agents = useAgents();
   const create = useCreateSession();
   const navigate = useNavigate();
@@ -58,6 +57,11 @@ export function NewChatScreen() {
           ? t('new_chat.pick_agent')
           : null;
 
+  /**
+   * The first message mints the session and then hands the blocks to the chat screen, which
+   * sends them once it is subscribed. Posting the run here instead would start the stream
+   * before anyone is listening, and the first deltas would only be seen on a replay.
+   */
   const send = async (blocks: ContentBlock[]) => {
     if (!agentId) return;
     setError(null);
@@ -66,10 +70,7 @@ export function NewChatScreen() {
       model,
       working_dir: workingDir,
     });
-    await client.request('post', '/sessions/{session_id}/runs', {
-      params: { session_id: session.id },
-      body: { content: blocks, when: 'queue' },
-    });
+    putFirstMessage(session.id, blocks);
     navigate(routeOf('chat').replace(':sessionId?', session.id));
   };
 
@@ -109,6 +110,7 @@ export function NewChatScreen() {
           models={models}
           onModel={setModel}
           approvalMode={approval.mode}
+          approvalOptions={approval.options}
           onApprovalMode={approval.set}
           approvalDisabledReason={approval.disabledReason}
           starters={starterSuggestions(language)}

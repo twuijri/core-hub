@@ -45,10 +45,21 @@ function scriptFor(prompt: string): Step[] {
       { type: 'completed' },
     ];
   }
+  if (/stop me|أوقفني/i.test(prompt)) {
+    // Long enough that the stop button is never a race: only an interrupt ends this run.
+    return [
+      { type: 'message_delta', text: 'أبدأ عملًا طويلًا… ' },
+      { type: 'delay', ms: 120_000 },
+      { type: 'message_delta', text: 'هذا الجزء لا يجب أن يصل بعد الإيقاف.' },
+      { type: 'completed' },
+    ];
+  }
   if (/slow|بطيء/i.test(prompt)) {
+    // The pause has to outlast creating the session, navigating and hydrating the screen,
+    // or the journey would be racing the script instead of testing the resume.
     return [
       { type: 'message_delta', text: 'الجزء الأول من الرد. ' },
-      { type: 'delay', ms: 2500 },
+      { type: 'delay', ms: 8000 },
       { type: 'message_delta', text: 'والجزء الثاني بعد الانقطاع.' },
       { type: 'completed' },
     ];
@@ -93,7 +104,19 @@ class ScriptedRunner implements AgentRunner {
     while (live.queue.length > 0 && !live.closed) {
       const step = live.queue.shift() as Step;
       if (step.type === 'delay') {
-        await new Promise((resolve) => setTimeout(resolve, step.ms));
+        // Interruptible: a pause that ignored `interrupt()` would make the stop button
+        // look broken for as long as the script says, which is not what a real agent does.
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => {
+            live.wake = null;
+            resolve();
+          }, step.ms);
+          live.wake = () => {
+            clearTimeout(timer);
+            live.wake = null;
+            resolve();
+          };
+        });
         continue;
       }
       if (step.type === 'await_input') {

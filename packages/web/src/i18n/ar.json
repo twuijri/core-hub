@@ -211,7 +211,9 @@
     "approval_mode": {
       "ask": "افتراضي: يسأل",
       "auto_safe": "تحرير تلقائي",
-      "auto_all": "بلا سؤال"
+      "auto_all": "بلا سؤال",
+      "off": "بلا موافقات",
+      "always": "يسأل دائمًا"
     },
     "dictate": "إملاء صوتي",
     "dictate_unavailable": "الإملاء يصل مع مزوّد صوت (models.transcribe ما زال 501)."
