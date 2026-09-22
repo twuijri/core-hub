@@ -24,6 +24,7 @@ import { useAgents, useForkSession } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { routeOf } from '../navigation/manifest.js';
 import type { Agent } from '../types.js';
+import { agentMark } from '../ui/brand/marks.js';
 import { IconAgents, IconChevron } from '../ui/icons.js';
 import { Button, Menu, MenuItem, MenuNote, MenuSeparator } from '../ui/index.js';
 import { installedAgents } from './AgentChips.js';
@@ -75,7 +76,7 @@ export function SessionAgent({
             aria-label={t('chat.agent_menu', { name: current.name })}
             data-testid="session-agent"
             data-agent-id={current.id}
-            icon={<IconAgents size={14} />}
+            icon={agentMark(current.slug, 14) ?? <IconAgents size={14} />}
           >
             <span dir="auto">{current.name}</span>
             <IconChevron size={12} />
@@ -91,7 +92,7 @@ export function SessionAgent({
           others.map((agent) => (
             <MenuItem
               key={agent.id}
-              icon={<IconAgents size={14} />}
+              icon={agentMark(agent.slug, 14) ?? <IconAgents size={14} />}
               onSelect={() => continueWith(agent)}
             >
               <span dir="auto" data-testid="continue-with" data-agent-id={agent.id}>

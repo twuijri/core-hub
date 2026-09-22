@@ -13,6 +13,7 @@
  */
 export { AlertDialog } from './AlertDialog.js';
 export { Avatar, initialOf, type AvatarSize } from './Avatar.js';
+export { agentMark } from './brand/marks.js';
 export { Badge, type BadgeTone } from './Badge.js';
 export { Breadcrumb, type Crumb } from './Breadcrumb.js';
 export {
@@ -54,11 +55,12 @@ export {
   SidebarFooter,
   SidebarFrame,
   SidebarGroup,
+  SidebarPanel,
   SidebarRow,
 } from './SidebarShell.js';
 export { Skeleton, SkeletonGroup, SkeletonText } from './Skeleton.js';
 export { Switch } from './Switch.js';
 export { Table, type Column } from './Table.js';
-export { TabPanel, Tabs, TabsNav, type TabItem } from './Tabs.js';
+export { TabPanel, Tabs, type TabItem } from './Tabs.js';
 export { ToastProvider, useToast, type ToastRequest, type ToastTone } from './Toast.js';
 export { Tooltip } from './Tooltip.js';

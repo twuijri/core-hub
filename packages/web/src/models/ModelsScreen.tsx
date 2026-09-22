@@ -49,7 +49,7 @@ import {
 import { IconModels } from '../ui/icons.js';
 import { modelOption, useRecentModels } from './useModelPicker.js';
 import type { Agent, Model, Provider, ProviderHost } from '../types.js';
-import { SettingsBack } from '../settings/SettingsBack.js';
+import { SettingsLayout } from '../settings/SettingsLayout.js';
 import { Notice, Spinner } from '../ui/Notice.js';
 import { AddProviderDialog } from './AddProviderDialog.js';
 import { RuntimeChecks } from './RuntimeChecks.js';
@@ -106,94 +106,95 @@ export function ModelsScreen() {
 
   return (
     <AppShell title={title} wide>
-      <SettingsBack />
-      <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">{title}</h1>
-        {/* The two header actions NAVIGATION §3 puts on `General`, and only there. */}
-        {tab === 'general' && (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              disabled={configured.length === 0 || refresh.isPending}
-              onClick={refreshAll}
-              data-testid="refresh-all"
-            >
-              {t('models.refresh_all')}
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => setAdding(true)}
-              data-testid="open-add-provider"
-            >
-              {t('models.provider.add')}
-            </Button>
-          </div>
-        )}
-      </header>
+      <SettingsLayout current="models">
+        <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-xl font-semibold">{title}</h1>
+          {/* The two header actions NAVIGATION §3 puts on `General`, and only there. */}
+          {tab === 'general' && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                disabled={configured.length === 0 || refresh.isPending}
+                onClick={refreshAll}
+                data-testid="refresh-all"
+              >
+                {t('models.refresh_all')}
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => setAdding(true)}
+                data-testid="open-add-provider"
+              >
+                {t('models.provider.add')}
+              </Button>
+            </div>
+          )}
+        </header>
 
-      {/* Whether any of this reached the agent runtime. Shown on `General`, next to the
+        {/* Whether any of this reached the agent runtime. Shown on `General`, next to the
           providers it is about, and only once a provider exists to be propagated —
           before that there is nothing to have failed. */}
-      {tab === 'general' && configured.length > 0 && runtime.data && (
-        <section
-          className="mb-4 rounded-md border border-line px-3 py-2"
-          data-testid="runtime-report"
-          aria-label={t('models.runtime.title')}
-        >
-          <h2 className="mb-1 text-sm font-medium">{t('models.runtime.title')}</h2>
-          <p className="mb-2 text-xs text-muted">{t('models.runtime.hint')}</p>
-          <RuntimeChecks report={runtime.data} />
-        </section>
-      )}
+        {tab === 'general' && configured.length > 0 && runtime.data && (
+          <section
+            className="mb-4 rounded-md border border-line px-3 py-2"
+            data-testid="runtime-report"
+            aria-label={t('models.runtime.title')}
+          >
+            <h2 className="mb-1 text-sm font-medium">{t('models.runtime.title')}</h2>
+            <p className="mb-2 text-xs text-muted">{t('models.runtime.hint')}</p>
+            <RuntimeChecks report={runtime.data} />
+          </section>
+        )}
 
-      <Segmented
-        className="mb-4"
-        label={title}
-        value={tab}
-        onChange={setTab}
-        wrap
-        testId="models-tabs"
-        options={tabs.map((id) => ({
-          value: id,
-          label: t(`models.tab.${id}`),
-          itemProps: { 'data-tab-id': id },
-        }))}
-      />
-
-      {providers.isPending && (
-        <SkeletonGroup label={t('common.loading')}>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {[0, 1].map((i) => (
-              <Skeleton key={i} height="16rem" radius="md" />
-            ))}
-          </div>
-        </SkeletonGroup>
-      )}
-      {providers.isError && <Notice tone="danger">{describeError(providers.error, t)}</Notice>}
-      {providers.data && (
-        <section aria-live="polite">
-          {tab === 'auxiliary' ? (
-            <DefaultsTab />
-          ) : tab === 'ensembles' ? (
-            <Notice>{t('models.ensembles.hint')}</Notice>
-          ) : (
-            <ProvidersTab
-              providers={providers.data}
-              tab={tab}
-              host={presets.data?.host}
-              onAdd={() => setAdding(true)}
-            />
-          )}
-        </section>
-      )}
-
-      {adding && (
-        <AddProviderDialog
-          presets={presets.data?.items ?? []}
-          host={presets.data?.host}
-          taken={new Set(configured.map((provider) => provider.slug))}
-          onClose={() => setAdding(false)}
+        <Segmented
+          className="mb-4"
+          label={title}
+          value={tab}
+          onChange={setTab}
+          wrap
+          testId="models-tabs"
+          options={tabs.map((id) => ({
+            value: id,
+            label: t(`models.tab.${id}`),
+            itemProps: { 'data-tab-id': id },
+          }))}
         />
-      )}
+
+        {providers.isPending && (
+          <SkeletonGroup label={t('common.loading')}>
+            <div className="grid gap-3 lg:grid-cols-2">
+              {[0, 1].map((i) => (
+                <Skeleton key={i} height="16rem" radius="md" />
+              ))}
+            </div>
+          </SkeletonGroup>
+        )}
+        {providers.isError && <Notice tone="danger">{describeError(providers.error, t)}</Notice>}
+        {providers.data && (
+          <section aria-live="polite">
+            {tab === 'auxiliary' ? (
+              <DefaultsTab />
+            ) : tab === 'ensembles' ? (
+              <Notice>{t('models.ensembles.hint')}</Notice>
+            ) : (
+              <ProvidersTab
+                providers={providers.data}
+                tab={tab}
+                host={presets.data?.host}
+                onAdd={() => setAdding(true)}
+              />
+            )}
+          </section>
+        )}
+
+        {adding && (
+          <AddProviderDialog
+            presets={presets.data?.items ?? []}
+            host={presets.data?.host}
+            taken={new Set(configured.map((provider) => provider.slug))}
+            onClose={() => setAdding(false)}
+          />
+        )}
+      </SettingsLayout>
     </AppShell>
   );
 }

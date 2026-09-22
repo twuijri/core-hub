@@ -6,6 +6,7 @@
  * The initial is taken with `Intl.Segmenter` where it exists, so an Arabic name yields its
  * first *grapheme* and an emoji avatar is not cut in half by a UTF-16 slice.
  */
+import type { ReactNode } from 'react';
 import { Avatar as RadixAvatar } from 'radix-ui';
 
 export type AvatarSize = 'sm' | 'md' | 'lg';
@@ -32,6 +33,7 @@ export function initialOf(name: string): string {
 export function Avatar({
   name,
   src,
+  mark,
   size = 'md',
   tone = 'accent',
   testId,
@@ -39,6 +41,8 @@ export function Avatar({
   /** Also the accessible name of the image, and the source of the fallback initial. */
   name: string;
   src?: string | null;
+  /** A drawn mark to stand in for the initial — an agent wears its own (`agentMark`). */
+  mark?: ReactNode;
   size?: AvatarSize;
   tone?: 'accent' | 'neutral';
   testId?: string;
@@ -50,7 +54,7 @@ export function Avatar({
     >
       {src ? <RadixAvatar.Image className="mj-avatar-img" src={src} alt={name} /> : null}
       <RadixAvatar.Fallback className="mj-avatar-fallback" delayMs={src ? 300 : 0}>
-        <span aria-hidden>{initialOf(name)}</span>
+        {mark ?? <span aria-hidden>{initialOf(name)}</span>}
       </RadixAvatar.Fallback>
     </RadixAvatar.Root>
   );
