@@ -3871,13 +3871,21 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [categories]
+                required: [categories, home]
                 properties:
                   categories:
                     type: array
                     items:
                       $ref: '#/components/schemas/SkillCategory'
+                  home:
+                    type: [string, 'null']
+                    description: >-
+                      The folder these skills were read from. Shown by clients so a
+                      runtime started with a different home reads as the wrong directory
+                      rather than as an agent with no skills. `null` when the hub cannot
+                      name one.
               example:
+                home: /data/hermes/skills
                 categories:
                   - key: research
                     name: 'بحث'

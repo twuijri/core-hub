@@ -280,6 +280,37 @@ export class AgentsService {
     };
   }
 
+  /**
+   * Which of an agent's skills this person pinned.
+   *
+   * The skills folder belongs to the agent; the pin is the hub's opinion about it, so it
+   * lives in the hub's own settings row and not as a marker file dropped into somebody
+   * else's directory — where a pack's next update would quietly remove it.
+   *
+   * It is read and written here rather than through `updateSettings`, because that path
+   * validates against the sections the *adapter* declares, and this is not one of them.
+   */
+  pinnedSkills(scope: WorkspaceScope, id: string): string[] {
+    const row = this.loadAgent(id);
+    const stored = this.settingsRow(scope.id, row.id);
+    const value = (stored?.settings as { pinnedSkills?: unknown } | undefined)?.pinnedSkills;
+    return Array.isArray(value)
+      ? value.filter((entry): entry is string => typeof entry === 'string')
+      : [];
+  }
+
+  setPinnedSkills(scope: WorkspaceScope, id: string, keys: readonly string[]): string[] {
+    const row = this.loadAgent(id);
+    const stored = this.ensureSettings(scope, id, row.ownerId);
+    const pinnedSkills = [...new Set(keys)];
+    this.db
+      .update(agentSettings)
+      .set({ settings: { ...stored.settings, pinnedSkills }, updatedAt: this.now() })
+      .where(eq(agentSettings.id, stored.id))
+      .run();
+    return pinnedSkills;
+  }
+
   // ------------------------------------------------------------------ jobs
 
   install(scope: WorkspaceScope, actor: Actor, id: string): JobRow {

@@ -4,7 +4,7 @@ Measured on this branch by asking a booted hub which contract operations are
 still the built-in 501 stub. Regenerate it the same way after a phase:
 every operation that answers `501 not_implemented` is not built yet.
 
-**170 of 251 contract operations are implemented.** Nothing fakes a success:
+**182 of 251 contract operations are implemented.** Nothing fakes a success:
 an unbuilt operation answers `501` with its operation id. Measured on this
 branch, 2026-09-22, by asking a booted hub which operations are still the
 built-in stub — and `packages/server/tests/unit/status.test.ts` keeps this
@@ -15,7 +15,7 @@ number from claiming more than the hub answers.
 | auth | 34 | 34 | first-run setup, sign-in, refresh, users, workspaces, app tokens, QR pairing, profiles |
 | sessions | 26 | 30 | sessions, messages, streamed runs, approvals, resume, fork, and the eight attachment operations (implemented by `knowledge`, which owns the bytes); only session categories are not built |
 | models | 26 | 26 | providers, keys, catalogue, defaults, verification on save, speech (ADR 0010) |
-| agents | 11 | 40 | registry, curated catalog (Hermes, the hub's own `direct` agent, four coding CLIs), install/remove/upgrade, discovery, restart, per-agent settings; the Hermes-gateway screens (skills, MCP, memory, channels, plugins, presets) are not built |
+| agents | 23 | 40 | registry, curated catalog (Hermes, the hub's own `direct` agent, four coding CLIs), install/remove/upgrade, discovery, restart, per-agent settings — and since 2026-09-23 the three Hermes tool pages that are **files in the agent's own home**: skills (`skills/<slug>/SKILL.md`, written verbatim so a pack's front matter survives), MCP servers (one block of `config.yaml`, edited in place with the comments kept) and memory (`SOUL.md`, `MEMORY.md`, `USER.md`). Channels, plugins, jobs, presets and the journey are not built; `importSkills` and `testMcpServer` stay 501, because neither imports bytes nor opens a connection yet |
 | updates | 7 | 7 | release channels, publishing from an upload or a source URL the hub fetches itself, check, download with `Range`, settings whose token never comes back |
 | jobs | 3 | 3 | list, get, cancel, with `/rt/jobs` events |
 | meta | 2 | 2 | health, and `meta.get` — the hub's name, its build, the contract version it loaded, the realtime namespaces it actually opened, and whether it still needs an owner. Unauthenticated, because a client compares the contract version before it signs in |
