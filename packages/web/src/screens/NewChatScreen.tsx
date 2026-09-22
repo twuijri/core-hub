@@ -76,8 +76,11 @@ export function NewChatScreen() {
 
   return (
     <AppShell title={title}>
-      <div className="flex flex-1 flex-col" data-testid="new-chat">
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+      {/* The same column an empty chat uses (`.chat-flow`), so nothing shifts when the
+          first message turns this draft into a session. */}
+      <div className="chat-flow" data-empty="true" data-testid="new-chat">
+        <div className="chat-pad" aria-hidden />
+        <div className="chat-lede">
           <h1 className="text-xl font-semibold">{t('new_chat.greeting')}</h1>
           <p className="max-w-prose text-sm text-muted">{t('new_chat.lede')}</p>
           <WorkingDirPicker value={workingDir} onChange={setWorkingDir} />
@@ -115,6 +118,7 @@ export function NewChatScreen() {
           approvalDisabledReason={approval.disabledReason}
           starters={starterSuggestions(language)}
         />
+        <div className="chat-pad" aria-hidden />
       </div>
     </AppShell>
   );
