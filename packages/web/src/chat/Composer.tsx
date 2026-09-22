@@ -39,7 +39,9 @@ import {
   IconPaperclip,
   IconPlus,
   IconSend,
+  IconAlert,
   IconShield,
+  IconSpark,
   IconStop,
   IconUpload,
 } from '../ui/icons.js';
@@ -83,6 +85,8 @@ export interface ComposerProps {
   onCancel(): Promise<void>;
   /** The agent chips row; rendered above the surface so it reads as part of the composer. */
   chips?: ReactNode;
+  /** "Replying to …", above the surface: the message the next run answers. */
+  reply?: ReactNode;
   /**
    * The live run indicator (`RunStatus.tsx`). It rides in the docked composer rather than
    * in the transcript so it stays on screen while the person scrolls back through the
@@ -95,6 +99,12 @@ export interface ComposerProps {
   /** Model values chosen most recently in this workspace, newest first. */
   recentModels?: readonly string[];
   onModel?: ((value: string | null) => void) | undefined;
+  /**
+   * How hard the model should think for the next turn (`RunCreate.reasoning_effort`).
+   * `null` means "let the agent decide", which is what the contract's null means too.
+   */
+  reasoningEffort?: string | null;
+  onReasoningEffort?: (value: string | null) => void;
   /** `agent_settings.approval_mode` (or the adapter's own field, ADR 0002). */
   approvalMode?: string | null;
   /** The modes the agent's descriptor declares; the client invents none. */
@@ -108,6 +118,9 @@ export interface ComposerProps {
 
 export const APPROVAL_MODES = ['ask', 'auto_safe', 'auto_all'] as const;
 
+/** The contract's `ReasoningEffort`, least to most; `null` (the placeholder) is "let it decide". */
+export const REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'max'] as const;
+
 export function Composer({
   busy,
   disabled,
@@ -115,11 +128,14 @@ export function Composer({
   onSend,
   onCancel,
   chips,
+  reply,
   status,
   model = null,
   models = [],
   recentModels = [],
   onModel,
+  reasoningEffort = null,
+  onReasoningEffort,
   approvalMode = null,
   approvalOptions,
   onApprovalMode,
@@ -213,6 +229,7 @@ export function Composer({
     <div className="composer-dock" data-testid="composer-dock">
       {status}
       {chips}
+      {reply}
       <form
         className="composer glass"
         data-state={state}
@@ -328,16 +345,33 @@ export function Composer({
             testId="composer-model"
           />
 
+          {/* Effort sits beside the model because both are "how the next turn runs", and
+              both are soft pills of the same height (owner, 2026-09-22). */}
+          <Select
+            value={reasoningEffort}
+            onValueChange={(value) => onReasoningEffort?.(value)}
+            options={REASONING_EFFORTS.map((effort) => ({
+              value: effort,
+              label: t(`composer.effort.${effort}`),
+            }))}
+            placeholder={t('composer.effort.default')}
+            label={t('composer.effort.label')}
+            title={t('composer.effort.label')}
+            icon={<IconSpark size={14} />}
+            disabled={disabled || !onReasoningEffort}
+            testId="composer-effort"
+          />
+
           <Select
             value={approvalMode ?? 'ask'}
             onValueChange={(value) => value && onApprovalMode?.(value)}
-            options={
+            options={(
               approvalOptions ??
               APPROVAL_MODES.map((mode) => ({
                 value: mode,
                 label: t(`composer.approval_mode.${mode}`),
               }))
-            }
+            ).map((option) => ({ ...option, icon: approvalIcon(option.value) }))}
             label={t('composer.approval')}
             // A disabled selector must say why; `Select` shows it in our tooltip.
             title={approvalDisabledReason ?? t('composer.approval')}
@@ -413,4 +447,14 @@ export function Composer({
       )}
     </div>
   );
+}
+
+/**
+ * The face of an approval mode. A mode that gives something away wears the warning glyph,
+ * so the risk is visible before the sentence is read (owner, 2026-09-22).
+ */
+function approvalIcon(mode: string) {
+  if (mode === 'auto_all' || mode === 'off') return <IconAlert size={14} />;
+  if (mode === 'auto_safe') return <IconSpark size={14} />;
+  return <IconShield size={14} />;
 }
