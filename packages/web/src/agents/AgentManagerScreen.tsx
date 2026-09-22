@@ -18,6 +18,7 @@ import { SettingsLayout } from '../settings/SettingsLayout.js';
 import type { Agent, Job } from '../types.js';
 import {
   Avatar,
+  agentMark,
   Badge,
   Button,
   Card,
@@ -122,7 +123,7 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
       <CardHeader
         title={agent.name}
         subtitle={`${agent.vendor ?? '—'} · ${agent.kind}${agent.install.version ? ` · ${agent.install.version}` : ''}`}
-        media={<Avatar name={agent.name} size="md" />}
+        media={<Avatar name={agent.name} size="md" mark={agentMark(agent.slug, 18)} />}
         actions={
           <Badge tone={STATUS_TONE[agent.status] ?? 'neutral'} dot={running}>
             {t(`agents.status.${agent.status}`)}

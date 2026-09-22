@@ -37,6 +37,7 @@ const ALLOWED = new Set(['ui']);
 const KIT: Array<[component: string, file: string]> = [
   ['AlertDialog', 'AlertDialog.tsx'],
   ['Avatar', 'Avatar.tsx'],
+  ['agentMark', 'brand/marks.tsx'],
   ['Badge', 'Badge.tsx'],
   ['Breadcrumb', 'Breadcrumb.tsx'],
   ['Button', 'Button.tsx'],
