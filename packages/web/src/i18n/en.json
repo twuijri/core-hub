@@ -617,5 +617,58 @@
       "normal": "Normal",
       "low": "Low"
     }
+  },
+  "schedules": {
+    "new": "New schedule",
+    "new_hint": "Saved, with its next run computed; running on its own arrives with the worker.",
+    "name": "Name",
+    "kind": "Kind",
+    "prompt": "What should the agent be asked?",
+    "empty": "No schedules yet",
+    "kinds": {
+      "cron": "Cron expression",
+      "interval": "Every so often",
+      "once": "Once"
+    },
+    "value": {
+      "cron": "Expression",
+      "interval": "Every how many minutes",
+      "once": "Date and time"
+    },
+    "cron_hint": "Five fields: minute hour day month weekday.",
+    "every": "Every {minutes} minutes",
+    "next": "Next: {at}",
+    "never": "No next time",
+    "enabled": "Enabled",
+    "run_now": "Run now",
+    "run_unavailable": "The hub does not start runs yet; a schedule is saved and its next time computed.",
+    "confirm_delete": "Delete “{name}”?",
+    "state": {
+      "scheduled": "Scheduled",
+      "running": "Running",
+      "paused": "Paused",
+      "exhausted": "Finished"
+    }
+  },
+  "audit": {
+    "period": "Period",
+    "days": "{count} days",
+    "between": "{from} to {to}",
+    "runs": "Runs",
+    "runs_n": "{count} runs",
+    "sessions_n": "{count} sessions",
+    "tokens": "Tokens",
+    "tokens_n": "{count} tokens",
+    "cost": "Cost",
+    "cost_unknown": "No published price",
+    "model": "Model",
+    "by_model": "By model",
+    "no_entries": "Nothing in this period.",
+    "uptime": "Uptime",
+    "seconds": "{count} seconds",
+    "memory": "Memory",
+    "node": "Node",
+    "no_samples": "No samples stored yet.",
+    "samples_n": "{count} samples"
   }
 }

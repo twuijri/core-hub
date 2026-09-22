@@ -9,6 +9,7 @@ import { phaseOf } from '../screens/PlaceholderScreen.js';
 import { EmptyState, Notice } from '../ui/index.js';
 import { IconSettings } from '../ui/icons.js';
 import { AccountTab } from './AccountTab.js';
+import { AuditReport } from './AuditReport.js';
 import { DisplayTab } from './DisplayTab.js';
 import { ThemeTool } from './ThemeTool.js';
 
@@ -29,16 +30,26 @@ export function SettingsScreen({ id }: { id: string }) {
         {current === 'account' && <AccountTab />}
         {current === 'display' && <DisplayTab />}
         {current === 'theme' && <ThemeTool />}
-        {current !== 'account' && current !== 'display' && current !== 'theme' && (
-          <EmptyState
-            icon={<IconSettings size={20} />}
-            title={t(termKey(current))}
-            body={t('placeholder.later', {
-              name: t(termKey(current)),
-              phase: phaseOf(destination?.module),
-            })}
-          />
+        {/* The three reports the audit module answers; `skills` is still a 501 and stays
+            a placeholder, which is what the hub itself says about it. */}
+        {(current === 'usage' || current === 'logs' || current === 'performance') && (
+          <AuditReport kind={current} />
         )}
+        {current !== 'account' &&
+          current !== 'display' &&
+          current !== 'theme' &&
+          current !== 'usage' &&
+          current !== 'logs' &&
+          current !== 'performance' && (
+            <EmptyState
+              icon={<IconSettings size={20} />}
+              title={t(termKey(current))}
+              body={t('placeholder.later', {
+                name: t(termKey(current)),
+                phase: phaseOf(destination?.module),
+              })}
+            />
+          )}
       </section>
     </AppShell>
   );
