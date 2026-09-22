@@ -43,9 +43,9 @@
 
 ## الفحوص
 ```
-      Tests  533 passed (server، كانت 531)
-      Tests  331 passed (web، كانت 321)
-  15 passed              (playwright، رحلة جديدة)
+      Tests  547 passed (server، فوق فرعَي الإشعارات والمستخدمين)
+      Tests  355 passed (web، فوق الفرعين نفسيهما)
+  17 passed              (playwright، رحلة ١٤)
 ```
 - `lint` و`typecheck` و`i18n:check` و`prettier` نظيفة.
 - الرحلة تقرأ من مجلسٍ يعمل حقًّا: بناءٌ غير فارغ، وقناة `/rt/sessions` معلنة، ومعرفةٌ
