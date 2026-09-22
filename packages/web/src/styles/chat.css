@@ -397,3 +397,74 @@
   font-family: var(--mj-font-mono);
   font-size: var(--mj-font-size-xs);
 }
+
+/* ------------------------------------------------- the row under a message */
+/* Invisible until the pointer is near the message, and present the moment anything in it
+   takes focus — a row that exists only for the mouse does not exist (owner, 2026-09-22).
+   It keeps its height either way, so nothing below it jumps when it appears. */
+.msg-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--mj-space-1);
+  min-block-size: 1.75rem;
+  opacity: 0;
+  transition: opacity var(--mj-motion-fast) var(--mj-motion-ease);
+}
+.msg[data-side='user'] .msg-actions {
+  justify-content: flex-end;
+}
+.msg:hover .msg-actions,
+.msg:focus-within .msg-actions {
+  opacity: 1;
+}
+/* A touch screen has no hovering to do, so the row is simply there. */
+@media (hover: none) {
+  .msg-actions {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .msg-actions {
+    transition: none;
+  }
+}
+.msg-time {
+  padding-inline: var(--mj-space-1);
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The message the next turn answers, above the composer's surface. */
+.composer-reply {
+  display: flex;
+  align-items: center;
+  gap: var(--mj-space-2);
+  margin-block-end: var(--mj-space-2);
+  padding-inline: var(--mj-space-3);
+  padding-block: var(--mj-space-1);
+  border-inline-start: 2px solid var(--mj-color-accent);
+  border-radius: var(--mj-radius-sm);
+  background: var(--mj-color-surface-2);
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-muted);
+}
+.composer-reply > :first-child {
+  min-inline-size: 0;
+  flex: 1;
+}
+
+/* The selection bar of the conversation list. */
+.session-select-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--mj-space-1);
+  padding-inline: var(--mj-space-1);
+}
+.session-select-count {
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-muted);
+}
+.session-row[data-selected='true'] {
+  background: var(--mj-color-surface-2);
+}

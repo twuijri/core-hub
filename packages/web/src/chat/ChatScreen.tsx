@@ -1,16 +1,16 @@
 import { HubApiError } from '@majlis/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { usePatchSession, usePreferences } from '../hub/queries.js';
+import { useAgents, useForkSession, usePatchSession, usePreferences } from '../hub/queries.js';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import { routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import { sessionTitle } from '../sessions/SessionList.js';
-import type { ContentBlock } from '../types.js';
-import { buttonClass, EmptyState, Notice, SkeletonText } from '../ui/index.js';
-import { IconSpark } from '../ui/icons.js';
+import type { ContentBlock, Message, ReasoningEffort } from '../types.js';
+import { Button, buttonClass, EmptyState, Notice, SkeletonText } from '../ui/index.js';
+import { IconClose, IconSpark } from '../ui/icons.js';
 import { AgentChips } from './AgentChips.js';
 import { ApprovalCard } from './ApprovalCard.js';
 import { Composer } from './Composer.js';
@@ -21,7 +21,7 @@ import { RunStatus } from './RunStatus.js';
 import { RunFailureNotice } from './RunFailureNotice.js';
 import { SessionAgent } from './SessionAgent.js';
 import { useRuntimeReport } from '../models/queries.js';
-import { activeRun, isBusy } from './transcript.js';
+import { activeRun, isBusy, textOf } from './transcript.js';
 import { runProgress, turnsOf } from './turns.js';
 import { useRecentModels } from '../models/useModelPicker.js';
 import { useApprovalMode, useComposerModels } from './useComposerControls.js';
@@ -71,6 +71,7 @@ function OpenSession({ sessionId }: { sessionId: string }) {
   }, [messageCount, lastText, Object.keys(state.approvals).length]);
 
   const agentId = state.session?.agent_id ?? null;
+  const agents = useAgents();
   const models = useComposerModels();
   const { recent, remember } = useRecentModels();
   const approval = useApprovalMode(agentId);
@@ -81,14 +82,37 @@ function OpenSession({ sessionId }: { sessionId: string }) {
   const run = activeRun(state);
   const progress = runProgress(state, run);
 
+  /**
+   * Replying to one message, and forking from one (owner, 2026-09-22). Both are the
+   * contract's own gestures, not new ones: `RunCreate.reply_to_message_id` says which
+   * message the next turn answers, and `sessions.fork` with `at_message_id` copies the
+   * transcript up to that point and leaves the original alone.
+   */
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const fork = useForkSession(sessionId);
+  const forkFrom = (message: Message) => {
+    fork.mutate(
+      { at_message_id: message.id },
+      {
+        onSuccess: (session) =>
+          navigate(routeOf('chat').replace(':sessionId?', (session as { id: string }).id)),
+      },
+    );
+  };
+
   const send = useCallback(
     async (blocks: ContentBlock[]) => {
       await client.request('post', '/sessions/{session_id}/runs', {
         params: { session_id: sessionId },
-        body: { content: blocks, when: preferences.data?.busy_input_mode ?? 'queue' },
+        body: {
+          content: blocks,
+          when: preferences.data?.busy_input_mode ?? 'queue',
+          ...(replyTo ? { reply_to_message_id: replyTo.id } : {}),
+        },
       });
+      setReplyTo(null);
     },
-    [client, sessionId, preferences.data?.busy_input_mode],
+    [client, sessionId, preferences.data?.busy_input_mode, replyTo],
   );
 
   /**
@@ -191,7 +215,15 @@ function OpenSession({ sessionId }: { sessionId: string }) {
           <p className="max-w-prose text-sm text-muted">{t('chat.empty')}</p>
         </div>
         <div className="chat-stream chat-turns">
-          <Transcript turns={turns} showReasoning={showReasoning} runs={state.runs} />
+          <Transcript
+            turns={turns}
+            showReasoning={showReasoning}
+            showCost={preferences.data?.show_cost ?? false}
+            runs={state.runs}
+            slugOf={(id) => (agents.data ?? []).find((agent) => agent.id === id)?.slug}
+            onReply={setReplyTo}
+            onFork={forkFrom}
+          />
           {Object.values(state.approvals).map((approval) => (
             <ApprovalCard key={approval.id} approval={approval} />
           ))}
@@ -218,6 +250,27 @@ function OpenSession({ sessionId }: { sessionId: string }) {
           // While a run is alive the composer carries the live indicator: something moving,
           // the word, and the seconds counting up (owner decision, 2026-09-22).
           {...(progress ? { status: <RunStatus progress={progress} /> } : {})}
+          {...(replyTo
+            ? {
+                reply: (
+                  <div className="composer-reply" data-testid="composer-reply">
+                    <span className="truncate" dir="auto">
+                      {t('chat.replying_to', { text: previewOf(replyTo) })}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      iconOnly
+                      aria-label={t('common.cancel')}
+                      tooltip={t('common.cancel')}
+                      icon={<IconClose size={14} />}
+                      onClick={() => setReplyTo(null)}
+                      data-testid="composer-reply-clear"
+                    />
+                  </div>
+                ),
+              }
+            : {})}
           // The row belongs to an empty chat only (owner decision, 2026-09-22): once the
           // conversation has turns, its agent is in the header and changing it is a fork.
           {...(messageCount === 0
@@ -243,6 +296,10 @@ function OpenSession({ sessionId }: { sessionId: string }) {
             remember(value);
             patch.mutate({ model: value });
           }}
+          reasoningEffort={state.session?.reasoning_effort ?? null}
+          onReasoningEffort={(value) =>
+            patch.mutate({ reasoning_effort: value as ReasoningEffort | null })
+          }
           approvalMode={approval.mode}
           approvalOptions={approval.options}
           onApprovalMode={approval.set}
@@ -253,4 +310,10 @@ function OpenSession({ sessionId }: { sessionId: string }) {
       </div>
     </AppShell>
   );
+}
+
+/** A few words of the message being answered — enough to recognise it, never the whole. */
+function previewOf(message: Message): string {
+  const text = textOf(message).replace(/\s+/g, ' ').trim();
+  return text.length > 60 ? `${text.slice(0, 60)}…` : text;
 }

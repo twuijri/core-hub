@@ -19,6 +19,13 @@ const envSchema = z.object({
     .string()
     .min(8, 'HUB_ADMIN_PASSWORD must be at least 8 characters')
     .optional(),
+  /**
+   * The release this image is. The workspace's package.json files stay at 0.0.0 on
+   * purpose — a release is a git tag, not a commit that bumps five files — so the image
+   * build stamps the tag here (`packages/server/Dockerfile`) and the hub reports it on
+   * /api/v1/health and /api/v1/meta. Empty outside an image: a working tree is no release.
+   */
+  MAJLIS_VERSION: z.string().trim().optional(),
 });
 
 export type DatabaseConfig = { kind: 'sqlite'; file: string } | { kind: 'postgres'; url: string };
@@ -51,6 +58,8 @@ export interface HubConfig {
   bootstrapAdminPassword: string | undefined;
   /** PATH and the variables spawned agents inherit (see `HostEnv`). */
   hostEnv: HostEnv;
+  /** The stamped release version, or `undefined` for a working tree (`MAJLIS_VERSION`). */
+  version: string | undefined;
 }
 
 export class ConfigError extends Error {
@@ -80,6 +89,7 @@ export function loadConfig(
       ? { kind: 'postgres', url: env.DATABASE_URL }
       : { kind: 'sqlite', file: path.join(dataDir, 'hub.sqlite') },
     bootstrapAdminPassword: env.HUB_ADMIN_PASSWORD,
+    version: env.MAJLIS_VERSION,
     hostEnv,
   };
 }

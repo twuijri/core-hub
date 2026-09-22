@@ -1,5 +1,6 @@
-// One settings screen (NAVIGATION §2): the list of everything Settings holds runs down the
-// side, and whichever destination is open fills the page. Each row is its own URL, so the
+// One settings screen (NAVIGATION §2). The list of everything Settings holds is in the
+// sidebar, which becomes that list while you are here (`settings/SettingsNav.tsx`), so the
+// page itself carries one destination and nothing else. Each row is its own URL, so the
 // back button works and a settings page can be linked to.
 import { useI18n } from '../i18n/context.js';
 import { destinationsById, termKey } from '../navigation/manifest.js';
@@ -9,7 +10,6 @@ import { EmptyState, Notice } from '../ui/index.js';
 import { IconSettings } from '../ui/icons.js';
 import { AccountTab } from './AccountTab.js';
 import { DisplayTab } from './DisplayTab.js';
-import { SettingsLayout } from './SettingsLayout.js';
 import { ThemeTool } from './ThemeTool.js';
 
 export function SettingsScreen({ id }: { id: string }) {
@@ -19,29 +19,27 @@ export function SettingsScreen({ id }: { id: string }) {
   const title = t(termKey(id));
 
   return (
-    <AppShell title={title} wide>
+    <AppShell title={title}>
       <h1 className="sr-only">{title}</h1>
-      <SettingsLayout current={current}>
-        {destination?.global && <Notice className="mb-3">{t('settings.global_note')}</Notice>}
-        <section aria-labelledby="settings-section">
-          <h2 id="settings-section" className="mb-3 text-lg font-semibold">
-            {t(termKey(current))}
-          </h2>
-          {current === 'account' && <AccountTab />}
-          {current === 'display' && <DisplayTab />}
-          {current === 'theme' && <ThemeTool />}
-          {current !== 'account' && current !== 'display' && current !== 'theme' && (
-            <EmptyState
-              icon={<IconSettings size={20} />}
-              title={t(termKey(current))}
-              body={t('placeholder.later', {
-                name: t(termKey(current)),
-                phase: phaseOf(destination?.module),
-              })}
-            />
-          )}
-        </section>
-      </SettingsLayout>
+      {destination?.global && <Notice className="mb-3">{t('settings.global_note')}</Notice>}
+      <section aria-labelledby="settings-section">
+        <h2 id="settings-section" className="mb-3 text-lg font-semibold">
+          {t(termKey(current))}
+        </h2>
+        {current === 'account' && <AccountTab />}
+        {current === 'display' && <DisplayTab />}
+        {current === 'theme' && <ThemeTool />}
+        {current !== 'account' && current !== 'display' && current !== 'theme' && (
+          <EmptyState
+            icon={<IconSettings size={20} />}
+            title={t(termKey(current))}
+            body={t('placeholder.later', {
+              name: t(termKey(current)),
+              phase: phaseOf(destination?.module),
+            })}
+          />
+        )}
+      </section>
     </AppShell>
   );
 }

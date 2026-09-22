@@ -127,9 +127,15 @@ describe('the direct adapter', () => {
     expect(probe.runtime.state).toBe('not_applicable');
   });
 
-  it('says so when the provider store was never wired', async () => {
+  it('never carries an install error, because there is no install to go wrong', async () => {
+    // Owner decision, 2026-09-22: a bundled agent's card must not show a red line. A probe
+    // that ran before the models module mounted used to leave one there for ever; whether
+    // a provider is configured is answered by the turn, out loud, at the moment it runs
+    // (see "refuses out loud when the hub has no provider store at all" below).
     const adapter = createDirectAdapter({ models: () => null });
-    expect((await adapter.probe(TARGET)).error).toMatch(/provider store/);
+    const probe = await adapter.probe(TARGET);
+    expect(probe.error).toBeNull();
+    expect(probe.installed).toBe(true);
   });
 });
 

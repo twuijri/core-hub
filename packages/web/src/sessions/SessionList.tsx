@@ -30,10 +30,12 @@ import { routeOf } from '../navigation/manifest.js';
 import type { Session } from '../types.js';
 import {
   IconArchive,
+  IconClose,
   IconGrip,
   IconMore,
   IconPin,
   IconSearch,
+  IconSelect,
   IconSpark,
   IconTrash,
   IconUnarchive,
@@ -41,6 +43,7 @@ import {
 import {
   Badge,
   Button,
+  Checkbox,
   ContextMenu,
   ContextMenuItem,
   ContextMenuSeparator,
@@ -112,6 +115,13 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
   const [manual, setManual] = useState<string[]>(() =>
     readOrder(typeof localStorage === 'undefined' ? null : localStorage, profile),
   );
+  /**
+   * Selection, as a mode: `null` is the ordinary list, a set is the list with ticks on it
+   * (owner decision, 2026-09-22). It is entered from the row menu rather than living in
+   * the sidebar, because tidying many conversations at once is a rare errand and a
+   * permanent toolbar for it would cost every day what it saves once a month.
+   */
+  const [chosen, setChosen] = useState<ReadonlySet<string> | null>(null);
 
   const items = useMemo(() => {
     const all = sessions.data?.items ?? [];
@@ -137,6 +147,39 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
     const next = move(ids, ids.indexOf(String(active.id)), ids.indexOf(String(over.id)));
     setManual(next);
     writeOrder(typeof localStorage === 'undefined' ? null : localStorage, profile, next);
+  };
+
+  const selecting = chosen !== null;
+  const visibleIds = useMemo(() => items.map((s) => s.id), [items]);
+  // Only what is on screen counts: a filtered list means the person is looking at a slice,
+  // and "all" has to mean the slice they can see.
+  const selectedHere = visibleIds.filter((id) => chosen?.has(id));
+  const allChosen = visibleIds.length > 0 && selectedHere.length === visibleIds.length;
+  const toggleOne = (id: string) =>
+    setChosen((current) => {
+      const next = new Set(current ?? []);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const onBulkArchive = async (archived: boolean) => {
+    for (const id of selectedHere) await update.mutateAsync({ id, patch: { archived } });
+    setChosen(null);
+  };
+
+  const onBulkDelete = async () => {
+    const count = selectedHere.length;
+    if (count === 0) return;
+    const sure = await ask({
+      title: t('sessions.confirm_delete_many', { count }),
+      body: t('sessions.confirm_delete_body'),
+      confirmLabel: t('sessions.delete'),
+    });
+    if (!sure) return;
+    for (const id of selectedHere) await remove.mutateAsync(id);
+    if (sessionId && selectedHere.includes(sessionId)) navigate(routeOf('new_chat'));
+    setChosen(null);
   };
 
   const onDelete = async (session: Session) => {
@@ -193,6 +236,58 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
         value={filter}
         onChange={(event) => setFilter(event.target.value)}
       />
+      {selecting ? (
+        /* The bar the selection brings with it: what is ticked, all or none, and the two
+           things worth doing to many conversations at once. It stands where the scope row
+           was, so nothing jumps. */
+        <div className="session-select-bar" data-testid="session-select-bar">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setChosen(allChosen ? new Set() : new Set(visibleIds))}
+            data-testid="session-select-all"
+          >
+            {allChosen ? t('sessions.select_none') : t('sessions.select_all')}
+          </Button>
+          <span className="session-select-count" data-testid="session-select-count">
+            {t('sessions.selected_count', { count: selectedHere.length })}
+          </span>
+          <span className="ms-auto flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              disabled={selectedHere.length === 0}
+              tooltip={scope === 'archived' ? t('sessions.unarchive') : t('sessions.archive')}
+              aria-label={scope === 'archived' ? t('sessions.unarchive') : t('sessions.archive')}
+              icon={scope === 'archived' ? <IconUnarchive size={14} /> : <IconArchive size={14} />}
+              onClick={() => void onBulkArchive(scope !== 'archived')}
+              data-testid="session-bulk-archive"
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              disabled={selectedHere.length === 0}
+              tooltip={t('sessions.delete')}
+              aria-label={t('sessions.delete')}
+              icon={<IconTrash size={14} />}
+              onClick={() => void onBulkDelete()}
+              data-testid="session-bulk-delete"
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              tooltip={t('common.cancel')}
+              aria-label={t('common.cancel')}
+              icon={<IconClose size={14} />}
+              onClick={() => setChosen(null)}
+              data-testid="session-select-done"
+            />
+          </span>
+        </div>
+      ) : null}
       <Segmented
         label={t('sessions.scope.label')}
         value={scope}
@@ -245,6 +340,9 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
                   update.mutate({ id: session.id, patch: { archived: !session.archived } })
                 }
                 onDelete={() => void onDelete(session)}
+                onSelectMode={() => setChosen(new Set([session.id]))}
+                selected={chosen === null ? null : chosen.has(session.id)}
+                onToggle={() => toggleOne(session.id)}
               />
             ))}
           </ul>
@@ -265,6 +363,9 @@ function SessionRow({
   onPin,
   onArchive,
   onDelete,
+  onSelectMode,
+  selected,
+  onToggle,
 }: {
   session: Session;
   active: boolean;
@@ -274,6 +375,11 @@ function SessionRow({
   onPin: () => void;
   onArchive: () => void;
   onDelete: () => void;
+  /** Enter selection with this row already ticked. */
+  onSelectMode: () => void;
+  /** `null` while the list is not selecting; a boolean while it is. */
+  selected: boolean | null;
+  onToggle: () => void;
 }) {
   const { t } = useI18n();
   const {
@@ -287,6 +393,7 @@ function SessionRow({
   } = useSortable({ id: session.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const title = sessionTitle(session, t);
+  const selecting = selected !== null;
   const pinLabel = session.pinned ? t('sessions.unpin') : t('sessions.pin');
   const archiveLabel = session.archived ? t('sessions.unarchive') : t('sessions.archive');
   return (
@@ -298,21 +405,46 @@ function SessionRow({
           style={style}
           className={`session-row ${isDragging ? 'sortable-dragging' : ''}`}
           data-active={active ? 'true' : undefined}
+          data-selecting={selecting ? 'true' : undefined}
+          data-selected={selected ? 'true' : undefined}
           data-testid="session-row"
         >
-          <button
-            ref={setActivatorNodeRef}
-            type="button"
-            className="session-grip"
-            aria-label={t('sessions.reorder', { title })}
-            {...attributes}
-            {...listeners}
-          >
-            <IconGrip size={14} />
-          </button>
+          {selecting ? (
+            // While the list is selecting, the grip's place is the tick: there is no
+            // reordering to do and every row needs one reachable box.
+            <span className="session-grip">
+              <Checkbox
+                checked={selected === true}
+                onChange={onToggle}
+                label={t('sessions.select_one', { title })}
+                labelHidden
+                testId="session-check"
+              />
+            </span>
+          ) : (
+            <button
+              ref={setActivatorNodeRef}
+              type="button"
+              className="session-grip"
+              aria-label={t('sessions.reorder', { title })}
+              {...attributes}
+              {...listeners}
+            >
+              <IconGrip size={14} />
+            </button>
+          )}
           <NavLink
             to={routeOf('chat').replace(':sessionId?', session.id)}
-            onClick={onOpen}
+            onClick={(event) => {
+              // Selecting: the row is a tick, not a door. Opening one would throw away
+              // the selection the person is still building.
+              if (selecting) {
+                event.preventDefault();
+                onToggle();
+                return;
+              }
+              onOpen?.();
+            }}
             className="session-link"
           >
             <span className="session-title-row">
@@ -332,35 +464,11 @@ function SessionRow({
               </span>
             )}
           </NavLink>
-          {/* Everything the right-click menu offers is reachable here too, by keyboard and
-              by touch — a context menu is never the only way to reach an action. The two
-              that name the session live behind "more" because they are rarer than pinning
-              and they open something. */}
-          <span className="session-actions">
-            <Menu
-              align="end"
-              testId="session-more"
-              tooltip={t('common.more')}
-              trigger={
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  iconOnly
-                  aria-label={t('sessions.more', { title })}
-                  icon={<IconMore size={14} />}
-                  data-testid="session-more-button"
-                />
-              }
-            >
-              <MenuItem icon={<IconGrip size={14} />} onSelect={onRename}>
-                {t('sessions.rename')}
-              </MenuItem>
-              <MenuSeparator />
-              <MenuNote>{t('sessions.retitle_hint')}</MenuNote>
-              <MenuItem icon={<IconSpark size={14} />} onSelect={onRetitle}>
-                {t('sessions.retitle')}
-              </MenuItem>
-            </Menu>
+          {/* Pin and archive stay on the row: both are one click back. **Delete does
+              not** (owner decision, 2026-09-22) — it is not something to be able to hit
+              in passing, so it lives in the menu with the rest, and the menu takes the
+              place at the end of the row where the bin used to be. */}
+          <span className="session-actions" hidden={selecting}>
             <Button
               variant="ghost"
               size="sm"
@@ -379,15 +487,37 @@ function SessionRow({
               icon={session.archived ? <IconUnarchive size={14} /> : <IconArchive size={14} />}
               onClick={onArchive}
             />
-            <Button
-              variant="ghost"
-              size="sm"
-              iconOnly
-              tooltip={t('sessions.delete')}
-              aria-label={t('sessions.delete')}
-              icon={<IconTrash size={14} />}
-              onClick={onDelete}
-            />
+            <Menu
+              align="end"
+              testId="session-more"
+              tooltip={t('common.more')}
+              trigger={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  iconOnly
+                  aria-label={t('sessions.more', { title })}
+                  icon={<IconMore size={14} />}
+                  data-testid="session-more-button"
+                />
+              }
+            >
+              <MenuItem icon={<IconGrip size={14} />} onSelect={onRename}>
+                {t('sessions.rename')}
+              </MenuItem>
+              <MenuNote>{t('sessions.retitle_hint')}</MenuNote>
+              <MenuItem icon={<IconSpark size={14} />} onSelect={onRetitle}>
+                {t('sessions.retitle')}
+              </MenuItem>
+              <MenuSeparator />
+              <MenuItem icon={<IconSelect size={14} />} onSelect={onSelectMode}>
+                {t('sessions.select')}
+              </MenuItem>
+              <MenuSeparator />
+              <MenuItem icon={<IconTrash size={14} />} tone="danger" onSelect={onDelete}>
+                {t('sessions.delete')}
+              </MenuItem>
+            </Menu>
           </span>
         </li>
       }
@@ -408,6 +538,10 @@ function SessionRow({
         onSelect={onArchive}
       >
         {archiveLabel}
+      </ContextMenuItem>
+      <ContextMenuSeparator />
+      <ContextMenuItem icon={<IconSelect size={14} />} onSelect={onSelectMode}>
+        {t('sessions.select')}
       </ContextMenuItem>
       <ContextMenuSeparator />
       <ContextMenuItem icon={<IconTrash size={14} />} tone="danger" onSelect={onDelete}>

@@ -72,7 +72,6 @@ const KIT: Array<[component: string, file: string]> = [
   ['Separator', 'Separator.tsx'],
   ['SidebarFrame', 'SidebarShell.tsx'],
   ['SidebarGroup', 'SidebarShell.tsx'],
-  ['SidebarPanel', 'SidebarShell.tsx'],
   ['SidebarRow', 'SidebarShell.tsx'],
   ['Skeleton', 'Skeleton.tsx'],
   ['SkeletonGroup', 'Skeleton.tsx'],
