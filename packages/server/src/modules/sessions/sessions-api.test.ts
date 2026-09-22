@@ -369,6 +369,120 @@ describe('sessions: bulk, fork and export', () => {
     }
   });
 
+  /**
+   * Continuing with another agent (contract decision §26). Four things are asserted
+   * because four things can go wrong: the transcript must travel, the agent must change,
+   * the original must not, and a fork with no `agent_id` must behave exactly as it did
+   * before the field existed.
+   */
+  it('forks to another agent with the transcript, and leaves the original alone', async () => {
+    const other = '01J8QK3ZR2W7M5N4P6T8V9X0CX';
+    const sessions = createSessionsModule({
+      agents: new FakeAgentDirectory([
+        fakeHermes(AGENT_ID),
+        {
+          id: other,
+          name: 'Codex',
+          adapterKind: 'acp',
+          defaultModel: 'gpt-5',
+          defaultProvider: 'openai',
+          available: true,
+        },
+      ]),
+      runner: new FakeAgentRunner({
+        script: [{ type: 'message_delta', text: 'ok' }, { type: 'completed' }],
+      }),
+    });
+    const hub = await testHub(
+      {},
+      { modules: defaultModules.map((m) => (m.name === 'sessions' ? sessions : m)) },
+    );
+    try {
+      const id = ((await create(hub.app)).json() as { id: string }).id;
+      await call(hub.app, 'POST', `/sessions/${id}/runs`, {
+        body: { content: [{ type: 'text', text: 'اشرح لي البث اللحظي' }] },
+      });
+      const forked = await call(hub.app, 'POST', `/sessions/${id}/fork`, {
+        body: { agent_id: other },
+      });
+      expect(forked.status).toBe(201);
+      const fork = forked.json() as Record<string, unknown>;
+      expectMatchesSchema('Session', fork);
+      expect(fork).toMatchObject({
+        agent_id: other,
+        parent_session_id: id,
+        // The new agent brings its own default model; nothing of the old one's leaks in.
+        model: 'gpt-5',
+        provider: 'openai',
+        // A fork starts no run: it is a conversation waiting for its next turn.
+        active_run_id: null,
+        status: 'idle',
+      });
+      const messages = (
+        await call(hub.app, 'GET', `/sessions/${fork.id as string}/messages`)
+      ).json() as { items: { content: { text: string }[] }[] };
+      expect(messages.items[0]?.content[0]?.text).toBe('اشرح لي البث اللحظي');
+
+      // The original is untouched: same agent, same model, and the person can go back.
+      const original = (await call(hub.app, 'GET', `/sessions/${id}`)).json() as Record<
+        string,
+        unknown
+      >;
+      expect(original).toMatchObject({ agent_id: AGENT_ID, model: 'hermes-4' });
+
+      // And with no `agent_id` the fork is the one that existed before decision §26.
+      const plain = await call(hub.app, 'POST', `/sessions/${id}/fork`, { body: {} });
+      expect(plain.status).toBe(201);
+      expect(plain.json()).toMatchObject({ agent_id: AGENT_ID, model: 'hermes-4' });
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('refuses a fork to an agent that is not installed, and to one that does not exist', async () => {
+    const missing = '01J8QK3ZR2W7M5N4P6T8V9X0GM';
+    const sessions = createSessionsModule({
+      agents: new FakeAgentDirectory([
+        fakeHermes(AGENT_ID),
+        {
+          id: missing,
+          name: 'Gemini CLI',
+          adapterKind: 'acp',
+          defaultModel: null,
+          defaultProvider: null,
+          available: false,
+          unavailableReason: 'not_installed',
+        },
+      ]),
+      runner: new FakeAgentRunner(),
+    });
+    const hub = await testHub(
+      {},
+      { modules: defaultModules.map((m) => (m.name === 'sessions' ? sessions : m)) },
+    );
+    try {
+      const id = ((await create(hub.app)).json() as { id: string }).id;
+      const refused = await call(hub.app, 'POST', `/sessions/${id}/fork`, {
+        body: { agent_id: missing },
+      });
+      expect(refused.status).toBe(422);
+      expect(refused.json()).toMatchObject({
+        code: 'agent_unavailable',
+        details: { agent_id: missing, status: 'not_installed' },
+      });
+      const unknown = await call(hub.app, 'POST', `/sessions/${id}/fork`, {
+        body: { agent_id: '01J8QK3ZR2W7M5N4P6T8V9X0ZZ' },
+      });
+      expect(unknown.status).toBe(404);
+      expect(unknown.json()).toMatchObject({ code: 'not_found', details: { resource: 'agent' } });
+      // Nothing was written for either refusal: the workspace still has one session.
+      const list = (await call(hub.app, 'GET', '/sessions')).json() as { items: unknown[] };
+      expect(list.items).toHaveLength(1);
+    } finally {
+      await hub.close();
+    }
+  });
+
   it('exports a transcript as JSON or Markdown, as an attachment', async () => {
     const hub = await hubWithAgent();
     try {

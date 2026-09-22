@@ -71,6 +71,10 @@ export interface RunCreateInput {
 export interface SessionForkInput {
   at_message_id?: string | null | undefined;
   title?: string | null | undefined;
+  /** Continue the conversation with a different agent (contract decision §26). */
+  agent_id?: string | null | undefined;
+  model?: string | null | undefined;
+  provider?: string | null | undefined;
 }
 
 export interface ApprovalResponseInput {
@@ -194,7 +198,19 @@ export class SessionsService {
       });
     }
     const changes: Partial<SessionRow> = {};
-    if (patch.title !== undefined) changes.title = patch.title;
+    /**
+     * Who owns the name (contract decision §26). A non-empty title is the person's own
+     * and the hub never replaces it; `null` gives the naming back, and the hub names the
+     * session again from its own first turn — the "Retitle" gesture, with no second verb
+     * in the contract for it.
+     */
+    let renameAgain = false;
+    if (patch.title !== undefined) {
+      const typed = typeof patch.title === 'string' ? patch.title.trim() : null;
+      changes.title = typed === '' ? null : typed;
+      changes.titleSetByUser = typed !== null;
+      renameAgain = typed === null;
+    }
     if (patch.pinned !== undefined) changes.pinned = patch.pinned;
     if (patch.archived !== undefined) changes.archivedAt = patch.archived ? new Date() : null;
     if (patch.model !== undefined) changes.modelLabel = patch.model;
@@ -221,6 +237,9 @@ export class SessionsService {
     const updated = this.store.updateSession(scope.workspace, row.id, changes) ?? row;
     const payload = this.sessionOf(scope, updated);
     this.realtime.emitToProfile(scope.profile, 'session.updated', { session: payload });
+    // After the answer, never before it: the new title arrives on its own
+    // `session.updated`, so clearing a title is as fast as any other patch.
+    if (renameAgain) this.engine.namer.schedule(scope, row.id);
     return payload;
   }
 
@@ -272,7 +291,20 @@ export class SessionsService {
     return { results };
   }
 
-  fork(scope: EngineScope, sessionId: string, input: SessionForkInput): Record<string, unknown> {
+  /**
+   * A fork carries the transcript, starts no run, and leaves the source untouched.
+   *
+   * With `agent_id` it is also how a conversation continues with a **different agent**
+   * (contract decision §26): rewriting `agent_id` in place would leave a transcript half
+   * of which was produced by an agent the row no longer names, and would abandon the
+   * first agent's live session with no way back. Changing only the model is not a fork —
+   * that stays `sessions.update`.
+   */
+  async fork(
+    scope: EngineScope,
+    sessionId: string,
+    input: SessionForkInput,
+  ): Promise<Record<string, unknown>> {
     const source = this.requireSession(scope, sessionId);
     const cutoff = input.at_message_id
       ? this.store.getMessage(scope.workspace, input.at_message_id)
@@ -280,18 +312,32 @@ export class SessionsService {
     if (input.at_message_id && (!cutoff || cutoff.sessionId !== source.id)) {
       throw notFound({ resource: 'message', id: input.at_message_id });
     }
+    // An agent the hub does not have is refused *before* anything is written: a fork left
+    // behind pointing at an agent that cannot answer would be a dead conversation with a
+    // full transcript in it. Unknown id -> 404 from `requireAgent`; known but not
+    // installed -> 422, naming the agent and its state.
+    const agent = input.agent_id ? await this.requireAgent(scope, input.agent_id) : null;
+    if (agent && !agent.available) {
+      throw new HubError('agent_unavailable', {
+        details: { agent_id: agent.id, status: agent.unavailableReason ?? 'unavailable' },
+      });
+    }
     const fork = this.store.createSession({
       workspace: scope.workspace,
       ownerId: scope.userId,
-      agentId: source.agentId,
+      agentId: agent?.id ?? source.agentId,
       title: input.title ?? source.title,
       source: source.source,
-      modelLabel: source.modelLabel,
-      provider: source.provider,
+      // A new agent brings its own default model unless the caller named one; the same
+      // agent keeps whatever the source was running on.
+      modelLabel: input.model ?? (agent ? agent.defaultModel : source.modelLabel),
+      provider: input.provider ?? (agent ? agent.defaultProvider : source.provider),
       reasoningEffort: source.reasoningEffort,
       workingDir: source.workingDir,
       categoryId: source.categoryId,
       parentSessionId: source.id,
+      // A title the person wrote stays theirs in the fork too.
+      titleSetByUser: input.title ? true : source.titleSetByUser,
     });
     // The transcript is copied; the runs are not — history is not re-executed.
     for (const message of this.store.allMessages(scope.workspace, source.id)) {
