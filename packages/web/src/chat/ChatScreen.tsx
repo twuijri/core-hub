@@ -1,5 +1,5 @@
 import { HubApiError } from '@majlis/contracts';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { usePatchSession, usePreferences } from '../hub/queries.js';
 import { useAuth } from '../auth/context.js';
@@ -9,16 +9,19 @@ import { routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import { sessionTitle } from '../sessions/SessionList.js';
 import type { ContentBlock } from '../types.js';
-import { Notice, Spinner } from '../ui/Notice.js';
+import { buttonClass, EmptyState, Notice, SkeletonText } from '../ui/index.js';
+import { IconSpark } from '../ui/icons.js';
 import { AgentChips } from './AgentChips.js';
 import { ApprovalCard } from './ApprovalCard.js';
 import { Composer } from './Composer.js';
 import { starterSuggestions } from './starters.js';
 import { takeFirstMessage } from './firstMessage.js';
-import { MessageView } from './MessageView.js';
+import { Transcript } from './MessageView.js';
+import { RunStatus } from './RunStatus.js';
 import { RunFailureNotice } from './RunFailureNotice.js';
 import { useRuntimeReport } from '../models/queries.js';
 import { activeRun, isBusy } from './transcript.js';
+import { runProgress, turnsOf } from './turns.js';
 import { useRecentModels } from '../models/useModelPicker.js';
 import { useApprovalMode, useComposerModels } from './useComposerControls.js';
 import { useSessionStream } from './useSessionStream.js';
@@ -31,11 +34,18 @@ export function ChatScreen() {
   if (!sessionId) {
     return (
       <AppShell title={title}>
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-          <p className="text-lg font-medium">{t('chat.pick_one')}</p>
-          <Link to={routeOf('new_chat')} className="btn btn-primary">
-            {t('nav.new_chat')}
-          </Link>
+        <div className="flex flex-1 items-center justify-center">
+          <EmptyState
+            icon={<IconSpark size={20} />}
+            title={t('chat.pick_one')}
+            body={t('chat.pick_one_body')}
+            action={
+              <Link to={routeOf('new_chat')} className={buttonClass('primary', 'md')}>
+                <span className="mj-btn-label">{t('nav.new_chat')}</span>
+              </Link>
+            }
+            testId="chat-none"
+          />
         </div>
       </AppShell>
     );
@@ -64,6 +74,12 @@ function OpenSession({ sessionId }: { sessionId: string }) {
   const { recent, remember } = useRecentModels();
   const approval = useApprovalMode(agentId);
 
+  // Who spoke, and where each turn begins (turns.ts). Recomputed only when the transcript
+  // actually changes, because a streaming reply rewrites the last message every few ms.
+  const turns = useMemo(() => turnsOf(state.messages), [state.messages]);
+  const run = activeRun(state);
+  const progress = runProgress(state, run);
+
   const send = useCallback(
     async (blocks: ContentBlock[]) => {
       await client.request('post', '/sessions/{session_id}/runs', {
@@ -88,7 +104,6 @@ function OpenSession({ sessionId }: { sessionId: string }) {
     send(blocks).catch(setFirstError);
   }, [sessionId, stream.status, send]);
   const cancel = async () => {
-    const run = activeRun(state);
     if (!run) return;
     try {
       await client.request('post', '/sessions/{session_id}/runs/{run_id}/cancel', {
@@ -137,7 +152,12 @@ function OpenSession({ sessionId }: { sessionId: string }) {
             <span className="text-xs text-danger-soft-text">{describeError(patch.error, t)}</span>
           )}
         </div>
-        {stream.status === 'loading' && <Spinner label={t('common.loading')} />}
+        {stream.status === 'loading' && (
+          <div className="flex flex-col gap-6 py-4">
+            <SkeletonText lines={2} label={t('common.loading')} />
+            <SkeletonText lines={4} label={t('common.loading')} />
+          </div>
+        )}
         {stream.status === 'error' && (
           <Notice tone="danger">
             {describeError(stream.error, t)}{' '}
@@ -166,10 +186,8 @@ function OpenSession({ sessionId }: { sessionId: string }) {
           <h2 className="text-xl font-semibold">{t('chat.empty_title')}</h2>
           <p className="max-w-prose text-sm text-muted">{t('chat.empty')}</p>
         </div>
-        <div className="chat-stream">
-          {state.messages.map((message) => (
-            <MessageView key={message.id} message={message} showReasoning={showReasoning} />
-          ))}
+        <div className="chat-stream chat-turns">
+          <Transcript turns={turns} showReasoning={showReasoning} runs={state.runs} />
           {Object.values(state.approvals).map((approval) => (
             <ApprovalCard key={approval.id} approval={approval} />
           ))}
@@ -193,6 +211,9 @@ function OpenSession({ sessionId }: { sessionId: string }) {
           disabledReason={disabledReason}
           onSend={send}
           onCancel={cancel}
+          // While a run is alive the composer carries the live indicator: something moving,
+          // the word, and the seconds counting up (owner decision, 2026-09-22).
+          {...(progress ? { status: <RunStatus progress={progress} /> } : {})}
           chips={
             <AgentChips
               selectedId={agentId}

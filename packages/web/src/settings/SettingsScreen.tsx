@@ -1,5 +1,8 @@
 // One settings screen (NAVIGATION §2): tabs across the top, the Tools section at the bottom.
 // Each tab and each tool is its own destination; this component renders whichever is open.
+//
+// The tabs are the kit's `TabsNav` — real links, because each tab has its own URL and a
+// fake tab would break the back button. The management pages are kit cards.
 import { NavLink } from 'react-router';
 import { useAuth } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';
@@ -12,8 +15,16 @@ import {
 } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import { phaseOf } from '../screens/PlaceholderScreen.js';
-import { Notice } from '../ui/Notice.js';
-import { IconAgents, IconDevices, IconKnowledge, IconModels } from '../ui/icons.js';
+import {
+  CardHeader,
+  EmptyState,
+  Notice,
+  Separator,
+  TabsNav,
+  buttonClass,
+  cardClass,
+} from '../ui/index.js';
+import { IconAgents, IconDevices, IconKnowledge, IconModels, IconSettings } from '../ui/icons.js';
 import { AccountTab } from './AccountTab.js';
 import { DisplayTab } from './DisplayTab.js';
 import { ThemeTool } from './ThemeTool.js';
@@ -47,22 +58,19 @@ export function SettingsScreen({ id }: { id: string }) {
     <AppShell title={title}>
       <h1 className="sr-only">{title}</h1>
       {!isTool && (
-        <nav
-          className="mb-4 flex flex-wrap gap-1 border-b border-line pb-2"
-          aria-label={t('nav.settings')}
-          data-testid="settings-tabs"
-        >
+        <TabsNav label={t('nav.settings')} testId="settings-tabs">
           {tabs.map((d) => (
             <NavLink
               key={d.id}
               to={routeOf(d.id)}
               data-nav-id={d.id}
-              className={`rounded-md px-3 py-1 text-sm ${current === d.id ? 'bg-surface-2 font-medium' : 'text-muted hover:bg-surface-2'}`}
+              className="mj-tab"
+              data-active={current === d.id ? 'true' : undefined}
             >
               {t(termKey(d.id))}
             </NavLink>
           ))}
-        </nav>
+        </TabsNav>
       )}
       {destination?.global && <Notice className="mb-3">{t('settings.global_note')}</Notice>}
       <section aria-labelledby="settings-section">
@@ -73,16 +81,19 @@ export function SettingsScreen({ id }: { id: string }) {
         {current === 'display' && <DisplayTab />}
         {current === 'theme' && <ThemeTool />}
         {current !== 'account' && current !== 'display' && current !== 'theme' && (
-          <Notice>
-            {t('placeholder.later', {
+          <EmptyState
+            icon={<IconSettings size={20} />}
+            title={t(termKey(current))}
+            body={t('placeholder.later', {
               name: t(termKey(current)),
               phase: phaseOf(destination?.module),
             })}
-          </Notice>
+          />
         )}
       </section>
       {!isTool && (
-        <section className="mt-8 border-t border-line pt-4" aria-labelledby="settings-management">
+        <section className="mt-8" aria-labelledby="settings-management">
+          <Separator className="mb-4" decorative={false} />
           <h2 id="settings-management" className="mb-1 text-sm font-medium text-muted">
             {t('settings.management')}
           </h2>
@@ -93,20 +104,17 @@ export function SettingsScreen({ id }: { id: string }) {
                 <NavLink
                   to={routeOf(d.id)}
                   data-nav-id={d.id}
-                  className="card flex items-center gap-3 py-3 transition-ui hover:bg-surface-2"
+                  className={cardClass('flat', 'sm', true)}
                 >
-                  <span
-                    className="inline-grid size-8 shrink-0 place-items-center rounded-md bg-accent-soft text-accent-soft-text"
-                    aria-hidden
-                  >
-                    {managementIcon(d.id)}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium">{t(termKey(d.id))}</span>
-                    <span className="block truncate text-xs text-muted">
-                      {t(`settings.about.${d.id}`)}
-                    </span>
-                  </span>
+                  <CardHeader
+                    title={t(termKey(d.id))}
+                    subtitle={t(`settings.about.${d.id}`)}
+                    media={
+                      <span className="settings-tile" aria-hidden>
+                        {managementIcon(d.id)}
+                      </span>
+                    }
+                  />
                 </NavLink>
               </li>
             ))}
@@ -114,15 +122,20 @@ export function SettingsScreen({ id }: { id: string }) {
         </section>
       )}
       {!isTool && (
-        <section className="mt-6 border-t border-line pt-4" aria-labelledby="settings-tools">
+        <section className="mt-6" aria-labelledby="settings-tools">
+          <Separator className="mb-4" decorative={false} />
           <h2 id="settings-tools" className="mb-2 text-sm font-medium text-muted">
             {t('settings.tools')}
           </h2>
           <ul className="flex flex-wrap gap-2" data-testid="settings-tools">
             {tools.map((d) => (
               <li key={d.id}>
-                <NavLink to={routeOf(d.id)} data-nav-id={d.id} className="btn">
-                  {t(termKey(d.id))}
+                <NavLink
+                  to={routeOf(d.id)}
+                  data-nav-id={d.id}
+                  className={buttonClass('secondary', 'md')}
+                >
+                  <span className="mj-btn-label">{t(termKey(d.id))}</span>
                 </NavLink>
               </li>
             ))}

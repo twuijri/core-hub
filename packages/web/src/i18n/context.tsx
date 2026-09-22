@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { UiDirection } from '../ui/Direction.js';
+import { ToastProvider } from '../ui/Toast.js';
 import { createTranslator, directionOf, type Language, type Translator } from './index.js';
 
 interface I18nValue {
@@ -14,12 +15,17 @@ const I18nContext = createContext<I18nValue | null>(null);
  * select's popup side and a popover's alignment all flip with it. The primitives do not
  * look at `<html dir>`, so the direction is published here through `src/ui/Direction.tsx`,
  * next to the language that decides it (DESIGN §Language).
+ *
+ * The toast viewport is mounted here too: it needs the language for the close button's
+ * name, and one viewport for the whole client is the point of it.
  */
 export function I18nProvider({ language, children }: { language: Language; children: ReactNode }) {
   const value = useMemo<I18nValue>(() => ({ language, t: createTranslator(language) }), [language]);
   return (
     <I18nContext.Provider value={value}>
-      <UiDirection dir={directionOf(language)}>{children}</UiDirection>
+      <UiDirection dir={directionOf(language)}>
+        <ToastProvider closeLabel={value.t('ui.close')}>{children}</ToastProvider>
+      </UiDirection>
     </I18nContext.Provider>
   );
 }

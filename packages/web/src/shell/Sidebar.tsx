@@ -1,5 +1,10 @@
 // The sidebar of NAVIGATION §1: header, rail, segments, the selected segment's list, footer.
 // Entry labels come from the same term key as the screen titles (rule "entry = title").
+//
+// What it contains is decided here; what a sidebar *is* — the glass rail, the brand row,
+// the row geometry, the scrolling middle, the footer — comes from `ui/SidebarShell.tsx`,
+// so the phone drawer and any later rail are assembled from the same pieces rather than
+// drawn again (docs/clients/DESIGN.md §UI policy).
 import type { ReactElement } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth/context.js';
@@ -17,8 +22,18 @@ import {
   IconSignOut,
   IconTasks,
 } from '../ui/icons.js';
-import { Segmented } from '../ui/Segmented.js';
-import { Tooltip } from '../ui/Tooltip.js';
+import {
+  Badge,
+  Button,
+  Segmented,
+  SidebarBody,
+  SidebarBrand,
+  SidebarFooter,
+  SidebarFrame,
+  SidebarGroup,
+  SidebarRow,
+  Tooltip,
+} from '../ui/index.js';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher.js';
 
 const RAIL_ICONS: Record<string, (p: { size?: number }) => ReactElement> = {
@@ -67,47 +82,42 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   };
   const nextTheme =
     THEME_CHOICES[(THEME_CHOICES.indexOf(prefs.theme) + 1) % THEME_CHOICES.length] ?? 'system';
+  const connectionTone =
+    realtime.state === 'connected'
+      ? 'success'
+      : realtime.state === 'connecting'
+        ? 'warning'
+        : 'danger';
 
   return (
-    <nav
-      className="glass flex h-full w-[var(--mj-layout-sidebar-width)] shrink-0 flex-col border-e"
-      aria-label={t('shell.sidebar')}
-    >
-      <div className="flex items-center gap-2 px-4 py-3">
-        <span
-          className="inline-grid size-7 place-items-center rounded-md bg-accent text-accent-text"
-          aria-hidden
-        >
-          م
-        </span>
-        <span className="text-base font-semibold">{t('app.name')}</span>
-      </div>
+    <SidebarFrame label={t('shell.sidebar')}>
+      <SidebarBrand mark="م" name={t('app.name')} />
 
       {/* Slim by design (NAVIGATION §1, 2026-09-22): starting a chat, finding one, and the
           list. Everything configured once lives on a page inside Settings. */}
-      <ul className="flex flex-col gap-1 px-2" data-testid="rail">
+      <SidebarGroup testId="rail">
         {rail.map((d, index) => {
           const Icon = RAIL_ICONS[d.id] ?? IconSearch;
-          const primary = index === 0;
           return (
-            <li key={d.id}>
-              <NavLink
-                to={routeOf(d.id)}
-                onClick={onNavigate}
-                data-nav-id={d.id}
-                className={({ isActive }) =>
-                  primary
-                    ? 'btn btn-primary w-full justify-start'
-                    : `flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-ui hover:bg-surface-2 ${isActive ? 'bg-surface-2 font-medium' : ''}`
-                }
-              >
-                <Icon size={18} />
-                <span>{t(termKey(d.id))}</span>
-              </NavLink>
-            </li>
+            <SidebarRow
+              key={d.id}
+              icon={<Icon size={18} />}
+              label={t(termKey(d.id))}
+              emphasis={index === 0 ? 'primary' : 'normal'}
+              render={({ className, children }) => (
+                <NavLink
+                  to={routeOf(d.id)}
+                  onClick={onNavigate}
+                  data-nav-id={d.id}
+                  className={({ isActive }) => `${className} ${isActive ? 'active' : ''}`}
+                >
+                  {children}
+                </NavLink>
+              )}
+            />
           );
         })}
-      </ul>
+      </SidebarGroup>
 
       <div className="mx-2 mt-3">
         <Segmented
@@ -125,7 +135,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+      <SidebarBody>
         {selected === 'chat' ? (
           <SessionList {...(onNavigate ? { onOpen: onNavigate } : {})} />
         ) : (
@@ -133,28 +143,24 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             {t('shell.segment_later', { name: t(termKey(selected)) })}
           </p>
         )}
-      </div>
+      </SidebarBody>
 
-      <footer
-        className="flex flex-col gap-2 border-t border-line px-3 py-2 text-xs"
-        data-testid="footer"
-      >
+      <SidebarFooter testId="footer">
         <div className="flex flex-wrap items-center gap-2">
           <WorkspaceSwitcher compact />
           <Tooltip label={t('shell.model_chip')}>
-            <span className="chip" tabIndex={0}>
-              {t('shell.model_default')}
+            <span tabIndex={0}>
+              <Badge>{t('shell.model_default')}</Badge>
             </span>
           </Tooltip>
         </div>
         <div className="flex items-center gap-2">
           <Tooltip label={t(`shell.connection.${realtime.state}`)}>
-            <span
-              className={`inline-block size-2 rounded-full ${realtime.state === 'connected' ? 'bg-accent' : realtime.state === 'connecting' ? 'bg-warning-soft-text' : 'bg-danger'}`}
-              role="status"
-              tabIndex={0}
-              aria-label={t(`shell.connection.${realtime.state}`)}
-            />
+            <span tabIndex={0} role="status" aria-label={t(`shell.connection.${realtime.state}`)}>
+              <Badge tone={connectionTone} dot>
+                {t(`shell.connection.${realtime.state}`)}
+              </Badge>
+            </span>
           </Tooltip>
           <span className="min-w-0 flex-1 truncate" dir="auto">
             {user?.display_name ?? user?.username}
@@ -165,45 +171,46 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 to={routeOf(d.id)}
                 onClick={onNavigate}
                 data-nav-id={d.id}
-                className="btn btn-ghost px-1.5"
+                className="mj-btn mj-btn-ghost mj-btn-sm"
+                data-icon-only="true"
                 aria-label={t(termKey(d.id))}
               >
-                <IconSettings />
+                <IconSettings size={16} />
               </NavLink>
             </Tooltip>
           ))}
-          <Tooltip label={t('nav.sign_out')}>
-            <button
-              type="button"
-              className="btn btn-ghost px-1.5"
-              onClick={() => void signOut()}
-              aria-label={t('nav.sign_out')}
-            >
-              <IconSignOut />
-            </button>
-          </Tooltip>
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            tooltip={t('nav.sign_out')}
+            aria-label={t('nav.sign_out')}
+            icon={<IconSignOut size={16} />}
+            onClick={() => void signOut()}
+          />
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="chip"
-            onClick={() => update({ language: language === 'ar' ? 'en' : 'ar' })}
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<IconGlobe size={12} />}
             aria-label={t('shell.language_chip')}
+            onClick={() => update({ language: language === 'ar' ? 'en' : 'ar' })}
           >
-            <IconGlobe size={12} /> {language === 'ar' ? 'العربية' : 'English'}
-          </button>
-          <button
-            type="button"
-            className="chip"
-            onClick={() => update({ theme: nextTheme })}
+            {language === 'ar' ? 'العربية' : 'English'}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             aria-label={t('shell.theme_chip')}
             data-testid="theme-chip"
+            onClick={() => update({ theme: nextTheme })}
           >
             {t(`display.theme.${prefs.theme}`)}
-          </button>
+          </Button>
           <span className="ms-auto text-faint">v{__APP_VERSION__}</span>
         </div>
-      </footer>
-    </nav>
+      </SidebarFooter>
+    </SidebarFrame>
   );
 }

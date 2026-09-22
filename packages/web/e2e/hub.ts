@@ -46,6 +46,46 @@ function scriptFor(prompt: string): Step[] {
       { type: 'completed' },
     ];
   }
+  if (/يفكّر الآن|think out loud/i.test(prompt)) {
+    // A run that is alive but says nothing for a while. Two things need that shape:
+    // the live indicator is then the *only* thing telling the person the agent is
+    // working (so the design pass can photograph it doing its job), and a second
+    // message can be queued before any reply exists, which is how two messages from
+    // the same speaker end up next to each other and group.
+    return [
+      { type: 'delay', ms: 6000 },
+      {
+        type: 'tool_started',
+        ref: 't1',
+        name: 'read_file',
+        kind: 'shell',
+        title: 'docs/clients/DESIGN.md',
+      },
+      { type: 'delay', ms: 120_000 },
+      { type: 'message_delta', text: 'انتهيت.' },
+      { type: 'completed' },
+    ];
+  }
+  if (/in english|بالإنجليزية/i.test(prompt)) {
+    // An English reply with a table and a code block: the agent's side has to be able to
+    // use the whole column, which a 70%-wide bubble could not.
+    return [
+      { type: 'reasoning_delta', text: 'Comparing the two options before answering.' },
+      {
+        type: 'message_delta',
+        text: '## Two ways to do it\n\nThe short answer is **the second one**.\n\n| Option | Cost | Notes |\n| --- | --- | --- |\n| Poll the hub | high | simple, wasteful |\n| Subscribe | low | one socket, resumable |\n\n',
+      },
+      { type: 'tool_started', ref: 't1', name: 'read_file', kind: 'shell', title: 'events.md' },
+      { type: 'delay', ms: 120 },
+      { type: 'tool_completed', ref: 't1', output: 'after_seq is the cursor.\n', exitCode: 0 },
+      {
+        type: 'message_delta',
+        text: '```ts\nsocket.emit("subscribe", { session_id, after_seq });\n```\n',
+      },
+      { type: 'usage', inputTokens: 41, outputTokens: 96 },
+      { type: 'completed' },
+    ];
+  }
   if (/stop me|أوقفني/i.test(prompt)) {
     // Long enough that the stop button is never a race: only an interrupt ends this run.
     return [
