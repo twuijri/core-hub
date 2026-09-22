@@ -43,10 +43,6 @@
       "en": "Schedules",
       "ar": "الجدولة"
     },
-    "history": {
-      "en": "History",
-      "ar": "السجل"
-    },
     "settings": {
       "en": "Settings",
       "ar": "الإعدادات"
@@ -238,7 +234,7 @@
         "kind": "segment"
       },
       "roles": ["member"],
-      "note": "Session list: pinned, recent with counter, categories, workspace filter."
+      "note": "Session list: pinned, recent with counter, a search field and an active/archived/all filter carried in the URL (?sessions=). This list is the history; there is no separate History screen (owner decision, 2026-09-22)."
     },
     {
       "id": "rooms",
@@ -257,7 +253,7 @@
       "module": "tasks",
       "level": "app",
       "entry": {
-        "kind": "segment"
+        "kind": "rail"
       },
       "roles": ["member"],
       "note": "Projects and tasks (kanban-style columns) with agent assignment. The section is named Tasks everywhere (owner decision 2026-09-21)."
@@ -268,21 +264,10 @@
       "module": "schedules",
       "level": "app",
       "entry": {
-        "kind": "segment"
+        "kind": "rail"
       },
       "roles": ["member"],
       "note": "Cron jobs and workflows with status badges."
-    },
-    {
-      "id": "history",
-      "title": "history",
-      "module": "sessions",
-      "level": "app",
-      "entry": {
-        "kind": "segment"
-      },
-      "roles": ["member"],
-      "note": "A page: pinned, collapsible groups by source, multi-select (archive/cancel/delete), archive. Opening a session does not change the selected segment."
     },
     {
       "id": "settings",
@@ -546,8 +531,8 @@
       "note": "No menu entry; reached from search results and the pending-actions bar."
     }
   ],
-  "rail": ["new_chat", "search"],
-  "segments": ["chat", "rooms", "tasks", "schedules", "history"],
+  "rail": ["new_chat", "search", "tasks", "schedules"],
+  "segments": ["chat", "rooms"],
   "footer": ["settings"],
   "settingsTabs": [
     "account",
@@ -571,7 +556,7 @@
     "agent_settings"
   ],
   "secondaryEntries": {
-    "chat": ["history", "search"],
+    "chat": ["search"],
     "global_agent": ["search"]
   },
   "footerChips": {
@@ -609,7 +594,6 @@
       "rooms": "/rooms",
       "tasks": "/tasks",
       "schedules": "/schedules",
-      "history": "/history",
       "settings": "/settings",
       "account": "/settings/account",
       "users": "/settings/users",
