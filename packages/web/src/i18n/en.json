@@ -581,5 +581,94 @@
     "steer": "Steer",
     "steer_hint": "Stop the live turn and take this instead, in the same context.",
     "remove": "Remove"
+  },
+  "tasks": {
+    "project": "Project",
+    "count": "{count} tasks",
+    "new_task": "New task",
+    "add": "Add",
+    "no_projects": "No project yet",
+    "no_projects_body": "Tasks live inside a project. Create one to start.",
+    "new_project": "New project",
+    "project_name": "Project name",
+    "rename": "Rename",
+    "title_label": "Task title",
+    "reorder": "Reorder {title}",
+    "more": "More for {title}",
+    "move_to": "Move to {column}",
+    "blocked_why": "What is blocking it?",
+    "reason": "Reason",
+    "confirm_delete": "Delete “{title}”?",
+    "confirm_delete_body": "This cannot be undone.",
+    "status": {
+      "triage": "Triage",
+      "todo": "To do",
+      "ready": "Ready",
+      "scheduled": "Scheduled",
+      "running": "Running",
+      "blocked": "Blocked",
+      "review": "Review",
+      "done": "Done",
+      "archived": "Archived"
+    },
+    "priority": {
+      "urgent": "Urgent",
+      "high": "High",
+      "normal": "Normal",
+      "low": "Low"
+    }
+  },
+  "schedules": {
+    "new": "New schedule",
+    "new_hint": "Saved, with its next run computed; running on its own arrives with the worker.",
+    "name": "Name",
+    "kind": "Kind",
+    "prompt": "What should the agent be asked?",
+    "empty": "No schedules yet",
+    "kinds": {
+      "cron": "Cron expression",
+      "interval": "Every so often",
+      "once": "Once"
+    },
+    "value": {
+      "cron": "Expression",
+      "interval": "Every how many minutes",
+      "once": "Date and time"
+    },
+    "cron_hint": "Five fields: minute hour day month weekday.",
+    "every": "Every {minutes} minutes",
+    "next": "Next: {at}",
+    "never": "No next time",
+    "enabled": "Enabled",
+    "run_now": "Run now",
+    "run_unavailable": "The hub does not start runs yet; a schedule is saved and its next time computed.",
+    "confirm_delete": "Delete “{name}”?",
+    "state": {
+      "scheduled": "Scheduled",
+      "running": "Running",
+      "paused": "Paused",
+      "exhausted": "Finished"
+    }
+  },
+  "audit": {
+    "period": "Period",
+    "days": "{count} days",
+    "between": "{from} to {to}",
+    "runs": "Runs",
+    "runs_n": "{count} runs",
+    "sessions_n": "{count} sessions",
+    "tokens": "Tokens",
+    "tokens_n": "{count} tokens",
+    "cost": "Cost",
+    "cost_unknown": "No published price",
+    "model": "Model",
+    "by_model": "By model",
+    "no_entries": "Nothing in this period.",
+    "uptime": "Uptime",
+    "seconds": "{count} seconds",
+    "memory": "Memory",
+    "node": "Node",
+    "no_samples": "No samples stored yet.",
+    "samples_n": "{count} samples"
   }
 }
