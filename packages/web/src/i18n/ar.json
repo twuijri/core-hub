@@ -297,7 +297,11 @@
       "awaiting_approval": "بانتظار الموافقة"
     },
     "truncated": "المخرجات مقتطعة",
-    "no_output": "لا مخرجات."
+    "count": "الأدوات: {count}",
+    "failed_count": "فشل {count}",
+    "earlier": "{count} قبلها",
+    "arguments": "المدخلات",
+    "result": "الناتج"
   },
   "agents": {
     "empty": "السجلّ فارغ.",

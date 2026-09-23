@@ -489,6 +489,16 @@
   flex-direction: column;
   min-block-size: 0;
 }
+/* The page is wide; the composer, the empty-chat invitation and the header are not.
+   They stay in the reading column, centred, so typing never stretches across a wide
+   screen — only the transcript uses the width (owner decision, 2026-09-23). */
+.chat-flow > [data-testid='chat-header'],
+.chat-flow > .chat-lede,
+.chat-flow .composer-dock {
+  inline-size: 100%;
+  max-inline-size: var(--mj-layout-composer-max);
+  margin-inline: auto;
+}
 .chat-pad,
 .chat-stream {
   flex-basis: 0;
