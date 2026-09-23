@@ -419,7 +419,7 @@ test.describe('web smoke journeys', () => {
 
     // English and dark, at the same size. The add-provider dialog is modal, so it has to
     // be closed before the sidebar can be reached again.
-    await page.getByRole('button', { name: 'إلغاء' }).click();
+    await page.keyboard.press('Escape');
     await expect(page.getByTestId('add-provider-dialog')).toHaveCount(0);
     await setDisplay(page, 'الإعدادات', 'العرض', 'theme-dark');
     await page.getByTestId('language-en').click();
@@ -626,6 +626,98 @@ test.describe('web smoke journeys', () => {
     await page.getByTestId('updates-from-source').click();
     await expect(page.getByTestId('updates-source-fields')).toBeVisible();
     await shot(page, 'updates-ar-light');
+  });
+
+  test('15. an agent’s skills are the files in its folder', async ({ page }) => {
+    await login(page);
+    // The agent manager lives in the Settings list, like every management page.
+    await page.getByRole('link', { name: 'الإعدادات' }).first().click();
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'مدير الوكلاء' }).click();
+    // The link is not hand-placed: the card lists every agent-level page whose capability
+    // the registry declares, and Hermes declares `skills`.
+    await page.getByTestId('agent-menu').getByRole('link', { name: 'المهارات' }).first().click();
+    await expect(page).toHaveURL(/\/skills$/);
+
+    // A fresh hub's Hermes home has no skills folder, and the page says that rather than
+    // showing an empty list that could mean anything.
+    await expect(page.getByText('لا مهارات')).toBeVisible();
+
+    await page.getByTestId('new-skill').click();
+    await page.getByTestId('skill-key').fill('daily-note');
+    await page
+      .getByTestId('skill-content')
+      .fill(
+        '---\nname: daily-note\ndescription: يكتب ملخص اليوم\nlicense: MIT\n---\n\n# ملخص اليوم\n',
+      );
+    await page.getByTestId('save-skill').click();
+
+    const row = page.getByTestId('skill-categories');
+    await expect(row).toContainText('daily-note');
+    await expect(row).toContainText('يكتب ملخص اليوم');
+    await shot(page, 'agent-skills-ar-light');
+
+    // Off is not gone: the row stays, and what it says about itself stays too.
+    await page.getByTestId('skill-toggle-daily-note').click();
+    await expect(page.getByTestId('skill-toggle-daily-note')).toHaveAttribute(
+      'data-state',
+      'unchecked',
+    );
+    await expect(row).toContainText('daily-note');
+
+    // The editor holds the document, front matter and all — including the line this hub
+    // does not understand.
+    await page.getByText('daily-note').first().click();
+    await expect(page.getByTestId('skill-content')).toHaveValue(/license: MIT/);
+    await page.keyboard.press('Escape');
+
+    // MCP: the same agent, the other page. It writes one block of config.yaml.
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'مدير الوكلاء' }).click();
+    await page.getByTestId('agent-menu').getByRole('link', { name: 'MCP' }).first().click();
+    await expect(page).toHaveURL(/\/mcp$/);
+    await expect(page.getByText(/أعد تشغيله ليسري التغيير/)).toBeVisible();
+    await expect(page.getByText('لا خوادم')).toBeVisible();
+
+    await page.getByTestId('new-mcp').click();
+    await page.getByTestId('mcp-name').fill('filesystem');
+    // A bracket in the wrong place is said while typing, not after saving.
+    await page.getByTestId('mcp-config').fill('{ "command": ');
+    await expect(page.getByText('النصّ ليس JSON صالحًا بعد.')).toBeVisible();
+    await expect(page.getByTestId('save-mcp')).toBeDisabled();
+
+    await page
+      .getByTestId('mcp-config')
+      .fill('{\n  "command": "npx",\n  "args": ["-y", "mcp-server-filesystem"]\n}');
+    await page.getByTestId('save-mcp').click();
+    const list = page.getByTestId('mcp-list');
+    await expect(list).toContainText('filesystem');
+    await expect(list).toContainText('npx -y mcp-server-filesystem');
+    await shot(page, 'agent-mcp-ar-light');
+
+    // Memory: the persona cannot be deleted, only emptied.
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'مدير الوكلاء' }).click();
+    await page.getByTestId('agent-menu').getByRole('link', { name: 'الذاكرة' }).first().click();
+    await expect(page).toHaveURL(/\/memory$/);
+
+    // Always the same three documents, including the ones nothing has written yet.
+    const docs = page.getByTestId('memory-list');
+    await expect(docs.getByRole('listitem')).toHaveCount(3);
+    await expect(docs).toContainText('SOUL.md');
+    await expect(docs).toContainText('لم يكتب عنك شيئًا بعد.');
+
+    await page.getByTestId('memory-edit-user').click();
+    await page.getByTestId('memory-content').fill('أفضّل الردود القصيرة.');
+    await page.getByTestId('save-memory').click();
+    await expect(docs).toContainText('أفضّل الردود القصيرة.');
+    // Still three: writing one does not add a row, and there is no delete to offer.
+    await expect(docs.getByRole('listitem')).toHaveCount(3);
+    await shot(page, 'agent-memory-ar-light');
+
+    // Channels: the fields come from the agent's own file, not from a form we wrote.
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'مدير الوكلاء' }).click();
+    await page.getByTestId('agent-menu').getByRole('link', { name: 'القنوات' }).first().click();
+    await expect(page).toHaveURL(/\/channels$/);
+    await expect(page.getByText('لا قنوات')).toBeVisible();
+    await shot(page, 'agent-channels-ar-light');
   });
 
   test('11. Schedules: a cron saved, its next time computed, and the button that says why', async ({

@@ -40,7 +40,11 @@
     "join_by_code": "Join by code",
     "sign_out": "Sign out",
     "login": "Sign in",
-    "setup": "First-run setup"
+    "setup": "First-run setup",
+    "agent_skills": "Skills",
+    "agent_mcp": "MCP",
+    "agent_memory": "Memory",
+    "agent_channels": "Channels"
   },
   "common": {
     "loading": "Loading…",
@@ -49,7 +53,8 @@
     "cancel": "Cancel",
     "delete": "Delete",
     "more": "More",
-    "rename": "Rename"
+    "rename": "Rename",
+    "edit": "Edit"
   },
   "errors": {
     "not_implemented": "The hub declares {operation} in the contract but does not implement it yet.",
@@ -843,5 +848,72 @@
     "locales": "Languages",
     "realtime": "Live channels",
     "realtime_note": "What a client opens so it learns what happens without asking."
+  },
+  "skills": {
+    "title_of": "{name} skills",
+    "search": "Search skills",
+    "new": "New skill",
+    "none": "No skills",
+    "none_body": "Skills are files in the agent's folder. Add one here, or install a pack.",
+    "no_match": "No matches",
+    "no_match_body": "Change the word.",
+    "category_user": "Your skills",
+    "enabled": "Enabled",
+    "pinned": "Pinned",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "broken": "Unreadable",
+    "delete_title": "Delete {name}?",
+    "delete_body": "The whole skill folder goes, with every file in it. Turning it off keeps everything.",
+    "key": "Key",
+    "document": "SKILL.md",
+    "editor_note": "This is what the agent reads, verbatim — front matter and body. Nothing is reshaped on save."
+  },
+  "mcp": {
+    "title_of": "{name} MCP servers",
+    "new": "New server",
+    "enabled": "Enabled",
+    "name": "Name",
+    "config": "Server config",
+    "name_bad": "Letters, digits and . _ - only",
+    "invalid_json": "Not valid JSON yet.",
+    "none": "No servers",
+    "none_body": "MCP servers give the agent tools beyond its own. Add one here.",
+    "restart_note": "This page writes to the agent's config file. Hermes connects to these servers when it starts, so restart it for a change to take effect.",
+    "editor_note": "Every MCP server has its own fields. It is edited as it is, and nothing we do not recognise is dropped. A credential reads as [stored]; leaving it keeps the one on file.",
+    "delete_title": "Delete {name}?",
+    "delete_body": "It goes from the config file. Nothing is removed from the server itself."
+  },
+  "memory": {
+    "title_of": "{name} memory",
+    "persona": "read at every start",
+    "content": "Text",
+    "note": "Three documents the agent reads. They are emptied by editing, never deleted.",
+    "write": "Write",
+    "doc_soul": "Persona",
+    "doc_memory": "Memory",
+    "doc_user": "About you",
+    "about_soul": "Who the agent is. Read at the start of every conversation.",
+    "about_memory": "What it learned and chose to keep.",
+    "about_user": "What it knows about you.",
+    "empty_soul": "Not written yet — the agent has no particular character.",
+    "empty_memory": "It has kept nothing yet.",
+    "empty_user": "It has written nothing about you yet."
+  },
+  "channels": {
+    "title_of": "{name} channels",
+    "enabled": "Enabled",
+    "exclusive": "one identity",
+    "not_configured": "not configured",
+    "fields_n": "{count} fields",
+    "clear": "Forget identity",
+    "none": "No channels",
+    "none_body": "Channels are added in the agent's config file. Whatever is in it appears here.",
+    "restart_note": "This page writes to the agent's config file. Hermes connects to these platforms when it starts, so restart it for a change to take effect.",
+    "editor_note": "The fields come from the agent's file, not from a form we wrote. A secret reads as [stored]; leaving it keeps the one on file.",
+    "secret_hint": "Leave it to keep the one already stored.",
+    "no_fields": "This channel has no fields yet.",
+    "clear_title": "Forget the {name} identity?",
+    "clear_body": "The tokens and secrets are removed and the channel is switched off. Its other settings stay."
   }
 }

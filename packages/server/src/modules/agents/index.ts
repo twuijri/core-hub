@@ -24,7 +24,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
 import { loadOpenApiDocument } from '@majlis/contracts';
 import { requireSqlite } from '../../lib/db.js';
-import { HubError } from '../../lib/errors.js';
+import { HubError, notFound } from '../../lib/errors.js';
 import { createContractIndex } from '../../lib/contract.js';
 import { defineModule } from '../../lib/module.js';
 import { createRealtime } from '../../lib/realtime.js';
@@ -46,6 +46,26 @@ import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './insta
 import type { AgentDirectoryPort, AgentInfo, AgentModelsPort, AgentRunnerPort } from './ports.js';
 import { AgentRunner } from './runner.js';
 import { AgentsService, type AgentPatchInput } from './service.js';
+import { ChannelError, clearChannel, listChannels, putChannel, type Channel } from './channels.js';
+import { MemoryError, deleteMemory, listMemory, putMemory, type MemoryDocument } from './memory.js';
+import {
+  McpError,
+  deleteMcpServer,
+  getMcpServer,
+  listMcpServers,
+  putMcpServer,
+  type McpServer,
+} from './mcp.js';
+import {
+  SkillError,
+  deleteSkill,
+  skillsDir,
+  getSkill,
+  listSkills,
+  putSkill,
+  setSkillEnabled,
+  type Skill,
+} from './skills.js';
 
 export { AgentsService } from './service.js';
 export type { AgentPatchInput, AgentsServiceOptions, ReconcileReport } from './service.js';
@@ -239,6 +259,65 @@ const actorOf = (request: FastifyRequest): { userId: string } => {
   return { userId: principal.user.id };
 };
 
+/**
+ * The contract's `Skill`.
+ *
+ * `use_count` is **0 and says nothing**, because nothing records skill use yet — the same
+ * reason `audit.getReport` refuses the Skills report rather than answering zeros that
+ * would read as a measurement. Here the field is required by the contract, so it is 0 and
+ * this comment is the footnote.
+ *
+ * `source` is read from the file: a skill that names the pack it came from is `external`,
+ * and one that names none was written by a person, which is `user`.
+ */
+function toSkill(skill: Skill, pinned: readonly string[]): Record<string, unknown> {
+  return {
+    key: skill.key,
+    name: skill.name,
+    description: skill.broken ? `[${skill.broken}]` : skill.description,
+    enabled: skill.enabled,
+    pinned: pinned.includes(skill.key),
+    source: skill.pack ? 'external' : 'user',
+    use_count: 0,
+    updated_at: skill.updatedAt.toISOString(),
+    content: skill.content,
+  };
+}
+
+/**
+ * Group the folder into the contract's categories.
+ *
+ * Hermes has no categories on disk, so the honest grouping is the one the files already
+ * carry: the pack a skill came from. Everything hand-written lands in one category of its
+ * own, and pinned skills come first inside each — an order a person chose beats one the
+ * filesystem chose.
+ */
+function categorise(
+  skills: readonly Skill[],
+  pinned: readonly string[],
+): Array<Record<string, unknown>> {
+  const groups = new Map<string, Skill[]>();
+  for (const skill of skills) {
+    const key = skill.pack ?? 'user';
+    const list = groups.get(key);
+    if (list) list.push(skill);
+    else groups.set(key, [skill]);
+  }
+  return (
+    [...groups.entries()]
+      // The person's own skills first; packs after, in name order.
+      .sort(([a], [b]) => (a === 'user' ? -1 : b === 'user' ? 1 : a.localeCompare(b)))
+      .map(([key, list]) => ({
+        key,
+        name: key,
+        description: null,
+        skills: list
+          .sort((a, b) => Number(pinned.includes(b.key)) - Number(pinned.includes(a.key)))
+          .map((skill) => toSkill(skill, pinned)),
+      }))
+  );
+}
+
 export const agentsModule = defineModule({
   name: 'agents',
   async registerRoutes(app: FastifyInstance) {
@@ -318,6 +397,395 @@ export const agentsModule = defineModule({
           params.agent_id as string,
           body as { section: string; values: Record<string, unknown> },
         ),
+    });
+
+    /**
+     * Skills. They are folders in the agent's own home (`skills.ts`), so the hub has to
+     * know where that home is — which it only does for the runtime it supervises. An
+     * external Hermes keeps its skills somewhere this process cannot see, and saying so
+     * is better than listing an empty folder as if the agent had no skills.
+     */
+    const skillHome = (request: FastifyRequest, agentId: string): string => {
+      const context = contextOf(request.server);
+      const row = context.service.get(scopeOf(request), agentId, request.language);
+      if (row.kind !== 'hermes') {
+        throw new HubError('state_invalid', {
+          details: { agent_id: agentId, reason: 'skills_are_hermes_only' },
+        });
+      }
+      const home = context.runtime.status().home;
+      if (!home) {
+        // No Hermes at all: no folder to read, and no folder to invent.
+        throw new HubError('state_invalid', {
+          details: { agent_id: agentId, reason: 'runtime_absent' },
+        });
+      }
+      return home;
+    };
+
+    const skillFault = (error: unknown): never => {
+      if (error instanceof SkillError) {
+        if (error.reason === 'skill_not_found') throw notFound({ resource: 'skill' });
+        throw new HubError('bad_request', { details: { reason: error.reason } });
+      }
+      throw error;
+    };
+
+    defineRoute(app, deps, {
+      operationId: 'agents.listSkills',
+      handler: (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const home = skillHome(request, agentId);
+        return {
+          categories: categorise(
+            listSkills(home),
+            contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
+          ),
+          // Which folder this is. A Hermes somebody else started with a different home
+          // would otherwise read as "no skills", and a path on screen is the difference
+          // between an empty agent and the wrong directory.
+          home: skillsDir(home),
+        };
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.getSkill',
+      handler: (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const key = params.skill_key as string;
+        const skill = getSkill(skillHome(request, agentId), key);
+        if (!skill) throw notFound({ resource: 'skill', id: key });
+        return toSkill(
+          skill,
+          contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
+        );
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.putSkill',
+      handler: (request, { params, body }) => {
+        const agentId = params.agent_id as string;
+        const key = params.skill_key as string;
+        const home = skillHome(request, agentId);
+        try {
+          const written = putSkill(home, key, {
+            content: String((body as { content: string }).content),
+          });
+          return toSkill(
+            written,
+            contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
+          );
+        } catch (error) {
+          return skillFault(error);
+        }
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.updateSkill',
+      handler: (request, { params, body }) => {
+        const agentId = params.agent_id as string;
+        const key = params.skill_key as string;
+        const home = skillHome(request, agentId);
+        const patch = body as { enabled?: boolean; pinned?: boolean };
+        const service = contextOf(request.server).service;
+        const scope = scopeOf(request);
+        try {
+          let skill = getSkill(home, key);
+          if (!skill) throw notFound({ resource: 'skill', id: key });
+          if (patch.enabled !== undefined) skill = setSkillEnabled(home, key, patch.enabled);
+          let pinned = service.pinnedSkills(scope, agentId);
+          if (patch.pinned !== undefined) {
+            pinned = service.setPinnedSkills(
+              scope,
+              agentId,
+              patch.pinned ? [...pinned, key] : pinned.filter((entry) => entry !== key),
+            );
+          }
+          return toSkill(skill, pinned);
+        } catch (error) {
+          return skillFault(error);
+        }
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.deleteSkill',
+      handler: (request, { params }) => {
+        const home = skillHome(request, params.agent_id as string);
+        try {
+          deleteSkill(home, params.skill_key as string);
+        } catch (error) {
+          return skillFault(error);
+        }
+        return null;
+      },
+    });
+
+    /**
+     * MCP servers. One block of `config.yaml`, edited in place (`mcp.ts`).
+     *
+     * `agents.testMcpServer` is **not** here and stays a documented 501: testing means
+     * spawning the command or opening the socket and running the handshake, and until
+     * something does that, a green tick would be a guess. What this hub does is write the
+     * file; Hermes connects when it starts, which is why the screen says to restart.
+     */
+    const mcpFault = (error: unknown): never => {
+      if (error instanceof McpError) {
+        if (error.reason === 'mcp_not_found') throw notFound({ resource: 'mcp_server' });
+        throw new HubError('bad_request', { details: { reason: error.reason } });
+      }
+      throw error;
+    };
+
+    /** The contract's `McpServer`. `connected` and `tools` are not measured — see above. */
+    const toMcpServer = (server: McpServer): Record<string, unknown> => ({
+      name: server.name,
+      transport: server.transport,
+      enabled: server.enabled,
+      connected: false,
+      tools: [],
+      error: null,
+      config: server.config,
+      updated_at: new Date().toISOString(),
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.listMcpServers',
+      handler: (request, { params }) => {
+        const home = skillHome(request, params.agent_id as string);
+        try {
+          return { items: listMcpServers(home).map(toMcpServer) };
+        } catch (error) {
+          return mcpFault(error);
+        }
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.createMcpServer',
+      handler: (request, { params, body }) => {
+        const home = skillHome(request, params.agent_id as string);
+        const input = body as {
+          name: string;
+          transport: string;
+          enabled?: boolean;
+          config: Record<string, unknown>;
+        };
+        try {
+          if (getMcpServer(home, input.name)) {
+            throw new HubError('conflict', {
+              details: { reason: 'mcp_name_taken', name: input.name },
+            });
+          }
+          return toMcpServer(
+            putMcpServer(home, input.name, {
+              config: input.config,
+              enabled: input.enabled ?? true,
+            }),
+          );
+        } catch (error) {
+          return mcpFault(error);
+        }
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.updateMcpServer',
+      handler: (request, { params, body }) => {
+        const home = skillHome(request, params.agent_id as string);
+        const name = params.server_name as string;
+        const patch = body as { enabled?: boolean; config?: Record<string, unknown> };
+        try {
+          if (!getMcpServer(home, name)) throw notFound({ resource: 'mcp_server', id: name });
+          return toMcpServer(
+            putMcpServer(home, name, {
+              ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
+              ...(patch.config === undefined ? {} : { config: patch.config }),
+            }),
+          );
+        } catch (error) {
+          return mcpFault(error);
+        }
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.deleteMcpServer',
+      handler: (request, { params }) => {
+        const home = skillHome(request, params.agent_id as string);
+        try {
+          deleteMcpServer(home, params.server_name as string);
+        } catch (error) {
+          return mcpFault(error);
+        }
+        return null;
+      },
+    });
+
+    /**
+     * Memory: the three documents Hermes reads (`memory.ts`) — `soul`, `memory`, `user`.
+     * Three and not a folder, because that is what the contract's `item_id` says and what
+     * Hermes actually reads; a hub that offered arbitrary filenames here would be offering
+     * a place the agent never looks.
+     */
+    const memoryFault = (error: unknown): never => {
+      if (error instanceof MemoryError) {
+        if (error.reason === 'memory_document_unknown') throw notFound({ resource: 'memory' });
+        if (error.reason === 'memory_document_protected') {
+          throw new HubError('conflict', { details: { reason: error.reason } });
+        }
+        throw new HubError('bad_request', { details: { reason: error.reason } });
+      }
+      throw error;
+    };
+
+    /** The contract's `MemoryItem`. Hermes's memory is documents, so `kind` is fixed. */
+    const toMemoryItem = (item: MemoryDocument): Record<string, unknown> => ({
+      id: item.id,
+      kind: 'document',
+      title: item.title,
+      content: item.content,
+      tags: [],
+      // Files have no revision of their own; the hub does not invent a version number
+      // for something a person can also edit with an editor.
+      revision: 0,
+      updated_at: item.updatedAt?.toISOString() ?? null,
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.listMemory',
+      handler: (request, { params, query }) => {
+        const home = skillHome(request, params.agent_id as string);
+        try {
+          return {
+            items: listMemory(home, query.q as string | undefined).map(toMemoryItem),
+            next_cursor: null,
+          };
+        } catch (error) {
+          return memoryFault(error);
+        }
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.putMemoryItem',
+      handler: (request, { params, body }) => {
+        const home = skillHome(request, params.agent_id as string);
+        try {
+          return toMemoryItem(
+            putMemory(
+              home,
+              params.item_id as string,
+              String((body as { content: string }).content),
+            ),
+          );
+        } catch (error) {
+          return memoryFault(error);
+        }
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.deleteMemoryItem',
+      handler: (request, { params }) => {
+        const home = skillHome(request, params.agent_id as string);
+        try {
+          deleteMemory(home, params.item_id as string);
+        } catch (error) {
+          return memoryFault(error);
+        }
+        return null;
+      },
+    });
+
+    /**
+     * Channels: the other block of `config.yaml` (`channels.ts`).
+     *
+     * `agents.loginChannel` is **not** here and stays a documented 501: pairing by QR is
+     * a conversation with the running gateway, not an edit to a file.
+     *
+     * `status` is `unknown`, deliberately. The hub writes the file; whether Telegram is
+     * actually answering is something only the gateway knows, and `online` would be a
+     * word nobody checked.
+     */
+    const channelFault = (error: unknown): never => {
+      if (error instanceof ChannelError) {
+        if (error.reason === 'channel_not_found') throw notFound({ resource: 'channel' });
+        throw new HubError('bad_request', { details: { reason: error.reason } });
+      }
+      throw error;
+    };
+
+    const toChannel = (channel: Channel): Record<string, unknown> => ({
+      platform: channel.platform,
+      // The platform's own name. A table of pretty labels would go stale the moment
+      // Hermes adds one, and the slug is what the person put in the file.
+      label: channel.platform,
+      enabled: channel.enabled,
+      configured: channel.configured,
+      exclusive: channel.exclusive,
+      status: 'unknown',
+      error: null,
+      login: null,
+      fields: channel.fields.map((field) => ({
+        key: field.key,
+        label: { ar: field.key, en: field.key },
+        kind: field.kind === 'boolean' ? 'toggle' : field.kind,
+        target: field.kind === 'secret' ? 'credentials' : 'configuration',
+        value: field.value,
+        hint: null,
+      })),
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.listChannels',
+      handler: (request, { params }) => {
+        const home = skillHome(request, params.agent_id as string);
+        try {
+          return { items: listChannels(home).map(toChannel) };
+        } catch (error) {
+          return channelFault(error);
+        }
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.updateChannel',
+      handler: (request, { params, body }) => {
+        const home = skillHome(request, params.agent_id as string);
+        const input = body as {
+          enabled?: boolean;
+          credentials?: Record<string, string>;
+          configuration?: Record<string, unknown>;
+        };
+        try {
+          return toChannel(
+            putChannel(home, params.platform as string, {
+              ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
+              // The contract splits them by where they go; the file does not, so they
+              // are merged back into the one node they came from.
+              values: { ...(input.configuration ?? {}), ...(input.credentials ?? {}) },
+            }),
+          );
+        } catch (error) {
+          return channelFault(error);
+        }
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.clearChannel',
+      handler: (request, { params }) => {
+        const home = skillHome(request, params.agent_id as string);
+        try {
+          return toChannel(clearChannel(home, params.platform as string));
+        } catch (error) {
+          return channelFault(error);
+        }
+      },
     });
 
     // Long work: `202 { job_id }` now, progress and outcome on `/rt/jobs` (invariant 4).
