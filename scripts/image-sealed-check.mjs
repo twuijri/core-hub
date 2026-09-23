@@ -2,7 +2,8 @@
 // The image is sealed (docs/changes/2026-09-23-twuijri-sealed-image.md): the hub's code in
 // /app and Hermes's in /opt/hermes are read-only to the user the hub runs as, and Hermes still
 // works — its commands run, and a feature that needs an optional package still gets it, in
-// /data, where it survives the container being recreated.
+// /data, where it survives the container being recreated. Hermes's dashboard API, which the hub
+// starts on demand (ADR 0015), starts against the sealed code and keeps its token.
 //
 //   node scripts/image-sealed-check.mjs <image>        (CI: majlis:ci)
 //
@@ -63,6 +64,46 @@ function start(name) {
   );
 }
 
+/**
+ * Runs inside the container: start `hermes serve` with a fresh token, time it to Hermes's
+ * ready line, call it without and with the token, read its resident memory, stop it. Prints
+ * one JSON line.
+ */
+const DASHBOARD_PROBE = `
+import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+const token = randomBytes(32).toString('hex');
+const began = Date.now();
+const child = spawn('hermes', ['serve', '--host', '127.0.0.1', '--port', '0'], {
+  env: { ...process.env, HERMES_DASHBOARD_SESSION_TOKEN: token, PYTHONUNBUFFERED: '1' },
+  stdio: ['ignore', 'pipe', 'pipe'],
+});
+let out = '';
+const port = await new Promise((resolve) => {
+  const timer = setTimeout(() => resolve(null), 120000);
+  child.stdout.on('data', (chunk) => {
+    out += chunk;
+    const ready = /HERMES_(?:BACKEND|DASHBOARD)_READY port=(\\d+)/.exec(out);
+    if (ready) { clearTimeout(timer); resolve(Number(ready[1])); }
+  });
+  child.on('exit', () => { clearTimeout(timer); resolve(null); });
+});
+const readyMs = Date.now() - began;
+const result = { port, readyMs };
+if (port) {
+  const url = 'http://127.0.0.1:' + port + '/api/plugins/kanban/board';
+  result.bare = (await fetch(url)).status;
+  result.withToken = (await fetch(url, { headers: { 'X-Hermes-Session-Token': token } })).status;
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  const status = readFileSync('/proc/' + child.pid + '/status', 'utf8');
+  result.rssMiB = Math.round(Number(/VmRSS:\\s+(\\d+)/.exec(status)[1]) / 1024);
+}
+child.kill('SIGTERM');
+await new Promise((resolve) => child.on('exit', resolve));
+console.log(JSON.stringify(result));
+`;
+
 const first = `${tag}-a`;
 const second = `${tag}-b`;
 try {
@@ -99,6 +140,30 @@ try {
     'an optional package Hermes needs lands in /data/hermes-packages',
     Boolean(installed?.startsWith('/data/hermes-packages/')),
     installed ?? 'install failed',
+  );
+
+  // Hermes's dashboard API (ADR 0015): the hub runs `hermes serve` on demand, as the hub's
+  // user, against the sealed code. It must start, refuse a call without the token and answer
+  // one with it. The script runs inside the container with node, as argv — no shell.
+  const served = docker(['exec', first, 'node', '--input-type=module', '-e', DASHBOARD_PROBE], {
+    allowFail: true,
+  });
+  let probe = null;
+  try {
+    probe = served ? JSON.parse(served.split('\n').at(-1)) : null;
+  } catch {
+    probe = null;
+  }
+  check(
+    "Hermes's dashboard API starts in the sealed image",
+    Boolean(probe?.port),
+    probe ? `ready in ${probe.readyMs} ms, ${probe.rssMiB} MiB resident` : (served ?? 'no answer'),
+  );
+  check('it refuses a call without the token (401)', probe?.bare === 401, String(probe?.bare));
+  check(
+    'it answers /api/plugins/kanban/board with the token (200)',
+    probe?.withToken === 200,
+    String(probe?.withToken),
   );
 
   // Nothing Hermes ran above changed the image's files — no __pycache__, no package, no edit.
