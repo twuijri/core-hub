@@ -30,7 +30,7 @@
     "web:dev": "pnpm --filter @majlis/web dev",
     "web:e2e": "pnpm --filter @majlis/web test:e2e",
     "tokens:build": "pnpm --filter @majlis/ui-tokens build",
-    "graph": "graphify update . && node scripts/graph-portable.mjs",
+    "graph": "node scripts/graph.mjs",
     "graph:check": "node scripts/graph-check.mjs"
   },
   "devDependencies": {

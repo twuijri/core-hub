@@ -17,11 +17,12 @@ never part of the build or the image. It replaced Understand-Anything on
   Claude Code (`.claude/`) and Codex (`.codex/`, `AGENTS.md`); whoever clones the
   repository gets the map and the instructions to use it.
 
-## Setup (once per machine, once per clone)
+## Setup (once per machine)
 ```bash
 uv tool install graphifyy==0.9.66   # the CLI; the package name has two y's
-graphify hook install               # once per clone: rebuild on commit/checkout + merge driver
 ```
+Do **not** run `graphify hook install` here: its hooks run plain `graphify update .` after
+every commit, which brings back what `pnpm graph` takes out (below).
 Use the pinned version: CI builds with it, and another version may build a
 different map. `uv` itself: <https://docs.astral.sh/uv/>.
 
@@ -36,12 +37,10 @@ schemas under `packages/contracts/events/` and the test screenshots.
 - **Before reading files across modules**, ask the map:
   `graphify query "<question>"`, `graphify path "<A>" "<B>"`,
   `graphify explain "<concept>"`, `graphify affected "<symbol>"`.
-- **Before you commit a code change**, `pnpm graph` (`graphify update .`, then `scripts/graph-portable.mjs`) and commit
-  `graphify-out/` with it. The hook does this after a commit too, which leaves the
-  next commit to carry it; running it yourself keeps each commit whole.
+- **Before you commit a code change**, `pnpm graph` and commit `graphify-out/` with it.
 - **After a pull or a merge**, `pnpm graph`.
-- **A conflict in `graph.json`** is not resolved by hand: the merge driver unions the
-  two maps; without it, take either side and run `pnpm graph`.
+- **A conflict in `graph.json`** is not resolved by hand: take either side, run
+  `pnpm graph`, commit.
 
 ## The check
 CI job *Code map is current* installs the pinned Graphify on a clean checkout of the
@@ -49,12 +48,16 @@ PR's head, runs `pnpm graph` and `pnpm graph:check`, which compares the built
 `graph.json` with the committed one (leaving out `built_at_commit`). A stale map fails
 the PR with the command that fixes it.
 
-**Why `pnpm graph` and not plain `graphify update .`:** Graphify names an import whose
-target it did not scan — the generated contract client, which is git-ignored — after its
-*absolute* path (`home_<user>_<checkout>_packages_…`). `scripts/graph-portable.mjs`
-rewrites those names to the root-relative form every other node has, and takes the
-checkout's folder name and the date out of the report's title, so every machine builds
-the same map. `pnpm graph:check` refuses a map that still carries such a path.
+**Why `pnpm graph` (`scripts/graph.mjs`) and not plain `graphify update .`:**
+- Graphify names an import whose target it did not scan — the generated contract client,
+  which is git-ignored — after its *absolute* path (`home_<user>_<checkout>_packages_…`).
+  The script rewrites those names to the root-relative form every other node has, and
+  takes the checkout's folder name and the date out of the report's title, so every
+  machine builds the same map. `pnpm graph:check` refuses a map that still carries such a
+  path.
+- `graphify update .` merges into the `graph.json` it finds and keeps what it did not
+  extract this time, so the renamed node would come back twice. The script builds from
+  scratch; with no model involved that takes about five seconds.
 
 ## Rule for agents
 Before a change that spans more than one module, query the map for those modules and
