@@ -185,6 +185,7 @@ boot. The endpoint is the Hermes agent's `gateway.endpoint` setting
 | `/data/hub.sqlite` | the hub's database |
 | `/data/keys/jwt.secret` | access-token signing key |
 | `/data/keys/hermes-api.secret` | the `API_SERVER_KEY` the hub sends to Hermes |
+| `/data/keys/hermes-dashboard.secret` | the session token of Hermes's dashboard API, which the hub starts on demand on the loopback (ADR 0015) |
 | `/data/hermes/` | Hermes's home: `.env`, `config.yaml`, memories, skills, sessions, cron |
 | `/data/agents/<id>/` | coding agents installed from the catalog |
 | `/data/hermes-packages/` | optional Python packages Hermes installs the first time a feature needs them (Edge voices, Bedrock, Vertex …) |

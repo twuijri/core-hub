@@ -42,6 +42,7 @@ import { createAdapterSet, type AdapterSet, type AdapterSetOptions } from './ada
 import type { AdapterKind } from './adapters/types.js';
 import { HERMES_ENTRY } from './catalog/index.js';
 import { HermesRuntime, type HermesRuntimeStatus, type Spawner } from './hermes-runtime.js';
+import { HermesDashboard, type DashboardSpawner } from './hermes-dashboard.js';
 import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './installer.js';
 import type { AgentDirectoryPort, AgentInfo, AgentModelsPort, AgentRunnerPort } from './ports.js';
 import { AgentRunner } from './runner.js';
@@ -128,6 +129,12 @@ export {
   type HermesProfiles,
 } from './hermes-profiles.js';
 export type { HermesRuntimeMode, HermesRuntimeStatus, Spawner } from './hermes-runtime.js';
+export {
+  HermesDashboard,
+  HermesDashboardRefusal,
+  HermesDashboardUnavailable,
+  type HermesDashboardStatus,
+} from './hermes-dashboard.js';
 
 /** Test seams: a fake PATH, a fake adapter set, a fake installer. Set before the app boots. */
 export interface AgentsOverrides {
@@ -138,6 +145,8 @@ export interface AgentsOverrides {
   adapterOptions?: Omit<AdapterSetOptions, 'host'>;
   /** The Hermes runtime supervisor's seams (a fake spawner, a health interval). */
   runtime?: { spawnImpl?: Spawner; healthIntervalMs?: number };
+  /** Hermes's dashboard API's seams (a fake spawner and `fetch`, a short idle). */
+  dashboard?: { spawnImpl?: DashboardSpawner; fetchImpl?: typeof fetch; idleMs?: number };
 }
 
 let pendingOverrides: AgentsOverrides | null = null;
@@ -156,6 +165,7 @@ interface AgentsContext {
   adapters: AdapterSet;
   runner: AgentRunner;
   runtime: HermesRuntime;
+  dashboard: HermesDashboard;
 }
 
 const contexts = new WeakMap<SocketServer, AgentsContext>();
@@ -235,7 +245,17 @@ function contextOf(app: FastifyInstance): AgentsContext {
     models: () => modelsPorts.get(hub.io) ?? null,
   });
   const runner = new AgentRunner({ service, adapters, log: app.log });
-  const created: AgentsContext = { service, adapters, runner, runtime };
+  // Hermes's own web server as an internal API (ADR 0015): nothing runs until a caller
+  // asks, and only where `runtime` is managed (`hermesDashboardFor`).
+  const dashboard = new HermesDashboard({
+    host: runtime,
+    dataDir: hub.config.dataDir,
+    log: app.log,
+    ...(own.dashboard?.spawnImpl ? { spawnImpl: own.dashboard.spawnImpl } : {}),
+    ...(own.dashboard?.fetchImpl ? { fetchImpl: own.dashboard.fetchImpl } : {}),
+    ...(own.dashboard?.idleMs !== undefined ? { idleMs: own.dashboard.idleMs } : {}),
+  });
+  const created: AgentsContext = { service, adapters, runner, runtime, dashboard };
   contexts.set(hub.io, created);
   return created;
 }
@@ -247,6 +267,16 @@ export function agentsServiceFor(app: FastifyInstance): AgentsService {
 /** The Hermes runtime this hub supervises or found (ADR 0008). */
 export function hermesRuntimeFor(app: FastifyInstance): HermesRuntime {
   return contextOf(app).runtime;
+}
+
+/**
+ * Hermes's dashboard API (ADR 0015) — Hermes's own web server, started on the first call
+ * and stopped when idle — or `null` where this hub does not supervise Hermes. For the
+ * composition root: a module that needs it is handed a port built from this.
+ */
+export function hermesDashboardFor(app: FastifyInstance): HermesDashboard | null {
+  const { dashboard } = contextOf(app);
+  return dashboard.available() ? dashboard : null;
 }
 
 /** The live turns, for anything that must not interrupt one (`models` recycles Hermes). */
@@ -365,6 +395,7 @@ export const agentsModule = defineModule({
     });
     app.addHook('onClose', async () => {
       await ctx.runner.closeAll();
+      await ctx.dashboard.close();
       await ctx.runtime.stop();
     });
 
