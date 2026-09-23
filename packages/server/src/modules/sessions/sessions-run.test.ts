@@ -465,6 +465,36 @@ describe('approvals inside a run', () => {
   });
 });
 
+describe('a request with a deadline', () => {
+  it('expires unanswered, tells the agent "no", and lets the run carry on', async () => {
+    harness = await startHarness([
+      {
+        type: 'approval_requested',
+        ref: 'q1',
+        kind: 'question',
+        title: 'أي مسار؟',
+        answerMode: 'text',
+        expiresInMs: 50,
+      },
+      { type: 'await_input' },
+      { type: 'message_delta', text: 'تخطّيتَ السؤال.' },
+      { type: 'completed' },
+    ]);
+    const sessionId = await newSession(harness);
+    await api(harness.hub, 'POST', `/sessions/${sessionId}/runs`, {
+      content: [{ type: 'text', text: 'اسألني' }],
+    });
+    const requested = await harness.waitFor('approval.requested');
+    expect((requested.payload.approval as { expires_at: string | null }).expires_at).not.toBeNull();
+    const resolved = await harness.waitFor('approval.resolved');
+    expect(resolved.payload.approval).toMatchObject({ status: 'expired' });
+    await harness.waitFor('run.completed');
+    expect(harness.runner.inputs).toEqual([
+      { runId: expect.any(String), input: { approvalRef: 'q1', decision: 'deny', answer: null } },
+    ]);
+  });
+});
+
 describe('interruption', () => {
   it('stops an active run and reports it as cancelled', async () => {
     harness = await startHarness([

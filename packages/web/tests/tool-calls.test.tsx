@@ -12,6 +12,7 @@ import { I18nProvider } from '../src/i18n/context.js';
 import { PaneProvider } from '../src/shell/pane.js';
 import { MessageView } from '../src/chat/MessageView.js';
 import { ToolCalls, LIVE_WINDOW } from '../src/chat/ToolCallCard.js';
+import { AnsweredQuestions, answeredQuestions } from '../src/chat/AnsweredQuestions.js';
 import { reasoningWorthShowing } from '../src/chat/turns.js';
 import type { Message, ToolCall } from '../src/types.js';
 
@@ -139,5 +140,41 @@ describe('reasoning that is only the reply', () => {
 
   it('is shown when it says something else', () => {
     expect(reasoningWorthShowing(msg('The user greets me.', 'أهلاً بك!'))).toBe(true);
+  });
+});
+
+describe('a question the agent asked', () => {
+  it('stays in the reply with what was answered, skipped, or left to time out', () => {
+    const calls = [
+      call('1', 'clarify', {
+        arguments: { question: 'Which device?' },
+        output: JSON.stringify({
+          question: 'Which device?',
+          choices_offered: ['Mac', 'Windows'],
+          user_response: 'Windows',
+        }),
+      }),
+      call('2', 'clarify', {
+        output: JSON.stringify({ question: 'Which branch?', user_response: '' }),
+      }),
+      call('3', 'clarify', {
+        output: JSON.stringify({
+          responses: [{ question: 'Name?', user_response: '' }],
+          timed_out: true,
+        }),
+      }),
+      call('4', 'clarify', { output: 'not json' }),
+      call('5', 'terminal', { output: JSON.stringify({ question: 'x', user_response: 'y' }) }),
+    ];
+    expect(answeredQuestions(calls)).toEqual([
+      { id: '1', question: 'Which device?', answer: 'Windows', timedOut: false },
+      { id: '2', question: 'Which branch?', answer: '', timedOut: false },
+      { id: '3:0', question: 'Name?', answer: '', timedOut: true },
+    ]);
+    mount(<AnsweredQuestions calls={calls} />);
+    const rows = screen.getAllByTestId('answered-question');
+    expect(rows[0]).toHaveTextContent('You answered: Windows');
+    expect(rows[1]).toHaveTextContent('Question skipped');
+    expect(rows[2]).toHaveTextContent('Time ran out without an answer');
   });
 });

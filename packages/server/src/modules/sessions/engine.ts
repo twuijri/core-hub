@@ -234,6 +234,48 @@ export class RunEngine {
 
   // ------------------------------------------------------------- internals
 
+  /**
+   * A request with a deadline (a question waits five minutes, owner decision 2026-09-23)
+   * that nobody answered in time is closed as `expired`, and the agent is told "no" — for
+   * a question that is Hermes's skip, the empty answer. The person sees the deadline count
+   * down on the card, so the hub keeps it rather than leaving the agent to its own, longer
+   * one.
+   */
+  private expireLater(run: ActiveRun, approvalId: string, expiresAt: number): void {
+    const timer = setTimeout(
+      () => void this.expire(run, approvalId),
+      Math.max(0, expiresAt - Date.now()),
+    );
+    timer.unref?.();
+  }
+
+  private async expire(run: ActiveRun, approvalId: string): Promise<void> {
+    if (this.active.get(run.runId) !== run) return;
+    const approval = run.state.approvals.find((a) => a.id === approvalId);
+    if (!approval || approval.status !== 'pending') return;
+    this.step(run, {
+      type: 'approval_resolved',
+      approvalId,
+      status: 'expired',
+      decision: 'deny',
+      answer: null,
+      respondedBy: null,
+      remember: false,
+    });
+    try {
+      await this.deps.ports.runner.send(run.runId, {
+        approvalRef: approval.ref,
+        decision: 'deny',
+        answer: null,
+      });
+    } catch (error) {
+      this.deps.log.warn(
+        { err: error, runId: run.runId },
+        'sessions: the agent did not take the expiry',
+      );
+    }
+  }
+
   private ctx() {
     return { now: Date.now(), newId: newUlid };
   }
@@ -505,6 +547,9 @@ export class RunEngine {
         case 'approval_resolved': {
           const approval = state.approvals.find((a) => a.id === action.approvalId);
           if (!approval) break;
+          if (action.type === 'approval_requested' && approval.expiresAt !== null) {
+            this.expireLater(run, approval.id, approval.expiresAt);
+          }
           const row = this.writeApproval(run, approval);
           this.emitApproval(
             scope,
