@@ -649,7 +649,13 @@
     },
     "all_workspaces": "All workspaces",
     "all_projects": "All projects",
-    "workspace": "Workspace"
+    "workspace": "Workspace",
+    "hermes": {
+      "origin": "On Hermes's board",
+      "refused": "Hermes said no: {message}",
+      "owns_text": "This card is on Hermes's board, so its title and description are Hermes's to change.",
+      "owns_card": "This card is on Hermes's board; Hermes decides when it goes away."
+    }
   },
   "schedules": {
     "new": "New schedule",
