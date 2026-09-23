@@ -28,7 +28,7 @@ function docker(args, { allowFail = false } = {}) {
     }).trim();
   } catch (error) {
     if (allowFail) return null;
-    throw new Error(`docker ${args.join(' ')}\n${error.stderr ?? error.message}`);
+    throw new Error(`docker ${args.join(' ')}\n${error.stderr ?? error.message}`, { cause: error });
   }
 }
 

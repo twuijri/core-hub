@@ -70,7 +70,32 @@
   src/modules/agents/adapters/hermes-tui.real.test.ts src/modules/agents/hermes-profiles.real.test.ts`
   ← `Tests 5 passed (5)`: محادثة Hermes الحقيقية، والأسئلة التوضيحية المفردة والمجمّعة، وإنشاء
   البروفايل ونسخه، كلها على الصورة المقفلة.
-- `pnpm lint`، `pnpm change-record:check`، `pnpm graph:check` ← انظر نتائج الـ PR.
+- ناتج الأوامر كما ظهر:
+
+```
+$ node scripts/image-sealed-check.mjs majlis:sealed
+ok    the hub answers /api/v1/health
+ok    nothing under /app or /opt/hermes is writable by the hub
+ok    Hermes's own code cannot be edited
+ok    the hub's own code cannot be edited
+ok    hermes runs — Hermes Agent v0.21.3 (2026.9.14)
+ok    hermes writes a profile to its home in /data
+ok    an optional package Hermes needs lands in /data/hermes-packages — /data/hermes-packages/edge_tts/__init__.py
+ok    the container changed nothing under /app or /opt/hermes
+ok    the package survives the container being recreated — /data/hermes-packages/edge_tts/__init__.py
+
+image:sealed-check  OK
+
+$ MAJLIS_HERMES_IMAGE=majlis:sealed pnpm --filter @majlis/server exec vitest run \
+    src/modules/agents/adapters/hermes-tui.real.test.ts src/modules/agents/hermes-profiles.real.test.ts
+      Tests  5 passed (5)
+
+$ pnpm lint
+All matched files use Prettier code style!
+$ pnpm typecheck        # exit 0
+$ pnpm graph:check
+graph:check  OK — 6294 nodes, 14991 edges, current
+```
 
 ## المخاطر والرجوع
 - ميزة في Hermes تكتب داخل مجلد كوده ولم تظهر في الفحص ستفشل. ما رأيناه في `docker diff` الحقيقي
