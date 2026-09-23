@@ -167,3 +167,7 @@ jobs:
           done
           docker logs hub
           exit 1
+      - name: The image is sealed and Hermes still works
+        # /app and /opt/hermes are read-only to the hub; Hermes runs, writes its profiles to
+        # /data and installs an optional package into /data/hermes-packages (network needed).
+        run: node scripts/image-sealed-check.mjs majlis:ci
