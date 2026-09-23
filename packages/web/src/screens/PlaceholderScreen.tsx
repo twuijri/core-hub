@@ -69,9 +69,5 @@ export function PlaceholderScreen({ id }: { id: string }) {
       </div>
     </>
   );
-  return (
-    <AppShell title={title} wide={underSettings}>
-      {body}
-    </AppShell>
-  );
+  return <AppShell title={title}>{body}</AppShell>;
 }
