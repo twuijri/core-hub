@@ -378,7 +378,15 @@
     "role": "Role",
     "workspaces": "Workspaces",
     "field": "Field",
-    "value": "Value"
+    "value": "Value",
+    "password": "Password",
+    "password_hint": "This device stays signed in; your other devices are signed out.",
+    "current_password": "Current password",
+    "new_password": "New password",
+    "confirm_password": "Type the new one again",
+    "password_mismatch": "Does not match the new one",
+    "password_changed": "Password changed, and your other devices were signed out.",
+    "change_password": "Change password"
   },
   "roles": {
     "owner": "Owner",
@@ -782,7 +790,6 @@
     "display_name": "Display name",
     "member_can": "Opens chats and agents in their workspaces",
     "admin_can": "Manages people, workspaces and hub settings",
-    "workspaces_note": "A new person enters every workspace; narrow it later from their row menu.",
     "lockouts": "Lockouts",
     "clear_lockouts": "Clear all",
     "no_lockouts": "No lockouts",
@@ -793,7 +800,12 @@
     "lock_token": "Token",
     "lock_pairing": "Pairing",
     "failures": "Attempts",
-    "locked_until": "Until"
+    "locked_until": "Until",
+    "edit_workspaces": "Workspaces…",
+    "workspaces_for": "Workspaces of {name}",
+    "workspaces_hint": "A member sees only the workspaces chosen here: their chats, agents and tasks.",
+    "workspaces_required": "Choose at least one workspace.",
+    "admin_everywhere": "An admin enters every workspace."
   },
   "workspaces": {
     "note": "Separate rooms: their agents, models and conversations do not see each other.",
