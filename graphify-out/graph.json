@@ -8349,7 +8349,7 @@
       "node_kind": "heading",
       "norm_label": "التسليم والخطوة التالية",
       "source_file": "docs/changes/2026-09-23-twuijri-sealed-image.md",
-      "source_location": "L84"
+      "source_location": "L109"
     },
     {
       "id": "docs_changes_2026_09_23_twuijri_sealed_image_الصورة_مقفلة_لا_يعد_ل_الوكيل_كود_المجلس_ولا_كود_hermes",
@@ -8409,7 +8409,7 @@
       "node_kind": "heading",
       "norm_label": "المخاطر والرجوع",
       "source_file": "docs/changes/2026-09-23-twuijri-sealed-image.md",
-      "source_location": "L75"
+      "source_location": "L100"
     },
     {
       "id": "docs_changes_2026_09_23_twuijri_sealed_image_المشكلة_والهدف",
@@ -86076,7 +86076,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1,
       "source_file": "docs/changes/2026-09-23-twuijri-sealed-image.md",
-      "source_location": "L84",
+      "source_location": "L109",
       "weight": 1
     },
     {
@@ -86088,7 +86088,7 @@
       "confidence_score": 0.95,
       "context": "main",
       "source_file": "docs/changes/2026-09-23-twuijri-sealed-image.md",
-      "source_location": "L85",
+      "source_location": "L110",
       "weight": 1
     },
     {
@@ -86132,7 +86132,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1,
       "source_file": "docs/changes/2026-09-23-twuijri-sealed-image.md",
-      "source_location": "L75",
+      "source_location": "L100",
       "weight": 1
     },
     {
@@ -86166,7 +86166,7 @@
       "confidence_score": 0.95,
       "context": "latest",
       "source_file": "docs/changes/2026-09-23-twuijri-sealed-image.md",
-      "source_location": "L77",
+      "source_location": "L102",
       "weight": 1
     },
     {
@@ -249778,5 +249778,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "1adebcbf13ef25e3fa307392fc99f5457a46bf93"
+  "built_at_commit": "2557dfe7ff9b52af5be7a98548a6e1e1221d3612"
 }
