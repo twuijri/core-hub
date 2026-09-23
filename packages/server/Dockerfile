@@ -120,6 +120,24 @@ RUN set -eu; \
     done; \
     /opt/hermes/.venv/bin/python -c "import ssl, sqlite3, ensurepip, curses, zoneinfo; import hermes_cli" \
  && /opt/hermes/.venv/bin/hermes --version
+# Compile the bytecode now: at runtime /opt/hermes is read-only (below) and Python writes no
+# __pycache__ (PYTHONDONTWRITEBYTECODE), so without this every `hermes` command recompiles its
+# imports — measured ~600 ms per command against ~200 ms. unchecked-hash: the sources never
+# change inside the image, so Python need not stat them to trust the cache. Costs ~34 MB
+# compressed (docs/changes/2026-09-23-twuijri-sealed-image.md). A file Python cannot compile
+# (a stray Python 2 test in a wheel) is skipped, which is why the exit code is not the check —
+# the import below is.
+#
+# pip goes into the venv here, not later: the image has no uv at runtime, so Hermes installs an
+# optional package with `python -m pip install --target /data/hermes-packages`, and with the
+# venv sealed it could not bootstrap pip into it (ensurepip) the way an open venv does.
+# go-w last: uv leaves world-writable .lock files, and nothing here may be writable by `hub`.
+RUN /opt/hermes/.venv/bin/python -m ensurepip --default-pip >/dev/null \
+ && { /opt/hermes/.venv/bin/python -m compileall -q -j0 --invalidation-mode unchecked-hash \
+        /opt/hermes/src /opt/hermes/.venv/lib/python3.12/site-packages /opt/hermes/python >/dev/null || true; } \
+ && chmod -R go-w /opt/hermes \
+ && /opt/hermes/.venv/bin/python -m pip --version \
+ && PYTHONDONTWRITEBYTECODE=1 /opt/hermes/.venv/bin/hermes --version
 
 # ---- runtime ------------------------------------------------------------------------------
 # debian:bookworm-slim is the base of node:24-bookworm-slim; taking it directly and copying the
@@ -133,7 +151,18 @@ ENV MAJLIS_VERSION=${MAJLIS_VERSION} \
     DATA_DIR=/data \
     PORT=8080 \
     HERMES_HOME=/data/hermes \
-    PATH=/opt/hermes/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    PATH=/opt/hermes/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    PYTHONDONTWRITEBYTECODE=1 \
+    HERMES_DISABLE_LAZY_INSTALLS=1 \
+    HERMES_LAZY_INSTALL_TARGET=/data/hermes-packages
+# The code is sealed (docs/changes/2026-09-23-twuijri-sealed-image.md): /app and /opt/hermes are
+# root's and read-only to `hub`, so nothing the hub or an agent runs can change the hub's or
+# Hermes's code — a change comes with a new image. Everything that is written lives in /data.
+# The two HERMES_* lines are Hermes's own switch for a sealed image (tools/lazy_deps.py, the
+# same pair its upstream Dockerfile sets): the optional packages Hermes installs the first time
+# a feature needs them (Edge voices, Bedrock, Vertex …) go to /data/hermes-packages instead of
+# its venv, appended to sys.path so they can add modules but never replace a core one, and
+# they survive a container being recreated.
 # git and ripgrep are what Hermes's own tools shell out to (tools/checkpoint_manager.py,
 # tools/working_diff.py, tools/subagent_worktree.py; tools/file_operations_search.py); curl is
 # how Hermes fetches its managed uv (hermes_cli/managed_uv.py); ca-certificates for provider calls.
@@ -150,16 +179,16 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
  && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
  && node --version && npm --version
 WORKDIR /app
-COPY --from=hermes --chown=hub:hub /opt/hermes /opt/hermes
+COPY --from=hermes /opt/hermes /opt/hermes
 # The whole prod-deps tree: root node_modules plus whatever per-package node_modules pnpm made.
-COPY --from=prod-deps --chown=hub:hub /app ./
-COPY --from=build --chown=hub:hub /app/packages/contracts/openapi.yaml ./packages/contracts/openapi.yaml
-COPY --from=build --chown=hub:hub /app/packages/contracts/events ./packages/contracts/events
-COPY --from=build --chown=hub:hub /app/packages/contracts/dist ./packages/contracts/dist
-COPY --from=build --chown=hub:hub /app/packages/server/dist ./packages/server/dist
-COPY --from=build --chown=hub:hub /app/packages/server/drizzle ./packages/server/drizzle
+COPY --from=prod-deps /app ./
+COPY --from=build /app/packages/contracts/openapi.yaml ./packages/contracts/openapi.yaml
+COPY --from=build /app/packages/contracts/events ./packages/contracts/events
+COPY --from=build /app/packages/contracts/dist ./packages/contracts/dist
+COPY --from=build /app/packages/server/dist ./packages/server/dist
+COPY --from=build /app/packages/server/drizzle ./packages/server/drizzle
 # The web client: static files the hub serves from / (packages/server/src/app/web.ts).
-COPY --from=build --chown=hub:hub /app/packages/web/dist ./packages/web/dist
+COPY --from=build /app/packages/web/dist ./packages/web/dist
 USER hub
 VOLUME ["/data"]
 EXPOSE 8080
