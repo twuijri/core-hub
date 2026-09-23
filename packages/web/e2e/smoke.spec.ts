@@ -647,7 +647,9 @@ test.describe('web smoke journeys', () => {
     // (owner, 2026-09-23: it said "Offline" until another conversation was clicked).
     await page.reload();
     await expect(reply).toContainText('سطر 60');
-    await expect(page.getByRole('status', { name: 'متصل' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('status', { name: 'متصل', exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
   });
 
   test('21. a search result opens the conversation at the word, not at the bottom', async ({
@@ -853,6 +855,16 @@ test.describe('web smoke journeys', () => {
     await page.getByLabel('الاسم').fill('Labs');
     // The slug followed the name without being typed.
     await expect(page.getByLabel('المعرّف')).toHaveValue('labs');
+    // How it starts is asked, not assumed (ADR 0014): from scratch, or a copy of one picked.
+    await expect(page.getByRole('radio', { name: 'من الصفر' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await page.getByRole('radio', { name: 'نسخة من بروفايل' }).click();
+    await expect(page.getByTestId('save-workspace')).toBeDisabled();
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: path.join(shots, 'workspace-origin-ar-light.png') });
+    await page.getByRole('radio', { name: 'من الصفر' }).click();
     await page.getByTestId('save-workspace').click();
     await expect(page.getByTestId('workspace-list')).toContainText('Labs');
     // A second workspace exists, so exactly one archive button appeared — the new one's.
@@ -883,7 +895,9 @@ test.describe('web smoke journeys', () => {
     };
     await change(PASSWORD, 'a-brand-new-password');
     // This device stays signed in and connected: only the other devices are signed out.
-    await expect(page.getByRole('status', { name: 'متصل' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('status', { name: 'متصل', exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
     await shot(page, 'account-password-ar-light');
     await change('a-brand-new-password', PASSWORD);
   });
@@ -918,6 +932,15 @@ test.describe('web smoke journeys', () => {
     await page.getByTestId('updates-from-source').click();
     await expect(page.getByTestId('updates-source-fields')).toBeVisible();
     await shot(page, 'updates-ar-light');
+
+    // A reload inside Settings comes back connected (owner, 2026-09-23: it said "Offline"
+    // there for good, because no page in Settings opened the socket the footer reports).
+    await page.reload();
+    await expect(page.getByText('لا إصدارات')).toBeVisible();
+    await expect(page.getByRole('status', { name: 'متصل', exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+    await shot(page, 'updates-reloaded-ar-light');
   });
 
   test('15. an agent’s skills are the files in its folder', async ({ page }) => {

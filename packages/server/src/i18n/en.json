@@ -56,7 +56,8 @@
     "pairing_not_found": "The pairing does not exist, has expired or was cancelled.",
     "pairing_wrong_code": "The pairing code is wrong.",
     "pairing_claimed": "This pairing was already claimed.",
-    "pairing_user_disabled": "The account that started the pairing is disabled."
+    "pairing_user_disabled": "The account that started the pairing is disabled.",
+    "profile_runtime_refused": "Hermes refused to create the profile."
   },
   "sessions": {
     "run_interrupted": "Stopped by the user.",

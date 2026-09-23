@@ -56,7 +56,8 @@
     "pairing_not_found": "طلب الاقتران غير موجود أو انتهى أو أُلغي.",
     "pairing_wrong_code": "كود الاقتران غير صحيح.",
     "pairing_claimed": "استُخدم طلب الاقتران هذا من قبل.",
-    "pairing_user_disabled": "الحساب الذي أنشأ الاقتران معطّل."
+    "pairing_user_disabled": "الحساب الذي أنشأ الاقتران معطّل.",
+    "profile_runtime_refused": "رفض هرمز إنشاء البروفايل."
   },
   "sessions": {
     "run_interrupted": "أوقفه المستخدم.",
