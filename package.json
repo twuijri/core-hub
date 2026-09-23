@@ -31,7 +31,8 @@
     "web:e2e": "pnpm --filter @majlis/web test:e2e",
     "tokens:build": "pnpm --filter @majlis/ui-tokens build",
     "graph": "node scripts/graph.mjs",
-    "graph:check": "node scripts/graph-check.mjs"
+    "graph:check": "node scripts/graph-check.mjs",
+    "image:sealed-check": "node scripts/image-sealed-check.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
