@@ -35,10 +35,28 @@ export const E2E_PASSWORD = 'e2e-owner-password';
 type Step = AgentEvent | { type: 'delay'; ms: number } | { type: 'await_input' };
 
 function scriptFor(prompt: string): Step[] {
+  if (/رد طويل|long reply/i.test(prompt)) {
+    // A reply that grows for a few seconds, taller than the screen: the transcript must
+    // follow it while the person is at the bottom, and leave them be when they are not.
+    const steps: Step[] = [];
+    for (let line = 1; line <= 60; line += 1) {
+      steps.push({ type: 'message_delta', text: `سطر ${line}\n\n` }, { type: 'delay', ms: 120 });
+    }
+    return [...steps, { type: 'completed' }];
+  }
   if (/اسألني|ask me/i.test(prompt)) {
     // A question with choices, answered on the card above the composer (journey 19). The
     // reply repeats the answer: `{answer}` is filled in with what the person sent.
+    // As Hermes does it: the `clarify` tool starts, asks, and returns what it was told
+    // (`{raw}` is the answer as Hermes receives it, `""` for a skip), and the question
+    // waits five minutes, counted down on the card.
     return [
+      {
+        type: 'tool_started',
+        ref: 'c1',
+        name: 'clarify',
+        input: { question: 'وش الجهاز اللي تبي تتصل فيه؟' },
+      },
       {
         type: 'approval_requested',
         ref: 'q1',
@@ -50,8 +68,15 @@ function scriptFor(prompt: string): Step[] {
           { value: 'لينكس', label: 'لينكس' },
         ],
         answerMode: 'both',
+        toolRef: 'c1',
+        expiresInMs: 5 * 60_000,
       },
       { type: 'await_input' },
+      {
+        type: 'tool_completed',
+        ref: 'c1',
+        output: '{"question": "وش الجهاز اللي تبي تتصل فيه؟", "user_response": "{raw}"}',
+      },
       { type: 'message_delta', text: 'اخترت: {answer}' },
       { type: 'completed' },
     ];
@@ -155,6 +180,8 @@ interface Live {
   closed: boolean;
   /** The last answer a person gave this run, for scripts that repeat it. */
   answer: string;
+  /** The same answer as the agent's tool returns it: `''` for a skip, no "(Recommended)". */
+  raw: string;
 }
 
 /** A runner with real pauses, so a socket can be dropped mid-run and resumed. */
@@ -168,6 +195,7 @@ class ScriptedRunner implements AgentRunner {
       wake: null,
       closed: false,
       answer: '',
+      raw: '',
     });
     return {
       agentSessionRef: request.agentSessionRef ?? `e2e-${request.sessionId}`,
@@ -202,6 +230,10 @@ class ScriptedRunner implements AgentRunner {
         });
         continue;
       }
+      if (step.type === 'tool_completed' && step.output) {
+        yield { ...step, output: step.output.replace('{raw}', live.raw) };
+        continue;
+      }
       yield step.type === 'message_delta'
         ? { ...step, text: step.text.replace('{answer}', live.answer) }
         : step;
@@ -213,6 +245,9 @@ class ScriptedRunner implements AgentRunner {
     const live = this.runs.get(runId);
     // Skipped is "deny" with no answer, as the card sends it.
     if (live) live.answer = input.decision === 'deny' ? 'تخطّيت' : (input.answer ?? '');
+    if (live)
+      live.raw =
+        input.decision === 'deny' ? '' : (input.answer ?? '').replace(/ \(Recommended\)$/, '');
     live?.wake?.();
     if (live) live.wake = null;
   }

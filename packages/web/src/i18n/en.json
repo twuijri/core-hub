@@ -960,6 +960,10 @@
     "recommended": "Recommended",
     "own": "Or write your own answer",
     "skip": "Skip",
-    "send": "Send"
+    "send": "Send",
+    "left": "{time} left",
+    "answered": "You answered:",
+    "skipped": "Question skipped",
+    "expired": "Time ran out without an answer"
   }
 }

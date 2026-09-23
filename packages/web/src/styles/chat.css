@@ -642,6 +642,10 @@ summary.tool-head:hover {
   font-size: var(--mj-font-size-xs);
   color: var(--mj-color-text-muted);
 }
+.question-left {
+  font-variant-numeric: tabular-nums;
+  unicode-bidi: isolate;
+}
 .question-text {
   font-weight: 500;
   line-height: var(--mj-font-leading-relaxed);
@@ -705,4 +709,36 @@ summary.tool-head:hover {
   background: transparent;
   outline: none;
   font-size: var(--mj-font-size-sm);
+}
+
+/* A question the agent asked, and the answer it got, kept in the reply (AnsweredQuestions). */
+.answered-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mj-space-1);
+  margin-block-end: var(--mj-space-2);
+}
+.answered {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--mj-space-2);
+  padding: var(--mj-space-2) var(--mj-space-3);
+  border: 1px solid var(--mj-color-border);
+  border-radius: var(--mj-radius-md);
+  background: var(--mj-color-surface-2);
+  font-size: var(--mj-font-size-sm);
+}
+.answered-icon {
+  flex: none;
+  margin-block-start: 0.2em;
+  color: var(--mj-color-text-muted);
+}
+.answered-body {
+  min-inline-size: 0;
+}
+.answered-question {
+  color: var(--mj-color-text-muted);
+}
+.answered-answer {
+  font-weight: 600;
 }

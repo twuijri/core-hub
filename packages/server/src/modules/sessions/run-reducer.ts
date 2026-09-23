@@ -69,7 +69,8 @@ export interface ApprovalState {
   requestedAt: number;
   respondedAt: number | null;
   expiresAt: number | null;
-  response: { decision: string | null; answer: string | null; respondedBy: string } | null;
+  /** `respondedBy` is null when nobody answered: the request ran out of time. */
+  response: { decision: string | null; answer: string | null; respondedBy: string | null } | null;
 }
 
 export interface UsageState {
@@ -115,7 +116,7 @@ export type RunInput =
       status: Exclude<ApprovalStatus, 'pending'>;
       decision: string | null;
       answer: string | null;
-      respondedBy: string;
+      respondedBy: string | null;
       remember: boolean;
     }
   | { type: 'stream_ended' }
@@ -262,7 +263,9 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
         const toolIndex = next.toolCalls.findIndex((c) => c.id === resolved.toolCallId);
         const call = next.toolCalls[toolIndex];
         if (call) {
-          if (input.status === 'denied') {
+          // A skipped question is not a refused tool: the agent's tool still runs, and
+          // says what it got (Hermes's `clarify` returns the empty answer).
+          if (input.status === 'denied' && resolved.kind !== 'question') {
             next.toolCalls = next.toolCalls.with(toolIndex, {
               ...call,
               status: 'denied',
