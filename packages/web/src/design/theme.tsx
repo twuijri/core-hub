@@ -21,6 +21,17 @@ export type ThemeChoice = 'system' | 'light' | 'dark';
 // order their three symbols read in: sun, moon, screen.
 export const THEME_CHOICES: readonly ThemeChoice[] = ['light', 'dark', 'system'];
 
+/**
+ * The next theme in the cycle: light → dark → system → light.
+ *
+ * The order is the one a person reaches for — the two they choose between first, and the
+ * one that hands the choice back to the machine last.
+ */
+export function nextTheme(choice: ThemeChoice): ThemeChoice {
+  const at = THEME_CHOICES.indexOf(choice);
+  return THEME_CHOICES[(at + 1) % THEME_CHOICES.length] ?? 'light';
+}
+
 /** The symbol for a theme choice. One drawing, so the footer and the Display page agree. */
 export function themeIcon(choice: ThemeChoice, size = 14) {
   const Icon = choice === 'light' ? IconSun : choice === 'dark' ? IconMoon : IconDisplay;
