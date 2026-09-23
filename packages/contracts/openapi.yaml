@@ -7365,8 +7365,19 @@ paths:
       operationId: schedules.list
       tags: [schedules]
       summary: List schedules (an agent's Jobs screen, a workflow's Schedules tab)
+      description: >-
+        Global, like the Tasks board: one Schedules page shows every workspace a person may
+        enter, each schedule carrying its own `profile` (owner decision, 2026-09-23 — a
+        workspace for design, another for content). Narrow it with `profile`, `agent_id`,
+        `workflow_id` or `enabled`. Every other schedule operation is scoped to the
+        schedule's own workspace.
+      x-scope: global
       parameters:
-        - $ref: '#/components/parameters/Profile'
+        - name: profile
+          in: query
+          description: One workspace instead of every workspace the caller may enter.
+          schema:
+            $ref: '#/components/schemas/ProfileSlug'
         - name: agent_id
           in: query
           schema:

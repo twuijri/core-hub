@@ -155,8 +155,10 @@ export function createHubClient(options: HubClientOptions): HubClient {
     const headers: Record<string, string> = { Accept: 'application/json', ...init.headers };
     const token = resolve(options.token);
     if (token) headers.Authorization = `Bearer ${token}`;
+    // A request that names its own workspace keeps it: a row from another workspace (a
+    // schedule on the global Schedules page) is acted on where it lives.
     const profile = resolve(options.profile);
-    if (profile) headers['X-Hub-Profile'] = profile;
+    if (profile && !headers['X-Hub-Profile']) headers['X-Hub-Profile'] = profile;
     if (options.language) headers['Accept-Language'] = options.language;
     let body: string | FormData | Blob | ArrayBuffer | undefined;
     if (typeof FormData !== 'undefined' && init.body instanceof FormData) {

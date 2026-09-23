@@ -40,6 +40,21 @@ describe('createHubClient', () => {
     expect(headers['Accept-Language']).toBe('ar');
   });
 
+  it("keeps a request's own workspace instead of the client's", async () => {
+    const { fetchImpl, calls } = fakeFetch(200, {});
+    const client = createHubClient({
+      baseUrl: 'http://hub.test',
+      fetch: fetchImpl,
+      profile: 'work',
+    });
+    await client.raw('get', '/schedules/{id}', {
+      params: { id: 's1' },
+      headers: { 'X-Hub-Profile': 'design' },
+    });
+    const headers = calls[0]?.init.headers as Record<string, string>;
+    expect(headers['X-Hub-Profile']).toBe('design');
+  });
+
   it('turns the error envelope into HubApiError', async () => {
     const { fetchImpl } = fakeFetch(501, { error: 'غير منفّذ بعد', code: 'not_implemented' });
     const client = createHubClient({ baseUrl: 'http://hub.test', fetch: fetchImpl });

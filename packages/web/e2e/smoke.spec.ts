@@ -868,9 +868,21 @@ test.describe('web smoke journeys', () => {
     // Not Hermes (journey 18): an agent without a scheduler of its own waits for the worker.
     await page.getByTestId('schedule-agent').click();
     await page.getByRole('option', { name: /Direct|مباشر/ }).click();
+    // The workspace is chosen here, not by the header: a schedule for the Labs workspace
+    // (made in journey 13) while the header still says Default.
+    await page.getByTestId('schedule-workspace').click();
+    await page.getByRole('option', { name: 'Labs' }).click();
     await page.getByTestId('schedule-save').click();
 
-    const card = page.getByTestId('schedule-card').first();
+    const card = page.getByTestId('schedule-card').filter({ hasText: 'تقرير الصباح' });
+    await expect(card.getByTestId('schedule-workspace-badge')).toHaveText('Labs');
+    // One page for every workspace, narrowed by the filter when asked.
+    await page.getByTestId('schedule-filter').click();
+    await page.getByRole('option', { name: 'Labs' }).click();
+    await expect(page.getByTestId('schedule-card')).toHaveCount(1);
+    await page.getByTestId('schedule-filter').click();
+    await page.getByRole('option', { name: 'كل المساحات' }).click();
+
     await expect(card).toBeVisible();
     // The hub computed a real next time rather than leaving it blank.
     await expect(card).not.toContainText('لا موعد');
