@@ -49,7 +49,9 @@ export const COLUMNS: readonly ColumnDef[] = [
   // Waiting is usually empty, and an empty column that takes a full slot is a column
   // that pushes the work off the screen.
   { id: 'waiting', statuses: ['scheduled', 'blocked'], collapsible: true },
-  { id: 'review', statuses: ['review'], collapsible: true },
+  // Review stays a full column even when empty (owner decision, 2026-09-23): only intake
+  // and Waiting fold to strips.
+  { id: 'review', statuses: ['review'], collapsible: false },
   { id: 'done', statuses: ['done'], collapsible: false },
 ];
 

@@ -39,7 +39,8 @@ describe('the shape of the board', () => {
 
   it('shrinks the columns that are usually empty, and not the ones that are not', () => {
     expect(column('waiting').collapsible).toBe(true);
-    expect(column('review').collapsible).toBe(true);
+    // Review stays a full column even when empty (owner decision, 2026-09-23).
+    expect(column('review').collapsible).toBe(false);
     expect(column('queue').collapsible).toBe(false);
     expect(column('done').collapsible).toBe(false);
   });

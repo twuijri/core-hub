@@ -8,7 +8,10 @@ import {
   expectModuleRegistered,
   signedInHub,
 } from '../../../tests/unit/helpers.js';
+import { eq } from 'drizzle-orm';
+import { requireSqlite } from '../../lib/db.js';
 import { tasksModule } from './index.js';
+import { tasks } from './schema.js';
 
 type Json = Record<string, unknown>;
 
@@ -490,6 +493,50 @@ describe('one board for everything (owner decision, 2026-09-23)', () => {
       });
       // One project, made once — not one per task and not none.
       expect((projects.json() as { items: unknown[] }).items).toHaveLength(1);
+    } finally {
+      await hub.close();
+    }
+  });
+});
+
+describe('done for a week goes to the archive (owner decision, 2026-09-23)', () => {
+  it('archives a hub card done more than seven days ago, and keeps a recent one', async () => {
+    const hub = await signedInHub();
+    try {
+      const make = async (title: string) => {
+        const created = await authed(hub, hub.token, {
+          method: 'POST',
+          url: '/api/v1/tasks',
+          payload: { title },
+        });
+        const id = (created.json() as Json).id as string;
+        for (const status of ['todo', 'ready', 'done']) {
+          await authed(hub, hub.token, {
+            method: 'POST',
+            url: `/api/v1/tasks/${id}/move`,
+            payload: { status },
+          });
+        }
+        return id;
+      };
+      const old = await make('Last month');
+      await make('Yesterday');
+      requireSqlite(hub.app.hub.database)
+        .update(tasks)
+        .set({ completedAt: new Date(Date.now() - 8 * 24 * 3600 * 1000) })
+        .where(eq(tasks.id, old))
+        .run();
+
+      const response = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/task-columns' });
+      const done = (
+        response.json() as { columns: Array<{ status: string; tasks: Json[] }> }
+      ).columns.find((column) => column.status === 'done')!;
+      expect(done.tasks.map((task) => task.title)).toEqual(['Yesterday']);
+      const archived = await authed(hub, hub.token, {
+        method: 'GET',
+        url: `/api/v1/tasks/${old}`,
+      });
+      expect((archived.json() as Json).status).toBe('archived');
     } finally {
       await hub.close();
     }

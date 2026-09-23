@@ -46,12 +46,19 @@ export interface SyncReport {
 
 const KNOWN = new Set<string>(HERMES_STATUSES);
 
+/** A card done for this long goes to the archive (owner decision, 2026-09-23). */
+export const ARCHIVE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+
 export class HermesMirror {
   private readonly lastSync = new Map<string, number>();
 
   constructor(
     private readonly port: HermesBoardPort,
-    private readonly options: { throttleMs?: number; now?: () => Date } = {},
+    private readonly options: {
+      throttleMs?: number;
+      now?: () => Date;
+      archiveAfterMs?: number;
+    } = {},
   ) {}
 
   /**
@@ -82,6 +89,45 @@ export class HermesMirror {
       };
     }
 
+    // Past this point nothing may escape either: a card that does not fit, or a board
+    // that cannot be written, is reported — never a Tasks page that fails for everyone.
+    try {
+      return await this.reflect(service, scope, kanban, cards, now);
+    } catch (error) {
+      return {
+        added: 0,
+        updated: 0,
+        archived: 0,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  private async reflect(
+    service: TasksService,
+    scope: Scope,
+    kanban: HermesKanban,
+    cards: HermesTask[],
+    now: Date,
+  ): Promise<SyncReport> {
+    if (!Array.isArray(cards)) throw new Error('hermes kanban list did not answer a list');
+    // Done for a week goes to the archive (owner decision, 2026-09-23) — on Hermes, which
+    // owns the card, in one call; the next list then leaves them out like any archived card.
+    const cutoff = now.getTime() - (this.options.archiveAfterMs ?? ARCHIVE_AFTER_MS);
+    const stale = cards
+      .filter((card) => card.status === 'done' && card.completed_at)
+      .filter((card) => card.completed_at! * 1000 < cutoff)
+      .map((card) => card.id);
+    let archivedOnHermes = new Set<string>();
+    if (stale.length > 0) {
+      try {
+        await kanban.archive(stale);
+        archivedOnHermes = new Set(stale);
+      } catch {
+        // Hermes kept them; they stay in Done and the next read tries again.
+      }
+    }
+
     const agentId = this.port.agentId(scope.workspace);
     const seen = new Set<string>();
     let added = 0;
@@ -89,7 +135,8 @@ export class HermesMirror {
     for (const card of cards) {
       // A status this release does not know is skipped rather than guessed at: showing a
       // card in the wrong column is worse than showing it on the next release.
-      if (!KNOWN.has(card.status)) continue;
+      if (!KNOWN.has(card.status) || !card.id || typeof card.title !== 'string') continue;
+      if (archivedOnHermes.has(card.id)) continue;
       seen.add(card.id);
       const { created } = service.reflectExternal(
         scope,
@@ -101,6 +148,7 @@ export class HermesMirror {
           status: card.status as TaskStatus,
           result: card.result ?? null,
           agentId,
+          completedAt: card.completed_at ? new Date(card.completed_at * 1000) : null,
         },
         now,
       );

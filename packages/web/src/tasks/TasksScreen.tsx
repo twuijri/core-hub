@@ -292,8 +292,8 @@ export function TasksScreen() {
               onClick={() => setIntakeOpen((open) => !open)}
               data-testid="task-intake-toggle"
             >
-              <span className="task-strip-count">{grouped.intake.length}</span>
               <span className="task-strip-title">{t('tasks.status.triage')}</span>
+              <span className="task-strip-count">{grouped.intake.length}</span>
             </button>
             {intakeOpen && (
               <div className="task-column-body">
@@ -442,8 +442,8 @@ function BoardColumn({
           onClick={() => setOpenedByHand((open) => !open)}
           data-testid={`column-toggle-${column.id}`}
         >
-          <span className="task-strip-count">{tasks.length}</span>
           <span className="task-strip-title">{t(`tasks.columns.${column.id}`)}</span>
+          <span className="task-strip-count">{tasks.length}</span>
         </button>
       ) : (
         <header className="task-column-head">
