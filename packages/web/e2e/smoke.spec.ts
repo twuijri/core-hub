@@ -650,6 +650,66 @@ test.describe('web smoke journeys', () => {
     await expect(page.getByRole('status', { name: 'متصل' })).toBeVisible({ timeout: 15_000 });
   });
 
+  test('21. a search result opens the conversation at the word, not at the bottom', async ({
+    page,
+  }) => {
+    // Owner, 2026-09-23: «يوديني للكلمه داخل المحادثه لان بعض المحادثات يكون فيها كلام كثير».
+    await login(page);
+    await newChat(page);
+    const replies = page.getByTestId('message-assistant');
+    // How far the transcript's scroller is from its bottom, in pixels (as in journey 20).
+    const gap = () =>
+      page.getByTestId('chat-screen').evaluate((node) => {
+        let at: HTMLElement | null = node.parentElement;
+        while (at && !/auto|scroll/.test(getComputedStyle(at).overflowY)) at = at.parentElement;
+        const scroller = at ?? (document.scrollingElement as HTMLElement);
+        return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      });
+
+    // A long reply, then the question with the word, then another long reply: the word
+    // sits in the middle of a conversation several screens tall.
+    const sessionId = await firstMessage(page, 'اكتب رد طويل');
+    await expect(replies.last()).toContainText('سطر 60');
+    await page.getByTestId('composer-input').fill('اكتب رد طويل ثانٍ عن الزعفران');
+    await page.getByTestId('send').click();
+    await expect(replies).toHaveCount(2);
+    await expect(replies.last()).toContainText('سطر 60');
+
+    await page.getByRole('link', { name: 'بحث' }).first().click();
+    await page.getByRole('searchbox', { name: 'بحث' }).fill('الزعفران');
+    // This conversation's result (a retry would have made another one like it).
+    const result = page.locator(`[data-testid="search-result"][href^="/chat/${sessionId}?"]`);
+    await expect(result).toHaveCount(1);
+    // The result shows the word, marked as it will be inside the conversation.
+    await expect(result.locator('mark.msg-hit')).toHaveText('الزعفران');
+    await result.click();
+
+    // The conversation, opened at the message that matched: on screen, and the page did
+    // not go to the bottom; that message flagged and the word marked in it. The address is
+    // the plain chat again.
+    const asked = page.getByTestId('message-user').filter({ hasText: 'الزعفران' });
+    await expect(asked).toBeInViewport();
+    expect(await gap()).toBeGreaterThan(200);
+    await expect(asked).toHaveAttribute('data-anchored', 'true');
+    await expect(page.locator('[data-anchored="true"]')).toHaveCount(1);
+    await expect(asked.locator('mark.msg-hit')).toHaveText('الزعفران');
+    await expect(page).toHaveURL(new RegExp(`/chat/${sessionId}$`));
+    await shot(page, 'search-jump-ar-light');
+
+    // Scrolling back to the bottom lets go: the chat follows new replies again.
+    await page.getByTestId('chat-screen').evaluate((node) => {
+      let at: HTMLElement | null = node.parentElement;
+      while (at && !/auto|scroll/.test(getComputedStyle(at).overflowY)) at = at.parentElement;
+      const scroller = at ?? (document.scrollingElement as HTMLElement);
+      scroller.scrollTop = scroller.scrollHeight;
+    });
+    await page.getByTestId('composer-input').fill('اكتب رد طويل ثالث');
+    await page.getByTestId('send').click();
+    await expect(replies).toHaveCount(3);
+    await expect(replies.last()).toContainText('سطر 60');
+    await expect.poll(gap).toBeLessThan(80);
+  });
+
   test('16. one press of the theme button is one change', async ({ page }) => {
     await login(page);
     const chip = page.getByTestId('theme-chip');

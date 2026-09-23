@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useSessions } from '../hub/queries.js';
 import { describeError } from '../auth/client.js';
@@ -9,8 +9,29 @@ import { AppShell } from '../shell/AppShell.js';
 import { CardHeader, EmptyState, Notice, Skeleton, SkeletonGroup, cardClass } from '../ui/index.js';
 import { Input } from '../ui/index.js';
 import { IconSearch } from '../ui/icons.js';
+import { highlightParts, matchRanges } from '../ui/combobox-filter.js';
+import { chatHref, HIT_CLASS } from '../chat/anchor.js';
 
-/** The search sheet over sessions, field focused at once; a result opens Chat (secondary entry). */
+/** The snippet with the searched words marked, as they will be inside the conversation. */
+function markedSnippet(text: string, q: string): ReactNode {
+  const ranges = matchRanges(text, q);
+  if (ranges.length === 0) return text;
+  return highlightParts(text, ranges).map((part, index) =>
+    part.hit ? (
+      <mark key={index} className={HIT_CLASS}>
+        {part.text}
+      </mark>
+    ) : (
+      part.text
+    ),
+  );
+}
+
+/**
+ * The search sheet over sessions, field focused at once; a result opens Chat (secondary
+ * entry) at the message that matched, when the hub names one (`match.message_id`,
+ * chat/anchor.ts).
+ */
 export function SearchScreen() {
   const { t } = useI18n();
   const [text, setText] = useState('');
@@ -62,13 +83,16 @@ export function SearchScreen() {
               to={
                 session.source === 'global_agent'
                   ? routeOf('global_agent')
-                  : routeOf('chat').replace(':sessionId?', session.id)
+                  : chatHref(session.id, session.match?.message_id, q)
               }
               className={cardClass('flat', 'sm', true)}
+              data-testid="search-result"
             >
               <CardHeader
                 title={sessionTitle(session, t)}
-                subtitle={session.match?.snippet ?? session.preview ?? ''}
+                subtitle={
+                  session.match ? markedSnippet(session.match.snippet, q) : (session.preview ?? '')
+                }
               />
             </Link>
           </li>

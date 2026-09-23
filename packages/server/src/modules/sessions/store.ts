@@ -192,7 +192,7 @@ export class SessionsStore {
     );
   }
 
-  /** The first message of a session whose text matches, for `Session.match`. */
+  /** The newest message of a session whose text matches, for `Session.match`. */
   findMatch(workspace: string, sessionId: string, q: string): MessageRow | undefined {
     return this.db
       .select()
@@ -692,4 +692,22 @@ export function preview(text: string): string | null {
   const flat = text.replace(/\s+/g, ' ').trim();
   if (flat.length === 0) return null;
   return flat.length > 300 ? `${flat.slice(0, 299)}…` : flat;
+}
+
+/**
+ * `Session.match.snippet`: up to 300 characters of the matching message that show the
+ * searched words (owner, 2026-09-23 — in a long message the opening lines may not contain
+ * them at all). A match near the start reads like `preview`; a later one starts a little
+ * before it, on a word boundary, behind an ellipsis.
+ */
+export function excerpt(text: string, q: string): string | null {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  if (flat.length <= 300) return preview(flat);
+  const needle = q.replace(/\s+/g, ' ').trim().toLowerCase();
+  const at = needle ? flat.toLowerCase().indexOf(needle) : -1;
+  if (at < 80) return preview(flat);
+  const space = flat.lastIndexOf(' ', at - 60);
+  const from = space >= 0 && space >= at - 100 ? space + 1 : at - 60;
+  const rest = flat.slice(from);
+  return `…${rest.length > 298 ? `${rest.slice(0, 297)}…` : rest}`;
 }

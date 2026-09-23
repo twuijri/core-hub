@@ -1,6 +1,6 @@
 import { HubApiError } from '@majlis/contracts';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useAgents, useForkSession, usePatchSession, usePreferences } from '../hub/queries.js';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
@@ -12,6 +12,7 @@ import type { ContentBlock, Message, ReasoningEffort } from '../types.js';
 import { Button, buttonClass, EmptyState, Notice, SkeletonText } from '../ui/index.js';
 import { IconClose, IconSpark } from '../ui/icons.js';
 import { AgentChips } from './AgentChips.js';
+import { ANCHOR_PARAM, QUERY_PARAM, readAnchor, type Anchor } from './anchor.js';
 import { ApprovalCard } from './ApprovalCard.js';
 import { Composer } from './Composer.js';
 import { starterSuggestions } from './starters.js';
@@ -59,11 +60,44 @@ export function ChatScreen() {
   return <OpenSession sessionId={sessionId} />;
 }
 
+/**
+ * Where an anchored open is (anchor.ts): waiting for the transcript, showing the message,
+ * let go (the person sent or scrolled to the bottom), or the message is not there.
+ */
+type AnchorPhase = 'loading' | 'shown' | 'released' | 'missing';
+type OpenAnchor = Anchor & { sessionId: string; phase: AnchorPhase };
+
 function OpenSession({ sessionId }: { sessionId: string }) {
   const { t, language } = useI18n();
   const { client } = useAuth();
   const navigate = useNavigate();
-  const stream = useSessionStream(sessionId);
+
+  // A search result opens the chat at the message that matched (`?m=`, anchor.ts). The
+  // anchor lives in state from here on: the address is cleaned once the jump is made.
+  const [params, setParams] = useSearchParams();
+  const fromUrl = readAnchor(params);
+  const [anchorState, setAnchorState] = useState<OpenAnchor | null>(() =>
+    fromUrl ? { ...fromUrl, sessionId, phase: 'loading' } : null,
+  );
+  if (
+    fromUrl &&
+    (anchorState?.sessionId !== sessionId ||
+      anchorState.messageId !== fromUrl.messageId ||
+      anchorState.query !== fromUrl.query)
+  ) {
+    setAnchorState({ ...fromUrl, sessionId, phase: 'loading' });
+  }
+  const anchor = anchorState?.sessionId === sessionId ? anchorState : null;
+  const setPhase = useCallback(
+    (from: readonly AnchorPhase[], phase: AnchorPhase) =>
+      setAnchorState((current) =>
+        current && from.includes(current.phase) ? { ...current, phase } : current,
+      ),
+    [],
+  );
+  const holding = anchor?.phase === 'loading' || anchor?.phase === 'shown';
+
+  const stream = useSessionStream(sessionId, anchor?.messageId ?? null);
   const preferences = usePreferences();
   const patch = usePatchSession(sessionId);
   const transcript = useRef<HTMLDivElement>(null);
@@ -71,12 +105,45 @@ function OpenSession({ sessionId }: { sessionId: string }) {
   const busy = isBusy(state);
   const messageCount = state.messages.length;
   // The transcript follows a growing reply while the person is at its bottom
-  // (followBottom.ts); what the person just sent always brings them there.
-  const follow = useFollowBottom(transcript);
+  // (followBottom.ts); what the person just sent always brings them there. An anchored
+  // open holds still until the person scrolls to the bottom themselves.
+  const follow = useFollowBottom(transcript, {
+    hold: holding,
+    onBottom: () => setPhase(['shown'], 'released'),
+  });
   const lastRole = state.messages.at(-1)?.role;
   useEffect(() => {
-    if (lastRole === 'user') follow();
-  }, [messageCount, lastRole, follow]);
+    if (lastRole === 'user' && !holding) follow();
+  }, [messageCount, lastRole, follow, holding]);
+
+  /**
+   * The jump itself: once the transcript is on the page, the anchored message is scrolled
+   * to the middle and flashed (`data-anchored`, styles/chat.css). Before paint, so the
+   * person never sees the bottom first. A message that is no longer there says so, and
+   * the chat opens at the bottom as usual.
+   */
+  const anchorPhase = anchor?.phase;
+  const anchorId = anchor?.messageId;
+  useLayoutEffect(() => {
+    if (anchorPhase !== 'loading' || !anchorId || stream.status !== 'ready') return;
+    const node = transcript.current?.querySelector<HTMLElement>(`[data-message-id="${anchorId}"]`);
+    if (node) {
+      node.scrollIntoView({ block: 'center' });
+      setPhase(['loading'], 'shown');
+    } else {
+      setPhase(['loading'], 'missing');
+      follow();
+    }
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete(ANCHOR_PARAM);
+        next.delete(QUERY_PARAM);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [anchorPhase, anchorId, stream.status, follow, setPhase, setParams]);
 
   const agentId = state.session?.agent_id ?? null;
   const agents = useAgents();
@@ -134,6 +201,8 @@ function OpenSession({ sessionId }: { sessionId: string }) {
 
   const send = useCallback(
     async (blocks: ContentBlock[]) => {
+      // What one just said is where one wants to be, even after a search opened the chat.
+      setPhase(['loading', 'shown'], 'released');
       const mode = preferences.data?.busy_input_mode;
       if (holdsBack(mode, busy)) {
         setOutbox((current) => [...current, queued(blocks)]);
@@ -147,7 +216,7 @@ function OpenSession({ sessionId }: { sessionId: string }) {
       );
       setReplyTo(null);
     },
-    [post, preferences.data?.busy_input_mode, busy, replyTo],
+    [post, preferences.data?.busy_input_mode, busy, replyTo, setPhase],
   );
 
   const [queueError, setQueueError] = useState<unknown>(null);
@@ -273,6 +342,11 @@ function OpenSession({ sessionId }: { sessionId: string }) {
           </Notice>
         )}
         {state.deleted && <Notice tone="warning">{t('chat.session_deleted')}</Notice>}
+        {anchor?.phase === 'missing' && (
+          <Notice tone="info" className="mb-2">
+            {t('chat.anchor_missing')}
+          </Notice>
+        )}
         {firstError !== null && <Notice tone="danger">{describeError(firstError, t)}</Notice>}
         {/* A held-back message that failed on its way out says so: it is no longer in the
             queue, so silence here would lose it without a word. */}
@@ -291,6 +365,7 @@ function OpenSession({ sessionId }: { sessionId: string }) {
             showCost={preferences.data?.show_cost ?? false}
             runs={state.runs}
             slugOf={(id) => (agents.data ?? []).find((agent) => agent.id === id)?.slug}
+            anchor={anchor && anchor.phase !== 'missing' ? anchor : null}
             onReply={setReplyTo}
             onFork={forkFrom}
           />

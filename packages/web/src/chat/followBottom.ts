@@ -6,6 +6,11 @@
  * the scroller is pinned to the bottom whenever the transcript changes size and the person
  * was already there; scrolling up unpins it, and coming back to the bottom pins it again.
  * Sending a message pins it too: what one just said is where one wants to be.
+ *
+ * `hold`: while the chat is showing one message a search opened it at (anchor.ts), the
+ * transcript is not pulled to the bottom — neither when it opens nor as it loads or grows.
+ * The caller lets go (`hold` false) once the person sends, or scrolls to the bottom
+ * themselves, which `onBottom` reports.
  */
 import { useCallback, useEffect, useRef, type RefObject } from 'react';
 
@@ -20,13 +25,28 @@ function scrollParent(node: HTMLElement | null): HTMLElement | null {
   return (document.scrollingElement as HTMLElement | null) ?? null;
 }
 
-export function useFollowBottom(content: RefObject<HTMLElement | null>): () => void {
-  const pinned = useRef(true);
+export function useFollowBottom(
+  content: RefObject<HTMLElement | null>,
+  { hold = false, onBottom }: { hold?: boolean; onBottom?: () => void } = {},
+): () => void {
+  const pinned = useRef(!hold);
   const scroller = useRef<HTMLElement | null>(null);
+  const held = useRef(hold);
+  held.current = hold;
+  const reportBottom = useRef(onBottom);
+  reportBottom.current = onBottom;
+
+  // Where `toBottom` last left the scroller. The scroll event it causes is dispatched on the
+  // next frame, and a message that arrived in between (the agent's reply starting right
+  // after the person's own) has already made the page taller: that event must not read as
+  // the person scrolling away. Only a scroll *above* this point does.
+  const placed = useRef<number | null>(null);
 
   const toBottom = useCallback(() => {
     const at = scroller.current;
-    if (at) at.scrollTop = at.scrollHeight;
+    if (!at) return;
+    at.scrollTop = at.scrollHeight;
+    placed.current = at.scrollTop;
   }, []);
 
   useEffect(() => {
@@ -37,17 +57,20 @@ export function useFollowBottom(content: RefObject<HTMLElement | null>): () => v
     // A window scroll reports on `window`, an element's on the element.
     const target: HTMLElement | Window = at === document.scrollingElement ? window : at;
     const onScroll = () => {
-      pinned.current = at.scrollHeight - at.scrollTop - at.clientHeight < NEAR;
+      const near = at.scrollHeight - at.scrollTop - at.clientHeight < NEAR;
+      const ours = placed.current !== null && at.scrollTop >= placed.current - 1;
+      pinned.current = near || (pinned.current && ours);
+      if (near && held.current) reportBottom.current?.();
     };
     target.addEventListener('scroll', onScroll, { passive: true });
     const observer =
       typeof ResizeObserver === 'undefined'
         ? null
         : new ResizeObserver(() => {
-            if (pinned.current) toBottom();
+            if (pinned.current && !held.current) toBottom();
           });
     observer?.observe(node);
-    toBottom();
+    if (!held.current) toBottom();
     return () => {
       target.removeEventListener('scroll', onScroll);
       observer?.disconnect();
