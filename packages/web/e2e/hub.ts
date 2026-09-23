@@ -326,7 +326,7 @@ registerHermesBoard(() => ({
 }));
 
 /**
- * Hermes's scheduler, scripted: the same in-memory `/api/jobs` the unit tests use, behind
+ * Hermes's scheduler, scripted: the same in-memory jobs API the unit tests use, behind
  * the real client. Its zone is one no developer's browser is in, so journey 18 always meets
  * the refusal that names Hermes's zone and the button that adopts it.
  */
