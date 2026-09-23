@@ -5,6 +5,7 @@
 // the row geometry, the scrolling middle, the footer — comes from `ui/SidebarShell.tsx`,
 // so the phone drawer and any later rail are assembled from the same pieces rather than
 // drawn again (docs/clients/DESIGN.md §UI policy).
+import { derived } from '@majlis/contracts';
 import type { ReactElement } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth/context.js';
@@ -46,7 +47,7 @@ const RAIL_ICONS: Record<string, (p: { size?: number }) => ReactElement> = {
   schedules: IconSchedules,
 };
 
-const SEGMENT_STORAGE = 'majlis.segment';
+const SEGMENT_STORAGE = `${derived.storagePrefix}segment`;
 
 export function segmentFromPath(pathname: string): string | null {
   for (const id of navigation.segments) {

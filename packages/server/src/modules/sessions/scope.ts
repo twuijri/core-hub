@@ -19,6 +19,7 @@
  * is the slug the client sent. Wiring `auth`'s resolver is one line in
  * `src/modules/index.ts`; after that the ids are the real rows'.
  */
+import { STABLE } from '@majlis/contracts';
 import { createHash } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
 
@@ -57,14 +58,14 @@ export function derivedId(namespace: string, value: string): string {
   return ENCODING.charAt((digest[0] ?? 0) & 7) + out.slice(1);
 }
 
-export const LOCAL_OWNER_ID = derivedId('majlis.user', 'local-owner');
+export const LOCAL_OWNER_ID = derivedId(`${STABLE.idNamespace}.user`, 'local-owner');
 export const LOCAL_OWNER_NAME = 'Owner';
 
 /** The placeholder resolver: every well-formed profile slug resolves. */
 export const derivedScopeResolver: ScopeResolver = {
   async resolve(profile: string): Promise<RequestScope | null> {
     return {
-      workspaceId: derivedId('majlis.workspace', profile),
+      workspaceId: derivedId(`${STABLE.idNamespace}.workspace`, profile),
       profile,
       userId: LOCAL_OWNER_ID,
       userName: LOCAL_OWNER_NAME,

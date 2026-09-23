@@ -25,6 +25,7 @@
  * Nothing about a specific vendor lives here: which CLIs to look for is data
  *  (`../catalog/`), not code: only a catalog entry the owner approved can be driven.
  */
+import { derived } from '@majlis/contracts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import type { AgentCapability } from '../schema.js';
@@ -384,7 +385,7 @@ export interface AcpAdapterOptions {
 export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
   const host = options.host;
   const catalog = options.catalog ?? entriesFor('acp');
-  const clientName = options.clientName ?? 'majlis';
+  const clientName = options.clientName ?? derived.serviceName;
   const clientVersion = options.clientVersion ?? ACP_ADAPTER_VERSION;
 
   const openTransport = async (target: AgentTarget): Promise<AcpTransport> => {

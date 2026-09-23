@@ -20,6 +20,7 @@
  * `models.refreshProvider` (`adapters/`), so the picker never offers a model that was
  * true when this file was written and is not true today.
  */
+import { STABLE } from '@majlis/contracts';
 import type {
   ApiMode,
   AuthKind,
@@ -463,7 +464,8 @@ export function secretNameOf(family: string): string {
  * the run would fall through to OpenRouter. The prefix also tells a person reading the
  * file which blocks the hub rewrites and which are their own.
  */
-export const HERMES_PROVIDER_PREFIX = 'majlis-';
+/** Frozen: it marks the hub's providers inside Hermes's own config (`STABLE`). */
+export const HERMES_PROVIDER_PREFIX = STABLE.hermesProviderPrefix;
 
 /**
  * The name Hermes knows one of our provider rows by: its own slug when Hermes ships the

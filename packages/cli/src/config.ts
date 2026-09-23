@@ -1,5 +1,6 @@
 // The token store: `$XDG_CONFIG_HOME/majlis/config.json` (or `~/.config/majlis/config.json`),
 // directory 0700, file 0600, written atomically. Secrets never travel on the command line.
+import { derived } from '@majlis/contracts';
 import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -40,7 +41,7 @@ export function defaultConfigPath(env: NodeJS.ProcessEnv, home: string = homedir
   if (env.MAJLIS_CONFIG && env.MAJLIS_CONFIG.trim() !== '') return path.resolve(env.MAJLIS_CONFIG);
   const xdg = env.XDG_CONFIG_HOME;
   const base = xdg && path.isAbsolute(xdg) ? xdg : path.join(home, '.config');
-  return path.join(base, 'majlis', 'config.json');
+  return path.join(base, derived.configDir, 'config.json');
 }
 
 export class ConfigStore {
