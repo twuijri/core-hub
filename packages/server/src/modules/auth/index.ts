@@ -83,6 +83,13 @@ export {
 } from './workspace.js';
 export { registerWorkspaceStatsProvider, type WorkspaceStatsProvider } from './profiles.js';
 export {
+  ProfileMirrorError,
+  RUNTIME_DEFAULT_PROFILE,
+  registerProfileMirror,
+  type ProfileMirror,
+  type ProfileOrigin,
+} from './profile-mirror.js';
+export {
   principalScopeResolver,
   type PrincipalScope,
   type PrincipalScopeResolver,

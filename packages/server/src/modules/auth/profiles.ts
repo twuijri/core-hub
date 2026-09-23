@@ -76,7 +76,7 @@ export function createProfile(
 }
 
 /** Slug taken by any workspace, archived ones included (their rows keep the slug). */
-function slugTaken(db: ModuleDb, slug: string): boolean {
+export function slugTaken(db: ModuleDb, slug: string): boolean {
   return (
     db.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.slug, slug)).get() !==
     undefined
