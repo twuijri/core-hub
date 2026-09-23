@@ -83,6 +83,26 @@ jobs:
           path: packages/web/playwright-report
           retention-days: 7
 
+  graph:
+    name: Code map is current (Graphify)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # The PR's own head, not the merge with main: the map in the PR describes that tree.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Graphify, at the version the map is built with (docs/harness/knowledge-graph.md)
+        run: pip install graphifyy==0.9.66
+      - run: graphify update .
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: node scripts/graph-check.mjs
+
   migrations:
     name: db:generate + db:migrate (SQLite and PostgreSQL)
     runs-on: ubuntu-latest

@@ -11,3 +11,6 @@ packages/web/dist
 packages/ui-tokens/dist
 packages/web/playwright-report
 packages/web/test-results
+
+# Graphify's code map, written by `graphify update .` (docs/harness/knowledge-graph.md)
+graphify-out/
