@@ -187,7 +187,7 @@ export function TasksScreen() {
 
   if (projects.isPending) {
     return (
-      <AppShell title={title} wide>
+      <AppShell title={title}>
         <SkeletonGroup label={t('common.loading')}>
           <div className="grid gap-3 md:grid-cols-3">
             {[0, 1, 2].map((i) => (
@@ -200,7 +200,7 @@ export function TasksScreen() {
   }
 
   return (
-    <AppShell title={title} wide>
+    <AppShell title={title}>
       <h1 className="sr-only">{title}</h1>
       <header className="mb-3 flex flex-wrap items-center gap-2">
         {/* Filters, and only when there is something to filter: a picker with one option
