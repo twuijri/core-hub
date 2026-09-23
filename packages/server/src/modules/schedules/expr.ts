@@ -23,6 +23,8 @@
 export interface Context {
   trigger: unknown;
   steps: Record<string, { output: unknown }>;
+  /** What a person typed when they ran it by hand — the contract's `{{input}}`. */
+  input?: unknown;
 }
 
 /** Paths are bounded so a crafted payload cannot make the walk expensive. */
