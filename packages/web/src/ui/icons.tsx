@@ -69,9 +69,18 @@ export const IconSettings = (p: IconProps) => (
 );
 // A pushpin seen head-on: the cap, the shoulders, the needle. The old drawing was the pin
 // seen at an angle and read as an arrow or a kite (owner, 2026-09-22: "مهب واضح وغريب").
+/**
+ * A pin pushed in at an angle, not a thumbtack seen from the front.
+ *
+ * The front view is symmetrical, and at 14px a symmetrical shape with a stem reads as a
+ * lamp or a trophy — which is what the owner saw. The angled pin has a direction, and a
+ * shape with a direction is recognisable small.
+ */
 export const IconPin = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M9 3h6M12 3v5M8.5 8h7l-1 5h-5l-1-5ZM12 13v8" />
+    <path d="M15 4.5l-4 4l-4 1.5l-1.5 1.5l7 7l1.5 -1.5l1.5 -4l4 -4" />
+    <path d="M9 15l-4.5 4.5" />
+    <path d="M14.5 4l5.5 5.5" />
   </Svg>
 );
 export const IconSelect = (p: IconProps) => (
