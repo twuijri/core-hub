@@ -1,0 +1,12 @@
+# Graphify (docs/harness/knowledge-graph.md): the map is of the code people change.
+# Generated from the contract, rebuilt by `pnpm contracts:generate`; the contract itself
+# (openapi.yaml) stays in the graph.
+packages/contracts/generated/
+# One JSON schema per realtime event: thousands of repeated property nodes that drown the
+# code. The events are still reachable from the code that emits and reads them.
+packages/contracts/events/
+# Screenshots and other binaries the tests write.
+packages/web/e2e/shots/
+# The assistants' own skill files (Graphify, installed by `graphify <platform> install --project`).
+.claude/
+.codex/

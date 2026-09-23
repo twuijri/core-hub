@@ -35,3 +35,9 @@ packages/ui-tokens/dist/
 
 # web e2e: the throwaway data directory of the first-run setup hub
 packages/web/e2e/.setup-data/
+
+# Graphify (docs/harness/knowledge-graph.md): the map is committed; its cache and the
+# per-machine manifest (file times) are not — a rebuild takes seconds.
+graphify-out/cache/
+graphify-out/manifest.json
+graphify-out/cost.json

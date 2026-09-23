@@ -1,0 +1,5 @@
+# Graphify's map: generated (collapsed in PR diffs), and union-merged by the driver
+# `graphify hook install` registers (docs/harness/knowledge-graph.md).
+graphify-out/graph.json merge=graphify linguist-generated=true
+graphify-out/graph.html linguist-generated=true
+graphify-out/GRAPH_REPORT.md linguist-generated=true

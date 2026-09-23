@@ -23,7 +23,7 @@ derived from Hermes Studio / Ekko Studio code (BSL 1.1). See
 - `docs/DEVELOPMENT.md` — run the hub, the web client and the checks locally.
 - `docs/clients/DESIGN.md` — the shared look: chat-centric, glass only on
   floating chrome, drag and drop only where it means something.
-- `.ua/knowledge-graph.json` (when present) — the generated map of the code; use `/understand-explain` before touching more than one module. See `docs/harness/knowledge-graph.md`.
+- `graphify-out/` — the committed map of the code (Graphify). Query it before reading files across modules; rebuild it with `pnpm graph` before you commit. See `docs/harness/knowledge-graph.md`.
 
 ## Layout
 - `packages/contracts` — OpenAPI + realtime event schemas + generated clients.
@@ -52,3 +52,17 @@ derived from Hermes Studio / Ekko Studio code (BSL 1.1). See
 - Never commit secrets, hostnames of the owner's servers, or third-party code.
 - When stuck, improve the harness (docs, tests, scripts, CI) instead of
   repeating the same attempt.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- The map is committed: run `pnpm graph` and commit `graphify-out/` with your change. CI (`pnpm graph:check`) fails when it is stale.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

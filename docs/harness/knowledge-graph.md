@@ -1,31 +1,56 @@
-# Knowledge graph (Understand-Anything)
+# Knowledge graph (Graphify)
 
-We use [Understand-Anything](https://github.com/Egonex-AI/Understand-Anything)
-(MIT, a Claude Code plugin) to keep a living map of the code base as it grows.
-It is a **developer aid only**: never a runtime dependency, never imported by
-the product, never required to build or test.
+We keep a map of the code base in the repository with
+[Graphify](https://github.com/Graphify-Labs/graphify) (Apache-2.0). It is a
+**developer aid only**: never a runtime dependency, never imported by the product,
+never part of the build or the image. It replaced Understand-Anything on
+2026-09-23 (owner decision; change record
+`docs/changes/2026-09-23-twuijri-graphify-map.md`).
 
-## What it produces
-`/understand` analyses the repository with a multi-agent pipeline and writes
-`.ua/knowledge-graph.json` (files, functions, classes, dependencies, plain
-summaries, guided tours, a domain view). `/understand-dashboard` opens it;
-`/understand-chat` and `/understand-explain` answer questions from it;
-`/understand-diff` shows what a change touches.
+## Why Graphify
+- **Code costs nothing to map.** Code is parsed locally with tree-sitter: no model,
+  no tokens, nothing leaves the machine. The map of this repository builds in
+  about five seconds.
+- **Deterministic.** The same tree gives the same `graph.json`, byte for byte, so the
+  map can be committed and CI can check that it is current.
+- **One map for every assistant.** The skill is installed in the repository for
+  Claude Code (`.claude/`) and Codex (`.codex/`, `AGENTS.md`); whoever clones the
+  repository gets the map and the instructions to use it.
 
-## When it is regenerated
-- At the end of every phase in `docs/ROADMAP.md`, before the tag.
-- Before onboarding a new AI session to a large change (run
-  `/understand-diff` first, `/understand` incrementally if stale).
-- Not on every PR: the first run on a large tree costs many tokens; later
-  runs are incremental.
+## Setup (once per machine, once per clone)
+```bash
+uv tool install graphifyy==0.9.66   # the CLI; the package name has two y's
+graphify hook install               # once per clone: rebuild on commit/checkout + merge driver
+```
+Use the pinned version: CI builds with it, and another version may build a
+different map. `uv` itself: <https://docs.astral.sh/uv/>.
 
-## Where it lives
-`.ua/` is committed so that any machine and any session sees the same map.
-`docs/` stays the source of truth for intent (ADRs, contracts, navigation);
-the graph is the source of truth for *what the code actually does today*.
-If they disagree, fix the code or the doc, never the graph.
+## What is committed
+`graphify-out/graph.json` (the map), `GRAPH_REPORT.md` (communities, hubs, suggested
+questions), `graph.html` (open it in a browser) and the community labels. Not
+committed: `cache/` and `manifest.json` (file times on one machine) — a rebuild takes
+seconds. `.graphifyignore` leaves out what would drown the code: the per-event JSON
+schemas under `packages/contracts/events/` and the test screenshots.
+
+## Working with it
+- **Before reading files across modules**, ask the map:
+  `graphify query "<question>"`, `graphify path "<A>" "<B>"`,
+  `graphify explain "<concept>"`, `graphify affected "<symbol>"`.
+- **Before you commit a code change**, `pnpm graph` (`graphify update .`) and commit
+  `graphify-out/` with it. The hook does this after a commit too, which leaves the
+  next commit to carry it; running it yourself keeps each commit whole.
+- **After a pull or a merge**, `pnpm graph`.
+- **A conflict in `graph.json`** is not resolved by hand: the merge driver unions the
+  two maps; without it, take either side and run `pnpm graph`.
+
+## The check
+CI job *Code map is current* installs the pinned Graphify on a clean checkout of the
+PR's head, runs `graphify update .` and `pnpm graph:check`, which compares the built
+`graph.json` with the committed one (leaving out `built_at_commit`). A stale map fails
+the PR with the command that fixes it.
 
 ## Rule for agents
-Before a change that spans more than one module, read the graph's summary of
-those modules (`/understand-explain <module>`) and cite it in the change
-record under «القرار».
+Before a change that spans more than one module, query the map for those modules and
+cite what it showed in the change record under «القرار». `docs/` stays the source of
+truth for intent (ADRs, contracts, navigation); the map is what the code does today.
+If they disagree, fix the code or the doc — the map follows the code.
