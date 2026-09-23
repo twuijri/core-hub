@@ -19,7 +19,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { authed, drainJobs, signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
 import { scriptedHermes } from './adapters/hermes.test.js';
 import type { HermesRunEvent } from './adapters/hermes.js';
-import { approvalChoices, failureCode, toRunnerEvent, toolKindOf } from './runner.js';
+import { AgentRunner, approvalChoices, failureCode, toRunnerEvent, toolKindOf } from './runner.js';
+import type { AdapterSet } from './adapters/index.js';
+import type { AgentEvent, AgentSession } from './adapters/types.js';
+import type { AgentsService } from './service.js';
+import { capturingLogger } from '../../../tests/unit/helpers.js';
 import type { ModelsOverrides } from '../models/index.js';
 
 const SOCKET_PATH = '/rt';
@@ -576,5 +580,74 @@ describe('agent runner: the translation table', () => {
     // Anything else keeps the generic code; the hub never guesses a cause.
     expect(failureCode('rate limit exceeded')).toBe('agent_error');
     expect(failureCode(null)).toBe('agent_error');
+  });
+});
+
+describe('agent runner: a live session whose process went away between turns', () => {
+  it('reopens it by the stored ref instead of handing the turn to a closed session', async () => {
+    const opened: Array<{ ref: string | null; session: AgentSession & { closed: boolean } }> = [];
+    const adapter = {
+      async start(target: { sessionRef: string | null }) {
+        const session = {
+          id: `stored-${opened.length + 1}`,
+          closed: false,
+          async send() {
+            if (session.closed) throw new Error('Hermes session is closed');
+            return { stopReason: 'completed' };
+          },
+          async *stream(): AsyncIterable<AgentEvent> {
+            yield { type: 'run.completed', stopReason: 'completed' };
+          },
+          async respond() {},
+          async interrupt() {},
+          async close() {},
+        };
+        opened.push({ ref: target.sessionRef, session });
+        return session;
+      },
+    };
+    const service = {
+      loadAgent: () => ({ id: 'agent-1', installState: 'installed', adapterKind: 'hermes' }),
+      selectionFor: () => ({ model: null, provider: null, providerId: null }),
+      targetFor: (_row: unknown, _workspace: unknown, input: { sessionRef: string | null }) => ({
+        sessionRef: input.sessionRef,
+      }),
+    };
+    const runner = new AgentRunner({
+      service: service as unknown as AgentsService,
+      adapters: { byKind: () => adapter } as unknown as AdapterSet,
+      log: capturingLogger().logger,
+    });
+    const request = (runId: string, agentSessionRef: string | null) => ({
+      runId,
+      sessionId: 'S1',
+      workspace: 'w',
+      agentId: 'agent-1',
+      agentSessionRef,
+      workingDir: null,
+      model: null,
+      provider: null,
+      reasoningEffort: null,
+      prompt: [{ type: 'text' as const, text: 'hi' }],
+      files: null,
+      allowedTools: [],
+    });
+    const drain = async (runId: string) => {
+      const out = [];
+      for await (const event of runner.stream(runId)) out.push(event);
+      return out;
+    };
+
+    const first = await runner.start(request('r1', null));
+    expect(first.agentSessionRef).toBe('stored-1');
+    expect((await drain('r1')).at(-1)).toMatchObject({ type: 'completed' });
+
+    // The gateway under it was closed while nobody was talking (a key change).
+    opened[0]!.session.closed = true;
+
+    await runner.start(request('r2', 'stored-1'));
+    expect((await drain('r2')).at(-1)).toMatchObject({ type: 'completed' });
+    expect(opened).toHaveLength(2);
+    expect(opened[1]!.ref).toBe('stored-1');
   });
 });
