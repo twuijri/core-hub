@@ -685,7 +685,9 @@
     },
     "stop": "إيقاف",
     "unassign": "إلغاء الإسناد",
-    "open_session": "فتح المحادثة"
+    "open_session": "فتح المحادثة",
+    "show_archived": "عرض المؤرشفة ({count})",
+    "hide_archived": "إخفاء المؤرشفة ({count})"
   },
   "schedules": {
     "new": "جدول جديد",
