@@ -6,7 +6,7 @@
  *
  * - **While the run is alive**, the last four calls are shown as one-line rows, so what
  *   the agent is doing *now* is visible without the transcript turning into a log. The
- *   earlier ones are one click away.
+ *   earlier ones are one click away, and the same click folds them back.
  * - **When the run ends**, the whole group folds into one line — how many, which tools,
  *   and whether any failed — and opens on a click.
  *
@@ -143,17 +143,24 @@ export function ToolCalls({ calls, live }: { calls: readonly ToolCall[]; live: b
     (call) => call.status === 'running' || call.status === 'awaiting_approval',
   );
   if (live || busy) {
-    const hidden = earlier ? 0 : Math.max(0, calls.length - LIVE_WINDOW);
+    const extra = Math.max(0, calls.length - LIVE_WINDOW);
+    const hidden = earlier ? 0 : extra;
     return (
       <section className="tool-group" data-testid="tool-group" data-live="true">
-        {hidden > 0 && (
+        {extra > 0 && (
+          // One toggle in one place: it opens the earlier calls and folds them back,
+          // as the finished group's line does (owner, 2026-09-23).
           <button
             type="button"
             className="tool-earlier"
-            onClick={() => setEarlier(true)}
+            aria-expanded={earlier}
+            onClick={() => setEarlier((open) => !open)}
             data-testid="tool-group-earlier"
           >
-            {t('tool.earlier', { count: hidden })}
+            <IconChevron size={12} className="tool-group-caret" />
+            {earlier
+              ? t('tool.hide_earlier', { count: extra })
+              : t('tool.earlier', { count: extra })}
           </button>
         )}
         <div className="tool-list">

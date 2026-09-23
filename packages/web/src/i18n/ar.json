@@ -300,6 +300,7 @@
     "count": "الأدوات: {count}",
     "failed_count": "فشل {count}",
     "earlier": "{count} قبلها",
+    "hide_earlier": "إخفاء {count} السابقة",
     "arguments": "المدخلات",
     "result": "الناتج"
   },
