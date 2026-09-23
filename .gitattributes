@@ -1,0 +1,5 @@
+# Graphify's map: generated, so collapsed in PR diffs. A conflict in it is resolved by
+# running `pnpm graph`, never by hand (docs/harness/knowledge-graph.md).
+graphify-out/graph.json linguist-generated=true
+graphify-out/graph.html linguist-generated=true
+graphify-out/GRAPH_REPORT.md linguist-generated=true

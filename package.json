@@ -29,7 +29,9 @@
     "dev": "pnpm --filter @majlis/server dev",
     "web:dev": "pnpm --filter @majlis/web dev",
     "web:e2e": "pnpm --filter @majlis/web test:e2e",
-    "tokens:build": "pnpm --filter @majlis/ui-tokens build"
+    "tokens:build": "pnpm --filter @majlis/ui-tokens build",
+    "graph": "node scripts/graph.mjs",
+    "graph:check": "node scripts/graph-check.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
