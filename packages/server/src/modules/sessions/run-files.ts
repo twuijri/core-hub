@@ -17,6 +17,7 @@
  * tree is never walked, on any event. The caps below are applied at collection and
  * what they refused is reported, never silently dropped — `collect()` answers both.
  */
+import { derived } from '@majlis/contracts';
 import { mkdirSync, readdirSync, statSync, watch, type FSWatcher } from 'node:fs';
 import path from 'node:path';
 
@@ -34,7 +35,7 @@ export const MAX_PRODUCED_TOTAL_BYTES = 100 * 1024 * 1024;
 export const MAX_PRODUCED_DEPTH = 3;
 
 /** The folder name under a working directory that belongs to the hub. */
-export const RUN_FILES_DIR = '.majlis';
+export const RUN_FILES_DIR = derived.runFilesDir;
 
 export interface RunFolders {
   /** Where the person's attachments were copied. */

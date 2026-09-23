@@ -1,5 +1,6 @@
 // Row -> contract shape (packages/contracts/openapi.yaml, tag `auth`). snake_case keys,
 // ISO-8601 UTC timestamps, never a hash or a secret.
+import { derived } from '@majlis/contracts';
 import type {
   appTokens,
   loginLockouts,
@@ -181,7 +182,7 @@ export function pairingStatus(row: PairingRow, now: number): PairingStatus {
 
 export function qrPayload(row: PairingRow): string {
   return JSON.stringify({
-    type: 'majlis.pairing',
+    type: derived.pairingType,
     hub_url: row.hubUrl,
     pairing_id: row.id,
     code: row.code,

@@ -18,6 +18,7 @@ export type {
   OpenApiParameter,
   OpenApiResponse,
 } from './document.js';
+export { PRODUCT, STABLE, derived } from './product.js';
 export { HubApiError, createHubClient, fillPath } from './client.js';
 export type {
   ClientMethod,

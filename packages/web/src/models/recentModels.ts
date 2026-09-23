@@ -1,3 +1,4 @@
+import { derived } from '@majlis/contracts';
 /**
  * The few models this workspace reached for last.
  *
@@ -11,7 +12,7 @@
 export const RECENT_LIMIT = 5;
 
 export function recentModelsKey(profile: string): string {
-  return `majlis.recentModels.${profile}`;
+  return `${derived.storagePrefix}recentModels.${profile}`;
 }
 
 export function readRecentModels(

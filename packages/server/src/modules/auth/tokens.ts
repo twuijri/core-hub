@@ -1,5 +1,6 @@
 // Tokens: the HS256 access JWT (short-lived), and the opaque bearer strings for refresh
 // tokens (`hub_rt_…`) and app tokens (`hub_at_…`). Opaque tokens are stored as SHA-256 only.
+import { STABLE } from '@majlis/contracts';
 import { createHash, randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -15,7 +16,8 @@ export const APP_TOKEN_PREFIX = 'hub_at_';
 export const REFRESH_TOKEN_PREFIX = 'hub_rt_';
 
 const JWT_ALG = 'HS256';
-const JWT_ISSUER = 'majlis';
+/** Frozen: it is inside every token already signed (`contracts` §STABLE). */
+const JWT_ISSUER = STABLE.jwtIssuer;
 
 export interface AccessClaims {
   /** User id. */
