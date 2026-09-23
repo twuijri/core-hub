@@ -279,6 +279,30 @@ describe("schedules: Hermes's cron reflected", () => {
     }
   });
 
+  it('keeps a Hermes schedule made in another workspace there, and only there', async () => {
+    const hub = await signedInHub();
+    try {
+      await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/profiles',
+        payload: { slug: 'design', name: 'Design' },
+      });
+      const created = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/schedules',
+        profile: 'design',
+        payload: forHermes(),
+      });
+      expect(created.statusCode).toBe(201);
+      // Read twice: the sync must find the job where it was made, not copy it home.
+      await list(hub);
+      const items = await list(hub);
+      expect(items.map((item) => [item.name, item.profile])).toEqual([['Morning inbox', 'design']]);
+    } finally {
+      await hub.close();
+    }
+  });
+
   it("leaves the hub's own schedules as they were", async () => {
     const hub = await signedInHub();
     try {

@@ -298,3 +298,68 @@ describe('schedules: where output can go', () => {
     }
   });
 });
+
+describe('schedules: one page for every workspace (owner decision, 2026-09-23)', () => {
+  it('lists every workspace the person may enter, each schedule with its own, and narrows to one', async () => {
+    const hub = await signedInHub();
+    try {
+      const design = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/profiles',
+        payload: { slug: 'design', name: 'Design' },
+      });
+      expect(design.statusCode).toBe(201);
+      const make = (name: string, profile: string) =>
+        authed(hub, hub.token, {
+          method: 'POST',
+          url: '/api/v1/schedules',
+          profile,
+          payload: {
+            name,
+            trigger: {
+              kind: 'interval',
+              expression: null,
+              every_minutes: 30,
+              run_at: null,
+              timezone: 'UTC',
+            },
+            target: {
+              kind: 'agent_prompt',
+              agent_id: null,
+              prompt: 'hi',
+              model: null,
+              provider: null,
+              skills: [],
+              workflow_id: null,
+              input: null,
+            },
+          },
+        });
+      expect((await make('For content', 'default')).statusCode).toBe(201);
+      expect((await make('For design', 'design')).statusCode).toBe(201);
+
+      const all = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/schedules' });
+      const items = (all.json() as { items: Json[] }).items;
+      expect(items.map((item) => [item.name, item.profile]).sort()).toEqual([
+        ['For content', 'default'],
+        ['For design', 'design'],
+      ]);
+
+      const one = await authed(hub, hub.token, {
+        method: 'GET',
+        url: '/api/v1/schedules?profile=design',
+      });
+      expect((one.json() as { items: Json[] }).items.map((item) => item.name)).toEqual([
+        'For design',
+      ]);
+
+      const nobody = await authed(hub, hub.token, {
+        method: 'GET',
+        url: '/api/v1/schedules?profile=ghost',
+      });
+      expect(nobody.statusCode).toBe(404);
+    } finally {
+      await hub.close();
+    }
+  });
+});
