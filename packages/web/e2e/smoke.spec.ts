@@ -756,7 +756,7 @@ test.describe('web smoke journeys', () => {
     await shot(page, 'people-ar-light');
 
     // Workspaces: the default one cannot be archived, so it offers no button.
-    await page.getByTestId('settings-nav').getByRole('link', { name: 'مساحات العمل' }).click();
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'البروفايلات' }).click();
     await expect(page.getByTestId('workspace-list')).toBeVisible();
     await expect(page.getByTestId('archive-workspace')).toHaveCount(0);
 
@@ -778,7 +778,7 @@ test.describe('web smoke journeys', () => {
     // Sara is given the new workspace too, from her row: a member enters only these.
     await page.getByTestId('settings-nav').getByRole('link', { name: 'المستخدمون' }).click();
     await page.getByTestId('user-menu').click();
-    await page.getByRole('menuitem', { name: 'مساحات العمل…' }).click();
+    await page.getByRole('menuitem', { name: 'البروفايلات…' }).click();
     await page.getByTestId('workspace-labs').click();
     await page.getByTestId('save-workspaces').click();
     await expect(page.getByTestId('user-table')).toContainText('labs');
@@ -949,7 +949,7 @@ test.describe('web smoke journeys', () => {
     await page.getByRole('option', { name: 'Labs' }).click();
     await expect(page.getByTestId('schedule-card')).toHaveCount(1);
     await page.getByTestId('schedule-filter').click();
-    await page.getByRole('option', { name: 'كل المساحات' }).click();
+    await page.getByRole('option', { name: 'كل البروفايلات' }).click();
 
     await expect(card).toBeVisible();
     // The hub computed a real next time rather than leaving it blank.
