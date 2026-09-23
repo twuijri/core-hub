@@ -20,6 +20,7 @@ import { ContextRing, contextUse } from './ContextRing.js';
 import { MessageQueue } from './MessageQueue.js';
 import { Transcript } from './MessageView.js';
 import { holdsBack, queued, type QueuedMessage } from './outbox.js';
+import { QuestionCard } from './QuestionCard.js';
 import { RunStatus } from './RunStatus.js';
 import { RunFailureNotice } from './RunFailureNotice.js';
 import { SessionAgent } from './SessionAgent.js';
@@ -85,6 +86,9 @@ function OpenSession({ sessionId }: { sessionId: string }) {
   const turns = useMemo(() => turnsOf(state.messages), [state.messages]);
   const run = activeRun(state);
   const progress = runProgress(state, run);
+  // The oldest question the agent is still waiting on; the next shows once it is answered.
+  const question =
+    Object.values(state.approvals).find((approval) => approval.kind === 'question') ?? null;
 
   /**
    * Replying to one message, and forking from one (owner, 2026-09-22). Both are the
@@ -286,9 +290,12 @@ function OpenSession({ sessionId }: { sessionId: string }) {
             onReply={setReplyTo}
             onFork={forkFrom}
           />
-          {Object.values(state.approvals).map((approval) => (
-            <ApprovalCard key={approval.id} approval={approval} />
-          ))}
+          {/* Questions wait above the composer (QuestionCard); decisions stay in the thread. */}
+          {Object.values(state.approvals)
+            .filter((approval) => approval.kind !== 'question')
+            .map((approval) => (
+              <ApprovalCard key={approval.id} approval={approval} />
+            ))}
           {failedRun?.error &&
             // A failed run often leaves an empty assistant message; the badge alone would
             // hide the reason, so the notice is only suppressed when that message has text
@@ -311,7 +318,12 @@ function OpenSession({ sessionId }: { sessionId: string }) {
           onCancel={cancel}
           // While a run is alive the composer carries the live indicator: something moving,
           // the word, and the seconds counting up (owner decision, 2026-09-22).
-          {...(progress ? { status: <RunStatus progress={progress} /> } : {})}
+          // Not while a question is open: the agent is not thinking, it is waiting on the
+          // person, and the card above says so.
+          {...(progress && !question ? { status: <RunStatus progress={progress} /> } : {})}
+          {...(question
+            ? { question: <QuestionCard key={question.id} approval={question} /> }
+            : {})}
           {...(outbox.length > 0
             ? {
                 queue: (

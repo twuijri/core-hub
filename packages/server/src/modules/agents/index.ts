@@ -204,7 +204,11 @@ function contextOf(app: FastifyInstance): AgentsContext {
     own.adapters ??
     createAdapterSet({
       ...own.adapterOptions,
-      hermes: { apiKey: () => runtime.apiKey(), ...own.adapterOptions?.hermes },
+      hermes: {
+        apiKey: () => runtime.apiKey(),
+        tui: () => runtime.tuiChannel(),
+        ...own.adapterOptions?.hermes,
+      },
       // The hub's own agent reaches the providers through the same port every other
       // agent's credentials come from, looked up per turn because `models` registers it
       // after this module mounts (ADR 0010; ADOPTION-BACKLOG §2.15).
