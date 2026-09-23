@@ -38,7 +38,6 @@ import {
   SidebarRow,
   Tooltip,
 } from '../ui/index.js';
-import { WorkspaceSwitcher } from './WorkspaceSwitcher.js';
 import { useNoticeStream } from '../notify/queries.js';
 
 const RAIL_ICONS: Record<string, (p: { size?: number }) => ReactElement> = {
@@ -204,14 +203,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </SidebarBody>
 
       <SidebarFooter testId="footer">
-        <div className="flex flex-wrap items-center gap-2">
-          <WorkspaceSwitcher compact />
-          <Tooltip label={t('shell.model_chip')}>
-            <span tabIndex={0}>
-              <Badge>{t('shell.model_default')}</Badge>
-            </span>
-          </Tooltip>
-        </div>
+        {/* The profile is switched in the top bar only, and the model in the composer and on
+            Models: the footer no longer repeats either (owner, 2026-09-24). */}
         <div className="flex items-center gap-2">
           <Tooltip label={t(`shell.connection.${realtime.state}`)}>
             <span tabIndex={0} role="status" aria-label={t(`shell.connection.${realtime.state}`)}>

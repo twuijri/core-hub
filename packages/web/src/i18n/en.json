@@ -96,8 +96,6 @@
     "sidebar": "Main menu",
     "segments": "Sections",
     "workspace": "Profile",
-    "model_chip": "Default model for new sessions",
-    "model_default": "Default model",
     "open_menu": "Open menu",
     "close_menu": "Close menu",
     "segment_later": "{name} arrives with its module in a later phase.",
