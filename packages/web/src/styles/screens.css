@@ -514,3 +514,47 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* ------------------------------------------------------------------- skills
+   A skill is a switch, a name and two buttons. The switch is first because it is the
+   thing a person comes here to flip; the name opens the document; the rest stays out of
+   the way until the row is hovered. */
+.skill-row {
+  display: flex;
+  align-items: center;
+  gap: var(--mj-space-3);
+  padding: var(--mj-space-2) var(--mj-space-3);
+  border: 1px solid var(--mj-color-border);
+  border-radius: var(--mj-radius-md);
+  background: var(--mj-color-surface);
+  opacity: 0.72;
+  transition: opacity var(--mj-motion-fast);
+}
+/* A skill that is on reads at full strength; one that is off is legible but quiet. */
+.skill-row[data-enabled] {
+  opacity: 1;
+}
+.skill-open {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  flex: 1;
+  min-inline-size: 0;
+  text-align: start;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: inherit;
+}
+.skill-description {
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.skill-editor {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--mj-font-size-xs);
+  line-height: var(--mj-font-leading-normal);
+}
