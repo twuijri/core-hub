@@ -2,9 +2,11 @@
 // The committed code map is the one this tree builds (docs/harness/knowledge-graph.md).
 //
 // Run after `pnpm graph` on a clean checkout: it compares the graph.json committed in
-// HEAD with the one just built. Graphify is deterministic for code (tree-sitter, no model),
-// so any difference means somebody changed code without rebuilding the map. The commit the
-// map was built from is left out: it is always the parent of the commit that carries it.
+// HEAD with the one just built. Graphify reads code with tree-sitter and no model, so the
+// nodes and edges are the same on every machine and any difference means somebody changed
+// code without rebuilding the map. Left out of the comparison: the commit the map was built
+// from (always the parent of the commit that carries it), and the communities — Graphify
+// clusters in the order the file system lists files, which differs between machines.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
@@ -14,6 +16,17 @@ function load(text, where) {
   try {
     const graph = JSON.parse(text);
     delete graph.built_at_commit;
+    graph.nodes = graph.nodes
+      .map(({ community: _c, community_name: _n, ...node }) => node)
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    graph.links = graph.links
+      .map((link) =>
+        !graph.directed && link.source > link.target
+          ? { ...link, source: link.target, target: link.source }
+          : link,
+      )
+      .map((link) => JSON.stringify(link))
+      .sort();
     return graph;
   } catch (error) {
     console.error(`graph:check  ${where} is not a graph: ${error.message}`);
