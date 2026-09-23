@@ -1,52 +1,52 @@
 # Graph Report - majlis
 
 ## Corpus Check
-- 652 files · ~719,435 words
+- 652 files · ~719,479 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 14 file(s) not represented in the graph (top: (none) 9, .css 4, .example 1)
 
 ## Summary
-- 6325 nodes · 15088 edges · 292 communities (269 shown, 23 thin omitted)
-- Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 1078 edges (avg confidence: 0.91)
+- 6325 nodes · 15089 edges · 289 communities (265 shown, 24 thin omitted)
+- Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 1079 edges (avg confidence: 0.91)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
 - web/src/types.ts
-- auth/routes.ts
 - main
 - ref_vitest
 - Sidebar.tsx
+- auth/schema.ts
 - ref_node_fs
+- modules/index.ts
+- auth/routes.ts
 - cli/src/main.ts
 - models/index.ts
 - ModelsService
 - describeError
 - engine.ts
+- notify/index.ts
 - agents/service.ts
 - SessionsStore
-- audit/index.ts
 - ui/index.ts
-- HubError
-- chat.ts
 - sessions/index.ts
 - hermes-runtime.ts
-- auth/schema.ts
+- HubError
+- audit/index.ts
+- ref_majlis_contracts
 - cli.test.ts
 - src/agents/skills.ts
 - runner.ts
 - hub/queries.ts
 - models/schema.ts
-- notify/index.ts
-- users.ts
-- modules/index.ts
+- ref_node_os
 - hub.ts
 - adapters/direct.ts
 - server.ts
 - tasksModule
-- ref_majlis_contracts
 - tasks/index.ts
 - icons.tsx
 - AgentManagerScreen.tsx
+- users.ts
 - schedules/service.ts
 - UsersTab.tsx
 - app/db.ts
@@ -61,27 +61,26 @@
 - TasksScreen.tsx
 - check-clients.mjs
 - ref_i18n_context_js
+- anthropic.ts
 - .test
 - SchedulesService
 - contracts/package.json
-- updates/index.ts
 - AgentModelsPort
-- models/adapters/index.ts
 - agents/adapters/types.ts
 - @testing-library/react
 - naming.test.ts
-- google.ts
 - AcpSession
 - Composer.tsx
 - cli/package.json
 - attachments.test.tsx
+- contract.ts
 - schedules/index.ts
 - hermes-cron.ts
-- contract.ts
 - notify/schema.ts
 - AuditService
 - auth
 - mappers.ts
+- models/adapters/index.ts
 - react
 - models/serialize.ts
 - HermesTuiSession
@@ -96,25 +95,26 @@
 - hermes-kanban.ts
 - auth/store.ts
 - Segmented.tsx
+- auth/index.ts
 - marks.tsx
 - السؤال: عدّاد تنازلي، وإجابتك تبقى في المحادثة، والمحادثة تلحق الرد
 - مفاتيح المزوّدين واختيار النموذج (ADR 0010)
 - output.ts
 - hermes-mirror.ts
 - web/src/i18n/index.ts
-- args.ts
 - channels.ts
 - KnowledgeService
 - .notify
 - workflow-engine.test.ts
 - scripts
+- args.ts
+- pair.ts
 - server/package.json
 - Combobox.tsx
 - The kit (owner decision, 2026-09-22)
 - mcp.ts
 - ui-tokens/package.json
 - media.ts
-- Chat
 - sessions/service.ts
 - AgentSettingsScreen.tsx
 - radix-ui
@@ -131,7 +131,7 @@
 - الإعدادات: قائمة جانبية بدل شريط التبويبات، وثلاثة رموز للسمة بدل كلمة
 - Contract decisions
 - Hermes Agent (وقت التشغيل الذي نقوده)
-- pair.ts
+- Chat
 - memory.ts
 - knowledge/service.ts
 - schedules/schema.ts
@@ -161,15 +161,14 @@
 - إعادة هيكلة عميل الويب: الملحن، شرائح الوكلاء، الشريط النحيف، مجلد عمل لكل جلسة
 - knowledge/serialize.ts
 - Domain model
-- lib/errors.ts
 - lib/realtime.ts
+- openai.ts
 - sessions/schema.ts
 - auth.contract.test.ts
 - pane.tsx
 - الوكيل المباشر (direct) — محادثة من المركز إلى المزوّد بلا وقت تشغيل بينهما
 - اسم المنتَج في مكانٍ واحد — وثلاثة أسماء لا تتبعه
 - newUlid
-- openai.ts
 - @majlis/web
 - Architecture
 - عقد الواجهة التأسيسي (OpenAPI + أحداث الوقت الحقيقي)
@@ -227,7 +226,7 @@
 - combobox.test.tsx
 - people.test.tsx
 - realtime-context.test.tsx
-- الإشعارات تحدث فعلًا: منتِج، وبثّ، وصفحة
+- التأسيس: العمود الفقري للوثائق والقرارات
 - الطابور والتوجيه، وحلقة السياق
 - schedules
 - Knowledge graph (Graphify)
@@ -242,13 +241,11 @@
 - محادثة حقيقية مع Hermes عبر الخادم: المشغّل، وقت التشغيل المُشرَف عليه، وربط المنافذ
 - `packages/server/src/modules/knowledge/` (السجل: البايتات والحدود)
 - جولة تصميم شاشة المحادثة، وطقم المكوّنات الكامل
-- جولة المالك على الواجهة: الإصدار، القائمة، الرسالة، الإعدادات، والوكلاء
 - وصول المزوّد إلى وقت التشغيل: التعبير عن النقاط المتوافقة مع OpenAI، والتحقّق من المفتاح، وفحص ظاهر
 - صفحة الجدولة تقرأ cron هرمز وتكتب فيه — وهرمز يفوز
 - المستخدمون: كلمة مرورك، ومستخدمون محصورون في مساحات محدّدة
 - knowledge
 - plugins
-- updates
 - Claw-Kanban
 - Vibe Kanban
 - Prompter
@@ -330,75 +327,75 @@
 - 3-file cycle: `packages/server/src/modules/audit/index.ts -> packages/server/src/modules/auth/index.ts -> packages/server/src/modules/auth/routes.ts -> packages/server/src/modules/audit/index.ts`
 - 3-file cycle: `packages/server/src/modules/audit/index.ts -> packages/server/src/modules/auth/index.ts -> packages/server/src/modules/auth/scopes.ts -> packages/server/src/modules/audit/index.ts`
 
-## Communities (292 total, 23 thin omitted)
+## Communities (289 total, 24 thin omitted)
 
 ### Community 0 - "web/src/types.ts"
 Cohesion: 0.04
 Nodes (107): Queries the clients need, OpenSession(), previewOf(), putFirstMessage(), takeFirstMessage(), waiting, scrollParent(), useFollowBottom() (+99 more)
 
-### Community 1 - "auth/routes.ts"
-Cohesion: 0.04
-Nodes (95): الملفات والتأثير, الملفات والتأثير, تجربة المشغّل على تركيب جديد, 26. First run is a claim token, not open onboarding, pairing_code (global), TokenPair, assertNotLocked(), clearFailures() (+87 more)
-
-### Community 2 - "main"
+### Community 1 - "main"
 Cohesion: 0.02
 Nodes (82): Agent Map — Majlis, First reads (in order), graphify, Hard rules, Layout, What this is, Contributing to Majlis, التسليم والخطوة التالية (+74 more)
 
-### Community 3 - "ref_vitest"
+### Community 2 - "ref_vitest"
 Cohesion: 0.04
 Nodes (62): endpoint, Envelope, overrideAgents(), addLmStudio(), row, ADR-0011, devicesModule, addFormats (+54 more)
 
-### Community 4 - "Sidebar.tsx"
+### Community 3 - "Sidebar.tsx"
 Cohesion: 0.03
 Nodes (85): القرار والموافقات, الملفات والتأثير, AgentCard(), capabilityLabel(), ChatScreen(), packages_web_src_i18n_ar, packages_web_src_i18n_en, agentMenu() (+77 more)
+
+### Community 4 - "auth/schema.ts"
+Cohesion: 0.04
+Nodes (74): pairing_code (global), ModuleDb, DecodedAvatar, AuthContext, cancelPairing(), ClaimResult, createPairing(), findPairing() (+66 more)
 
 ### Community 5 - "ref_node_fs"
 Cohesion: 0.03
 Nodes (56): doc, here, script, temps, packageRoot, here, Parsed, shim (+48 more)
 
-### Community 6 - "cli/src/main.ts"
+### Community 6 - "modules/index.ts"
 Cohesion: 0.05
-Nodes (67): CommandSpec, sessionTitle(), agentsGetCommand, agentsInstallCommand, agentsListCommand, agentsRemoveCommand, jobCommand(), KINDS (+59 more)
+Nodes (67): isUlid(), requireSqlite(), defineModule(), clampLimit(), decodeCursor(), DEFAULT_LIMIT, encodeCursor(), MAX_LIMIT (+59 more)
 
-### Community 7 - "models/index.ts"
+### Community 7 - "auth/routes.ts"
+Cohesion: 0.04
+Nodes (78): الملفات والتأثير, البروفايل في المجلس بروفايل في هرمز (المرحلة ١): الإنشاء من الصفر أو نسخة، وظهور بروفايلات هرمز, التسليم والخطوة التالية, العقد, الفحوص, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير (+70 more)
+
+### Community 8 - "cli/src/main.ts"
+Cohesion: 0.05
+Nodes (68): CommandSpec, sessionTitle(), anonymousClient(), agentsGetCommand, agentsInstallCommand, agentsListCommand, agentsRemoveCommand, jobCommand() (+60 more)
+
+### Community 9 - "models/index.ts"
 Cohesion: 0.05
 Nodes (72): assertCatalogueIsWellFormed(), authKindOf(), catalogueEntry(), CREDENTIAL_FAMILIES, CredentialFamily, envVarOf(), familyEntries(), HERMES_PROVIDER_PREFIX (+64 more)
 
-### Community 8 - "ModelsService"
+### Community 10 - "ModelsService"
 Cohesion: 0.09
 Nodes (21): Context, العقد (ما تغيّر في packages/contracts), المخاطر والرجوع, الملفات والتأثير, Client screen coverage, Cross-cutting, Inventory reconciliation, No menu entry (reached from elsewhere) (+13 more)
 
-### Community 9 - "describeError"
+### Community 11 - "describeError"
 Cohesion: 0.05
 Nodes (58): العقد, describeError(), HubClientBundle, useMe(), usePreferences(), useSavePreferences(), useSetupState(), LoginScreen() (+50 more)
 
-### Community 10 - "engine.ts"
+### Community 12 - "engine.ts"
 Cohesion: 0.06
 Nodes (40): `packages/server/src/modules/sessions/`, الملفات والتأثير, ActiveRun, agentRefOf(), allowedToolsOf(), promptOf(), refusalNote(), RunEngine (+32 more)
 
-### Community 11 - "agents/service.ts"
+### Community 13 - "notify/index.ts"
+Cohesion: 0.04
+Nodes (64): الإشعارات تحدث فعلًا: منتِج، وبثّ، وصفحة, التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, التسليم والخطوة التالية (+56 more)
+
+### Community 14 - "agents/service.ts"
 Cohesion: 0.08
 Nodes (31): القرار والموافقات, الملفات والتأثير, الملفات والتأثير, العقد, `agents` — الوكيل والمحوّل, Language, t(), notFound() (+23 more)
 
-### Community 12 - "SessionsStore"
+### Community 15 - "SessionsStore"
 Cohesion: 0.10
 Nodes (15): القرار والموافقات, منفَّذ فعلًا (لم يعد 501), حدود معروفة، والخطوة التالية, `chat`, Commands, Root content with a payload, Segments, EngineScope (+7 more)
 
-### Community 13 - "audit/index.ts"
-Cohesion: 0.05
-Nodes (50): التسليم والخطوة التالية, الفحوص, القرار والموافقات, المخاطر والرجوع, المرحلة الرابعة: المعرفة، الإضافات، قناة التحديثات، ولوحات التدقيق, المشكلة والهدف, قاعدة التسمية, auditModule (+42 more)
-
-### Community 14 - "ui/index.ts"
+### Community 16 - "ui/index.ts"
 Cohesion: 0.03
 Nodes (62): packages_web_src_ui_alertdialog_js, packages_web_src_ui_avatar_js, packages_web_src_ui_badge_js, packages_web_src_ui_brand_marks_js, packages_web_src_ui_breadcrumb_js, packages_web_src_ui_button_js, packages_web_src_ui_card_js, packages_web_src_ui_checkbox_js (+54 more)
-
-### Community 15 - "HubError"
-Cohesion: 0.07
-Nodes (57): الملفات والتأثير, المشكلة والهدف, ModuleDb, HubError, profileRoom(), AuthContext, contexts, registerEvents (+49 more)
-
-### Community 16 - "chat.ts"
-Cohesion: 0.06
-Nodes (45): BY_NUMBER, Decision, DECISION_OF, DECISIONS, parseAnswer(), parseDecision(), belongsToSession(), Chunk (+37 more)
 
 ### Community 17 - "sessions/index.ts"
 Cohesion: 0.05
@@ -408,41 +405,41 @@ Nodes (41): modules, OneTurn, PortOrFactory, registerEvents, registerRoutes, ses
 Cohesion: 0.05
 Nodes (40): PromptStreams, Json, Spawned, stderrExitReasons(), StdioChannelOptions, stdioTuiChannel(), Api, channelOver() (+32 more)
 
-### Community 19 - "auth/schema.ts"
-Cohesion: 0.05
-Nodes (54): DecodedAvatar, adoptProfiles(), AdoptResult, profileMirrorFor(), ProfileOrigin, registerProfileMirror(), RUNTIME_DEFAULT_PROFILE, runtimeProfileName() (+46 more)
+### Community 19 - "HubError"
+Cohesion: 0.07
+Nodes (53): المشكلة والهدف, الملفات والتأثير, تجربة المشغّل على تركيب جديد, 26. First run is a claim token, not open onboarding, TokenPair, agentUnavailable(), ERROR_CODES, ErrorEnvelope (+45 more)
 
-### Community 20 - "cli.test.ts"
+### Community 20 - "audit/index.ts"
+Cohesion: 0.06
+Nodes (43): القرار والموافقات, قاعدة التسمية, auditModule, contexts, registerEvents, registerRoutes, SAMPLE_INTERVAL_MS, startSampler() (+35 more)
+
+### Community 21 - "ref_majlis_contracts"
+Cohesion: 0.06
+Nodes (41): BY_NUMBER, Decision, DECISION_OF, DECISIONS, parseAnswer(), parseDecision(), belongsToSession(), Chunk (+33 more)
+
+### Community 22 - "cli.test.ts"
 Cohesion: 0.06
 Nodes (39): cli(), Running, start(), temps, ADR-0010, overrideModels(), createSessionsModule(), resolvePort() (+31 more)
 
-### Community 21 - "src/agents/skills.ts"
+### Community 23 - "src/agents/skills.ts"
 Cohesion: 0.07
 Nodes (50): AgentChannelsScreen(), ChannelEditor(), ChannelRow(), AgentMcpScreen(), omitEnabled(), parse(), ServerEditor(), ServerRow() (+42 more)
 
-### Community 22 - "runner.ts"
+### Community 24 - "runner.ts"
 Cohesion: 0.07
 Nodes (41): `packages/server/src/modules/agents/`, الدليل الحقيقي: الصورة تُبنى، وتُشغَّل، وتتبادل الملفات, المشكلة والهدف, ما لم يُثبَت هنا, ApprovalOption, AgentInfo, DirectChatRequest, RunnerApprovalKind (+33 more)
 
-### Community 23 - "hub/queries.ts"
+### Community 25 - "hub/queries.ts"
 Cohesion: 0.07
 Nodes (48): الملفات والتأثير, ٣) و٤) الخريطة, enabledAgents(), INSTALLED, installedAgents(), SessionAgent(), keys, SessionFilters (+40 more)
 
-### Community 24 - "models/schema.ts"
+### Community 26 - "models/schema.ts"
 Cohesion: 0.06
 Nodes (35): المخاطر والرجوع, API_MODES, AUTH_KINDS, AuthKind, CATALOGUE_STATUSES, CatalogueStatus, EnsembleMemberValue, EnsembleRow (+27 more)
 
-### Community 25 - "notify/index.ts"
-Cohesion: 0.06
-Nodes (46): الملفات والتأثير, findUser(), AddressVerdict, checkAddress(), isPrivateAddress(), announce(), dbOf(), DEFAULT_QUIET (+38 more)
-
-### Community 26 - "users.ts"
+### Community 27 - "ref_node_os"
 Cohesion: 0.07
-Nodes (45): Decision, القرار والموافقات, القرار والموافقات, Settings (one screen) and its Tools, AVATAR_MAX_BYTES, AVATAR_MIMES, AvatarMime, AvatarOwnerKind (+37 more)
-
-### Community 27 - "modules/index.ts"
-Cohesion: 0.07
-Nodes (38): requireSqlite(), defineModule(), agentDirectory(), agentRunnerFor(), agentsServiceFor(), contextOf(), hermesRuntimeFor(), auditFor() (+30 more)
+Nodes (34): authenticatedClient, doRefresh(), ClientOptions, expiresAt(), normaliseServer(), askKey(), findProvider(), parseQrPayload() (+26 more)
 
 ### Community 28 - "hub.ts"
 Cohesion: 0.07
@@ -460,21 +457,21 @@ Nodes (40): HubConfig, HubDatabase, API_PREFIX, DEFAULT_PROFILE, fastify, Fastif
 Cohesion: 0.12
 Nodes (11): الملفات والتأثير, Under the agent (entered from an Agent Manager card), actorOf(), refuseOnHermesCard(), scopeOf(), serviceOf(), tasksModule, SubtaskRow (+3 more)
 
-### Community 32 - "ref_majlis_contracts"
-Cohesion: 0.08
-Nodes (30): anonymousClient(), authenticatedClient, doRefresh(), ClientOptions, expiresAt(), normaliseServer(), askKey(), findProvider() (+22 more)
-
-### Community 33 - "tasks/index.ts"
+### Community 32 - "tasks/index.ts"
 Cohesion: 0.07
 Nodes (40): mirrors, nameOf(), overrides, realtimes, refusedByHermes(), registerEvents, registerRoutes, TasksOverrides (+32 more)
 
-### Community 34 - "icons.tsx"
+### Community 33 - "icons.tsx"
 Cohesion: 0.04
 Nodes (10): الملفات والتأثير, themeIcon(), IconDisplay(), IconMoon(), IconPlus(), IconProps, IconSchedules(), IconSearch() (+2 more)
 
-### Community 35 - "AgentManagerScreen.tsx"
+### Community 34 - "AgentManagerScreen.tsx"
 Cohesion: 0.06
 Nodes (40): القرار والموافقات, القرار والموافقات, AgentManagerScreen(), STATUS_TONE, useJobs(), ApprovalCard(), DECISIONS, decisionsFor() (+32 more)
+
+### Community 35 - "users.ts"
+Cohesion: 0.09
+Nodes (40): القرار والموافقات, ARGON2_OPTIONS, hashPassword(), isArgon2idHash(), PASSWORD_MIN_LENGTH, verifyPassword(), PrincipalUser, Locale (+32 more)
 
 ### Community 36 - "schedules/service.ts"
 Cohesion: 0.09
@@ -532,145 +529,145 @@ Nodes (31): allowed, appsDir, args, CLIENT_EXTENSIONS, clientRoots, doc, docPath
 Cohesion: 0.07
 Nodes (28): AnsweredQuestion, AnsweredQuestions, text(), ContextRing(), contextUse, percentOf(), MessageActions(), messageTime() (+20 more)
 
-### Community 50 - ".test"
-Cohesion: 0.06
-Nodes (30): التأسيس: العمود الفقري للوثائق والقرارات, التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير (+22 more)
+### Community 50 - "anthropic.ts"
+Cohesion: 0.11
+Nodes (30): `models` — فعل البثّ ومنفذه, Call, Scripted, ANTHROPIC_VERSION, AnthropicFrame, content(), count(), headers() (+22 more)
 
-### Community 51 - "SchedulesService"
+### Community 51 - ".test"
+Cohesion: 0.06
+Nodes (29): الفحوص, التسليم والخطوة التالية, العقد, الفحوص, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, تحديث لاحق (المنسّق، 2026-09-21) (+21 more)
+
+### Community 52 - "SchedulesService"
 Cohesion: 0.15
 Nodes (6): الملفات والتأثير, الملفات والتأثير, conflict(), definitionOf(), deliveryOf(), SchedulesService
 
-### Community 52 - "contracts/package.json"
+### Community 53 - "contracts/package.json"
 Cohesion: 0.05
 Nodes (36): dependencies, yaml, description, devDependencies, ajv, ajv-formats, openapi-typescript, @openapitools/openapi-generator-cli (+28 more)
-
-### Community 53 - "updates/index.ts"
-Cohesion: 0.10
-Nodes (30): isUlid(), ULID_LENGTH, ULID_PATTERN, clampLimit(), decodeCursor(), DEFAULT_LIMIT, encodeCursor(), MAX_LIMIT (+22 more)
 
 ### Community 54 - "AgentModelsPort"
 Cohesion: 0.06
 Nodes (26): 1. The hub owns one credential store, 2. One key, many provider rows: the credential family, 3. Propagation is the hub's job, per agent kind, 4. Overrides stay possible; inheriting is the default, 5. Direction of dependency, ADR 0010 — One credential store; the hub propagates, the person does not, Alternatives rejected, Consequences (+18 more)
 
-### Community 55 - "models/adapters/index.ts"
-Cohesion: 0.11
-Nodes (30): الملفات والتأثير, Call, refused(), Scripted, ANTHROPIC_VERSION, anthropicAdapter, anthropicChat(), AnthropicFrame (+22 more)
-
-### Community 56 - "agents/adapters/types.ts"
+### Community 55 - "agents/adapters/types.ts"
 Cohesion: 0.07
 Nodes (28): 25. The section is `tasks`, never `board` or `kanban`, agent_adapter (global), agent (global), agent_settings (scoped), agents, Not stored, Queries the clients need, 12. A seat is backed by its own session (+20 more)
 
-### Community 57 - "@testing-library/react"
+### Community 56 - "@testing-library/react"
 Cohesion: 0.07
 Nodes (17): measure(), OPTIONS, renderWide(), ADR-0011, USER, profiles, ref_src_auth_context_js, ref_src_chat_approvalcard_js (+9 more)
 
-### Community 58 - "naming.test.ts"
+### Community 57 - "naming.test.ts"
 Cohesion: 0.09
 Nodes (25): ADR 0012 — A provider Hermes has no slug for still reaches it, or the hub refuses out loud, Alternatives rejected, Consequences, Context, Decision, agenthub, الأفكار التي نرفضها ولماذا, روابط (+17 more)
 
-### Community 59 - "google.ts"
-Cohesion: 0.12
-Nodes (26): `models` — فعل البثّ ومنفذه, count(), GoogleFrame, GoogleModel, headers(), BytesAnswer, detailOf(), HttpAnswer (+18 more)
-
-### Community 60 - "AcpSession"
+### Community 58 - "AcpSession"
 Cohesion: 0.09
 Nodes (14): التسليم والخطوة التالية, العقد (ما تغيّر في packages/contracts), الفحوص (الأوامر ونواتجها الفعلية), القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, تحديث لاحق 2 (المنسّق، 2026-09-21): مراجعة أرقام الكتالوج, تحديث لاحق (المنسّق، 2026-09-21) (+6 more)
 
-### Community 61 - "Composer.tsx"
+### Community 59 - "Composer.tsx"
 Cohesion: 0.09
 Nodes (27): العقد (ما تغيّر في packages/contracts), blocksFor(), APPROVAL_MODES, approvalIcon(), blocksFor(), Composer(), Pending, REASONING_EFFORTS (+19 more)
 
-### Community 62 - "cli/package.json"
+### Community 60 - "cli/package.json"
 Cohesion: 0.06
 Nodes (31): bin, majlis, dependencies, ajv, ajv-formats, @majlis/contracts, qrcode-generator, socket.io-client (+23 more)
 
-### Community 63 - "attachments.test.tsx"
+### Community 61 - "attachments.test.tsx"
 Cohesion: 0.10
 Nodes (19): الأفكار التي نتبنّاها (كل فكرة ↔ وحدة في ARCHITECTURE §Modules), attachmentKeys, AttachmentRef, attachmentsOf(), AttachmentTooLargeError, expectedOffsetOf(), MAX_ATTACHMENT_BYTES, MAX_ONE_SHOT_BYTES (+11 more)
 
-### Community 64 - "schedules/index.ts"
+### Community 62 - "contract.ts"
+Cohesion: 0.09
+Nodes (20): ContractIndex, ContractOperationInfo, createAjv(), createContractIndex(), build(), compile(), objectSchemaFor(), parametersOf() (+12 more)
+
+### Community 63 - "schedules/index.ts"
 Cohesion: 0.10
 Nodes (26): cronOf(), crons, engines, notBuilt(), outputsOf(), Preview, previews, realtimes (+18 more)
 
-### Community 65 - "hermes-cron.ts"
+### Community 64 - "hermes-cron.ts"
 Cohesion: 0.12
 Nodes (11): CronSyncReport, deliverOf(), HermesCron, HermesCronPort, refusedByHermesCron(), triggerOf(), HermesJobs, HermesJobWrite (+3 more)
 
-### Community 66 - "contract.ts"
-Cohesion: 0.10
-Nodes (19): ContractIndex, ContractOperationInfo, createAjv(), createContractIndex(), build(), compile(), objectSchemaFor(), parametersOf() (+11 more)
-
-### Community 67 - "notify/schema.ts"
+### Community 65 - "notify/schema.ts"
 Cohesion: 0.11
 Nodes (25): ADR-0001, EMPTY_OBJECT, globalColumns(), json(), scopedColumns(), timestampMs(), ADR-0005, ulid() (+17 more)
 
-### Community 68 - "AuditService"
+### Community 66 - "AuditService"
 Cohesion: 0.11
 Nodes (11): التسليم والخطوة التالية, العقد, الفحوص (الأوامر ونواتجها الفعلية), القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, نموذج المجال ومخطط قاعدة البيانات (+3 more)
 
-### Community 69 - "auth"
+### Community 67 - "auth"
 Cohesion: 0.07
 Nodes (25): التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, وحدة «المهام»: المشاريع واللوحة وكل ما يحدث لمهمة (+17 more)
 
-### Community 70 - "mappers.ts"
+### Community 68 - "mappers.ts"
 Cohesion: 0.13
 Nodes (27): UsageTotals, ApprovalView, AttachmentFacts, attachmentUrl(), contentBlocks(), iso(), isoNow(), MessageAuthor (+19 more)
 
-### Community 71 - "react"
+### Community 69 - "models/adapters/index.ts"
+Cohesion: 0.15
+Nodes (23): anthropicAdapter, anthropicChat(), elevenLabsAdapter, count(), googleAdapter, googleChat(), GoogleFrame, GoogleModel (+15 more)
+
+### Community 70 - "react"
 Cohesion: 0.12
 Nodes (22): DEFAULT_QUIET, Inbox(), NoticeRowItem(), Preferences(), Notice, NOTICE_KINDS, NoticeKind, NoticePage (+14 more)
 
-### Community 72 - "models/serialize.ts"
+### Community 71 - "models/serialize.ts"
 Cohesion: 0.11
 Nodes (24): DAY, HOUR, iso(), MINUTE, SECOND, agentStatus(), ContractAgentStatus, ContractAvatar (+16 more)
 
-### Community 73 - "HermesTuiSession"
+### Community 72 - "HermesTuiSession"
 Cohesion: 0.14
 Nodes (6): capped(), HermesTuiSession, turn(), collect(), text(), PromptInput
 
-### Community 74 - "agents/index.ts"
+### Community 73 - "agents/index.ts"
 Cohesion: 0.08
 Nodes (23): AdapterSet, Channel, HermesProfiles, actorOf(), agentModelsPort(), AgentsContext, categorise(), contexts (+15 more)
 
-### Community 75 - "web/src/chat/transcript.ts"
+### Community 74 - "web/src/chat/transcript.ts"
 Cohesion: 0.13
 Nodes (19): appendText(), belongsToSession(), ChatState, hydrate(), patchMessage(), reduce(), shellMessage(), upsertMessage() (+11 more)
 
-### Community 76 - "The wrappers that exist"
+### Community 75 - "The wrappers that exist"
 Cohesion: 0.13
 Nodes (19): أخطاء حقيقية ظهرت أثناء العمل وأُصلحت, ٥) سياسة الواجهة, How it is enforced, One of everything, The wrappers that exist, UI policy (owner decision, 2026-09-22), Layout, Checkbox() (+11 more)
 
-### Community 77 - "SessionStore"
+### Community 76 - "SessionStore"
 Cohesion: 0.11
 Nodes (14): App(), AppProps, SessionStore, memoryStorage(), renderScreen(), memoryStorage(), mount(), Sent (+6 more)
 
-### Community 78 - "models-screen.test.tsx"
+### Community 77 - "models-screen.test.tsx"
 Cohesion: 0.13
 Nodes (20): chooseInCombobox(), chooseOption(), closeControl(), openControl(), optionLabels(), User, hub(), HubState (+12 more)
 
-### Community 79 - "وحدة الجلسات والبث الحي في Majlis (Phase 0)"
+### Community 78 - "وحدة الجلسات والبث الحي في Majlis (Phase 0)"
 Cohesion: 0.09
 Nodes (21): التسليم والخطوة التالية, العقد, الفحوص (الأوامر ونواتجها الفعلية), القرار والموافقات, المخاطر والرجوع, وحدة `auth`: الحساب الأول، الدخول، رموز التطبيق، الاقتران بـQR، المستخدمون، مساحات العمل, التسليم والخطوة التالية, العقد (ما تغيّر في packages/contracts، أو «لا شيء») (+13 more)
 
-### Community 80 - "devices/index.ts"
+### Community 79 - "devices/index.ts"
 Cohesion: 0.13
 Nodes (22): device (global), ClaimInput, PairedDeviceInput, registerEvents, registerRoutes, SerializeDeviceOptions, CAPABILITY_KINDS, CapabilityKind (+14 more)
 
-### Community 81 - "contracts/src/client.ts"
+### Community 80 - "contracts/src/client.ts"
 Cohesion: 0.10
 Nodes (21): BinaryBody, ClientMethod, raw(), fillPath(), HubApiError, HubClientOptions, HubResponse, isBinaryBody() (+13 more)
 
-### Community 82 - "hermes-kanban.ts"
+### Community 81 - "hermes-kanban.ts"
 Cohesion: 0.14
 Nodes (14): kanban(), createHermesKanban(), HermesRefusal, HermesTask, json(), KanbanResult, KanbanRunner, processRunner() (+6 more)
 
-### Community 83 - "auth/store.ts"
+### Community 82 - "auth/store.ts"
 Cohesion: 0.12
 Nodes (15): createClientBundle(), doRefresh(), AuthContext, AuthProvider(), AuthValue, SetupInput, ADR-0005, ADR-0011 (+7 more)
 
-### Community 84 - "Segmented.tsx"
+### Community 83 - "Segmented.tsx"
 Cohesion: 0.12
 Nodes (17): allOf(), compactWidths(), Layout, LayoutInput, layoutSegments(), SegmentedDensity, Registered, SegmentedItem (+9 more)
+
+### Community 84 - "auth/index.ts"
+Cohesion: 0.12
+Nodes (20): Decision, الملفات والتأثير, القرار والموافقات, profileRoom(), contexts, registerEvents, registerRoutes, ADR-0011 (+12 more)
 
 ### Community 85 - "marks.tsx"
 Cohesion: 0.08
@@ -696,57 +693,57 @@ Nodes (10): HERMES_STATUSES, HermesKanban, ARCHIVE_AFTER_MS, HermesBoardPort, He
 Cohesion: 0.13
 Nodes (22): BundleOptions, DisplayPrefs, I18nContext, I18nProvider(), I18nValue, useI18n(), useT(), Catalogue (+14 more)
 
-### Community 91 - "args.ts"
-Cohesion: 0.14
-Nodes (20): aligned(), findCommand(), GLOBAL_OPTIONS, Invocation, mergedOptions(), optionLine(), OptionSpec, parseInvocation() (+12 more)
-
-### Community 92 - "channels.ts"
+### Community 91 - "channels.ts"
 Cohesion: 0.17
 Nodes (18): ChannelError, ChannelField, ChannelWrite, clearChannel(), CREDENTIAL, ensureMap(), EXCLUSIVE, FieldKind (+10 more)
 
-### Community 93 - "KnowledgeService"
+### Community 92 - "KnowledgeService"
 Cohesion: 0.17
 Nodes (8): ما زال 501 عمدًا (وموثَّق), sanitiseFilename(), DownloadHandle, isFileTooLarge(), KnowledgeService, purposeFrom(), tooLarge(), AttachmentRow
 
-### Community 94 - ".notify"
+### Community 93 - ".notify"
 Cohesion: 0.10
 Nodes (18): التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, وحدة «الجدولة»: متى يحدث الشيء، وماذا يحدث (+10 more)
 
-### Community 95 - "workflow-engine.test.ts"
+### Community 94 - "workflow-engine.test.ts"
 Cohesion: 0.10
 Nodes (17): التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, سير العمل يعمل: خطوات ينفّذها المحرّك وخطوات ينفّذها وكيل, idle() (+9 more)
 
-### Community 96 - "scripts"
+### Community 95 - "scripts"
 Cohesion: 0.09
 Nodes (22): scripts, build, change-record:check, contract:test, contracts:check-clients, contracts:generate, contracts:generate:ts, contracts:lint (+14 more)
 
-### Community 97 - "server/package.json"
+### Community 96 - "args.ts"
+Cohesion: 0.15
+Nodes (19): aligned(), findCommand(), GLOBAL_OPTIONS, Invocation, mergedOptions(), optionLine(), OptionSpec, parseInvocation() (+11 more)
+
+### Community 97 - "pair.ts"
+Cohesion: 0.14
+Nodes (16): Claimed, pairClaimCommand, pairCommand, QrPayload, waitForClaim(), QrLevel, qrModules(), renderModules() (+8 more)
+
+### Community 98 - "server/package.json"
 Cohesion: 0.09
 Nodes (21): description, ajv, ajv-formats, @majlis/contracts, socket.io-client, tsx, @types/node, typescript (+13 more)
 
-### Community 98 - "Combobox.tsx"
+### Community 99 - "Combobox.tsx"
 Cohesion: 0.18
 Nodes (17): Combobox(), ComboboxProps, ComboboxStatus, buildRows(), BuildRowsInput, ComboboxOption, highlightParts(), matchRanges() (+9 more)
 
-### Community 99 - "The kit (owner decision, 2026-09-22)"
+### Community 100 - "The kit (owner decision, 2026-09-22)"
 Cohesion: 0.12
 Nodes (14): The kit (owner decision, 2026-09-22), Body, Badge(), BadgeTone, Card(), cardClass(), CardFooter(), CardHeader() (+6 more)
 
-### Community 100 - "mcp.ts"
+### Community 101 - "mcp.ts"
 Cohesion: 0.20
 Nodes (16): configPath(), deleteMcpServer(), getMcpServer(), listMcpServers(), load(), mask(), McpError, McpWrite (+8 more)
 
-### Community 101 - "ui-tokens/package.json"
+### Community 102 - "ui-tokens/package.json"
 Cohesion: 0.10
 Nodes (20): description, devDependencies, @types/node, typescript, vitest, exports, ./tokens.css, ./tokens.json (+12 more)
 
-### Community 102 - "media.ts"
+### Community 103 - "media.ts"
 Cohesion: 0.12
 Nodes (17): RFC-5987, ByteRange, StoredBlob, WriteOptions, MAX_FILENAME_LENGTH, AttachmentKind, BY_EXTENSION, looksLikeText() (+9 more)
-
-### Community 103 - "Chat"
-Cohesion: 0.22
-Nodes (4): Chat, describeError(), isConnectionError(), reasonOf()
 
 ### Community 104 - "sessions/service.ts"
 Cohesion: 0.16
@@ -807,10 +804,6 @@ Nodes (16): 10. A workflow step's output is a session, 13. Channels, webhook eve
 ### Community 119 - "Hermes Agent (وقت التشغيل الذي نقوده)"
 Cohesion: 0.12
 Nodes (16): 2) الجلسات (user-guide/sessions), 3) الذاكرة (user-guide/features/memory), 4) المهارات (user-guide/features/skills), 5) المهام المجدولة (user-guide/features/cron), 6) قنوات المراسلة (user-guide/messaging, developer-guide/gateway-internals), 7) Kanban والتفويض والملفات الشخصية, 8) اللوحة والأمان, Hermes Agent (وقت التشغيل الذي نقوده) (+8 more)
-
-### Community 120 - "pair.ts"
-Cohesion: 0.18
-Nodes (13): Claimed, pairClaimCommand, pairCommand, parseQrPayload(), QrPayload, QrLevel, qrModules(), renderModules() (+5 more)
 
 ### Community 121 - "memory.ts"
 Cohesion: 0.21
@@ -928,13 +921,13 @@ Nodes (12): attachment (scoped), Attachments and a run, What the store actually 
 Cohesion: 0.15
 Nodes (12): Archive and delete, Conventions, Domain model, Entity map, job, Lifecycles, Ownership per module, Reading the map (+4 more)
 
-### Community 150 - "lib/errors.ts"
-Cohesion: 0.21
-Nodes (10): agentUnavailable(), ERROR_CODES, ErrorEnvelope, HubErrorOptions, STATUS_BY_CODE, parse(), parseRequest(), RequestPart (+2 more)
-
-### Community 151 - "lib/realtime.ts"
+### Community 150 - "lib/realtime.ts"
 Cohesion: 0.18
 Nodes (9): RealtimeNamespace, createRealtime(), EmitTarget, Realtime, RealtimeEnvelope, userRoom(), AuditContext, realtimeOf() (+1 more)
+
+### Community 151 - "openai.ts"
+Cohesion: 0.23
+Nodes (11): authHeaders(), chatMessage(), count(), enrich(), numberOf(), openAiChat(), OpenAiChatFrame, OpenAiModel (+3 more)
 
 ### Community 152 - "sessions/schema.ts"
 Cohesion: 0.15
@@ -956,471 +949,459 @@ Nodes (11): التسليم والخطوة التالية, العقد (ما تغ�
 Cohesion: 0.17
 Nodes (9): اسم المنتَج في مكانٍ واحد — وثلاثة أسماء لا تتبعه, التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير (+1 more)
 
-### Community 158 - "openai.ts"
-Cohesion: 0.24
-Nodes (10): authHeaders(), chatMessage(), count(), enrich(), numberOf(), openAiChat(), OpenAiChatFrame, OpenAiModel (+2 more)
-
-### Community 159 - "@majlis/web"
+### Community 158 - "@majlis/web"
 Cohesion: 0.17
 Nodes (10): @majlis/web, Rules, Run, Tests, Third-party layers (owner decision, 2026-09-22), Button, buttonClass(), ButtonProps (+2 more)
 
-### Community 160 - "Architecture"
+### Community 159 - "Architecture"
 Cohesion: 0.18
 Nodes (10): Architecture, Clean room, Contract, Data ownership, Hermes is the base (ADR 0006), Invariants (tested), Modules (server), One sentence (+2 more)
 
-### Community 161 - "عقد الواجهة التأسيسي (OpenAPI + أحداث الوقت الحقيقي)"
+### Community 160 - "عقد الواجهة التأسيسي (OpenAPI + أحداث الوقت الحقيقي)"
 Cohesion: 0.18
 Nodes (10): التسليم والخطوة التالية, العقد (ما تغيّر في packages/contracts، أو «لا شيء»), الفحوص (الأوامر ونواتجها الفعلية), القرار والموافقات, المخاطر والرجوع, الملفات والتأثير, عقد الواجهة التأسيسي (OpenAPI + أحداث الوقت الحقيقي), 9. One `Schedule` resource for Hermes cron jobs and workflow schedules (+2 more)
 
-### Community 162 - "العميل المرجعي `packages/cli`: إثبات المرحلة صفر من الطرفية فوق العقد"
+### Community 161 - "العميل المرجعي `packages/cli`: إثبات المرحلة صفر من الطرفية فوق العقد"
 Cohesion: 0.18
 Nodes (10): التسليم والخطوة التالية, العقد, العميل المرجعي `packages/cli`: إثبات المرحلة صفر من الطرفية فوق العقد, الفحوص (الأوامر ونواتجها الفعلية), المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, تحديث لاحق (المنسّق، 2026-09-21) (+2 more)
 
-### Community 163 - "سجل ما نأخذه من المشاريع الملهِمة، مرتَّبًا بمراحله"
+### Community 162 - "سجل ما نأخذه من المشاريع الملهِمة، مرتَّبًا بمراحله"
 Cohesion: 0.18
 Nodes (10): التسليم والخطوة التالية, العقد, الفحوص (الأوامر ونواتجها الفعلية), القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, تحديث (2026-09-22): معاينة AionUi حيًّا (+2 more)
 
-### Community 164 - "لوحة المهام: لا تسقط بسبب هرمز، أعمدة طويلة، رؤوس موحّدة، وأرشفة بعد أسبوع"
+### Community 163 - "لوحة المهام: لا تسقط بسبب هرمز، أعمدة طويلة، رؤوس موحّدة، وأرشفة بعد أسبوع"
 Cohesion: 0.18
 Nodes (10): التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, لوحة المهام: لا تسقط بسبب هرمز، أعمدة طويلة، رؤوس موحّدة، وأرشفة بعد أسبوع (+2 more)
 
-### Community 165 - "الدبّوس يُعرَف صغيرًا، وزرّ السمة يُبدّل بضغطة"
+### Community 164 - "الدبّوس يُعرَف صغيرًا، وزرّ السمة يُبدّل بضغطة"
 Cohesion: 0.18
 Nodes (10): التسليم والخطوة التالية, الدبّوس يُعرَف صغيرًا، وزرّ السمة يُبدّل بضغطة, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير (+2 more)
 
-### Community 166 - "Roadmap"
+### Community 165 - "Roadmap"
 Cohesion: 0.18
 Nodes (10): Checkpoint A — first deployment on the owner's server, Phase 0 — Foundation (this repository's first release), Phase 1 — Working together, Phase 2 — Web client, Phase 3 — Phones and desktop, Phase 3b — Desktop details, Phase 4 — Knowledge, plugins, updates, audit, Phase 5 — Replace the fork (+2 more)
 
-### Community 167 - "hermes-profiles.ts"
+### Community 166 - "hermes-profiles.ts"
 Cohesion: 0.29
 Nodes (7): createHermesProfiles(), HermesProfileError, hermesProfileRunner(), isDirectory(), ProfileRunner, ADR-0014, ADR-0014
 
-### Community 168 - "settings-pages.test.tsx"
+### Community 167 - "settings-pages.test.tsx"
 Cohesion: 0.20
 Nodes (8): memoryStorage(), mount(), Sent, State, ref_src_settings_abouttab_js, ref_src_settings_knowledgetab_js, ref_src_settings_pluginstab_js, ref_src_settings_updatestab_js
 
-### Community 169 - "hermes-kanban.py"
+### Community 168 - "hermes-kanban.py"
 Cohesion: 0.20
 Nodes (8): argparse, cron_jobs, hermes_cli_kanban, hermes_cli_kanban_parser, json, Run the real `hermes kanban` from a checkout of Hermes's source, stdlib only.…, Parse schedule strings with the real Hermes, from a checkout of its source,…, sys
 
-### Community 170 - "تقليص صورة Docker بلا تغيير في السلوك"
+### Community 169 - "تقليص صورة Docker بلا تغيير في السلوك"
 Cohesion: 0.22
 Nodes (9): التسليم والخطوة التالية, العقد (ما تغيّر في packages/contracts، أو «لا شيء»), الفحوص (الأوامر ونواتجها الفعلية), القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, تقليص صورة Docker بلا تغيير في السلوك (+1 more)
 
-### Community 171 - "createHubClient"
+### Community 170 - "createHubClient"
 Cohesion: 0.20
 Nodes (7): العقد, Contracts, 4. Smoke checklist, The Hermes runtime (ADR 0008, ADR 0010), i18n drift, @majlis/contracts, createHubClient()
 
-### Community 172 - "أدوات وكيل هرمز: المهارات و MCP والذاكرة والقنوات — ملفاتٌ لا نملكها"
+### Community 171 - "أدوات وكيل هرمز: المهارات و MCP والذاكرة والقنوات — ملفاتٌ لا نملكها"
 Cohesion: 0.20
 Nodes (9): أدوات وكيل هرمز: المهارات و MCP والذاكرة والقنوات — ملفاتٌ لا نملكها, التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير (+1 more)
 
-### Community 173 - "composer.test.tsx"
+### Community 172 - "composer.test.tsx"
 Cohesion: 0.24
 Nodes (8): ١) عنصر المقاطع المشترك, base, memoryStorage(), Props, renderComposer(), state(), surface(), ref_src_chat_composer_js
 
-### Community 174 - "المحادثة: تفكير لا يكرّر الرد، وأدوات خارج الرسالة، وعرض يستعمل الشاشة"
+### Community 173 - "المحادثة: تفكير لا يكرّر الرد، وأدوات خارج الرسالة، وعرض يستعمل الشاشة"
 Cohesion: 0.20
 Nodes (9): التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المحادثة: تفكير لا يكرّر الرد، وأدوات خارج الرسالة، وعرض يستعمل الشاشة, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير (+1 more)
 
-### Community 175 - "كل الصفحات بعرض الشاشة"
+### Community 174 - "كل الصفحات بعرض الشاشة"
 Cohesion: 0.20
 Nodes (9): التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, كل الصفحات بعرض الشاشة (+1 more)
 
-### Community 176 - "لوحة المهام تقرأ كنبان هرمز — وهرمز يفوز"
+### Community 175 - "لوحة المهام تقرأ كنبان هرمز — وهرمز يفوز"
 Cohesion: 0.20
 Nodes (8): التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, لوحة المهام تقرأ كنبان هرمز — وهرمز يفوز, registerHermesBoard()
 
-### Community 177 - "الإعدادات: زرّ رجوع إلى المحادثات بدل الشريط العلوي"
+### Community 176 - "الإعدادات: زرّ رجوع إلى المحادثات بدل الشريط العلوي"
 Cohesion: 0.20
 Nodes (9): الإعدادات: زرّ رجوع إلى المحادثات بدل الشريط العلوي, التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير (+1 more)
 
-### Community 178 - "notify"
+### Community 177 - "notify"
 Cohesion: 0.20
 Nodes (9): Not stored, notification_delivery (scoped), notification_preference (scoped), notification (scoped), notify, push_credential (global), Queries the clients need, webhook_delivery (scoped) (+1 more)
 
-### Community 179 - "sessions"
+### Community 178 - "sessions"
 Cohesion: 0.20
 Nodes (9): approval (scoped), Files in a turn, message (scoped), Not stored, run (scoped), session (scoped), sessions, tool_call (scoped) (+1 more)
 
-### Community 180 - "Harness"
+### Community 179 - "Harness"
 Cohesion: 0.20
 Nodes (9): CI on a private repository, Contract drift (ADR 0003), Database, Design and layout drift (web), Harness, Missing change records (TEAM-RULES §2), Module boundaries (ARCHITECTURE §Modules), Navigation drift (+1 more)
 
-### Community 181 - "ما نأخذه، ومتى"
+### Community 180 - "ما نأخذه، ومتى"
 Cohesion: 0.20
 Nodes (9): أشياء رأيناها ولا نأخذها, الاتصال المباشر بالنموذج (قرار المالك 2026-09-22), المرحلة ١ — العمل المشترك (الغرف، المهام، الجدولة), المرحلة ٢ — عميل الويب, المرحلة ٢ — عميل الويب: هيكل الشاشة (بعد معاينة AionUi حيًّا، 2026-09-22), المرحلة ٤ — المعرفة والإضافات والتدقيق, ما نأخذه، ومتى, مكتبة مساعدين جاهزين (قرار المالك 2026-09-22) (+1 more)
 
-### Community 182 - "devDependencies"
+### Community 181 - "devDependencies"
 Cohesion: 0.20
 Nodes (10): devDependencies, drizzle-kit, pino-pretty, socket.io-client, tsx, @types/better-sqlite3, @types/node, @types/pg (+2 more)
 
-### Community 183 - "web.ts"
+### Community 182 - "web.ts"
 Cohesion: 0.24
 Nodes (8): packageRoot, API_ROOT, DEFAULT_WEB_DIR, isReservedPath(), registerWebClient(), SOCKET_ROOT, WebOptions, @fastify/static
 
-### Community 184 - "plugins/schema.ts"
+### Community 183 - "plugins/schema.ts"
 Cohesion: 0.20
 Nodes (9): PLUGIN_BINDING_STATUSES, PLUGIN_INSTALL_STATES, PLUGIN_KINDS, PLUGIN_SOURCES, PLUGIN_TOOL_KINDS, pluginBindings, PluginManifest, plugins (+1 more)
 
-### Community 185 - "contrast.test.ts"
+### Community 184 - "contrast.test.ts"
 Cohesion: 0.31
 Nodes (8): channel(), composite(), contrastRatio(), luminance(), parseHex(), Rgb, root, tokens
 
-### Community 187 - "قرار وضعَي تطبيق سطح المكتب وقاعدة الأحجام"
+### Community 186 - "قرار وضعَي تطبيق سطح المكتب وقاعدة الأحجام"
 Cohesion: 0.22
 Nodes (8): التسليم والخطوة التالية, العقد, الفحوص (الأوامر ونواتجها الفعلية), القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, قرار وضعَي تطبيق سطح المكتب وقاعدة الأحجام
 
-### Community 188 - "وثائق الالتحاق: حالة المشروع، التشغيل المحلي، ولغة التصميم"
+### Community 187 - "وثائق الالتحاق: حالة المشروع، التشغيل المحلي، ولغة التصميم"
 Cohesion: 0.22
 Nodes (8): التسليم والخطوة التالية, العقد, الفحوص (الأوامر ونواتجها الفعلية), القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, وثائق الالتحاق: حالة المشروع، التشغيل المحلي، ولغة التصميم
 
-### Community 189 - "الغرفة النظيفة: إجراء بدل عصابة العينين"
+### Community 188 - "الغرفة النظيفة: إجراء بدل عصابة العينين"
 Cohesion: 0.22
 Nodes (8): التسليم والخطوة التالية, العقد, الغرفة النظيفة: إجراء بدل عصابة العينين, الفحوص (الأوامر ونواتجها الفعلية), القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير
 
-### Community 190 - "وحدة «الإشعارات»: الصندوق، والتفضيلات، والخطّافات"
+### Community 189 - "وحدة «الإشعارات»: الصندوق، والتفضيلات، والخطّافات"
 Cohesion: 0.22
 Nodes (8): التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, وحدة «الإشعارات»: الصندوق، والتفضيلات، والخطّافات
 
-### Community 191 - "المستخدمون والمساحات: شاشتان لا تعرضان إلّا ما يقبله المجلس"
+### Community 190 - "المستخدمون والمساحات: شاشتان لا تعرضان إلّا ما يقبله المجلس"
 Cohesion: 0.22
 Nodes (8): التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المستخدمون والمساحات: شاشتان لا تعرضان إلّا ما يقبله المجلس, المشكلة والهدف, الملفات والتأثير
 
-### Community 192 - "آخر أربع صفحات في الإعدادات — و`meta.get` التي كانت ناقصة"
+### Community 191 - "آخر أربع صفحات في الإعدادات — و`meta.get` التي كانت ناقصة"
 Cohesion: 0.22
 Nodes (8): آخر أربع صفحات في الإعدادات — و`meta.get` التي كانت ناقصة, التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير
 
-### Community 193 - "شاشات الويب فوق ما بُني: المهام، الجدولة، والتقارير الثلاثة"
+### Community 192 - "شاشات الويب فوق ما بُني: المهام، الجدولة، والتقارير الثلاثة"
 Cohesion: 0.22
 Nodes (8): التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, شاشات الويب فوق ما بُني: المهام، الجدولة، والتقارير الثلاثة
 
-### Community 194 - "خريطة الكود بـ Graphify، مرفوعة في المستودع ومفحوصة في CI؛ وحذف Understand-Anything"
+### Community 193 - "خريطة الكود بـ Graphify، مرفوعة في المستودع ومفحوصة في CI؛ وحذف Understand-Anything"
 Cohesion: 0.22
 Nodes (8): التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, خريطة الكود بـ Graphify، مرفوعة في المستودع ومفحوصة في CI؛ وحذف Understand-Anything
 
-### Community 195 - "هرمز عبر واجهته الداخلية: أسئلة بخيارات، وتفكير حقيقي، وناتج الأدوات"
+### Community 194 - "هرمز عبر واجهته الداخلية: أسئلة بخيارات، وتفكير حقيقي، وناتج الأدوات"
 Cohesion: 0.22
 Nodes (8): التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, هرمز عبر واجهته الداخلية: أسئلة بخيارات، وتفكير حقيقي، وناتج الأدوات
 
-### Community 196 - "لوحة واحدة لكل المهام — بلا مشروعٍ يُخترَع أوّلًا"
+### Community 195 - "لوحة واحدة لكل المهام — بلا مشروعٍ يُخترَع أوّلًا"
 Cohesion: 0.22
 Nodes (8): التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, لوحة واحدة لكل المهام — بلا مشروعٍ يُخترَع أوّلًا
 
-### Community 197 - "المستخدمون: كلمة المرور والحذف أزرار ظاهرة، وزرّ الإضافة المعطّل يقول لماذا"
+### Community 196 - "المستخدمون: كلمة المرور والحذف أزرار ظاهرة، وزرّ الإضافة المعطّل يقول لماذا"
 Cohesion: 0.22
 Nodes (8): التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المستخدمون: كلمة المرور والحذف أزرار ظاهرة، وزرّ الإضافة المعطّل يقول لماذا, المشكلة والهدف, الملفات والتأثير
 
-### Community 198 - "«بروفايل» بدل «مساحة العمل» في نصوص الواجهة"
+### Community 197 - "«بروفايل» بدل «مساحة العمل» في نصوص الواجهة"
 Cohesion: 0.22
 Nodes (8): التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, «بروفايل» بدل «مساحة العمل» في نصوص الواجهة
 
-### Community 199 - "The look of every Majlis client"
+### Community 198 - "The look of every Majlis client"
 Cohesion: 0.22
 Nodes (8): Drag and drop, where it means something, Glass, deliberately partial, Language, Naming, Shape, The conversation (owner decision, 2026-09-22), The look of every Majlis client, The thinking indicator
 
-### Community 200 - "خريطة التنقّل الموحّدة لعملاء Majlis (عقد إلزامي)"
+### Community 199 - "خريطة التنقّل الموحّدة لعملاء Majlis (عقد إلزامي)"
 Cohesion: 0.22
 Nodes (8): خريطة التنقّل الموحّدة لعملاء Majlis (عقد إلزامي), ٠) شاشات ما قبل الدخول (ليست وجهات), ١) القائمة الجانبية (متطابقة على كل السطوح), ٢) شاشة الإعدادات (شاشة واحدة، بلا «إعدادات داخل إعدادات»), ٣) صفحة النماذج, ٤) تحت الوكيل (يُدخَل من بطاقة في `Agent Manager` فقط), ٥) التحقق, Channels
 
-### Community 201 - "Deploying Majlis"
+### Community 200 - "Deploying Majlis"
 Cohesion: 0.22
 Nodes (8): 1. Run the image, 2. First run: creating the owner account, 2b. Pairing a phone, 3. Hermes inside the container, 3b. A model server on your own machine (LM Studio, Ollama, LiteLLM), Deploying Majlis, Using a Hermes you already run, Where things live
 
-### Community 202 - "audit"
+### Community 201 - "audit"
 Cohesion: 0.22
 Nodes (8): audit, audit_event (global, workspace nullable), job_event (global, workspace nullable), job (global, workspace nullable), Not stored, performance_snapshot (global), Queries the clients need, usage_record (scoped)
 
-### Community 203 - "rooms"
+### Community 202 - "rooms"
 Cohesion: 0.22
 Nodes (8): handoff (scoped), Not stored, Queries the clients need, room_member (scoped), room_message (scoped), room (scoped), rooms, seat (scoped)
 
-### Community 204 - "devDependencies"
+### Community 203 - "devDependencies"
 Cohesion: 0.22
 Nodes (9): devDependencies, eslint, eslint-config-prettier, @eslint/js, globals, prettier, @types/node, typescript (+1 more)
 
-### Community 205 - "contracts/tsconfig.json"
+### Community 204 - "contracts/tsconfig.json"
 Cohesion: 0.22
 Nodes (8): compilerOptions, lib, outDir, rootDir, exclude, extends, include, ../../tsconfig.base.json
 
-### Community 206 - "scripts"
+### Community 205 - "scripts"
 Cohesion: 0.22
 Nodes (9): scripts, build, contract:test, db:generate, db:migrate, dev, start, test (+1 more)
 
-### Community 207 - "proof.mjs"
+### Community 206 - "proof.mjs"
 Cohesion: 0.22
 Nodes (6): big, form, hermes, produced, reply, spare
 
-### Community 208 - "updates/schema.ts"
+### Community 207 - "updates/schema.ts"
 Cohesion: 0.22
 Nodes (7): bool(), channelSubscriptions, RELEASE_PLATFORMS, releaseChannels, releases, ADR-0005, updateSettings
 
-### Community 211 - "compilerOptions"
+### Community 210 - "compilerOptions"
 Cohesion: 0.22
 Nodes (8): compilerOptions, declaration, noEmit, rootDir, sourceMap, extends, include, ../../tsconfig.base.json
 
-### Community 212 - "smoke.spec.ts"
+### Community 211 - "smoke.spec.ts"
 Cohesion: 0.25
 Nodes (3): leaveSettings(), newChat(), ADR-0014
 
-### Community 213 - "combobox.test.tsx"
+### Community 212 - "combobox.test.tsx"
 Cohesion: 0.28
 Nodes (6): activeRow(), CATALOGUE, renderBox(), rows(), stubListViewport(), ref_src_ui_combobox_js
 
-### Community 214 - "people.test.tsx"
+### Community 213 - "people.test.tsx"
 Cohesion: 0.28
 Nodes (8): hub(), memoryStorage(), mount(), person(), Sent, ADR-0014, ref_src_people_userstab_js, ref_src_people_workspacestab_js
 
-### Community 215 - "realtime-context.test.tsx"
+### Community 214 - "realtime-context.test.tsx"
 Cohesion: 0.25
 Nodes (3): auth, FakeSocket, sockets
 
-### Community 216 - "الإشعارات تحدث فعلًا: منتِج، وبثّ، وصفحة"
+### Community 215 - "التأسيس: العمود الفقري للوثائق والقرارات"
 Cohesion: 0.25
-Nodes (7): الإشعارات تحدث فعلًا: منتِج، وبثّ، وصفحة, التسليم والخطوة التالية, العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف
+Nodes (7): التأسيس: العمود الفقري للوثائق والقرارات, التسليم والخطوة التالية, العقد, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير
 
-### Community 217 - "الطابور والتوجيه، وحلقة السياق"
+### Community 216 - "الطابور والتوجيه، وحلقة السياق"
 Cohesion: 0.25
 Nodes (7): التسليم والخطوة التالية, الطابور والتوجيه، وحلقة السياق, العقد, الفحوص, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير
 
-### Community 218 - "schedules"
+### Community 217 - "schedules"
 Cohesion: 0.25
 Nodes (7): node_run (scoped), Not stored, Queries the clients need, schedule_run (scoped), schedule (scoped), schedules, workflow_run (scoped)
 
-### Community 219 - "Knowledge graph (Graphify)"
+### Community 218 - "Knowledge graph (Graphify)"
 Cohesion: 0.25
 Nodes (7): Knowledge graph (Graphify), Rule for agents, Setup (once per machine), The check, What is committed, Why Graphify, Working with it
 
-### Community 220 - "AionUi"
+### Community 219 - "AionUi"
 Cohesion: 0.25
 Nodes (7): AionUi, الأفكار التي نرفضها ولماذا, روابط, كيف يكتشف الوكلاء ويستخدم ACP (من `packages/desktop/src/common/types/agent/detectedAgent.ts` وREADME), ما لا نأخذه تحت هذه الرخصة, ماذا يفعل (في خمسة أسطر), bearer()
 
-### Community 221 - "Multica"
+### Community 220 - "Multica"
 Cohesion: 0.25
 Nodes (7): Multica, الأفكار التي نتبنّاها, الأفكار التي نرفضها ولماذا, الشروط الإضافية (Part I) كما هي في الملف, روابط, ما لا نأخذه تحت هذه الرخصة, ماذا يفعل (في خمسة أسطر)
 
-### Community 222 - "Proliferate"
+### Community 221 - "Proliferate"
 Cohesion: 0.25
 Nodes (6): Proliferate, الأفكار التي نتبنّاها, الأفكار التي نرفضها ولماذا, روابط, ما لا نأخذه تحت هذه الرخصة, ماذا يفعل (في خمسة أسطر)
 
-### Community 223 - "cli/tsconfig.json"
+### Community 222 - "cli/tsconfig.json"
 Cohesion: 0.25
 Nodes (7): compilerOptions, outDir, rootDir, exclude, extends, include, ../../tsconfig.base.json
 
-### Community 224 - "cli/tsconfig.test.json"
+### Community 223 - "cli/tsconfig.test.json"
 Cohesion: 0.25
 Nodes (7): compilerOptions, declaration, noEmit, sourceMap, extends, include, ../../tsconfig.base.json
 
-### Community 225 - "Database"
+### Community 224 - "Database"
 Cohesion: 0.25
 Nodes (7): Backups, Column mapping: SQLite ⇄ PostgreSQL, Configuration and the default SQLite file, Database, Layout, Migrations (Drizzle Kit), PostgreSQL option
 
-### Community 226 - "server/tsconfig.json"
+### Community 225 - "server/tsconfig.json"
 Cohesion: 0.25
 Nodes (7): compilerOptions, outDir, rootDir, exclude, extends, include, ../../tsconfig.base.json
 
-### Community 227 - "build.mjs"
+### Community 226 - "build.mjs"
 Cohesion: 0.29
 Nodes (5): dist, hexToRgb(), root, themeBlock(), tokens
 
-### Community 228 - "محادثة حقيقية مع Hermes عبر الخادم: المشغّل، وقت التشغيل المُشرَف عليه، وربط المنافذ"
+### Community 227 - "محادثة حقيقية مع Hermes عبر الخادم: المشغّل، وقت التشغيل المُشرَف عليه، وربط المنافذ"
 Cohesion: 0.29
 Nodes (6): التسليم والخطوة التالية, العقد (ما تغيّر في packages/contracts، أو «لا شيء»), الفحوص (الأوامر ونواتجها الفعلية), المخاطر والرجوع, المشكلة والهدف, محادثة حقيقية مع Hermes عبر الخادم: المشغّل، وقت التشغيل المُشرَف عليه، وربط المنافذ
 
-### Community 229 - "`packages/server/src/modules/knowledge/` (السجل: البايتات والحدود)"
+### Community 228 - "`packages/server/src/modules/knowledge/` (السجل: البايتات والحدود)"
 Cohesion: 0.33
 Nodes (6): `packages/server/src/modules/knowledge/` (السجل: البايتات والحدود), parseRange(), contentDispositionOf(), AttachmentMeta, UploadInput, AttachmentInsert
 
-### Community 230 - "جولة تصميم شاشة المحادثة، وطقم المكوّنات الكامل"
+### Community 229 - "جولة تصميم شاشة المحادثة، وطقم المكوّنات الكامل"
 Cohesion: 0.29
 Nodes (6): العقد, الفحوص, القرار والموافقات, المخاطر والرجوع, المشكلة والهدف, جولة تصميم شاشة المحادثة، وطقم المكوّنات الكامل
 
-### Community 231 - "جولة المالك على الواجهة: الإصدار، القائمة، الرسالة، الإعدادات، والوكلاء"
-Cohesion: 0.29
-Nodes (6): التسليم والخطوة التالية, الفحوص, المخاطر والرجوع, المشكلة والهدف, الملفات والتأثير, جولة المالك على الواجهة: الإصدار، القائمة، الرسالة، الإعدادات، والوكلاء
-
-### Community 232 - "وصول المزوّد إلى وقت التشغيل: التعبير عن النقاط المتوافقة مع OpenAI، والتحقّق من المفتاح، وفحص ظاهر"
+### Community 230 - "وصول المزوّد إلى وقت التشغيل: التعبير عن النقاط المتوافقة مع OpenAI، والتحقّق من المفتاح، وفحص ظاهر"
 Cohesion: 0.29
 Nodes (6): الفحوص (الأوامر ونواتجها الفعلية), القرار والموافقات, المشكلة والهدف, وصول المزوّد إلى وقت التشغيل: التعبير عن النقاط المتوافقة مع OpenAI، والتحقّق من المفتاح، وفحص ظاهر, ١) الحاوية الحقيقية, ٢) مصفوفة `docs/harness/validation.md`
 
-### Community 233 - "صفحة الجدولة تقرأ cron هرمز وتكتب فيه — وهرمز يفوز"
+### Community 231 - "صفحة الجدولة تقرأ cron هرمز وتكتب فيه — وهرمز يفوز"
 Cohesion: 0.29
 Nodes (6): التسليم والخطوة التالية, العقد, الفحوص, المخاطر والرجوع, المشكلة والهدف, صفحة الجدولة تقرأ cron هرمز وتكتب فيه — وهرمز يفوز
 
-### Community 234 - "المستخدمون: كلمة مرورك، ومستخدمون محصورون في مساحات محدّدة"
+### Community 232 - "المستخدمون: كلمة مرورك، ومستخدمون محصورون في مساحات محدّدة"
 Cohesion: 0.29
 Nodes (6): التسليم والخطوة التالية, العقد, الفحوص, المخاطر والرجوع, المستخدمون: كلمة مرورك، ومستخدمون محصورون في مساحات محدّدة, المشكلة والهدف
 
-### Community 235 - "knowledge"
+### Community 233 - "knowledge"
 Cohesion: 0.29
 Nodes (6): journal_entry (scoped), knowledge, knowledge_note (scoped), Not stored, Queries the clients need, Search
 
-### Community 236 - "plugins"
+### Community 234 - "plugins"
 Cohesion: 0.29
 Nodes (6): Not stored, plugin_binding (scoped), plugin (global), plugin_tool (global), plugins, Queries the clients need
 
-### Community 237 - "updates"
-Cohesion: 0.29
-Nodes (6): channel_subscription (global), Not stored, Queries the clients need, release_channel (global), release (global), updates
-
-### Community 238 - "Claw-Kanban"
+### Community 235 - "Claw-Kanban"
 Cohesion: 0.29
 Nodes (6): Claw-Kanban, الأفكار التي نتبنّاها, الأفكار التي نرفضها ولماذا, روابط, ما لا نأخذه تحت هذه الرخصة, ماذا يفعل (في خمسة أسطر)
 
-### Community 239 - "Vibe Kanban"
+### Community 236 - "Vibe Kanban"
 Cohesion: 0.29
 Nodes (6): Vibe Kanban, الأفكار التي نتبنّاها, الأفكار التي نرفضها ولماذا, روابط, ما لا نأخذه تحت هذه الرخصة, ماذا يفعل (في خمسة أسطر)
 
-### Community 241 - "AgentSession"
+### Community 238 - "AgentSession"
 Cohesion: 0.33
 Nodes (3): turn(), AgentSession, LiveSession
 
-### Community 242 - "auth/setup.test.ts"
+### Community 239 - "auth/setup.test.ts"
 Cohesion: 0.33
 Nodes (5): SETUP_TOKEN_FILE, OWNER, tokenFile(), tokenOf(), ADR-0011
 
-### Community 243 - "chat.test.ts"
+### Community 240 - "chat.test.ts"
 Cohesion: 0.29
 Nodes (3): HELLO_FRAMES, Recorder, Scripted
 
-### Community 244 - "server/tsconfig.test.json"
+### Community 241 - "server/tsconfig.test.json"
 Cohesion: 0.29
 Nodes (6): compilerOptions, noEmit, rootDir, extends, include, ../../tsconfig.base.json
 
-### Community 245 - "scripts"
+### Community 242 - "scripts"
 Cohesion: 0.29
 Nodes (7): scripts, build, dev, preview, test, test:e2e, typecheck
 
-### Community 246 - "Toast.tsx"
+### Community 243 - "Toast.tsx"
 Cohesion: 0.33
 Nodes (5): Live, ToastContext, ToastRequest, ToastTone, useToast()
 
-### Community 247 - "ADR 0001 — Server stack"
+### Community 244 - "ADR 0001 — Server stack"
 Cohesion: 0.33
 Nodes (5): ADR 0001 — Server stack, Alternatives rejected, Consequences, Context, Decision
 
-### Community 248 - "ADR 0002 — How agents connect"
+### Community 245 - "ADR 0002 — How agents connect"
 Cohesion: 0.33
 Nodes (5): ADR 0002 — How agents connect, Alternatives rejected, Consequences, Context, Decision
 
-### Community 249 - "ADR 0006 — Hermes Agent is the base; other agents are installed on demand"
+### Community 246 - "ADR 0006 — Hermes Agent is the base; other agents are installed on demand"
 Cohesion: 0.33
 Nodes (5): ADR 0006 — Hermes Agent is the base; other agents are installed on demand, Alternatives rejected, Consequences, Context, Decision
 
-### Community 250 - "ADR 0008 — How the hub reaches Hermes: a supervised child, over its API server"
+### Community 247 - "ADR 0008 — How the hub reaches Hermes: a supervised child, over its API server"
 Cohesion: 0.33
 Nodes (5): ADR 0008 — How the hub reaches Hermes: a supervised child, over its API server, Alternatives rejected, Consequences, Context, Decision
 
-### Community 251 - "ADR 0011 — First-run setup in the browser, behind a claim token"
+### Community 248 - "ADR 0011 — First-run setup in the browser, behind a claim token"
 Cohesion: 0.33
 Nodes (5): ADR 0011 — First-run setup in the browser, behind a claim token, Consequences, Context, Decision, Rejected
 
-### Community 252 - "ADR 0013 — Hermes conversations over its TUI gateway, not the API server's run surface"
+### Community 249 - "ADR 0013 — Hermes conversations over its TUI gateway, not the API server's run surface"
 Cohesion: 0.33
 Nodes (5): ADR 0013 — Hermes conversations over its TUI gateway, not the API server's run surface, Alternatives rejected, Consequences, Context, Decision
 
-### Community 253 - "ADR 0014 — A workspace is a Hermes profile"
+### Community 250 - "ADR 0014 — A workspace is a Hermes profile"
 Cohesion: 0.33
 Nodes (5): ADR 0014 — A workspace is a Hermes profile, Alternatives rejected, Consequences, Context, Stages
 
-### Community 254 - "`majlis` — the reference client"
+### Community 251 - "`majlis` — the reference client"
 Cohesion: 0.33
 Nodes (5): Exit codes, Install and run, `majlis` — the reference client, What is 501-bound today, Where the token lives
 
-### Community 255 - "Developing Majlis"
+### Community 252 - "Developing Majlis"
 Cohesion: 0.33
 Nodes (5): Checks, Developing Majlis, Docker, Run the hub and the web client, Tests that must not depend on your machine
 
-### Community 257 - "Input.tsx"
+### Community 254 - "Input.tsx"
 Cohesion: 0.33
 Nodes (5): Input, InputProps, InputSize, Textarea, TextareaProps
 
-### Community 258 - "web/tsconfig.test.json"
+### Community 255 - "web/tsconfig.test.json"
 Cohesion: 0.33
 Nodes (5): compilerOptions, types, extends, include, ./tsconfig.json
 
-### Community 259 - ".prettierrc.json"
+### Community 256 - ".prettierrc.json"
 Cohesion: 0.33
 Nodes (5): endOfLine, printWidth, semi, singleQuote, trailingComma
 
-### Community 260 - "ADR 0003 — Contract first, clients generated"
+### Community 257 - "ADR 0003 — Contract first, clients generated"
 Cohesion: 0.40
 Nodes (4): ADR 0003 — Contract first, clients generated, Consequences, Context, Decision
 
-### Community 261 - "ADR 0004 — Clean room"
+### Community 258 - "ADR 0004 — Clean room"
 Cohesion: 0.40
 Nodes (4): ADR 0004 — Clean room, Consequences, Context, Decision
 
-### Community 262 - "ADR 0005 — Workspaces (profiles) are a filter, not a tree"
+### Community 259 - "ADR 0005 — Workspaces (profiles) are a filter, not a tree"
 Cohesion: 0.40
 Nodes (4): ADR 0005 — Workspaces (profiles) are a filter, not a tree, Consequences, Context, Decision
 
-### Community 263 - "ADR 0007 — Every client is built from scratch on the contract"
+### Community 260 - "ADR 0007 — Every client is built from scratch on the contract"
 Cohesion: 0.40
 Nodes (4): ADR 0007 — Every client is built from scratch on the contract, Consequences, Context, Decision
 
-### Community 264 - "ADR 0009 — The desktop app has two modes and never bundles Hermes"
+### Community 261 - "ADR 0009 — The desktop app has two modes and never bundles Hermes"
 Cohesion: 0.40
 Nodes (4): ADR 0009 — The desktop app has two modes and never bundles Hermes, Consequences, Context, Decision
 
-### Community 265 - "ADR 0012 — Observation is allowed; the clean room is a procedure, not a blindfold"
+### Community 262 - "ADR 0012 — Observation is allowed; the clean room is a procedure, not a blindfold"
 Cohesion: 0.40
 Nodes (4): ADR 0012 — Observation is allowed; the clean room is a procedure, not a blindfold, Consequences, Context, Decision
 
-### Community 266 - ".capabilities"
+### Community 263 - ".capabilities"
 Cohesion: 0.40
 Nodes (4): القواعد الخمس, 11. The agent registry is data, visible to every signed-in user, 14. Devices: a stable key, a capability handshake, requests as jobs, fixed error codes, الأفكار التي نتبنّاها
 
-### Community 267 - "Clients"
+### Community 264 - "Clients"
 Cohesion: 0.40
 Nodes (4): Clients, The parity test every client implements, The reference client, The web client
 
-### Community 269 - "devices"
+### Community 266 - "devices"
 Cohesion: 0.40
 Nodes (4): device_command (scoped), devices, Not stored, Queries the clients need
 
-### Community 270 - "shadcn/ui"
+### Community 267 - "shadcn/ui"
 Cohesion: 0.40
 Nodes (4): shadcn/ui, الفكرة التي نتبنّاها, ما نرفضه ولماذا, ماذا يفعل (في أربعة أسطر)
 
-### Community 271 - "openapitools.json"
+### Community 268 - "openapitools.json"
 Cohesion: 0.40
 Nodes (4): generator-cli, version, $schema, spaces
 
-### Community 272 - "product.ts"
+### Community 269 - "product.ts"
 Cohesion: 0.70
 Nodes (3): derived, PRODUCT, STABLE
 
-### Community 273 - "prove.sh"
+### Community 270 - "prove.sh"
 Cohesion: 0.70
 Nodes (3): await_run(), hub(), prove.sh script
 
-### Community 274 - "main.tsx"
+### Community 271 - "main.tsx"
 Cohesion: 0.40
 Nodes (4): root, packages_web_src_styles_app, ref_app_js, react-dom
 
-### Community 275 - "Notice.tsx"
+### Community 272 - "Notice.tsx"
 Cohesion: 0.40
 Nodes (3): Spinner(), Tone, tones
 
-### Community 280 - "engines"
+### Community 277 - "engines"
 Cohesion: 0.67
 Nodes (3): engines, node, pnpm
 
 ## Knowledge Gaps
 - **1871 isolated node(s):** `singleQuote`, `semi`, `trailingComma`, `printWidth`, `endOfLine` (+1866 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2611 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **23 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **24 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `main()` connect `main` to `cli/src/main.ts`, `cli/src/i18n/index.ts`, `chat.ts`, `cli.test.ts`, `runner.ts`, `الوكيل المباشر (direct) — محادثة من المركز إلى المزوّد بلا وقت تشغيل بينهما`, `ref_majlis_contracts`, `لوحة المهام: لا تسقط بسبب هرمز، أعمدة طويلة، رؤوس موحّدة، وأرشفة بعد أسبوع`, `الدبّوس يُعرَف صغيرًا، وزرّ السمة يُبدّل بضغطة`, `app/db.ts`, `sessions/store.ts`, `HermesRuntime`, `أدوات وكيل هرمز: المهارات و MCP والذاكرة والقنوات — ملفاتٌ لا نملكها`, `createHubClient`, `المحادثة: تفكير لا يكرّر الرد، وأدوات خارج الرسالة، وعرض يستعمل الشاشة`, `كل الصفحات بعرض الشاشة`, `لوحة المهام تقرأ كنبان هرمز — وهرمز يفوز`, `الإعدادات: زرّ رجوع إلى المحادثات بدل الشريط العلوي`, `Harness`, `AgentModelsPort`, `المستخدمون والمساحات: شاشتان لا تعرضان إلّا ما يقبله المجلس`, `آخر أربع صفحات في الإعدادات — و`meta.get` التي كانت ناقصة`, `خريطة الكود بـ Graphify، مرفوعة في المستودع ومفحوصة في CI؛ وحذف Understand-Anything`, `هرمز عبر واجهته الداخلية: أسئلة بخيارات، وتفكير حقيقي، وناتج الأدوات`, `المستخدمون: كلمة المرور والحذف أزرار ظاهرة، وزرّ الإضافة المعطّل يقول لماذا`, `«بروفايل» بدل «مساحة العمل» في نصوص الواجهة`, `وحدة الجلسات والبث الحي في Majlis (Phase 0)`, `marks.tsx`, `السؤال: عدّاد تنازلي، وإجابتك تبقى في المحادثة، والمحادثة تلحق الرد`, `مفاتيح المزوّدين واختيار النموذج (ADR 0010)`, `الإشعارات تحدث فعلًا: منتِج، وبثّ، وصفحة`, `output.ts`, `args.ts`, `Proliferate`, `workflow-engine.test.ts`, `محادثة حقيقية مع Hermes عبر الخادم: المشغّل، وقت التشغيل المُشرَف عليه، وربط المنافذ`, `جولة المالك على الواجهة: الإصدار، القائمة، الرسالة، الإعدادات، والوكلاء`, `Chat`, `المستخدمون: كلمة مرورك، ومستخدمون محصورون في مساحات محدّدة`, `Prompter`, `الإعدادات: قائمة جانبية بدل شريط التبويبات، وثلاثة رموز للسمة بدل كلمة`, `Hermes Agent (وقت التشغيل الذي نقوده)`?**
-  _High betweenness centrality (0.087) - this node is a cross-community bridge._
-- **Why does `HubError` connect `HubError` to `auth/routes.ts`, `models/index.ts`, `ModelsService`, `engine.ts`, `agents/service.ts`, `SessionsStore`, `audit/index.ts`, `sessions/index.ts`, `hermes-runtime.ts`, `auth/schema.ts`, `cli.test.ts`, `lib/errors.ts`, `runner.ts`, `notify/index.ts`, `users.ts`, `modules/index.ts`, `اسم المنتَج في مكانٍ واحد — وثلاثة أسماء لا تتبعه`, `server.ts`, `tasksModule`, `tasks/index.ts`, `adapters/hermes.ts`, `sessions/store.ts`, `acp.ts`, `SchedulesService`, `updates/index.ts`, `schedules/index.ts`, `hermes-cron.ts`, `HermesTuiSession`, `agents/index.ts`, `KnowledgeService`, `media.ts`, `sessions/service.ts`, `knowledge/service.ts`?**
+- **Why does `main()` connect `main` to `auth/routes.ts`, `cli/src/main.ts`, `cli/src/i18n/index.ts`, `notify/index.ts`, `ref_majlis_contracts`, `cli.test.ts`, `runner.ts`, `الوكيل المباشر (direct) — محادثة من المركز إلى المزوّد بلا وقت تشغيل بينهما`, `ref_node_os`, `لوحة المهام: لا تسقط بسبب هرمز، أعمدة طويلة، رؤوس موحّدة، وأرشفة بعد أسبوع`, `الدبّوس يُعرَف صغيرًا، وزرّ السمة يُبدّل بضغطة`, `app/db.ts`, `sessions/store.ts`, `أدوات وكيل هرمز: المهارات و MCP والذاكرة والقنوات — ملفاتٌ لا نملكها`, `HermesRuntime`, `المحادثة: تفكير لا يكرّر الرد، وأدوات خارج الرسالة، وعرض يستعمل الشاشة`, `كل الصفحات بعرض الشاشة`, `لوحة المهام تقرأ كنبان هرمز — وهرمز يفوز`, `الإعدادات: زرّ رجوع إلى المحادثات بدل الشريط العلوي`, `createHubClient`, `Harness`, `AgentModelsPort`, `المستخدمون والمساحات: شاشتان لا تعرضان إلّا ما يقبله المجلس`, `آخر أربع صفحات في الإعدادات — و`meta.get` التي كانت ناقصة`, `خريطة الكود بـ Graphify، مرفوعة في المستودع ومفحوصة في CI؛ وحذف Understand-Anything`, `هرمز عبر واجهته الداخلية: أسئلة بخيارات، وتفكير حقيقي، وناتج الأدوات`, `المستخدمون: كلمة المرور والحذف أزرار ظاهرة، وزرّ الإضافة المعطّل يقول لماذا`, `«بروفايل» بدل «مساحة العمل» في نصوص الواجهة`, `وحدة الجلسات والبث الحي في Majlis (Phase 0)`, `marks.tsx`, `السؤال: عدّاد تنازلي، وإجابتك تبقى في المحادثة، والمحادثة تلحق الرد`, `مفاتيح المزوّدين واختيار النموذج (ADR 0010)`, `output.ts`, `Proliferate`, `workflow-engine.test.ts`, `args.ts`, `محادثة حقيقية مع Hermes عبر الخادم: المشغّل، وقت التشغيل المُشرَف عليه، وربط المنافذ`, `المستخدمون: كلمة مرورك، ومستخدمون محصورون في مساحات محدّدة`, `Prompter`, `الإعدادات: قائمة جانبية بدل شريط التبويبات، وثلاثة رموز للسمة بدل كلمة`, `Hermes Agent (وقت التشغيل الذي نقوده)`?**
+  _High betweenness centrality (0.086) - this node is a cross-community bridge._
+- **Why does `HubError` connect `HubError` to `auth/schema.ts`, `modules/index.ts`, `auth/routes.ts`, `models/index.ts`, `ModelsService`, `engine.ts`, `notify/index.ts`, `agents/service.ts`, `SessionsStore`, `sessions/index.ts`, `hermes-runtime.ts`, `audit/index.ts`, `cli.test.ts`, `runner.ts`, `اسم المنتَج في مكانٍ واحد — وثلاثة أسماء لا تتبعه`, `server.ts`, `tasksModule`, `tasks/index.ts`, `users.ts`, `adapters/hermes.ts`, `sessions/store.ts`, `acp.ts`, `SchedulesService`, `schedules/index.ts`, `hermes-cron.ts`, `HermesTuiSession`, `agents/index.ts`, `auth/index.ts`, `KnowledgeService`, `media.ts`, `sessions/service.ts`, `knowledge/service.ts`?**
   _High betweenness centrality (0.062) - this node is a cross-community bridge._
-- **Why does `react` connect `react` to `web/src/types.ts`, `Input.tsx`, `Sidebar.tsx`, `../src/realtime/context.js`, `describeError`, `theme.tsx`, `SchedulesScreen.tsx`, `ui/index.ts`, `main.tsx`, `Notice.tsx`, `RunStatus.tsx`, `src/agents/skills.ts`, `Breadcrumb.tsx`, `hub/queries.ts`, `Table.tsx`, `pane.tsx`, `@majlis/web`, `icons.tsx`, `AgentManagerScreen.tsx`, `UsersTab.tsx`, `TasksScreen.tsx`, `ref_i18n_context_js`, `Composer.tsx`, `attachments.test.tsx`, `web/src/chat/transcript.ts`, `The wrappers that exist`, `auth/store.ts`, `Segmented.tsx`, `marks.tsx`, `realtime-context.test.tsx`, `web/src/i18n/index.ts`, `Combobox.tsx`, `The kit (owner decision, 2026-09-22)`, `AgentSettingsScreen.tsx`, `radix-ui`, `web/package.json`, `الإعدادات: قائمة جانبية بدل شريط التبويبات، وثلاثة رموز للسمة بدل كلمة`, `Toast.tsx`, `الملفات والتأثير`?**
+- **Why does `react` connect `react` to `web/src/types.ts`, `Sidebar.tsx`, `../src/realtime/context.js`, `describeError`, `theme.tsx`, `SchedulesScreen.tsx`, `main.tsx`, `Notice.tsx`, `RunStatus.tsx`, `Breadcrumb.tsx`, `ui/index.ts`, `Table.tsx`, `src/agents/skills.ts`, `hub/queries.ts`, `pane.tsx`, `@majlis/web`, `icons.tsx`, `AgentManagerScreen.tsx`, `UsersTab.tsx`, `TasksScreen.tsx`, `ref_i18n_context_js`, `Composer.tsx`, `attachments.test.tsx`, `web/src/chat/transcript.ts`, `The wrappers that exist`, `auth/store.ts`, `Segmented.tsx`, `marks.tsx`, `realtime-context.test.tsx`, `web/src/i18n/index.ts`, `Combobox.tsx`, `The kit (owner decision, 2026-09-22)`, `AgentSettingsScreen.tsx`, `radix-ui`, `web/package.json`, `Toast.tsx`, `الإعدادات: قائمة جانبية بدل شريط التبويبات، وثلاثة رموز للسمة بدل كلمة`, `Input.tsx`, `الملفات والتأثير`?**
   _High betweenness centrality (0.051) - this node is a cross-community bridge._
 - **Are the 64 inferred relationships involving `main()` (e.g. with `Hard rules` and `Contributing to Majlis`) actually correct?**
   _`main()` has 64 INFERRED edges - model-reasoned connections that need verification._
@@ -1428,5 +1409,5 @@ _Questions this graph is uniquely positioned to answer:_
   _1871 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `web/src/types.ts` be split into smaller, more focused modules?**
   _Cohesion score 0.03638709677419355 - nodes in this community are weakly interconnected._
-- **Should `auth/routes.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.040768782760629 - nodes in this community are weakly interconnected._
+- **Should `main` be split into smaller, more focused modules?**
+  _Cohesion score 0.023292273236282194 - nodes in this community are weakly interconnected._
