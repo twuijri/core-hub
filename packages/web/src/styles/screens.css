@@ -401,6 +401,43 @@
   place-items: center;
   color: var(--mj-color-text-muted);
 }
+/* What the agent said when its run ended: a few lines; the conversation has the rest. */
+.task-card-summary {
+  display: -webkit-box;
+  margin-block-start: var(--mj-space-1);
+  overflow: hidden;
+  color: var(--mj-color-text-muted);
+  font-size: var(--mj-font-size-xs);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+/* The task's conversation: a plain link, because it is a place to go, not an action. */
+.task-card-session {
+  display: inline-block;
+  margin-block-start: var(--mj-space-1);
+  color: var(--mj-color-link);
+  font-size: var(--mj-font-size-xs);
+}
+.task-card-session:hover {
+  text-decoration: underline;
+}
+/* A running card breathes, so "running" is not only a word on it. */
+.task-card-live {
+  display: inline-block;
+  inline-size: 0.4rem;
+  block-size: 0.4rem;
+  margin-inline-end: var(--mj-space-1);
+  border-radius: var(--mj-radius-full);
+  background: var(--mj-color-accent);
+  animation: task-live 1.6s ease-in-out infinite;
+}
+@keyframes task-live {
+  50% {
+    opacity: 0.35;
+  }
+}
 /* The one action a card offers appears when it is reachable, not always. */
 .task-card-quick {
   opacity: 0;
@@ -418,6 +455,9 @@
   .task-column,
   .task-intake {
     transition: none;
+  }
+  .task-card-live {
+    animation: none;
   }
 }
 
