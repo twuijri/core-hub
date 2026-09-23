@@ -648,23 +648,38 @@ export class HermesTuiSession implements AgentSession {
       return { choice: await choice };
     }
     if (method === 'clarify') {
-      const id = `question-${++this.counter}`;
-      const choices = Array.isArray(params.choices)
-        ? params.choices.filter((c): c is string => typeof c === 'string')
-        : [];
       const asking = [...this.openTools].reverse().find((tool) => tool.name === 'clarify');
-      const reply = new Promise<string | null>((resolve) => this.questions.set(id, resolve));
-      this.queue.push({
-        type: 'question.asked',
-        id,
-        question: text(params.question) ?? '',
-        choices,
-        toolId: asking?.id ?? null,
-      });
-      const answer = await reply;
-      // Hermes defines skip as the empty answer; a chosen label loses the "(Recommended)"
-      // mark Hermes itself added to it.
-      return { answer: answer === null ? '' : answer.replace(RECOMMENDED, '') };
+      const ask = async (question: string, choices: string[]): Promise<string> => {
+        const id = `question-${++this.counter}`;
+        const reply = new Promise<string | null>((resolve) => this.questions.set(id, resolve));
+        this.queue.push({
+          type: 'question.asked',
+          id,
+          question,
+          choices,
+          toolId: asking?.id ?? null,
+        });
+        const answer = await reply;
+        // Hermes defines skip as the empty answer; a chosen label loses the "(Recommended)"
+        // mark Hermes itself added to it.
+        return answer === null ? '' : answer.replace(RECOMMENDED, '');
+      };
+      // A batch (`questions`, what Hermes's clarify tool advertises to the model) is put to
+      // the person one question at a time, and Hermes gets the whole set back as `answers`
+      // keyed by `qid` — the single form's `{answer}` would read as "cancel all" there.
+      if (Array.isArray(params.questions)) {
+        const answers: Record<string, string> = {};
+        for (const entry of params.questions) {
+          if (this.isClosed) break;
+          if (!entry || typeof entry !== 'object') continue;
+          const item = entry as Json;
+          const qid = text(item.qid);
+          if (!qid) continue;
+          answers[qid] = await ask(text(item.question) ?? '', strings(item.choices));
+        }
+        return { answers };
+      }
+      return { answer: await ask(text(params.question) ?? '', strings(params.choices)) };
     }
     // Secrets, sudo, the desktop's own bridges: nothing in the hub can answer them, and
     // an unanswered request blocks the agent until its timeout. Refuse at once.
@@ -685,4 +700,11 @@ export class HermesTuiSession implements AgentSession {
     this.openTools.length = 0;
     turn?.resolve(stopReason);
   }
+}
+
+/** The strings in a list Hermes sent, or none. */
+function strings(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
 }
