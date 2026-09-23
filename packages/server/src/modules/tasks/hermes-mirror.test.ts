@@ -40,6 +40,7 @@ class FakeHermes implements HermesKanban {
 
   async list() {
     if (this.failList) throw new Error('hermes is not answering');
+    if (this.garbage !== null) return this.garbage as HermesTask[];
     return [...this.cards.values()].filter((card) => card.status !== 'archived');
   }
 
@@ -59,6 +60,17 @@ class FakeHermes implements HermesKanban {
     const card = this.add(input.title, input.triage ? 'triage' : 'ready', input.body ?? null);
     this.keys.set(input.idempotencyKey, card.id);
     return card;
+  }
+
+  archived: string[][] = [];
+  garbage: unknown = null;
+
+  async archive(ids: readonly string[]) {
+    this.archived.push([...ids]);
+    for (const id of ids) {
+      const card = this.cards.get(id);
+      if (card) card.status = 'archived';
+    }
   }
 
   async move(id: string, from: string, to: string) {
@@ -281,6 +293,31 @@ describe('tasks: Hermes board reflected', () => {
       hermes.refuse = null;
       const all = [...(await board(hub)).values()].flat();
       expect(all.filter((task) => task.title === 'Refused')).toHaveLength(0);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('archives on Hermes a card that has been done for a week, in one call', async () => {
+    const old = hermes.add('Old report', 'done');
+    old.completed_at = Math.floor(Date.now() / 1000) - 8 * 24 * 3600;
+    const fresh = hermes.add('Yesterday', 'done');
+    fresh.completed_at = Math.floor(Date.now() / 1000) - 24 * 3600;
+    const hub = await signedInHub();
+    try {
+      const columns = await board(hub);
+      expect(titles(columns.get('done'))).toEqual(['Yesterday']);
+      expect(hermes.archived).toEqual([[old.id]]);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('still answers when Hermes says something that is not a list', async () => {
+    hermes.garbage = { tasks: 'not what we expected' };
+    const hub = await signedInHub();
+    try {
+      await board(hub);
     } finally {
       await hub.close();
     }

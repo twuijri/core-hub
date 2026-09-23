@@ -23,7 +23,7 @@ import { clampLimit, decodeCursor, encodeCursor } from '../../lib/pagination.js'
 import { createRealtime, type Realtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
 import { HermesRefusal } from './hermes-kanban.js';
-import { HermesMirror, type HermesBoardPort } from './hermes-mirror.js';
+import { ARCHIVE_AFTER_MS, HermesMirror, type HermesBoardPort } from './hermes-mirror.js';
 import { jobRunnerFor, serializeJob } from '../audit/index.js';
 import { listWorkspacesFor, requireRole, requireUser, requireWorkspace } from '../auth/index.js';
 import { TasksService, type Actor, type Scope, type TaskStatus } from './service.js';
@@ -255,12 +255,15 @@ export const tasksModule = defineModule({
         const mirror = mirrorOf(request.server);
         const home = chosen.find((row) => row.isDefault);
         if (mirror && home) {
-          await mirror.sync(service, {
-            workspace: home.id,
-            profile: home.slug,
-            userId: principal.user.id,
-          });
+          const report = await mirror
+            .sync(service, { workspace: home.id, profile: home.slug, userId: principal.user.id })
+            .catch((error: unknown) => ({ error: String(error) }));
+          // The board answers with what it has; why Hermes could not be read goes to the log,
+          // where the owner can find it, instead of a 500 that hides every other card.
+          if (report?.error) request.log.warn({ err: report.error }, 'tasks: Hermes board sync');
         }
+        // Done for a week goes to the archive, so Done is the recent week (owner, 2026-09-23).
+        service.archiveDoneBefore(ids, new Date(Date.now() - ARCHIVE_AFTER_MS));
 
         const projectId = (query.project_id as string | undefined) ?? undefined;
         const agentId = (query.agent_id as string | undefined) ?? undefined;
