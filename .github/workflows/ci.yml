@@ -97,10 +97,11 @@ jobs:
           python-version: '3.12'
       - name: Graphify, at the version the map is built with (docs/harness/knowledge-graph.md)
         run: pip install graphifyy==0.9.66
-      - run: graphify update .
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      # What `pnpm graph` runs, without installing the workspace: neither step needs it.
+      - run: graphify update . && node scripts/graph-portable.mjs
       - run: node scripts/graph-check.mjs
 
   migrations:
