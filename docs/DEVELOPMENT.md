@@ -9,6 +9,13 @@ corepack enable
 pnpm install --frozen-lockfile
 ```
 
+The code map is committed and checked by CI (`docs/harness/knowledge-graph.md`):
+
+```bash
+uv tool install graphifyy==0.9.66   # once per machine
+pnpm graph                          # before committing a code change, and after a pull
+```
+
 ## Run the hub and the web client
 
 ```bash

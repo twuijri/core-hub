@@ -24,5 +24,7 @@ The short version:
    Only the owner merges into `main`; nobody enables auto-merge. Merging into `main`, publishing
    an image or a release is the owner's decision, never implied by a code request.
 
-Setup: Node 24 (`.nvmrc`), pnpm via `corepack enable`, optional Java 17+ for the Kotlin/Swift
-client generators, optional Docker for the image.
+Setup: Node 24 (`.nvmrc`), pnpm via `corepack enable`, **Graphify** for the committed code map
+(`uv tool install graphifyy==0.9.66`; `pnpm graph` before committing — see
+`docs/harness/knowledge-graph.md`), optional Java 17+ for the Kotlin/Swift client generators,
+optional Docker for the image.

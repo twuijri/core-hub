@@ -10,8 +10,9 @@
 | `docs/clients/navigation.json` | `pnpm nav:check` plus the web parity test (`pnpm test --filter @majlis/web`) |
 | a module's schema | `pnpm db:generate` produces a migration; `pnpm db:migrate` on a fresh SQLite and on PostgreSQL in CI |
 | any user text | `pnpm i18n:check` (ar/en parity, no missing keys) |
+| any code or doc file | `pnpm graph` then `pnpm graph:check`, and commit `graphify-out/` (docs/harness/knowledge-graph.md) |
 | the agents catalog (`modules/agents/catalog/`) | `pnpm test --filter server` — the catalog guard checks unique ids, an exact version pin and a licence on every entry (ADR 0006); the pinned versions themselves are the owner's review |
 | `docs/clients/NAVIGATION.md` | the client parity tests of every existing client |
-| release | `pnpm build`, Docker image builds, smoke test against the image, `/understand` regenerated and `.ua/` committed (docs/harness/knowledge-graph.md) |
+| release | `pnpm build`, Docker image builds, smoke test against the image, `pnpm graph` rebuilt and `graphify-out/` committed (docs/harness/knowledge-graph.md) |
 
 Never claim a check passed without pasting its output in the change record.
