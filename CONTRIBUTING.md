@@ -25,6 +25,7 @@ The short version:
    an image or a release is the owner's decision, never implied by a code request.
 
 Setup: Node 24 (`.nvmrc`), pnpm via `corepack enable`, **Graphify** for the committed code map
-(`uv tool install graphifyy==0.9.66`; `pnpm graph` before committing — see
+(`uv tool install graphifyy==0.9.66`; `pnpm graph` rebuilds it locally for your own queries —
+do not commit `graphify-out/`: a bot proposes the new map after each merge, see
 `docs/harness/knowledge-graph.md`), optional Java 17+ for the Kotlin/Swift client generators,
 optional Docker for the image.
