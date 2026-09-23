@@ -19,6 +19,13 @@ const sidebarShot = (page: Page, name: string) =>
     .screenshot({ path: path.join(shots, `${name}.png`) });
 
 /** Display preferences live on one Settings page; the journey uses it to change the skin. */
+
+/** Inside Settings the rail steps aside for one row back (owner, 2026-09-23). */
+async function leaveSettings(page: Page) {
+  const back = page.getByTestId('back-to-chats');
+  if ((await back.count()) > 0) await back.click();
+}
+
 async function setDisplay(page: Page, settings: string, display: string, testId: string) {
   // A management page carries its own "back to Settings" link, so the name is not unique.
   await page.getByRole('link', { name: settings }).first().click();
@@ -38,6 +45,7 @@ async function login(page: Page) {
 
 /** Open the draft chat: the agent chips, the folder chip and the composer, no session yet. */
 async function newChat(page: Page) {
+  await leaveSettings(page);
   await page.getByRole('link', { name: 'محادثة جديدة' }).first().click();
   await expect(page).toHaveURL(/\/new$/);
   await expect(page.getByTestId('agent-chip').first()).toBeVisible();
@@ -127,11 +135,22 @@ test.describe('web smoke journeys', () => {
     await expect(page.getByTestId('segments')).not.toContainText('السجل');
 
     // Dark theme and English (LTR) through the settings screen; both persist on the root.
+    const chatUrl = page.url();
     await page.getByRole('link', { name: 'الإعدادات' }).click();
     // Inside Settings the sidebar *is* the settings list (owner, 2026-09-22): the
     // management pages are rows in it, and the conversation list has stepped aside.
     await expect(page.getByTestId('settings-management').getByRole('link')).toHaveCount(4);
     await expect(page.getByTestId('session-row')).toHaveCount(0);
+    // And the rail too (owner, 2026-09-23): one row leads back, to the conversation that
+    // was open — not a New chat pressed to get out.
+    await expect(page.getByTestId('rail')).toHaveCount(0);
+    await expect(page.getByTestId('back-to-chats')).toHaveText('رجوع إلى المحادثات');
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'المستخدمون' }).click();
+    await page.getByTestId('back-to-chats').click();
+    await expect(page).toHaveURL(chatUrl);
+    await expect(page.getByTestId('rail').getByRole('link')).toHaveCount(4);
+    await expect(page.getByTestId('back-to-chats')).toHaveCount(0);
+    await page.getByRole('link', { name: 'الإعدادات' }).click();
     await page.screenshot({
       path: path.join(shots, 'settings-management-ar-light.png'),
       fullPage: true,
@@ -149,6 +168,7 @@ test.describe('web smoke journeys', () => {
     await expect(page.getByTestId('message-assistant')).toBeVisible();
     await shot(page, 'chat-reply-ar-dark');
     await sidebarShot(page, 'sidebar-ar-dark');
+    await leaveSettings(page);
     await page.getByRole('link', { name: 'محادثة جديدة' }).first().click();
     await expect(page.getByTestId('new-chat')).toHaveAttribute('data-empty', 'true');
     await shot(page, 'new-chat-ar-dark');
@@ -157,6 +177,7 @@ test.describe('web smoke journeys', () => {
     await setDisplay(page, 'الإعدادات', 'العرض', 'language-en');
     await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
     await expect(page.locator('#settings-section')).toHaveText('Display');
+    await leaveSettings(page);
     await page.getByRole('link', { name: 'New chat' }).first().click();
     await expect(page.getByTestId('agent-chip').first()).toBeVisible();
     await shot(page, 'new-chat-en-dark');
@@ -238,6 +259,7 @@ test.describe('web smoke journeys', () => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await setDisplay(page, 'الإعدادات', 'العرض', 'theme-dark');
     await page.getByTestId('language-en').click();
+    await leaveSettings(page);
     await page.getByRole('link', { name: 'New chat' }).first().click();
     await expect(page.getByTestId('agent-chips')).toBeVisible();
     await page.setViewportSize({ width: 860, height: 720 });

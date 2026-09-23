@@ -26,6 +26,12 @@ test.use({ viewport: { width: 1440, height: 900 } });
 const shot = (page: Page, name: string) =>
   page.screenshot({ path: path.join(shots, `${name}.png`), fullPage: false });
 
+/** Inside Settings the rail steps aside for one row back (owner, 2026-09-23). */
+async function leaveSettings(page: Page) {
+  const back = page.getByTestId('back-to-chats');
+  if ((await back.count()) > 0) await back.click();
+}
+
 async function login(page: Page) {
   await page.goto('/');
   await expect(page).toHaveURL(/\/login$/);
@@ -36,6 +42,7 @@ async function login(page: Page) {
 }
 
 async function newChat(page: Page) {
+  await leaveSettings(page);
   await page.getByRole('link', { name: 'محادثة جديدة' }).first().click();
   await expect(page).toHaveURL(/\/new$/);
   await expect(page.getByTestId('composer-input')).toBeEnabled();
@@ -124,6 +131,7 @@ test.describe('the chat surface, designed', () => {
     await setDisplay(page, 'الإعدادات', 'العرض', 'language-en');
     await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
     // Settings owns the sidebar while it is open; leaving it brings the list back.
+    await leaveSettings(page);
     await page.getByRole('link', { name: 'New chat' }).first().click();
     await page.getByTestId('session-row').first().getByRole('link').click();
     await expect(page.getByTestId('message-assistant').first()).toBeVisible();
