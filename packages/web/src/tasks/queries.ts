@@ -7,7 +7,10 @@
  * way and none of them needs its own refresh.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { useAuth } from '../auth/context.js';
+import { useRealtime } from '../realtime/context.js';
+import { TASK_EVENTS, isEnvelope } from '../realtime/envelope.js';
 
 /** The nine columns, in workflow order — the contract's `TaskStatus`. */
 export const TASK_STATUSES = [
@@ -65,6 +68,21 @@ export interface Task {
   due_at: string | null;
   /** Set when the card reflects one on an agent's own board (Hermes's kanban). */
   external?: { source: 'hermes'; id: string } | null;
+  /** The workspace the task is in; the board holds every workspace. */
+  profile?: string;
+  /** The conversation the agent works the task in, once it has been started. */
+  session_id?: string | null;
+  /** The agent's last words when its run ended — what the card shows in Review. */
+  latest_summary?: string | null;
+  last_run?: { id: string | null } | null;
+}
+
+/** What `tasks.assignTask` answers: real ids when the task started, `null` when it did not. */
+export interface TaskAssigned {
+  task_id: string;
+  job_id: string | null;
+  run_id: string | null;
+  session_id: string | null;
 }
 
 export interface Column {
@@ -89,9 +107,19 @@ export interface BoardFilter {
   agentId?: string | undefined;
 }
 
+/** While a card is running the board asks again this often, whatever workspace it is in. */
+export const RUNNING_REFRESH_MS = 4_000;
+
 export function useBoard(filter: BoardFilter) {
   const { client, session } = useAuth();
   return useQuery({
+    // A run ends on its own time. The realtime events refresh the board for the workspace
+    // in the header; a card from another workspace is caught by this, and only while
+    // something is actually running.
+    refetchInterval: (query) =>
+      query.state.data?.columns.some((column) => column.status === 'running' && column.count > 0)
+        ? RUNNING_REFRESH_MS
+        : false,
     queryKey: taskKeys.board(filter),
     queryFn: async () =>
       (
@@ -199,4 +227,79 @@ export function useDeleteTask() {
     },
     onSuccess: refresh,
   });
+}
+
+/**
+ * Give a task to an agent, and — with `start` — have it start now: the hub opens the
+ * task's conversation, queues the run and answers with its ids.
+ */
+export function useAssignTask() {
+  const { client } = useAuth();
+  const refresh = useInvalidateBoard();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...body
+    }: {
+      id: string;
+      agent_id: string;
+      start: boolean;
+      instructions: string | null;
+    }) =>
+      (
+        await client.request('post', '/tasks/{task_id}/assign', {
+          params: { task_id: id },
+          body: { ...body, model: null, provider: null },
+        })
+      ).data as unknown as TaskAssigned,
+    onSuccess: refresh,
+  });
+}
+
+/** Stop the task's run; it stays with its agent and waits in `ready`. */
+export function useStopTask() {
+  const { client } = useAuth();
+  const refresh = useInvalidateBoard();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await client.request('post', '/tasks/{task_id}/stop', { params: { task_id: id } });
+      return id;
+    },
+    onSuccess: refresh,
+  });
+}
+
+/** Take the task away from its agent, stopping its run if it has one. */
+export function useUnassignTask() {
+  const { client } = useAuth();
+  const refresh = useInvalidateBoard();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await client.request('delete', '/tasks/{task_id}/assign', { params: { task_id: id } });
+      return id;
+    },
+    onSuccess: refresh,
+  });
+}
+
+/**
+ * The board follows `/rt/tasks`: a run that ends moves its card on the hub, and the board
+ * redraws when the hub says so rather than when somebody reloads.
+ */
+export function useTaskEvents(): void {
+  const realtime = useRealtime();
+  const { profile } = useAuth();
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const socket = realtime.socket('tasks');
+    const handler = (raw: unknown) => {
+      if (!isEnvelope(raw)) return;
+      void queryClient.invalidateQueries({ queryKey: ['task-columns'] });
+    };
+    for (const name of TASK_EVENTS) socket.on(name, handler);
+    if (!socket.connected) socket.connect();
+    return () => {
+      for (const name of TASK_EVENTS) socket.off(name, handler);
+    };
+  }, [profile, queryClient, realtime.epoch]);
 }

@@ -63,6 +63,9 @@ export interface NewSession {
   parentSessionId: string | null;
   /** The person named it themselves; the hub then never renames it (decision §26). */
   titleSetByUser?: boolean;
+  /** The entity the session serves (a task, a workflow run…); a person's chat has none. */
+  originKind?: SessionRow['originKind'];
+  originId?: string | null;
 }
 
 export interface NewMessage {
@@ -90,6 +93,9 @@ export interface NewRun {
   provider: string | null;
   reasoningEffort: string | null;
   adapterKind: string;
+  /** Who asked for the turn, when it was not a person typing (a task, a workflow step). */
+  originKind?: RunRow['originKind'];
+  originId?: string | null;
 }
 
 /** The sort key of a session in the list: newest activity first. */
@@ -118,6 +124,8 @@ export class SessionsStore {
         categoryId: input.categoryId,
         parentSessionId: input.parentSessionId,
         titleSetByUser: input.titleSetByUser ?? false,
+        originKind: input.originKind ?? 'user',
+        originId: input.originId ?? null,
       })
       .run();
     return this.getSession(input.workspace, id) as SessionRow;
@@ -339,6 +347,8 @@ export class SessionsStore {
         provider: input.provider,
         reasoningEffort: input.reasoningEffort as RunRow['reasoningEffort'],
         adapterKind: input.adapterKind,
+        originKind: input.originKind ?? 'user',
+        originId: input.originId ?? null,
       })
       .run();
     return this.getRun(input.workspace, input.id) as RunRow;

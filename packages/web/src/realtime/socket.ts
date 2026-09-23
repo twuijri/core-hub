@@ -8,6 +8,7 @@ export const NAMESPACES = {
   sessions: '/rt/sessions',
   devices: '/rt/devices',
   jobs: '/rt/jobs',
+  tasks: '/rt/tasks',
 } as const;
 export type NamespaceName = keyof typeof NAMESPACES;
 

@@ -545,6 +545,8 @@ export class TasksService {
       reason?: string | null;
       summary?: string | null;
       after_task_id?: string | null;
+      /** The run this move belongs to, written on the transition. */
+      runId?: string | null;
     },
   ): TaskRow {
     const current = this.task(scope, id);
@@ -580,7 +582,16 @@ export class TasksService {
       })
       .where(eq(tasks.id, id))
       .run();
-    this.record(scope, actor, id, 'status', current.status, move.status, move.reason ?? null);
+    this.record(
+      scope,
+      actor,
+      id,
+      'status',
+      current.status,
+      move.status,
+      move.reason ?? null,
+      move.runId ?? null,
+    );
     return this.task(scope, id);
   }
 
@@ -655,25 +666,45 @@ export class TasksService {
     return this.task(scope, id);
   }
 
+  /**
+   * Take the task away from its agent. A task that was running goes back to `ready` (its
+   * run is stopped by the caller, which owns that); one that was only `ready` goes back to
+   * `todo`, because nobody is going to pick it up.
+   */
   unassign(scope: Scope, actor: Actor, id: string): TaskRow {
     const current = this.task(scope, id);
+    const status =
+      current.status === 'running' ? 'ready' : current.status === 'ready' ? 'todo' : current.status;
     this.db
       .update(tasks)
       .set({
         assigneeKind: 'none',
         assigneeAgentId: null,
         assigneeUserId: null,
-        status: current.status === 'ready' ? 'todo' : current.status,
+        currentRunId: null,
+        status,
         updatedAt: new Date(),
       })
       .where(eq(tasks.id, id))
       .run();
     this.record(scope, actor, id, 'assignee', current.assigneeAgentId, 'none', null);
+    if (current.status === 'running') {
+      this.record(
+        scope,
+        actor,
+        id,
+        'status',
+        'running',
+        status,
+        'unassigned',
+        current.currentRunId,
+      );
+    }
     return this.task(scope, id);
   }
 
   /** Stop working on a task: the run reference goes, and the task waits again. */
-  stop(scope: Scope, actor: Actor, id: string): TaskRow {
+  stop(scope: Scope, actor: Actor, id: string, note = 'stopped'): TaskRow {
     const current = this.task(scope, id);
     this.db
       .update(tasks)
@@ -684,8 +715,81 @@ export class TasksService {
       })
       .where(eq(tasks.id, id))
       .run();
-    this.record(scope, actor, id, 'status', current.status, 'ready', 'stopped');
+    this.record(scope, actor, id, 'status', current.status, 'ready', note, current.currentRunId);
     return this.task(scope, id);
+  }
+
+  // ------------------------------------------------------------------ runs
+
+  /**
+   * The worker took the task: it is `running`, in this session, on this run. A new
+   * attempt, so the count goes up — a task that went round twice says so.
+   */
+  startRun(scope: Scope, actor: Actor, id: string, run: { sessionId: string; runId: string }) {
+    const current = this.task(scope, id);
+    this.moveTask(scope, actor, id, { status: 'running', reason: null, runId: run.runId });
+    this.db
+      .update(tasks)
+      .set({
+        sessionId: run.sessionId,
+        currentRunId: run.runId,
+        attemptCount: current.attemptCount + 1,
+      })
+      .where(eq(tasks.id, id))
+      .run();
+    return { row: this.task(scope, id), from: current.status };
+  }
+
+  /**
+   * The run ended; the task goes where the ending says. Only while the task is still
+   * `running` **on that run**: a task somebody stopped, unassigned or gave to another run
+   * has already been moved by whoever did that, and moving it again would undo them.
+   *
+   * - `succeeded` → `review`, with the agent's last words as the progress summary;
+   * - `cancelled` → `ready` (stopped from the chat, say), still assigned;
+   * - anything else → `blocked`, with the reason — `blocked` refuses to exist without one.
+   */
+  finishRun(
+    scope: Scope,
+    actor: Actor,
+    id: string,
+    runId: string,
+    outcome: { status: string; summary: string | null; reason: string },
+  ): { row: TaskRow; from: TaskStatus } | null {
+    const current = this.db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.workspace, scope.workspace), eq(tasks.id, id)))
+      .get();
+    if (!current || current.status !== 'running' || current.currentRunId !== runId) return null;
+    const move =
+      outcome.status === 'succeeded'
+        ? { status: 'review' as const, reason: null, summary: outcome.summary }
+        : outcome.status === 'cancelled'
+          ? { status: 'ready' as const, reason: outcome.reason }
+          : { status: 'blocked' as const, reason: outcome.reason };
+    this.moveTask(scope, actor, id, { ...move, runId });
+    this.db.update(tasks).set({ currentRunId: null }).where(eq(tasks.id, id)).run();
+    return { row: this.task(scope, id), from: current.status };
+  }
+
+  /** Forget the run a task was on, without moving it (the caller already has). */
+  detachRun(scope: Scope, id: string): TaskRow {
+    this.db
+      .update(tasks)
+      .set({ currentRunId: null })
+      .where(and(eq(tasks.workspace, scope.workspace), eq(tasks.id, id)))
+      .run();
+    return this.task(scope, id);
+  }
+
+  /** Every task of the hub's own left `running` — what a restart has to settle. */
+  runningEverywhere(): TaskRow[] {
+    return this.db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.status, 'running'), isNull(tasks.externalSource)))
+      .all();
   }
 
   /** The `ready` tasks an auto-dispatch would take, oldest first. */
@@ -910,6 +1014,7 @@ export class TasksService {
     from: string | null,
     to: string,
     note: string | null,
+    runId: string | null = null,
   ): void {
     this.db
       .insert(taskTransitions)
@@ -923,6 +1028,7 @@ export class TasksService {
         toValue: to,
         actorKind: actor.kind,
         actorId: actor.id,
+        runId,
         note,
       })
       .run();
