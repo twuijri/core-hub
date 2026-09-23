@@ -108,7 +108,8 @@
       "connecting": "Connecting…",
       "offline": "Offline"
     },
-    "theme_next": "Theme: {next}"
+    "theme_next": "Theme: {next}",
+    "back_to_chats": "Back to chats"
   },
   "pane": {
     "resize": "Resize the side pane (arrow keys resize, Home collapses, End expands)",
