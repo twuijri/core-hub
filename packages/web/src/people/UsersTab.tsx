@@ -9,7 +9,7 @@
  * **A password is set, never shown.** It is typed once into a field that is emptied the
  * moment it is sent, and no response ever carries it back.
  */
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { describeError } from '../auth/client.js';
 import { useAuth } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';
@@ -163,14 +163,18 @@ function UserMenu({ user }: { user: HubUser }) {
   if (owner)
     return (
       <>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setResetting(true)}
-          data-testid="user-password"
-        >
-          {t('people.lock_password')}
-        </Button>
+        <ActionSlots
+          password={
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setResetting(true)}
+              data-testid="user-password"
+            >
+              {t('people.lock_password')}
+            </Button>
+          }
+        />
         {resetting && <SetPassword user={user} onClose={() => setResetting(false)} />}
       </>
     );
@@ -189,73 +193,107 @@ function UserMenu({ user }: { user: HubUser }) {
   // "⋯" (owner, 2026-09-23: «اليوزر ما فيه حذف له او تعديل الباسوورد حقه؟»).
   return (
     <div className="flex flex-col items-end gap-1">
-      <div className="flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setResetting(true)}
-          data-testid="user-password"
-        >
-          {t('people.lock_password')}
-        </Button>
-        {!self && (
+      <ActionSlots
+        password={
           <Button
             variant="ghost"
             size="sm"
-            iconOnly
-            icon={<IconTrash size={16} />}
-            aria-label={t('common.delete')}
-            tooltip={t('common.delete')}
-            onClick={confirmDelete}
-            data-testid="user-delete"
-          />
-        )}
-        <Menu
-          trigger={
-            <Button variant="ghost" size="sm" aria-label={t('common.more')} data-testid="user-menu">
-              <IconMore size={16} />
-            </Button>
-          }
-        >
-          <MenuItem
-            onSelect={() =>
-              update.mutate({
-                id: user.id,
-                patch: { role: user.role === 'admin' ? 'member' : 'admin' },
-              })
+            onClick={() => setResetting(true)}
+            data-testid="user-password"
+          >
+            {t('people.lock_password')}
+          </Button>
+        }
+        remove={
+          !self && (
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              icon={<IconTrash size={16} />}
+              aria-label={t('common.delete')}
+              tooltip={t('common.delete')}
+              onClick={confirmDelete}
+              data-testid="user-delete"
+            />
+          )
+        }
+        menu={
+          <Menu
+            trigger={
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={t('common.more')}
+                data-testid="user-menu"
+              >
+                <IconMore size={16} />
+              </Button>
             }
           >
-            {t(user.role === 'admin' ? 'people.make_member' : 'people.make_admin')}
-          </MenuItem>
-          {/* Only a member is held to a list; an admin enters every workspace regardless. */}
-          {user.role === 'member' && (
-            <MenuItem onSelect={() => setPlacing(true)}>{t('people.edit_workspaces')}</MenuItem>
-          )}
-          {/* Disabling or deleting yourself is refused by the hub, so it is not offered:
+            <MenuItem
+              onSelect={() =>
+                update.mutate({
+                  id: user.id,
+                  patch: { role: user.role === 'admin' ? 'member' : 'admin' },
+                })
+              }
+            >
+              {t(user.role === 'admin' ? 'people.make_member' : 'people.make_admin')}
+            </MenuItem>
+            {/* Only a member is held to a list; an admin enters every workspace regardless. */}
+            {user.role === 'member' && (
+              <MenuItem onSelect={() => setPlacing(true)}>{t('people.edit_workspaces')}</MenuItem>
+            )}
+            {/* Disabling or deleting yourself is refused by the hub, so it is not offered:
             a greyed row that explains nothing is worse than a row that is not there. */}
-          {!self && (
-            <>
-              <MenuSeparator />
-              <MenuItem
-                onSelect={() =>
-                  update.mutate({
-                    id: user.id,
-                    patch: { status: user.status === 'active' ? 'disabled' : 'active' },
-                  })
-                }
-              >
-                {t(user.status === 'active' ? 'people.disable' : 'people.enable')}
-              </MenuItem>
-            </>
-          )}
-        </Menu>
-      </div>
+            {!self && (
+              <>
+                <MenuSeparator />
+                <MenuItem
+                  onSelect={() =>
+                    update.mutate({
+                      id: user.id,
+                      patch: { status: user.status === 'active' ? 'disabled' : 'active' },
+                    })
+                  }
+                >
+                  {t(user.status === 'active' ? 'people.disable' : 'people.enable')}
+                </MenuItem>
+              </>
+            )}
+          </Menu>
+        }
+      />
       {dialog}
       {resetting && <SetPassword user={user} onClose={() => setResetting(false)} />}
       {placing && <EditWorkspaces user={user} onClose={() => setPlacing(false)} />}
       {(update.isError || remove.isError) && (
         <Notice tone="danger">{describeError(update.error ?? remove.error, t)}</Notice>
       )}
+    </div>
+  );
+}
+
+/**
+ * Every row's buttons sit in the same three slots — password, delete, "⋯" — so "Password"
+ * lines up down the table even on a row that offers no delete or menu, like the owner's
+ * (owner, 2026-09-24: «كلمة باسسورد مهب موزونه»).
+ */
+function ActionSlots({
+  password,
+  remove,
+  menu,
+}: {
+  password: ReactNode;
+  remove?: ReactNode;
+  menu?: ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-end gap-1" data-testid="user-actions">
+      {password}
+      <span className="flex w-9 justify-center">{remove || null}</span>
+      <span className="flex w-9 justify-center">{menu || null}</span>
     </div>
   );
 }
