@@ -101,7 +101,7 @@ export function DeviceConnectionsScreen() {
     : 0;
 
   return (
-    <AppShell title={title} wide>
+    <AppShell title={title}>
       <h1 className="sr-only">{title}</h1>
       {/* Two sections of one page, switched in place: that is a tab set, and it carries
           the tab semantics (`role="tablist"`, arrow keys, `aria-controls`) a segmented

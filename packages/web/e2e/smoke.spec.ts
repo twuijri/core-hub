@@ -190,14 +190,10 @@ test.describe('web smoke journeys', () => {
     // to the Agent Manager.
     await expect(page.getByTestId('agent-chip')).toHaveCount(6);
     await expect(page.getByTestId('agent-add')).toBeVisible();
-    // At its widest the chat column is `--mj-layout-reading-max` (48rem), and six
-    // Arabic labels no longer fit in it, so the row opens one rung down the ladder:
-    // compact, with the chosen agent still a word and the rest icon-only. Nothing wraps
-    // and nothing scrolls, which is what the ladder is for. The comfortable rung is
-    // covered by `tests/segmented-fit.test.ts`; whether six labelled chips *should* fit
-    // is the chip row's own question and a parallel branch owns it.
+    // Pages take the whole width (owner, 2026-09-23), so on a wide screen the six Arabic
+    // labels fit and the row is at the top of the ladder: every agent a word.
     await page.setViewportSize({ width: 1600, height: 720 });
-    await expect(row).toHaveAttribute('data-density', 'compact');
+    await expect(row).toHaveAttribute('data-density', 'comfortable');
     await shot(page, 'agents-comfortable-ar-light');
 
     // Narrow enough that the labels no longer fit: only the chosen agent keeps its word,
@@ -669,6 +665,13 @@ test.describe('web smoke journeys', () => {
     // People: the owner's own row offers nothing, because the hub refuses all of it.
     await page.getByTestId('settings-nav').getByRole('link', { name: 'المستخدمون' }).click();
     await expect(page.getByTestId('user-table')).toBeVisible();
+    // Every page takes the whole width beside the sidebar (owner, 2026-09-23), not a
+    // centred column.
+    const [tableBox, mainBox] = await Promise.all([
+      page.getByTestId('user-table').boundingBox(),
+      page.locator('#main').boundingBox(),
+    ]);
+    expect(tableBox && mainBox && tableBox.width).toBeGreaterThan((mainBox?.width ?? 0) - 64);
     await expect(page.getByTestId('owner-note')).toBeVisible();
     await expect(page.getByTestId('user-menu')).toHaveCount(0);
 
