@@ -18,6 +18,7 @@
  * Nothing in this file logs a value. The functions return which **names** changed, which
  * is what a log line and an audit row are allowed to carry.
  */
+import { STABLE } from '@majlis/contracts';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
@@ -328,7 +329,8 @@ function isOwnedProviderKey(key: unknown): boolean {
  * Kept here rather than imported from `catalogue.ts` so this file stays a pure writer
  * with no opinion about which providers exist. The two are compared by a unit test.
  */
-const OWNED_PROVIDER_PREFIX = 'majlis-';
+/** Frozen, and the same string `catalogue.ts` writes (`STABLE`). */
+const OWNED_PROVIDER_PREFIX = STABLE.hermesProviderPrefix;
 
 function applyProviders(
   document: YAML.Document,

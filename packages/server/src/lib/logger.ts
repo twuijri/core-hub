@@ -1,5 +1,6 @@
 // Structured JSON logging with secret redaction. Nothing secret is ever written to a log
 // (ARCHITECTURE §Data ownership); add new secret field names here, not at call sites.
+import { derived } from '@majlis/contracts';
 import pino, { type Logger, type LoggerOptions } from 'pino';
 
 export const REDACTED = '[redacted]';
@@ -45,7 +46,7 @@ export function createLogger(config: LoggerConfig = {}): Logger {
   const options: LoggerOptions = {
     level: config.level ?? 'info',
     redact: { paths: REDACT_PATHS, censor: REDACTED },
-    base: { service: 'majlis' },
+    base: { service: derived.serviceName },
     timestamp: pino.stdTimeFunctions.isoTime,
   };
   if (config.destination) return pino(options, config.destination);

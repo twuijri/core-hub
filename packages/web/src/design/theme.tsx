@@ -3,6 +3,7 @@
 // in (theme, locale, text_scale exist in the contract; the glass level does not, so it stays
 // local). Writes land on <html> as data-theme / data-glass / dir / lang / --mj-text-scale;
 // the generated tokens.css reacts to those.
+import { derived } from '@majlis/contracts';
 import {
   createContext,
   useCallback,
@@ -47,7 +48,7 @@ export interface DisplayPrefs {
   textScale: number;
 }
 
-const STORAGE_KEY = 'majlis.display';
+const STORAGE_KEY = `${derived.storagePrefix}display`;
 
 export function readStoredPrefs(storage: Pick<Storage, 'getItem'> | null): DisplayPrefs {
   const fallback: DisplayPrefs = {
