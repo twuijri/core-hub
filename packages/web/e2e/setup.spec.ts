@@ -45,7 +45,7 @@ test.describe('web smoke journeys (a hub with no owner)', () => {
     const token = readFileSync(path.join(setupDataDir, 'setup-token.txt'), 'utf8').trim();
     expect(token).toMatch(/^[0-9a-f]{48}$/);
     await page.getByLabel('رمز التهيئة', { exact: true }).fill(token);
-    await page.getByLabel('اسم مساحة العمل (اختياري)', { exact: true }).fill('مساحتي');
+    await page.getByLabel('اسم البروفايل (اختياري)', { exact: true }).fill('بروفايلي');
     await page.getByRole('button', { name: 'أنشئ الحساب وادخل' }).click();
 
     // Signed in immediately: the chat screen, with the owner in the sidebar.
