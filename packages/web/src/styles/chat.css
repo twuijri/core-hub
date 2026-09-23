@@ -135,6 +135,38 @@
   border-color: var(--mj-color-danger);
 }
 
+/* The message a search opened the conversation at (chat/anchor.ts, owner 2026-09-23):
+   a ring that fades once, so the eye lands on it, and the searched words marked inside
+   it for as long as it is on screen. Under reduced motion the ring does not fade — it
+   simply stays, which is information, not movement. */
+.msg[data-anchored='true'] :is(.msg-bubble, .msg-agent-body),
+.msg-system[data-anchored='true'] > span {
+  animation: msg-anchored 2400ms var(--mj-motion-ease) 1 both;
+}
+@keyframes msg-anchored {
+  0%,
+  40% {
+    box-shadow: 0 0 0 3px var(--mj-color-focus);
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .msg[data-anchored='true'] :is(.msg-bubble, .msg-agent-body),
+  .msg-system[data-anchored='true'] > span {
+    animation: none;
+    box-shadow: 0 0 0 2px var(--mj-color-focus);
+  }
+}
+/* A searched word, in the conversation and in the search result that led there. */
+.msg-hit {
+  background: var(--mj-color-warning-soft);
+  color: var(--mj-color-warning-soft-text);
+  border-radius: 2px;
+  padding-inline: 1px;
+}
+
 /* A message the hub wrote about the conversation, not in it. */
 .msg-system {
   display: flex;
