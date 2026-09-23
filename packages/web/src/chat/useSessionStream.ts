@@ -7,6 +7,7 @@ import { useRealtime } from '../realtime/context.js';
 import { SESSION_EVENTS, isEnvelope, type Envelope } from '../realtime/envelope.js';
 import { subscribeSession, unsubscribeSession } from '../realtime/socket.js';
 import { hydrate, initialChat, reduce, type ChatState } from './transcript.js';
+import { OLDER_PAGE, pageBackUntil } from './anchor.js';
 
 export type StreamStatus = 'loading' | 'ready' | 'error';
 
@@ -22,7 +23,16 @@ export interface StreamInfo {
 /** How long opening a chat waits for its subscription before showing what it has. */
 export const SUBSCRIBE_GRACE_MS = 5000;
 
-export function useSessionStream(sessionId: string | undefined): StreamInfo {
+/**
+ * `anchorId`: a message the chat was opened at (anchor.ts). The base document is the
+ * newest page of messages; when the anchor is older than that, older pages are fetched
+ * until it is there, before the transcript is first shown — and again on every resync,
+ * so a reconnect does not take away the message the person is reading.
+ */
+export function useSessionStream(
+  sessionId: string | undefined,
+  anchorId: string | null = null,
+): StreamInfo {
   const { client, profile } = useAuth();
   const realtime = useRealtime();
   const [state, setState] = useState<ChatState>(initialChat);
@@ -32,6 +42,10 @@ export function useSessionStream(sessionId: string | undefined): StreamInfo {
   const [generation, setGeneration] = useState(0);
   const stateRef = useRef(state);
   stateRef.current = state;
+  // Read when the base document is fetched, not a reason to fetch it again; it belongs
+  // to the session it was given for, so another conversation never pages back for it.
+  const anchorRef = useRef<{ sessionId: string; messageId: string } | null>(null);
+  if (anchorId && sessionId) anchorRef.current = { sessionId, messageId: anchorId };
 
   const reload = useCallback(() => setGeneration((g) => g + 1), []);
 
@@ -67,7 +81,18 @@ export function useSessionStream(sessionId: string | undefined): StreamInfo {
           query: { limit: 100 },
         }),
       ]);
-      return { detail: detail.data, messages: page.data.items };
+      const anchor =
+        anchorRef.current?.sessionId === sessionId ? anchorRef.current.messageId : null;
+      const messages = anchor
+        ? await pageBackUntil(page.data, anchor, async (before) => {
+            const older = await client.request('get', '/sessions/{session_id}/messages', {
+              params: { session_id: sessionId },
+              query: { before, limit: OLDER_PAGE },
+            });
+            return older.data;
+          })
+        : page.data.items;
+      return { detail: detail.data, messages };
     };
 
     const resync = async () => {

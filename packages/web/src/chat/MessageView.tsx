@@ -11,8 +11,10 @@
  * avatar are drawn once, and the gap above a grouped message is the tighter one. That
  * difference in spacing is what makes a turn read as one thing.
  */
+import type { ReactNode } from 'react';
 import { useI18n } from '../i18n/context.js';
 import type { Message, Run } from '../types.js';
+import { highlightParts, matchRanges } from '../ui/combobox-filter.js';
 import { Avatar } from '../ui/Avatar.js';
 import { Badge } from '../ui/Badge.js';
 import { agentMark } from '../ui/brand/marks.js';
@@ -20,6 +22,7 @@ import { MessageActions } from './MessageActions.js';
 import { Markdown } from './Markdown.js';
 import { Reasoning } from './Reasoning.js';
 import { AnsweredQuestions } from './AnsweredQuestions.js';
+import { HIT_CLASS } from './anchor.js';
 import { ToolCalls } from './ToolCallCard.js';
 import { textOf } from './transcript.js';
 import { reasoningWorthShowing, sideOf, thoughtSeconds, type Turn } from './turns.js';
@@ -39,6 +42,21 @@ export function costLabel(cost: { amount: string; currency: string } | null): st
   if (value === 0) return `0 ${cost.currency}`;
   const digits = value < 0.01 ? 4 : 2;
   return `${value.toFixed(digits)} ${cost.currency}`;
+}
+
+/** Plain text with each occurrence of `query` in `<mark>` (a searched word, anchor.ts). */
+function Marked({ text, query }: { text: string; query: string | null | undefined }): ReactNode {
+  const ranges = query ? matchRanges(text, query) : [];
+  if (ranges.length === 0) return text;
+  return highlightParts(text, ranges).map((part, index) =>
+    part.hit ? (
+      <mark key={index} className={HIT_CLASS}>
+        {part.text}
+      </mark>
+    ) : (
+      part.text
+    ),
+  );
 }
 
 function Attachments({ message }: { message: Message }) {
@@ -67,6 +85,8 @@ export function MessageView({
   showCost = false,
   runs = {},
   markSlug,
+  anchored = false,
+  mark = null,
   onReply,
   onFork,
 }: {
@@ -84,17 +104,28 @@ export function MessageView({
    * message must stay a thing that can be drawn without a hub behind it.
    */
   markSlug?: string | undefined;
+  /** The message a search result opened the conversation at (anchor.ts): flashed once. */
+  anchored?: boolean;
+  /** The searched words, marked inside this message's text. */
+  mark?: string | null;
   onReply?: ((message: Message) => void) | undefined;
   onFork?: ((message: Message) => void) | undefined;
 }) {
   const { t } = useI18n();
+  // Every message says which it is, so an anchored open can find it in the page.
+  const place = {
+    'data-message-id': message.id,
+    ...(anchored ? { 'data-anchored': 'true' } : {}),
+  };
   const side = sideOf(message);
   const text = textOf(message);
 
   if (side === 'system') {
     return (
-      <article className="msg-system" data-testid="message-system">
-        <span dir="auto">{text}</span>
+      <article className="msg-system" data-testid="message-system" {...place}>
+        <span dir="auto">
+          <Marked text={text} query={mark} />
+        </span>
       </article>
     );
   }
@@ -107,6 +138,7 @@ export function MessageView({
         data-grouped={grouped ? 'true' : 'false'}
         data-testid="message-user"
         data-role={message.role}
+        {...place}
       >
         <div className="msg-stack">
           {!grouped && (
@@ -115,7 +147,9 @@ export function MessageView({
             </header>
           )}
           <div className="msg-bubble msg-user" data-role={message.role}>
-            <p dir="auto">{text}</p>
+            <p dir="auto">
+              <Marked text={text} query={mark} />
+            </p>
             <Attachments message={message} />
           </div>
           <MessageActions message={message} onFork={onFork} />
@@ -136,6 +170,7 @@ export function MessageView({
       data-grouped={grouped ? 'true' : 'false'}
       data-testid="message-assistant"
       data-status={message.status}
+      {...place}
     >
       {grouped ? (
         <span className="msg-gutter" aria-hidden />
@@ -169,7 +204,7 @@ export function MessageView({
             {/* The reasoning of a *finished* turn only: while the run is alive it is the
                 status line above the composer, not a fold in the transcript. */}
             {reasoning && <Reasoning text={reasoning} seconds={seconds} />}
-            {text ? <Markdown text={text} /> : null}
+            {text ? <Markdown text={text} mark={mark} /> : null}
           </div>
         )}
         {message.usage && !streaming && (
@@ -196,6 +231,7 @@ export function Transcript({
   showCost = false,
   runs,
   slugOf,
+  anchor = null,
   onReply,
   onFork,
 }: {
@@ -205,6 +241,8 @@ export function Transcript({
   runs: Record<string, Run>;
   /** The registry's answer for an author id; the transcript itself asks no questions. */
   slugOf?: ((authorId: string | null) => string | undefined) | undefined;
+  /** The message a search opened the conversation at, and the words to mark in it. */
+  anchor?: { messageId: string; query: string } | null;
   onReply?: ((message: Message) => void) | undefined;
   onFork?: ((message: Message) => void) | undefined;
 }) {
@@ -219,6 +257,8 @@ export function Transcript({
           showCost={showCost}
           runs={runs}
           markSlug={slugOf?.(turn.message.author.id ?? null)}
+          anchored={turn.message.id === anchor?.messageId}
+          mark={turn.message.id === anchor?.messageId ? anchor.query : null}
           onReply={onReply}
           onFork={onFork}
         />
