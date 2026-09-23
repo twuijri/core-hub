@@ -64,6 +64,13 @@
       "when": 1790168826498,
       "tag": "0008_hermes_kanban_link",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790170366442,
+      "tag": "0009_hermes_cron_link",
+      "breakpoints": true
     }
   ]
 }

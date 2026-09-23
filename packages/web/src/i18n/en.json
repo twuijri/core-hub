@@ -659,7 +659,7 @@
   },
   "schedules": {
     "new": "New schedule",
-    "new_hint": "Saved, with its next run computed; running on its own arrives with the worker.",
+    "new_hint": "Saved with its next run computed. A schedule for Hermes runs in Hermes's own scheduler; any other waits for the hub's worker.",
     "name": "Name",
     "kind": "Kind",
     "prompt": "What should the agent be asked?",
@@ -687,6 +687,19 @@
       "running": "Running",
       "paused": "Paused",
       "exhausted": "Finished"
+    },
+    "agent": "Agent",
+    "delivers_to": "Posts to {channel}",
+    "last_error": "Last run failed: {error}",
+    "hermes": {
+      "origin": "In Hermes's scheduler",
+      "refused": "Hermes said no: {message}",
+      "unreachable": "Hermes is not answering right now, so nothing was changed.",
+      "timezone": "Hermes runs every cron in {zone}. Use that zone, or change Hermes's timezone.",
+      "use_zone": "Use {zone}",
+      "delivery": "Hermes posts to messaging platforms itself — ask for it in the prompt.",
+      "prompt_required": "A schedule for Hermes needs a prompt.",
+      "fired": "Hermes will run it on its next tick."
     }
   },
   "audit": {
