@@ -217,7 +217,9 @@ function OpenSession({ sessionId }: { sessionId: string }) {
           ? t('chat.session_deleted')
           : null;
   return (
-    <AppShell title={title}>
+    // The whole width (owner decision, 2026-09-23): the agent's replies reach the left
+    // edge and the person's the right, while the composer keeps its reading column.
+    <AppShell title={title} wide>
       <div
         className="chat-flow"
         data-empty={messageCount === 0 ? 'true' : 'false'}
