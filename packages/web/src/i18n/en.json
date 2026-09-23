@@ -300,6 +300,7 @@
     "count": "{count} tools",
     "failed_count": "{count} failed",
     "earlier": "{count} earlier",
+    "hide_earlier": "Hide {count} earlier",
     "arguments": "Arguments",
     "result": "Result"
   },

@@ -42,15 +42,22 @@ function mount(node: React.ReactNode) {
 afterEach(cleanup);
 
 describe('a live run', () => {
-  it(`shows the last ${LIVE_WINDOW} calls, and the earlier ones on a click`, () => {
+  it(`shows the last ${LIVE_WINDOW} calls, the earlier ones on a click, and folds them back`, () => {
     const calls = ['a', 'b', 'c', 'd', 'e', 'f'].map((id, i) =>
       call(id, `tool_${id}`, { status: i === 5 ? 'running' : 'succeeded' }),
     );
     mount(<ToolCalls calls={calls} live />);
     expect(screen.getAllByTestId('tool-call')).toHaveLength(LIVE_WINDOW);
     expect(screen.queryByText('tool_a')).toBeNull();
-    fireEvent.click(screen.getByTestId('tool-group-earlier'));
+    const toggle = screen.getByTestId('tool-group-earlier');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
     expect(screen.getAllByTestId('tool-call')).toHaveLength(6);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(toggle).toHaveTextContent('Hide 2 earlier');
+    fireEvent.click(toggle);
+    expect(screen.getAllByTestId('tool-call')).toHaveLength(LIVE_WINDOW);
+    expect(toggle).toHaveTextContent('2 earlier');
   });
 });
 
