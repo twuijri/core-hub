@@ -3,8 +3,11 @@ import { useAuth } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';
 import { Select } from '../ui/Select.js';
 
-/** The workspace chip: switches `X-Hub-Profile` and refetches; never navigates (rule 4). */
-export function WorkspaceSwitcher({ compact = false }: { compact?: boolean }) {
+/**
+ * The profile chip, in the top bar only (owner, 2026-09-24): switches `X-Hub-Profile` and
+ * refetches; never navigates (rule 4).
+ */
+export function WorkspaceSwitcher() {
   const { t } = useI18n();
   const { profile, setProfile } = useAuth();
   const profiles = useProfiles();
@@ -16,7 +19,7 @@ export function WorkspaceSwitcher({ compact = false }: { compact?: boolean }) {
       : items.map((p) => ({ value: p.slug, label: p.name }));
   return (
     <span className="inline-flex items-center gap-1 text-xs">
-      {!compact && <span className="text-muted">{t('shell.workspace')}</span>}
+      <span className="text-muted">{t('shell.workspace')}</span>
       <Select
         value={profile}
         onValueChange={(next) => next && setProfile(next)}
