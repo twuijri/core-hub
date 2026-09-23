@@ -19,6 +19,7 @@ type Json = Record<string, unknown>;
 function fakeGateway(script: (method: string, params: Json, api: Api) => Json | null | undefined) {
   const stdin = new PassThrough();
   const stdout = new PassThrough();
+  const stderr = new PassThrough();
   const exits = new EventEmitter();
   const received: Array<{
     method?: string;
@@ -39,8 +40,15 @@ function fakeGateway(script: (method: string, params: Json, api: Api) => Json | 
       );
     },
     die() {
+      stderr.end();
       exits.emit('exit', 1, null);
     },
+    exit(code, lines) {
+      // What `tui_gateway/entry.py` does on every way out: a line on stderr, then exit 0.
+      stderr.end(lines.map((line) => `${line}\n`).join(''));
+      exits.emit('exit', code, null);
+    },
+    stderr,
     received,
   };
   createInterface({ input: stdin }).on('line', (line) => {
@@ -65,6 +73,7 @@ function fakeGateway(script: (method: string, params: Json, api: Api) => Json | 
   const spawned: Spawned = {
     stdin,
     stdout,
+    stderr,
     kill: () => exits.emit('exit', null, 'SIGTERM'),
     on: (event, listener) => exits.on(event, listener),
   };
@@ -76,6 +85,9 @@ interface Api {
   event(sid: string, type: string, payload?: Json): void;
   ask(sid: string, method: string, params: Json, id: string): void;
   die(): void;
+  /** Exit with `code` after writing `lines` to stderr. */
+  exit(code: number, lines: string[]): void;
+  stderr: PassThrough;
   received: Array<{ method?: string; id?: unknown; result?: unknown; error?: unknown }>;
 }
 
@@ -304,5 +316,84 @@ describe('Hermes over the TUI gateway', () => {
     expect(await sent).toEqual({ stopReason: 'failed' });
     expect((await reading).at(-1)).toMatchObject({ type: 'run.failed' });
     expect(session.closed).toBe(true);
+  });
+
+  it('says why the gateway exited: the reason it printed on stderr, not only "code 0"', async () => {
+    const gateway = fakeGateway((method) => {
+      if (method === 'session.create') return { session_id: 's', stored_session_id: 'st' };
+      if (method === 'prompt.submit') return { status: 'streaming' };
+      return {};
+    });
+    const channel = channelOver(gateway);
+    const reasons: string[] = [];
+    channel.onExit((reason) => reasons.push(reason));
+    const session = await HermesTuiSession.open(channel, null);
+    const reading = collect(session, terminal);
+    const sent = session.send({ text: 'x' });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(channel.busy).toBe(true);
+    gateway.api.exit(0, [
+      'Traceback (most recent call last): something the hub must not keep',
+      '[gateway-exit] stdin EOF (peer closed)',
+    ]);
+    expect(await sent).toEqual({ stopReason: 'failed' });
+    const failure = (await reading).at(-1);
+    expect(failure).toEqual({
+      type: 'run.failed',
+      error: 'the Hermes TUI gateway exited (code 0: stdin EOF (peer closed))',
+    });
+    expect(reasons).toEqual(['the Hermes TUI gateway exited (code 0: stdin EOF (peer closed))']);
+    expect(channel.alive).toBe(false);
+    expect(channel.busy).toBe(false);
+  });
+
+  it('names a signal, joins a line split across writes, and never keeps other stderr', async () => {
+    const reasonOf = async (gateway: ReturnType<typeof fakeGateway>, act: () => void) => {
+      const channel = channelOver(gateway);
+      const reason = new Promise<string>((resolve) => channel.onExit(resolve));
+      act();
+      return reason;
+    };
+    const signalled = fakeGateway(() => ({}));
+    expect(
+      await reasonOf(signalled, () => signalled.api.exit(0, ['[gateway-signal] SIGTERM'])),
+    ).toBe('the Hermes TUI gateway exited (code 0: signal SIGTERM)');
+    const split = fakeGateway(() => ({}));
+    expect(
+      await reasonOf(split, () => {
+        split.api.stderr.write('[gateway-exit] stdin EOF');
+        split.api.stderr.write(' (peer closed)\nan ordinary log line\n');
+        split.api.die();
+      }),
+    ).toBe('the Hermes TUI gateway exited (code 1: stdin EOF (peer closed))');
+    const plain = fakeGateway(() => ({}));
+    expect(await reasonOf(plain, () => plain.api.exit(0, ['an ordinary log line']))).toBe(
+      'the Hermes TUI gateway exited (code 0)',
+    );
+  });
+
+  it('reports the exit after a short grace when stderr is still open', async () => {
+    const stderr = new PassThrough();
+    const exits = new EventEmitter();
+    const channel = stdioTuiChannel({
+      command: 'python',
+      args: [],
+      env: {},
+      exitGraceMs: 5,
+      spawn: () => ({
+        stdin: new PassThrough(),
+        stdout: new PassThrough(),
+        stderr,
+        kill: () => exits.emit('exit', null, 'SIGTERM'),
+        on: (event, listener) => exits.on(event, listener),
+      }),
+    });
+    const reason = new Promise<string>((resolve) => channel.onExit(resolve));
+    stderr.write('[gateway-exit] broken stdout pipe\n');
+    await new Promise((resolve) => setImmediate(resolve));
+    exits.emit('exit', 0, null);
+    // Gone for callers at once, even while its last words are still being read.
+    expect(channel.alive).toBe(false);
+    expect(await reason).toBe('the Hermes TUI gateway exited (code 0: broken stdout pipe)');
   });
 });
