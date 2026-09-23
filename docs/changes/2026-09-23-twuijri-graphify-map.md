@@ -56,10 +56,12 @@
 
 ## الفحوص
 ```
-pnpm graph            → Rebuilt: 6227 nodes, 14903 edges (~5 s)
-pnpm graph:check      → graph:check  OK — 6227 nodes, 14903 edges, current
-نسخة نظيفة في مجلد آخر (كما في CI): graph:check  OK — 6227 nodes, 14903 edges, current
-ثلاثة تشغيلات في المجلد نفسه (بالكاش وبدونه): graph.json وGRAPH_REPORT.md وgraph.html متطابقة
+pnpm graph            → Rebuilt: 6238 nodes, 14916 edges (~5 s)
+pnpm graph:check      → graph:check  OK — 6238 nodes, 14916 edges, current
+نسخة نظيفة، Python 3.12 وpip كما في CI     → graph:check  OK — 6238 nodes, 14916 edges, current
+نسخة نظيفة، Python 3.14 وuv                → graph:check  OK — 6238 nodes, 14916 edges, current
+نسخة العمل وفيها node_modules وdist مبنية → graph:check  OK (البناء في نسخة مؤقتة لا تراها)
+ثلاثة تشغيلات في المجلد نفسه: graph.json وGRAPH_REPORT.md وgraph.html متطابقة
 lint، prettier: نظيفة
 ```
 - **الفحص يلتقط ما يجب**: قبل إصلاح المسار رفض الخريطة بـ
