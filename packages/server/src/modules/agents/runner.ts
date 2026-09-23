@@ -96,6 +96,13 @@ export class AgentRunner implements AgentRunnerPort {
     });
 
     let live = this.sessions.get(request.sessionId);
+    if (live && isClosed(live.session)) {
+      // Its process went away between turns — a Hermes TUI gateway retired after a key
+      // change and closed once idle: reopen by the stored ref rather than hand the turn to
+      // a session that can only refuse it ("Hermes session is closed").
+      this.sessions.delete(request.sessionId);
+      live = undefined;
+    }
     if (!live) {
       const target = service.targetFor(row, request.workspace, {
         sessionRef: request.agentSessionRef ?? mintSessionRef(row.adapterKind, request.sessionId),
