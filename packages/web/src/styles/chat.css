@@ -537,7 +537,9 @@ summary.tool-head:hover {
   color: var(--mj-color-text-muted);
 }
 .session-row[data-selected='true'] {
-  background: var(--mj-color-surface-2);
+  /* The accent, not a shade of grey: a chosen row must read as chosen at a glance,
+     in both themes, and not only beside an unchosen one. */
+  background: var(--mj-color-accent-soft);
 }
 
 /* ------------------------------------------------ the messages held back */
