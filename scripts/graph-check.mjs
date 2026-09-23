@@ -17,7 +17,12 @@ function load(text, where) {
     const graph = JSON.parse(text);
     delete graph.built_at_commit;
     graph.nodes = graph.nodes
-      .map(({ community: _c, community_name: _n, ...node }) => node)
+      .map((node) => {
+        const copy = { ...node };
+        delete copy.community;
+        delete copy.community_name;
+        return copy;
+      })
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     graph.links = graph.links
       .map((link) =>
