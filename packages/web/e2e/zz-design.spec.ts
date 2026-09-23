@@ -152,6 +152,10 @@ test.describe('the chat surface, designed', () => {
     // queue: it waits in this tab, where it can still be sent now, used to steer, or
     // dropped (owner decision, 2026-09-22). "Send now" posts it with `when: next`, and
     // that is how two messages from the same speaker end up next to each other.
+    // Only once the run is visibly alive: the first send moves the page from /new to the
+    // session, and a message typed while the composer is being redrawn is typed into
+    // nothing (seen on a slow CI runner). A person types after they see it working.
+    await expect(page.getByTestId('run-status')).toBeVisible();
     await say(page, 'وأضف مثالًا في النهاية');
     await expect(page.getByTestId('queue-item')).toHaveCount(1);
     await expect(page.getByTestId('queue-count')).toHaveText('1');
