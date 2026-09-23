@@ -6825,7 +6825,7 @@
       "node_kind": "heading",
       "norm_label": "التسليم والخطوة التالية",
       "source_file": "docs/changes/2026-09-23-twuijri-graphify-map.md",
-      "source_location": "L79"
+      "source_location": "L81"
     },
     {
       "id": "docs_changes_2026_09_23_twuijri_graphify_map_العقد",
@@ -6873,7 +6873,7 @@
       "node_kind": "heading",
       "norm_label": "المخاطر والرجوع",
       "source_file": "docs/changes/2026-09-23-twuijri-graphify-map.md",
-      "source_location": "L72"
+      "source_location": "L74"
     },
     {
       "id": "docs_changes_2026_09_23_twuijri_graphify_map_المشكلة_والهدف",
@@ -83493,7 +83493,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1,
       "source_file": "docs/changes/2026-09-23-twuijri-graphify-map.md",
-      "source_location": "L79",
+      "source_location": "L81",
       "weight": 1
     },
     {
@@ -83505,7 +83505,7 @@
       "confidence_score": 0.95,
       "context": "main",
       "source_file": "docs/changes/2026-09-23-twuijri-graphify-map.md",
-      "source_location": "L80",
+      "source_location": "L82",
       "weight": 1
     },
     {
@@ -83549,7 +83549,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1,
       "source_file": "docs/changes/2026-09-23-twuijri-graphify-map.md",
-      "source_location": "L72",
+      "source_location": "L74",
       "weight": 1
     },
     {
@@ -248261,5 +248261,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "9d1f48f7a36b9c43a6cb66b4e8fc2dc4214e8f9b"
+  "built_at_commit": "221d0d6a08f7d990aaa287dab0a995926a94befa"
 }
