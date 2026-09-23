@@ -77,6 +77,38 @@ export interface SessionForkInput {
   provider?: string | null | undefined;
 }
 
+/** A turn another module asks for (`startTurn`, `oneTurn`). */
+export interface TurnInput {
+  agentId: string;
+  prompt: string;
+  title: string;
+  source: 'workflow' | 'schedule' | 'task';
+  model?: string | null | undefined;
+  provider?: string | null | undefined;
+  /** The entity the turn serves; its id lands on the session and the run (`origin`). */
+  origin?: { kind: 'task' | 'workflow' | 'schedule'; id: string | null } | undefined;
+}
+
+/** How a turn ended and what the agent said in it. */
+export interface TurnResult {
+  sessionId: string;
+  runId: string;
+  status: RunRow['status'];
+  output: string;
+  error: string | null;
+  /** The run's error code (`stale` for one a restart cut short); `null` when it had none. */
+  errorCode: string | null;
+}
+
+/** A turn that has started: its ids now, its ending when it comes. */
+export interface TurnHandle {
+  sessionId: string;
+  runId: string;
+  jobId: string;
+  /** Resolves when the run is terminal; never rejects. */
+  done: Promise<TurnResult>;
+}
+
 export interface ApprovalResponseInput {
   decision?: string | null | undefined;
   answer?: string | null | undefined;
@@ -111,8 +143,15 @@ export class SessionsService {
   async create(
     scope: EngineScope,
     input: SessionCreateInput,
-    /** Where the session came from, when not a person's chat (a workflow step, say). */
-    origin: { source?: SessionRow['source'] } = {},
+    /**
+     * Where the session came from, when not a person's chat (a workflow step, a task), and
+     * which entity it serves — so the session's `origin` names the task it works on.
+     */
+    origin: {
+      source?: SessionRow['source'];
+      kind?: SessionRow['originKind'];
+      id?: string | null;
+    } = {},
   ): Promise<Record<string, unknown>> {
     const agent = await this.requireAgent(scope, input.agent_id);
     // Resolved before the row is minted: a refused path must not leave a session behind.
@@ -132,6 +171,7 @@ export class SessionsService {
       workingDir: null,
       categoryId: input.category_id ?? null,
       parentSessionId: null,
+      ...(origin.kind ? { originKind: origin.kind, originId: origin.id ?? null } : {}),
     });
     let withDir: SessionRow;
     try {
@@ -448,7 +488,7 @@ export class SessionsService {
     scope: EngineScope,
     sessionId: string,
     input: RunCreateInput,
-    origin: { kind?: RunRow['originKind'] } = {},
+    origin: { kind?: RunRow['originKind']; id?: string | null } = {},
   ): Promise<{ payload: Record<string, unknown>; started: Promise<void> }> {
     const session = this.requireSession(scope, sessionId);
     const agent = await this.requireAgent(scope, session.agentId);
@@ -506,7 +546,7 @@ export class SessionsService {
       provider: input.provider ?? session.provider ?? agent.defaultProvider,
       reasoningEffort: input.reasoning_effort ?? session.reasoningEffort ?? null,
       adapterKind: agent.adapterKind,
-      ...(origin.kind ? { originKind: origin.kind } : {}),
+      ...(origin.kind ? { originKind: origin.kind, originId: origin.id ?? null } : {}),
     });
     this.store.updateMessage(scope.workspace, message.id, { runId: run.id });
 
@@ -542,51 +582,104 @@ export class SessionsService {
   }
 
   /**
-   * One turn, start to finish, for something that is not a person at a keyboard: open a
-   * session of its own, send the prompt, and wait until the run ends.
+   * One turn, started for something that is not a person at a keyboard, and handed back
+   * **before it ends**: open a session of its own, send the prompt, answer with the ids at
+   * once, and let `done` say how it ended.
    *
    * The session is an ordinary one — it shows in the history under its source, its tool
    * calls and approvals are the same as in a chat, and a run that asks for an approval
-   * waits for a person exactly as a chat run does. What comes back is how it ended and
-   * what the agent said, which is all a workflow step needs.
+   * waits for a person exactly as a chat run does. A task needs the ids now (its route
+   * answers `202` with them) and the ending later; a workflow step only needs the ending
+   * (`oneTurn`).
+   *
+   * An agent that cannot take the turn is refused before anything is written: a session
+   * left behind with no run in it would be a conversation nobody started.
+   */
+  async startTurn(scope: EngineScope, input: TurnInput): Promise<TurnHandle> {
+    const agent = await this.requireAgent(scope, input.agentId);
+    if (!agent.available) {
+      throw new HubError('agent_unavailable', {
+        details: { agent_id: agent.id, status: agent.unavailableReason ?? 'unavailable' },
+      });
+    }
+    const session = await this.create(
+      scope,
+      {
+        agent_id: input.agentId,
+        title: input.title,
+        model: input.model ?? null,
+        provider: input.provider ?? null,
+      },
+      input.origin
+        ? { source: input.source, kind: input.origin.kind, id: input.origin.id }
+        : { source: input.source },
+    );
+    const sessionId = String(session.id);
+    let accepted: Awaited<ReturnType<SessionsService['createRun']>>;
+    try {
+      accepted = await this.createRun(
+        scope,
+        sessionId,
+        { content: [{ type: 'text', text: input.prompt }] },
+        { kind: input.origin?.kind ?? input.source, id: input.origin?.id ?? null },
+      );
+    } catch (error) {
+      // The same rule as above, for a refusal only `createRun` can see.
+      this.store.deleteSession(scope.workspace, sessionId);
+      this.realtime.emitToProfile(scope.profile, 'session.deleted', { session_id: sessionId });
+      throw error;
+    }
+    const runId = String(accepted.payload.run_id);
+    return {
+      sessionId,
+      runId,
+      jobId: String(accepted.payload.job_id),
+      done: accepted.started.then(
+        () =>
+          this.turnResult(scope.workspace, runId) ?? {
+            sessionId,
+            runId,
+            status: 'failed' as const,
+            output: '',
+            error: 'the run was deleted before it ended',
+            errorCode: null,
+          },
+      ),
+    };
+  }
+
+  /**
+   * One whole turn, start to finish: `startTurn`, then wait for it. What comes back is how
+   * it ended and what the agent said, which is all a workflow step needs.
    */
   async oneTurn(
     scope: EngineScope,
     input: { agentId: string; prompt: string; title: string; source: 'workflow' | 'schedule' },
-  ): Promise<{
-    sessionId: string;
-    runId: string;
-    status: RunRow['status'];
-    output: string;
-    error: string | null;
-  }> {
-    const session = await this.create(
-      scope,
-      { agent_id: input.agentId, title: input.title },
-      { source: input.source },
-    );
-    const sessionId = String(session.id);
-    const { payload, started } = await this.createRun(
-      scope,
-      sessionId,
-      { content: [{ type: 'text', text: input.prompt }] },
-      { kind: input.source },
-    );
-    await started;
-    const runId = String(payload.run_id);
-    const run = this.store.getRun(scope.workspace, runId);
+  ): Promise<TurnResult> {
+    const handle = await this.startTurn(scope, input);
+    return handle.done;
+  }
+
+  /**
+   * How a run stands and what its agent said in it — for a caller that holds a run id but
+   * not the session (a task settling after a restart). `null` when there is no such run.
+   */
+  turnResult(workspace: string, runId: string): TurnResult | null {
+    const run = this.store.getRun(workspace, runId);
+    if (!run) return null;
     const output = this.store
-      .allMessages(scope.workspace, sessionId)
+      .allMessages(workspace, run.sessionId)
       .filter((message) => message.runId === runId && message.role === 'assistant')
       .map((message) => message.content)
       .join('\n')
       .trim();
     return {
-      sessionId,
+      sessionId: run.sessionId,
       runId,
-      status: run?.status ?? 'failed',
+      status: run.status,
       output,
-      error: run?.errorMessage ?? run?.errorCode ?? null,
+      error: run.errorMessage ?? run.errorCode ?? null,
+      errorCode: run.errorCode ?? null,
     };
   }
 

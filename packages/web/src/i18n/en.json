@@ -670,7 +670,22 @@
       "refused": "Hermes said no: {message}",
       "owns_text": "This card is on Hermes's board, so its title and description are Hermes's to change.",
       "owns_card": "This card is on Hermes's board; Hermes decides when it goes away."
-    }
+    },
+    "assign": {
+      "open": "Assign to an agent…",
+      "again": "Reassign…",
+      "title": "Assign to an agent",
+      "agent": "Agent",
+      "instructions": "Instructions",
+      "instructions_hint": "Optional. Sent to the agent with the task.",
+      "start": "Assign and start",
+      "only": "Assign only",
+      "no_agents": "No agent on this hub can take a task yet. Install or enable one in Agents.",
+      "not_started": "Handed to this agent's own board: it starts the task from there, not the hub."
+    },
+    "stop": "Stop",
+    "unassign": "Unassign",
+    "open_session": "Open the conversation"
   },
   "schedules": {
     "new": "New schedule",
