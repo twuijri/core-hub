@@ -92,6 +92,7 @@
 - `docs/STATUS.md`: صفّ المهام وفقرة «لا شيء يبدأ تشغيلًا إلا…».
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
+بعد دمج `origin/main` (#60 و#63) في الفرع، بلا تعارض، أُعيدت كلها:
 ```
 $ pnpm lint
 $ eslint . && prettier --check .
@@ -104,17 +105,17 @@ $ pnpm i18n:check                -> web: 805 keys, ar/en in parity ... i18n:chec
 $ pnpm nav:check                 -> nav:check  OK — 34 destinations, 2 pre-auth screens (login, setup), 38 terms, ar/en complete, routes for web
 
 $ pnpm --filter @majlis/server test
- Test Files  67 passed | 4 skipped (71)
-      Tests  717 passed | 15 skipped (732)
+ Test Files  69 passed | 5 skipped (74)
+      Tests  725 passed | 16 skipped (741)
 $ pnpm contract:test
  Test Files  2 passed (2)
       Tests  254 passed (254)
 $ pnpm --filter @majlis/web test
  Test Files  33 passed (33)
-      Tests  412 passed (412)
+      Tests  417 passed (417)
 $ pnpm --filter @majlis/web build  -> ✓ built
 $ PLAYWRIGHT_CHANNEL=chrome pnpm web:e2e
-  ✓  22 [chromium] › e2e/smoke.spec.ts › 22. a task assigned and started runs the agent, lands in Review, and opens its conversation (4.6s)
+  ✓  22 [chromium] › e2e/smoke.spec.ts:1106:3 › web smoke journeys › 22. a task assigned and started runs the agent, lands in Review, and opens its conversation (4.5s)
   25 passed (1.6m)
 
 # الاختبارات الجديدة تفشل بلا التغيير (المصدر مخبّأ بـ git stash):
@@ -137,7 +138,7 @@ $ vitest run tests/unit/task-runs.test.ts
 - الرجوع: الفرع وحده، بلا هجرة (الأعمدة كلّها موجودة).
 
 ## التسليم والخطوة التالية
-PR إلى `main` من `feat/task-assign-runs`. الدمج والنشر للمالك.
+PR إلى `main` من `feat/task-assign-runs` (مدموج فيه `origin/main` حتى `bf9f2c4`). الدمج والنشر للمالك.
 
 المرحلة الثانية: شجرة عمل git حقيقية لمشروع له مستودع، والإبلاغ في الغرف حين تُبنى، و`auto_start`
 مع احترام الاعتماديات، وعرض حالة التشغيل الأخير (`last_run.status`) من `sessions`.
