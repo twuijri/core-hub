@@ -166,7 +166,6 @@ describe('agent runner: a Hermes turn through the composed app', () => {
       ++turn === 1
         ? [
             { event: 'run.started' },
-            { event: 'reasoning.available', text: 'thinking' },
             { event: 'message.delta', delta: 'مرحبا ' },
             { event: 'tool.started', tool: 'terminal', preview: 'ls' },
             {
@@ -177,6 +176,8 @@ describe('agent runner: a Hermes turn through the composed app', () => {
               preview: 'a b',
             },
             { event: 'message.delta', delta: 'بك.' },
+            // Hermes's "reasoning" is the reply's own text; it must not reach the transcript.
+            { event: 'reasoning.available', text: 'مرحبا بك.' },
             {
               event: 'run.completed',
               session_id: 'majlis-continued',
@@ -209,7 +210,6 @@ describe('agent runner: a Hermes turn through the composed app', () => {
       'message.created',
       'run.started',
       'session.updated',
-      'reasoning.delta',
       'message.delta',
       'tool.started',
       'tool.completed',

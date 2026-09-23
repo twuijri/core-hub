@@ -15,7 +15,7 @@
  *       POST /v1/runs                  { input, session_id, model?, provider?,
  *                                        model_options? }            -> 202 { run_id }
  *       GET  /v1/runs/{id}/events      SSE, one JSON object per `data:` line:
- *                                      message.delta · message.interim · reasoning.available ·
+ *                                      message.delta · message.interim · reasoning.available (dropped) ·
  *                                      tool.started · tool.completed · approval.request ·
  *                                      approval.responded · subagent.start · subagent.complete ·
  *                                      run.completed | run.failed | run.cancelled | run.interrupted
@@ -374,11 +374,14 @@ export class HermesSession implements AgentSession {
         }
         return null;
       }
-      case 'reasoning.available': {
-        const text = str(frame.text);
-        if (text) this.queue.push({ type: 'reasoning.delta', text });
+      case 'reasoning.available':
+        // Despite its name this is not the model's reasoning. Hermes fills it with the
+        // first 500 characters of the assistant's own *content* (`_relay_thinking(agent,
+        // content)`, `agent/turn_response_intake.py`), and that content already reaches
+        // us as `message.delta` — or as `run.completed.output` when nothing streamed.
+        // Shown as thinking, it repeated the reply word for word under "Thought for".
+        // The runs API carries no real reasoning, so there is nothing else to show.
         return null;
-      }
       case 'tool.started': {
         const name = str(frame.tool) ?? 'tool';
         const id = `tool-${++this.counter}`;

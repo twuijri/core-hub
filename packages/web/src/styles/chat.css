@@ -65,8 +65,10 @@
 }
 .msg[data-side='agent'] .msg-stack {
   align-items: flex-start;
-  /* The agent can use the whole column: code blocks and tables need it. */
+  /* The agent uses the width from the left edge — code blocks and tables need it —
+     but stops short of the far side, which is the person's. */
   flex: 1;
+  max-inline-size: 85%;
 }
 
 /* ------------------------------------------------------------------ the header */
@@ -296,29 +298,98 @@
   line-height: var(--mj-font-leading-relaxed);
 }
 
-/* ------------------------------------------------------------- the tool card
-   Folded into the agent's turn, on the code surface so it reads as machinery
-   rather than as something the agent said. */
-.tool-card {
-  inline-size: 100%;
+/* ------------------------------------------------------------- the tools of a turn
+   Beside the reply, not inside it: machinery on the raised surface, one line each,
+   and folded to one line altogether once the run has ended. */
+.tool-group {
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-inline-size: min(22rem, 100%);
   border: 1px solid var(--mj-color-border);
   border-radius: var(--mj-radius-md);
   background: var(--mj-color-bg-raised);
   overflow: hidden;
+  font-size: var(--mj-font-size-xs);
+}
+.tool-group-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--mj-space-2);
+  padding: var(--mj-space-2) var(--mj-space-3);
+  cursor: pointer;
+  list-style: none;
+  color: var(--mj-color-text-muted);
+}
+.tool-group-summary::-webkit-details-marker {
+  display: none;
+}
+.tool-group-summary:hover {
+  background: var(--mj-color-surface-2);
+}
+.tool-group-caret {
+  transition: rotate var(--mj-motion-fast) var(--mj-motion-ease);
+}
+.tool-group[open] .tool-group-caret {
+  rotate: 180deg;
+}
+.tool-group-count {
+  font-weight: 600;
+  color: var(--mj-color-text);
+}
+.tool-group-names {
+  min-inline-size: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mj-font-mono);
+  unicode-bidi: isolate;
+}
+.tool-group[open] > .tool-group-summary {
+  border-block-end: 1px solid var(--mj-color-border);
+}
+.tool-list > * + * {
+  border-block-start: 1px solid var(--mj-color-border);
+}
+.tool-earlier {
+  inline-size: 100%;
+  padding: var(--mj-space-1) var(--mj-space-3);
+  border-block-end: 1px solid var(--mj-color-border);
+  text-align: start;
+  color: var(--mj-color-text-muted);
+  cursor: pointer;
+}
+.tool-earlier:hover {
+  background: var(--mj-color-surface-2);
+  color: var(--mj-color-text);
+}
+.tool-ok {
+  display: inline-grid;
+  place-items: center;
+  color: var(--mj-color-success);
+}
+.tool-label {
+  margin-block: var(--mj-space-1);
+  font-size: var(--mj-font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--mj-color-text-faint);
 }
 .tool-head {
   display: flex;
   align-items: center;
   gap: var(--mj-space-2);
-  padding: var(--mj-space-2) var(--mj-space-3);
+  padding: var(--mj-space-1) var(--mj-space-3);
   font-size: var(--mj-font-size-xs);
-  cursor: pointer;
   list-style: none;
+}
+summary.tool-head {
+  cursor: pointer;
 }
 .tool-head::-webkit-details-marker {
   display: none;
 }
-.tool-head:hover {
+summary.tool-head:hover {
   background: var(--mj-color-surface-2);
 }
 .tool-name {
