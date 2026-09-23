@@ -318,6 +318,8 @@ registerHermesBoard(() => ({
     create: async () => {
       throw new HermesRefusal('create', 'the e2e board takes no new cards');
     },
+    // Hermes's card is not a week old; the scripted board archives nothing.
+    archive: async () => {},
     move: async (id) => {
       throw new HermesRefusal('archive', `cannot archive ${id}: its summary is not written yet`);
     },
