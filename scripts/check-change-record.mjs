@@ -41,13 +41,25 @@ if (flag('--all')) {
   files = args.slice(args.indexOf('--files') + 1).filter((a) => !a.startsWith('--'));
 } else {
   const base = value('--base') ?? 'origin/main';
-  const diff = execFileSync('git', ['diff', '--name-only', '--diff-filter=AM', `${base}...HEAD`], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  });
-  files = diff
-    .split('\n')
-    .filter((f) => f.startsWith('docs/changes/') && f !== 'docs/changes/README.md');
+  const changed = (...filter) =>
+    execFileSync('git', ['diff', '--name-only', ...filter, `${base}...HEAD`], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    })
+      .split('\n')
+      .filter(Boolean);
+  // The code-map bot's PR (.github/workflows/code-map.yml) only refreshes the generated map:
+  // there is no task to record. Exempt exactly that — a change set touching graphify-out/ alone.
+  const all = changed();
+  if (all.length > 0 && all.every((f) => f.startsWith('graphify-out/'))) {
+    console.log(
+      `change-record  OK — only graphify-out/ changed (${all.length} file(s)): the generated code map needs no record`,
+    );
+    process.exit(0);
+  }
+  files = changed('--diff-filter=AM').filter(
+    (f) => f.startsWith('docs/changes/') && f !== 'docs/changes/README.md',
+  );
   if (files.length === 0) {
     console.error(
       'change-record  FAILED: this change adds or updates no file under docs/changes/ (TEAM-RULES §2).',
