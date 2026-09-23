@@ -4,10 +4,17 @@ import type { HubModule } from '../lib/module.js';
 import { requireSqlite } from '../lib/db.js';
 import type { SessionsNotifier } from './sessions/ports.js';
 import { authModule, principalScopeResolver } from './auth/index.js';
-import { agentDirectory, agentRunner, agentsModule } from './agents/index.js';
+import {
+  agentDirectory,
+  agentRunner,
+  agentsModule,
+  agentsServiceFor,
+  hermesRuntimeFor,
+} from './agents/index.js';
 import { attachmentReferences, createSessionsModule } from './sessions/index.js';
 import { roomsModule } from './rooms/index.js';
-import { tasksModule } from './tasks/index.js';
+import { registerHermesBoard, tasksModule } from './tasks/index.js';
+import { createHermesKanban, processRunner } from './tasks/hermes-kanban.js';
 import { schedulesModule } from './schedules/index.js';
 import {
   attachmentsPort,
@@ -67,6 +74,31 @@ export const sessionsModule = createSessionsModule({
 // The other direction of the same pair: `knowledge` refuses to delete a file a message
 // still points at, and only `sessions` knows that (contract `409` on deleteAttachment).
 registerAttachmentReferences(attachmentReferences);
+
+/**
+ * The Tasks board reflects Hermes's own kanban (owner decision, 2026-09-23). `agents`
+ * knows where Hermes lives — its executable and the home the gateway runs in — and
+ * `tasks` knows what a card is; this is the one place allowed to put them together.
+ *
+ * There is a kanban only while both exist: no executable on this host, or no home to
+ * point it at, and every card is simply the hub's own.
+ */
+registerHermesBoard((app) => ({
+  kanban() {
+    const runtime = hermesRuntimeFor(app);
+    const home = runtime.status().home;
+    const command = runtime.executable();
+    if (!home || !command) return null;
+    return createHermesKanban(processRunner({ command, home, env: runtime.cliEnv() }));
+  },
+  agentId(workspace) {
+    // Agents are hub-wide rows; the scope only decides how settings are shown.
+    const found = agentsServiceFor(app)
+      .list({ id: workspace, slug: '', name: '', isDefault: false }, { kind: 'hermes' })
+      .find((agent) => agent.slug === 'hermes');
+    return found?.id ?? null;
+  },
+}));
 
 export const modules: readonly HubModule[] = [
   authModule,

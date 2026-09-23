@@ -382,6 +382,12 @@
   gap: var(--mj-space-1);
   margin-block-start: var(--mj-space-1);
 }
+/* Whose board a reflected card lives on: the agent's mark, nothing louder. */
+.task-card-origin {
+  display: inline-grid;
+  place-items: center;
+  color: var(--mj-color-text-muted);
+}
 /* The one action a card offers appears when it is reachable, not always. */
 .task-card-quick {
   opacity: 0;
