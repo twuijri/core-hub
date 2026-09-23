@@ -5,8 +5,11 @@
  * **The chip in the footer switches; this page decides what exists.** They are different
  * questions, and putting the second one on the chip is how a menu becomes a control panel.
  *
+ * **Each one is a Hermes profile** (ADR 0014): made in Hermes, from scratch or as a copy of
+ * one the person picks, and a profile Hermes already has is listed here.
+ *
  * **Removing one archives it**, which is the hub's own word: the rows stay and only the
- * memberships go. The button says archive for that reason — a delete that archives is a
+ * memberships go, and the Hermes profile stays as it is. The button says archive for that reason — a delete that archives is a
  * lie the person finds out later, and the opposite would be worse.
  */
 import { useState } from 'react';
@@ -22,6 +25,7 @@ import {
   Field,
   Input,
   Notice,
+  Segmented,
   Select,
   Skeleton,
   SkeletonGroup,
@@ -183,10 +187,18 @@ function AddWorkspace({ existing, onClose }: { existing: Workspace[]; onClose: (
   const create = useCreateWorkspace();
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
+  // Asked, not defaulted (owner, 2026-09-23): a Hermes profile starts either fresh or as a
+  // copy of one the person picks — config, SOUL and skills, never memory or chats (ADR 0014).
+  const [origin, setOrigin] = useState<'blank' | 'clone'>('blank');
   const [cloneFrom, setCloneFrom] = useState<string | null>(null);
   const taken = existing.some((workspace) => workspace.slug === slug);
   const badSlug = slug.length > 0 && !SLUG.test(slug);
-  const ready = slug.length > 0 && !badSlug && !taken && name.trim().length > 0;
+  const ready =
+    slug.length > 0 &&
+    !badSlug &&
+    !taken &&
+    name.trim().length > 0 &&
+    (origin === 'blank' || cloneFrom !== null);
 
   return (
     <Dialog
@@ -205,7 +217,11 @@ function AddWorkspace({ existing, onClose }: { existing: Workspace[]; onClose: (
             data-testid="save-workspace"
             onClick={() =>
               create.mutate(
-                { slug, name: name.trim(), ...(cloneFrom ? { clone_from: cloneFrom } : {}) },
+                {
+                  slug,
+                  name: name.trim(),
+                  ...(origin === 'clone' && cloneFrom ? { clone_from: cloneFrom } : {}),
+                },
                 { onSuccess: onClose },
               )
             }
@@ -249,21 +265,52 @@ function AddWorkspace({ existing, onClose }: { existing: Workspace[]; onClose: (
             />
           )}
         </Field>
-        <Select
-          label={t('workspaces.clone')}
-          value={cloneFrom}
-          placeholder={t('workspaces.clone_none')}
-          onValueChange={setCloneFrom}
-          options={existing.map((workspace) => ({
-            value: workspace.slug,
-            label: workspace.name,
-            description: t('workspaces.clone_what'),
-          }))}
-        />
-        {create.isError && <Notice tone="danger">{describeError(create.error, t)}</Notice>}
+        <div className="flex flex-col gap-1">
+          <Segmented
+            label={t('workspaces.origin')}
+            value={origin}
+            onChange={(value) => setOrigin(value === 'clone' ? 'clone' : 'blank')}
+            size="sm"
+            stretch
+            testId="workspace-origin"
+            options={[
+              { value: 'blank', label: t('workspaces.origin_blank') },
+              { value: 'clone', label: t('workspaces.origin_clone') },
+            ]}
+          />
+          <p className="text-xs text-muted">
+            {t(origin === 'blank' ? 'workspaces.origin_blank_what' : 'workspaces.clone_what')}
+          </p>
+        </div>
+        {origin === 'clone' && (
+          <Select
+            label={t('workspaces.clone')}
+            value={cloneFrom}
+            placeholder={t('workspaces.clone_pick')}
+            onValueChange={setCloneFrom}
+            testId="workspace-clone-from"
+            options={existing.map((workspace) => ({
+              value: workspace.slug,
+              label: workspace.name,
+            }))}
+          />
+        )}
+        {create.isError && <Notice tone="danger">{refusal(create.error, t)}</Notice>}
       </div>
     </Dialog>
   );
+}
+
+/** Hermes's own words when it refused to make the profile; the hub's message otherwise. */
+function refusal(
+  error: unknown,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  const details = (error as { body?: { details?: { reason?: string; message?: string } } })?.body
+    ?.details;
+  return details?.reason === 'hermes_refused' && details.message
+    ? t('workspaces.refused', { message: details.message })
+    : describeError(error, t);
 }
 
 /** A name turned into a slug: lowercase, dashes, nothing else. Latin names only — an

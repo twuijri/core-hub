@@ -791,6 +791,16 @@ test.describe('web smoke journeys', () => {
     await page.getByLabel('الاسم').fill('Labs');
     // The slug followed the name without being typed.
     await expect(page.getByLabel('المعرّف')).toHaveValue('labs');
+    // How it starts is asked, not assumed (ADR 0014): from scratch, or a copy of one picked.
+    await expect(page.getByRole('radio', { name: 'من الصفر' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await page.getByRole('radio', { name: 'نسخة من بروفايل' }).click();
+    await expect(page.getByTestId('save-workspace')).toBeDisabled();
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: path.join(shots, 'workspace-origin-ar-light.png') });
+    await page.getByRole('radio', { name: 'من الصفر' }).click();
     await page.getByTestId('save-workspace').click();
     await expect(page.getByTestId('workspace-list')).toContainText('Labs');
     // A second workspace exists, so exactly one archive button appeared — the new one's.
