@@ -218,6 +218,53 @@ describe('Hermes over the TUI gateway', () => {
     });
   });
 
+  it('asks a batch one question at a time, and gives Hermes the whole set by qid', async () => {
+    const gateway = fakeGateway((method, _params, api) => {
+      if (method === 'session.create') return { session_id: 's', stored_session_id: 'st' };
+      if (method === 'prompt.submit') {
+        setImmediate(() =>
+          api.ask(
+            's',
+            'clarify',
+            {
+              questions: [
+                { qid: 'q0', question: 'Which device?', choices: ['Mac (Recommended)', 'PC'] },
+                { qid: 'q1', question: 'Anything else?', choices: [] },
+                { qid: 'q2', question: 'Which OS?', choices: ['macOS', 'Linux'] },
+              ],
+            },
+            'srq-9',
+          ),
+        );
+        return { status: 'streaming' };
+      }
+      return {};
+    });
+    const session = await HermesTuiSession.open(channelOver(gateway), null);
+    const asked: Array<Extract<AgentEvent, { type: 'question.asked' }>> = [];
+    const reading = (async () => {
+      for await (const event of session.stream()) {
+        if (event.type !== 'question.asked') continue;
+        asked.push(event);
+        // Chosen, skipped, and written by hand.
+        const replies = ['Mac (Recommended)', null, 'Ubuntu'];
+        await session.answer(event.id, replies[asked.length - 1] ?? null);
+        if (asked.length === 3) return;
+      }
+    })();
+    void session.send({ text: 'ask me three things' });
+    await reading;
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(asked.map((q) => [q.question, q.choices])).toEqual([
+      ['Which device?', ['Mac (Recommended)', 'PC']],
+      ['Anything else?', []],
+      ['Which OS?', ['macOS', 'Linux']],
+    ]);
+    expect(gateway.api.received.find((f) => f.id === 'srq-9')).toMatchObject({
+      result: { answers: { q0: 'Mac', q1: '', q2: 'Ubuntu' } },
+    });
+  });
+
   it('turns an approval into the choices Hermes offers, and sends back the one chosen', async () => {
     const gateway = fakeGateway((method, _params, api) => {
       if (method === 'session.create') return { session_id: 's', stored_session_id: 'st' };

@@ -35,8 +35,18 @@ function scriptedModel(): http.Server {
         : {};
       const tool = [...(body.messages ?? [])].reverse().find((m) => m.role === 'tool');
       const ask = !tool && JSON.stringify(body.tools ?? []).includes('clarify');
-      const reply = tool
-        ? `answer=${JSON.parse(String(tool.content)).user_response as string}`
+      // "batch" in the prompt: the shape Hermes's clarify tool advertises to a model
+      // (`questions`), two of them; otherwise the single shape it also accepts.
+      const lastUser = [...(body.messages ?? [])].reverse().find((m) => m.role === 'user');
+      const batch = JSON.stringify(lastUser?.content ?? '').includes('batch');
+      const result = tool
+        ? (JSON.parse(String(tool.content)) as {
+            user_response?: string;
+            responses?: Array<{ user_response: string }>;
+          })
+        : null;
+      const reply = result
+        ? `answer=${result.user_response ?? (result.responses ?? []).map((r) => r.user_response).join('|')}`
         : 'hello';
       const message = ask
         ? {
@@ -48,10 +58,16 @@ function scriptedModel(): http.Server {
                 type: 'function',
                 function: {
                   name: 'clarify',
-                  arguments: JSON.stringify({
-                    question: 'Which device?',
-                    choices: ['Mac', 'Windows', 'Linux'],
-                  }),
+                  arguments: JSON.stringify(
+                    batch
+                      ? {
+                          questions: [
+                            { question: 'Which device?', choices: ['Mac', 'Windows', 'Linux'] },
+                            { question: 'Which shell?', choices: ['zsh', 'bash'] },
+                          ],
+                        }
+                      : { question: 'Which device?', choices: ['Mac', 'Windows', 'Linux'] },
+                  ),
                 },
               },
             ],
@@ -190,6 +206,24 @@ describe.skipIf(!image)('Hermes TUI gateway (real Hermes; set MAJLIS_HERMES_IMAG
       .join('');
     expect(said).toContain('answer=Mac');
     expect(events.at(-1)).toMatchObject({ type: 'run.completed' });
+    await session.close();
+  }, 180_000);
+
+  it('asks a batch — the shape Hermes offers the model — and gives Hermes every answer', async () => {
+    const session = await HermesTuiSession.open(channel, null);
+    const questions: string[] = [];
+    const events = await turn(session, 'ask me a batch', async (question) => {
+      questions.push(question.question);
+      await session.answer(question.id, questions.length === 1 ? 'Linux' : 'zsh');
+    });
+    expect(questions).toEqual(['Which device?', 'Which shell?']);
+    const said = events
+      .filter(
+        (e): e is Extract<AgentEvent, { type: 'message.delta' }> => e.type === 'message.delta',
+      )
+      .map((e) => e.text)
+      .join('');
+    expect(said).toContain('answer=Linux|zsh');
     await session.close();
   }, 180_000);
 
