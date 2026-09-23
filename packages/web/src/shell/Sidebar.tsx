@@ -6,8 +6,8 @@
 // so the phone drawer and any later rail are assembled from the same pieces rather than
 // drawn again (docs/clients/DESIGN.md §UI policy).
 import { derived } from '@majlis/contracts';
-import type { ReactElement } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router';
+import { useEffect, type ReactElement } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth/context.js';
 import { useTheme, themeIcon, nextTheme } from '../design/theme.js';
 import { useI18n } from '../i18n/context.js';
@@ -17,6 +17,7 @@ import { useRealtime } from '../realtime/context.js';
 import { SessionList } from '../sessions/SessionList.js';
 import { SettingsNav, settingsIdFromPath } from '../settings/SettingsNav.js';
 import {
+  IconArrowStart,
   IconGlobe,
   IconPlus,
   IconSchedules,
@@ -48,6 +49,8 @@ const RAIL_ICONS: Record<string, (p: { size?: number }) => ReactElement> = {
 };
 
 const SEGMENT_STORAGE = `${derived.storagePrefix}segment`;
+/** The last page outside Settings, for the sidebar's way back (per tab, not per device). */
+const LAST_OUTSIDE_SETTINGS = `${derived.storagePrefix}before-settings`;
 
 export function segmentFromPath(pathname: string): string | null {
   for (const id of navigation.segments) {
@@ -82,10 +85,30 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const selected = segmentFromPath(location.pathname) ?? stored ?? 'chat';
   /**
    * Inside Settings the sidebar becomes the settings list (owner correction, 2026-09-22):
-   * the list of places belongs here, and the page keeps the whole column for itself. The
-   * rail above stays, so leaving is one click and never a hunt for a back link.
+   * the list of places belongs here, and the page keeps the whole column for itself.
    */
   const settingsId = settingsIdFromPath(location.pathname);
+  /**
+   * Inside Settings the rail gives way to one row back to where the person was (owner,
+   * 2026-09-23: «اذا دخلت الاعدادات تروح رسالة جديدة والسيرش … واذا برجع للمحادثات يصير فيه
+   * زر رجوع»). Where they were is the last page outside Settings — the conversation they
+   * had open — and a new chat when Settings was the first page of the visit.
+   */
+  useEffect(() => {
+    if (settingsId !== null) return;
+    try {
+      sessionStorage.setItem(LAST_OUTSIDE_SETTINGS, `${location.pathname}${location.search}`);
+    } catch {
+      // fine: the way back is then a new chat
+    }
+  }, [settingsId, location.pathname, location.search]);
+  const backTo = (() => {
+    try {
+      return sessionStorage.getItem(LAST_OUTSIDE_SETTINGS);
+    } catch {
+      return null;
+    }
+  })();
   const chooseSegment = (id: string) => {
     try {
       localStorage.setItem(SEGMENT_STORAGE, id);
@@ -107,29 +130,48 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
       {/* Slim by design (NAVIGATION §1, 2026-09-22): starting a chat, finding one, and the
           list. Everything configured once lives on a page inside Settings. */}
-      <SidebarGroup testId="rail">
-        {rail.map((d, index) => {
-          const Icon = RAIL_ICONS[d.id] ?? IconSearch;
-          return (
-            <SidebarRow
-              key={d.id}
-              icon={<Icon size={18} />}
-              label={t(termKey(d.id))}
-              emphasis={index === 0 ? 'primary' : 'normal'}
-              render={({ className, children }) => (
-                <NavLink
-                  to={routeOf(d.id)}
-                  onClick={onNavigate}
-                  data-nav-id={d.id}
-                  className={({ isActive }) => `${className} ${isActive ? 'active' : ''}`}
-                >
-                  {children}
-                </NavLink>
-              )}
-            />
-          );
-        })}
-      </SidebarGroup>
+      {settingsId !== null ? (
+        <SidebarGroup testId="settings-back">
+          <SidebarRow
+            icon={<IconArrowStart size={18} />}
+            label={t('shell.back_to_chats')}
+            render={({ className, children }) => (
+              <Link
+                to={backTo ?? routeOf('new_chat')}
+                onClick={onNavigate}
+                className={className}
+                data-testid="back-to-chats"
+              >
+                {children}
+              </Link>
+            )}
+          />
+        </SidebarGroup>
+      ) : (
+        <SidebarGroup testId="rail">
+          {rail.map((d, index) => {
+            const Icon = RAIL_ICONS[d.id] ?? IconSearch;
+            return (
+              <SidebarRow
+                key={d.id}
+                icon={<Icon size={18} />}
+                label={t(termKey(d.id))}
+                emphasis={index === 0 ? 'primary' : 'normal'}
+                render={({ className, children }) => (
+                  <NavLink
+                    to={routeOf(d.id)}
+                    onClick={onNavigate}
+                    data-nav-id={d.id}
+                    className={({ isActive }) => `${className} ${isActive ? 'active' : ''}`}
+                  >
+                    {children}
+                  </NavLink>
+                )}
+              />
+            );
+          })}
+        </SidebarGroup>
+      )}
 
       {settingsId === null && (
         <div className="mx-2 mt-3">
