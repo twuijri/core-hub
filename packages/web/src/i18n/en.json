@@ -223,7 +223,8 @@
     "speak": "Listen",
     "speak_later": "Speech arrives in a later phase.",
     "replying_to": "Replying to: {text}",
-    "estimated": "≈ {amount}"
+    "estimated": "≈ {amount}",
+    "anchor_missing": "The message this search pointed to is no longer in this conversation."
   },
   "composer": {
     "label": "Message composer",
