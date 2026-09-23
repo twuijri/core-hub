@@ -187,6 +187,14 @@ boot. The endpoint is the Hermes agent's `gateway.endpoint` setting
 | `/data/keys/hermes-api.secret` | the `API_SERVER_KEY` the hub sends to Hermes |
 | `/data/hermes/` | Hermes's home: `.env`, `config.yaml`, memories, skills, sessions, cron |
 | `/data/agents/<id>/` | coding agents installed from the catalog |
+| `/data/hermes-packages/` | optional Python packages Hermes installs the first time a feature needs them (Edge voices, Bedrock, Vertex …) |
+| `/data/workspaces/<profile>/` | each chat's working folder |
+
+Everything else in the image is **read-only** to the hub and to every agent it runs: the
+hub's code in `/app` and Hermes's in `/opt/hermes` belong to root. An agent cannot change
+the hub or Hermes, by mistake or because a page it read told it to; a change to either
+comes with a new image. Recreating the container drops nothing you need — every file that
+is written lives in `/data`.
 
 ## 4. Smoke checklist
 
