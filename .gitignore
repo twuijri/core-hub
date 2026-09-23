@@ -41,3 +41,5 @@ packages/web/e2e/.setup-data/
 graphify-out/cache/
 graphify-out/manifest.json
 graphify-out/cost.json
+# dated copies Graphify keeps of earlier maps
+graphify-out/20*/

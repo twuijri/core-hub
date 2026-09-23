@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The committed code map is the one this tree builds (docs/harness/knowledge-graph.md).
 //
-// Run after `graphify update .` on a clean checkout: it compares the graph.json committed in
+// Run after `pnpm graph` on a clean checkout: it compares the graph.json committed in
 // HEAD with the one just built. Graphify is deterministic for code (tree-sitter, no model),
 // so any difference means somebody changed code without rebuilding the map. The commit the
 // map was built from is left out: it is always the parent of the commit that carries it.
@@ -37,8 +37,8 @@ const committed = load(committedText, `HEAD:${FILE}`);
 const built = load(readFileSync(FILE, 'utf8'), FILE);
 
 // A map must not carry a path from the machine that built it: Graphify names an import of a
-// file it did not scan after its absolute path, and `scripts/graph-portable.mjs` (run by
-// `pnpm graph`) is what rewrites it.
+// file it did not scan after its absolute path, and `scripts/graph.mjs` (`pnpm graph`)
+// is what rewrites it.
 const local = /(^|_)(home|users|tmp|private|var)_[a-z0-9_]*_/;
 const leaked = committed.nodes.filter(
   (node) => node.type === 'external' && local.test(String(node.id)),

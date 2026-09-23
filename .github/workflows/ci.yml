@@ -100,8 +100,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      # What `pnpm graph` runs, without installing the workspace: neither step needs it.
-      - run: graphify update . && node scripts/graph-portable.mjs
+      # `pnpm graph` without installing the workspace: the script needs Node alone.
+      - run: node scripts/graph.mjs
       - run: node scripts/graph-check.mjs
 
   migrations:
