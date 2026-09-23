@@ -645,7 +645,10 @@
     },
     "confirm": {
       "archive": "أرشفة «{title}»؟"
-    }
+    },
+    "all_workspaces": "كل المساحات",
+    "all_projects": "كل المشاريع",
+    "workspace": "المساحة"
   },
   "schedules": {
     "new": "جدول جديد",

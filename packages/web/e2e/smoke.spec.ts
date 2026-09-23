@@ -446,11 +446,8 @@ test.describe('web smoke journeys', () => {
     await page.getByRole('link', { name: 'المهام' }).click();
     await expect(page).toHaveURL(/\/tasks$/);
 
-    await expect(page.getByTestId('tasks-empty')).toBeVisible();
-    await page.getByTestId('new-project').click();
-    await page.getByRole('textbox').fill('إعادة بناء المركز');
-    await page.getByRole('button', { name: 'حفظ' }).click();
-
+    // The board is there immediately: no project to create first, because writing
+    // something down should not start with inventing a container for it.
     // The board is the shape of the work: an intake strip and four columns.
     const board = page.getByTestId('task-board');
     await expect(board).toBeVisible();

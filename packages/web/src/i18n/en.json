@@ -645,7 +645,10 @@
     },
     "confirm": {
       "archive": "Archive “{title}”?"
-    }
+    },
+    "all_workspaces": "All workspaces",
+    "all_projects": "All projects",
+    "workspace": "Workspace"
   },
   "schedules": {
     "new": "New schedule",
