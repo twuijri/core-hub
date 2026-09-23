@@ -158,6 +158,19 @@ export const IconMore = (p: IconProps) => (
     <path d="M5 12h.01M12 12h.01M19 12h.01" />
   </Svg>
 );
+/** A question the agent is asking: a circle with a question mark. */
+export const IconHelp = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.5v.7M12 17h.01" />
+  </Svg>
+);
+/** "Go": an arrow toward the end of the line, mirrored in a right-to-left page. */
+export const IconArrowEnd = ({ className = '', ...p }: IconProps) => (
+  <Svg {...p} className={`rtl:-scale-x-100 ${className}`}>
+    <path d="M5 12h14M13 6l6 6-6 6" />
+  </Svg>
+);
 export const IconChevron = (p: IconProps) => (
   <Svg {...p}>
     <path d="m6 9 6 6 6-6" />

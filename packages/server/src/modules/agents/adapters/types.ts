@@ -145,6 +145,19 @@ export type AgentEvent =
       /** `tool.started.id` this decision gates, when the adapter can tell. */
       toolId?: string | null;
     }
+  | {
+      /**
+       * The agent asks the person something and waits (Hermes's `clarify` tool): a
+       * question, up to a few choices, and always a line to write one's own answer.
+       * Answered through `AgentSession.answer`; `null` there means the person skipped it.
+       */
+      type: 'question.asked';
+      id: string;
+      question: string;
+      choices: string[];
+      /** `tool.started.id` of the tool call that asked, when the adapter can tell. */
+      toolId?: string | null;
+    }
   | { type: 'plan'; entries: { content: string; status: string }[] }
   | {
       /** Cumulative token totals for the turn, as the agent reports them. */
@@ -253,6 +266,8 @@ export interface AgentSession {
   stream(): AsyncIterable<AgentEvent>;
   /** Answer an `approval.requested` the agent is blocked on. */
   respond(approvalId: string, optionId: string): Promise<void>;
+  /** Answer a `question.asked`: the person's words, or `null` when they skipped it. */
+  answer?(questionId: string, text: string | null): Promise<void>;
   interrupt(): Promise<void>;
   close(): Promise<void>;
 }

@@ -35,6 +35,27 @@ export const E2E_PASSWORD = 'e2e-owner-password';
 type Step = AgentEvent | { type: 'delay'; ms: number } | { type: 'await_input' };
 
 function scriptFor(prompt: string): Step[] {
+  if (/اسألني|ask me/i.test(prompt)) {
+    // A question with choices, answered on the card above the composer (journey 19). The
+    // reply repeats the answer: `{answer}` is filled in with what the person sent.
+    return [
+      {
+        type: 'approval_requested',
+        ref: 'q1',
+        kind: 'question',
+        title: 'وش الجهاز اللي تبي تتصل فيه؟',
+        choices: [
+          { value: 'ماك (Recommended)', label: 'ماك (Recommended)' },
+          { value: 'ويندوز', label: 'ويندوز' },
+          { value: 'لينكس', label: 'لينكس' },
+        ],
+        answerMode: 'both',
+      },
+      { type: 'await_input' },
+      { type: 'message_delta', text: 'اخترت: {answer}' },
+      { type: 'completed' },
+    ];
+  }
   if (/approve|موافقة/i.test(prompt)) {
     return [
       { type: 'message_delta', text: 'سأحتاج إذنك لتشغيل الأمر. ' },
@@ -132,6 +153,8 @@ interface Live {
   queue: Step[];
   wake: (() => void) | null;
   closed: boolean;
+  /** The last answer a person gave this run, for scripts that repeat it. */
+  answer: string;
 }
 
 /** A runner with real pauses, so a socket can be dropped mid-run and resumed. */
@@ -140,7 +163,12 @@ class ScriptedRunner implements AgentRunner {
 
   async start(request: AgentRunRequest): Promise<AgentRunAccepted> {
     const text = request.prompt.map((b) => (b.type === 'text' ? b.text : '')).join(' ');
-    this.runs.set(request.runId, { queue: scriptFor(text), wake: null, closed: false });
+    this.runs.set(request.runId, {
+      queue: scriptFor(text),
+      wake: null,
+      closed: false,
+      answer: '',
+    });
     return {
       agentSessionRef: request.agentSessionRef ?? `e2e-${request.sessionId}`,
       agentRunRef: `e2e-run-${request.runId}`,
@@ -174,13 +202,17 @@ class ScriptedRunner implements AgentRunner {
         });
         continue;
       }
-      yield step;
+      yield step.type === 'message_delta'
+        ? { ...step, text: step.text.replace('{answer}', live.answer) }
+        : step;
     }
     if (live.closed) yield { type: 'completed' };
   }
 
-  async send(runId: string, _input: AgentRunInput): Promise<void> {
+  async send(runId: string, input: AgentRunInput): Promise<void> {
     const live = this.runs.get(runId);
+    // Skipped is "deny" with no answer, as the card sends it.
+    if (live) live.answer = input.decision === 'deny' ? 'تخطّيت' : (input.answer ?? '');
     live?.wake?.();
     if (live) live.wake = null;
   }
