@@ -49,6 +49,11 @@ PR's head, runs `pnpm graph` and `pnpm graph:check`, which compares the built
 the PR with the command that fixes it.
 
 **Why `pnpm graph` (`scripts/graph.mjs`) and not plain `graphify update .`:**
+- Graphify resolves imports through whatever is on disk, so a checkout with
+  `node_modules` and built packages (`dist/`, the generated contract client) gets nodes a
+  fresh clone does not (26 of them, the first time CI checked). The script builds in a
+  temporary copy of the files git tracks plus new files it does not ignore — the change
+  being made, committed or not, and nothing a build left behind.
 - Graphify names an import whose target it did not scan — the generated contract client,
   which is git-ignored — after its *absolute* path (`home_<user>_<checkout>_packages_…`).
   The script rewrites those names to the root-relative form every other node has, and
@@ -56,8 +61,8 @@ the PR with the command that fixes it.
   machine builds the same map. `pnpm graph:check` refuses a map that still carries such a
   path.
 - `graphify update .` merges into the `graph.json` it finds and keeps what it did not
-  extract this time, so the renamed node would come back twice. The script builds from
-  scratch; with no model involved that takes about five seconds.
+  extract this time, so the renamed node would come back twice. The copy has no map, so
+  every build is from scratch; with no model involved that takes about five seconds.
 
 ## Rule for agents
 Before a change that spans more than one module, query the map for those modules and
