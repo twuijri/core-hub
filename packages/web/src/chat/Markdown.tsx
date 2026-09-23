@@ -1,11 +1,15 @@
-import { useState, type ComponentProps, type ReactNode } from 'react';
-import ReactMarkdown from 'react-markdown';
+import { useMemo, useState, type ComponentProps, type ReactNode } from 'react';
+import ReactMarkdown, { type Options } from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { useI18n } from '../i18n/context.js';
 import { usePane } from '../shell/pane.js';
 import { IconCheck, IconCopy, IconPanel } from '../ui/icons.js';
 import { Button, useToast } from '../ui/index.js';
+import { rehypeMarkQuery } from './anchor.js';
+
+type Plugins = NonNullable<Options['rehypePlugins']>;
+const HIGHLIGHT: Plugins[number] = [rehypeHighlight, { detect: false, ignoreMissing: true }];
 
 function textOfChildren(node: ReactNode): string {
   if (typeof node === 'string') return node;
@@ -70,13 +74,24 @@ function CodeBlock(props: ComponentProps<'pre'>) {
   );
 }
 
-/** Streamed markdown: GFM tables/lists, highlighted fenced code, links in a new tab. */
-export function Markdown({ text }: { text: string }) {
+/**
+ * Streamed markdown: GFM tables/lists, highlighted fenced code, links in a new tab.
+ * `mark` wraps each occurrence of a searched word in `<mark>` (anchor.ts), after the
+ * code has been highlighted, so neither changes the other.
+ */
+export function Markdown({ text, mark }: { text: string; mark?: string | null | undefined }) {
+  const rehypePlugins = useMemo<Plugins>(
+    () =>
+      mark
+        ? [HIGHLIGHT, [rehypeMarkQuery, { query: mark }] as unknown as Plugins[number]]
+        : [HIGHLIGHT],
+    [mark],
+  );
   return (
     <div className="prose-chat" dir="auto">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[[rehypeHighlight, { detect: false, ignoreMissing: true }]]}
+        rehypePlugins={rehypePlugins}
         components={{
           pre: CodeBlock,
           a: ({ href, children }) => (
