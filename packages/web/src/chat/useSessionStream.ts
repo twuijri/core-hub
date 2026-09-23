@@ -150,8 +150,9 @@ export function useSessionStream(sessionId: string | undefined): StreamInfo {
       socket.off('connect', onConnect);
       if (socket.connected) unsubscribeSession(socket, sessionId);
     };
-    // `realtime` changes identity with the connection state; the socket object itself is stable.
-  }, [sessionId, profile, client, generation]);
+    // `realtime` changes identity with the connection state; the socket object is stable
+    // until every socket is dropped, which `epoch` counts.
+  }, [sessionId, profile, client, generation, realtime.epoch]);
 
   return { state, status, error, lastResume, reload };
 }

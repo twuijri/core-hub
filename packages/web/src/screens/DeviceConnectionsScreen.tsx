@@ -94,7 +94,7 @@ export function DeviceConnectionsScreen() {
       clearInterval(poll);
       clearInterval(tick);
     };
-  }, [pairing?.id, pairing?.status, client]);
+  }, [pairing?.id, pairing?.status, client, realtime.epoch]);
 
   const secondsLeft = pairing
     ? Math.max(0, Math.round((Date.parse(pairing.expires_at) - now) / 1000))
