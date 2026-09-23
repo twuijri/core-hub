@@ -104,7 +104,7 @@ describe('first-run setup screen', () => {
     await user.type(screen.getByLabelText('رمز التهيئة'), TOKEN);
     await user.type(screen.getByLabelText('اسم المستخدم'), 'tariq');
     await user.type(screen.getByLabelText('الاسم الظاهر (اختياري)'), 'طارق');
-    await user.type(screen.getByLabelText('اسم مساحة العمل (اختياري)'), 'مساحتي');
+    await user.type(screen.getByLabelText('اسم البروفايل (اختياري)'), 'بروفايلي');
     await user.type(screen.getByLabelText('كلمة المرور'), 'a-good-owner-password');
     await user.type(screen.getByLabelText('تأكيد كلمة المرور'), 'a-good-owner-password');
     await user.click(screen.getByRole('button', { name: 'أنشئ الحساب وادخل' }));
@@ -115,7 +115,7 @@ describe('first-run setup screen', () => {
       username: 'tariq',
       password: 'a-good-owner-password',
       display_name: 'طارق',
-      workspace_name: 'مساحتي',
+      workspace_name: 'بروفايلي',
     });
     // Signed in exactly like `auth.login` does: the session is stored, the route moves on.
     await waitFor(() => expect(store.read()?.user.username).toBe('tariq'));
