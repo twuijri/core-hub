@@ -3,6 +3,10 @@ name: Change record
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
+  # The code-map bot (code-map.yml) starts this on `bot/code-map`: GitHub does not start
+  # `pull_request` runs for a PR opened or pushed with GITHUB_TOKEN, and this check is required.
+  # A dispatched run compares with main.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,4 +24,6 @@ jobs:
         with:
           node-version-file: .nvmrc
       - name: Validate docs/changes for this PR (TEAM-RULES §2)
-        run: node scripts/check-change-record.mjs --base origin/${{ github.base_ref }}
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: node scripts/check-change-record.mjs --base "origin/$BASE_REF"

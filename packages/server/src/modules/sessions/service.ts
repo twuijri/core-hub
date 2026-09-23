@@ -25,7 +25,7 @@ import {
 import type { SessionsPorts } from './ports.js';
 import type { SessionsRealtime } from './realtime.js';
 import type { SessionsStore } from './store.js';
-import { preview, type SessionFilters } from './store.js';
+import { excerpt, type SessionFilters } from './store.js';
 import type { MessagePart } from './schema.js';
 
 /** `undefined` is spelled out everywhere: `exactOptionalPropertyTypes` is on. */
@@ -162,7 +162,7 @@ export class SessionsService {
         if (filters.q) {
           const hit = this.store.findMatch(scope.workspace, row.id, filters.q);
           session.match = hit
-            ? { message_id: hit.id, snippet: preview(hit.content) ?? '' }
+            ? { message_id: hit.id, snippet: excerpt(hit.content, filters.q) ?? '' }
             : { message_id: null, snippet: row.title ?? '' };
         }
         return session;
