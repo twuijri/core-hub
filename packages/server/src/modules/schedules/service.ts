@@ -269,16 +269,13 @@ export class SchedulesService {
       externalState: job.state ?? (job.enabled ? 'scheduled' : 'paused'),
       externalSyncedAt: now,
     };
+    // Hermes has one scheduler, so a job is one row wherever it was made: a schedule someone
+    // created in the design workspace stays there, and only a job Hermes made itself lands
+    // in `scope` (the default workspace).
     const existing = this.db
       .select()
       .from(schedules)
-      .where(
-        and(
-          eq(schedules.workspace, scope.workspace),
-          eq(schedules.externalSource, 'hermes'),
-          eq(schedules.externalId, job.id),
-        ),
-      )
+      .where(and(eq(schedules.externalSource, 'hermes'), eq(schedules.externalId, job.id)))
       .get();
     let id: string;
     if (existing) {
@@ -307,7 +304,8 @@ export class SchedulesService {
     if (lastRunAt && (!existing?.lastRunAt || lastRunAt > existing.lastRunAt)) {
       this.settleHermesRun(scope, id, lastRunAt, values.lastStatus, values.lastError);
     }
-    return { row: this.get(scope, id), created: !existing };
+    const row = this.db.select().from(schedules).where(eq(schedules.id, id)).get()!;
+    return { row, created: !existing };
   }
 
   /** A run Hermes finished: the one the hub asked for, if one is open, or a new line. */
@@ -356,12 +354,9 @@ export class SchedulesService {
   }
 
   /** Every reflection of Hermes's jobs here, archived ones included. */
-  hermesRows(scope: Scope): ScheduleRow[] {
-    return this.db
-      .select()
-      .from(schedules)
-      .where(and(eq(schedules.workspace, scope.workspace), eq(schedules.externalSource, 'hermes')))
-      .all();
+  hermesRows(_scope: Scope): ScheduleRow[] {
+    // Every workspace: Hermes's one scheduler may hold a job made from any of them.
+    return this.db.select().from(schedules).where(eq(schedules.externalSource, 'hermes')).all();
   }
 
   /** Hermes no longer lists it: removed there, so gone from the list here. */
