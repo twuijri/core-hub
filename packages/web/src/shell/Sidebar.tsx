@@ -8,7 +8,7 @@
 import type { ReactElement } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth/context.js';
-import { useTheme, themeIcon, THEME_CHOICES, type ThemeChoice } from '../design/theme.js';
+import { useTheme, themeIcon, nextTheme } from '../design/theme.js';
 import { useI18n } from '../i18n/context.js';
 import { useMeta } from '../hub/queries.js';
 import { navigation, routeOf, termKey, visibleEntries } from '../navigation/manifest.js';
@@ -214,22 +214,26 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           >
             {language === 'ar' ? 'العربية' : 'English'}
           </Button>
-          {/* Three symbols, no word: sun, moon, screen. The word "System" read as a
-              label for the whole row rather than as one choice among three. */}
-          <Segmented
-            icons
-            size="sm"
-            label={t('shell.theme_chip')}
-            testId="theme-chip"
-            value={prefs.theme}
-            onChange={(choice) => update({ theme: choice as ThemeChoice })}
-            options={THEME_CHOICES.map((choice) => ({
-              value: choice,
-              label: t(`display.theme.${choice}`),
-              icon: themeIcon(choice),
-              itemProps: { 'data-testid': `theme-chip-${choice}` },
-            }))}
-          />
+          {/* One button, and a press moves to the next: light → dark → system → light.
+              Three symbols side by side asked the person to work out which of them was
+              the selected one, and in a dark theme the highlight that says so is the
+              faintest thing on the row. One button has nothing to compare: what it shows
+              is what is on. The full picker is still on the Display page, for choosing
+              rather than cycling. */}
+          <Tooltip label={t(`display.theme.${prefs.theme}`)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label={t('shell.theme_next', {
+                next: t(`display.theme.${nextTheme(prefs.theme)}`),
+              })}
+              data-testid="theme-chip"
+              data-theme-choice={prefs.theme}
+              onClick={() => update({ theme: nextTheme(prefs.theme) })}
+            >
+              {themeIcon(prefs.theme, 15)}
+            </Button>
+          </Tooltip>
           {/* The version that is *running*, which is the hub's — the browser may be
               holding an older bundle. The build constant answers only until the hub does. */}
           <span className="ms-auto text-faint" data-testid="app-version">
