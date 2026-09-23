@@ -315,8 +315,17 @@ export async function updateUserAsAdmin(
   target: UserRow,
   input: UserAdminPatchInput,
   now: number,
+  /** The caller's own token, kept when the owner sets their own password here. */
+  keepTokenId: string | null = null,
 ): Promise<UserRow> {
-  if (target.role === 'owner' && (input.role || input.status || input.password)) {
+  // The owner's role and status never change. Their password does — by the owner alone
+  // (owner decision, 2026-09-23: «خل اقدر اعدل باسوورد اي احد حتى حسابي لاني انا سوبر ادمن»);
+  // an admin still cannot touch the owner's account.
+  const ownerSetsOwn = target.role === 'owner' && target.id === actorId;
+  if (
+    target.role === 'owner' &&
+    (input.role || input.status || (input.password && !ownerSetsOwn))
+  ) {
     throw new HubError('forbidden', { messageKey: 'auth.owner_immutable' });
   }
   if (target.id === actorId && input.status === 'disabled') {
@@ -345,7 +354,15 @@ export async function updateUserAsAdmin(
     if (Object.keys(patch).length > 0) {
       tx.update(users).set(patch).where(eq(users.id, target.id)).run();
     }
-    if (passwordHash) revokeOtherSessions(tx as ModuleDb, target.id, null, now);
+    // Every other session of that person ends; the one making the change stays when it is
+    // their own account, as on the Account page.
+    if (passwordHash)
+      revokeOtherSessions(
+        tx as ModuleDb,
+        target.id,
+        target.id === actorId ? keepTokenId : null,
+        now,
+      );
     return tx.select().from(users).where(eq(users.id, target.id)).get()!;
   });
 }
