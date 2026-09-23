@@ -29,7 +29,9 @@ export type Locale = 'ar' | 'en';
 export type NoticeEvent =
   | { kind: 'run_completed'; agent: string; session: string }
   | { kind: 'run_failed'; agent: string; session: string; reason: string | null }
-  | { kind: 'approval_requested'; agent: string; session: string; what: string };
+  | { kind: 'approval_requested'; agent: string; session: string; what: string }
+  /** Words someone else already chose — a workflow's `notify` step writes its own. */
+  | { kind: 'system'; title: string; body: string | null };
 
 interface Sentence {
   title: string;
@@ -59,6 +61,8 @@ export function sentenceFor(event: NoticeEvent, locale: Locale): Sentence {
         title: ar ? `${event.agent} ينتظر إذنك` : `${event.agent} is waiting for you`,
         body: event.what,
       };
+    case 'system':
+      return { title: event.title, body: event.body };
   }
 }
 
@@ -67,6 +71,7 @@ const SEVERITY: Record<NoticeEvent['kind'], 'info' | 'warning' | 'action_require
   run_completed: 'info',
   run_failed: 'warning',
   approval_requested: 'action_required',
+  system: 'info',
 };
 
 /**
@@ -79,6 +84,7 @@ const CONTRACT_KIND: Record<NoticeEvent['kind'], string> = {
   run_completed: 'run_completed',
   run_failed: 'run_completed',
   approval_requested: 'approval_requested',
+  system: 'system',
 };
 
 export interface Recipient {

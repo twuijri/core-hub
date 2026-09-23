@@ -17,7 +17,9 @@ import { newUlid } from '../../db/ids.js';
 import type { ModuleDb } from '../../lib/db.js';
 import { conflict, notFound } from '../../lib/errors.js';
 import { CronError, nextRunAt, parseCron } from './cron.js';
+import { ConditionError, parseCondition, pathsIn } from './expr.js';
 import { deliveryOfHermes, type HermesJob } from './hermes-jobs.js';
+import { MAX_DELAY_SECONDS } from './workflow-engine.js';
 import {
   nodeRuns,
   scheduleRuns,
@@ -568,6 +570,153 @@ export class SchedulesService {
     this.db.delete(workflowRuns).where(eq(workflowRuns.id, id)).run();
   }
 
+  // ------------------------------------------------------ running a workflow
+
+  /** A run, started now, with the definition it runs frozen into it. */
+  createWorkflowRun(
+    scope: Scope,
+    workflow: WorkflowRow,
+    input: {
+      input: Record<string, unknown>;
+      triggerKind: WorkflowRunRow['triggerKind'];
+      triggerRef?: string | null;
+      scheduleId?: string | null;
+    },
+  ): WorkflowRunRow {
+    const id = newUlid();
+    const now = new Date();
+    this.db
+      .insert(workflowRuns)
+      .values({
+        id,
+        ownerId: scope.userId,
+        workspace: scope.workspace,
+        workflowId: workflow.id,
+        scheduleId: input.scheduleId ?? null,
+        triggerKind: input.triggerKind,
+        triggerRef: input.triggerRef ?? null,
+        status: 'running',
+        workflowVersion: workflow.version,
+        definitionSnapshot: workflow.definition,
+        input: input.input,
+        startedAt: now,
+      })
+      .run();
+    return this.workflowRun(scope, id);
+  }
+
+  updateWorkflowRun(id: string, patch: Partial<typeof workflowRuns.$inferInsert>): void {
+    this.db
+      .update(workflowRuns)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(eq(workflowRuns.id, id))
+      .run();
+  }
+
+  /** One step begins: a row per node and attempt, so a rerun keeps the old attempt. */
+  startStep(
+    scope: Scope,
+    workflowRunId: string,
+    node: WorkflowNode,
+    input: Record<string, unknown>,
+  ): NodeRunRow {
+    const attempt =
+      this.stepsOf(workflowRunId).filter((step) => step.nodeKey === node.id).length + 1;
+    const id = newUlid();
+    this.db
+      .insert(nodeRuns)
+      .values({
+        id,
+        ownerId: scope.userId,
+        workspace: scope.workspace,
+        workflowRunId,
+        nodeKey: node.id,
+        nodeType: node.kind === 'agent' ? 'agent_run' : node.kind,
+        attempt,
+        status: 'running',
+        input,
+        startedAt: new Date(),
+      })
+      .run();
+    return this.db.select().from(nodeRuns).where(eq(nodeRuns.id, id)).get()!;
+  }
+
+  finishStep(
+    id: string,
+    patch: {
+      status: NodeRunRow['status'];
+      output?: Record<string, unknown> | null;
+      error?: string | null;
+      runId?: string | null;
+    },
+  ): NodeRunRow {
+    const now = new Date();
+    this.db
+      .update(nodeRuns)
+      .set({
+        status: patch.status,
+        output: patch.output ?? null,
+        error: patch.error ?? null,
+        runId: patch.runId ?? null,
+        finishedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(nodeRuns.id, id))
+      .run();
+    return this.db.select().from(nodeRuns).where(eq(nodeRuns.id, id)).get()!;
+  }
+
+  /** The run of this workflow that is still going, if any. */
+  activeRunOf(workflowId: string): string | null {
+    return (
+      this.db
+        .select({ id: workflowRuns.id })
+        .from(workflowRuns)
+        .where(
+          and(
+            eq(workflowRuns.workflowId, workflowId),
+            inArray(workflowRuns.status, ['queued', 'running', 'waiting_approval']),
+          ),
+        )
+        .orderBy(desc(workflowRuns.id))
+        .get()?.id ?? null
+    );
+  }
+
+  /**
+   * Runs a restart cut short. The engine keeps its place in memory, so a run that was
+   * going when the process stopped cannot continue — it is failed, with that reason,
+   * rather than left "running" forever.
+   */
+  failInterruptedRuns(): number {
+    const now = new Date();
+    const reason = 'the hub restarted while this run was going';
+    const stale = this.db
+      .select({ id: workflowRuns.id })
+      .from(workflowRuns)
+      .where(inArray(workflowRuns.status, ['queued', 'running', 'waiting_approval', 'paused']))
+      .all();
+    for (const run of stale) {
+      this.db
+        .update(nodeRuns)
+        .set({ status: 'failed', error: reason, finishedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(nodeRuns.workflowRunId, run.id),
+            inArray(nodeRuns.status, ['pending', 'running', 'waiting_approval']),
+          ),
+        )
+        .run();
+      this.updateWorkflowRun(run.id, {
+        status: 'failed',
+        error: reason,
+        activeNodeKeys: [],
+        finishedAt: now,
+      });
+    }
+    return stale.length;
+  }
+
   cancelWorkflowRun(scope: Scope, id: string): WorkflowRunRow {
     const row = this.workflowRun(scope, id);
     if (['succeeded', 'failed', 'cancelled'].includes(row.status)) {
@@ -583,7 +732,6 @@ export class SchedulesService {
   }
 }
 
-/** The contract's delivery block, stored as the table's smaller one. */
 /** Hermes's `last_status` in the hub's words; `delivery_failed` still ran. */
 function runStatusOfHermes(status: string | null | undefined): ScheduleRow['lastStatus'] {
   if (!status) return null;
@@ -593,6 +741,7 @@ function runStatusOfHermes(status: string | null | undefined): ScheduleRow['last
   return 'failed';
 }
 
+/** The contract's delivery block, stored as the table's smaller one. */
 function deliveryOf(delivery: Record<string, unknown> | undefined) {
   if (!delivery) return {};
   const kind = delivery.kind as string | undefined;
@@ -630,6 +779,37 @@ export function validateDefinition(definition: WorkflowDefinition): string[] {
     if (!ids.has(edge.from)) problems.push(`an edge starts at "${edge.from}", which is not a node`);
     if (!ids.has(edge.to)) problems.push(`an edge ends at "${edge.to}", which is not a node`);
   }
+  // What a step says is checked now, not when the run reaches it at 3 a.m. (`expr.ts`).
+  for (const node of definition.nodes) {
+    const name = node.title || node.id;
+    const input = node.input ?? '';
+    if (node.kind === 'condition') {
+      try {
+        parseCondition(input);
+      } catch (error) {
+        problems.push(
+          `the condition of "${name}" cannot be read (${error instanceof ConditionError ? error.reason : 'unreadable'})`,
+        );
+      }
+      continue;
+    }
+    if (node.kind === 'delay' && pathsIn(input).length === 0) {
+      const seconds = Number(input.trim());
+      if (!Number.isFinite(seconds) || seconds < 0 || seconds > MAX_DELAY_SECONDS) {
+        problems.push(`the delay of "${name}" must be 0 to ${MAX_DELAY_SECONDS} seconds`);
+      }
+    }
+    for (const path of pathsIn(input)) {
+      const [root, second] = path.split('.');
+      if (root !== 'input' && root !== 'trigger' && root !== 'steps') {
+        problems.push(
+          `"${name}" refers to {{${path}}}; a path starts with input, trigger or steps`,
+        );
+      } else if (root === 'steps' && (!second || !ids.has(second))) {
+        problems.push(`"${name}" refers to {{${path}}}, but there is no step "${second ?? ''}"`);
+      }
+    }
+  }
   return problems;
 }
 
@@ -646,7 +826,7 @@ export function warningsFor(definition: WorkflowDefinition): string[] {
     warnings.push(`${starts.length} nodes have nothing before them`);
   }
   for (const node of definition.nodes) {
-    if (node.kind === 'agent' && !node.agentId) {
+    if (node.kind === 'agent' && !node.agent_id) {
       warnings.push(`the node "${node.title || node.id}" names no agent`);
     }
   }

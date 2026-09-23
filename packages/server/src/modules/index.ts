@@ -11,12 +11,12 @@ import {
   agentsServiceFor,
   hermesRuntimeFor,
 } from './agents/index.js';
-import { attachmentReferences, createSessionsModule } from './sessions/index.js';
+import { attachmentReferences, createSessionsModule, sessionTurnsFor } from './sessions/index.js';
 import { roomsModule } from './rooms/index.js';
 import { registerHermesBoard, tasksModule } from './tasks/index.js';
 import { createHermesKanban, processRunner } from './tasks/hermes-kanban.js';
 import { createHermesJobs } from './schedules/hermes-jobs.js';
-import { registerHermesCron, schedulesModule } from './schedules/index.js';
+import { registerHermesCron, registerWorkflowPorts, schedulesModule } from './schedules/index.js';
 import {
   attachmentsPort,
   knowledgeModule,
@@ -122,6 +122,28 @@ registerHermesCron((app) => ({
   agentId: (workspace) => hermesAgentId(app, workspace),
   timezone: () => hermesRuntimeFor(app).timezone(),
 }));
+
+/**
+ * A workflow step reaches two other modules: an agent turn is a `sessions` run in a session
+ * of its own, and a `notify` step is a notice in the run owner's inbox. Neither module
+ * knows `schedules` exists; this is where they meet.
+ */
+registerWorkflowPorts((app) => {
+  const notifier = createNotifier(requireSqlite(app.hub.database), () => app.hub.io);
+  return {
+    agentTurn: async (scope, input) => {
+      const turn = sessionTurnsFor(app);
+      if (!turn) throw new Error('this hub composes no sessions module');
+      return turn(scope, { ...input, source: 'workflow' });
+    },
+    notice: (scope, input) =>
+      notifier.announce(
+        { userId: scope.userId, workspace: scope.workspace, profile: scope.profile },
+        { kind: 'system', title: input.title, body: input.body },
+        null,
+      ),
+  };
+});
 
 export const modules: readonly HubModule[] = [
   authModule,

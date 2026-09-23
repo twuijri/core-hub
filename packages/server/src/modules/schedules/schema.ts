@@ -99,17 +99,26 @@ export type ScheduleDelivery = {
  */
 export type WorkflowNode = {
   id: string;
-  /** The contract's five kinds; the table's `node_runs.node_type` carries the longer list. */
+  /** The contract's kinds; the table's `node_runs.node_type` carries the longer list. */
   kind: 'agent' | 'approval' | 'condition' | 'delay' | 'notify';
   title: string;
-  agentId?: string | null;
+  /**
+   * The fields keep the contract's own (snake_case) names, because the definition is
+   * stored and served exactly as the client sent it.
+   */
+  agent_id?: string | null;
   model?: string | null;
   provider?: string | null;
-  reasoningEffort?: string | null;
+  reasoning_effort?: string | null;
   skills?: string[];
-  /** Prompt template; `{{input}}` and `{{steps.<id>.output}}` are substituted at run time. */
+  /**
+   * `agent` and `notify`: a template — `{{input}}`, `{{trigger.<path>}}` and
+   * `{{steps.<id>.output}}` are substituted at run time (`expr.ts`).
+   * `condition`: one comparison, `trigger.body.amount > 100` (`expr.ts`).
+   * `delay`: a number of seconds.
+   */
   input?: string | null;
-  approvalRequired?: boolean;
+  approval_required?: boolean;
   position?: { x: number; y: number };
 };
 
