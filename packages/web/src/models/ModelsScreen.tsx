@@ -104,7 +104,7 @@ export function ModelsScreen() {
   };
 
   return (
-    <AppShell title={title} wide>
+    <AppShell title={title}>
       <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">{title}</h1>
         {/* The two header actions NAVIGATION §3 puts on `General`, and only there. */}

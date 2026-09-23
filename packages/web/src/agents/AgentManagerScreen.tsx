@@ -57,7 +57,7 @@ export function AgentManagerScreen() {
   const jobs = useJobs();
   const title = t(termKey('agent_manager'));
   return (
-    <AppShell title={title} wide>
+    <AppShell title={title}>
       <h1 className="sr-only">{title}</h1>
       {agents.isPending && (
         <SkeletonGroup label={t('common.loading')}>
