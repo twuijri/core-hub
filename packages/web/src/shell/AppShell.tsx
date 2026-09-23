@@ -8,18 +8,13 @@ import { SplitPane } from './SplitPane.js';
 import { TopBar } from './TopBar.js';
 
 /**
- * The frame: sidebar (glass) · one centred reading column · the split pane at the inline end.
- * The column width is the layout token `reading-max` (≈48rem); the composer floats inside it.
+ * The frame: sidebar (glass) · the page · the split pane at the inline end.
+ *
+ * Every page takes the whole width beside the sidebar (owner decision, 2026-09-23: «كل مكان
+ * بالسستم ما ياخذ كل الصفحه كل شي يتوسط؟» → «كل شي بعرض كامل»). What must stay narrow to be
+ * read — the composer, a dialog — keeps its own width.
  */
-export function AppShell({
-  title,
-  children,
-  wide = false,
-}: {
-  title: string;
-  children: ReactNode;
-  wide?: boolean;
-}) {
+export function AppShell({ title, children }: { title: string; children: ReactNode }) {
   const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
@@ -51,11 +46,7 @@ export function AppShell({
           <TopBar title={title} onMenu={() => setMenuOpen(true)} />
           <div className="flex min-h-0 flex-1">
             <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto" id="main">
-              <div
-                className={`mx-auto flex w-full flex-1 flex-col px-4 py-4 ${wide ? '' : 'max-w-[var(--mj-layout-reading-max)]'}`}
-              >
-                {children}
-              </div>
+              <div className="flex w-full flex-1 flex-col px-4 py-4">{children}</div>
             </main>
             <SplitPane />
           </div>

@@ -7,7 +7,7 @@ tokens in `packages/ui-tokens` are the single source they all read.
 Chat-centric, in the family of Claude and ChatGPT, not a dashboard:
 
 - a sidebar for navigation and history;
-- one centred reading column (~48rem) for the conversation;
+- every page takes the whole width beside the sidebar (owner decision, 2026-09-23); only what must stay narrow to be read keeps its own width — the composer (~48rem, centred) and dialogs;
 - a floating composer at the bottom;
 - a right-hand pane, resizable and collapsible, for artifacts: code,
   previews, tool output, Tasks.
