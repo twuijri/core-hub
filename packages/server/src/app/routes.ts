@@ -86,7 +86,15 @@ export async function registerRoutes(
         .send(new HubError('bad_request').toEnvelope(request.language));
     }
     request.log.error({ err: error }, 'unhandled error');
-    return reply.status(500).send(new HubError('internal').toEnvelope(request.language));
+    // The request id is the thread from the screen to the log line: a person can quote it,
+    // and the owner finds the stack under it. It says nothing about the error itself.
+    return reply
+      .status(500)
+      .send(
+        new HubError('internal', { details: { request_id: String(request.id) } }).toEnvelope(
+          request.language,
+        ),
+      );
   });
 
   const report: RoutesReport = { modules: [], stubs: [] };

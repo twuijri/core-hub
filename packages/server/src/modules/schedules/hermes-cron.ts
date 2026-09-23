@@ -76,25 +76,37 @@ export class HermesCron {
         error: error instanceof Error ? error.message : String(error),
       };
     }
-    const context = this.contextFor(scope.workspace);
-    const seen = new Set<string>();
-    let added = 0;
-    let updated = 0;
-    for (const job of listed) {
-      const reflected = service.reflectHermes(scope, job, context);
-      if (!reflected) continue;
-      seen.add(job.id);
-      if (reflected.created) added += 1;
-      else updated += 1;
-    }
-    let removed = 0;
-    for (const row of service.hermesRows(scope)) {
-      if (row.externalId && !seen.has(row.externalId) && !row.archivedAt) {
-        service.archiveReflection(row.id);
-        removed += 1;
+    // Nothing past the list may escape either: a job that does not fit is reported, never
+    // a Schedules page that fails for everyone.
+    try {
+      if (!Array.isArray(listed)) throw new Error('hermes did not answer a list of jobs');
+      const context = this.contextFor(scope.workspace);
+      const seen = new Set<string>();
+      let added = 0;
+      let updated = 0;
+      for (const job of listed) {
+        const reflected = service.reflectHermes(scope, job, context);
+        if (!reflected) continue;
+        seen.add(job.id);
+        if (reflected.created) added += 1;
+        else updated += 1;
       }
+      let removed = 0;
+      for (const row of service.hermesRows(scope)) {
+        if (row.externalId && !seen.has(row.externalId) && !row.archivedAt) {
+          service.archiveReflection(row.id);
+          removed += 1;
+        }
+      }
+      return { added, updated, removed, error: null };
+    } catch (error) {
+      return {
+        added: 0,
+        updated: 0,
+        removed: 0,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
-    return { added, updated, removed, error: null };
   }
 
   /** True when this target is a prompt for the Hermes agent of this workspace. */

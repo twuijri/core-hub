@@ -12,7 +12,7 @@
  * - **A task number is a project's, and never repeats.** `HUB-12` is the twelfth task of
  *   the project keyed `HUB`, handed out in the same transaction as the insert.
  */
-import { and, asc, desc, eq, inArray, isNull, like, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, like, lt, or, sql } from 'drizzle-orm';
 import { newUlid } from '../../db/ids.js';
 import type { ModuleDb } from '../../lib/db.js';
 import { conflict, notFound } from '../../lib/errors.js';
@@ -319,6 +319,8 @@ export class TasksService {
       status: TaskStatus;
       result: string | null;
       agentId: string | null;
+      /** When the card reached `done` on its own board; `null` when that board did not say. */
+      completedAt?: Date | null;
     },
     now: Date = new Date(),
   ): { row: TaskRow; created: boolean } {
@@ -350,7 +352,8 @@ export class TasksService {
               )
             : existing.position,
           archivedAt: card.status === 'archived' ? (existing.archivedAt ?? now) : null,
-          completedAt: card.status === 'done' ? (existing.completedAt ?? now) : null,
+          completedAt:
+            card.status === 'done' ? (card.completedAt ?? existing.completedAt ?? now) : null,
           externalSyncedAt: now,
           updatedAt: moved ? now : existing.updatedAt,
         })
@@ -391,13 +394,51 @@ export class TasksService {
         position: append(this.lastPosition(scope, project.id, card.status)),
         latestSummary: card.result,
         archivedAt: card.status === 'archived' ? now : null,
-        completedAt: card.status === 'done' ? now : null,
+        completedAt: card.status === 'done' ? (card.completedAt ?? now) : null,
         externalSource: card.source,
         externalId: card.id,
         externalSyncedAt: now,
       })
       .run();
     return { row: this.task(scope, id), created: true };
+  }
+
+  /**
+   * Done for longer than the cutoff: archived, so the Done column shows the recent week
+   * and not the whole history (owner decision, 2026-09-23). Only the hub's own cards —
+   * a card on Hermes's board is archived *on Hermes* (`HermesMirror.sync`).
+   */
+  archiveDoneBefore(workspaces: readonly string[], cutoff: Date, now: Date = new Date()): number {
+    if (workspaces.length === 0) return 0;
+    const stale = this.db
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          inArray(tasks.workspace, [...workspaces]),
+          eq(tasks.status, 'done'),
+          isNull(tasks.externalSource),
+          lt(tasks.completedAt, cutoff),
+        ),
+      )
+      .all();
+    for (const row of stale) {
+      this.db
+        .update(tasks)
+        .set({ status: 'archived', archivedAt: now, updatedAt: now })
+        .where(eq(tasks.id, row.id))
+        .run();
+      this.record(
+        { workspace: row.workspace, profile: '', userId: row.ownerId },
+        { kind: 'system', id: null, name: null },
+        row.id,
+        'status',
+        'done',
+        'archived',
+        'done for a week',
+      );
+    }
+    return stale.length;
   }
 
   /** Every reflection of `source` in this workspace, so a sync can see what went missing. */
