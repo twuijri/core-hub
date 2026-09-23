@@ -4,14 +4,15 @@
  * The shape the owner pointed at in Codex and Claude: the question, the agent's choices as
  * numbered rows — a tap answers — and always a line to write one's own answer, with Skip
  * and Send. Nothing is skipped for the person: the card stays until they answer or press
- * Skip themselves (the agent's own limit is Hermes's `agent.clarify_timeout`).
+ * Skip themselves — or until its time runs out: the hub gives a question five minutes, as
+ * Ekko does (owner, 2026-09-23), and the card counts them down from `expires_at`.
  *
  * The agent's suggested choice arrives marked "(Recommended)" (Hermes's `clarify` adds it
  * to the first choice). The mark becomes a badge here; the answer sent is the choice as
  * the agent wrote it, and the adapter drops the mark before Hermes reads it.
  */
 import { HubApiError } from '@majlis/contracts';
-import { useState, type KeyboardEvent } from 'react';
+import { useEffect, useState, type KeyboardEvent } from 'react';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
@@ -21,12 +22,27 @@ import { IconArrowEnd, IconClose, IconHelp } from '../ui/icons.js';
 
 const RECOMMENDED = / \(Recommended\)$/i;
 
+/** `m:ss` left until `expiresAt`, ticking each second; null when there is no deadline. */
+export function useCountdown(expiresAt: string | null): string | null {
+  const deadline = expiresAt ? Date.parse(expiresAt) : NaN;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (Number.isNaN(deadline)) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [deadline]);
+  if (Number.isNaN(deadline)) return null;
+  const seconds = Math.max(0, Math.ceil((deadline - now) / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
 export function QuestionCard({ approval }: { approval: Approval }) {
   const { t } = useI18n();
   const { client } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [own, setOwn] = useState('');
+  const left = useCountdown(approval.expires_at);
 
   const respond = async (body: { decision: ApprovalDecision | null; answer: string | null }) => {
     setBusy(true);
@@ -60,11 +76,16 @@ export function QuestionCard({ approval }: { approval: Approval }) {
       <header className="question-head">
         <IconHelp size={14} />
         <span>{t('question.title')}</span>
+        {left !== null && (
+          <span className="question-left ms-auto" data-testid="question-left">
+            {t('question.left', { time: left })}
+          </span>
+        )}
         <Button
           variant="ghost"
           size="sm"
           iconOnly
-          className="ms-auto"
+          className={left === null ? 'ms-auto' : undefined}
           aria-label={t('question.skip')}
           tooltip={t('question.skip')}
           icon={<IconClose size={14} />}

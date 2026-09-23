@@ -556,11 +556,18 @@ test.describe('web smoke journeys', () => {
     // Hermes's "(Recommended)" mark becomes a badge, not text in the choice.
     await expect(card.getByTestId('question-choice').first()).toContainText('موصى به');
     await expect(card).not.toContainText('(Recommended)');
+    // Five minutes, counted down (owner, 2026-09-23: as Ekko does).
+    await expect(card.getByTestId('question-left')).toContainText(/[45]:\d\d/);
     await page.waitForTimeout(300);
     await shot(page, 'question-card-ar-light');
     await card.getByTestId('question-choice').nth(1).click();
     await expect(card).toHaveCount(0);
     await expect(reply).toContainText('اخترت: ويندوز');
+    // The chat keeps what was asked and what was chosen.
+    await expect(reply.getByTestId('answered-question')).toContainText(
+      'وش الجهاز اللي تبي تتصل فيه؟',
+    );
+    await expect(reply.getByTestId('answered-question')).toContainText('إجابتك: ويندوز');
 
     // One's own words, when no choice fits.
     await newChat(page);
@@ -576,6 +583,45 @@ test.describe('web smoke journeys', () => {
     await card.getByTestId('question-skip').click();
     await expect(card).toHaveCount(0);
     await expect(reply).toContainText('اخترت: تخطّيت');
+    await expect(reply.getByTestId('answered-question')).toContainText('تُخطّي السؤال');
+  });
+
+  test('20. the transcript follows a growing reply, unless the person scrolled away', async ({
+    page,
+  }) => {
+    await login(page);
+    await newChat(page);
+    const reply = page.getByTestId('message-assistant').last();
+    // How far the transcript's scroller is from its bottom, in pixels.
+    const gap = () =>
+      page.getByTestId('chat-screen').evaluate((node) => {
+        let at: HTMLElement | null = node.parentElement;
+        while (at && !/auto|scroll/.test(getComputedStyle(at).overflowY)) at = at.parentElement;
+        const scroller = at ?? (document.scrollingElement as HTMLElement);
+        return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      });
+    const scrollTo = (where: 'top' | 'bottom') =>
+      page.getByTestId('chat-screen').evaluate((node, to) => {
+        let at: HTMLElement | null = node.parentElement;
+        while (at && !/auto|scroll/.test(getComputedStyle(at).overflowY)) at = at.parentElement;
+        const scroller = at ?? (document.scrollingElement as HTMLElement);
+        scroller.scrollTop = to === 'top' ? 0 : scroller.scrollHeight;
+      }, where);
+
+    await firstMessage(page, 'اكتب رد طويل');
+    await expect(reply).toContainText('سطر 15');
+    // Taller than the screen by now, and the page kept up with it.
+    await expect.poll(gap).toBeLessThan(80);
+
+    // Scrolled up to read: the growing reply does not pull the person back down.
+    await scrollTo('top');
+    await expect(reply).toContainText('سطر 25');
+    expect(await gap()).toBeGreaterThan(200);
+
+    // Back at the bottom: following again, to the last line.
+    await scrollTo('bottom');
+    await expect(reply).toContainText('سطر 60');
+    await expect.poll(gap).toBeLessThan(80);
   });
 
   test('16. one press of the theme button is one change', async ({ page }) => {

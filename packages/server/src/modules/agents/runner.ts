@@ -43,6 +43,12 @@ import type {
 } from './ports.js';
 import type { AgentsService } from './service.js';
 
+/**
+ * How long a question waits for the person (owner decision, 2026-09-23: five minutes, as in
+ * Ekko). The card shows it counting down; at zero the hub answers Hermes with a skip.
+ */
+export const QUESTION_WAIT_MS = 5 * 60_000;
+
 /** How a hub decision maps onto the options an agent offered, per approval. */
 type DecisionMap = Map<RunnerDecision, string>;
 
@@ -335,6 +341,8 @@ export class AgentRunner implements AgentRunnerPort {
           // Always a line to write one's own answer, as Hermes's clarify promises.
           answerMode: event.choices.length > 0 ? 'both' : 'text',
           toolRef: event.toolId ?? null,
+          // The card counts this down; when it runs out the hub skips the question.
+          expiresInMs: QUESTION_WAIT_MS,
         },
       ];
     }
