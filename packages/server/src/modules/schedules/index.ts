@@ -73,7 +73,11 @@ function cronOf(app: FastifyInstance): HermesCron | null {
 /** Hermes keeps one scheduler per home, and the hub has one Hermes home: the default workspace. */
 async function syncHermes(request: FastifyRequest, service: SchedulesService): Promise<void> {
   const cron = cronOf(request.server);
-  if (cron && request.workspace?.isDefault) await cron.sync(service, scopeOf(request));
+  if (!cron || !request.workspace?.isDefault) return;
+  const report = await cron
+    .sync(service, scopeOf(request))
+    .catch((error: unknown) => ({ error: String(error) }));
+  if (report?.error) request.log.warn({ err: report.error }, 'schedules: Hermes cron sync');
 }
 
 /**

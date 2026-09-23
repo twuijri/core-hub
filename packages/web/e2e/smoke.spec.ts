@@ -457,9 +457,12 @@ test.describe('web smoke journeys', () => {
     await expect(board.locator('.task-column')).toHaveCount(4);
     await expect(page.getByTestId('task-intake')).toBeVisible();
 
-    // Waiting and review are empty, so they are strips rather than full columns.
+    // Waiting is empty, so it is a strip; Review stays a column even when empty.
     await expect(page.locator('[data-column="waiting"]')).toHaveAttribute('data-collapsed', 'true');
-    await expect(page.locator('[data-column="review"]')).toHaveAttribute('data-collapsed', 'true');
+    await expect(page.locator('[data-column="review"]')).not.toHaveAttribute(
+      'data-collapsed',
+      'true',
+    );
 
     // A new task lands in intake, which is where a task is specified before it queues.
     await page.getByTestId('new-task-input').fill('اكتب خطة الإطلاق');

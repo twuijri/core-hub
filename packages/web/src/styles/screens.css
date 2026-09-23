@@ -249,6 +249,10 @@
    a full slot pushes the work off the screen. */
 .task-board {
   --task-column-width: 16rem;
+  /* The columns run to the bottom of the page, as in Core Hub, and scroll inside
+     themselves: a board whose columns end where their cards end reads as a list. */
+  flex: 1 1 0;
+  min-block-size: 24rem;
   display: flex;
   align-items: stretch;
   gap: var(--mj-space-3);
@@ -296,6 +300,8 @@
 .task-intake-toggle {
   display: flex;
   align-items: center;
+  /* The same head as every other column: the name at the start, the count at the end. */
+  justify-content: space-between;
   gap: var(--mj-space-2);
   inline-size: 100%;
   padding: var(--mj-space-1);
@@ -311,9 +317,10 @@
 .task-column[data-collapsed='true'] .task-strip-toggle,
 .task-intake:not([data-open='true']) .task-intake-toggle {
   flex: 1;
-  flex-direction: column;
+  /* Folded, the count sits on top of the turned title. */
+  flex-direction: column-reverse;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-end;
 }
 .task-column[data-collapsed='true'] .task-strip-title,
 .task-intake:not([data-open='true']) .task-strip-title {
@@ -332,8 +339,8 @@
 }
 .task-column-body {
   display: flex;
+  flex: 1 1 0;
   min-block-size: 3rem;
-  max-block-size: 60vh;
   flex-direction: column;
   gap: var(--mj-space-2);
   overflow-y: auto;

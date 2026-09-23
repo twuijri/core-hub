@@ -30,6 +30,8 @@ export interface HermesTask {
   status: string;
   priority: number;
   created_at: number;
+  /** Epoch seconds, set when the card reached `done`. */
+  completed_at?: number | null;
   result: string | null;
 }
 
@@ -155,6 +157,8 @@ export interface HermesKanban {
     idempotencyKey: string;
     triage?: boolean;
   }): Promise<HermesTask>;
+  /** Archive finished cards, several in one call (`hermes kanban archive <ids…>`). */
+  archive(ids: readonly string[]): Promise<void>;
   /** Ask Hermes to move a card. Throws `HermesRefusal` with Hermes's words when it won't. */
   move(id: string, from: string, to: string, reason?: string | null): Promise<void>;
 }
@@ -176,6 +180,11 @@ export function createHermesKanban(run: KanbanRunner): HermesKanban {
       if (input.triage) argv.push('--triage');
       argv.push('--idempotency-key', input.idempotencyKey, '--json');
       return json<HermesTask>(await run(argv), 'create');
+    },
+    async archive(ids) {
+      if (ids.length === 0) return;
+      const result = await run(['archive', ...ids]);
+      if (result.code !== 0) throw new HermesRefusal('archive', refusalOf(result));
     },
     async move(id, from, to, reason) {
       const argv = verbFor(from, to, id, reason);

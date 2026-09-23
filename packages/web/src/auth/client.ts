@@ -117,7 +117,10 @@ export function describeError(
       const details = (error.body as { details?: { operationId?: string } } | undefined)?.details;
       return fallback('errors.not_implemented', { operation: details?.operationId ?? '?' });
     }
-    return error.message;
+    // A hub failure carries the id of its log line; saying it lets the owner find the cause.
+    const ref = (error.body as { details?: { request_id?: string } } | undefined)?.details
+      ?.request_id;
+    return error.status >= 500 && ref ? `${error.message} (${ref})` : error.message;
   }
   if (error instanceof TypeError && /fetch/i.test(error.message))
     return fallback('errors.connection');
