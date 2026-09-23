@@ -15002,7 +15002,8 @@ components:
           maxLength: 8000
         start:
           type: boolean
-          default: true
+          default: false
+          description: Open the task session and queue its run now. Without it the task is only assigned, and `TaskAssigned` carries `null` ids.
     TaskAssigned:
       type: object
       required: [job_id, run_id, session_id, task_id]

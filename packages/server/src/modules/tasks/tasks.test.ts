@@ -202,7 +202,7 @@ describe('tasks: the board', () => {
 });
 
 describe('tasks: assignment', () => {
-  it('assigns, moves the task to ready, and says plainly that nothing started', async () => {
+  it('assigns without start, moves the task to ready, and says plainly that nothing started', async () => {
     const { hub, project } = await boardHub();
     try {
       const task = (await newTask(hub, project.id as string, 'Work')).json() as Json;
@@ -212,7 +212,7 @@ describe('tasks: assignment', () => {
         payload: { agent_id: '01J8QK3ZR2W7M5N4P6T8V9X0AC' },
       });
       expect(response.statusCode).toBe(202);
-      // No invented ids: the worker that would open a session is not built.
+      // No invented ids: nobody asked for a start (`start` defaults to false).
       expect(response.json()).toEqual({
         job_id: null,
         run_id: null,
@@ -253,7 +253,7 @@ describe('tasks: assignment', () => {
     }
   });
 
-  it('dispatch assigns the ready tasks to the project default, and starts nothing', async () => {
+  it('dispatch assigns the ready tasks to the project default, and says why one could not start', async () => {
     const { hub, project } = await boardHub();
     try {
       await authed(hub, hub.token, {
@@ -278,6 +278,17 @@ describe('tasks: assignment', () => {
         await authed(hub, hub.token, { method: 'GET', url: `/api/v1/tasks/${task.id as string}` })
       ).json() as Json;
       expect(after.assignee).toMatchObject({ id: '01J8QK3ZR2W7M5N4P6T8V9X0AC' });
+      // This hub has no such agent, so nothing started — and the job's result says why,
+      // rather than an assignment that looks as if it ran.
+      expect(after.status).toBe('ready');
+      const job = (
+        await authed(hub, hub.token, {
+          method: 'GET',
+          url: `/api/v1/jobs/${(response.json() as Json).id as string}`,
+        })
+      ).json() as { result: { started: number; assignments: Json[] } };
+      expect(job.result.started).toBe(0);
+      expect(job.result.assignments[0]).toMatchObject({ run_id: null, error: 'not_found' });
     } finally {
       await hub.close();
     }

@@ -11,9 +11,14 @@ import {
   agentsServiceFor,
   hermesRuntimeFor,
 } from './agents/index.js';
-import { attachmentReferences, createSessionsModule, sessionTurnsFor } from './sessions/index.js';
+import {
+  attachmentReferences,
+  createSessionsModule,
+  sessionRunsFor,
+  sessionTurnsFor,
+} from './sessions/index.js';
 import { roomsModule } from './rooms/index.js';
-import { registerHermesBoard, tasksModule } from './tasks/index.js';
+import { registerHermesBoard, registerTaskRunner, tasksModule } from './tasks/index.js';
 import { createHermesKanban, processRunner } from './tasks/hermes-kanban.js';
 import { createHermesJobs } from './schedules/hermes-jobs.js';
 import { registerHermesCron, registerWorkflowPorts, schedulesModule } from './schedules/index.js';
@@ -142,6 +147,30 @@ registerWorkflowPorts((app) => {
         { kind: 'system', title: input.title, body: input.body },
         null,
       ),
+  };
+});
+
+/**
+ * Assigning a task starts it: the task's run is a `sessions` turn in a session of its own
+ * (source `task`, origin the task), and the task follows it to its end. `tasks` defines
+ * what it needs (`TaskRunPort`) and never sees a session table; this is where they meet.
+ */
+registerTaskRunner((app) => {
+  const runs = sessionRunsFor(app);
+  if (!runs) return null;
+  return {
+    start: (scope, input) =>
+      runs.start(scope, {
+        agentId: input.agentId,
+        prompt: input.prompt,
+        title: input.title,
+        source: 'task',
+        model: input.model,
+        provider: input.provider,
+        origin: { kind: 'task', id: input.taskId },
+      }),
+    cancel: (scope, sessionId, runId) => runs.cancel(scope, sessionId, runId),
+    outcome: (workspace, runId) => runs.outcome(workspace, runId),
   };
 });
 
