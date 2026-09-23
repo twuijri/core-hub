@@ -41,8 +41,17 @@ export function registerProfileMirror(
   return previous;
 }
 
+/**
+ * The port for this app, or none. A hub composed without the runtime's module (a test hub
+ * with `auth` alone) has none: the factory's failure to find it is "no mirror", never a 500.
+ */
 export function profileMirrorFor(app: FastifyInstance): ProfileMirror | null {
-  return mirrorFactory ? mirrorFactory(app) : null;
+  if (!mirrorFactory) return null;
+  try {
+    return mirrorFactory(app);
+  } catch {
+    return null;
+  }
 }
 
 /** The runtime's name for a workspace: its slug, except the default one. */
