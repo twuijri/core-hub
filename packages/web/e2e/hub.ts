@@ -49,6 +49,16 @@ function scriptFor(prompt: string): Step[] {
       { type: 'completed' },
     ];
   }
+  if (/ترجم الدليل/.test(prompt)) {
+    // A task that is still running when the board is photographed (zz-task-board): its
+    // turning green frame has to be seen next to the other stages, so it does not end.
+    return [
+      { type: 'reasoning_delta', text: 'أقرأ الدليل…' },
+      { type: 'delay', ms: 180_000 },
+      { type: 'message_delta', text: 'ترجمت الدليل.' },
+      { type: 'completed' },
+    ];
+  }
   if (/رد طويل|long reply/i.test(prompt)) {
     // A reply that grows for a few seconds, taller than the screen: the transcript must
     // follow it while the person is at the bottom, and leave them be when they are not.

@@ -179,3 +179,58 @@ export function quickActionTarget(action: QuickAction): TaskStatus {
   if (action === 'promote') return 'ready';
   return 'archived';
 }
+
+/**
+ * How a card says its stage without a column of its own (owner's board decision,
+ * 2026-09-17, rebuilt here): a frame around the whole card, each drawn differently so the
+ * stage is not told by colour alone — and the status word stays on the card beside it.
+ *
+ * - **running** — a green frame that turns (still under reduced motion, but still green);
+ * - **blocked** — a solid red frame;
+ * - **scheduled** — an amber dashed frame, with a clock beside the word;
+ * - **review** — a purple frame;
+ * - **ready** — a quiet edge and a "ready" badge: ready is `todo` with a yes, not an alarm.
+ *
+ * `null` is a plain card: intake, `todo`, `done` and the archive.
+ */
+export type CardFrame = 'running' | 'blocked' | 'scheduled' | 'review' | 'ready';
+
+export function cardFrame(status: TaskStatus): CardFrame | null {
+  switch (status) {
+    case 'running':
+    case 'blocked':
+    case 'scheduled':
+    case 'review':
+    case 'ready':
+      return status;
+    default:
+      return null;
+  }
+}
+
+/** Whether a card prints its stage as a word: every stage its column does not already say. */
+export function showsStatusWord(status: TaskStatus): boolean {
+  return status !== 'todo' && status !== 'triage';
+}
+
+export interface CollapseState {
+  /** Cards in the column right now. */
+  count: number;
+  /** The person opened the strip by hand. */
+  openedByHand: boolean;
+  /** The status of the card being dragged, or `null` when nothing is. */
+  dragging: TaskStatus | null;
+}
+
+/**
+ * Whether a column is folded to a strip. Only a collapsible column folds, and only while it
+ * is empty, nobody opened it, and the card being dragged (if any) could not be dropped
+ * there — a strip that stays shut while a card is heading for it is a target nobody can
+ * hit, and one that opens for a card it would refuse is a promise it cannot keep.
+ */
+export function isColumnCollapsed(column: ColumnDef, state: CollapseState): boolean {
+  if (!column.collapsible) return false;
+  if (state.count > 0 || state.openedByHand) return false;
+  if (state.dragging !== null && isDropTarget(state.dragging, column)) return false;
+  return true;
+}
