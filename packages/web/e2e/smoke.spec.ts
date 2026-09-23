@@ -490,6 +490,28 @@ test.describe('web smoke journeys', () => {
     await shot(page, 'tasks-blocked-ar-light');
   });
 
+  test('16. one press of the theme button is one change', async ({ page }) => {
+    await login(page);
+    const chip = page.getByTestId('theme-chip');
+    const html = page.locator('html');
+
+    // What the button shows is what is on: there is nothing to compare it against, which
+    // is the whole reason it replaced three symbols side by side.
+    await expect(chip).toHaveAttribute('data-theme-choice', 'system');
+
+    await chip.click();
+    await expect(chip).toHaveAttribute('data-theme-choice', 'light');
+    await expect(html).toHaveAttribute('data-theme', 'light');
+
+    await chip.click();
+    await expect(chip).toHaveAttribute('data-theme-choice', 'dark');
+    await expect(html).toHaveAttribute('data-theme', 'dark');
+
+    // …and round again, so the person is never stuck at the end of a list.
+    await chip.click();
+    await expect(chip).toHaveAttribute('data-theme-choice', 'system');
+  });
+
   test('12. a finished run reaches the inbox, and a switch stops the next one', async ({
     page,
   }) => {

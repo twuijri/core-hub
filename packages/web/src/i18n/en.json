@@ -107,7 +107,8 @@
       "connected": "Connected",
       "connecting": "Connecting…",
       "offline": "Offline"
-    }
+    },
+    "theme_next": "Theme: {next}"
   },
   "pane": {
     "resize": "Resize the side pane (arrow keys resize, Home collapses, End expands)",
