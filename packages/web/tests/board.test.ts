@@ -5,7 +5,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   COLUMNS,
+  TASK_STATUSES,
+  cardFrame,
   columnOf,
+  isColumnCollapsed,
+  showsStatusWord,
   dropOptions,
   isDropTarget,
   quickActionFor,
@@ -109,5 +113,63 @@ describe('the one thing a card offers without opening', () => {
     expect(quickActionTarget('queue')).toBe('todo');
     expect(quickActionTarget('promote')).toBe('ready');
     expect(quickActionTarget('archive')).toBe('archived');
+  });
+});
+
+describe('how a card says its stage (the owner’s board decision, rebuilt here)', () => {
+  it('draws a frame for each stage a column does not already say', () => {
+    expect(cardFrame('running')).toBe('running');
+    expect(cardFrame('blocked')).toBe('blocked');
+    expect(cardFrame('scheduled')).toBe('scheduled');
+    expect(cardFrame('review')).toBe('review');
+    expect(cardFrame('ready')).toBe('ready');
+  });
+
+  it('leaves intake, todo, done and the archive plain', () => {
+    for (const status of ['triage', 'todo', 'done', 'archived'] as const) {
+      expect(cardFrame(status), status).toBeNull();
+    }
+  });
+
+  it('never lets the frame be the only sign: every framed stage also prints its word', () => {
+    for (const status of TASK_STATUSES) {
+      if (cardFrame(status) !== null) expect(showsStatusWord(status), status).toBe(true);
+    }
+    // `todo` is the queue's default, so its column already says it.
+    expect(showsStatusWord('todo')).toBe(false);
+  });
+});
+
+describe('the Waiting strip', () => {
+  const waiting = column('waiting');
+  const idle = { count: 0, openedByHand: false, dragging: null };
+
+  it('is a strip while it is empty', () => {
+    expect(isColumnCollapsed(waiting, idle)).toBe(true);
+  });
+
+  it('opens by itself when it holds a task', () => {
+    expect(isColumnCollapsed(waiting, { ...idle, count: 1 })).toBe(false);
+  });
+
+  it('opens when the person clicks it', () => {
+    expect(isColumnCollapsed(waiting, { ...idle, openedByHand: true })).toBe(false);
+  });
+
+  it('opens while a card that may be dropped there is dragged', () => {
+    expect(isColumnCollapsed(waiting, { ...idle, dragging: 'ready' })).toBe(false);
+    expect(isColumnCollapsed(waiting, { ...idle, dragging: 'running' })).toBe(false);
+  });
+
+  it('stays a strip while a card it would refuse is dragged', () => {
+    // Intake joins the queue only, and review goes on to done: neither can wait.
+    expect(isColumnCollapsed(waiting, { ...idle, dragging: 'triage' })).toBe(true);
+    expect(isColumnCollapsed(waiting, { ...idle, dragging: 'review' })).toBe(true);
+  });
+
+  it('never folds a column that is not collapsible, however empty', () => {
+    for (const id of ['queue', 'review', 'done']) {
+      expect(isColumnCollapsed(column(id), idle), id).toBe(false);
+    }
   });
 });

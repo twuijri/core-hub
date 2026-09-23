@@ -140,6 +140,33 @@ export function useBoard(filter: BoardFilter) {
 }
 
 /**
+ * The archive behind Done: the same one call with `include_archived`, keeping only the
+ * archived column. A separate query on purpose — the board is asked again every few
+ * seconds while something runs, and the archive only grows, so it is not dragged along on
+ * every one of those. Its key starts with the board's, so every write refreshes it too.
+ */
+export function useArchive(filter: BoardFilter) {
+  const { client, session } = useAuth();
+  return useQuery({
+    queryKey: [...taskKeys.board(filter), 'archived'] as const,
+    queryFn: async () => {
+      const board = (
+        await client.request('get', '/task-columns', {
+          query: {
+            include_archived: true,
+            ...(filter.profile ? { profile: filter.profile } : {}),
+            ...(filter.projectId ? { project_id: filter.projectId } : {}),
+            ...(filter.agentId ? { agent_id: filter.agentId } : {}),
+          },
+        })
+      ).data as unknown as { columns: Column[] };
+      return board.columns.find((column) => column.status === 'archived')?.tasks ?? [];
+    },
+    enabled: !!session,
+  });
+}
+
+/**
  * Every write refreshes every view of the board.
  *
  * The board is one page with filters, so a task created while a filter is on still

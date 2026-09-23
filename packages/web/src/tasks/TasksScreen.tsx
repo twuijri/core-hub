@@ -59,21 +59,26 @@ import {
   useConfirm,
   usePrompt,
 } from '../ui/index.js';
-import { IconGrip, IconMore, IconPlus, IconStop, IconTrash } from '../ui/icons.js';
+import { IconGrip, IconMore, IconPlus, IconSchedules, IconStop, IconTrash } from '../ui/icons.js';
 import { AssignDialog } from './AssignDialog.js';
 import {
   COLUMNS,
   INTAKE_STATUS,
+  cardFrame,
   columnOf,
   dropOptions,
+  isColumnCollapsed,
   isDropTarget,
   quickActionFor,
   quickActionTarget,
+  showsStatusWord,
+  transitionFor,
   type ColumnDef,
   type ColumnDrop,
   type TaskStatus,
 } from './board.js';
 import {
+  useArchive,
   useBoard,
   useCreateTask,
   useDeleteTask,
@@ -106,10 +111,13 @@ export function TasksScreen() {
   // agent — and these narrow it (owner decision, 2026-09-23).
   const [profile, setProfile] = useState<string>('');
   const [projectId, setProjectId] = useState<string>('');
-  const board = useBoard({
+  const filter = {
     ...(profile ? { profile } : {}),
     ...(projectId ? { projectId } : {}),
-  });
+  };
+  const board = useBoard(filter);
+  // The archive behind Done, read-only: counted for its link, shown when asked for.
+  const archive = useArchive(filter);
   const createTask = useCreateTask();
   const move = useMoveTask();
   const update = useUpdateTask();
@@ -139,10 +147,11 @@ export function TasksScreen() {
     const intake = byStatus.get(INTAKE_STATUS) ?? [];
     const columns = new Map<string, Task[]>();
     for (const column of COLUMNS) {
-      const tasks = column.statuses.flatMap((status) => byStatus.get(status) ?? []);
-      // The archive lives behind `done` rather than in a column of its own.
-      if (column.id === 'done') tasks.push(...(byStatus.get('archived') ?? []));
-      columns.set(column.id, tasks);
+      // The archive lives behind `done` (its own query and link), not among its cards.
+      columns.set(
+        column.id,
+        column.statuses.flatMap((status) => byStatus.get(status) ?? []),
+      );
     }
     return { intake, columns };
   }, [board.data]);
@@ -177,8 +186,18 @@ export function TasksScreen() {
     move.mutate({ id: task.id, status: drop.to });
   };
 
-  const actionsFor = (task: Task, onMove: (status: TaskStatus) => void): CardActions => ({
-    onMove,
+  /**
+   * A move from a card's own button or menu means what the same drop would: blocking asks
+   * why and archiving asks first, whichever way the person got there.
+   */
+  const moveTo = (task: Task, status: TaskStatus) => {
+    const found = transitionFor(task.status, status);
+    if (found) apply(task, { to: status, transition: found });
+    else move.mutate({ id: task.id, status });
+  };
+
+  const actionsFor = (task: Task): CardActions => ({
+    onMove: (status) => moveTo(task, status),
     onRename: () =>
       void askText({
         title: t('tasks.rename'),
@@ -357,11 +376,7 @@ export function TasksScreen() {
               <div className="task-column-body">
                 <p className="task-intake-hint">{t('tasks.intake_hint')}</p>
                 {grouped.intake.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    actions={actionsFor(task, (status) => move.mutate({ id: task.id, status }))}
-                  />
+                  <TaskCard key={task.id} task={task} actions={actionsFor(task)} />
                 ))}
                 {grouped.intake.length === 0 && (
                   <p className="task-column-empty">{t('tasks.nothing')}</p>
@@ -376,16 +391,8 @@ export function TasksScreen() {
               column={column}
               tasks={grouped.columns.get(column.id) ?? []}
               dragging={dragging}
-              actionsFor={(task) =>
-                actionsFor(task, (status) => {
-                  const target = COLUMNS.find((c) => c.statuses.includes(status));
-                  const option = target
-                    ? dropOptions(task.status, target).find((drop) => drop.to === status)
-                    : null;
-                  if (option) apply(task, option);
-                  else move.mutate({ id: task.id, status });
-                })
-              }
+              actionsFor={actionsFor}
+              {...(column.id === 'done' ? { archived: archive.data ?? [] } : {})}
             />
           ))}
         </div>
@@ -427,20 +434,26 @@ function BoardColumn({
   tasks,
   dragging,
   actionsFor,
+  archived,
 }: {
   column: ColumnDef;
   tasks: Task[];
   dragging: TaskStatus | null;
   actionsFor(task: Task): CardActions;
+  /** Done only: the archive behind it, shown read-only when the person asks. */
+  archived?: Task[];
 }) {
   const { t } = useI18n();
   const [openedByHand, setOpenedByHand] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const { setNodeRef, isOver } = useDroppable({ id: `column:${column.id}` });
-  // A column that shrinks does so only while it is empty, nothing is being dragged over
-  // it and nobody has opened it: an empty column that keeps a full slot pushes the work
-  // off the screen, and one that hides while a card is heading for it is worse.
-  const collapsed =
-    column.collapsible && tasks.length === 0 && !isOver && !openedByHand && dragging === null;
+  // An empty column that keeps a full slot pushes the work off the screen, and one that
+  // stays shut while a card is heading for it is worse (board.ts, `isColumnCollapsed`).
+  const collapsed = isColumnCollapsed(column, {
+    count: tasks.length,
+    openedByHand,
+    dragging,
+  });
   const accepts = dragging === null || isDropTarget(dragging, column);
 
   return (
@@ -480,6 +493,28 @@ function BoardColumn({
               <TaskCard key={task.id} task={task} actions={actionsFor(task)} />
             ))}
             {tasks.length === 0 && <li className="task-column-empty">{t('tasks.nothing')}</li>}
+            {archived && archived.length > 0 && (
+              <li className="task-archive">
+                <button
+                  type="button"
+                  className="task-archive-toggle"
+                  aria-expanded={showArchived}
+                  onClick={() => setShowArchived((open) => !open)}
+                  data-testid="task-archive-toggle"
+                >
+                  {t(showArchived ? 'tasks.hide_archived' : 'tasks.show_archived', {
+                    count: archived.length,
+                  })}
+                </button>
+                {showArchived && (
+                  <ul className="task-archive-list" data-testid="task-archive">
+                    {archived.map((task) => (
+                      <ArchivedCard key={task.id} task={task} />
+                    ))}
+                  </ul>
+                )}
+              </li>
+            )}
           </ul>
         </SortableContext>
       )}
@@ -500,8 +535,11 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
     isDragging,
   } = useSortable({ id: task.id });
   const quick = quickActionFor(task.status);
-  // The column groups several statuses, so the card is where the stage is readable.
-  const showsStatus = task.status !== 'todo' && task.status !== 'triage';
+  // The column groups several statuses, so the card is where the stage is readable: a
+  // frame drawn for the stage (board.ts, `cardFrame`) and the word beside it, so neither
+  // colour nor motion is the only thing that says it.
+  const showsStatus = showsStatusWord(task.status);
+  const frame = cardFrame(task.status);
   // A card on Hermes's own board: Hermes owns its words and its life, the hub reflects it.
   const fromHermes = task.external?.source === 'hermes';
   const running = task.status === 'running';
@@ -529,6 +567,7 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
       data-testid="task-card"
       data-task-id={task.id}
       data-status={task.status}
+      data-frame={frame ?? undefined}
       data-external={fromHermes ? 'hermes' : undefined}
     >
       <button
@@ -558,12 +597,7 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
               </span>
             </Tooltip>
           )}
-          {showsStatus && (
-            <Badge tone={task.status === 'blocked' ? 'danger' : 'neutral'}>
-              {running && <span className="task-card-live" aria-hidden="true" />}
-              {t(`tasks.status.${task.status}`)}
-            </Badge>
-          )}
+          {showsStatus && <StatusBadge status={task.status} />}
           {agent && (
             <span className="truncate text-xs text-muted" dir="auto" data-testid="task-agent">
               {agentName}
@@ -680,6 +714,63 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
           </MenuItem>
         )}
       </Menu>
+    </li>
+  );
+}
+
+/** The stage as a word, in the stage's own tone: what the frame says, said for everyone. */
+function StatusBadge({ status }: { status: TaskStatus }) {
+  const { t } = useI18n();
+  return (
+    <Badge
+      tone={STATUS_TONE[status] ?? 'neutral'}
+      className={`task-status task-status-${status}`}
+      testId="task-status"
+    >
+      {status === 'running' && <span className="task-card-live" aria-hidden="true" />}
+      {status === 'scheduled' && (
+        <IconSchedules size={12} className="task-status-icon" data-testid="task-clock" />
+      )}
+      {t(`tasks.status.${status}`)}
+    </Badge>
+  );
+}
+
+/** Review has a tone of its own (purple), painted by `.task-status-review`. */
+const STATUS_TONE: Partial<Record<TaskStatus, 'success' | 'danger' | 'warning' | 'info'>> = {
+  running: 'success',
+  blocked: 'danger',
+  scheduled: 'warning',
+  ready: 'info',
+};
+
+/**
+ * A card in the archive: read-only. It is there to be found again, not worked — no grip,
+ * no menu, no quick action; the title, where it came from, and the word "archived".
+ */
+function ArchivedCard({ task }: { task: Task }) {
+  const { t } = useI18n();
+  const fromHermes = task.external?.source === 'hermes';
+  return (
+    <li
+      className="task-card task-card-archived"
+      data-testid="task-card-archived"
+      data-task-id={task.id}
+      data-status={task.status}
+    >
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm" dir="auto">
+          {task.title}
+        </p>
+        <span className="task-card-meta">
+          {fromHermes && (
+            <span className="task-card-origin" role="img" aria-label={t('tasks.hermes.origin')}>
+              {agentMark('hermes', 14)}
+            </span>
+          )}
+          <StatusBadge status={task.status} />
+        </span>
+      </div>
     </li>
   );
 }
