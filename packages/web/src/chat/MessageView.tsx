@@ -19,6 +19,7 @@ import { agentMark } from '../ui/brand/marks.js';
 import { MessageActions } from './MessageActions.js';
 import { Markdown } from './Markdown.js';
 import { Reasoning } from './Reasoning.js';
+import { AnsweredQuestions } from './AnsweredQuestions.js';
 import { ToolCalls } from './ToolCallCard.js';
 import { textOf } from './transcript.js';
 import { reasoningWorthShowing, sideOf, thoughtSeconds, type Turn } from './turns.js';
@@ -161,6 +162,8 @@ export function MessageView({
         )}
         {/* Machinery beside the reply, not inside it (owner decision, 2026-09-23). */}
         <ToolCalls calls={message.tool_calls} live={streaming} />
+        {/* What the agent asked and what was answered, outside the fold (owner, 2026-09-23). */}
+        <AnsweredQuestions calls={message.tool_calls} />
         {(reasoning || text) && (
           <div className="msg-agent-body">
             {/* The reasoning of a *finished* turn only: while the run is alive it is the
