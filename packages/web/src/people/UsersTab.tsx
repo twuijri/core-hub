@@ -17,6 +17,7 @@ import {
   Avatar,
   Badge,
   Button,
+  Checkbox,
   Dialog,
   EmptyState,
   Field,
@@ -44,6 +45,7 @@ import {
   useUsers,
   useWorkspaces,
   type HubUser,
+  type Workspace,
 } from './queries.js';
 
 export function UsersTab() {
@@ -118,9 +120,12 @@ function UserTable({ users }: { users: HubUser[] }) {
     {
       key: 'workspaces',
       header: t('people.workspaces'),
-      // An empty list is the hub's way of saying "every workspace", not "none".
+      // Owners and admins enter every workspace whatever the list says; a member enters
+      // the ones listed (the hub's rule, `auth/workspace.ts` canEnter).
       cell: (user) =>
-        user.profiles.length === 0 ? t('people.all_workspaces') : user.profiles.join('، '),
+        user.role !== 'member' || user.profiles.length === 0
+          ? t('people.all_workspaces')
+          : user.profiles.join('، '),
     },
     { key: 'menu', header: '', cell: (user) => <UserMenu user={user} /> },
   ];
@@ -142,6 +147,7 @@ function UserMenu({ user }: { user: HubUser }) {
   const remove = useDeleteUser();
   const { ask, dialog } = useConfirm();
   const [resetting, setResetting] = useState(false);
+  const [placing, setPlacing] = useState(false);
   const owner = isOwner(user);
   const self = isSelf(user, session?.user.id);
 
@@ -174,6 +180,10 @@ function UserMenu({ user }: { user: HubUser }) {
           {t(user.role === 'admin' ? 'people.make_member' : 'people.make_admin')}
         </MenuItem>
         <MenuItem onSelect={() => setResetting(true)}>{t('people.set_password')}</MenuItem>
+        {/* Only a member is held to a list; an admin enters every workspace regardless. */}
+        {user.role === 'member' && (
+          <MenuItem onSelect={() => setPlacing(true)}>{t('people.edit_workspaces')}</MenuItem>
+        )}
         {/* Disabling or deleting yourself is refused by the hub, so it is not offered:
             a greyed row that explains nothing is worse than a row that is not there. */}
         {!self && (
@@ -208,6 +218,7 @@ function UserMenu({ user }: { user: HubUser }) {
       </Menu>
       {dialog}
       {resetting && <SetPassword user={user} onClose={() => setResetting(false)} />}
+      {placing && <EditWorkspaces user={user} onClose={() => setPlacing(false)} />}
       {(update.isError || remove.isError) && (
         <Notice tone="danger">{describeError(update.error ?? remove.error, t)}</Notice>
       )}
@@ -283,9 +294,13 @@ function AddUser({ onClose }: { onClose: () => void }) {
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'admin' | 'member'>('member');
+  const [chosen, setChosen] = useState<string[]>([]);
   // The contract's pattern, checked here so the field says so before the hub does.
   const badName = username.length > 0 && !/^[a-z0-9._-]{2,40}$/.test(username);
-  const ready = !badName && username.length >= 2 && password.length >= 8;
+  // A member with no workspace would enter all of them (the hub reads an empty list as
+  // "unrestricted"), so a member is not added until at least one is chosen.
+  const placed = role === 'admin' || chosen.length > 0;
+  const ready = !badName && username.length >= 2 && password.length >= 8 && placed;
 
   return (
     <Dialog
@@ -308,6 +323,7 @@ function AddUser({ onClose }: { onClose: () => void }) {
                   username,
                   password,
                   role,
+                  ...(role === 'member' ? { profiles: chosen } : {}),
                   ...(displayName ? { display_name: displayName } : {}),
                 },
                 {
@@ -370,11 +386,98 @@ function AddUser({ onClose }: { onClose: () => void }) {
             { value: 'admin', label: t('roles.admin'), description: t('people.admin_can') },
           ]}
         />
-        {workspaces.data && workspaces.data.items.length > 1 && (
-          <p className="text-xs text-muted">{t('people.workspaces_note')}</p>
+        {role === 'admin' ? (
+          <p className="text-xs text-muted">{t('people.admin_everywhere')}</p>
+        ) : (
+          <WorkspaceChoice
+            workspaces={workspaces.data?.items ?? []}
+            chosen={chosen}
+            onChange={setChosen}
+          />
         )}
         {create.isError && <Notice tone="danger">{describeError(create.error, t)}</Notice>}
       </div>
+    </Dialog>
+  );
+}
+
+/** The workspaces a member may enter: one box each, at least one to go on. */
+function WorkspaceChoice({
+  workspaces,
+  chosen,
+  onChange,
+}: {
+  workspaces: Workspace[];
+  chosen: string[];
+  onChange(next: string[]): void;
+}) {
+  const { t } = useI18n();
+  return (
+    <fieldset className="flex flex-col gap-2" data-testid="workspace-choice">
+      <legend className="mb-1 text-sm font-medium">{t('people.workspaces')}</legend>
+      <p className="text-xs text-muted">{t('people.workspaces_hint')}</p>
+      {workspaces.map((workspace) => (
+        <Checkbox
+          key={workspace.id}
+          label={
+            <span className="flex items-center gap-2">
+              <span dir="auto">{workspace.name}</span>
+              <span className="text-xs text-muted" dir="ltr">
+                {workspace.slug}
+              </span>
+            </span>
+          }
+          checked={chosen.includes(workspace.slug)}
+          onChange={(on) =>
+            onChange(
+              on ? [...chosen, workspace.slug] : chosen.filter((slug) => slug !== workspace.slug),
+            )
+          }
+          testId={`workspace-${workspace.slug}`}
+        />
+      ))}
+      {chosen.length === 0 && (
+        <p className="text-xs text-danger-soft-text">{t('people.workspaces_required')}</p>
+      )}
+    </fieldset>
+  );
+}
+
+function EditWorkspaces({ user, onClose }: { user: HubUser; onClose: () => void }) {
+  const { t } = useI18n();
+  const update = useUpdateUser();
+  const workspaces = useWorkspaces();
+  const [chosen, setChosen] = useState<string[]>(user.profiles);
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={t('people.workspaces_for', { name: user.display_name || user.username })}
+      closeLabel={t('common.cancel')}
+      testId="edit-workspaces"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            disabled={chosen.length === 0 || update.isPending}
+            onClick={() =>
+              update.mutate({ id: user.id, patch: { profiles: chosen } }, { onSuccess: onClose })
+            }
+            data-testid="save-workspaces"
+          >
+            {t('common.save')}
+          </Button>
+        </>
+      }
+    >
+      <WorkspaceChoice
+        workspaces={workspaces.data?.items ?? []}
+        chosen={chosen}
+        onChange={setChosen}
+      />
+      {update.isError && <Notice tone="danger">{describeError(update.error, t)}</Notice>}
     </Dialog>
   );
 }
