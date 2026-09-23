@@ -378,7 +378,15 @@
     "role": "الدور",
     "workspaces": "مساحات العمل",
     "field": "الحقل",
-    "value": "القيمة"
+    "value": "القيمة",
+    "password": "كلمة المرور",
+    "password_hint": "يبقى هذا الجهاز داخلًا، وتخرج بقية أجهزتك.",
+    "current_password": "كلمة المرور الحالية",
+    "new_password": "كلمة المرور الجديدة",
+    "confirm_password": "أعد كتابة الجديدة",
+    "password_mismatch": "لا تطابق الجديدة",
+    "password_changed": "تغيّرت كلمة المرور، وخرجت بقية أجهزتك.",
+    "change_password": "غيّر كلمة المرور"
   },
   "roles": {
     "owner": "المالك",
@@ -782,7 +790,6 @@
     "display_name": "الاسم المعروض",
     "member_can": "يفتح المحادثات والوكلاء في مساحاته",
     "admin_can": "يدير المستخدمين والمساحات وإعدادات المجلس",
-    "workspaces_note": "المستخدم الجديد يدخل كل المساحات؛ حدِّدها لاحقًا من قائمة صفّه.",
     "lockouts": "الأقفال",
     "clear_lockouts": "فكّ الكل",
     "no_lockouts": "لا أقفال",
@@ -793,7 +800,12 @@
     "lock_token": "رمز",
     "lock_pairing": "اقتران",
     "failures": "المحاولات",
-    "locked_until": "حتى"
+    "locked_until": "حتى",
+    "edit_workspaces": "مساحات العمل…",
+    "workspaces_for": "مساحات {name}",
+    "workspaces_hint": "لا يرى العضو إلا المساحات المحدّدة هنا: محادثاتها ووكلاءها ومهامها.",
+    "workspaces_required": "اختر مساحة واحدة على الأقل.",
+    "admin_everywhere": "المشرف يدخل كل المساحات."
   },
   "workspaces": {
     "note": "مساحات منفصلة: وكلاؤها ونماذجها ومحادثاتها لا ترى بعضها.",

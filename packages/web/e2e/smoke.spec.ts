@@ -676,6 +676,10 @@ test.describe('web smoke journeys', () => {
     await page.getByLabel('اسم المستخدم').fill('sara');
     await page.getByLabel('الاسم المعروض').fill('سارة');
     await page.getByLabel('كلمة المرور الجديدة').fill('a-long-enough-one');
+    // A member is not added until they have somewhere to go: an empty list would open
+    // every workspace to them.
+    await expect(page.getByTestId('save-user')).toBeDisabled();
+    await page.getByTestId('workspace-default').click();
     await page.getByTestId('save-user').click();
     const table = page.getByTestId('user-table');
     await expect(table).toContainText('سارة');
@@ -701,6 +705,30 @@ test.describe('web smoke journeys', () => {
     // Archiving says archive, and says what happens to the conversations.
     await page.getByTestId('archive-workspace').click();
     await expect(page.getByRole('alertdialog')).toContainText('لا تُمحى');
+    await page.keyboard.press('Escape');
+
+    // Sara is given the new workspace too, from her row: a member enters only these.
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'المستخدمون' }).click();
+    await page.getByTestId('user-menu').click();
+    await page.getByRole('menuitem', { name: 'مساحات العمل…' }).click();
+    await page.getByTestId('workspace-labs').click();
+    await page.getByTestId('save-workspaces').click();
+    await expect(page.getByTestId('user-table')).toContainText('labs');
+
+    // The owner changes their own password — and back, for the journeys after this one.
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'الحساب' }).click();
+    const change = async (from: string, to: string) => {
+      await page.getByTestId('current-password').fill(from);
+      await page.getByTestId('new-password').fill(to);
+      await page.getByTestId('confirm-password').fill(to);
+      await page.getByTestId('save-own-password').click();
+      await expect(page.getByTestId('change-password')).toContainText('تغيّرت كلمة المرور');
+    };
+    await change(PASSWORD, 'a-brand-new-password');
+    // This device stays signed in and connected: only the other devices are signed out.
+    await expect(page.getByRole('status', { name: 'متصل' })).toBeVisible({ timeout: 15_000 });
+    await shot(page, 'account-password-ar-light');
+    await change('a-brand-new-password', PASSWORD);
   });
 
   test('14. the last four settings pages say what is true about themselves', async ({ page }) => {
