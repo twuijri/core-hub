@@ -324,19 +324,18 @@ export class TasksService {
     },
     now: Date = new Date(),
   ): { row: TaskRow; created: boolean } {
+    // Hermes keeps one board, so a card is one row wherever it was made: a task given to
+    // Hermes from the design workspace stays there; only a card Hermes made itself lands
+    // in `scope` (the default workspace).
     const existing = this.db
       .select()
       .from(tasks)
-      .where(
-        and(
-          eq(tasks.workspace, scope.workspace),
-          eq(tasks.externalSource, card.source),
-          eq(tasks.externalId, card.id),
-        ),
-      )
+      .where(and(eq(tasks.externalSource, card.source), eq(tasks.externalId, card.id)))
       .get();
     if (existing) {
       const moved = existing.status !== card.status;
+      // The card's own workspace, not the one the board is being read from.
+      const own = { ...scope, workspace: existing.workspace };
       this.db
         .update(tasks)
         .set({
@@ -348,7 +347,7 @@ export class TasksService {
           position: moved
             ? between(
                 null,
-                this.column(scope, existing.projectId, card.status, true)[0]?.position ?? null,
+                this.column(own, existing.projectId, card.status, true)[0]?.position ?? null,
               )
             : existing.position,
           archivedAt: card.status === 'archived' ? (existing.archivedAt ?? now) : null,
@@ -361,7 +360,7 @@ export class TasksService {
         .run();
       if (moved) {
         this.record(
-          scope,
+          own,
           { kind: 'agent', id: card.agentId, name: 'Hermes' },
           existing.id,
           'status',
@@ -370,7 +369,7 @@ export class TasksService {
           null,
         );
       }
-      return { row: this.task(scope, existing.id), created: false };
+      return { row: this.task(own, existing.id), created: false };
     }
     const project = this.defaultProject(scope);
     const id = newUlid();
@@ -442,12 +441,9 @@ export class TasksService {
   }
 
   /** Every reflection of `source` in this workspace, so a sync can see what went missing. */
-  externalRows(scope: Scope, source: 'hermes'): TaskRow[] {
-    return this.db
-      .select()
-      .from(tasks)
-      .where(and(eq(tasks.workspace, scope.workspace), eq(tasks.externalSource, source)))
-      .all();
+  externalRows(_scope: Scope, source: 'hermes'): TaskRow[] {
+    // Every workspace: Hermes's one board may hold a card given from any of them.
+    return this.db.select().from(tasks).where(eq(tasks.externalSource, source)).all();
   }
 
   /** Link an existing row to the card it was just created as. */

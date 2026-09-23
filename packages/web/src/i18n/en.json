@@ -712,7 +712,9 @@
       "delivery": "Hermes posts to messaging platforms itself — ask for it in the prompt.",
       "prompt_required": "A schedule for Hermes needs a prompt.",
       "fired": "Hermes will run it on its next tick."
-    }
+    },
+    "workspace": "Workspace",
+    "all_workspaces": "All workspaces"
   },
   "audit": {
     "period": "Period",
