@@ -73,7 +73,8 @@ pnpm --filter @majlis/web test    → Test Files 32 passed (32) · Tests 402 pas
 pnpm --filter @majlis/server test → Test Files 64 passed | 4 skipped (68) · Tests 698 passed | 14 skipped (712)
 pnpm --filter @majlis/web build   → ✓ built
 PLAYWRIGHT_CHANNEL=chrome pnpm exec playwright test → 24 passed (1.5m)
-pnpm graph:check     → (انظر أدناه)
+pnpm graph:check     → graph:check  OK — 6300 nodes, 15064 edges, current
+pnpm change-record:check → change-record  OK — 1 record(s) valid
 ```
 - **الرحلة ٢١ تلتقط غياب التغيير**: بإرجاع `ChatScreen.tsx` وحده إلى `main` تسقط:
   `expect(locator).toBeInViewport() failed · Locator: getByTestId('message-user').filter({ hasText: 'الزعفران' }) · Received: viewport ratio 0`
@@ -83,7 +84,7 @@ pnpm graph:check     → (انظر أدناه)
 
 ## المخاطر والرجوع
 - رسالة أقدم من ٥٠٠٠ رسالة إضافية (٢٥ صفحة × ٢٠٠) لا تُحمَّل: تظهر «الرسالة … لم تعد في هذه
-  المحادثة» وتُفتح في الأسفل. لا توجد محادثة بهذا الطول اليوم.
+  المحادثة» وتُفتح في الأسفل.
 - الكلمة المقسومة بتنسيق (`**زع**فران`) لا تُعلَّم؛ الرسالة نفسها تبقى مُبرَزة. والمطابقة في
   الواجهة `toLowerCase` كما في `Combobox`، وفي الخادم `lower()` في SQLite (حروف ASCII فقط) — لا
   فرق في العربية.

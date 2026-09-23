@@ -8253,7 +8253,7 @@
       "node_kind": "heading",
       "norm_label": "التسليم والخطوة التالية",
       "source_file": "docs/changes/2026-09-23-twuijri-search-jump.md",
-      "source_location": "L93"
+      "source_location": "L94"
     },
     {
       "id": "docs_changes_2026_09_23_twuijri_search_jump_العقد",
@@ -8301,7 +8301,7 @@
       "node_kind": "heading",
       "norm_label": "المخاطر والرجوع",
       "source_file": "docs/changes/2026-09-23-twuijri-search-jump.md",
-      "source_location": "L84"
+      "source_location": "L85"
     },
     {
       "id": "docs_changes_2026_09_23_twuijri_search_jump_المشكلة_والهدف",
@@ -86025,7 +86025,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1,
       "source_file": "docs/changes/2026-09-23-twuijri-search-jump.md",
-      "source_location": "L93",
+      "source_location": "L94",
       "weight": 1
     },
     {
@@ -86069,7 +86069,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1,
       "source_file": "docs/changes/2026-09-23-twuijri-search-jump.md",
-      "source_location": "L84",
+      "source_location": "L85",
       "weight": 1
     },
     {
@@ -86103,7 +86103,7 @@
       "confidence_score": 0.95,
       "context": "main",
       "source_file": "docs/changes/2026-09-23-twuijri-search-jump.md",
-      "source_location": "L94",
+      "source_location": "L95",
       "weight": 1
     },
     {
@@ -86115,7 +86115,7 @@
       "confidence_score": 0.95,
       "context": "main",
       "source_file": "docs/changes/2026-09-23-twuijri-search-jump.md",
-      "source_location": "L78",
+      "source_location": "L79",
       "weight": 1
     },
     {
@@ -86271,7 +86271,7 @@
       "confidence_score": 0.95,
       "context": "Combobox",
       "source_file": "docs/changes/2026-09-23-twuijri-search-jump.md",
-      "source_location": "L88",
+      "source_location": "L89",
       "weight": 1
     },
     {
@@ -250724,5 +250724,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "e3bb3a8a9dc216273fc293936dfa97405f073749"
+  "built_at_commit": "7e06f3f393965131b118cadb55029c8d8d0e0f64"
 }

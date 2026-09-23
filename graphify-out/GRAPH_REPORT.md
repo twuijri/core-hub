@@ -1,7 +1,7 @@
 # Graph Report - majlis
 
 ## Corpus Check
-- 648 files · ~719,378 words
+- 648 files · ~719,387 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 14 file(s) not represented in the graph (top: (none) 9, .css 4, .example 1)
 
