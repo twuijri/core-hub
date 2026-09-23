@@ -283,6 +283,44 @@ describe('sessions: listing', () => {
     }
   });
 
+  /**
+   * Owner, 2026-09-23: a search result opens the conversation at the message that matched
+   * (web `chat/anchor.ts`), so the hit must name it, and the snippet must show the words
+   * even when they sit deep in a long message.
+   */
+  it('names the message that matched, and shows the words from inside a long one', async () => {
+    const hub = await hubWithAgent();
+    try {
+      const id = ((await create(hub.app, { title: 'مطبخ' })).json() as { id: string }).id;
+      const long = `${'مقدمة طويلة لا تذكر المطلوب '.repeat(30)}ثم يأتي الزعفران في آخرها.`;
+      await call(hub.app, 'POST', `/sessions/${id}/runs`, {
+        body: { content: [{ type: 'text', text: long }] },
+      });
+      const messages = (await call(hub.app, 'GET', `/sessions/${id}/messages`)).json() as {
+        items: { id: string; role: string }[];
+      };
+      const asked = messages.items.find((m) => m.role === 'user');
+      const hits = (
+        await call(hub.app, 'GET', `/sessions?q=${encodeURIComponent('الزعفران')}`)
+      ).json() as {
+        items: { id: string; match: { message_id: string | null; snippet: string } | null }[];
+      };
+      expect(hits.items).toHaveLength(1);
+      expect(hits.items[0]?.match?.message_id).toBe(asked?.id);
+      const snippet = hits.items[0]?.match?.snippet ?? '';
+      expect(snippet).toContain('الزعفران');
+      expect(snippet.startsWith('…')).toBe(true);
+      expect(snippet.length).toBeLessThanOrEqual(300);
+      // A hit on the title alone names no message: the chat then opens as it always has.
+      const byTitle = (
+        await call(hub.app, 'GET', `/sessions?q=${encodeURIComponent('مطبخ')}`)
+      ).json() as { items: { match: { message_id: string | null } | null }[] };
+      expect(byTitle.items[0]?.match?.message_id).toBeNull();
+    } finally {
+      await hub.close();
+    }
+  });
+
   it("never returns another workspace's sessions (invariant 3)", async () => {
     const hub = await hubWithAgent();
     try {

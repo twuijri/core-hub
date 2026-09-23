@@ -9,11 +9,14 @@ corepack enable
 pnpm install --frozen-lockfile
 ```
 
-The code map is committed and checked by CI (`docs/harness/knowledge-graph.md`):
+The code map (`graphify-out/`) is committed by a bot after each merge into `main`
+(`docs/harness/knowledge-graph.md`). Rebuild it locally for your own queries, but do not
+commit it — CI fails a PR that changes `graphify-out/`:
 
 ```bash
 uv tool install graphifyy==0.9.66   # once per machine
-pnpm graph                          # before committing a code change, and after a pull
+pnpm graph                          # after a pull, or to query your own change; leave it unstaged
+git restore --source=origin/main --staged --worktree -- graphify-out   # before committing, if staged
 ```
 
 ## Run the hub and the web client

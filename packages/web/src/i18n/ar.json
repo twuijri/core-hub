@@ -223,7 +223,8 @@
     "speak": "استمع",
     "speak_later": "الصوت يصل في مرحلة لاحقة.",
     "replying_to": "ردًّا على: {text}",
-    "estimated": "≈ {amount}"
+    "estimated": "≈ {amount}",
+    "anchor_missing": "الرسالة التي أشار إليها البحث لم تعد في هذه المحادثة."
   },
   "composer": {
     "label": "محرّر الرسالة",
