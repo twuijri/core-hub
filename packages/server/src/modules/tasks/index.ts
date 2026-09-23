@@ -23,7 +23,7 @@ import { clampLimit, decodeCursor, encodeCursor } from '../../lib/pagination.js'
 import { createRealtime, type Realtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
 import { jobRunnerFor, serializeJob } from '../audit/index.js';
-import { requireRole, requireUser, requireWorkspace } from '../auth/index.js';
+import { listWorkspacesFor, requireRole, requireUser, requireWorkspace } from '../auth/index.js';
 import { TasksService, type Actor, type Scope, type TaskStatus } from './service.js';
 import { toComment, toProject, toSubtask, toTask, toWorktree, type NameOf } from './serialize.js';
 import { TASK_STATUSES } from './schema.js';
@@ -169,20 +169,44 @@ export const tasksModule = defineModule({
     // ----------------------------------------------------------- the board
 
     defineRoute(app, deps, {
+      /**
+       * One board for everything (owner decision, 2026-09-23).
+       *
+       * Global: the columns hold every workspace the person may enter, not the one in the
+       * header — because a list of things to do that hides half of them by default is a
+       * list you stop trusting. `profile`, `project_id` and `agent_id` narrow it.
+       *
+       * Each card still says which workspace it is from (`profile`), so the page is one
+       * board and not a pile.
+       */
       operationId: 'tasks.getColumns',
       handler: (request, { query }) => {
-        const scope = scopeOf(request);
         const service = serviceOf(request);
-        const projectId = query.project_id as string;
-        service.project(scope, projectId);
+        const db = requireSqlite(request.server.hub.database);
+        const principal = request.principal;
+        if (!principal) throw new HubError('internal', { message: 'route has no principal' });
+
+        const asked = query.profile as string | undefined;
+        const enterable = listWorkspacesFor(db, principal.user);
+        const chosen = asked
+          ? enterable.filter((row) => row.slug === asked || row.id === asked)
+          : enterable;
+        // A `profile` nobody may enter is not an empty board, it is a wrong request.
+        if (asked && chosen.length === 0) throw notFound({ resource: 'profile', id: asked });
+        const slugOf = new Map(chosen.map((row) => [row.id, row.slug]));
+        const ids = chosen.map((row) => row.id);
+
+        const projectId = (query.project_id as string | undefined) ?? undefined;
+        const agentId = (query.agent_id as string | undefined) ?? undefined;
         const includeArchived = (query.include_archived as boolean | undefined) ?? false;
+
         const columns = TASK_STATUSES.map((status) => {
-          const rows = service.column(scope, projectId, status, includeArchived);
+          const rows = service.columnAcross(ids, { projectId, agentId }, status, includeArchived);
           return {
             status,
             count: rows.length,
             tasks: rows.map((row) =>
-              toTask(row, scope.profile, {
+              toTask(row, slugOf.get(row.workspace) ?? '', {
                 nameOf,
                 subtaskCounts: service.subtaskCounts(row.id),
                 dependsOn: service.dependenciesOf(row.id),
@@ -191,7 +215,15 @@ export const tasksModule = defineModule({
             ),
           };
         });
-        return { project_id: projectId, columns, counts: service.countsFor(scope, projectId) };
+        const total = columns.reduce((sum, column) => sum + column.count, 0);
+        return {
+          project_id: projectId ?? null,
+          columns,
+          counts: {
+            total,
+            by_status: Object.fromEntries(columns.map((column) => [column.status, column.count])),
+          },
+        };
       },
     });
 

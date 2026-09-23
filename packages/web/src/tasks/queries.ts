@@ -25,7 +25,19 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 export const taskKeys = {
   projects: (profile: string) => ['projects', profile] as const,
-  board: (profile: string, projectId: string) => ['task-columns', profile, projectId] as const,
+  /**
+   * The board is global, so the key is the **filter**, not the workspace. Switching the
+   * workspace chip no longer changes what the board shows — one page holds every
+   * workspace (owner decision, 2026-09-23) — so the profile is only in the key when it
+   * is the filter the person chose.
+   */
+  board: (filter: BoardFilter) =>
+    [
+      'task-columns',
+      filter.profile ?? 'all',
+      filter.projectId ?? 'all',
+      filter.agentId ?? 'all',
+    ] as const,
 };
 
 export interface Project {
@@ -69,28 +81,46 @@ export function useProjects() {
   });
 }
 
-export function useBoard(projectId: string | null) {
-  const { client, profile, session } = useAuth();
+export interface BoardFilter {
+  profile?: string | undefined;
+  projectId?: string | undefined;
+  agentId?: string | undefined;
+}
+
+export function useBoard(filter: BoardFilter) {
+  const { client, session } = useAuth();
   return useQuery({
-    queryKey: taskKeys.board(profile, projectId ?? 'none'),
+    queryKey: taskKeys.board(filter),
     queryFn: async () =>
       (
         await client.request('get', '/task-columns', {
-          query: { project_id: projectId as string },
+          query: {
+            ...(filter.profile ? { profile: filter.profile } : {}),
+            ...(filter.projectId ? { project_id: filter.projectId } : {}),
+            ...(filter.agentId ? { agent_id: filter.agentId } : {}),
+          },
         })
-      ).data as unknown as { project_id: string; columns: Column[]; counts: { total: number } },
-    enabled: !!session && !!projectId,
+      ).data as unknown as {
+        project_id: string | null;
+        columns: Column[];
+        counts: { total: number };
+      },
+    enabled: !!session,
   });
 }
 
-/** Everything the board changes goes through here, so it is refetched once per change. */
-function useInvalidateBoard(projectId: string | null): () => void {
+/**
+ * Every write refreshes every view of the board.
+ *
+ * The board is one page with filters, so a task created while a filter is on still
+ * changes what the unfiltered board holds — invalidating only the current filter would
+ * leave the other views stale behind it.
+ */
+function useInvalidateBoard(): () => void {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   return () => {
-    void queryClient.invalidateQueries({
-      queryKey: taskKeys.board(profile, projectId ?? 'none'),
-    });
+    void queryClient.invalidateQueries({ queryKey: ['task-columns'] });
     void queryClient.invalidateQueries({ queryKey: taskKeys.projects(profile) });
   };
 }
@@ -105,17 +135,18 @@ export function useCreateProject() {
   });
 }
 
-export function useCreateTask(projectId: string | null) {
+export function useCreateTask() {
   const { client } = useAuth();
-  const refresh = useInvalidateBoard(projectId);
+  const refresh = useInvalidateBoard();
   return useMutation({
     mutationFn: async (body: { title: string; status?: 'triage' | 'todo' | 'ready' }) =>
       (
         await client.request('post', '/tasks', {
           // `auto_start` and `status` carry defaults in the contract and are required on
           // the wire, so the client sends them rather than relying on the server's.
+          // No `project_id`: the hub puts it in the workspace's own project, so writing
+          // something down never starts with inventing a container for it.
           body: {
-            project_id: projectId as string,
             auto_start: false,
             status: body.status ?? 'triage',
             title: body.title,
@@ -126,9 +157,9 @@ export function useCreateTask(projectId: string | null) {
   });
 }
 
-export function useMoveTask(projectId: string | null) {
+export function useMoveTask() {
   const { client } = useAuth();
-  const refresh = useInvalidateBoard(projectId);
+  const refresh = useInvalidateBoard();
   return useMutation({
     mutationFn: async ({
       id,
@@ -145,9 +176,9 @@ export function useMoveTask(projectId: string | null) {
   });
 }
 
-export function useUpdateTask(projectId: string | null) {
+export function useUpdateTask() {
   const { client } = useAuth();
-  const refresh = useInvalidateBoard(projectId);
+  const refresh = useInvalidateBoard();
   return useMutation({
     mutationFn: async ({ id, patch }: { id: string; patch: Record<string, unknown> }) =>
       (await client.request('patch', '/tasks/{task_id}', { params: { task_id: id }, body: patch }))
@@ -156,9 +187,9 @@ export function useUpdateTask(projectId: string | null) {
   });
 }
 
-export function useDeleteTask(projectId: string | null) {
+export function useDeleteTask() {
   const { client } = useAuth();
-  const refresh = useInvalidateBoard(projectId);
+  const refresh = useInvalidateBoard();
   return useMutation({
     mutationFn: async (id: string) => {
       await client.request('delete', '/tasks/{task_id}', { params: { task_id: id } });
