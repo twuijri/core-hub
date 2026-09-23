@@ -32,6 +32,7 @@ import {
 } from './service.js';
 import type { WorkflowDefinition } from './schema.js';
 import { HermesCron, refusedByHermesCron, type HermesCronPort } from './hermes-cron.js';
+import { WorkflowEngine, type RunScope, type WorkflowPorts } from './workflow-engine.js';
 
 export { SchedulesService, validateDefinition, warningsFor } from './service.js';
 export type { Scope } from './service.js';
@@ -73,6 +74,58 @@ function cronOf(app: FastifyInstance): HermesCron | null {
 async function syncHermes(request: FastifyRequest, service: SchedulesService): Promise<void> {
   const cron = cronOf(request.server);
   if (cron && request.workspace?.isDefault) await cron.sync(service, scopeOf(request));
+}
+
+/**
+ * What a workflow step reaches outside this module — an agent turn (`sessions`) and the
+ * inbox (`notify`) — composed in `modules/index.ts`. Without it, agent and notify steps
+ * fail saying the hub cannot do them; conditions and delays still run.
+ */
+let workflowPortsFactory: ((app: FastifyInstance) => WorkflowPorts) | null = null;
+export function registerWorkflowPorts(
+  factory: ((app: FastifyInstance) => WorkflowPorts) | null,
+): ((app: FastifyInstance) => WorkflowPorts) | null {
+  const previous = workflowPortsFactory;
+  workflowPortsFactory = factory;
+  return previous;
+}
+const engines = new WeakMap<SocketServer, WorkflowEngine>();
+/** The app's engine; the first use also fails the runs a restart cut short. */
+export function workflowEngineFor(app: FastifyInstance): WorkflowEngine {
+  const existing = engines.get(app.hub.io);
+  if (existing) return existing;
+  const engine = new WorkflowEngine(
+    workflowPortsFactory?.(app) ?? { agentTurn: null, notice: null },
+    (profile, event, payload) =>
+      realtimeOf(app).emit(REALTIME_NAMESPACES.schedules, event, { profile }, payload),
+    app.log,
+  );
+  engines.set(app.hub.io, engine);
+  const stale = new SchedulesService(requireSqlite(app.hub.database)).failInterruptedRuns();
+  if (stale > 0) app.log.warn({ runs: stale }, 'workflows: runs left by a restart failed');
+  return engine;
+}
+
+function runScopeOf(request: FastifyRequest): RunScope {
+  return {
+    ...scopeOf(request),
+    userName: request.principal?.user.username ?? '',
+    language: request.language === 'en' ? 'en' : 'ar',
+  };
+}
+
+/** The steps a rerun keeps: the last successful output of every node before the restart. */
+function outputsOf(
+  steps: ReturnType<SchedulesService['stepsOf']>,
+): Record<string, { output: unknown }> {
+  const out: Record<string, { output: unknown }> = {};
+  // `stepsOf` is newest first; the first success seen per node is its latest.
+  for (const step of steps) {
+    if (step.status === 'succeeded' && !(step.nodeKey in out)) {
+      out[step.nodeKey] = { output: (step.output as { value?: unknown } | null)?.value ?? null };
+    }
+  }
+  return out;
 }
 
 const realtimes = new WeakMap<SocketServer, Realtime>();
@@ -573,7 +626,7 @@ export const schedulesModule = defineModule({
             toWorkflow(row, scope.profile, {
               runs: service.workflowRunsOf(scope, row.id, 1000).length,
               schedules: service.scheduleCount(scope, row.id),
-              activeRunId: null,
+              activeRunId: service.activeRunOf(row.id),
             }),
           ),
           next_cursor: null,
@@ -591,7 +644,7 @@ export const schedulesModule = defineModule({
         const workflow = toWorkflow(row, scope.profile, {
           runs: 0,
           schedules: 0,
-          activeRunId: null,
+          activeRunId: service.activeRunOf(row.id),
         });
         announce(request, 'workflow.created', { workflow });
         return workflow;
@@ -607,7 +660,7 @@ export const schedulesModule = defineModule({
         return toWorkflow(row, scope.profile, {
           runs: service.workflowRunsOf(scope, row.id, 1000).length,
           schedules: service.scheduleCount(scope, row.id),
-          activeRunId: null,
+          activeRunId: service.activeRunOf(row.id),
         });
       },
     });
@@ -625,7 +678,7 @@ export const schedulesModule = defineModule({
         const workflow = toWorkflow(row, scope.profile, {
           runs: service.workflowRunsOf(scope, row.id, 1000).length,
           schedules: service.scheduleCount(scope, row.id),
-          activeRunId: null,
+          activeRunId: service.activeRunOf(row.id),
         });
         announce(request, 'workflow.updated', { workflow });
         return workflow;
@@ -644,9 +697,30 @@ export const schedulesModule = defineModule({
 
     defineRoute(app, deps, {
       operationId: 'schedules.runWorkflow',
-      handler: (request, { params }) => {
-        serviceOf(request).workflow(scopeOf(request), params.workflow_id as string);
-        return notBuilt('schedules.runWorkflow');
+      status: 202,
+      handler: (request, { params, body }) => {
+        const scope = runScopeOf(request);
+        const service = serviceOf(request);
+        const workflow = service.workflow(scope, params.workflow_id as string);
+        const ask = (body ?? {}) as { input?: string | null; start_node_ids?: string[] | null };
+        const definition = workflow.definition as WorkflowDefinition;
+        if (definition.nodes.length === 0) {
+          throw new HubError('conflict', { details: { reason: 'workflow_empty' } });
+        }
+        const known = new Set(definition.nodes.map((node) => node.id));
+        const unknown = (ask.start_node_ids ?? []).filter((id) => !known.has(id));
+        if (unknown.length > 0) {
+          throw new HubError('conflict', {
+            details: { reason: 'start_node_unknown', node_ids: unknown },
+          });
+        }
+        const run = workflowEngineFor(request.server).start(service, scope, workflow, {
+          trigger: { input: ask.input ?? null },
+          input: ask.input ?? null,
+          triggerKind: 'manual',
+          startNodeIds: ask.start_node_ids ?? null,
+        });
+        return { job_id: run.id, workflow_run_id: run.id };
       },
     });
 
@@ -689,15 +763,41 @@ export const schedulesModule = defineModule({
         const scope = scopeOf(request);
         const service = serviceOf(request);
         const row = service.cancelWorkflowRun(scope, params.workflow_run_id as string);
+        workflowEngineFor(request.server).cancel(row.id);
         return toWorkflowRun(row, scope.profile, service.stepsOf(row.id));
       },
     });
 
     defineRoute(app, deps, {
       operationId: 'schedules.rerunWorkflowFromNode',
-      handler: (request, { params }) => {
-        serviceOf(request).workflowRun(scopeOf(request), params.workflow_run_id as string);
-        return notBuilt('schedules.rerunWorkflowFromNode');
+      status: 202,
+      handler: (request, { params, body }) => {
+        const scope = runScopeOf(request);
+        const service = serviceOf(request);
+        const previous = service.workflowRun(scope, params.workflow_run_id as string);
+        const from = (body as { from_node_id: string }).from_node_id;
+        const definition = previous.definitionSnapshot as WorkflowDefinition;
+        if (!definition.nodes.some((node) => node.id === from)) {
+          throw new HubError('conflict', {
+            details: { reason: 'start_node_unknown', node_ids: [from] },
+          });
+        }
+        // The same drawing the first run used, not today's: resuming means resuming that.
+        const workflow = {
+          ...service.workflow(scope, previous.workflowId),
+          definition,
+          version: previous.workflowVersion,
+        };
+        const earlier = previous.input as { trigger?: unknown; input?: string | null };
+        const run = workflowEngineFor(request.server).start(service, scope, workflow, {
+          trigger: earlier.trigger ?? null,
+          input: earlier.input ?? null,
+          triggerKind: 'manual',
+          triggerRef: previous.id,
+          startNodeIds: [from],
+          steps: outputsOf(service.stepsOf(previous.id)),
+        });
+        return { job_id: run.id, workflow_run_id: run.id };
       },
     });
 
@@ -759,7 +859,7 @@ export const schedulesModule = defineModule({
         const workflow = toWorkflow(row, scope.profile, {
           runs: 0,
           schedules: 0,
-          activeRunId: null,
+          activeRunId: service.activeRunOf(row.id),
         });
         announce(request, 'workflow.created', { workflow });
         return workflow;

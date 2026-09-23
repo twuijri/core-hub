@@ -7,7 +7,7 @@
 // built lazily on the first request, when `app.hub.database` exists. That
 // keeps one service per app — important because the module object is a
 // singleton shared by every `buildServer()` in a test process.
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyBaseLogger, FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
 import { requireSqlite } from '../../lib/db.js';
 import { HubError } from '../../lib/errors.js';
@@ -64,8 +64,10 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
     resolvePort(options.scopes ?? derivedScopeResolver, app);
   const services = new WeakMap<SocketServer, SessionsService>();
 
-  const service = (request: FastifyRequest): SessionsService => {
-    const hub = request.server.hub;
+  const service = (request: FastifyRequest): SessionsService =>
+    serviceFor(request.server, request.log);
+  const serviceFor = (app: FastifyInstance, log: FastifyBaseLogger): SessionsService => {
+    const hub = app.hub;
     const realtime = sessionsRealtimeFor(hub.io);
     if (!realtime) {
       throw new HubError('service_unavailable', { details: { reason: 'realtime_not_attached' } });
@@ -82,12 +84,12 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
       store,
       new AuditService(hub.database.db),
       realtime,
-      portsFor(request.server),
-      request.log,
+      portsFor(app),
+      log,
       hub.config.dataDir,
     );
     const stale = created.recoverStaleRuns();
-    if (stale > 0) request.log.warn({ runs: stale }, 'sessions: failed runs left by a restart');
+    if (stale > 0) log.warn({ runs: stale }, 'sessions: failed runs left by a restart');
     services.set(hub.io, created);
     return created;
   };
@@ -96,12 +98,27 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
     name: 'sessions',
     registerRoutes(app: FastifyInstance) {
       registerSessionRoutes(app, { service, scopes: scopesFor(app) });
+      turns.set(app, (scope, input) => serviceFor(app, app.log).oneTurn(scope, input));
     },
     registerEvents(io: SocketServer) {
       io.of(REALTIME_NAMESPACES.sessions);
       attachSessionsRealtime(io);
     },
   });
+}
+
+/** A turn run for something other than a person — a workflow step (`SessionsService.oneTurn`). */
+export type OneTurn = SessionsService['oneTurn'] extends (...args: infer A) => infer R
+  ? (...args: A) => R
+  : never;
+const turns = new WeakMap<FastifyInstance, OneTurn>();
+
+/**
+ * One whole agent turn, for another module (through the composition root). `null` when
+ * this app composes no sessions module — then nothing can run an agent, and says so.
+ */
+export function sessionTurnsFor(app: FastifyInstance): OneTurn | null {
+  return turns.get(app) ?? null;
 }
 
 /** The module the app composes (`src/modules/index.ts`). */

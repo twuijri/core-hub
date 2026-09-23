@@ -108,7 +108,12 @@ export class SessionsService {
     return listWorkingDirs(this.rootOf(scope));
   }
 
-  async create(scope: EngineScope, input: SessionCreateInput): Promise<Record<string, unknown>> {
+  async create(
+    scope: EngineScope,
+    input: SessionCreateInput,
+    /** Where the session came from, when not a person's chat (a workflow step, say). */
+    origin: { source?: SessionRow['source'] } = {},
+  ): Promise<Record<string, unknown>> {
     const agent = await this.requireAgent(scope, input.agent_id);
     // Resolved before the row is minted: a refused path must not leave a session behind.
     const root = this.rootOf(scope);
@@ -118,7 +123,7 @@ export class SessionsService {
       ownerId: scope.userId,
       agentId: agent.id,
       title: input.title ?? null,
-      source: 'chat',
+      source: origin.source ?? 'chat',
       modelLabel: input.model ?? agent.defaultModel,
       provider: input.provider ?? agent.defaultProvider,
       reasoningEffort: input.reasoning_effort ?? null,
@@ -443,6 +448,7 @@ export class SessionsService {
     scope: EngineScope,
     sessionId: string,
     input: RunCreateInput,
+    origin: { kind?: RunRow['originKind'] } = {},
   ): Promise<{ payload: Record<string, unknown>; started: Promise<void> }> {
     const session = this.requireSession(scope, sessionId);
     const agent = await this.requireAgent(scope, session.agentId);
@@ -500,6 +506,7 @@ export class SessionsService {
       provider: input.provider ?? session.provider ?? agent.defaultProvider,
       reasoningEffort: input.reasoning_effort ?? session.reasoningEffort ?? null,
       adapterKind: agent.adapterKind,
+      ...(origin.kind ? { originKind: origin.kind } : {}),
     });
     this.store.updateMessage(scope.workspace, message.id, { runId: run.id });
 
@@ -531,6 +538,55 @@ export class SessionsService {
         queue_position: active || queued.length > 1 ? queuePosition || 1 : null,
       },
       started: this.engine.kick(scope, session.id),
+    };
+  }
+
+  /**
+   * One turn, start to finish, for something that is not a person at a keyboard: open a
+   * session of its own, send the prompt, and wait until the run ends.
+   *
+   * The session is an ordinary one — it shows in the history under its source, its tool
+   * calls and approvals are the same as in a chat, and a run that asks for an approval
+   * waits for a person exactly as a chat run does. What comes back is how it ended and
+   * what the agent said, which is all a workflow step needs.
+   */
+  async oneTurn(
+    scope: EngineScope,
+    input: { agentId: string; prompt: string; title: string; source: 'workflow' | 'schedule' },
+  ): Promise<{
+    sessionId: string;
+    runId: string;
+    status: RunRow['status'];
+    output: string;
+    error: string | null;
+  }> {
+    const session = await this.create(
+      scope,
+      { agent_id: input.agentId, title: input.title },
+      { source: input.source },
+    );
+    const sessionId = String(session.id);
+    const { payload, started } = await this.createRun(
+      scope,
+      sessionId,
+      { content: [{ type: 'text', text: input.prompt }] },
+      { kind: input.source },
+    );
+    await started;
+    const runId = String(payload.run_id);
+    const run = this.store.getRun(scope.workspace, runId);
+    const output = this.store
+      .allMessages(scope.workspace, sessionId)
+      .filter((message) => message.runId === runId && message.role === 'assistant')
+      .map((message) => message.content)
+      .join('\n')
+      .trim();
+    return {
+      sessionId,
+      runId,
+      status: run?.status ?? 'failed',
+      output,
+      error: run?.errorMessage ?? run?.errorCode ?? null,
     };
   }
 
