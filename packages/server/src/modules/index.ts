@@ -15,7 +15,8 @@ import { attachmentReferences, createSessionsModule } from './sessions/index.js'
 import { roomsModule } from './rooms/index.js';
 import { registerHermesBoard, tasksModule } from './tasks/index.js';
 import { createHermesKanban, processRunner } from './tasks/hermes-kanban.js';
-import { schedulesModule } from './schedules/index.js';
+import { createHermesJobs } from './schedules/hermes-jobs.js';
+import { registerHermesCron, schedulesModule } from './schedules/index.js';
 import {
   attachmentsPort,
   knowledgeModule,
@@ -91,13 +92,35 @@ registerHermesBoard((app) => ({
     if (!home || !command) return null;
     return createHermesKanban(processRunner({ command, home, env: runtime.cliEnv() }));
   },
-  agentId(workspace) {
-    // Agents are hub-wide rows; the scope only decides how settings are shown.
-    const found = agentsServiceFor(app)
-      .list({ id: workspace, slug: '', name: '', isDefault: false }, { kind: 'hermes' })
-      .find((agent) => agent.slug === 'hermes');
-    return found?.id ?? null;
+  agentId: (workspace) => hermesAgentId(app, workspace),
+}));
+
+/** The registry id of the Hermes agent. Agents are hub-wide rows; the scope only shapes settings. */
+function hermesAgentId(app: FastifyInstance, workspace: string): string | null {
+  const found = agentsServiceFor(app)
+    .list({ id: workspace, slug: '', name: '', isDefault: false }, { kind: 'hermes' })
+    .find((agent) => agent.slug === 'hermes');
+  return found?.id ?? null;
+}
+
+/**
+ * Hermes's own scheduler on the Schedules page (`schedules/hermes-cron.ts`). Reached over
+ * the gateway's API with the key every chat turn uses; there is a scheduler only while the
+ * hub supervises or found a gateway — otherwise every schedule is the hub's own.
+ */
+registerHermesCron((app) => ({
+  jobs() {
+    const runtime = hermesRuntimeFor(app);
+    const { mode, endpoint } = runtime.status();
+    if (mode !== 'managed' && mode !== 'external') return null;
+    return createHermesJobs({
+      baseUrl: endpoint,
+      apiKey: () => runtime.apiKey(),
+      fetch: runtime.apiFetch(),
+    });
   },
+  agentId: (workspace) => hermesAgentId(app, workspace),
+  timezone: () => hermesRuntimeFor(app).timezone(),
 }));
 
 export const modules: readonly HubModule[] = [

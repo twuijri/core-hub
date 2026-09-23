@@ -27,6 +27,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'n
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import type { FastifyBaseLogger } from 'fastify';
+import { parse as parseYaml } from 'yaml';
 import { probeHttp, whichSync, type HostEnvironment } from './adapters/host.js';
 import type { RuntimeState } from './adapters/types.js';
 
@@ -176,6 +177,35 @@ export class HermesRuntime {
     if (same) return false;
     this.providerEnv = { ...env };
     return true;
+  }
+
+  /** How the hub reaches this gateway's API — the same `fetch` every chat turn uses. */
+  apiFetch(): typeof fetch {
+    return this.options.fetchImpl ?? fetch;
+  }
+
+  /**
+   * The zone Hermes evaluates cron expressions in, resolved the way Hermes resolves it
+   * (`hermes_time.py`): `HERMES_TIMEZONE`, then `timezone:` in its `config.yaml`, then the
+   * machine's own zone. The last is the hub's zone too when Hermes runs beside it.
+   */
+  timezone(): string {
+    const fromEnv = this.options.host.inherited?.HERMES_TIMEZONE?.trim();
+    if (fromEnv) return fromEnv;
+    const home = this.status().home;
+    if (home) {
+      try {
+        const config = parseYaml(readFileSync(path.join(home, 'config.yaml'), 'utf8')) as {
+          timezone?: unknown;
+        } | null;
+        if (typeof config?.timezone === 'string' && config.timezone.trim()) {
+          return config.timezone.trim();
+        }
+      } catch {
+        // No config yet, or one Hermes itself would also fail to read: the machine's zone.
+      }
+    }
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   }
 
   /**

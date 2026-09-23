@@ -15,6 +15,10 @@ import { overrideModels } from '../../server/src/modules/models/index.js';
 import type { AgentInstaller } from '../../server/src/modules/agents/index.js';
 import { createSessionsModule } from '../../server/src/modules/sessions/index.js';
 import { registerHermesBoard } from '../../server/src/modules/tasks/index.js';
+import { registerHermesCron } from '../../server/src/modules/schedules/index.js';
+import { createHermesJobs } from '../../server/src/modules/schedules/hermes-jobs.js';
+import { FakeHermesApi } from '../../server/src/modules/schedules/testing/fake-hermes-api.js';
+import { agentsServiceFor } from '../../server/src/modules/agents/index.js';
 import { HermesRefusal, type HermesTask } from '../../server/src/modules/tasks/hermes-kanban.js';
 import type {
   AgentAskRequest,
@@ -319,6 +323,27 @@ registerHermesBoard(() => ({
     },
   }),
   agentId: () => null,
+}));
+
+/**
+ * Hermes's scheduler, scripted: the same in-memory `/api/jobs` the unit tests use, behind
+ * the real client. Its zone is one no developer's browser is in, so journey 18 always meets
+ * the refusal that names Hermes's zone and the button that adopts it.
+ */
+const hermesJobs = new FakeHermesApi();
+registerHermesCron((app) => ({
+  jobs: () =>
+    createHermesJobs({
+      baseUrl: 'http://hermes.e2e',
+      apiKey: () => 'e2e',
+      fetch: hermesJobs.fetch,
+    }),
+  agentId: (workspace) =>
+    agentsServiceFor(app)
+      .list({ id: workspace, slug: '', name: '', isDefault: false }, { kind: 'hermes' })
+      .find((agent) => agent.slug === 'hermes')?.id ?? null,
+  timezone: () => 'Pacific/Chatham',
+  throttleMs: 0,
 }));
 
 const sessions = createSessionsModule({
