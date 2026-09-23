@@ -11,6 +11,7 @@
 //   committed file and make every machine's map differ; it is rewritten to the
 //   root-relative form every other node already has.
 // - With the checkout's folder name and the date out of the report's title.
+// - In one canonical order (see `canonical` below).
 import { spawnSync } from 'node:child_process';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 
@@ -38,8 +39,27 @@ for (const file of ['graph.json', 'graph.html']) {
   const next = text.split(root).join('');
   if (next !== text) writeFileSync(path, next);
 }
+const graphFile = `${OUT}/graph.json`;
+const graph = JSON.parse(readFileSync(graphFile, 'utf8'));
+writeFileSync(graphFile, `${JSON.stringify(canonical(graph), null, 2)}\n`);
+
 const report = `${OUT}/GRAPH_REPORT.md`;
 writeFileSync(
   report,
   readFileSync(report, 'utf8').replace(/^# Graph Report - .*$/m, '# Graph Report - majlis'),
 );
+
+/** Nodes by id, and each undirected edge with its ends in order, then edges in order. */
+function canonical(graph) {
+  const nodes = [...graph.nodes].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const links = graph.links
+    .map((link) =>
+      !graph.directed && link.source > link.target
+        ? { ...link, source: link.target, target: link.source }
+        : link,
+    )
+    .map((link) => [JSON.stringify(link), link])
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([, link]) => link);
+  return { ...graph, nodes, links };
+}
