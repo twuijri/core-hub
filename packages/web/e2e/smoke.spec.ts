@@ -808,7 +808,8 @@ test.describe('web smoke journeys', () => {
       page.locator('#main').boundingBox(),
     ]);
     expect(tableBox && mainBox && tableBox.width).toBeGreaterThan((mainBox?.width ?? 0) - 64);
-    await expect(page.getByTestId('owner-note')).toBeVisible();
+    // The owner's own row: a password, and nothing else (owner, 2026-09-23).
+    await expect(page.getByTestId('user-password')).toHaveCount(1);
     await expect(page.getByTestId('user-menu')).toHaveCount(0);
 
     await page.getByTestId('add-user').click();
@@ -832,12 +833,13 @@ test.describe('web smoke journeys', () => {
     // And now there is a row that is not the owner's: its password and delete are on the
     // row, not behind "⋯".
     await expect(page.getByTestId('user-menu')).toHaveCount(1);
-    await expect(page.getByTestId('user-password')).toBeVisible();
-    await expect(page.getByTestId('user-delete')).toBeVisible();
-    await page.getByTestId('user-password').click();
+    const saraRow = page.getByRole('row').filter({ hasText: 'سارة' });
+    await expect(saraRow.getByTestId('user-password')).toBeVisible();
+    await expect(saraRow.getByTestId('user-delete')).toBeVisible();
+    await saraRow.getByTestId('user-password').click();
     await expect(page.getByTestId('set-password')).toBeVisible();
     await page.keyboard.press('Escape');
-    await page.getByTestId('user-delete').click();
+    await saraRow.getByTestId('user-delete').click();
     await expect(page.getByRole('alertdialog')).toContainText('حذف سارة؟');
     await page.keyboard.press('Escape');
     await shot(page, 'people-ar-light');
