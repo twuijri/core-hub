@@ -35,6 +35,20 @@ export const E2E_PASSWORD = 'e2e-owner-password';
 type Step = AgentEvent | { type: 'delay'; ms: number } | { type: 'await_input' };
 
 function scriptFor(prompt: string): Step[] {
+  if (/ملاحظات الإصدار/.test(prompt)) {
+    // A task the board started (journey 22). Slow enough that the card is seen running,
+    // and it ends the way the task prompt asks: with a short summary, which the card
+    // then shows in Review.
+    return [
+      { type: 'reasoning_delta', text: 'أقرأ سجل التغييرات…' },
+      { type: 'delay', ms: 2500 },
+      {
+        type: 'message_delta',
+        text: 'جمعت ملاحظات الإصدار في ثلاثة أقسام: الجديد، والإصلاحات، وما تغيّر في التثبيت. بقي: مراجعة الصياغة.',
+      },
+      { type: 'completed' },
+    ];
+  }
   if (/رد طويل|long reply/i.test(prompt)) {
     // A reply that grows for a few seconds, taller than the screen: the transcript must
     // follow it while the person is at the bottom, and leave them be when they are not.

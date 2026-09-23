@@ -1,16 +1,21 @@
 /**
  * Module `tasks`: projects, the nine-column board, and everything that happens to a task.
  *
- * All twenty-seven operations answer. What they do **not** do is start the work: the
- * contract's `assignTask` describes a future in which assigning opens a session and
- * queues a run, and that worker is not built. So this module assigns, moves, records and
- * reports, and says plainly that nothing started — `TaskAssigned` answers with `null` for
- * the job, the run and the session rather than an invented id. A board a person drives by
- * hand is a board that works; a board that claims to have started a run it never started
- * is worse than an empty screen.
+ * All twenty-seven operations answer, and since 2026-09-24 assigning a task can **start**
+ * it: `assignTask` with `start: true` opens a session of source `task` for the assignee,
+ * queues one run whose prompt is the task (title, brief, checklist, the instructions given
+ * with the assignment), moves the task to `running` and answers `202` with the real job,
+ * run and session ids. When the run ends the task moves on its own — `review` with the
+ * agent's last words as the progress summary, `blocked` with the reason it failed — and
+ * stop, unassign and reassign cancel the run for real (`runs.ts`). A hub that restarts
+ * settles, at boot, the tasks it finds left `running`.
  *
- * The same honesty applies to a worktree: the row is recorded in `creating`, because
- * making a git worktree belongs to whatever runs the task.
+ * Without `start` the task is only assigned, and `TaskAssigned` says so with `null` ids.
+ * A task on Hermes's own kanban is never started here: Hermes's dispatcher owns it.
+ *
+ * Still not done by the hub (stage 2): a git worktree per task — the row is recorded in
+ * `creating` and the run works in the session's ordinary folder under the workspace — and
+ * reporting into a project's room, which waits on `rooms`.
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
@@ -27,6 +32,7 @@ import { ARCHIVE_AFTER_MS, HermesMirror, type HermesBoardPort } from './hermes-m
 import { jobRunnerFor, serializeJob } from '../audit/index.js';
 import { listWorkspacesFor, requireRole, requireUser, requireWorkspace } from '../auth/index.js';
 import { TasksService, type Actor, type Scope, type TaskStatus } from './service.js';
+import { TaskRuns, type TaskRunPort, type TaskRunScope } from './runs.js';
 import {
   toComment,
   toProject,
@@ -41,6 +47,7 @@ import { TASK_STATUSES } from './schema.js';
 export { TasksService } from './service.js';
 export type { Actor, Scope, TaskStatus } from './service.js';
 export { between, append } from './position.js';
+export type { TaskRunPort, TaskRunScope, TaskRunOutcome } from './runs.js';
 
 /** How a name is found for an assignee. Injected so this module never reads another's tables. */
 export interface TasksOverrides {
@@ -112,6 +119,63 @@ function refuseOnHermesCard(row: TaskRow, action: string): void {
   }
 }
 
+/**
+ * The worker's reach into `sessions` (`runs.ts`). Filled by the composition root, like the
+ * Hermes board; without it a task can be assigned but not started, and says so.
+ */
+let taskRunnerFactory: ((app: FastifyInstance) => TaskRunPort | null) | null = null;
+export function registerTaskRunner(
+  factory: ((app: FastifyInstance) => TaskRunPort | null) | null,
+): ((app: FastifyInstance) => TaskRunPort | null) | null {
+  const previous = taskRunnerFactory;
+  taskRunnerFactory = factory;
+  return previous;
+}
+const workers = new WeakMap<SocketServer, TaskRuns>();
+/** This app's worker. Exported for tests, which wait on `settled()`. */
+export function taskRunsFor(app: FastifyInstance): TaskRuns {
+  const existing = workers.get(app.hub.io);
+  if (existing) return existing;
+  const created = new TaskRuns(
+    taskRunnerFactory?.(app) ?? null,
+    () => requireSqlite(app.hub.database),
+    (profile, event, payload) =>
+      realtimeOf(app).emit(REALTIME_NAMESPACES.tasks, event, { profile }, payload),
+    (scope, id) => renderTask(new TasksService(requireSqlite(app.hub.database)), scope, id),
+    app.log,
+  );
+  workers.set(app.hub.io, created);
+  return created;
+}
+
+function renderTask(service: TasksService, scope: Scope, id: string): Record<string, unknown> {
+  const row = service.task(scope, id);
+  return toTask(row, scope.profile, {
+    nameOf,
+    subtaskCounts: service.subtaskCounts(row.id),
+    dependsOn: service.dependenciesOf(row.id),
+    worktree: service.worktreeOf(row.id),
+  });
+}
+
+function runScopeOf(request: FastifyRequest): TaskRunScope {
+  return {
+    ...scopeOf(request),
+    userName: request.principal?.user.username ?? '',
+    language: request.language === 'en' ? 'en' : 'ar',
+  };
+}
+
+/** The contract's `Author` for whoever moved a task. */
+function authorOf(actor: Actor): Record<string, unknown> {
+  return {
+    kind: actor.kind === 'user' ? 'user' : actor.kind === 'agent' ? 'agent' : 'system',
+    id: actor.id,
+    name: actor.name ?? actor.kind,
+    avatar: null,
+  };
+}
+
 const realtimes = new WeakMap<SocketServer, Realtime>();
 function realtimeOf(app: FastifyInstance): Realtime {
   const existing = realtimes.get(app.hub.io);
@@ -141,14 +205,169 @@ export const tasksModule = defineModule({
       );
     };
 
-    const task = (request: FastifyRequest, service: TasksService, scope: Scope, id: string) => {
-      const row = service.task(scope, id);
-      return toTask(row, scope.profile, {
-        nameOf,
-        subtaskCounts: service.subtaskCounts(row.id),
-        dependsOn: service.dependenciesOf(row.id),
-        worktree: service.worktreeOf(row.id),
+    const task = (_request: FastifyRequest, service: TasksService, scope: Scope, id: string) =>
+      renderTask(service, scope, id);
+
+    /**
+     * A task the hub started and nobody moved is still `running` after a restart, and no
+     * follow-up is left to move it: settle those before the hub serves anything.
+     */
+    app.addHook('onReady', async () => {
+      try {
+        const settled = taskRunsFor(app).settleStranded();
+        if (settled > 0)
+          app.log.warn({ tasks: settled }, 'tasks: settled runs a restart cut short');
+      } catch (error) {
+        app.log.warn({ err: error }, 'tasks: could not settle tasks left running');
+      }
+    });
+
+    /**
+     * Take a task off the run it is on, then stop that run. In that order: the run's own
+     * ending arrives later and must find the task already moved, so it leaves it alone.
+     */
+    const leaveRun = async (
+      request: FastifyRequest,
+      move: () => TaskRow,
+      current: TaskRow,
+    ): Promise<TaskRow> => {
+      const moved = move();
+      if (current.status === 'running' && current.currentRunId) {
+        await taskRunsFor(request.server)
+          .cancel(runScopeOf(request), current.sessionId, current.currentRunId)
+          .catch((error: unknown) =>
+            request.log.warn({ err: error, taskId: current.id }, 'tasks: stopping the run failed'),
+          );
+      }
+      return moved;
+    };
+
+    const announceMove = (
+      request: FastifyRequest,
+      service: TasksService,
+      scope: Scope,
+      id: string,
+      from: TaskStatus,
+    ) => {
+      const moved = task(request, service, scope, id);
+      if (moved.status === from) return moved;
+      announce(request, 'task.moved', {
+        task: moved,
+        from,
+        to: moved.status,
+        actor: authorOf(actorOf(request)),
       });
+      return moved;
+    };
+
+    /**
+     * Assign a task and, when asked, start it: open its session, queue its run, move it to
+     * `running`. The session and the run are opened **first**, so an agent that cannot take
+     * the turn (`404`, `422`) leaves the task exactly as it was.
+     */
+    const assignAndStart = async (
+      request: FastifyRequest,
+      service: TasksService,
+      scope: TaskRunScope,
+      id: string,
+      input: {
+        agent_id: string;
+        model?: string | null;
+        provider?: string | null;
+        instructions?: string | null;
+        start?: boolean;
+      },
+    ): Promise<{ job_id: string | null; run_id: string | null; session_id: string | null }> => {
+      const actor = actorOf(request);
+      let current = service.task(scope, id);
+      const mirror = mirrorOf(request.server);
+      // Hermes's cards are Hermes's to run: its own dispatcher picks them up from its board.
+      const hermes =
+        HermesMirror.isHermes(current) || !!mirror?.isHermesAgent(scope.workspace, input.agent_id);
+      const start = input.start === true && !hermes;
+      const runs = taskRunsFor(request.server);
+      if (start) {
+        if (current.status === 'done' || current.status === 'archived') {
+          throw new HubError('conflict', {
+            details: { reason: 'task_closed', status: current.status },
+          });
+        }
+        if (!runs.available) {
+          throw new HubError('agent_unavailable', {
+            details: { agent_id: input.agent_id, status: 'no_runner' },
+          });
+        }
+      }
+      // Given to Hermes and asked to start: the card goes on Hermes's board, where Hermes's
+      // own dispatcher picks it up — the same rule as a card created for Hermes. Before
+      // anything else changes, so a refusal from Hermes leaves the task as it was.
+      if (hermes && input.start === true && mirror && !HermesMirror.isHermes(current)) {
+        try {
+          const brief = [current.description, input.instructions]
+            .filter((part): part is string => !!part?.trim())
+            .join('\n\n');
+          const externalId = await mirror.createThrough({
+            id: current.id,
+            title: current.title,
+            body: brief === '' ? null : brief,
+            triage: false,
+          });
+          if (externalId) current = service.linkExternal(scope, id, 'hermes', externalId);
+        } catch (error) {
+          refusedByHermes(error);
+        }
+      }
+      // Reassigning a running task interrupts its run.
+      if (current.status === 'running' && current.currentRunId) {
+        const before = current;
+        current = await leaveRun(
+          request,
+          () => service.stop(scope, actor, id, 'reassigned'),
+          before,
+        );
+        announceMove(request, service, scope, id, before.status);
+      }
+      if (!start) {
+        service.assign(scope, actor, id, {
+          agent_id: input.agent_id,
+          instructions: input.instructions ?? null,
+        });
+        const assigned = task(request, service, scope, id);
+        announce(request, 'task.assigned', { task: assigned });
+        if (assigned.status !== current.status) {
+          announce(request, 'task.moved', {
+            task: assigned,
+            from: current.status,
+            to: assigned.status,
+            actor: authorOf(actor),
+          });
+        }
+        return { job_id: null, run_id: null, session_id: null };
+      }
+      const handle = await runs.open(scope, service, current, {
+        agentId: input.agent_id,
+        model: input.model ?? null,
+        provider: input.provider ?? null,
+        instructions: input.instructions ?? null,
+      });
+      service.assign(scope, actor, id, {
+        agent_id: input.agent_id,
+        instructions: input.instructions ?? null,
+      });
+      const { from } = service.startRun(scope, actor, id, {
+        sessionId: handle.sessionId,
+        runId: handle.runId,
+      });
+      const started = task(request, service, scope, id);
+      announce(request, 'task.assigned', { task: started });
+      announce(request, 'task.moved', {
+        task: started,
+        from,
+        to: 'running',
+        actor: authorOf(actor),
+      });
+      runs.follow(scope, id, handle.runId, handle.done);
+      return { job_id: handle.jobId, run_id: handle.runId, session_id: handle.sessionId };
     };
 
     // ------------------------------------------------------------ projects
@@ -300,11 +519,10 @@ export const tasksModule = defineModule({
       operationId: 'tasks.dispatch',
       status: 202,
       handler: (request, { body }) => {
-        const scope = scopeOf(request);
+        const scope = runScopeOf(request);
         const service = serviceOf(request);
         const input = body as { project_id: string; max?: number; dry_run?: boolean };
         const project = service.project(scope, input.project_id);
-        const actor = actorOf(request);
         const job = jobRunnerFor(request.server).start(
           {
             workspace: scope.workspace,
@@ -314,26 +532,49 @@ export const tasksModule = defineModule({
             entityId: project.id,
             input: { max: input.max ?? 1, dry_run: input.dry_run ?? false },
           },
-          () => {
+          async () => {
             const candidates = service.dispatchable(scope, project.id, input.max ?? 1);
             const assignments: Array<Record<string, unknown>> = [];
+            let started = 0;
             for (const candidate of candidates) {
               const agentId = candidate.assigneeAgentId ?? project.defaultAgentId;
               if (!agentId) continue;
-              if (!input.dry_run) {
-                service.assign(scope, actor, candidate.id, { agent_id: agentId });
-                announce(request, 'task.assigned', { task_id: candidate.id, agent_id: agentId });
+              if (input.dry_run) {
+                assignments.push({
+                  task_id: candidate.id,
+                  agent_id: agentId,
+                  job_id: null,
+                  run_id: null,
+                  session_id: null,
+                });
+                continue;
               }
-              // Assigned, not started: the worker that would start a run is not built.
-              assignments.push({
-                task_id: candidate.id,
-                agent_id: agentId,
-                job_id: null,
-                run_id: null,
-                session_id: null,
-              });
+              // Dispatch starts what it assigns, the same way a person's "assign and
+              // start" does. One task whose agent cannot run is reported, and the rest
+              // still go.
+              try {
+                const ids = await assignAndStart(request, service, scope, candidate.id, {
+                  agent_id: agentId,
+                  start: true,
+                });
+                if (ids.run_id) started += 1;
+                assignments.push({ task_id: candidate.id, agent_id: agentId, ...ids });
+              } catch (error) {
+                service.assign(scope, actorOf(request), candidate.id, { agent_id: agentId });
+                announce(request, 'task.assigned', {
+                  task: task(request, service, scope, candidate.id),
+                });
+                assignments.push({
+                  task_id: candidate.id,
+                  agent_id: agentId,
+                  job_id: null,
+                  run_id: null,
+                  session_id: null,
+                  error: error instanceof HubError ? error.code : 'internal',
+                });
+              }
             }
-            return Promise.resolve({ assignments, started: 0 });
+            return { assignments, started };
           },
         );
         return serializeJob(job, scope.profile);
@@ -529,11 +770,20 @@ export const tasksModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'tasks.deleteTask',
       status: 204,
-      handler: (request, { params }) => {
+      handler: async (request, { params }) => {
         const scope = scopeOf(request);
         const service = serviceOf(request);
-        refuseOnHermesCard(service.task(scope, params.task_id as string), 'delete');
-        service.deleteTask(scope, params.task_id as string);
+        const current = service.task(scope, params.task_id as string);
+        refuseOnHermesCard(current, 'delete');
+        // A task deleted mid-run takes its run with it.
+        await leaveRun(
+          request,
+          () => {
+            service.deleteTask(scope, current.id);
+            return current;
+          },
+          current,
+        );
         announce(request, 'task.deleted', { task_id: params.task_id });
         return null;
       },
@@ -545,17 +795,33 @@ export const tasksModule = defineModule({
         const scope = scopeOf(request);
         const service = serviceOf(request);
         const move = body as { status: TaskStatus; reason?: string | null };
+        const current = service.task(scope, params.task_id as string);
         // A Hermes card moves on Hermes first. If Hermes refuses, so does the hub —
         // with Hermes's words — and the row is not touched.
         await mirrorOf(request.server)
-          ?.moveThrough(service.task(scope, params.task_id as string), move.status, move.reason)
+          ?.moveThrough(current, move.status, move.reason)
           .catch(refusedByHermes);
-        service.moveTask(
-          scope,
-          actorOf(request),
-          params.task_id as string,
-          body as { status: TaskStatus },
-        );
+        const moveIt = () =>
+          service.moveTask(
+            scope,
+            actorOf(request),
+            params.task_id as string,
+            body as { status: TaskStatus },
+          );
+        // A person who moves a running task out of `running` has taken it off its run:
+        // the run stops, rather than go on working on a task the board says is elsewhere.
+        if (move.status !== 'running') {
+          await leaveRun(
+            request,
+            () => {
+              moveIt();
+              return service.detachRun(scope, current.id);
+            },
+            current,
+          );
+        } else {
+          moveIt();
+        }
         const moved = task(request, service, scope, params.task_id as string);
         announce(request, 'task.moved', { task: moved });
         return moved;
@@ -565,28 +831,33 @@ export const tasksModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'tasks.assignTask',
       status: 202,
-      handler: (request, { params, body }) => {
-        const scope = scopeOf(request);
+      handler: async (request, { params, body }) => {
+        const scope = runScopeOf(request);
         const service = serviceOf(request);
         const id = params.task_id as string;
-        service.assign(scope, actorOf(request), id, body as { agent_id: string });
-        announce(request, 'task.assigned', {
-          task_id: id,
-          agent_id: (body as { agent_id: string }).agent_id,
-        });
-        // Assigned, and nothing started: the worker that opens a session and queues a run
-        // is not built, and a made-up run id would be worse than a null one.
-        return { job_id: null, run_id: null, session_id: null, task_id: id };
+        const ids = await assignAndStart(
+          request,
+          service,
+          scope,
+          id,
+          body as Parameters<typeof assignAndStart>[4],
+        );
+        return { ...ids, task_id: id };
       },
     });
 
     defineRoute(app, deps, {
       operationId: 'tasks.unassignTask',
       status: 204,
-      handler: (request, { params }) => {
+      handler: async (request, { params }) => {
         const scope = scopeOf(request);
-        serviceOf(request).unassign(scope, actorOf(request), params.task_id as string);
-        announce(request, 'task.unassigned', { task_id: params.task_id });
+        const service = serviceOf(request);
+        const id = params.task_id as string;
+        const current = service.task(scope, id);
+        // The run stops with the assignment, and a running task goes back to `ready`.
+        await leaveRun(request, () => service.unassign(scope, actorOf(request), id), current);
+        announce(request, 'task.unassigned', { task: task(request, service, scope, id) });
+        announceMove(request, service, scope, id, current.status);
         return null;
       },
     });
@@ -594,12 +865,15 @@ export const tasksModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'tasks.stopTask',
       status: 204,
-      handler: (request, { params }) => {
+      handler: async (request, { params }) => {
         const scope = scopeOf(request);
         const service = serviceOf(request);
-        refuseOnHermesCard(service.task(scope, params.task_id as string), 'stop');
-        service.stop(scope, actorOf(request), params.task_id as string);
-        announce(request, 'task.moved', { task_id: params.task_id });
+        const id = params.task_id as string;
+        const current = service.task(scope, id);
+        refuseOnHermesCard(current, 'stop');
+        // The run is cancelled; the task stays with its agent and waits in `ready`.
+        await leaveRun(request, () => service.stop(scope, actorOf(request), id), current);
+        announceMove(request, service, scope, id, current.status);
         return null;
       },
     });

@@ -1102,4 +1102,47 @@ test.describe('web smoke journeys', () => {
     await expect(page.getByText('سيشغّله هرمز في دورته التالية.')).toBeVisible();
     await shot(page, 'schedules-hermes-ar-light');
   });
+
+  test('22. a task assigned and started runs the agent, lands in Review, and opens its conversation', async ({
+    page,
+  }) => {
+    await login(page);
+    await page.getByRole('link', { name: 'المهام' }).click();
+    await page.getByTestId('new-task-input').fill('جهّز ملاحظات الإصدار');
+    await page.getByTestId('new-task').click();
+    await page.getByTestId('task-intake-toggle').click();
+    const card = page.getByTestId('task-card').filter({ hasText: 'جهّز ملاحظات الإصدار' });
+    await expect(card).toHaveAttribute('data-status', 'triage');
+
+    // Give it to an agent, with a word of instruction, and have it start now.
+    await card.getByTestId('task-more').click();
+    await page.getByRole('menuitem', { name: 'إسناد إلى وكيل…' }).click();
+    const dialog = page.getByTestId('task-assign-dialog');
+    await expect(dialog.getByTestId('task-assign-agent')).not.toBeEmpty();
+    await dialog.getByTestId('task-assign-instructions').fill('اكتبها للمستخدمين لا للمطوّرين.');
+    await dialog.getByTestId('task-assign-start').click();
+    await expect(dialog).toBeHidden();
+
+    // Running: in the queue, breathing, with a way to stop it and a way into its chat.
+    await expect(card).toHaveAttribute('data-status', 'running');
+    await expect(card.getByTestId('task-stop')).toBeVisible();
+    await expect(card.getByTestId('task-session')).toBeVisible();
+    await page.waitForTimeout(400);
+    await shot(page, 'tasks-running-ar-light');
+
+    // The run ends on its own time; the board moves the card without a reload.
+    await expect(card).toHaveAttribute('data-status', 'review', { timeout: 20_000 });
+    await expect(page.locator('[data-column-body="review"]')).toContainText('جهّز ملاحظات الإصدار');
+    await expect(card.getByTestId('task-summary')).toContainText('بقي: مراجعة الصياغة.');
+    await page.waitForTimeout(400);
+    await shot(page, 'tasks-review-ar-light');
+
+    // The conversation is an ordinary chat: the task as the prompt, the agent's reply.
+    await card.getByTestId('task-session').click();
+    await expect(page).toHaveURL(/\/chat\/[0-9A-Z]{26}$/);
+    await expect(page.getByTestId('message-assistant').last()).toContainText(
+      'جمعت ملاحظات الإصدار',
+    );
+    await expect(page.getByText('اكتبها للمستخدمين لا للمطوّرين.')).toBeVisible();
+  });
 });

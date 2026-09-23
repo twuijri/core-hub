@@ -16,7 +16,8 @@ import { AuditService } from '../audit/index.js';
 import { attachSessionsRealtime, sessionsRealtimeFor } from './realtime.js';
 import { registerSessionRoutes } from './routes.js';
 import { derivedScopeResolver, type ScopeResolver } from './scope.js';
-import { SessionsService } from './service.js';
+import { SessionsService, type TurnHandle, type TurnInput, type TurnResult } from './service.js';
+import type { EngineScope } from './engine.js';
 import { SessionsStore } from './store.js';
 import type {
   AgentDirectory,
@@ -99,6 +100,21 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
     registerRoutes(app: FastifyInstance) {
       registerSessionRoutes(app, { service, scopes: scopesFor(app) });
       turns.set(app, (scope, input) => serviceFor(app, app.log).oneTurn(scope, input));
+      runs.set(app, {
+        start: (scope, input) => serviceFor(app, app.log).startTurn(scope, input),
+        async cancel(scope, sessionId, runId) {
+          try {
+            await serviceFor(app, app.log).cancelRun(scope, sessionId, runId);
+          } catch (error) {
+            // Already over, or already gone: there is nothing left to stop, which is what
+            // the caller wanted.
+            if (error instanceof HubError && ['state_invalid', 'not_found'].includes(error.code))
+              return;
+            throw error;
+          }
+        },
+        outcome: (workspace, runId) => serviceFor(app, app.log).turnResult(workspace, runId),
+      });
     },
     registerEvents(io: SocketServer) {
       io.of(REALTIME_NAMESPACES.sessions);
@@ -119,6 +135,24 @@ const turns = new WeakMap<FastifyInstance, OneTurn>();
  */
 export function sessionTurnsFor(app: FastifyInstance): OneTurn | null {
   return turns.get(app) ?? null;
+}
+
+/**
+ * A turn another module starts and follows on its own — a task (`tasks.assignTask`). The
+ * ids come back at once; the ending arrives on `done`.
+ */
+export interface SessionRuns {
+  start(scope: EngineScope, input: TurnInput): Promise<TurnHandle>;
+  /** Stop a run; a run that already ended (or was deleted) is not an error. */
+  cancel(scope: EngineScope, sessionId: string, runId: string): Promise<void>;
+  /** How a run stands, by id — after a restart, when nobody holds its `done` any more. */
+  outcome(workspace: string, runId: string): TurnResult | null;
+}
+const runs = new WeakMap<FastifyInstance, SessionRuns>();
+
+/** `null` when this app composes no sessions module. */
+export function sessionRunsFor(app: FastifyInstance): SessionRuns | null {
+  return runs.get(app) ?? null;
 }
 
 /** The module the app composes (`src/modules/index.ts`). */
@@ -159,3 +193,5 @@ export type {
 export { RUN_FILES_DIR, collectOutputs, ensureRunFolders, runFolders } from './run-files.js';
 export type { ProducedFile, ProducedFiles, ProducedRefusal } from './run-files.js';
 export type { ScopeResolver, RequestScope } from './scope.js';
+export type { TurnHandle, TurnInput, TurnResult } from './service.js';
+export type { EngineScope } from './engine.js';
