@@ -41,6 +41,17 @@ export const SESSION_EVENTS = [
   'context.updated',
 ] as const;
 
+/** `/rt/tasks`: the board only listens, and refreshes on any of these. */
+export const TASK_EVENTS = [
+  'task.created',
+  'task.updated',
+  'task.deleted',
+  'task.moved',
+  'task.assigned',
+  'task.unassigned',
+  'task.commented',
+] as const;
+
 export const JOB_EVENTS = [
   'job.queued',
   'job.started',

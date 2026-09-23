@@ -34,13 +34,15 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router';
 import { describeError } from '../auth/client.js';
 import { HubApiError } from '@majlis/contracts';
 import { agentMark } from '../ui/brand/marks.js';
 import { Tooltip } from '../ui/Tooltip.js';
+import { useAuth } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';
-import { useProfiles } from '../hub/queries.js';
-import { termKey } from '../navigation/manifest.js';
+import { useAgents, useProfiles } from '../hub/queries.js';
+import { routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import {
   Badge,
@@ -57,7 +59,8 @@ import {
   useConfirm,
   usePrompt,
 } from '../ui/index.js';
-import { IconGrip, IconMore, IconPlus, IconTrash } from '../ui/icons.js';
+import { IconGrip, IconMore, IconPlus, IconStop, IconTrash } from '../ui/icons.js';
+import { AssignDialog } from './AssignDialog.js';
 import {
   COLUMNS,
   INTAKE_STATUS,
@@ -76,9 +79,22 @@ import {
   useDeleteTask,
   useMoveTask,
   useProjects,
+  useStopTask,
+  useTaskEvents,
+  useUnassignTask,
   useUpdateTask,
   type Task,
 } from './queries.js';
+
+/** What a card can ask of the board beyond moving: the agent side of a task. */
+interface CardActions {
+  onMove(status: TaskStatus): void;
+  onRename(): void;
+  onDelete(): void;
+  onAssign(): void;
+  onStop(): void;
+  onUnassign(): void;
+}
 
 export function TasksScreen() {
   const { t } = useI18n();
@@ -98,6 +114,11 @@ export function TasksScreen() {
   const move = useMoveTask();
   const update = useUpdateTask();
   const remove = useDeleteTask();
+  const stop = useStopTask();
+  const unassign = useUnassignTask();
+  useTaskEvents();
+  /** The task whose "assign to an agent" dialog is open. */
+  const [assigning, setAssigning] = useState<Task | null>(null);
   const { ask, dialog } = useConfirm();
   const { ask: askText, dialog: textDialog } = usePrompt();
   const [draft, setDraft] = useState('');
@@ -155,6 +176,30 @@ export function TasksScreen() {
     }
     move.mutate({ id: task.id, status: drop.to });
   };
+
+  const actionsFor = (task: Task, onMove: (status: TaskStatus) => void): CardActions => ({
+    onMove,
+    onRename: () =>
+      void askText({
+        title: t('tasks.rename'),
+        label: t('tasks.title_label'),
+        initialValue: task.title,
+        confirmLabel: t('common.save'),
+      }).then((value) => {
+        if (value) update.mutate({ id: task.id, patch: { title: value } });
+      }),
+    onDelete: () =>
+      void ask({
+        title: t('tasks.confirm_delete', { title: task.title }),
+        body: t('tasks.confirm_delete_body'),
+        confirmLabel: t('common.delete'),
+      }).then((sure) => {
+        if (sure) remove.mutate(task.id);
+      }),
+    onAssign: () => setAssigning(task),
+    onStop: () => stop.mutate(task.id),
+    onUnassign: () => unassign.mutate(task.id),
+  });
 
   const onDragEnd = (event: DragEndEvent) => {
     setDragging(null);
@@ -261,9 +306,22 @@ export function TasksScreen() {
       </header>
 
       {board.isError && <Notice tone="danger">{describeError(board.error, t)}</Notice>}
-      {(move.isError || createTask.isError || update.isError || remove.isError) && (
+      {(move.isError ||
+        createTask.isError ||
+        update.isError ||
+        remove.isError ||
+        stop.isError ||
+        unassign.isError) && (
         <Notice tone="danger">
-          {describeTaskError(move.error ?? createTask.error ?? update.error ?? remove.error, t)}
+          {describeTaskError(
+            move.error ??
+              createTask.error ??
+              update.error ??
+              remove.error ??
+              stop.error ??
+              unassign.error,
+            t,
+          )}
         </Notice>
       )}
 
@@ -302,26 +360,7 @@ export function TasksScreen() {
                   <TaskCard
                     key={task.id}
                     task={task}
-                    onMove={(status) => move.mutate({ id: task.id, status })}
-                    onRename={() =>
-                      void askText({
-                        title: t('tasks.rename'),
-                        label: t('tasks.title_label'),
-                        initialValue: task.title,
-                        confirmLabel: t('common.save'),
-                      }).then((value) => {
-                        if (value) update.mutate({ id: task.id, patch: { title: value } });
-                      })
-                    }
-                    onDelete={() =>
-                      void ask({
-                        title: t('tasks.confirm_delete', { title: task.title }),
-                        body: t('tasks.confirm_delete_body'),
-                        confirmLabel: t('common.delete'),
-                      }).then((sure) => {
-                        if (sure) remove.mutate(task.id);
-                      })
-                    }
+                    actions={actionsFor(task, (status) => move.mutate({ id: task.id, status }))}
                   />
                 ))}
                 {grouped.intake.length === 0 && (
@@ -337,31 +376,14 @@ export function TasksScreen() {
               column={column}
               tasks={grouped.columns.get(column.id) ?? []}
               dragging={dragging}
-              onMove={(task, status) => {
-                const target = COLUMNS.find((c) => c.statuses.includes(status));
-                const option = target
-                  ? dropOptions(task.status, target).find((drop) => drop.to === status)
-                  : null;
-                if (option) apply(task, option);
-                else move.mutate({ id: task.id, status });
-              }}
-              onRename={(task) =>
-                void askText({
-                  title: t('tasks.rename'),
-                  label: t('tasks.title_label'),
-                  initialValue: task.title,
-                  confirmLabel: t('common.save'),
-                }).then((value) => {
-                  if (value) update.mutate({ id: task.id, patch: { title: value } });
-                })
-              }
-              onDelete={(task) =>
-                void ask({
-                  title: t('tasks.confirm_delete', { title: task.title }),
-                  body: t('tasks.confirm_delete_body'),
-                  confirmLabel: t('common.delete'),
-                }).then((sure) => {
-                  if (sure) remove.mutate(task.id);
+              actionsFor={(task) =>
+                actionsFor(task, (status) => {
+                  const target = COLUMNS.find((c) => c.statuses.includes(status));
+                  const option = target
+                    ? dropOptions(task.status, target).find((drop) => drop.to === status)
+                    : null;
+                  if (option) apply(task, option);
+                  else move.mutate({ id: task.id, status });
                 })
               }
             />
@@ -393,6 +415,7 @@ export function TasksScreen() {
           ))}
         </div>
       </Dialog>
+      <AssignDialog task={assigning} onClose={() => setAssigning(null)} />
       {dialog}
       {textDialog}
     </AppShell>
@@ -403,16 +426,12 @@ function BoardColumn({
   column,
   tasks,
   dragging,
-  onMove,
-  onRename,
-  onDelete,
+  actionsFor,
 }: {
   column: ColumnDef;
   tasks: Task[];
   dragging: TaskStatus | null;
-  onMove(task: Task, status: TaskStatus): void;
-  onRename(task: Task): void;
-  onDelete(task: Task): void;
+  actionsFor(task: Task): CardActions;
 }) {
   const { t } = useI18n();
   const [openedByHand, setOpenedByHand] = useState(false);
@@ -458,13 +477,7 @@ function BoardColumn({
         >
           <ul className="task-column-body" data-column-body={column.id}>
             {tasks.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                onMove={(status) => onMove(task, status)}
-                onRename={() => onRename(task)}
-                onDelete={() => onDelete(task)}
-              />
+              <TaskCard key={task.id} task={task} actions={actionsFor(task)} />
             ))}
             {tasks.length === 0 && <li className="task-column-empty">{t('tasks.nothing')}</li>}
           </ul>
@@ -474,18 +487,9 @@ function BoardColumn({
   );
 }
 
-function TaskCard({
-  task,
-  onMove,
-  onRename,
-  onDelete,
-}: {
-  task: Task;
-  onMove(status: TaskStatus): void;
-  onRename(): void;
-  onDelete(): void;
-}) {
+export function TaskCard({ task, actions }: { task: Task; actions: CardActions }) {
   const { t } = useI18n();
+  const { profile, setProfile } = useAuth();
   const {
     attributes,
     listeners,
@@ -500,6 +504,22 @@ function TaskCard({
   const showsStatus = task.status !== 'todo' && task.status !== 'triage';
   // A card on Hermes's own board: Hermes owns its words and its life, the hub reflects it.
   const fromHermes = task.external?.source === 'hermes';
+  const running = task.status === 'running';
+  // A task can be given to an agent until it is finished; Hermes's cards are Hermes's.
+  const assignable = !fromHermes && task.status !== 'done' && task.status !== 'archived';
+  const agent = task.assignee?.kind === 'agent' ? task.assignee : null;
+  // The registry knows the agent's name; the task row carries only what it was given.
+  const agents = useAgents();
+  const agentName = agent
+    ? (agents.data?.find((candidate) => candidate.id === agent.id)?.name ?? agent.name)
+    : null;
+  const sessionHref = task.session_id
+    ? routeOf('chat').replace(':sessionId?', task.session_id)
+    : null;
+  // The board holds every workspace; the conversation opens in the task's own.
+  const openSession = () => {
+    if (task.profile && task.profile !== profile) setProfile(task.profile);
+  };
 
   return (
     <li
@@ -540,8 +560,14 @@ function TaskCard({
           )}
           {showsStatus && (
             <Badge tone={task.status === 'blocked' ? 'danger' : 'neutral'}>
+              {running && <span className="task-card-live" aria-hidden="true" />}
               {t(`tasks.status.${task.status}`)}
             </Badge>
+          )}
+          {agent && (
+            <span className="truncate text-xs text-muted" dir="auto" data-testid="task-agent">
+              {agentName}
+            </span>
           )}
           {task.priority !== 'normal' && (
             <Badge tone={task.priority === 'urgent' ? 'danger' : 'warning'}>
@@ -554,23 +580,60 @@ function TaskCard({
             </span>
           )}
           {task.blocked_reason && (
-            <span className="truncate text-xs text-danger-soft-text" dir="auto">
-              {task.blocked_reason}
-            </span>
+            // A reason cut short on the card is read whole on hover or focus.
+            <Tooltip label={task.blocked_reason}>
+              <span
+                className="truncate text-xs text-danger-soft-text"
+                dir="auto"
+                tabIndex={0}
+                data-testid="task-blocked-reason"
+              >
+                {task.blocked_reason}
+              </span>
+            </Tooltip>
           )}
         </span>
+        {/* What the agent said when it finished: the card says it, the conversation has the rest. */}
+        {task.latest_summary && task.status === 'review' && (
+          <p className="task-card-summary" dir="auto" data-testid="task-summary">
+            {task.latest_summary}
+          </p>
+        )}
+        {sessionHref && (
+          <Link
+            to={sessionHref}
+            onClick={openSession}
+            className="task-card-session"
+            data-testid="task-session"
+          >
+            {t('tasks.open_session')}
+          </Link>
+        )}
       </div>
-      {quick && (
+      {running && !fromHermes ? (
         <Button
           variant="ghost"
           size="sm"
           className="task-card-quick"
-          onClick={() => onMove(quickActionTarget(quick))}
-          data-testid="task-quick"
-          data-action={quick}
+          icon={<IconStop size={12} />}
+          onClick={actions.onStop}
+          data-testid="task-stop"
         >
-          {t(`tasks.action.${quick}`)}
+          {t('tasks.stop')}
         </Button>
+      ) : (
+        quick && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="task-card-quick"
+            onClick={() => actions.onMove(quickActionTarget(quick))}
+            data-testid="task-quick"
+            data-action={quick}
+          >
+            {t(`tasks.action.${quick}`)}
+          </Button>
+        )
       )}
       <Menu
         align="end"
@@ -587,18 +650,32 @@ function TaskCard({
           />
         }
       >
-        {!fromHermes && <MenuItem onSelect={onRename}>{t('tasks.rename')}</MenuItem>}
+        {assignable && (
+          <MenuItem onSelect={actions.onAssign}>
+            {t(agent ? 'tasks.assign.again' : 'tasks.assign.open')}
+          </MenuItem>
+        )}
+        {running && !fromHermes && (
+          <MenuItem icon={<IconStop size={14} />} onSelect={actions.onStop}>
+            {t('tasks.stop')}
+          </MenuItem>
+        )}
+        {agent && !fromHermes && (
+          <MenuItem onSelect={actions.onUnassign}>{t('tasks.unassign')}</MenuItem>
+        )}
+        {assignable && <MenuSeparator />}
+        {!fromHermes && <MenuItem onSelect={actions.onRename}>{t('tasks.rename')}</MenuItem>}
         {!fromHermes && <MenuSeparator />}
         {/* Only the moves the hub would accept, so the menu never offers a dead end. */}
         {COLUMNS.flatMap((column) => dropOptions(task.status, column)).map((option) => (
-          <MenuItem key={option.to} onSelect={() => onMove(option.to)}>
+          <MenuItem key={option.to} onSelect={() => actions.onMove(option.to)}>
             {t(`tasks.action.${option.transition.action}`)}
           </MenuItem>
         ))}
         {/* Hermes would bring a deleted card back on the next read; it is Hermes's to remove. */}
         {!fromHermes && <MenuSeparator />}
         {!fromHermes && (
-          <MenuItem icon={<IconTrash size={14} />} tone="danger" onSelect={onDelete}>
+          <MenuItem icon={<IconTrash size={14} />} tone="danger" onSelect={actions.onDelete}>
             {t('common.delete')}
           </MenuItem>
         )}
