@@ -137,31 +137,33 @@ describe('People', () => {
     const { fetchImpl } = hub({ users: [person({ id: ME, username: 'admin', role: 'admin' })] });
     mount(<UsersTab />, fetchImpl);
     await waitFor(() => expect(screen.getByTestId('user-menu')).toBeTruthy());
+    // What is legal is there…
+    expect(screen.getByTestId('user-password')).toBeTruthy();
+    // …and what the hub refuses is not offered at all.
+    expect(screen.queryByTestId('user-delete')).toBeNull();
     await openControl(userEvent, screen.getByTestId('user-menu'));
     const menu = await screen.findByRole('menu');
-    // What is legal is there…
-    expect(within(menu).getByText('Set a password')).toBeTruthy();
-    // …and what the hub refuses is not offered at all.
     expect(within(menu).queryByText('Disable')).toBeNull();
     expect(within(menu).queryByText('Delete')).toBeNull();
   });
 
-  it('offers disable and delete on somebody else’s row', async () => {
+  it('puts password and delete on somebody else’s row, and disable in its menu', async () => {
+    // Owner, 2026-09-23: behind "⋯" they were not found at all.
     const { fetchImpl } = hub({ users: [person()] });
     mount(<UsersTab />, fetchImpl);
     await waitFor(() => expect(screen.getByTestId('user-menu')).toBeTruthy());
+    expect(screen.getByTestId('user-password')).toBeTruthy();
+    expect(screen.getByTestId('user-delete')).toBeTruthy();
     await openControl(userEvent, screen.getByTestId('user-menu'));
     const menu = await screen.findByRole('menu');
     expect(within(menu).getByText('Disable')).toBeTruthy();
-    expect(within(menu).getByText('Delete')).toBeTruthy();
   });
 
   it('sends a password as a patch and never asks for one back', async () => {
     const { fetchImpl, sent } = hub({ users: [person()] });
     mount(<UsersTab />, fetchImpl);
-    await waitFor(() => expect(screen.getByTestId('user-menu')).toBeTruthy());
-    await openControl(userEvent, screen.getByTestId('user-menu'));
-    await userEvent.click(await screen.findByText('Set a password'));
+    await waitFor(() => expect(screen.getByTestId('user-password')).toBeTruthy());
+    await userEvent.click(screen.getByTestId('user-password'));
     const field = await screen.findByLabelText('New password');
     await userEvent.type(field, 'a-long-enough-one');
     await userEvent.click(screen.getByTestId('save-password'));
@@ -178,9 +180,8 @@ describe('People', () => {
   it('will not save a password shorter than the contract allows', async () => {
     const { fetchImpl, sent } = hub({ users: [person()] });
     mount(<UsersTab />, fetchImpl);
-    await waitFor(() => expect(screen.getByTestId('user-menu')).toBeTruthy());
-    await openControl(userEvent, screen.getByTestId('user-menu'));
-    await userEvent.click(await screen.findByText('Set a password'));
+    await waitFor(() => expect(screen.getByTestId('user-password')).toBeTruthy());
+    await userEvent.click(screen.getByTestId('user-password'));
     await userEvent.type(await screen.findByLabelText('New password'), 'short');
     expect(screen.getByTestId('save-password').hasAttribute('disabled')).toBe(true);
     expect(sent.some((s) => s.method === 'PATCH')).toBe(false);
