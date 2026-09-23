@@ -33,7 +33,7 @@ import {
   useConfirm,
   type Column,
 } from '../ui/index.js';
-import { IconMore, IconShield } from '../ui/icons.js';
+import { IconMore, IconTrash, IconShield } from '../ui/icons.js';
 import {
   isOwner,
   isSelf,
@@ -160,69 +160,88 @@ function UserMenu({ user }: { user: HubUser }) {
       </span>
     );
 
+  const confirmDelete = () => {
+    void ask({
+      title: t('people.delete_title', { name: user.display_name || user.username }),
+      body: t('people.delete_body'),
+      confirmLabel: t('common.delete'),
+    }).then((yes) => {
+      if (yes) remove.mutate(user.id);
+    });
+  };
+
+  // The two things people come here for are buttons on the row, not entries hidden behind
+  // "⋯" (owner, 2026-09-23: «اليوزر ما فيه حذف له او تعديل الباسوورد حقه؟»).
   return (
-    <>
-      <Menu
-        trigger={
-          <Button variant="ghost" size="sm" aria-label={t('common.more')} data-testid="user-menu">
-            <IconMore size={16} />
-          </Button>
-        }
-      >
-        <MenuItem
-          onSelect={() =>
-            update.mutate({
-              id: user.id,
-              patch: { role: user.role === 'admin' ? 'member' : 'admin' },
-            })
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setResetting(true)}
+          data-testid="user-password"
+        >
+          {t('people.lock_password')}
+        </Button>
+        {!self && (
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            icon={<IconTrash size={16} />}
+            aria-label={t('common.delete')}
+            tooltip={t('common.delete')}
+            onClick={confirmDelete}
+            data-testid="user-delete"
+          />
+        )}
+        <Menu
+          trigger={
+            <Button variant="ghost" size="sm" aria-label={t('common.more')} data-testid="user-menu">
+              <IconMore size={16} />
+            </Button>
           }
         >
-          {t(user.role === 'admin' ? 'people.make_member' : 'people.make_admin')}
-        </MenuItem>
-        <MenuItem onSelect={() => setResetting(true)}>{t('people.set_password')}</MenuItem>
-        {/* Only a member is held to a list; an admin enters every workspace regardless. */}
-        {user.role === 'member' && (
-          <MenuItem onSelect={() => setPlacing(true)}>{t('people.edit_workspaces')}</MenuItem>
-        )}
-        {/* Disabling or deleting yourself is refused by the hub, so it is not offered:
+          <MenuItem
+            onSelect={() =>
+              update.mutate({
+                id: user.id,
+                patch: { role: user.role === 'admin' ? 'member' : 'admin' },
+              })
+            }
+          >
+            {t(user.role === 'admin' ? 'people.make_member' : 'people.make_admin')}
+          </MenuItem>
+          {/* Only a member is held to a list; an admin enters every workspace regardless. */}
+          {user.role === 'member' && (
+            <MenuItem onSelect={() => setPlacing(true)}>{t('people.edit_workspaces')}</MenuItem>
+          )}
+          {/* Disabling or deleting yourself is refused by the hub, so it is not offered:
             a greyed row that explains nothing is worse than a row that is not there. */}
-        {!self && (
-          <>
-            <MenuSeparator />
-            <MenuItem
-              onSelect={() =>
-                update.mutate({
-                  id: user.id,
-                  patch: { status: user.status === 'active' ? 'disabled' : 'active' },
-                })
-              }
-            >
-              {t(user.status === 'active' ? 'people.disable' : 'people.enable')}
-            </MenuItem>
-            <MenuItem
-              tone="danger"
-              onSelect={() => {
-                void ask({
-                  title: t('people.delete_title', { name: user.display_name || user.username }),
-                  body: t('people.delete_body'),
-                  confirmLabel: t('common.delete'),
-                }).then((yes) => {
-                  if (yes) remove.mutate(user.id);
-                });
-              }}
-            >
-              {t('common.delete')}
-            </MenuItem>
-          </>
-        )}
-      </Menu>
+          {!self && (
+            <>
+              <MenuSeparator />
+              <MenuItem
+                onSelect={() =>
+                  update.mutate({
+                    id: user.id,
+                    patch: { status: user.status === 'active' ? 'disabled' : 'active' },
+                  })
+                }
+              >
+                {t(user.status === 'active' ? 'people.disable' : 'people.enable')}
+              </MenuItem>
+            </>
+          )}
+        </Menu>
+      </div>
       {dialog}
       {resetting && <SetPassword user={user} onClose={() => setResetting(false)} />}
       {placing && <EditWorkspaces user={user} onClose={() => setPlacing(false)} />}
       {(update.isError || remove.isError) && (
         <Notice tone="danger">{describeError(update.error ?? remove.error, t)}</Notice>
       )}
-    </>
+    </div>
   );
 }
 
@@ -301,6 +320,7 @@ function AddUser({ onClose }: { onClose: () => void }) {
   // "unrestricted"), so a member is not added until at least one is chosen.
   const placed = role === 'admin' || chosen.length > 0;
   const ready = !badName && username.length >= 2 && password.length >= 8 && placed;
+  const shortPassword = password.length > 0 && password.length < 8;
 
   return (
     <Dialog
@@ -366,14 +386,21 @@ function AddUser({ onClose }: { onClose: () => void }) {
             />
           )}
         </Field>
-        <Field label={t('people.new_password')} hint={t('people.password_note')}>
+        {/* A button that is off says why (owner, 2026-09-23: «يلغي زر الانشاء ولا تدري ليش»). */}
+        <Field
+          label={t('people.new_password')}
+          hint={t('people.password_short')}
+          {...(shortPassword ? { error: t('people.password_short') } : {})}
+        >
           {(props) => (
             <Input
               {...props}
               type="password"
               autoComplete="new-password"
               value={password}
+              invalid={shortPassword}
               onChange={(event) => setPassword(event.target.value)}
+              data-testid="new-user-password"
             />
           )}
         </Field>
@@ -389,11 +416,18 @@ function AddUser({ onClose }: { onClose: () => void }) {
         {role === 'admin' ? (
           <p className="text-xs text-muted">{t('people.admin_everywhere')}</p>
         ) : (
-          <WorkspaceChoice
-            workspaces={workspaces.data?.items ?? []}
-            chosen={chosen}
-            onChange={setChosen}
-          />
+          <>
+            <WorkspaceChoice
+              workspaces={workspaces.data?.items ?? []}
+              chosen={chosen}
+              onChange={setChosen}
+            />
+            {!placed && (
+              <p className="text-xs text-warning-soft-text" data-testid="workspaces-required">
+                {t('people.workspaces_required')}
+              </p>
+            )}
+          </>
         )}
         {create.isError && <Notice tone="danger">{describeError(create.error, t)}</Notice>}
       </div>
