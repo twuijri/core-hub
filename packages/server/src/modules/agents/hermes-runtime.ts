@@ -105,8 +105,17 @@ const TUI_RETIRE_INTERVAL_MS = 5_000;
 
 /** Reads or mints the API server key. Kept next to the JWT secret, mode 0600. */
 export function loadOrCreateHermesApiKey(dataDir: string): string {
+  return loadOrCreateSecret(dataDir, 'hermes-api.secret');
+}
+
+/**
+ * Reads or mints a secret the hub hands a Hermes process: 32 random bytes as hex, in
+ * `${dataDir}/keys/<name>`, the folder 0700 and the file 0600. Kept across restarts so a
+ * process started before the hub restarted still matches.
+ */
+export function loadOrCreateSecret(dataDir: string, name: string): string {
   const dir = path.join(dataDir, 'keys');
-  const file = path.join(dir, 'hermes-api.secret');
+  const file = path.join(dir, name);
   if (existsSync(file)) {
     const existing = readFileSync(file, 'utf8').trim();
     if (existing.length >= 16) return existing;
