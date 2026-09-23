@@ -22,7 +22,7 @@ import { defineModule, REALTIME_NAMESPACES } from '../../lib/module.js';
 import { clampLimit } from '../../lib/pagination.js';
 import { createRealtime, type Realtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
-import { requireRole, requireUser, requireWorkspace } from '../auth/index.js';
+import { listWorkspacesFor, requireRole, requireUser, requireWorkspace } from '../auth/index.js';
 import {
   SchedulesService,
   validateDefinition,
@@ -71,11 +71,15 @@ function cronOf(app: FastifyInstance): HermesCron | null {
 }
 
 /** Hermes keeps one scheduler per home, and the hub has one Hermes home: the default workspace. */
-async function syncHermes(request: FastifyRequest, service: SchedulesService): Promise<void> {
+async function syncHermes(
+  request: FastifyRequest,
+  service: SchedulesService,
+  home: Scope,
+): Promise<void> {
   const cron = cronOf(request.server);
-  if (!cron || !request.workspace?.isDefault) return;
+  if (!cron) return;
   const report = await cron
-    .sync(service, scopeOf(request))
+    .sync(service, home)
     .catch((error: unknown) => ({ error: String(error) }));
   if (report?.error) request.log.warn({ err: report.error }, 'schedules: Hermes cron sync');
 }
@@ -439,16 +443,49 @@ export const schedulesModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'schedules.list',
       handler: async (request, { query }) => {
-        const scope = scopeOf(request);
+        // Global (like the Tasks board): every workspace this person may enter, each
+        // schedule with its own. `profile` narrows it to one.
+        const principal = request.principal;
+        if (!principal) throw new HubError('internal', { message: 'route has no principal' });
         const service = serviceOf(request);
-        await syncHermes(request, service);
-        const rows = service.list(scope, {
+        const asked = query.profile ? String(query.profile) : undefined;
+        const enterable = listWorkspacesFor(
+          requireSqlite(request.server.hub.database),
+          principal.user,
+        );
+        const chosen = asked
+          ? enterable.filter((row) => row.slug === asked || row.id === asked)
+          : enterable;
+        // A `profile` nobody may enter is not an empty page, it is a wrong request.
+        if (asked && chosen.length === 0) throw notFound({ resource: 'profile', id: asked });
+
+        // Hermes keeps one scheduler, reflected into the default workspace (a job made in
+        // Hermes itself lands there); read before answering, never able to fail the page.
+        const home = enterable.find((row) => row.isDefault);
+        if (home) {
+          await syncHermes(request, service, {
+            workspace: home.id,
+            profile: home.slug,
+            userId: principal.user.id,
+          });
+        }
+        const filter = {
           ...(query.agent_id ? { agentId: String(query.agent_id) } : {}),
           ...(query.workflow_id ? { workflowId: String(query.workflow_id) } : {}),
           ...(query.enabled === undefined ? {} : { enabled: Boolean(query.enabled) }),
-        });
+        };
+        const items = chosen.flatMap((workspace) =>
+          service
+            .list(
+              { workspace: workspace.id, profile: workspace.slug, userId: principal.user.id },
+              filter,
+            )
+            .map((row) => ({ row, slug: workspace.slug })),
+        );
+        // Newest first across workspaces, the way one workspace was already ordered.
+        items.sort((a, b) => (a.row.id < b.row.id ? 1 : a.row.id > b.row.id ? -1 : 0));
         return {
-          items: rows.map((row) => toSchedule(row, scope.profile, service.nextFor(row))),
+          items: items.map(({ row, slug }) => toSchedule(row, slug, service.nextFor(row))),
           next_cursor: null,
         };
       },

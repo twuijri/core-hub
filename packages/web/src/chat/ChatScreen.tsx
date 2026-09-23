@@ -29,6 +29,7 @@ import { activeRun, isBusy, textOf } from './transcript.js';
 import { runProgress, turnsOf } from './turns.js';
 import { useRecentModels } from '../models/useModelPicker.js';
 import { useApprovalMode, useComposerModels } from './useComposerControls.js';
+import { useFollowBottom } from './followBottom.js';
 import { useSessionStream } from './useSessionStream.js';
 import { WorkingDirPicker } from './WorkingDirPicker.js';
 
@@ -65,14 +66,17 @@ function OpenSession({ sessionId }: { sessionId: string }) {
   const stream = useSessionStream(sessionId);
   const preferences = usePreferences();
   const patch = usePatchSession(sessionId);
-  const bottom = useRef<HTMLDivElement>(null);
+  const transcript = useRef<HTMLDivElement>(null);
   const { state } = stream;
   const busy = isBusy(state);
   const messageCount = state.messages.length;
-  const lastText = state.messages.at(-1)?.content.length;
+  // The transcript follows a growing reply while the person is at its bottom
+  // (followBottom.ts); what the person just sent always brings them there.
+  const follow = useFollowBottom(transcript);
+  const lastRole = state.messages.at(-1)?.role;
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: 'end' });
-  }, [messageCount, lastText, Object.keys(state.approvals).length]);
+    if (lastRole === 'user') follow();
+  }, [messageCount, lastRole, follow]);
 
   const agentId = state.session?.agent_id ?? null;
   const agents = useAgents();
@@ -280,7 +284,7 @@ function OpenSession({ sessionId }: { sessionId: string }) {
           <h2 className="text-xl font-semibold">{t('chat.empty_title')}</h2>
           <p className="max-w-prose text-sm text-muted">{t('chat.empty')}</p>
         </div>
-        <div className="chat-stream chat-turns">
+        <div className="chat-stream chat-turns" ref={transcript}>
           <Transcript
             turns={turns}
             showReasoning={showReasoning}
@@ -308,7 +312,6 @@ function OpenSession({ sessionId }: { sessionId: string }) {
                   m.status === 'failed' &&
                   m.content.some((part) => part.type === 'text' && part.text.trim() !== ''),
               )) && <RunFailureNotice failure={failedRun.error} runtime={runtime.data} />}
-          <div ref={bottom} />
         </div>
         <Composer
           busy={busy}
