@@ -521,6 +521,24 @@ test.describe('web smoke journeys', () => {
     await expect(page.locator('[data-column-body="queue"] [data-testid="task-card"]')).toHaveCount(
       1,
     );
+    // In the queue a todo card offers the next step, promote, as a button: dragging it
+    // inside its own column would be a reorder, not a move.
+    await expect(card.getByTestId('task-quick')).toHaveAttribute('data-action', 'promote');
+
+    // The Waiting strip opens while a card that may go there is being dragged, and folds
+    // back when the drag is called off.
+    const waiting = page.locator('[data-column="waiting"]');
+    const grip = await card.locator('.task-card-grip').boundingBox();
+    expect(grip).toBeTruthy();
+    if (grip) {
+      await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(grip.x + 40, grip.y + 40, { steps: 6 });
+      await expect(waiting).not.toHaveAttribute('data-collapsed', 'true');
+      await page.keyboard.press('Escape');
+      await page.mouse.up();
+      await expect(waiting).toHaveAttribute('data-collapsed', 'true');
+    }
 
     // Waiting means two things, so the menu names both rather than the code choosing.
     await card.getByTestId('task-more').click();
@@ -554,8 +572,12 @@ test.describe('web smoke journeys', () => {
     await expect(page.getByRole('menuitem', { name: 'إعادة التسمية' })).toHaveCount(0);
     await page.keyboard.press('Escape');
 
-    // Archiving asks Hermes first; Hermes says no, and the person reads Hermes's reason.
+    // Archiving is confirmed first, then asked of Hermes; Hermes says no, and the person
+    // reads Hermes's reason.
     await card.getByTestId('task-quick').click();
+    const confirm = page.getByTestId('confirm-dialog');
+    await expect(confirm).toContainText('أرشفة «');
+    await confirm.getByRole('button', { name: 'أرشفة' }).click();
     await expect(page.getByText('رفض هرمز: cannot archive t_e2e00001')).toBeVisible();
     await expect(page.locator('[data-column-body="done"]')).toContainText('راجعت سجل التغييرات');
     await shot(page, 'tasks-hermes-card-ar-light');
