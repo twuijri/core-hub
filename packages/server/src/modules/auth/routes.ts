@@ -635,6 +635,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
         ...(body.password !== undefined ? { password: body.password } : {}),
       },
       now(),
+      principalOf(request).tokenId,
     );
     audit(
       request,

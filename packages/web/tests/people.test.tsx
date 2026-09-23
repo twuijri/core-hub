@@ -135,12 +135,33 @@ function mount(node: React.ReactElement, fetchImpl: typeof fetch) {
 afterEach(cleanup);
 
 describe('People', () => {
-  it('offers nothing at all on the owner’s row, and says why once', async () => {
-    const { fetchImpl } = hub({ users: [person({ id: ME, username: 'admin', role: 'owner' })] });
+  it('gives the owner only a password on their own row (owner, 2026-09-23)', async () => {
+    const { fetchImpl, sent } = hub({
+      users: [person({ id: ME, username: 'admin', role: 'owner' })],
+    });
+    mount(<UsersTab />, fetchImpl);
+    await waitFor(() => expect(screen.getByTestId('user-table')).toBeTruthy());
+    // Role and status never change; delete and the menu are not offered.
+    expect(screen.queryByTestId('user-menu')).toBeNull();
+    expect(screen.queryByTestId('user-delete')).toBeNull();
+    await userEvent.click(screen.getByTestId('user-password'));
+    // Their own: this device stays signed in, and the dialog says so.
+    expect(await screen.findByText(/This device stays signed in/)).toBeTruthy();
+    await userEvent.type(await screen.findByLabelText('New password'), 'a-long-enough-one');
+    await userEvent.click(screen.getByTestId('save-password'));
+    await waitFor(() => {
+      const patch = sent.find((s) => s.method === 'PATCH');
+      expect(patch?.url).toContain(ME);
+      expect(patch?.body).toEqual({ password: 'a-long-enough-one' });
+    });
+  });
+
+  it('shows an admin that the owner’s account is not theirs to edit, and says why once', async () => {
+    const { fetchImpl } = hub({ users: [person({ username: 'owner', role: 'owner' })] });
     mount(<UsersTab />, fetchImpl);
     await waitFor(() => expect(screen.getByTestId('user-table')).toBeTruthy());
     expect(screen.getByTestId('owner-note')).toBeTruthy();
-    expect(screen.queryByTestId('user-menu')).toBeNull();
+    expect(screen.queryByTestId('user-password')).toBeNull();
   });
 
   it('does not offer to disable or delete the person who is signed in', async () => {
