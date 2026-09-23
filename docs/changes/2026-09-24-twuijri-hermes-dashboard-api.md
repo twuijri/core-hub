@@ -105,6 +105,8 @@ All matched files use Prettier code style!        # exit 0
 $ pnpm typecheck                                   # exit 0
 $ pnpm contracts:check-clients
 check-clients  OK — 208 client file(s) scanned, 166 contract path(s) known.
+$ pnpm change-record:check
+change-record  OK — 1 record(s) valid
 ```
 
 ## المخاطر والرجوع
