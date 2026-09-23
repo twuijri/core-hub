@@ -35,6 +35,9 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useMemo, useState } from 'react';
 import { describeError } from '../auth/client.js';
+import { HubApiError } from '@majlis/contracts';
+import { agentMark } from '../ui/brand/marks.js';
+import { Tooltip } from '../ui/Tooltip.js';
 import { useI18n } from '../i18n/context.js';
 import { useProfiles } from '../hub/queries.js';
 import { termKey } from '../navigation/manifest.js';
@@ -258,8 +261,10 @@ export function TasksScreen() {
       </header>
 
       {board.isError && <Notice tone="danger">{describeError(board.error, t)}</Notice>}
-      {(move.isError || createTask.isError) && (
-        <Notice tone="danger">{describeError(move.error ?? createTask.error, t)}</Notice>
+      {(move.isError || createTask.isError || update.isError || remove.isError) && (
+        <Notice tone="danger">
+          {describeTaskError(move.error ?? createTask.error ?? update.error ?? remove.error, t)}
+        </Notice>
       )}
 
       <DndContext
@@ -493,6 +498,8 @@ function TaskCard({
   const quick = quickActionFor(task.status);
   // The column groups several statuses, so the card is where the stage is readable.
   const showsStatus = task.status !== 'todo' && task.status !== 'triage';
+  // A card on Hermes's own board: Hermes owns its words and its life, the hub reflects it.
+  const fromHermes = task.external?.source === 'hermes';
 
   return (
     <li
@@ -502,6 +509,7 @@ function TaskCard({
       data-testid="task-card"
       data-task-id={task.id}
       data-status={task.status}
+      data-external={fromHermes ? 'hermes' : undefined}
     >
       <button
         ref={setActivatorNodeRef}
@@ -518,6 +526,18 @@ function TaskCard({
           {task.title}
         </p>
         <span className="task-card-meta">
+          {fromHermes && (
+            <Tooltip label={t('tasks.hermes.origin')}>
+              <span
+                className="task-card-origin"
+                role="img"
+                aria-label={t('tasks.hermes.origin')}
+                data-testid="task-origin-hermes"
+              >
+                {agentMark('hermes', 14)}
+              </span>
+            </Tooltip>
+          )}
           {showsStatus && (
             <Badge tone={task.status === 'blocked' ? 'danger' : 'neutral'}>
               {t(`tasks.status.${task.status}`)}
@@ -567,19 +587,42 @@ function TaskCard({
           />
         }
       >
-        <MenuItem onSelect={onRename}>{t('tasks.rename')}</MenuItem>
-        <MenuSeparator />
+        {!fromHermes && <MenuItem onSelect={onRename}>{t('tasks.rename')}</MenuItem>}
+        {!fromHermes && <MenuSeparator />}
         {/* Only the moves the hub would accept, so the menu never offers a dead end. */}
         {COLUMNS.flatMap((column) => dropOptions(task.status, column)).map((option) => (
           <MenuItem key={option.to} onSelect={() => onMove(option.to)}>
             {t(`tasks.action.${option.transition.action}`)}
           </MenuItem>
         ))}
-        <MenuSeparator />
-        <MenuItem icon={<IconTrash size={14} />} tone="danger" onSelect={onDelete}>
-          {t('common.delete')}
-        </MenuItem>
+        {/* Hermes would bring a deleted card back on the next read; it is Hermes's to remove. */}
+        {!fromHermes && <MenuSeparator />}
+        {!fromHermes && (
+          <MenuItem icon={<IconTrash size={14} />} tone="danger" onSelect={onDelete}>
+            {t('common.delete')}
+          </MenuItem>
+        )}
       </Menu>
     </li>
   );
+}
+
+/**
+ * The board's own refusals, in the person's language — and Hermes's, in Hermes's words.
+ * Hermes answers in the language its CLI speaks; the hub passes the sentence on unchanged
+ * rather than guessing at a translation of it.
+ */
+function describeTaskError(
+  error: unknown,
+  t: (key: string, p?: Record<string, string | number>) => string,
+): string {
+  if (error instanceof HubApiError && error.status === 409) {
+    const details = (error.body as { details?: { reason?: string; message?: string } } | undefined)
+      ?.details;
+    if (details?.reason === 'hermes_refused')
+      return t('tasks.hermes.refused', { message: details.message ?? '' });
+    if (details?.reason === 'hermes_owns_text') return t('tasks.hermes.owns_text');
+    if (details?.reason === 'hermes_owns_card') return t('tasks.hermes.owns_card');
+  }
+  return describeError(error, t);
 }

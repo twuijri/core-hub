@@ -462,20 +462,24 @@ test.describe('web smoke journeys', () => {
     await page.getByTestId('new-task-input').fill('اكتب خطة الإطلاق');
     await page.getByTestId('new-task').click();
     await page.getByTestId('task-intake-toggle').click();
-    await expect(page.getByTestId('task-card')).toHaveCount(1);
+    // Hermes's finished card (journey 17) sits in Done; this journey drives its own card.
+    const card = page.getByTestId('task-card').filter({ hasText: 'اكتب خطة الإطلاق' });
+    await expect(page.locator('[data-testid="task-intake"] [data-testid="task-card"]')).toHaveCount(
+      1,
+    );
     // A column grows and shrinks with an animation; the screenshot waits for it to land
     // rather than photographing a column half-way open.
     await page.waitForTimeout(400);
     await shot(page, 'tasks-board-ar-light');
 
     // Its one quick action moves it on; the menu only offers moves the hub would accept.
-    await page.getByTestId('task-quick').click();
+    await card.getByTestId('task-quick').click();
     await expect(page.locator('[data-column-body="queue"] [data-testid="task-card"]')).toHaveCount(
       1,
     );
 
     // Waiting means two things, so the menu names both rather than the code choosing.
-    await page.getByTestId('task-more').click();
+    await card.getByTestId('task-more').click();
     await page.getByRole('menuitem', { name: 'موقوفة' }).click();
     await page.getByRole('textbox').fill('ننتظر المفتاح');
     await page.getByRole('button', { name: 'حفظ' }).click();
@@ -488,6 +492,29 @@ test.describe('web smoke journeys', () => {
     ).toContainText('ننتظر المفتاح');
     await page.waitForTimeout(400);
     await shot(page, 'tasks-blocked-ar-light');
+  });
+
+  test("17. Hermes's own cards: marked as Hermes's, and Hermes's refusal in its own words", async ({
+    page,
+  }) => {
+    await login(page);
+    await page.getByRole('link', { name: 'المهام' }).click();
+    const card = page.locator('[data-external="hermes"]');
+    await expect(card).toContainText('راجعت سجل التغييرات');
+    await expect(card.getByTestId('task-origin-hermes')).toBeVisible();
+    await expect(page.locator('[data-column-body="done"]')).toContainText('راجعت سجل التغييرات');
+
+    // Its words and its life are Hermes's: the menu offers moves, never rename or delete.
+    await card.getByTestId('task-more').click();
+    await expect(page.getByRole('menuitem', { name: 'حذف' })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: 'إعادة التسمية' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    // Archiving asks Hermes first; Hermes says no, and the person reads Hermes's reason.
+    await card.getByTestId('task-quick').click();
+    await expect(page.getByText('رفض هرمز: cannot archive t_e2e00001')).toBeVisible();
+    await expect(page.locator('[data-column-body="done"]')).toContainText('راجعت سجل التغييرات');
+    await shot(page, 'tasks-hermes-card-ar-light');
   });
 
   test('16. one press of the theme button is one change', async ({ page }) => {

@@ -14,6 +14,8 @@ import { overrideAgents } from '../../server/src/modules/agents/index.js';
 import { overrideModels } from '../../server/src/modules/models/index.js';
 import type { AgentInstaller } from '../../server/src/modules/agents/index.js';
 import { createSessionsModule } from '../../server/src/modules/sessions/index.js';
+import { registerHermesBoard } from '../../server/src/modules/tasks/index.js';
+import { HermesRefusal, type HermesTask } from '../../server/src/modules/tasks/hermes-kanban.js';
 import type {
   AgentAskRequest,
   AgentEvent,
@@ -289,6 +291,35 @@ const scriptedProvider: typeof fetch = async (input) => {
   return json({ ok: true });
 };
 overrideModels({ fetchImpl: scriptedProvider });
+
+/**
+ * Hermes's own board, scripted: one card Hermes finished, and a Hermes that refuses to let
+ * it go — so journey 17 can show the card's mark and Hermes's refusal in Hermes's words.
+ * Whether the developer's box has a real Hermes must not decide what the board shows.
+ */
+const hermesCard: HermesTask = {
+  id: 't_e2e00001',
+  title: 'راجعت سجل التغييرات',
+  body: null,
+  assignee: null,
+  status: 'done',
+  priority: 0,
+  created_at: 0,
+  result: null,
+};
+registerHermesBoard(() => ({
+  kanban: () => ({
+    list: async () => [hermesCard],
+    show: async (id) => (id === hermesCard.id ? hermesCard : null),
+    create: async () => {
+      throw new HermesRefusal('create', 'the e2e board takes no new cards');
+    },
+    move: async (id) => {
+      throw new HermesRefusal('archive', `cannot archive ${id}: its summary is not written yet`);
+    },
+  }),
+  agentId: () => null,
+}));
 
 const sessions = createSessionsModule({
   agents: { find: async (_workspace, agentId) => fakeHermes(agentId) },

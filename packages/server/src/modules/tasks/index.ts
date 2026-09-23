@@ -22,10 +22,20 @@ import { defineModule, REALTIME_NAMESPACES } from '../../lib/module.js';
 import { clampLimit, decodeCursor, encodeCursor } from '../../lib/pagination.js';
 import { createRealtime, type Realtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
+import { HermesRefusal } from './hermes-kanban.js';
+import { HermesMirror, type HermesBoardPort } from './hermes-mirror.js';
 import { jobRunnerFor, serializeJob } from '../audit/index.js';
 import { listWorkspacesFor, requireRole, requireUser, requireWorkspace } from '../auth/index.js';
 import { TasksService, type Actor, type Scope, type TaskStatus } from './service.js';
-import { toComment, toProject, toSubtask, toTask, toWorktree, type NameOf } from './serialize.js';
+import {
+  toComment,
+  toProject,
+  toSubtask,
+  toTask,
+  toWorktree,
+  type NameOf,
+  type TaskRow,
+} from './serialize.js';
 import { TASK_STATUSES } from './schema.js';
 
 export { TasksService } from './service.js';
@@ -57,6 +67,49 @@ function actorOf(request: FastifyRequest): Actor {
 
 function serviceOf(request: FastifyRequest): TasksService {
   return new TasksService(requireSqlite(request.server.hub.database));
+}
+
+/**
+ * Hermes's board, reflected (`hermes-mirror.ts`). The port comes from the composition
+ * root, because only it may put `agents` (which knows where Hermes lives) and `tasks`
+ * together. Without one — tests, or a hub that composes no Hermes — every card is the
+ * hub's own and nothing below changes behaviour.
+ */
+let hermesBoardFactory: ((app: FastifyInstance) => HermesBoardPort) | null = null;
+export function registerHermesBoard(
+  factory: ((app: FastifyInstance) => HermesBoardPort) | null,
+): ((app: FastifyInstance) => HermesBoardPort) | null {
+  const previous = hermesBoardFactory;
+  hermesBoardFactory = factory;
+  return previous;
+}
+const mirrors = new WeakMap<SocketServer, HermesMirror | null>();
+function mirrorOf(app: FastifyInstance): HermesMirror | null {
+  if (mirrors.has(app.hub.io)) return mirrors.get(app.hub.io) ?? null;
+  const mirror = hermesBoardFactory ? new HermesMirror(hermesBoardFactory(app)) : null;
+  mirrors.set(app.hub.io, mirror);
+  return mirror;
+}
+
+/** Hermes said no: answer 409 with Hermes's own sentence and change nothing. */
+function refusedByHermes(error: unknown): never {
+  if (error instanceof HermesRefusal) {
+    throw new HubError('conflict', {
+      details: { reason: 'hermes_refused', verb: error.verb, message: error.message },
+    });
+  }
+  throw error;
+}
+
+/**
+ * Some things only Hermes may do to its own card: delete it, stop its run, rewrite it.
+ * Doing them here would last until the next read, when Hermes wins and the change quietly
+ * comes undone — so the hub refuses and says whose card it is.
+ */
+function refuseOnHermesCard(row: TaskRow, action: string): void {
+  if (HermesMirror.isHermes(row)) {
+    throw new HubError('conflict', { details: { reason: 'hermes_owns_card', action } });
+  }
 }
 
 const realtimes = new WeakMap<SocketServer, Realtime>();
@@ -180,7 +233,7 @@ export const tasksModule = defineModule({
        * board and not a pile.
        */
       operationId: 'tasks.getColumns',
-      handler: (request, { query }) => {
+      handler: async (request, { query }) => {
         const service = serviceOf(request);
         const db = requireSqlite(request.server.hub.database);
         const principal = request.principal;
@@ -195,6 +248,19 @@ export const tasksModule = defineModule({
         if (asked && chosen.length === 0) throw notFound({ resource: 'profile', id: asked });
         const slugOf = new Map(chosen.map((row) => [row.id, row.slug]));
         const ids = chosen.map((row) => row.id);
+
+        // Hermes's board lands in the default workspace: Hermes keeps one board per home,
+        // and the hub has one Hermes home. Read before answering, so what the person sees
+        // is what Hermes has — throttled, and never able to fail the board.
+        const mirror = mirrorOf(request.server);
+        const home = chosen.find((row) => row.isDefault);
+        if (mirror && home) {
+          await mirror.sync(service, {
+            workspace: home.id,
+            profile: home.slug,
+            userId: principal.user.id,
+          });
+        }
 
         const projectId = (query.project_id as string | undefined) ?? undefined;
         const agentId = (query.agent_id as string | undefined) ?? undefined;
@@ -306,10 +372,30 @@ export const tasksModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'tasks.createTask',
       status: 201,
-      handler: (request, { body }) => {
+      handler: async (request, { body }) => {
         const scope = scopeOf(request);
         const service = serviceOf(request);
-        const row = service.createTask(scope, actorOf(request), body as Record<string, unknown>);
+        const input = body as Record<string, unknown>;
+        let row = service.createTask(scope, actorOf(request), input);
+        // A card given to Hermes goes on Hermes's board too, with the hub's id as the
+        // idempotency key — so a retry after a half-finished create finds the same card
+        // rather than making a second one. If Hermes refuses, the hub's row goes as well:
+        // a card that exists here and not there is the one thing the mirror must not make.
+        const mirror = mirrorOf(request.server);
+        if (mirror?.isHermesAgent(scope.workspace, input.assignee_agent_id as string | null)) {
+          try {
+            const externalId = await mirror.createThrough({
+              id: row.id,
+              title: row.title,
+              body: row.description,
+              triage: row.status === 'triage',
+            });
+            if (externalId) row = service.linkExternal(scope, row.id, 'hermes', externalId);
+          } catch (error) {
+            service.deleteTask(scope, row.id);
+            refusedByHermes(error);
+          }
+        }
         const created = task(request, service, scope, row.id);
         announce(request, 'task.created', { task: created });
         return created;
@@ -324,6 +410,13 @@ export const tasksModule = defineModule({
         const input = body as { task_ids: string[]; patch: Record<string, unknown> };
         const results = input.task_ids.map((id) => {
           try {
+            if (
+              input.patch.title !== undefined ||
+              input.patch.description !== undefined ||
+              input.patch.status !== undefined
+            ) {
+              refuseOnHermesCard(service.task(scope, id), 'bulk_update');
+            }
             service.bulkUpdate(scope, actorOf(request), [id], input.patch);
             return { id, ok: true, error: null };
           } catch (error) {
@@ -354,10 +447,12 @@ export const tasksModule = defineModule({
         const service = serviceOf(request);
         const results = ids.map((id) => {
           try {
+            refuseOnHermesCard(service.task(scope, id), 'delete');
             service.deleteTask(scope, id);
             return { id, ok: true, error: null };
-          } catch {
-            return { id, ok: false, error: { error: 'not_found', code: 'not_found' } };
+          } catch (error) {
+            const code = error instanceof HubError ? error.code : 'not_found';
+            return { id, ok: false, error: { error: code, code } };
           }
         });
         announce(request, 'task.deleted', { task_ids: ids });
@@ -389,9 +484,33 @@ export const tasksModule = defineModule({
 
     defineRoute(app, deps, {
       operationId: 'tasks.updateTask',
-      handler: (request, { params, body }) => {
+      handler: async (request, { params, body }) => {
         const scope = scopeOf(request);
         const service = serviceOf(request);
+        const patch = body as Record<string, unknown>;
+        const current = service.task(scope, params.task_id as string);
+        if (HermesMirror.isHermes(current)) {
+          // Hermes's CLI edits a card's result, never its title or body — so the hub
+          // cannot either. Accepting the edit here would last until the next read, when
+          // Hermes wins and it silently vanishes.
+          if (patch.title !== undefined || patch.description !== undefined) {
+            throw new HubError('conflict', {
+              details: {
+                reason: 'hermes_owns_text',
+                field: patch.title !== undefined ? 'title' : 'description',
+              },
+            });
+          }
+          if (typeof patch.status === 'string' && patch.status !== current.status) {
+            await mirrorOf(request.server)
+              ?.moveThrough(
+                current,
+                patch.status as TaskStatus,
+                (patch.status_reason as string | null) ?? null,
+              )
+              .catch(refusedByHermes);
+          }
+        }
         service.updateTask(
           scope,
           actorOf(request),
@@ -409,7 +528,9 @@ export const tasksModule = defineModule({
       status: 204,
       handler: (request, { params }) => {
         const scope = scopeOf(request);
-        serviceOf(request).deleteTask(scope, params.task_id as string);
+        const service = serviceOf(request);
+        refuseOnHermesCard(service.task(scope, params.task_id as string), 'delete');
+        service.deleteTask(scope, params.task_id as string);
         announce(request, 'task.deleted', { task_id: params.task_id });
         return null;
       },
@@ -417,9 +538,15 @@ export const tasksModule = defineModule({
 
     defineRoute(app, deps, {
       operationId: 'tasks.moveTask',
-      handler: (request, { params, body }) => {
+      handler: async (request, { params, body }) => {
         const scope = scopeOf(request);
         const service = serviceOf(request);
+        const move = body as { status: TaskStatus; reason?: string | null };
+        // A Hermes card moves on Hermes first. If Hermes refuses, so does the hub —
+        // with Hermes's words — and the row is not touched.
+        await mirrorOf(request.server)
+          ?.moveThrough(service.task(scope, params.task_id as string), move.status, move.reason)
+          .catch(refusedByHermes);
         service.moveTask(
           scope,
           actorOf(request),
@@ -466,7 +593,9 @@ export const tasksModule = defineModule({
       status: 204,
       handler: (request, { params }) => {
         const scope = scopeOf(request);
-        serviceOf(request).stop(scope, actorOf(request), params.task_id as string);
+        const service = serviceOf(request);
+        refuseOnHermesCard(service.task(scope, params.task_id as string), 'stop');
+        service.stop(scope, actorOf(request), params.task_id as string);
         announce(request, 'task.moved', { task_id: params.task_id });
         return null;
       },

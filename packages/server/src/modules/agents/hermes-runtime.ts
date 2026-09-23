@@ -178,6 +178,30 @@ export class HermesRuntime {
     return true;
   }
 
+  /**
+   * The environment a one-off `hermes` command runs in (the kanban and cron bridges): the
+   * host's, the shared provider keys — `specify` asks a model — and this Hermes's home.
+   */
+  cliEnv(): NodeJS.ProcessEnv {
+    return {
+      ...(this.options.host.inherited ?? {}),
+      ...(this.options.host.pathValue ? { PATH: this.options.host.pathValue } : {}),
+      ...this.providerEnv,
+      HERMES_HOME: this.status().home ?? this.home,
+    };
+  }
+
+  /**
+   * The `hermes` executable on this host, or `null` when there is none.
+   *
+   * Looked up on demand rather than kept from `start()`, because an external gateway never
+   * needed the executable to start — but the kanban bridge still runs `hermes kanban` on
+   * the same host, against the same home, whoever started the gateway.
+   */
+  executable(): string | null {
+    return whichSync('hermes', this.options.host);
+  }
+
   /** Decide the mode and, when managed, start the child. Never throws. */
   async start(): Promise<HermesRuntimeMode> {
     if (this.mode !== 'undecided') return this.mode;
