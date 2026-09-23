@@ -62,6 +62,8 @@ interface LiveRun {
   ended: boolean;
   interruptRequested: boolean;
   decisions: Map<string, DecisionMap>;
+  /** Questions the agent asked in this run and still waits on (`question.asked`). */
+  questions: Set<string>;
 }
 
 export interface AgentRunnerDeps {
@@ -116,6 +118,7 @@ export class AgentRunner implements AgentRunnerPort {
       ended: false,
       interruptRequested: false,
       decisions: new Map(),
+      questions: new Set(),
     };
     this.runs.set(request.runId, run);
 
@@ -172,6 +175,20 @@ export class AgentRunner implements AgentRunnerPort {
   async send(runId: string, input: RunnerRunInput): Promise<void> {
     const run = this.runs.get(runId);
     if (!run) throw new HubError('state_invalid', { details: { reason: 'run_not_live', runId } });
+    if (run.questions.has(input.approvalRef)) {
+      // A question: the person's words, or nothing when they skipped it. Skip is "deny"
+      // on the wire, because the contract's decisions are the one way to say "no answer".
+      const answer = run.live.session.answer;
+      if (!answer) {
+        throw new HubError('state_invalid', {
+          details: { reason: 'answer_not_supported', adapter: run.live.adapterKind },
+        });
+      }
+      run.questions.delete(input.approvalRef);
+      const text = input.decision === 'deny' ? null : (input.answer ?? null);
+      await answer.call(run.live.session, input.approvalRef, text);
+      return;
+    }
     const options = run.decisions.get(input.approvalRef);
     if (!options) {
       throw new HubError('state_invalid', {
@@ -302,6 +319,25 @@ export class AgentRunner implements AgentRunnerPort {
   }
 
   private translate(run: LiveRun, event: AgentEvent): RunnerEvent[] {
+    if (event.type === 'question.asked') {
+      run.questions.add(event.id);
+      return [
+        {
+          type: 'approval_requested',
+          ref: event.id,
+          kind: 'question',
+          title: event.question,
+          description: null,
+          command: null,
+          // The value is the words: a chosen answer reaches the agent as the text it offered.
+          choices: event.choices.map((label) => ({ value: label, label })),
+          allowAlways: false,
+          // Always a line to write one's own answer, as Hermes's clarify promises.
+          answerMode: event.choices.length > 0 ? 'both' : 'text',
+          toolRef: event.toolId ?? null,
+        },
+      ];
+    }
     if (event.type === 'approval.requested') {
       const { choices, decisions } = approvalChoices(event.options);
       run.decisions.set(event.id, decisions);
@@ -325,9 +361,9 @@ export class AgentRunner implements AgentRunnerPort {
     run.ended = true;
     for (const waiter of run.waiting.splice(0)) waiter({ value: undefined as never, done: true });
     this.runs.delete(run.runId);
-    // A session whose child process died is not reusable; forget it so the next turn
-    // opens a fresh one. Hermes sessions are HTTP conversations and stay.
-    if (run.live.adapterKind === 'acp' && isClosed(run.live.session)) {
+    // A session whose process died is not reusable; forget it so the next turn opens a
+    // fresh one (an ACP child, or the Hermes TUI gateway). Hermes's HTTP sessions stay.
+    if (isClosed(run.live.session)) {
       this.sessions.delete(run.sessionId);
     }
   }
@@ -542,6 +578,9 @@ export function toRunnerEvent(event: AgentEvent, ctx: TranslateContext): RunnerE
         output: event.output,
         exitCode: event.exitCode ?? null,
       };
+    case 'question.asked':
+      // Handled by `translate`, which records the question on the run it belongs to.
+      return null;
     case 'approval.requested': {
       const choices = ctx.choices ?? approvalChoices(event.options).choices;
       const kind: RunnerApprovalKind = 'tool_call';

@@ -35,6 +35,7 @@ import { HERMES_ENTRY } from '../catalog/index.js';
 import type { AgentCapability } from '../schema.js';
 import { HubError, notImplemented } from '../../../lib/errors.js';
 import { EventQueue } from './event-queue.js';
+import { HermesTuiSession, type TuiChannel } from './hermes-tui.js';
 import { parseVersion, probeHttp, runCommand, whichSync, type HostEnvironment } from './host.js';
 import type {
   AgentAdapter,
@@ -582,6 +583,12 @@ export interface HermesAdapterOptions {
   apiKey?: string | null | (() => string | null);
   /** Injected in tests: a scripted Hermes instead of HTTP. */
   transport?: (target: AgentTarget, endpoint: string) => HermesTransport;
+  /**
+   * Hermes's TUI gateway, when a Hermes is installed beside the hub (ADR 0013). When it
+   * answers, conversations go through it — reasoning, tool results and questions; when it
+   * is `null`, through the API server's run surface as before.
+   */
+  tui?: () => TuiChannel | null;
 }
 
 export function createHermesAdapter(options: HermesAdapterOptions): AgentAdapter {
@@ -761,6 +768,16 @@ export function createHermesAdapter(options: HermesAdapterOptions): AgentAdapter
         // The runner mints the conversation id (ADR 0008 §Session continuity); an adapter
         // that invented one would give the hub a session it cannot find again.
         throw notImplemented({ adapter: 'hermes', reason: 'target.sessionRef is required' });
+      }
+      const tui = options.tui?.() ?? null;
+      if (tui) {
+        // Resumed by the stored id the hub kept, or created; Hermes names the conversation
+        // here, and the runner records that name as this session's reference.
+        return HermesTuiSession.open(tui, sessionRef, {
+          model: target.model ?? null,
+          provider: target.modelProvider ?? null,
+          reasoningEffort: target.reasoningEffort ?? null,
+        });
       }
       const transport = options.transport
         ? options.transport(target, endpoint)

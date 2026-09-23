@@ -541,6 +541,43 @@ test.describe('web smoke journeys', () => {
     await shot(page, 'tasks-hermes-card-ar-light');
   });
 
+  test("19. the agent asks, the card above the composer answers: a choice, one's own words, or skip", async ({
+    page,
+  }) => {
+    await login(page);
+    const card = page.getByTestId('question-card');
+    const reply = page.getByTestId('message-assistant').last();
+
+    // A choice: tapped, sent as the agent wrote it, and the card goes.
+    await newChat(page);
+    await firstMessage(page, 'اسألني سؤال بخيارات');
+    await expect(card).toContainText('وش الجهاز اللي تبي تتصل فيه؟');
+    await expect(card.getByTestId('question-choice')).toHaveCount(3);
+    // Hermes's "(Recommended)" mark becomes a badge, not text in the choice.
+    await expect(card.getByTestId('question-choice').first()).toContainText('موصى به');
+    await expect(card).not.toContainText('(Recommended)');
+    await page.waitForTimeout(300);
+    await shot(page, 'question-card-ar-light');
+    await card.getByTestId('question-choice').nth(1).click();
+    await expect(card).toHaveCount(0);
+    await expect(reply).toContainText('اخترت: ويندوز');
+
+    // One's own words, when no choice fits.
+    await newChat(page);
+    await firstMessage(page, 'اسألني مرة ثانية');
+    await card.getByTestId('question-own').fill('أندرويد');
+    await card.getByTestId('question-send').click();
+    await expect(reply).toContainText('اخترت: أندرويد');
+
+    // Skip is the person's to press; nothing skips for them.
+    await newChat(page);
+    await firstMessage(page, 'اسألني وأتخطى');
+    await expect(card).toBeVisible();
+    await card.getByTestId('question-skip').click();
+    await expect(card).toHaveCount(0);
+    await expect(reply).toContainText('اخترت: تخطّيت');
+  });
+
   test('16. one press of the theme button is one change', async ({ page }) => {
     await login(page);
     const chip = page.getByTestId('theme-chip');

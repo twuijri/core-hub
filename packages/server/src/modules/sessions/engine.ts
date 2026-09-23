@@ -335,7 +335,15 @@ export class RunEngine {
     this.emitSession(scope, session.id);
 
     try {
-      for await (const event of withTimeout(ports.runner.stream(runRow.id), ports.agentTimeoutMs)) {
+      // Silence is only the agent's while nobody else is expected to speak: a run waiting
+      // on a person's approval or answer waits as long as the person takes.
+      const waiting = () =>
+        active.state.status === 'waiting_approval' || active.state.status === 'waiting_input';
+      for await (const event of withTimeout(
+        ports.runner.stream(runRow.id),
+        ports.agentTimeoutMs,
+        waiting,
+      )) {
         if (event === TIMEOUT) {
           this.step(active, { type: 'timeout' });
           break;
@@ -958,18 +966,23 @@ export const TIMEOUT = Symbol('agent-timeout');
 
 /**
  * Yields the adapter's events, or `TIMEOUT` once `ms` pass with silence —
- * the `streaming -> timed_out` arrow of the run state machine.
+ * the `streaming -> timed_out` arrow of the run state machine. While `paused()` says
+ * the run is waiting on a person, the silence is theirs and the clock starts again.
  */
 export async function* withTimeout(
   source: AsyncIterable<AgentEvent>,
   ms: number,
+  paused: () => boolean = () => false,
 ): AsyncGenerator<AgentEvent | typeof TIMEOUT> {
   const iterator = source[Symbol.asyncIterator]();
   for (;;) {
     let timer: NodeJS.Timeout | undefined;
     const deadline = new Promise<typeof TIMEOUT>((resolve) => {
-      timer = setTimeout(() => resolve(TIMEOUT), ms);
-      timer.unref?.();
+      const arm = () => {
+        timer = setTimeout(() => (paused() ? arm() : resolve(TIMEOUT)), ms);
+        timer.unref?.();
+      };
+      arm();
     });
     const result = await Promise.race([iterator.next(), deadline]);
     clearTimeout(timer);
