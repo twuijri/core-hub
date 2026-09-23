@@ -3,12 +3,20 @@ import type { FastifyInstance } from 'fastify';
 import type { HubModule } from '../lib/module.js';
 import { requireSqlite } from '../lib/db.js';
 import type { SessionsNotifier } from './sessions/ports.js';
-import { authModule, principalScopeResolver } from './auth/index.js';
 import {
+  ProfileMirrorError,
+  authModule,
+  principalScopeResolver,
+  registerProfileMirror,
+} from './auth/index.js';
+import {
+  HermesProfileError,
   agentDirectory,
   agentRunner,
   agentsModule,
   agentsServiceFor,
+  createHermesProfiles,
+  hermesProfileRunner,
   hermesRuntimeFor,
 } from './agents/index.js';
 import { attachmentReferences, createSessionsModule, sessionTurnsFor } from './sessions/index.js';
@@ -102,6 +110,33 @@ function hermesAgentId(app: FastifyInstance, workspace: string): string | null {
     .find((agent) => agent.slug === 'hermes');
   return found?.id ?? null;
 }
+
+/**
+ * A workspace is a Hermes profile (ADR 0014). `auth` owns workspaces, `agents` knows where
+ * Hermes lives; creating a workspace creates Hermes's profile of the same name, and a
+ * profile Hermes already has is listed as a workspace. Only where the hub can run `hermes`
+ * against its home — otherwise a workspace stays the hub's own filter.
+ */
+registerProfileMirror((app) => {
+  const runtime = hermesRuntimeFor(app);
+  const home = runtime.status().home;
+  const command = runtime.executable();
+  if (!home || !command) return null;
+  const profiles = createHermesProfiles({
+    home,
+    run: hermesProfileRunner({ command, home, env: runtime.cliEnv() }),
+  });
+  return {
+    list: () => profiles.list(),
+    async create(name, origin) {
+      try {
+        await profiles.create(name, origin);
+      } catch (error) {
+        throw error instanceof HermesProfileError ? new ProfileMirrorError(error.message) : error;
+      }
+    },
+  };
+});
 
 /**
  * Hermes's own scheduler on the Schedules page (`schedules/hermes-cron.ts`). Reached over

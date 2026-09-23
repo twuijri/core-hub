@@ -1,6 +1,6 @@
 // HTTP routes of the `auth` tag (packages/contracts/openapi.yaml). Thin: validate, call a
 // service, serialize. Guards come from principal.ts; every route here is `x-scope: global`.
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { isUlid } from '../../db/ids.js';
@@ -34,11 +34,19 @@ import {
   findPairing,
 } from './pairing.js';
 import { verifyPassword } from './passwords.js';
+import {
+  ProfileMirrorError,
+  adoptProfiles,
+  profileMirrorFor,
+  runtimeProfileName,
+  type ProfileOrigin,
+} from './profile-mirror.js';
 import { requireRole, requireUser, type Principal } from './principal.js';
 import {
   createProfile,
   deleteProfile,
   patchProfileSettings,
+  slugTaken,
   statsOf,
   updateProfile,
   type HubSettingsPatch,
@@ -876,12 +884,63 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
 
   const profileView = (row: WorkspaceRow) => serializeProfile(row, statsOf(row.id));
 
-  route('GET', '/profiles', signedIn, async (request) => ({
-    items: listWorkspacesFor(db, principalOf(request).user).map(profileView),
-  }));
+  /** Hermes profiles nobody has seen yet become workspaces (ADR 0014); logged once each. */
+  const unnamedReported = new Set<string>();
+  const adoptRuntimeProfiles = async (log: FastifyBaseLogger) => {
+    const mirror = profileMirrorFor(app);
+    const owner = mirror ? ownerUser(db) : null;
+    if (!mirror || !owner) return;
+    try {
+      const { adopted, unnamed } = adoptProfiles(db, owner.id, await mirror.list());
+      if (adopted.length > 0) log.info({ adopted }, 'auth: runtime profiles added as workspaces');
+      const fresh = unnamed.filter((name) => !unnamedReported.has(name));
+      for (const name of fresh) unnamedReported.add(name);
+      if (fresh.length > 0) {
+        log.warn(
+          { profiles: fresh },
+          'auth: runtime profiles whose names a workspace slug cannot carry are not shown',
+        );
+      }
+    } catch (error) {
+      // The list the hub already has is still the right answer.
+      log.warn({ err: error }, 'auth: could not read the runtime profiles');
+    }
+  };
+
+  route('GET', '/profiles', signedIn, async (request) => {
+    await adoptRuntimeProfiles(request.log);
+    return { items: listWorkspacesFor(db, principalOf(request).user).map(profileView) };
+  });
 
   route('POST', '/profiles', admin, async (request, reply) => {
     const body = parse(ProfileCreate, request.body);
+    // The runtime's profile first (ADR 0014): a workspace Hermes refused would be a filter
+    // with nothing behind it. Hermes's own words come back when it says no.
+    const mirror = profileMirrorFor(app);
+    if (mirror) {
+      if (slugTaken(db, body.slug))
+        throw new HubError('conflict', { messageKey: 'auth.slug_taken' });
+      let origin: ProfileOrigin = { kind: 'blank' };
+      if (body.clone_from) {
+        const source = findWorkspace(db, body.clone_from);
+        if (!source) {
+          throw new HubError('validation_failed', {
+            messageKey: 'auth.profile_unknown',
+            details: { profiles: [body.clone_from] },
+          });
+        }
+        origin = { kind: 'clone', source: runtimeProfileName(source) };
+      }
+      try {
+        await mirror.create(body.slug, origin);
+      } catch (error) {
+        if (!(error instanceof ProfileMirrorError)) throw error;
+        throw new HubError('conflict', {
+          messageKey: 'auth.profile_runtime_refused',
+          details: { reason: 'hermes_refused', message: error.message },
+        });
+      }
+    }
     const row = createProfile(db, principalOf(request).user.id, {
       slug: body.slug,
       name: body.name,
