@@ -36,6 +36,22 @@ try {
 const committed = load(committedText, `HEAD:${FILE}`);
 const built = load(readFileSync(FILE, 'utf8'), FILE);
 
+// A map must not carry a path from the machine that built it: Graphify names an import of a
+// file it did not scan after its absolute path, and `scripts/graph-portable.mjs` (run by
+// `pnpm graph`) is what rewrites it.
+const local = /(^|_)(home|users|tmp|private|var)_[a-z0-9_]*_/;
+const leaked = committed.nodes.filter(
+  (node) => node.type === 'external' && local.test(String(node.id)),
+);
+if (leaked.length > 0) {
+  console.error(
+    `graph:check  the committed map carries paths from the machine that built it:\n` +
+      leaked.map((node) => `             ${node.id}`).join('\n') +
+      '\n             Run `pnpm graph` (not plain `graphify update .`) and commit graphify-out/.',
+  );
+  process.exit(1);
+}
+
 const same = JSON.stringify(committed) === JSON.stringify(built);
 if (!same) {
   const count = (graph) => `${graph.nodes?.length ?? 0} nodes, ${graph.links?.length ?? 0} edges`;

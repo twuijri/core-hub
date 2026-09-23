@@ -36,7 +36,7 @@ schemas under `packages/contracts/events/` and the test screenshots.
 - **Before reading files across modules**, ask the map:
   `graphify query "<question>"`, `graphify path "<A>" "<B>"`,
   `graphify explain "<concept>"`, `graphify affected "<symbol>"`.
-- **Before you commit a code change**, `pnpm graph` (`graphify update .`) and commit
+- **Before you commit a code change**, `pnpm graph` (`graphify update .`, then `scripts/graph-portable.mjs`) and commit
   `graphify-out/` with it. The hook does this after a commit too, which leaves the
   next commit to carry it; running it yourself keeps each commit whole.
 - **After a pull or a merge**, `pnpm graph`.
@@ -45,9 +45,16 @@ schemas under `packages/contracts/events/` and the test screenshots.
 
 ## The check
 CI job *Code map is current* installs the pinned Graphify on a clean checkout of the
-PR's head, runs `graphify update .` and `pnpm graph:check`, which compares the built
+PR's head, runs `pnpm graph` and `pnpm graph:check`, which compares the built
 `graph.json` with the committed one (leaving out `built_at_commit`). A stale map fails
 the PR with the command that fixes it.
+
+**Why `pnpm graph` and not plain `graphify update .`:** Graphify names an import whose
+target it did not scan — the generated contract client, which is git-ignored — after its
+*absolute* path (`home_<user>_<checkout>_packages_…`). `scripts/graph-portable.mjs`
+rewrites those names to the root-relative form every other node has, and takes the
+checkout's folder name and the date out of the report's title, so every machine builds
+the same map. `pnpm graph:check` refuses a map that still carries such a path.
 
 ## Rule for agents
 Before a change that spans more than one module, query the map for those modules and
