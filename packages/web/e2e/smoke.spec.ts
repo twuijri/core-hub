@@ -721,16 +721,32 @@ test.describe('web smoke journeys', () => {
     await page.getByTestId('add-user').click();
     await page.getByLabel('اسم المستخدم').fill('sara');
     await page.getByLabel('الاسم المعروض').fill('سارة');
+    // A short password keeps the button off, and the field says why.
+    await page.getByLabel('كلمة المرور الجديدة').fill('short');
+    await expect(page.getByTestId('save-user')).toBeDisabled();
+    await expect(page.getByTestId('add-user-dialog')).toContainText('ثمانية أحرف على الأقل');
+    await expect(page.getByTestId('new-user-password')).toHaveAttribute('aria-invalid', 'true');
     await page.getByLabel('كلمة المرور الجديدة').fill('a-long-enough-one');
     // A member is not added until they have somewhere to go: an empty list would open
-    // every workspace to them.
+    // every workspace to them — and the dialog says so.
     await expect(page.getByTestId('save-user')).toBeDisabled();
+    await expect(page.getByTestId('workspaces-required')).toBeVisible();
     await page.getByTestId('workspace-default').click();
+    await expect(page.getByTestId('workspaces-required')).toHaveCount(0);
     await page.getByTestId('save-user').click();
     const table = page.getByTestId('user-table');
     await expect(table).toContainText('سارة');
-    // And now there is a row that is not the owner's, so a menu exists.
+    // And now there is a row that is not the owner's: its password and delete are on the
+    // row, not behind "⋯".
     await expect(page.getByTestId('user-menu')).toHaveCount(1);
+    await expect(page.getByTestId('user-password')).toBeVisible();
+    await expect(page.getByTestId('user-delete')).toBeVisible();
+    await page.getByTestId('user-password').click();
+    await expect(page.getByTestId('set-password')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.getByTestId('user-delete').click();
+    await expect(page.getByRole('alertdialog')).toContainText('حذف سارة؟');
+    await page.keyboard.press('Escape');
     await shot(page, 'people-ar-light');
 
     // Workspaces: the default one cannot be archived, so it offers no button.
