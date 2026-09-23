@@ -776,6 +776,9 @@ test.describe('web smoke journeys', () => {
     await page.getByTestId('schedule-name').fill('تقرير الصباح');
     await page.getByTestId('schedule-value').fill('0 9 * * *');
     await page.getByTestId('schedule-prompt').fill('اكتب ملخص أمس');
+    // Not Hermes (journey 18): an agent without a scheduler of its own waits for the worker.
+    await page.getByTestId('schedule-agent').click();
+    await page.getByRole('option', { name: /Direct|مباشر/ }).click();
     await page.getByTestId('schedule-save').click();
 
     const card = page.getByTestId('schedule-card').first();
@@ -783,7 +786,7 @@ test.describe('web smoke journeys', () => {
     // The hub computed a real next time rather than leaving it blank.
     await expect(card).not.toContainText('لا موعد');
     // And the run button is there, disabled, saying why — not hidden.
-    await expect(page.getByTestId('schedule-run')).toBeDisabled();
+    await expect(card.getByTestId('schedule-run')).toBeDisabled();
     await shot(page, 'schedules-ar-light');
 
     // A cron the hub cannot read is refused when it is saved, with the reason.
@@ -791,5 +794,31 @@ test.describe('web smoke journeys', () => {
     await page.getByTestId('schedule-value').fill('@daily');
     await page.getByTestId('schedule-save').click();
     await expect(page.getByRole('alert')).toBeVisible();
+  });
+
+  test("18. a schedule for Hermes lives in Hermes's scheduler, and runs now when asked", async ({
+    page,
+  }) => {
+    await login(page);
+    await page.getByRole('link', { name: 'الجدولة' }).click();
+    await expect(page.getByTestId('schedule-agent')).toContainText('Hermes');
+
+    // A cron in the person's zone: Hermes runs every cron in its own, and says which.
+    await page.getByTestId('schedule-name').fill('ملخص البريد');
+    await page.getByTestId('schedule-value').fill('0 7 * * *');
+    await page.getByTestId('schedule-prompt').fill('لخّص بريدي وأرسله لي على تيليجرام');
+    await page.getByTestId('schedule-save').click();
+    await expect(page.getByRole('alert')).toContainText('Pacific/Chatham');
+    await page.getByTestId('schedule-use-zone').click();
+
+    const card = page.locator('[data-external="hermes"]').filter({ hasText: 'ملخص البريد' });
+    await expect(card).toBeVisible();
+    await expect(card.getByTestId('schedule-origin-hermes')).toBeVisible();
+    await expect(card).toContainText('0 7 * * * · Pacific/Chatham');
+
+    // Hermes has a scheduler, so "Run now" works — and says what will happen.
+    await card.getByTestId('schedule-run').click();
+    await expect(page.getByText('سيشغّله هرمز في دورته التالية.')).toBeVisible();
+    await shot(page, 'schedules-hermes-ar-light');
   });
 });

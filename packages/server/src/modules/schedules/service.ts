@@ -12,11 +12,12 @@
  * What it does compute for real is `next_run_at` (`cron.ts`), so a saved schedule can
  * always say when it *would* run.
  */
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { newUlid } from '../../db/ids.js';
 import type { ModuleDb } from '../../lib/db.js';
 import { conflict, notFound } from '../../lib/errors.js';
 import { CronError, nextRunAt, parseCron } from './cron.js';
+import { deliveryOfHermes, type HermesJob } from './hermes-jobs.js';
 import {
   nodeRuns,
   scheduleRuns,
@@ -121,6 +122,8 @@ export class SchedulesService {
 
   /** What the row would run next, from now — `null` when it never would. */
   nextFor(row: ScheduleRow, now: Date = new Date()): Date | null {
+    // A reflection's next time is whatever its own scheduler said: it is the one firing it.
+    if (row.externalSource) return row.nextRunAt;
     if (!row.enabled) return null;
     if (row.repeatLimit !== null && row.repeatCount >= row.repeatLimit) return null;
     return nextRunAt(this.triggerOf(row), now, row.lastRunAt);
@@ -162,7 +165,21 @@ export class SchedulesService {
   }
 
   update(scope: Scope, id: string, patch: Record<string, unknown>): ScheduleRow {
+    const values = this.valuesOf(this.get(scope, id), patch);
+    this.db.update(schedules).set(values).where(eq(schedules.id, id)).run();
+    return this.refreshNext(this.get(scope, id));
+  }
+
+  /** The row `update` would make, validated, without writing it. */
+  previewUpdate(scope: Scope, id: string, patch: Record<string, unknown>): ScheduleRow {
     const current = this.get(scope, id);
+    return { ...current, ...(this.valuesOf(current, patch) as Partial<ScheduleRow>) };
+  }
+
+  private valuesOf(
+    current: ScheduleRow,
+    patch: Record<string, unknown>,
+  ): Partial<typeof schedules.$inferInsert> {
     const trigger = patch.trigger as Record<string, unknown> | undefined;
     this.validateTrigger(trigger);
     const target = patch.target as Record<string, unknown> | undefined;
@@ -188,8 +205,7 @@ export class SchedulesService {
       values.prompt = (target.prompt as string | null) ?? null;
       values.skills = (target.skills as string[] | undefined) ?? [];
     }
-    this.db.update(schedules).set(values).where(eq(schedules.id, id)).run();
-    return this.refreshNext(this.get(scope, id));
+    return values;
   }
 
   /** Recomputes `next_run_at` from the row as it now stands. */
@@ -206,6 +222,201 @@ export class SchedulesService {
   remove(scope: Scope, id: string): void {
     this.get(scope, id);
     this.db.delete(schedules).where(eq(schedules.id, id)).run();
+  }
+
+  // ------------------------------------------------- Hermes's own schedules
+
+  /**
+   * Write what Hermes says about one of its jobs over the reflection — Hermes wins — and
+   * put any run Hermes finished since the last look into the history.
+   *
+   * Hermes reports only its *latest* run, so a job that fired twice between two looks
+   * shows once. The history says what was seen, never what was guessed.
+   */
+  reflectHermes(
+    scope: Scope,
+    job: HermesJob,
+    context: { agentId: string | null; timezone: string },
+    now: Date = new Date(),
+  ): { row: ScheduleRow; created: boolean } | null {
+    const raw = job.schedule?.kind;
+    if (raw !== 'cron' && raw !== 'interval' && raw !== 'once') return null;
+    const kind: ScheduleRow['kind'] = raw;
+    const lastRunAt = job.last_run_at ? new Date(job.last_run_at) : null;
+    const channel = deliveryOfHermes(job.deliver);
+    const values = {
+      name: (job.name || job.id).slice(0, 120),
+      kind,
+      cronExpr: kind === 'cron' ? (job.schedule.expr ?? null) : null,
+      timezone: context.timezone,
+      intervalSeconds: kind === 'interval' ? Number(job.schedule.minutes ?? 0) * 60 : null,
+      runAt: kind === 'once' && job.schedule.run_at ? new Date(job.schedule.run_at) : null,
+      enabled: job.enabled,
+      targetKind: 'prompt' as const,
+      agentId: context.agentId,
+      prompt: job.prompt ?? null,
+      skills: job.skills ?? [],
+      delivery: channel ? { channel: channel.channel ?? '', address: channel.address } : {},
+      repeatLimit: job.repeat?.times ?? null,
+      repeatCount: job.repeat?.completed ?? 0,
+      nextRunAt: job.next_run_at ? new Date(job.next_run_at) : null,
+      lastRunAt,
+      lastStatus: runStatusOfHermes(job.last_status),
+      lastError: job.last_error ?? null,
+      lastDeliveryError: job.last_delivery_error ?? null,
+      externalState: job.state ?? (job.enabled ? 'scheduled' : 'paused'),
+      externalSyncedAt: now,
+    };
+    const existing = this.db
+      .select()
+      .from(schedules)
+      .where(
+        and(
+          eq(schedules.workspace, scope.workspace),
+          eq(schedules.externalSource, 'hermes'),
+          eq(schedules.externalId, job.id),
+        ),
+      )
+      .get();
+    let id: string;
+    if (existing) {
+      id = existing.id;
+      // A reflection that had been archived because Hermes stopped listing it comes back
+      // when Hermes lists it again.
+      this.db
+        .update(schedules)
+        .set({ ...values, archivedAt: null, updatedAt: now })
+        .where(eq(schedules.id, id))
+        .run();
+    } else {
+      id = newUlid();
+      this.db
+        .insert(schedules)
+        .values({
+          id,
+          ownerId: scope.userId,
+          workspace: scope.workspace,
+          ...values,
+          externalSource: 'hermes',
+          externalId: job.id,
+        })
+        .run();
+    }
+    if (lastRunAt && (!existing?.lastRunAt || lastRunAt > existing.lastRunAt)) {
+      this.settleHermesRun(scope, id, lastRunAt, values.lastStatus, values.lastError);
+    }
+    return { row: this.get(scope, id), created: !existing };
+  }
+
+  /** A run Hermes finished: the one the hub asked for, if one is open, or a new line. */
+  private settleHermesRun(
+    scope: Scope,
+    scheduleId: string,
+    at: Date,
+    status: ScheduleRow['lastStatus'],
+    error: string | null,
+  ): void {
+    const settled = status ?? 'succeeded';
+    const open = this.db
+      .select()
+      .from(scheduleRuns)
+      .where(
+        and(
+          eq(scheduleRuns.scheduleId, scheduleId),
+          inArray(scheduleRuns.status, ['queued', 'running']),
+        ),
+      )
+      .orderBy(asc(scheduleRuns.id))
+      .get();
+    if (open) {
+      this.db
+        .update(scheduleRuns)
+        .set({ status: settled, error, finishedAt: at, updatedAt: new Date() })
+        .where(eq(scheduleRuns.id, open.id))
+        .run();
+      return;
+    }
+    this.db
+      .insert(scheduleRuns)
+      .values({
+        id: newUlid(),
+        ownerId: scope.userId,
+        workspace: scope.workspace,
+        scheduleId,
+        scheduledFor: at,
+        status: settled,
+        error,
+        startedAt: at,
+        finishedAt: at,
+      })
+      .onConflictDoNothing()
+      .run();
+  }
+
+  /** Every reflection of Hermes's jobs here, archived ones included. */
+  hermesRows(scope: Scope): ScheduleRow[] {
+    return this.db
+      .select()
+      .from(schedules)
+      .where(and(eq(schedules.workspace, scope.workspace), eq(schedules.externalSource, 'hermes')))
+      .all();
+  }
+
+  /** Hermes no longer lists it: removed there, so gone from the list here. */
+  archiveReflection(id: string, now: Date = new Date()): void {
+    this.db
+      .update(schedules)
+      .set({ archivedAt: now, enabled: false, nextRunAt: null, updatedAt: now })
+      .where(eq(schedules.id, id))
+      .run();
+  }
+
+  /** Tie a row to the Hermes job it was just created as, taking Hermes's answer. */
+  linkHermes(
+    scope: Scope,
+    id: string,
+    job: HermesJob,
+    context: { agentId: string | null; timezone: string },
+  ): ScheduleRow {
+    this.db
+      .update(schedules)
+      .set({ externalSource: 'hermes', externalId: job.id })
+      .where(and(eq(schedules.workspace, scope.workspace), eq(schedules.id, id)))
+      .run();
+    return this.reflectHermes(scope, job, context)?.row ?? this.get(scope, id);
+  }
+
+  /** The row stops being a reflection (its agent changed away from Hermes). */
+  unlinkExternal(scope: Scope, id: string): ScheduleRow {
+    this.db
+      .update(schedules)
+      .set({
+        externalSource: null,
+        externalId: null,
+        externalState: null,
+        externalSyncedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(schedules.workspace, scope.workspace), eq(schedules.id, id)))
+      .run();
+    return this.refreshNext(this.get(scope, id));
+  }
+
+  /** A run the hub asked for; it stays `queued` until the scheduler that fires it reports. */
+  queueRun(scope: Scope, scheduleId: string, now: Date = new Date()): ScheduleRunRow {
+    const id = newUlid();
+    this.db
+      .insert(scheduleRuns)
+      .values({
+        id,
+        ownerId: scope.userId,
+        workspace: scope.workspace,
+        scheduleId,
+        scheduledFor: now,
+        status: 'queued',
+      })
+      .run();
+    return this.run(scope, scheduleId, id);
   }
 
   // -------------------------------------------------------- schedule runs
@@ -373,12 +584,24 @@ export class SchedulesService {
 }
 
 /** The contract's delivery block, stored as the table's smaller one. */
+/** Hermes's `last_status` in the hub's words; `delivery_failed` still ran. */
+function runStatusOfHermes(status: string | null | undefined): ScheduleRow['lastStatus'] {
+  if (!status) return null;
+  if (status === 'ok' || status === 'delivery_failed') return 'succeeded';
+  if (status === 'error') return 'failed';
+  if (status === 'skipped') return 'skipped';
+  return 'failed';
+}
+
 function deliveryOf(delivery: Record<string, unknown> | undefined) {
   if (!delivery) return {};
   const kind = delivery.kind as string | undefined;
   return {
     ...(kind === 'room' && delivery.room_id ? { roomId: String(delivery.room_id) } : {}),
     ...(kind === 'notice' ? { notify: true } : {}),
+    ...(kind === 'channel' && delivery.channel
+      ? { channel: String(delivery.channel), address: (delivery.address as string | null) ?? null }
+      : {}),
   };
 }
 

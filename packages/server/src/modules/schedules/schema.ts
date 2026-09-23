@@ -87,6 +87,9 @@ export type ScheduleDelivery = {
   roomId?: string;
   notify?: boolean;
   webhookId?: string;
+  /** A messaging platform the agent itself posts to (Hermes's `deliver`), and where on it. */
+  channel?: string;
+  address?: string | null;
 };
 
 /**
@@ -156,10 +159,22 @@ export const schedules = sqliteTable(
     nextRunAt: timestampMs('next_run_at'),
     lastRunAt: timestampMs('last_run_at'),
     lastStatus: text('last_status', { enum: SCHEDULE_RUN_STATUSES }),
+    lastError: text('last_error'),
+    lastDeliveryError: text('last_delivery_error'),
     archivedAt: timestampMs('archived_at'),
+    /**
+     * Set when the schedule lives in an agent's own scheduler (today: Hermes's cron). That
+     * scheduler fires it and is the source of truth; this row is its reflection.
+     */
+    externalSource: text('external_source', { enum: ['hermes'] }),
+    externalId: text('external_id', { length: 64 }),
+    /** The state that scheduler reports (`scheduled`, `running`, `paused`, `completed`, `error`). */
+    externalState: text('external_state', { length: 16 }),
+    externalSyncedAt: timestampMs('external_synced_at'),
   },
   (t) => [
     index('schedules_due_idx').on(t.enabled, t.nextRunAt),
+    uniqueIndex('schedules_external_uq').on(t.workspace, t.externalSource, t.externalId),
     index('schedules_workspace_idx').on(t.workspace, t.archivedAt),
     check('schedules_kind_check', inList(t.kind, SCHEDULE_KINDS)),
     check('schedules_target_kind_check', inList(t.targetKind, SCHEDULE_TARGETS)),
