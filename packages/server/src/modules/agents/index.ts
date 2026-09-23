@@ -121,6 +121,12 @@ export function agentModelsPort(io: SocketServer): AgentModelsPort | null {
 }
 export { AgentRunner, toRunnerEvent, toolKindOf, mintSessionRef } from './runner.js';
 export { HermesRuntime, loadOrCreateHermesApiKey } from './hermes-runtime.js';
+export {
+  HermesProfileError,
+  createHermesProfiles,
+  hermesProfileRunner,
+  type HermesProfiles,
+} from './hermes-profiles.js';
 export type { HermesRuntimeMode, HermesRuntimeStatus, Spawner } from './hermes-runtime.js';
 
 /** Test seams: a fake PATH, a fake adapter set, a fake installer. Set before the app boots. */

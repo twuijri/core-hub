@@ -69,7 +69,9 @@ interface Sent {
   body: unknown;
 }
 
-function hub(state: { users?: unknown[]; workspaces?: unknown[]; lockouts?: unknown[] } = {}) {
+function hub(
+  state: { users?: unknown[]; workspaces?: unknown[]; lockouts?: unknown[]; refuse?: string } = {},
+) {
   const sent: Sent[] = [];
   const fetchImpl = ((url: string, init: RequestInit = {}) => {
     const path = new URL(String(url)).pathname;
@@ -89,6 +91,15 @@ function hub(state: { users?: unknown[]; workspaces?: unknown[]; lockouts?: unkn
     if (path.endsWith('/auth/lockouts')) return json({ items: state.lockouts ?? [] });
     if (path.endsWith('/profiles') && method === 'GET')
       return json({ items: state.workspaces ?? [workspace()] });
+    if (path.endsWith('/profiles') && method === 'POST' && state.refuse)
+      return json(
+        {
+          error: 'Hermes refused to create the profile.',
+          code: 'conflict',
+          details: { reason: 'hermes_refused', message: state.refuse },
+        },
+        409,
+      );
     if (path.includes('/profiles')) return json(workspace());
     return json({ error: { code: 'not_found', message: path } }, 404);
   }) as unknown as typeof fetch;
@@ -264,6 +275,37 @@ describe('Workspaces', () => {
     expect(screen.getByText('That slug is taken')).toBeTruthy();
     expect(screen.getByTestId('save-workspace').hasAttribute('disabled')).toBe(true);
     expect(sent.some((s) => s.method === 'POST')).toBe(false);
+  });
+
+  it('asks how it starts: from scratch, or a copy of a profile the person picks', async () => {
+    // Owner, 2026-09-23 (ADR 0014): a new profile is a Hermes profile, fresh or copied.
+    const { fetchImpl, sent } = hub();
+    mount(<WorkspacesTab />, fetchImpl);
+    await userEvent.click(screen.getByTestId('add-workspace'));
+    await userEvent.type(await screen.findByLabelText('Name'), 'Design');
+    expect(screen.queryByTestId('workspace-clone-from')).toBeNull();
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Copy of a profile' }));
+    // A copy needs its source before it can be made.
+    expect(screen.getByTestId('save-workspace').hasAttribute('disabled')).toBe(true);
+    await openControl(userEvent, screen.getByTestId('workspace-clone-from'));
+    await userEvent.click(await screen.findByRole('option', { name: /الافتراضي/ }));
+    await userEvent.click(screen.getByTestId('save-workspace'));
+    await waitFor(() => {
+      const post = sent.find((s) => s.method === 'POST');
+      expect(post?.body).toEqual({ slug: 'design', name: 'Design', clone_from: 'default' });
+    });
+  });
+
+  it("says Hermes's own words when Hermes refuses to make the profile", async () => {
+    const { fetchImpl } = hub({ refuse: "Error: Profile 'design' already exists" });
+    mount(<WorkspacesTab />, fetchImpl);
+    await userEvent.click(screen.getByTestId('add-workspace'));
+    await userEvent.type(await screen.findByLabelText('Name'), 'Design');
+    await userEvent.click(screen.getByTestId('save-workspace'));
+    expect(
+      await screen.findByText("Hermes refused: Error: Profile 'design' already exists"),
+    ).toBeTruthy();
   });
 
   it('creates with clone_from only when one was chosen', async () => {
