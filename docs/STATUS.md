@@ -23,7 +23,7 @@ number from claiming more than the hub answers.
 | audit | 1 | 1 | the Logs, Usage and Performance reports; `skills` still answers `501`, because nothing records skill use and zeros would read as a measurement |
 | plugins | 1 | 1 | what is installed on this hub — an empty list until an installer exists |
 | tasks | 27 | 27 | projects, the nine-column board with fractional ordering, subtasks, dependencies, comments, activity, worktree rows — and since 2026-09-23 **Hermes's own kanban on the same board**: read through `hermes kanban list` when the board opens, Hermes wins on every read, a move on a Hermes card is asked of Hermes first and a refusal comes back in Hermes's words, and a task given to Hermes goes on Hermes's board. Assigning does **not** start a run: the worker that opens a session is not built, and `TaskAssigned` answers `null` rather than an invented id |
-| schedules | 20 | 23 | schedules with a real `next_run_at` (cron, interval, once, in the schedule's own timezone), run history, workflow definitions with validation, workflow-run history and cancel, and workflow import preview/confirm. The three that would **start** something — `runNow`, `runWorkflow`, `rerunWorkflowFromNode` — answer `501` with their operation ids |
+| schedules | 20 | 23 | schedules with a real `next_run_at` (cron, interval, once, in the schedule's own timezone), run history, workflow definitions with validation, workflow-run history and cancel, and workflow import preview/confirm — and since 2026-09-23 **Hermes's own cron on the same page**: a schedule for the Hermes agent is created, edited, paused, deleted and fired *in Hermes's scheduler* through its `/api/jobs`, so it really runs; jobs Hermes made itself appear too, Hermes wins on every read, and the runs Hermes reports land in the history. The three that would **start** something for any other agent — `runNow`, `runWorkflow`, `rerunWorkflowFromNode` — answer `501` with their operation ids |
 | rooms | 0 | 28 | several agents in one room |
 | devices | 0 | 17 | device registry and push |
 | notify | 11 | 11 | the inbox — and since 2026-09-22 something actually writes to it: a run that finishes and an approval that is raised, in the recipient's own language, announced on `/rt/devices`. Per-kind preferences decide whether a notice is written at all, quiet hours are stored as given, and webhooks check their URL against private addresses before anything is sent, with an HMAC signature and a delivery record |
@@ -41,7 +41,7 @@ run from a task yet; a task worktree is recorded in `creating`, because
 making a git worktree belongs to whatever runs the task; and the three schedule
 operations that would start a run answer `501` rather than recording a run that
 never happened. **Nothing in this hub starts a run except a person typing in the
-chat.**
+chat — and Hermes's own scheduler, for the schedules that live in it.**
 
 ## Clients
 - **Web** (`packages/web`): first-run setup, login, chat with streaming,

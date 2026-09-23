@@ -15180,6 +15180,24 @@ components:
               type: [string, 'null']
             last_delivery_error:
               type: [string, 'null']
+            external:
+              description: >-
+                Set when this schedule lives in an agent's own scheduler (today: Hermes's
+                cron). That scheduler fires it and is the source of truth: edits are asked
+                of it first and it may refuse them, and the next run, last run and state are
+                what it reports.
+              oneOf:
+                - type: object
+                  required: [source, id]
+                  properties:
+                    source:
+                      type: string
+                      enum: [hermes]
+                    id:
+                      type: string
+                      maxLength: 64
+                      description: The job's id in that scheduler.
+                - type: 'null'
     ScheduleWrite:
       type: object
       properties:

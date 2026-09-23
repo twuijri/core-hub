@@ -23,8 +23,15 @@ import { clampLimit } from '../../lib/pagination.js';
 import { createRealtime, type Realtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
 import { requireRole, requireUser, requireWorkspace } from '../auth/index.js';
-import { SchedulesService, validateDefinition, warningsFor, type Scope } from './service.js';
+import {
+  SchedulesService,
+  validateDefinition,
+  warningsFor,
+  type ScheduleRow,
+  type Scope,
+} from './service.js';
 import type { WorkflowDefinition } from './schema.js';
+import { HermesCron, refusedByHermesCron, type HermesCronPort } from './hermes-cron.js';
 
 export { SchedulesService, validateDefinition, warningsFor } from './service.js';
 export type { Scope } from './service.js';
@@ -39,6 +46,33 @@ function scopeOf(request: FastifyRequest): Scope {
 
 function serviceOf(request: FastifyRequest): SchedulesService {
   return new SchedulesService(requireSqlite(request.server.hub.database));
+}
+
+/**
+ * Hermes's scheduler, reflected (`hermes-cron.ts`). The port comes from the composition
+ * root, the only place allowed to put `agents` (which knows where Hermes is) and
+ * `schedules` together. Without one every schedule is the hub's own, as before.
+ */
+let hermesCronFactory: ((app: FastifyInstance) => HermesCronPort) | null = null;
+export function registerHermesCron(
+  factory: ((app: FastifyInstance) => HermesCronPort) | null,
+): ((app: FastifyInstance) => HermesCronPort) | null {
+  const previous = hermesCronFactory;
+  hermesCronFactory = factory;
+  return previous;
+}
+const crons = new WeakMap<SocketServer, HermesCron | null>();
+function cronOf(app: FastifyInstance): HermesCron | null {
+  if (crons.has(app.hub.io)) return crons.get(app.hub.io) ?? null;
+  const cron = hermesCronFactory ? new HermesCron(hermesCronFactory(app)) : null;
+  crons.set(app.hub.io, cron);
+  return cron;
+}
+
+/** Hermes keeps one scheduler per home, and the hub has one Hermes home: the default workspace. */
+async function syncHermes(request: FastifyRequest, service: SchedulesService): Promise<void> {
+  const cron = cronOf(request.server);
+  if (cron && request.workspace?.isDefault) await cron.sync(service, scopeOf(request));
 }
 
 const realtimes = new WeakMap<SocketServer, Realtime>();
@@ -82,24 +116,49 @@ function toSchedule(
       input: null,
     },
     delivery: {
-      kind: row.delivery.roomId ? 'room' : row.delivery.notify ? 'notice' : 'none',
+      kind: row.delivery.channel
+        ? 'channel'
+        : row.delivery.roomId
+          ? 'room'
+          : row.delivery.notify
+            ? 'notice'
+            : 'none',
       room_id: row.delivery.roomId ?? null,
-      channel: null,
-      address: null,
+      channel: row.delivery.channel ?? null,
+      address: row.delivery.address ?? null,
     },
     repeat: { limit: row.repeatLimit, completed: row.repeatCount },
     enabled: row.enabled,
-    // Four states, and each is a fact about the row rather than a guess.
-    state: exhausted ? 'exhausted' : !row.enabled ? 'paused' : next ? 'scheduled' : 'paused',
+    // Four states, and each is a fact about the row rather than a guess — for a reflection,
+    // the fact is what Hermes reported.
+    state: row.externalState
+      ? stateOfHermes(row.externalState)
+      : exhausted
+        ? 'exhausted'
+        : !row.enabled
+          ? 'paused'
+          : next
+            ? 'scheduled'
+            : 'paused',
     next_run_at: next?.toISOString() ?? null,
     last_run_at: row.lastRunAt?.toISOString() ?? null,
     last_status:
       row.lastStatus === 'queued' || row.lastStatus === 'running'
         ? row.lastStatus
         : (row.lastStatus ?? null),
-    last_error: null,
-    last_delivery_error: null,
+    last_error: row.lastError,
+    last_delivery_error: row.lastDeliveryError,
+    external:
+      row.externalSource && row.externalId
+        ? { source: row.externalSource, id: row.externalId }
+        : null,
   };
+}
+
+/** Hermes's job state in the contract's four: a finished one-shot and a dead one are both done. */
+function stateOfHermes(state: string): 'scheduled' | 'running' | 'paused' | 'exhausted' {
+  if (state === 'running' || state === 'paused' || state === 'scheduled') return state;
+  return 'exhausted';
 }
 
 function toScheduleRun(
@@ -214,6 +273,91 @@ function notBuilt(operationId: string): never {
   });
 }
 
+/**
+ * An edit to a schedule that is, or is becoming, or is ceasing to be Hermes's.
+ *
+ * Hermes is asked first in every case, so a refusal leaves both sides as they were:
+ * - still Hermes's: the changed fields go to Hermes, then Hermes's answer is the row;
+ * - moving to Hermes: saved here, then created on Hermes (and rolled back if refused);
+ * - leaving Hermes: removed from Hermes, then the row is the hub's own again.
+ */
+async function updateThroughHermes(
+  cron: HermesCron,
+  service: SchedulesService,
+  scope: Scope,
+  current: ScheduleRow,
+  patch: Record<string, unknown>,
+  how: { wasHermes: boolean; willBeHermes: boolean },
+): Promise<ScheduleRow> {
+  const jobs = cron.jobs();
+  if (!jobs) return service.update(scope, current.id, patch);
+  const context = cron.contextFor(scope.workspace);
+  const merged = { ...toWrite(current), ...patch };
+
+  if (how.wasHermes && !how.willBeHermes) {
+    await jobs.remove(current.externalId!).catch(refusedByHermesCron);
+    service.unlinkExternal(scope, current.id);
+    return service.update(scope, current.id, patch);
+  }
+  cron.checkWritable(merged);
+  if (!how.wasHermes) {
+    const saved = service.update(scope, current.id, patch);
+    try {
+      const job = await jobs.create(cron.jobOf(saved));
+      return service.linkHermes(scope, saved.id, job, context);
+    } catch (error) {
+      service.update(scope, current.id, toWrite(current));
+      return refusedByHermesCron(error);
+    }
+  }
+
+  // Still Hermes's. Work out the row the patch would make without keeping it, so the
+  // fields sent to Hermes are the hub's normalized ones.
+  const preview = service.previewUpdate(scope, current.id, patch);
+  const fields = cron.patchOf(patch, preview);
+  let job = null;
+  try {
+    if (Object.keys(fields).length > 0) job = await jobs.update(current.externalId!, fields);
+    if (patch.enabled !== undefined && patch.enabled !== current.enabled) {
+      job = patch.enabled
+        ? await jobs.resume(current.externalId!)
+        : await jobs.pause(current.externalId!);
+    }
+  } catch (error) {
+    return refusedByHermesCron(error);
+  }
+  const updated = service.update(scope, current.id, patch);
+  return job ? (service.reflectHermes(scope, job, context)?.row ?? updated) : updated;
+}
+
+/** A row as the write body that would recreate it — for rollback and for merging a patch. */
+function toWrite(row: ScheduleRow): Record<string, unknown> {
+  return {
+    name: row.name,
+    enabled: row.enabled,
+    trigger: {
+      kind: row.kind,
+      expression: row.cronExpr,
+      every_minutes: row.intervalSeconds === null ? null : Math.round(row.intervalSeconds / 60),
+      run_at: row.runAt?.toISOString() ?? null,
+      timezone: row.timezone,
+    },
+    target: {
+      kind: row.targetKind === 'workflow' ? 'workflow' : 'agent_prompt',
+      agent_id: row.agentId,
+      prompt: row.prompt,
+      skills: row.skills,
+      workflow_id: row.workflowId,
+    },
+    delivery: row.delivery.channel
+      ? { kind: 'channel', channel: row.delivery.channel, address: row.delivery.address ?? null }
+      : row.delivery.roomId
+        ? { kind: 'room', room_id: row.delivery.roomId }
+        : { kind: row.delivery.notify ? 'notice' : 'none' },
+    repeat: { limit: row.repeatLimit },
+  };
+}
+
 export const schedulesModule = defineModule({
   name: 'schedules',
   registerRoutes(app: FastifyInstance) {
@@ -237,9 +381,10 @@ export const schedulesModule = defineModule({
 
     defineRoute(app, deps, {
       operationId: 'schedules.list',
-      handler: (request, { query }) => {
+      handler: async (request, { query }) => {
         const scope = scopeOf(request);
         const service = serviceOf(request);
+        await syncHermes(request, service);
         const rows = service.list(scope, {
           ...(query.agent_id ? { agentId: String(query.agent_id) } : {}),
           ...(query.workflow_id ? { workflowId: String(query.workflow_id) } : {}),
@@ -255,10 +400,26 @@ export const schedulesModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'schedules.create',
       status: 201,
-      handler: (request, { body }) => {
+      handler: async (request, { body }) => {
         const scope = scopeOf(request);
         const service = serviceOf(request);
-        const row = service.create(scope, body as Record<string, unknown>);
+        const input = body as Record<string, unknown>;
+        const cron = cronOf(request.server);
+        const forHermes = cron?.targetsHermes(scope.workspace, input.target as never) ?? false;
+        if (forHermes) cron!.checkWritable(input);
+        let row = service.create(scope, input);
+        // A schedule for Hermes lives in Hermes's scheduler, which is what fires it. If
+        // Hermes refuses, the hub's row goes too: a schedule here that Hermes never heard
+        // of would look saved and never run.
+        if (forHermes) {
+          try {
+            const job = await cron!.jobs()!.create(cron!.jobOf(row));
+            row = service.linkHermes(scope, row.id, job, cron!.contextFor(scope.workspace));
+          } catch (error) {
+            service.remove(scope, row.id);
+            refusedByHermesCron(error);
+          }
+        }
         const schedule = toSchedule(row, scope.profile, service.nextFor(row));
         announce(request, 'schedule.created', { schedule });
         return schedule;
@@ -277,14 +438,29 @@ export const schedulesModule = defineModule({
 
     defineRoute(app, deps, {
       operationId: 'schedules.update',
-      handler: (request, { params, body }) => {
+      handler: async (request, { params, body }) => {
         const scope = scopeOf(request);
         const service = serviceOf(request);
-        const row = service.update(
-          scope,
-          params.schedule_id as string,
-          body as Record<string, unknown>,
-        );
+        const id = params.schedule_id as string;
+        const patch = body as Record<string, unknown>;
+        const current = service.get(scope, id);
+        const cron = cronOf(request.server);
+        const target = (patch.target as Record<string, unknown> | undefined) ?? {
+          kind: current.targetKind === 'workflow' ? 'workflow' : 'agent_prompt',
+          agent_id: current.agentId,
+          prompt: current.prompt,
+        };
+        const wasHermes = current.externalSource === 'hermes' && !!current.externalId;
+        const willBeHermes = cron?.targetsHermes(scope.workspace, target) ?? false;
+        let row: ScheduleRow;
+        if (cron && (wasHermes || willBeHermes)) {
+          row = await updateThroughHermes(cron, service, scope, current, patch, {
+            wasHermes,
+            willBeHermes,
+          });
+        } else {
+          row = service.update(scope, id, patch);
+        }
         const schedule = toSchedule(row, scope.profile, service.nextFor(row));
         announce(request, 'schedule.updated', { schedule });
         return schedule;
@@ -294,8 +470,16 @@ export const schedulesModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'schedules.delete',
       status: 204,
-      handler: (request, { params }) => {
-        serviceOf(request).remove(scopeOf(request), params.schedule_id as string);
+      handler: async (request, { params }) => {
+        const scope = scopeOf(request);
+        const service = serviceOf(request);
+        const row = service.get(scope, params.schedule_id as string);
+        // Hermes first: a schedule deleted here and still in Hermes would keep firing.
+        const jobs = cronOf(request.server)?.jobs();
+        if (row.externalSource === 'hermes' && row.externalId && jobs) {
+          await jobs.remove(row.externalId).catch(refusedByHermesCron);
+        }
+        service.remove(scope, row.id);
         announce(request, 'schedule.deleted', { schedule_id: params.schedule_id });
         return null;
       },
@@ -303,10 +487,22 @@ export const schedulesModule = defineModule({
 
     defineRoute(app, deps, {
       operationId: 'schedules.runNow',
-      handler: (request, { params }) => {
+      status: 202,
+      handler: async (request, { params }) => {
+        const scope = scopeOf(request);
+        const service = serviceOf(request);
         // The schedule must exist before the hub says it cannot run it: a 404 is more
         // useful than a 501 when the id is simply wrong.
-        serviceOf(request).get(scopeOf(request), params.schedule_id as string);
+        const row = service.get(scope, params.schedule_id as string);
+        const jobs = cronOf(request.server)?.jobs();
+        // Hermes has a scheduler, so a Hermes schedule can fire now: Hermes runs it on its
+        // next tick, and the run stays `queued` here until Hermes reports how it went.
+        if (row.externalSource === 'hermes' && row.externalId && jobs) {
+          await jobs.run(row.externalId).catch(refusedByHermesCron);
+          const run = service.queueRun(scope, row.id);
+          announce(request, 'schedule.fired', { schedule_id: row.id, schedule_run_id: run.id });
+          return { job_id: run.id, schedule_run_id: run.id };
+        }
         return notBuilt('schedules.runNow');
       },
     });
