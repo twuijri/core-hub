@@ -372,6 +372,24 @@ test.describe('web smoke journeys', () => {
     await row.getByTestId('session-more-button').click();
     await page.getByRole('menuitem', { name: 'أعد التسمية تلقائيًا' }).click();
     await expect(row).toContainText('خطة الإطلاق في ثلاث مراحل');
+
+    // Selecting several: every chosen row keeps its tick in sight, not only the one
+    // under the pointer (owner, 2026-09-23) — so the pointer is moved away first.
+    await row.getByTestId('session-more-button').click();
+    await page.getByRole('menuitem', { name: 'تحديد', exact: true }).click();
+    // The row the menu came from is chosen already; choose the rest by their links.
+    for (const each of await page.getByTestId('session-row').all()) {
+      if ((await each.getAttribute('data-selected')) !== 'true') {
+        await each.locator('.session-link').click();
+      }
+    }
+    await page.getByTestId('composer-input').hover();
+    const rows = page.locator('[data-testid="session-row"][data-selected="true"]');
+    await expect.poll(() => rows.count()).toBeGreaterThan(0);
+    for (const selected of await rows.all()) {
+      await expect(selected.locator('.session-grip')).toHaveCSS('opacity', '1');
+    }
+    await page.getByTestId('session-select-done').click();
   });
 
   test('7. 443 models: the picker searches, and the list never stops being usable', async ({
