@@ -51,7 +51,7 @@ function workspace(over: Record<string, unknown> = {}) {
   return {
     id: '01J8QK3ZR2W7M5N4P6T8V9X0W1',
     slug: 'default',
-    name: 'الافتراضية',
+    name: 'الافتراضي',
     avatar: null,
     default_model: null,
     agent_count: 2,
