@@ -12,7 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/context.js';
 import { HubApiError } from '@majlis/contracts';
 import { describeError } from '../auth/client.js';
-import { useAgents } from '../hub/queries.js';
+import { useAgents, useProfiles } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
@@ -37,6 +37,8 @@ import { Tooltip } from '../ui/Tooltip.js';
 
 interface Schedule {
   id: string;
+  /** The workspace it belongs to: the page shows every workspace (owner, 2026-09-23). */
+  profile: string;
   name: string;
   enabled: boolean;
   state: 'scheduled' | 'running' | 'paused' | 'exhausted';
@@ -54,53 +56,75 @@ interface Schedule {
   external?: { source: 'hermes'; id: string } | null;
 }
 
-const key = (profile: string) => ['schedules', profile] as const;
+/** One page for every workspace; the key is the filter, not the header's workspace. */
+const key = (filter: string) => ['schedules', filter || 'all'] as const;
 
-function useSchedules() {
-  const { client, profile, session } = useAuth();
+function useSchedules(filter: string) {
+  const { client, session } = useAuth();
   return useQuery({
-    queryKey: key(profile),
+    queryKey: key(filter),
     queryFn: async () =>
-      (await client.request('get', '/schedules')).data as unknown as { items: Schedule[] },
+      (
+        await client.request('get', '/schedules', {
+          ...(filter ? { query: { profile: filter } } : {}),
+        })
+      ).data as unknown as { items: Schedule[] },
     enabled: !!session,
   });
 }
 
+/** Every write goes to the schedule's own workspace, whichever one the header shows. */
+const inWorkspace = (profile: string) => ({ headers: { 'X-Hub-Profile': profile } });
+
 function useScheduleWrite() {
-  const { client, profile } = useAuth();
+  const { client } = useAuth();
   const queryClient = useQueryClient();
-  const refresh = () => void queryClient.invalidateQueries({ queryKey: key(profile) });
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: ['schedules'] });
   return {
     create: useMutation({
-      mutationFn: async (body: Record<string, unknown>) =>
-        (await client.request('post', '/schedules', { body: body as never })).data,
+      mutationFn: async ({ body, profile }: { body: Record<string, unknown>; profile: string }) =>
+        (
+          await client.request('post', '/schedules', {
+            body: body as never,
+            ...inWorkspace(profile),
+          })
+        ).data,
       onSuccess: refresh,
     }),
     update: useMutation({
-      mutationFn: async ({ id, patch }: { id: string; patch: Record<string, unknown> }) =>
+      mutationFn: async ({
+        schedule,
+        patch,
+      }: {
+        schedule: Schedule;
+        patch: Record<string, unknown>;
+      }) =>
         (
           await client.request('patch', '/schedules/{schedule_id}', {
-            params: { schedule_id: id },
+            params: { schedule_id: schedule.id },
             body: patch as never,
+            ...inWorkspace(schedule.profile),
           })
         ).data,
       onSuccess: refresh,
     }),
     run: useMutation({
-      mutationFn: async (id: string) =>
+      mutationFn: async (schedule: Schedule) =>
         (
           await client.request('post', '/schedules/{schedule_id}/run', {
-            params: { schedule_id: id },
+            params: { schedule_id: schedule.id },
+            ...inWorkspace(schedule.profile),
           })
         ).data,
       onSuccess: refresh,
     }),
     remove: useMutation({
-      mutationFn: async (id: string) => {
+      mutationFn: async (schedule: Schedule) => {
         await client.request('delete', '/schedules/{schedule_id}', {
-          params: { schedule_id: id },
+          params: { schedule_id: schedule.id },
+          ...inWorkspace(schedule.profile),
         });
-        return id;
+        return schedule.id;
       },
       onSuccess: refresh,
     }),
@@ -149,9 +173,17 @@ function describeScheduleError(error: unknown, t: Translate): string {
 export function SchedulesScreen() {
   const { t, language } = useI18n();
   const title = t(termKey('schedules'));
-  const schedules = useSchedules();
+  const { profile: headerProfile } = useAuth();
+  const workspaces = useProfiles().data ?? [];
+  // Filters, not prerequisites: the page opens on every workspace.
+  const [filter, setFilter] = useState('');
+  const schedules = useSchedules(filter);
   const { create, update, run, remove } = useScheduleWrite();
   const agents = useAgents();
+  // A new schedule goes where the person says — design, content… — the header's by default.
+  const [workspace, setWorkspace] = useState<string | null>(null);
+  const target = workspace ?? headerProfile;
+  const nameOf = (slug: string) => workspaces.find((w) => w.slug === slug)?.name ?? slug;
   const { ask, dialog } = useConfirm();
   const [name, setName] = useState('');
   const [agentId, setAgentId] = useState<string | null>(null);
@@ -171,17 +203,20 @@ export function SchedulesScreen() {
   const save = (withZone: string | null) =>
     create.mutate(
       {
-        name: name.trim(),
-        trigger: triggerOf(kind, value, withZone),
-        target: {
-          kind: 'agent_prompt',
-          agent_id: chosenAgent,
-          prompt: prompt.trim() || null,
-          model: null,
-          provider: null,
-          skills: [],
-          workflow_id: null,
-          input: null,
+        profile: target,
+        body: {
+          name: name.trim(),
+          trigger: triggerOf(kind, value, withZone),
+          target: {
+            kind: 'agent_prompt',
+            agent_id: chosenAgent,
+            prompt: prompt.trim() || null,
+            model: null,
+            provider: null,
+            skills: [],
+            workflow_id: null,
+            input: null,
+          },
         },
       },
       { onSuccess: () => setName('') },
@@ -250,6 +285,19 @@ export function SchedulesScreen() {
               />
             )}
           </Field>
+          {workspaces.length > 1 && (
+            <Field label={t('schedules.workspace')}>
+              {() => (
+                <Select
+                  value={target}
+                  onValueChange={(next) => setWorkspace(next ?? null)}
+                  options={workspaces.map((w) => ({ value: w.slug, label: w.name }))}
+                  label={t('schedules.workspace')}
+                  testId="schedule-workspace"
+                />
+              )}
+            </Field>
+          )}
           {agentOptions.length > 0 && (
             <Field label={t('schedules.agent')}>
               {() => (
@@ -312,6 +360,19 @@ export function SchedulesScreen() {
           ))}
         </SkeletonGroup>
       )}
+      {workspaces.length > 1 && (
+        <div className="mb-3 flex justify-end">
+          <Select
+            value={filter}
+            placeholder={t('schedules.all_workspaces')}
+            onValueChange={(next) => setFilter(next ?? '')}
+            // The placeholder is the "every workspace" choice; the kit offers it as an option.
+            options={workspaces.map((w) => ({ value: w.slug, label: w.name }))}
+            label={t('schedules.workspace')}
+            testId="schedule-filter"
+          />
+        </div>
+      )}
       {schedules.isError && <Notice tone="danger">{describeError(schedules.error, t)}</Notice>}
       {(update.isError || run.isError || remove.isError) && (
         <Notice tone="danger">
@@ -355,9 +416,15 @@ export function SchedulesScreen() {
                         : when(schedule.trigger.run_at)
                   }
                   actions={
-                    <Badge tone={schedule.state === 'scheduled' ? 'accent' : 'neutral'}>
-                      {t(`schedules.state.${schedule.state}`)}
-                    </Badge>
+                    <span className="flex items-center gap-1">
+                      {/* Whose schedule this is, once there is more than one workspace. */}
+                      {workspaces.length > 1 && (
+                        <Badge testId="schedule-workspace-badge">{nameOf(schedule.profile)}</Badge>
+                      )}
+                      <Badge tone={schedule.state === 'scheduled' ? 'accent' : 'neutral'}>
+                        {t(`schedules.state.${schedule.state}`)}
+                      </Badge>
+                    </span>
                   }
                 />
                 <p className="text-xs text-muted">
@@ -374,9 +441,7 @@ export function SchedulesScreen() {
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Switch
                     checked={schedule.enabled}
-                    onChange={(next) =>
-                      update.mutate({ id: schedule.id, patch: { enabled: next } })
-                    }
+                    onChange={(next) => update.mutate({ schedule, patch: { enabled: next } })}
                     label={t('schedules.enabled')}
                     testId="schedule-enabled"
                   />
@@ -384,9 +449,9 @@ export function SchedulesScreen() {
                     <Button
                       variant="secondary"
                       size="sm"
-                      loading={run.isPending && run.variables === schedule.id}
+                      loading={run.isPending && run.variables?.id === schedule.id}
                       onClick={() =>
-                        run.mutate(schedule.id, { onSuccess: () => setFired(schedule.id) })
+                        run.mutate(schedule, { onSuccess: () => setFired(schedule.id) })
                       }
                       data-testid="schedule-run"
                     >
@@ -416,7 +481,7 @@ export function SchedulesScreen() {
                         title: t('schedules.confirm_delete', { name: schedule.name }),
                         confirmLabel: t('common.delete'),
                       }).then((sure) => {
-                        if (sure) remove.mutate(schedule.id);
+                        if (sure) remove.mutate(schedule);
                       });
                     }}
                     data-testid="schedule-delete"

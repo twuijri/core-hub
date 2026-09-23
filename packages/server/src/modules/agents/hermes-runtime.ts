@@ -29,7 +29,12 @@ import { createInterface } from 'node:readline';
 import type { FastifyBaseLogger } from 'fastify';
 import { parse as parseYaml } from 'yaml';
 import { probeHttp, whichSync, type HostEnvironment } from './adapters/host.js';
-import { stdioTuiChannel, type Spawned, type TuiChannel } from './adapters/hermes-tui.js';
+import {
+  stdioTuiChannel,
+  TUI_STOPPED,
+  type Spawned,
+  type TuiChannel,
+} from './adapters/hermes-tui.js';
 import type { RuntimeState } from './adapters/types.js';
 
 export type HermesRuntimeMode = 'undecided' | 'external' | 'managed' | 'absent';
@@ -82,6 +87,11 @@ export interface HermesRuntimeOptions {
   ) => Spawned;
   healthIntervalMs?: number;
   probeTimeoutMs?: number;
+  /**
+   * How often a TUI gateway started with keys that have since changed is checked for a
+   * moment with no turn in flight, when it is closed.
+   */
+  tuiRetireIntervalMs?: number;
   /** Called on every state change (the registry row follows it). */
   onState?: (status: HermesRuntimeStatus) => void;
 }
@@ -91,6 +101,7 @@ const RESTART_BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 30_000, 60_000];
 const STOP_GRACE_MS = 10_000;
 const WARM_UP_INTERVAL_MS = 2_000;
 const WARM_UP_ATTEMPTS = 60;
+const TUI_RETIRE_INTERVAL_MS = 5_000;
 
 /** Reads or mints the API server key. Kept next to the JWT secret, mode 0600. */
 export function loadOrCreateHermesApiKey(dataDir: string): string {
@@ -132,6 +143,13 @@ export class HermesRuntime {
    */
   private providerEnv: Record<string, string> = {};
   private tui: TuiChannel | null = null;
+  /**
+   * TUI gateways started with provider keys that have since changed. New conversations no
+   * longer get them; the conversations already on them keep them until nothing is in
+   * flight, and then they are closed (`sweepRetiredTui`).
+   */
+  private readonly retiredTui = new Set<TuiChannel>();
+  private retireTimer: NodeJS.Timeout | null = null;
   private healthyAt: number | null = null;
   private stopping = false;
   private restartRequested = false;
@@ -185,8 +203,11 @@ export class HermesRuntime {
       before.every((key, index) => key === after[index] && this.providerEnv[key] === env[key]);
     if (same) return false;
     this.providerEnv = { ...env };
-    // The TUI gateway read its keys when it started; the next conversation starts a new one.
-    void this.tui?.close();
+    // The TUI gateway read its keys when it started, so the next conversation starts a new
+    // one. The running one is not killed: it may be carrying a turn somebody is watching —
+    // forty tool calls in and waiting on a question — and closing it here ended that turn
+    // as "the Hermes TUI gateway exited". It is retired instead, and closed once idle.
+    if (this.tui) this.retireTui(this.tui);
     this.tui = null;
     return true;
   }
@@ -215,9 +236,36 @@ export class HermesRuntime {
     const channel = this.tui;
     channel.onExit((reason) => {
       if (this.tui === channel) this.tui = null;
-      this.log.warn({ reason }, 'hermes: the TUI gateway stopped');
+      this.retiredTui.delete(channel);
+      // The hub closing it is routine; the process going away on its own is not.
+      if (reason === TUI_STOPPED) this.log.info({ reason }, 'hermes: the TUI gateway stopped');
+      else this.log.warn({ reason }, 'hermes: the TUI gateway stopped');
     });
     return channel;
+  }
+
+  private retireTui(channel: TuiChannel): void {
+    if (!channel.alive) return;
+    this.retiredTui.add(channel);
+    this.sweepRetiredTui();
+  }
+
+  /** Closes every retired TUI gateway with nothing in flight; checks again later if any is busy. */
+  private sweepRetiredTui(): void {
+    for (const channel of [...this.retiredTui]) {
+      if (channel.alive && channel.busy) continue;
+      this.retiredTui.delete(channel);
+      if (!channel.alive) continue;
+      this.log.info('hermes: closing the TUI gateway started with the previous provider keys');
+      void channel.close();
+    }
+    if (this.retiredTui.size === 0 || this.retireTimer || this.stopping) return;
+    this.retireTimer = setTimeout(() => {
+      this.retireTimer = null;
+      this.sweepRetiredTui();
+    }, this.options.tuiRetireIntervalMs ?? TUI_RETIRE_INTERVAL_MS);
+    // A conversation still running must never be the reason the hub cannot exit.
+    this.retireTimer.unref?.();
   }
 
   /** How the hub reaches this gateway's API — the same `fetch` every chat turn uses. */
@@ -313,7 +361,11 @@ export class HermesRuntime {
 
   async stop(): Promise<void> {
     this.stopping = true;
-    await this.tui?.close();
+    if (this.retireTimer) clearTimeout(this.retireTimer);
+    this.retireTimer = null;
+    const retired = [...this.retiredTui];
+    this.retiredTui.clear();
+    await Promise.all([this.tui?.close(), ...retired.map((channel) => channel.close())]);
     this.tui = null;
     if (this.restartTimer) clearTimeout(this.restartTimer);
     if (this.healthTimer) clearInterval(this.healthTimer);

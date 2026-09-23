@@ -6,9 +6,11 @@ import { EventEmitter } from 'node:events';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { createInterface } from 'node:readline';
 import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
 import { capturingLogger, unreachableFetch } from '../../../tests/unit/helpers.js';
+import { HermesTuiSession, type Spawned } from './adapters/hermes-tui.js';
 import {
   HermesRuntime,
   loadOrCreateHermesApiKey,
@@ -208,5 +210,144 @@ describe('Hermes runtime: choosing a mode', () => {
     await external.start();
     await expect(external.restart()).rejects.toThrow(/not managed/);
     await external.stop();
+  });
+});
+
+/**
+ * A scripted `tui_gateway` per spawn: creates sessions, accepts a turn and leaves it
+ * running until the test finishes it — the owner's case of 2026-09-23, a run waiting on
+ * a question when a provider was saved.
+ */
+function tuiGateways() {
+  const started: Array<{
+    env: NodeJS.ProcessEnv;
+    killed: boolean;
+    complete(sessionId: string): void;
+  }> = [];
+  const tuiSpawn = (
+    _command: string,
+    _args: readonly string[],
+    env: NodeJS.ProcessEnv,
+  ): Spawned => {
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    const exits = new EventEmitter();
+    const send = (frame: Record<string, unknown>) =>
+      stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...frame })}\n`);
+    const n = started.length + 1;
+    const gateway = {
+      env,
+      killed: false,
+      complete(sessionId: string) {
+        send({
+          method: 'event',
+          params: {
+            type: 'message.complete',
+            session_id: sessionId,
+            payload: { status: 'complete' },
+          },
+        });
+      },
+    };
+    started.push(gateway);
+    createInterface({ input: stdin }).on('line', (line) => {
+      const frame = JSON.parse(line) as { id?: number; method?: string };
+      if (frame.method === 'session.create') {
+        send({
+          id: frame.id,
+          result: { session_id: `live-${n}`, stored_session_id: `stored-${n}` },
+        });
+      } else if (frame.method) {
+        send({ id: frame.id, result: {} });
+      }
+    });
+    setImmediate(() => send({ method: 'event', params: { type: 'gateway.ready', payload: {} } }));
+    return {
+      stdin,
+      stdout,
+      kill: () => {
+        gateway.killed = true;
+        exits.emit('exit', null, 'SIGTERM');
+      },
+      on: (event, listener) => exits.on(event, listener),
+    };
+  };
+  return { started, tuiSpawn };
+}
+
+describe('Hermes runtime: the TUI gateway and changing keys', () => {
+  it('keeps a gateway carrying a turn alive when the keys change, and gives new conversations a new one', async () => {
+    const { logger } = capturingLogger();
+    const { spawnImpl } = fakeSpawner();
+    const { started, tuiSpawn } = tuiGateways();
+    const bin = binDirWithHermes();
+    writeFileSync(path.join(bin, 'python'), '');
+    const runtime = new HermesRuntime({
+      dataDir: tempDir(),
+      host: { pathValue: bin },
+      log: logger,
+      fetchImpl: unreachableFetch,
+      spawnImpl,
+      tuiSpawn,
+      healthIntervalMs: 0,
+      tuiRetireIntervalMs: 5,
+    });
+    await runtime.start();
+    runtime.setProviderEnv({ OPENROUTER_API_KEY: 'old-key' });
+
+    const first = runtime.tuiChannel()!;
+    const session = await HermesTuiSession.open(first, null);
+    const turn = session.send({ text: 'forty-five tool calls, then a question' });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(first.busy).toBe(true);
+
+    // A provider saved mid-turn.
+    expect(runtime.setProviderEnv({ OPENROUTER_API_KEY: 'new-key' })).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(first.alive).toBe(true);
+    expect(session.closed).toBe(false);
+    expect(started[0]!.killed).toBe(false);
+
+    // A new conversation gets a gateway started with the new key.
+    const second = runtime.tuiChannel()!;
+    expect(second).not.toBe(first);
+    expect(started).toHaveLength(2);
+    expect(started[1]!.env.OPENROUTER_API_KEY).toBe('new-key');
+    expect(runtime.tuiChannel()).toBe(second);
+
+    // The turn finishes on the gateway it started on; then the old gateway is closed.
+    started[0]!.complete('live-1');
+    expect(await turn).toEqual({ stopReason: 'completed' });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(first.alive).toBe(false);
+    expect(started[0]!.killed).toBe(true);
+    expect(second.alive).toBe(true);
+    await runtime.stop();
+    expect(second.alive).toBe(false);
+  });
+
+  it('closes an idle gateway at once when the keys change', async () => {
+    const { logger } = capturingLogger();
+    const { spawnImpl } = fakeSpawner();
+    const { started, tuiSpawn } = tuiGateways();
+    const bin = binDirWithHermes();
+    writeFileSync(path.join(bin, 'python'), '');
+    const runtime = new HermesRuntime({
+      dataDir: tempDir(),
+      host: { pathValue: bin },
+      log: logger,
+      fetchImpl: unreachableFetch,
+      spawnImpl,
+      tuiSpawn,
+      healthIntervalMs: 0,
+    });
+    await runtime.start();
+    const first = runtime.tuiChannel()!;
+    await HermesTuiSession.open(first, null);
+    runtime.setProviderEnv({ OPENROUTER_API_KEY: 'new-key' });
+    expect(first.alive).toBe(false);
+    expect(started[0]!.killed).toBe(true);
+    expect(runtime.tuiChannel()).not.toBe(first);
+    await runtime.stop();
   });
 });

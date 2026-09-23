@@ -552,11 +552,18 @@ test.describe('web smoke journeys', () => {
     // Hermes's "(Recommended)" mark becomes a badge, not text in the choice.
     await expect(card.getByTestId('question-choice').first()).toContainText('موصى به');
     await expect(card).not.toContainText('(Recommended)');
+    // Five minutes, counted down (owner, 2026-09-23: as Ekko does).
+    await expect(card.getByTestId('question-left')).toContainText(/[45]:\d\d/);
     await page.waitForTimeout(300);
     await shot(page, 'question-card-ar-light');
     await card.getByTestId('question-choice').nth(1).click();
     await expect(card).toHaveCount(0);
     await expect(reply).toContainText('اخترت: ويندوز');
+    // The chat keeps what was asked and what was chosen.
+    await expect(reply.getByTestId('answered-question')).toContainText(
+      'وش الجهاز اللي تبي تتصل فيه؟',
+    );
+    await expect(reply.getByTestId('answered-question')).toContainText('إجابتك: ويندوز');
 
     // One's own words, when no choice fits.
     await newChat(page);
@@ -572,6 +579,45 @@ test.describe('web smoke journeys', () => {
     await card.getByTestId('question-skip').click();
     await expect(card).toHaveCount(0);
     await expect(reply).toContainText('اخترت: تخطّيت');
+    await expect(reply.getByTestId('answered-question')).toContainText('تُخطّي السؤال');
+  });
+
+  test('20. the transcript follows a growing reply, unless the person scrolled away', async ({
+    page,
+  }) => {
+    await login(page);
+    await newChat(page);
+    const reply = page.getByTestId('message-assistant').last();
+    // How far the transcript's scroller is from its bottom, in pixels.
+    const gap = () =>
+      page.getByTestId('chat-screen').evaluate((node) => {
+        let at: HTMLElement | null = node.parentElement;
+        while (at && !/auto|scroll/.test(getComputedStyle(at).overflowY)) at = at.parentElement;
+        const scroller = at ?? (document.scrollingElement as HTMLElement);
+        return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      });
+    const scrollTo = (where: 'top' | 'bottom') =>
+      page.getByTestId('chat-screen').evaluate((node, to) => {
+        let at: HTMLElement | null = node.parentElement;
+        while (at && !/auto|scroll/.test(getComputedStyle(at).overflowY)) at = at.parentElement;
+        const scroller = at ?? (document.scrollingElement as HTMLElement);
+        scroller.scrollTop = to === 'top' ? 0 : scroller.scrollHeight;
+      }, where);
+
+    await firstMessage(page, 'اكتب رد طويل');
+    await expect(reply).toContainText('سطر 15');
+    // Taller than the screen by now, and the page kept up with it.
+    await expect.poll(gap).toBeLessThan(80);
+
+    // Scrolled up to read: the growing reply does not pull the person back down.
+    await scrollTo('top');
+    await expect(reply).toContainText('سطر 25');
+    expect(await gap()).toBeGreaterThan(200);
+
+    // Back at the bottom: following again, to the last line.
+    await scrollTo('bottom');
+    await expect(reply).toContainText('سطر 60');
+    await expect.poll(gap).toBeLessThan(80);
   });
 
   test('16. one press of the theme button is one change', async ({ page }) => {
@@ -678,16 +724,32 @@ test.describe('web smoke journeys', () => {
     await page.getByTestId('add-user').click();
     await page.getByLabel('اسم المستخدم').fill('sara');
     await page.getByLabel('الاسم المعروض').fill('سارة');
+    // A short password keeps the button off, and the field says why.
+    await page.getByLabel('كلمة المرور الجديدة').fill('short');
+    await expect(page.getByTestId('save-user')).toBeDisabled();
+    await expect(page.getByTestId('add-user-dialog')).toContainText('ثمانية أحرف على الأقل');
+    await expect(page.getByTestId('new-user-password')).toHaveAttribute('aria-invalid', 'true');
     await page.getByLabel('كلمة المرور الجديدة').fill('a-long-enough-one');
     // A member is not added until they have somewhere to go: an empty list would open
-    // every workspace to them.
+    // every workspace to them — and the dialog says so.
     await expect(page.getByTestId('save-user')).toBeDisabled();
+    await expect(page.getByTestId('workspaces-required')).toBeVisible();
     await page.getByTestId('workspace-default').click();
+    await expect(page.getByTestId('workspaces-required')).toHaveCount(0);
     await page.getByTestId('save-user').click();
     const table = page.getByTestId('user-table');
     await expect(table).toContainText('سارة');
-    // And now there is a row that is not the owner's, so a menu exists.
+    // And now there is a row that is not the owner's: its password and delete are on the
+    // row, not behind "⋯".
     await expect(page.getByTestId('user-menu')).toHaveCount(1);
+    await expect(page.getByTestId('user-password')).toBeVisible();
+    await expect(page.getByTestId('user-delete')).toBeVisible();
+    await page.getByTestId('user-password').click();
+    await expect(page.getByTestId('set-password')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.getByTestId('user-delete').click();
+    await expect(page.getByRole('alertdialog')).toContainText('حذف سارة؟');
+    await page.keyboard.press('Escape');
     await shot(page, 'people-ar-light');
 
     // Workspaces: the default one cannot be archived, so it offers no button.
@@ -871,9 +933,21 @@ test.describe('web smoke journeys', () => {
     // Not Hermes (journey 18): an agent without a scheduler of its own waits for the worker.
     await page.getByTestId('schedule-agent').click();
     await page.getByRole('option', { name: /Direct|مباشر/ }).click();
+    // The workspace is chosen here, not by the header: a schedule for the Labs workspace
+    // (made in journey 13) while the header still says Default.
+    await page.getByTestId('schedule-workspace').click();
+    await page.getByRole('option', { name: 'Labs' }).click();
     await page.getByTestId('schedule-save').click();
 
-    const card = page.getByTestId('schedule-card').first();
+    const card = page.getByTestId('schedule-card').filter({ hasText: 'تقرير الصباح' });
+    await expect(card.getByTestId('schedule-workspace-badge')).toHaveText('Labs');
+    // One page for every workspace, narrowed by the filter when asked.
+    await page.getByTestId('schedule-filter').click();
+    await page.getByRole('option', { name: 'Labs' }).click();
+    await expect(page.getByTestId('schedule-card')).toHaveCount(1);
+    await page.getByTestId('schedule-filter').click();
+    await page.getByRole('option', { name: 'كل المساحات' }).click();
+
     await expect(card).toBeVisible();
     // The hub computed a real next time rather than leaving it blank.
     await expect(card).not.toContainText('لا موعد');

@@ -323,6 +323,31 @@ describe('tasks: Hermes board reflected', () => {
     }
   });
 
+  it('keeps a card given to Hermes from another workspace there, and only there', async () => {
+    const hub = await signedInHub();
+    try {
+      await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/profiles',
+        payload: { slug: 'design', name: 'Design' },
+      });
+      const created = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/tasks',
+        profile: 'design',
+        payload: { title: 'Logo ideas', assignee_agent_id: HERMES_AGENT },
+      });
+      expect(created.statusCode).toBe(201);
+      await board(hub);
+      const all = [...(await board(hub)).values()].flat();
+      const logo = all.filter((task) => task.title === 'Logo ideas');
+      expect(logo).toHaveLength(1);
+      expect(logo[0]!.profile).toBe('design');
+    } finally {
+      await hub.close();
+    }
+  });
+
   it("leaves the hub's own cards alone", async () => {
     const hub = await signedInHub();
     try {

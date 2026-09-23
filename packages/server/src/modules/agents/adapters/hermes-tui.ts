@@ -20,6 +20,7 @@
  */
 import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { StringDecoder } from 'node:string_decoder';
 import { HubError } from '../../../lib/errors.js';
 import { EventQueue } from './event-queue.js';
 import type { AgentEvent, AgentSession, PromptInput } from './types.js';
@@ -35,18 +36,26 @@ export interface TuiFrame {
   error?: { code?: number; message?: string } | null;
 }
 
+/** What one live session id hands the channel when it attaches. */
+export interface TuiSessionHandlers {
+  event(type: string, payload: Json): void;
+  request(method: string, params: Json): Promise<Json>;
+  /** Whether this conversation has a turn in flight (a question waiting counts). */
+  busy?(): boolean;
+}
+
 /** One running `tui_gateway`, shared by every conversation. */
 export interface TuiChannel {
   readonly alive: boolean;
+  /**
+   * Whether closing it now would cut something short: a conversation on it has a turn in
+   * flight, or a call is still waiting for its answer. The runtime asks before it recycles
+   * a gateway that was started with keys that have since changed.
+   */
+  readonly busy: boolean;
   request(method: string, params: Json): Promise<Json>;
   /** Events and requests for one live session id. Returns the unsubscribe. */
-  attach(
-    sessionId: string,
-    handlers: {
-      event(type: string, payload: Json): void;
-      request(method: string, params: Json): Promise<Json>;
-    },
-  ): () => void;
+  attach(sessionId: string, handlers: TuiSessionHandlers): () => void;
   /** Called once when the process is gone, so its sessions can stop pretending. */
   onExit(listener: (reason: string) => void): () => void;
   close(): Promise<void>;
@@ -74,6 +83,11 @@ export interface StdioChannelOptions {
   ) => Spawned;
   /** How long to wait for `gateway.ready` before calls fail. */
   readyTimeoutMs?: number;
+  /**
+   * How long, after the process exits, to wait for its last stderr lines — Node can report
+   * the exit before the pipe is drained, and the line that says why is the last one.
+   */
+  exitGraceMs?: number;
   log?: (message: string, detail?: unknown) => void;
 }
 
@@ -99,15 +113,11 @@ export function stdioTuiChannel(options: StdioChannelOptions): TuiChannel {
     options.cwd,
   );
   let alive = true;
+  /** The process is gone and its last stderr lines are being read: accept nothing new. */
+  let exiting = false;
   let counter = 0;
   const pending = new Map<number, { resolve: (value: Json) => void; reject: (e: Error) => void }>();
-  const sessions = new Map<
-    string,
-    {
-      event(type: string, payload: Json): void;
-      request(method: string, params: Json): Promise<Json>;
-    }
-  >();
+  const sessions = new Map<string, TuiSessionHandlers>();
   const exitListeners = new Set<(reason: string) => void>();
   let markReady: () => void = () => {};
   let failReady: (error: Error) => void = () => {};
@@ -124,7 +134,7 @@ export function stdioTuiChannel(options: StdioChannelOptions): TuiChannel {
   readyTimer.unref?.();
 
   const write = (frame: TuiFrame) => {
-    if (!alive) return;
+    if (!alive || exiting) return;
     child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', ...frame })}\n`);
   };
 
@@ -138,11 +148,24 @@ export function stdioTuiChannel(options: StdioChannelOptions): TuiChannel {
     for (const listener of exitListeners) listener(reason);
   };
 
-  child.on('exit', (code, signal) =>
-    gone(`the Hermes TUI gateway exited (${signal ?? `code ${code ?? '?'}`})`),
-  );
-  // stderr is Hermes's log; kept out of the protocol and out of the hub's own log volume.
-  child.stderr?.on('data', () => undefined);
+  // stderr is Hermes's log; kept out of the protocol and out of the hub's own log volume —
+  // except the one line the gateway prints on its way out. Every exit path of
+  // `tui_gateway/entry.py` is `sys.exit(0)`, so the code says nothing; the reason is the
+  // `[gateway-exit] …` or `[gateway-signal] …` line it writes to stderr just before.
+  const exitReasons = stderrExitReasons(child.stderr);
+
+  child.on('exit', (code, signal) => {
+    const report = () => {
+      const why = exitReasons.last();
+      const status = signal ?? `code ${code ?? '?'}`;
+      gone(`the Hermes TUI gateway exited (${why ? `${status}: ${why}` : status})`);
+    };
+    if (!alive) return;
+    exiting = true;
+    exitReasons.drained(options.exitGraceMs ?? 250).then(report, report);
+  });
+  // A write racing the exit fails with EPIPE; the exit above already says what happened.
+  child.stdin.on('error', () => undefined);
 
   createInterface({ input: child.stdout }).on('line', (line) => {
     let frame: TuiFrame;
@@ -198,11 +221,17 @@ export function stdioTuiChannel(options: StdioChannelOptions): TuiChannel {
 
   return {
     get alive() {
-      return alive;
+      return alive && !exiting;
+    },
+    get busy() {
+      if (!alive || exiting) return false;
+      if (pending.size > 0) return true;
+      for (const handlers of sessions.values()) if (handlers.busy?.()) return true;
+      return false;
     },
     async request(method, params) {
       await ready;
-      if (!alive) throw new Error('the Hermes TUI gateway is not running');
+      if (!alive || exiting) throw new Error('the Hermes TUI gateway is not running');
       const id = ++counter;
       return new Promise<Json>((resolve, reject) => {
         pending.set(id, { resolve, reject });
@@ -220,8 +249,82 @@ export function stdioTuiChannel(options: StdioChannelOptions): TuiChannel {
       return () => exitListeners.delete(listener);
     },
     async close() {
-      gone('the Hermes TUI gateway was stopped');
+      gone(TUI_STOPPED);
       child.kill();
+    },
+  };
+}
+
+/** The reason `close()` gives: the hub stopped the gateway itself, nothing went wrong. */
+export const TUI_STOPPED = 'the Hermes TUI gateway was stopped';
+
+const EXIT_MARKER = /^\[gateway-(exit|signal)\]\s*(.*)$/;
+/** Enough for "why did it stop"; a marker line is a fixed phrase, never a payload. */
+const EXIT_REASONS_KEPT = 3;
+const EXIT_REASON_MAX = 200;
+/** A line longer than this is Hermes's log, not a marker; it is skipped, not buffered. */
+const STDERR_LINE_MAX = 4096;
+
+/**
+ * Reads the gateway's stderr for its exit markers only, keeping the last few — nothing
+ * else of the stream is kept or logged, and memory stays bounded however much it writes.
+ */
+function stderrExitReasons(stream: NodeJS.ReadableStream | null | undefined): {
+  last(): string | null;
+  /** Resolves once stderr has ended, or after `graceMs`, whichever is first. */
+  drained(graceMs: number): Promise<void>;
+} {
+  const reasons: string[] = [];
+  let ended = !stream;
+  const endWaiters: Array<() => void> = [];
+  if (stream) {
+    const decoder = new StringDecoder('utf8');
+    let carry = '';
+    let skipping = false;
+    const line = (text: string) => {
+      const match = EXIT_MARKER.exec(text.trim());
+      if (!match) return;
+      const detail = (match[2] ?? '').slice(0, EXIT_REASON_MAX);
+      reasons.push(match[1] === 'signal' ? `signal ${detail}` : detail);
+      if (reasons.length > EXIT_REASONS_KEPT) reasons.shift();
+    };
+    stream.on('data', (chunk: Buffer | string) => {
+      const parts = (carry + (typeof chunk === 'string' ? chunk : decoder.write(chunk))).split(
+        '\n',
+      );
+      carry = parts.pop() ?? '';
+      for (const part of parts) {
+        if (skipping) skipping = false;
+        else line(part);
+      }
+      if (carry.length > STDERR_LINE_MAX) {
+        carry = '';
+        skipping = true;
+      }
+    });
+    const finish = () => {
+      if (ended) return;
+      ended = true;
+      if (carry && !skipping) line(carry);
+      carry = '';
+      for (const waiter of endWaiters.splice(0)) waiter();
+    };
+    stream.on('end', finish);
+    stream.on('close', finish);
+    stream.on('error', finish);
+  }
+  return {
+    last: () => reasons[reasons.length - 1] ?? null,
+    drained(graceMs) {
+      if (ended) return Promise.resolve();
+      return new Promise((resolve) => {
+        const timer = setTimeout(resolve, graceMs);
+        timer.unref?.();
+        endWaiters.push(() => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
     },
   };
 }
@@ -328,6 +431,7 @@ export class HermesTuiSession implements AgentSession {
     session.detach = channel.attach(liveId, {
       event: (type, payload) => session.onEvent(type, payload),
       request: (method, params) => session.onRequest(method, params),
+      busy: () => session.turn !== null,
     });
     session.stopExit = channel.onExit((reason) => session.onExit(reason));
     return session;
