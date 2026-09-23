@@ -26,7 +26,7 @@
     "usage": "Usage",
     "performance": "Performance",
     "theme": "Theme",
-    "workspaces": "Workspaces",
+    "workspaces": "Profiles",
     "updates": "Updates",
     "plugins": "Plugins",
     "skills": "Skills",
@@ -82,8 +82,8 @@
     "username": "Username",
     "username_hint": "Lowercase letters, digits, dot, dash or underscore — 2 to 40 characters.",
     "display_name": "Display name (optional)",
-    "workspace_name": "Workspace name (optional)",
-    "workspace_hint": "The name of the first workspace; \"Default\" when left empty.",
+    "workspace_name": "Profile name (optional)",
+    "workspace_hint": "The name of the first profile; \"Default\" when left empty.",
     "password": "Password",
     "password_hint": "{min} characters or more. It is never shown, logged or stored anywhere but as a hash.",
     "confirm": "Confirm the password",
@@ -95,7 +95,7 @@
   "shell": {
     "sidebar": "Main menu",
     "segments": "Sections",
-    "workspace": "Workspace",
+    "workspace": "Profile",
     "model_chip": "Default model for new sessions",
     "model_default": "Default model",
     "open_menu": "Open menu",
@@ -127,7 +127,7 @@
   "sessions": {
     "untitled": "New chat",
     "filter": "Filter sessions",
-    "empty": "No sessions in this workspace yet. Start one with New chat.",
+    "empty": "No sessions in this profile yet. Start one with New chat.",
     "none_match": "No session matches this filter.",
     "pin": "Pin",
     "unpin": "Unpin",
@@ -202,7 +202,7 @@
     "session_deleted": "This session was deleted.",
     "run_failed": "The run failed: {error} ({code})",
     "empty_title": "What shall we start with?",
-    "no_provider": "No model provider is configured for this workspace, so the agent has nothing to run on.",
+    "no_provider": "No model provider is configured for this profile, so the agent has nothing to run on.",
     "no_provider_action": "Open Settings → Models → Defaults",
     "no_key": "The provider rejected the stored key, so the agent could not reach it.",
     "no_key_action": "Open Settings → Models",
@@ -364,7 +364,7 @@
   "settings": {
     "tools": "Tools",
     "back": "Back to Settings",
-    "global_note": "This screen is hub-wide, outside the current workspace.",
+    "global_note": "This screen is hub-wide, outside the current profile.",
     "management": "Management",
     "management_hint": "Configured once: whole pages, not tabs.",
     "about": {
@@ -378,7 +378,7 @@
     "username": "Username",
     "display_name": "Display name",
     "role": "Role",
-    "workspaces": "Workspaces",
+    "workspaces": "Profiles",
     "field": "Field",
     "value": "Value",
     "password": "Password",
@@ -548,7 +548,7 @@
     },
     "runtime": {
       "title": "Runtime",
-      "hint": "What the agent runtime received from this workspace.",
+      "hint": "What the agent runtime received from this profile.",
       "runtime_writable": {
         "ok": "The hub manages the agent runtime.",
         "missing": "No agent runtime this hub can configure."
@@ -661,9 +661,9 @@
     "confirm": {
       "archive": "Archive “{title}”?"
     },
-    "all_workspaces": "All workspaces",
+    "all_workspaces": "All profiles",
     "all_projects": "All projects",
-    "workspace": "Workspace",
+    "workspace": "Profile",
     "hermes": {
       "origin": "On Hermes's board",
       "refused": "Hermes said no: {message}",
@@ -715,8 +715,8 @@
       "prompt_required": "A schedule for Hermes needs a prompt.",
       "fired": "Hermes will run it on its next tick."
     },
-    "workspace": "Workspace",
-    "all_workspaces": "All workspaces"
+    "workspace": "Profile",
+    "all_workspaces": "All profiles"
   },
   "audit": {
     "period": "Period",
@@ -774,8 +774,8 @@
     "status": "Status",
     "status_active": "Active",
     "status_disabled": "Disabled",
-    "workspaces": "Workspaces",
-    "all_workspaces": "Every workspace",
+    "workspaces": "Profiles",
+    "all_workspaces": "Every profile",
     "owner_note": "The owner account is not edited here",
     "make_admin": "Make admin",
     "make_member": "Make member",
@@ -792,8 +792,8 @@
     "username_hint": "Lowercase letters, digits, and . _ -",
     "username_bad": "Two to forty lowercase letters, digits, and . _ -",
     "display_name": "Display name",
-    "member_can": "Opens chats and agents in their workspaces",
-    "admin_can": "Manages people, workspaces and hub settings",
+    "member_can": "Opens chats and agents in their profiles",
+    "admin_can": "Manages people, profiles and hub settings",
     "lockouts": "Lockouts",
     "clear_lockouts": "Clear all",
     "no_lockouts": "No lockouts",
@@ -805,21 +805,21 @@
     "lock_pairing": "Pairing",
     "failures": "Attempts",
     "locked_until": "Until",
-    "edit_workspaces": "Workspaces…",
-    "workspaces_for": "Workspaces of {name}",
-    "workspaces_hint": "A member sees only the workspaces chosen here: their chats, agents and tasks.",
-    "workspaces_required": "Choose at least one workspace.",
-    "admin_everywhere": "An admin enters every workspace."
+    "edit_workspaces": "Profiles…",
+    "workspaces_for": "Profiles of {name}",
+    "workspaces_hint": "A member sees only the profiles chosen here: their chats, agents and tasks.",
+    "workspaces_required": "Choose at least one profile.",
+    "admin_everywhere": "An admin enters every profile."
   },
   "workspaces": {
-    "note": "Separate rooms: their agents, models and conversations do not see each other.",
-    "add": "New workspace",
+    "note": "Separate profiles: their agents, models and conversations do not see each other.",
+    "add": "New profile",
     "current": "Current",
     "default": "Default",
     "counts": "{agents} agents · {sessions} conversations",
     "archive": "Archive",
     "archive_title": "Archive {name}?",
-    "archive_body": "The workspace is folded away and its memberships end. Its conversations ({sessions}) stay in the database and are not erased.",
+    "archive_body": "The profile is folded away and its memberships end. Its conversations ({sessions}) stay in the database and are not erased.",
     "name": "Name",
     "slug": "Slug",
     "slug_hint": "Lowercase letters, digits and dashes — it appears in links.",
