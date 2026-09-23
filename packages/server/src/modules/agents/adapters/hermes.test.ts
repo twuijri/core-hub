@@ -89,11 +89,10 @@ async function collect(session: HermesSession, until: number): Promise<AgentEven
 }
 
 describe('Hermes session: one turn over /v1/runs', () => {
-  it('maps deltas, reasoning, tools, usage and the terminal frame, in order', async () => {
+  it('maps deltas, tools, usage and the terminal frame, in order', async () => {
     const hermes = scriptedHermes([
       { event: 'run.started' },
       { event: 'message.started' },
-      { event: 'reasoning.available', text: 'The user wants the tests run.' },
       { event: 'message.delta', delta: 'سأشغّل ' },
       { event: 'tool.started', tool: 'terminal', preview: 'pnpm test' },
       { event: 'tool.progress', tool: 'terminal', delta: 'noise the hub drops' },
@@ -105,6 +104,8 @@ describe('Hermes session: one turn over /v1/runs', () => {
         preview: '30 passed',
       },
       { event: 'message.delta', delta: 'الاختبارات الآن.' },
+      // What Hermes really puts here: the reply's own text, not reasoning (dropped).
+      { event: 'reasoning.available', text: 'سأشغّل الاختبارات الآن.' },
       {
         event: 'run.completed',
         session_id: 'majlis-s1',
@@ -122,12 +123,11 @@ describe('Hermes session: one turn over /v1/runs', () => {
       },
     ]);
     const session = new HermesSession(hermes.transport, { sessionRef: 'majlis-s1', model: null });
-    const events = collect(session, 7);
+    const events = collect(session, 6);
     const turn = await session.send({ text: 'شغّل الاختبارات' });
     expect(turn).toEqual({ stopReason: 'completed' });
     expect(hermes.calls.createRun).toEqual([{ input: 'شغّل الاختبارات', session_id: 'majlis-s1' }]);
     expect(await events).toEqual([
-      { type: 'reasoning.delta', text: 'The user wants the tests run.' },
       { type: 'message.delta', text: 'سأشغّل ' },
       {
         type: 'tool.started',

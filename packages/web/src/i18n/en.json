@@ -297,7 +297,11 @@
       "awaiting_approval": "awaiting approval"
     },
     "truncated": "output truncated",
-    "no_output": "No output."
+    "count": "{count} tools",
+    "failed_count": "{count} failed",
+    "earlier": "{count} earlier",
+    "arguments": "Arguments",
+    "result": "Result"
   },
   "agents": {
     "empty": "The registry is empty.",

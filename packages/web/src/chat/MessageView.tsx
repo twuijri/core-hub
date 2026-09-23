@@ -19,9 +19,9 @@ import { agentMark } from '../ui/brand/marks.js';
 import { MessageActions } from './MessageActions.js';
 import { Markdown } from './Markdown.js';
 import { Reasoning } from './Reasoning.js';
-import { ToolCallCard } from './ToolCallCard.js';
+import { ToolCalls } from './ToolCallCard.js';
 import { textOf } from './transcript.js';
-import { sideOf, thoughtSeconds, type Turn } from './turns.js';
+import { reasoningWorthShowing, sideOf, thoughtSeconds, type Turn } from './turns.js';
 
 /**
  * What the turn cost, in words a person can read — or nothing at all.
@@ -126,6 +126,8 @@ export function MessageView({
   const streaming = message.status === 'streaming';
   const name = message.author.name || t('chat.assistant');
   const seconds = thoughtSeconds(message, runs);
+  const reasoning =
+    showReasoning && !streaming && reasoningWorthShowing(message) ? message.reasoning!.text : null;
   return (
     <article
       className="msg"
@@ -157,17 +159,16 @@ export function MessageView({
             )}
           </header>
         )}
-        <div className="msg-agent-body">
-          {/* The reasoning of a *finished* turn only: while the run is alive it is the
-              status line above the composer, not a fold in the transcript. */}
-          {showReasoning && !streaming && message.reasoning?.text && (
-            <Reasoning text={message.reasoning.text} seconds={seconds} />
-          )}
-          {message.tool_calls.map((call) => (
-            <ToolCallCard key={call.id} call={call} />
-          ))}
-          {text ? <Markdown text={text} /> : null}
-        </div>
+        {/* Machinery beside the reply, not inside it (owner decision, 2026-09-23). */}
+        <ToolCalls calls={message.tool_calls} live={streaming} />
+        {(reasoning || text) && (
+          <div className="msg-agent-body">
+            {/* The reasoning of a *finished* turn only: while the run is alive it is the
+                status line above the composer, not a fold in the transcript. */}
+            {reasoning && <Reasoning text={reasoning} seconds={seconds} />}
+            {text ? <Markdown text={text} /> : null}
+          </div>
+        )}
         {message.usage && !streaming && (
           <p className="msg-usage" dir="auto">
             {t('chat.usage', {

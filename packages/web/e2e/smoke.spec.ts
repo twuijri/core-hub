@@ -105,7 +105,10 @@ test.describe('web smoke journeys', () => {
     await expect(page.getByTestId('chat-screen')).toHaveAttribute('data-empty', 'false');
     await shot(page, 'chat-reply-ar-light');
 
-    // The tool card opens its output in the split pane; the divider is a keyboard separator.
+    // A finished turn folds its tools into one line beside the reply; opened, a call
+    // shows its output and sends it to the split pane. The divider is a keyboard separator.
+    await expect(page.getByTestId('tool-group-summary')).toContainText('shell');
+    await page.getByTestId('tool-group-summary').click();
     await page.getByTestId('tool-call').locator('summary').click();
     await page.getByRole('button', { name: 'فتح في اللوحة الجانبية' }).first().click();
     await expect(page.getByTestId('split-pane')).toContainText('README.md');

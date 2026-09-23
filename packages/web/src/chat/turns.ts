@@ -116,6 +116,24 @@ export function runProgress(state: ChatState, run: Run | null): RunProgress | nu
  * (`reasoning.duration_ms`); otherwise the run's own start and finish, which every hub
  * records. Null when neither is known — better no number than an invented one.
  */
+/**
+ * Reasoning that is only the reply again is not reasoning. Hermes's run stream sent the
+ * reply's own opening as `reasoning.available` (the adapter drops it now), and sessions
+ * saved before that still carry it — so a "thought" that the reply starts with is hidden.
+ */
+export function reasoningWorthShowing(message: Pick<Message, 'reasoning' | 'content'>): boolean {
+  const thought = squash(message.reasoning?.text ?? '');
+  if (!thought) return false;
+  const reply = squash(
+    message.content.map((block) => (block.type === 'text' ? block.text : '')).join(''),
+  );
+  return !reply.startsWith(thought);
+}
+
+function squash(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 export function thoughtSeconds(
   message: Pick<Message, 'reasoning' | 'run_id'>,
   runs: Record<string, Run>,
