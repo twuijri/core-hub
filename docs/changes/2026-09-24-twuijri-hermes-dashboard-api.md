@@ -107,6 +107,13 @@ $ pnpm contracts:check-clients
 check-clients  OK — 208 client file(s) scanned, 166 contract path(s) known.
 $ pnpm change-record:check
 change-record  OK — 1 record(s) valid
+
+# بعد دمج origin/main (PR #66، مهام تشغّل الوكيل) في الفرع:
+$ pnpm typecheck   # exit 0
+$ pnpm lint        # exit 0
+$ pnpm --filter @majlis/server test
+ Test Files  70 passed | 6 skipped (76)
+      Tests  743 passed | 18 skipped (761)
 ```
 
 ## المخاطر والرجوع
