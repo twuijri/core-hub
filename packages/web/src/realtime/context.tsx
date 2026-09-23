@@ -1,5 +1,6 @@
 // One socket per namespace for the whole app, created lazily and rebuilt when the signed-in
-// person or the workspace changes. The sessions socket's state feeds the footer's connection dot.
+// person or the workspace changes. The sessions socket's state feeds the footer's connection dot,
+// so the provider itself keeps that one open for as long as someone is signed in.
 import {
   createContext,
   useContext,
@@ -67,6 +68,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // Lets the effect below reach `socket()` without re-running on every change of `state`.
+  const valueRef = useRef<RealtimeValue | null>(null);
+
   const value = useMemo<RealtimeValue>(
     () => ({
       state,
@@ -84,6 +88,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           setState('connecting');
           socket.on('connect', () => setState('connected'));
           socket.on('disconnect', () => setState('offline'));
+          // A hub that cannot be reached never "disconnects" — it was never connected. Without
+          // this the footer would say "Connecting" for as long as the hub is down.
+          socket.on('connect_error', () => setState('offline'));
           socket.io.on('reconnect_attempt', () => setState('connecting'));
         }
         sockets.current.set(name, socket);
@@ -92,6 +99,18 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     }),
     [baseUrl, state, epoch],
   );
+  valueRef.current = value;
+
+  // The footer reports the sessions socket, and the footer is on every page — but until now
+  // only the conversation list and an open conversation asked for that socket. Inside Settings
+  // the sidebar is the settings list, so a reload there left nothing asking: no socket, and the
+  // footer showing its first value, "Offline", for good (owner, 2026-09-23: «اذا دخلت الاعدادات
+  // وحدثت الصفحة يعطيني اوفلاين»). The provider opens it itself, on every page, and again after
+  // every drop (`epoch`). `socket()` hands back the one a page already opened, if any.
+  useEffect(() => {
+    if (!userId) return;
+    valueRef.current?.socket('sessions');
+  }, [userId, epoch]);
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>;
 }
 
