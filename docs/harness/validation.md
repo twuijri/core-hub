@@ -10,9 +10,10 @@
 | `docs/clients/navigation.json` | `pnpm nav:check` plus the web parity test (`pnpm test --filter @majlis/web`) |
 | a module's schema | `pnpm db:generate` produces a migration; `pnpm db:migrate` on a fresh SQLite and on PostgreSQL in CI |
 | any user text | `pnpm i18n:check` (ar/en parity, no missing keys) |
-| any code or doc file | `pnpm graph` then `pnpm graph:check`, and commit `graphify-out/` (docs/harness/knowledge-graph.md) |
+| any code or doc file | nothing for the code map: do **not** commit `graphify-out/` — the code-map bot proposes it after merge (docs/harness/knowledge-graph.md). `pnpm graph` is for your own queries |
+| `.github/workflows/`, `scripts/graph*.mjs`, `scripts/check-change-record.mjs` | `pnpm lint`, `pnpm change-record:check`; `actionlint` if you have it; the bot's behaviour is only proven by its first run on `main` (docs/harness/knowledge-graph.md) |
 | the agents catalog (`modules/agents/catalog/`) | `pnpm test --filter server` — the catalog guard checks unique ids, an exact version pin and a licence on every entry (ADR 0006); the pinned versions themselves are the owner's review |
 | `docs/clients/NAVIGATION.md` | the client parity tests of every existing client |
-| release | `pnpm build`, Docker image builds, smoke test against the image, `pnpm graph` rebuilt and `graphify-out/` committed (docs/harness/knowledge-graph.md) |
+| release | `pnpm build`, Docker image builds, smoke test against the image, and the latest "Update the code map" PR merged if one is open (docs/harness/knowledge-graph.md) |
 
 Never claim a check passed without pasting its output in the change record.

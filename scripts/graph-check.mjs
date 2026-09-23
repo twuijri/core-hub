@@ -1,12 +1,14 @@
 #!/usr/bin/env node
-// The committed code map is the one this tree builds (docs/harness/knowledge-graph.md).
+// Is the committed code map the one this tree builds? (docs/harness/knowledge-graph.md)
 //
 // Run after `pnpm graph` on a clean checkout: it compares the graph.json committed in
 // HEAD with the one just built. Graphify reads code with tree-sitter and no model, so the
-// nodes and edges are the same on every machine and any difference means somebody changed
-// code without rebuilding the map. Left out of the comparison: the commit the map was built
-// from (always the parent of the commit that carries it), and the communities — Graphify
-// clusters in the order the file system lists files, which differs between machines.
+// nodes and edges are the same on every machine and any difference means the code changed
+// since the map was built. The code-map bot (.github/workflows/code-map.yml) runs it on main
+// after every merge and proposes a new map when it fails; on a branch a stale map is
+// expected — PRs do not carry graphify-out/. Left out of the comparison: the commit the map
+// was built from (always the parent of the commit that carries it), and the communities —
+// Graphify clusters in the order the file system lists files, which differs between machines.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
@@ -47,7 +49,7 @@ try {
   });
 } catch {
   console.error(
-    `graph:check  ${FILE} is not committed. Run \`pnpm graph\` and commit graphify-out/.`,
+    `graph:check  ${FILE} is not committed; the code-map bot commits it after a merge into main.`,
   );
   process.exit(1);
 }
@@ -65,7 +67,7 @@ if (leaked.length > 0) {
   console.error(
     `graph:check  the committed map carries paths from the machine that built it:\n` +
       leaked.map((node) => `             ${node.id}`).join('\n') +
-      '\n             Run `pnpm graph` (not plain `graphify update .`) and commit graphify-out/.',
+      '\n             `pnpm graph` (not plain `graphify update .`) removes them; the code-map bot commits its result.',
   );
   process.exit(1);
 }
@@ -75,7 +77,7 @@ if (!same) {
   const count = (graph) => `${graph.nodes?.length ?? 0} nodes, ${graph.links?.length ?? 0} edges`;
   console.error(
     `graph:check  the committed map is stale (committed: ${count(committed)}; this tree: ${count(built)}).\n` +
-      '             Run `pnpm graph` and commit graphify-out/ with your change.',
+      '             The code-map bot refreshes graphify-out/ after each merge into main; PRs do not carry it.',
   );
   process.exit(1);
 }
