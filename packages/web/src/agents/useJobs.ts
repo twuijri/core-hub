@@ -31,6 +31,6 @@ export function useJobs(): Record<string, Job> {
     return () => {
       for (const name of JOB_EVENTS) socket.off(name, handler);
     };
-  }, [profile, queryClient]);
+  }, [profile, queryClient, realtime.epoch]);
   return jobs;
 }

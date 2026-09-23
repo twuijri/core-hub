@@ -620,6 +620,12 @@ test.describe('web smoke journeys', () => {
     await scrollTo('bottom');
     await expect(reply).toContainText('سطر 60');
     await expect.poll(gap).toBeLessThan(80);
+
+    // A reload of the conversation comes back connected, without opening another one
+    // (owner, 2026-09-23: it said "Offline" until another conversation was clicked).
+    await page.reload();
+    await expect(reply).toContainText('سطر 60');
+    await expect(page.getByRole('status', { name: 'متصل' })).toBeVisible({ timeout: 15_000 });
   });
 
   test('16. one press of the theme button is one change', async ({ page }) => {

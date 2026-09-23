@@ -18,6 +18,12 @@ export type ConnectionState = 'connected' | 'connecting' | 'offline';
 interface RealtimeValue {
   socket(name: NamespaceName): Socket;
   state: ConnectionState;
+  /**
+   * Counts the times every socket was dropped. A hook that keeps a socket in an effect lists
+   * this among the effect's dependencies, so it takes the new socket instead of holding the
+   * closed one.
+   */
+  epoch: number;
 }
 
 const RealtimeContext = createContext<RealtimeValue | null>(null);
@@ -29,12 +35,21 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   tokenRef.current = token;
   const profileRef = useRef(profile);
   const [state, setState] = useState<ConnectionState>('offline');
+  const [epoch, setEpoch] = useState(0);
   const sockets = useRef(new Map<NamespaceName, Socket>());
   const userId = session?.user.id;
 
   // A new person or workspace means new rooms on the hub: drop every socket and start over.
+  // Only a *change* does. On the first render there is nothing to drop — and a page opened
+  // straight from the address bar (a reload of a conversation) has already asked for its
+  // socket in its own effect, which React runs before this one: tearing that socket down
+  // left the page holding a closed one and the footer saying "Offline" until another
+  // conversation was opened (owner, 2026-09-23).
+  const identity = useRef({ userId, profile });
   useEffect(() => {
     profileRef.current = profile;
+    if (identity.current.userId === userId && identity.current.profile === profile) return;
+    identity.current = { userId, profile };
     const current = sockets.current;
     for (const socket of current.values()) {
       socket.removeAllListeners();
@@ -42,6 +57,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     }
     current.clear();
     setState('offline');
+    setEpoch((n) => n + 1);
   }, [userId, profile]);
 
   useEffect(
@@ -54,6 +70,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   const value = useMemo<RealtimeValue>(
     () => ({
       state,
+      epoch,
       socket(name) {
         const existing = sockets.current.get(name);
         if (existing) return existing;
@@ -73,7 +90,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         return socket;
       },
     }),
-    [baseUrl, state],
+    [baseUrl, state, epoch],
   );
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>;
 }
