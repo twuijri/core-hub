@@ -89,6 +89,8 @@ export interface ComposerProps {
   reply?: ReactNode;
   /** The messages this tab is holding back while a run is alive. */
   queue?: ReactNode;
+  /** A question the agent is waiting on (`QuestionCard`), above everything else. */
+  question?: ReactNode;
   /** How full the model's window is, beside the mic. */
   context?: ReactNode;
   /**
@@ -134,6 +136,7 @@ export function Composer({
   chips,
   reply,
   queue,
+  question,
   context,
   status,
   model = null,
@@ -233,6 +236,7 @@ export function Composer({
 
   return (
     <div className="composer-dock" data-testid="composer-dock">
+      {question}
       {status}
       {chips}
       {queue}

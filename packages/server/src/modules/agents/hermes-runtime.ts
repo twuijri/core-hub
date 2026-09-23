@@ -29,6 +29,7 @@ import { createInterface } from 'node:readline';
 import type { FastifyBaseLogger } from 'fastify';
 import { parse as parseYaml } from 'yaml';
 import { probeHttp, whichSync, type HostEnvironment } from './adapters/host.js';
+import { stdioTuiChannel, type Spawned, type TuiChannel } from './adapters/hermes-tui.js';
 import type { RuntimeState } from './adapters/types.js';
 
 export type HermesRuntimeMode = 'undecided' | 'external' | 'managed' | 'absent';
@@ -72,6 +73,13 @@ export interface HermesRuntimeOptions {
   /** Test seams. */
   fetchImpl?: typeof fetch;
   spawnImpl?: Spawner;
+  /** Injected in tests: a scripted TUI gateway instead of a Python child. */
+  tuiSpawn?: (
+    command: string,
+    args: readonly string[],
+    env: NodeJS.ProcessEnv,
+    cwd?: string,
+  ) => Spawned;
   healthIntervalMs?: number;
   probeTimeoutMs?: number;
   /** Called on every state change (the registry row follows it). */
@@ -123,6 +131,7 @@ export class HermesRuntime {
    * could be one. The environment is the one: the process cannot start without it.
    */
   private providerEnv: Record<string, string> = {};
+  private tui: TuiChannel | null = null;
   private healthyAt: number | null = null;
   private stopping = false;
   private restartRequested = false;
@@ -176,7 +185,39 @@ export class HermesRuntime {
       before.every((key, index) => key === after[index] && this.providerEnv[key] === env[key]);
     if (same) return false;
     this.providerEnv = { ...env };
+    // The TUI gateway read its keys when it started; the next conversation starts a new one.
+    void this.tui?.close();
+    this.tui = null;
     return true;
+  }
+
+  /**
+   * The Hermes TUI gateway conversations go through (ADR 0013): one `python -m
+   * tui_gateway.entry` child, started on first use with this Hermes's home and the shared
+   * provider keys, and started again after it exits. `null` when there is no Hermes
+   * installed beside the hub — a gateway reached from elsewhere keeps the run surface.
+   */
+  tuiChannel(): TuiChannel | null {
+    if (this.tui?.alive) return this.tui;
+    const hermes = this.executable();
+    const home = this.status().home;
+    if (!hermes || !home) return null;
+    // The interpreter of Hermes's own venv, beside its `hermes` entry point.
+    const python = path.join(path.dirname(hermes), 'python');
+    if (!existsSync(python)) return null;
+    this.tui = stdioTuiChannel({
+      command: python,
+      args: ['-m', 'tui_gateway.entry'],
+      env: this.cliEnv(),
+      cwd: home,
+      ...(this.options.tuiSpawn ? { spawn: this.options.tuiSpawn } : {}),
+    });
+    const channel = this.tui;
+    channel.onExit((reason) => {
+      if (this.tui === channel) this.tui = null;
+      this.log.warn({ reason }, 'hermes: the TUI gateway stopped');
+    });
+    return channel;
   }
 
   /** How the hub reaches this gateway's API — the same `fetch` every chat turn uses. */
@@ -272,6 +313,8 @@ export class HermesRuntime {
 
   async stop(): Promise<void> {
     this.stopping = true;
+    await this.tui?.close();
+    this.tui = null;
     if (this.restartTimer) clearTimeout(this.restartTimer);
     if (this.healthTimer) clearInterval(this.healthTimer);
     this.restartTimer = null;

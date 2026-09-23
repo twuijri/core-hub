@@ -68,8 +68,12 @@ owner unattended and skips the screen.
 A fresh install has **two** agents (ADOPTION-BACKLOG §2.15, owner's decision of
 2026-09-22):
 
-- **Hermes** runs inside the image, supervised by the hub (ADR 0008), and a run
-  reaches it over its real API.
+- **Hermes** runs inside the image, supervised by the hub (ADR 0008). Since
+  2026-09-23 a conversation reaches it over its **TUI gateway** (ADR 0013), the
+  surface Hermes's own apps use: the model's reasoning, each tool's arguments and
+  result, and the questions Hermes asks (`clarify`) reach the screen, a question
+  as a card above the composer. A Hermes reached from outside the container keeps
+  the API server's run surface, without those three.
 - **Direct** («مباشر») is the hub itself: a turn is one request from the hub to
   the model provider, with no runtime in between. It runs no tools — skills and
   MCP over this path are backlog §2.16 — and it inlines a text attachment or
