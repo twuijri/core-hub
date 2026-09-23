@@ -151,13 +151,28 @@ function UserMenu({ user }: { user: HubUser }) {
   const owner = isOwner(user);
   const self = isSelf(user, session?.user.id);
 
-  // Nothing at all may be done to the owner's account from here, so the menu says that
-  // once instead of showing four disabled rows.
-  if (owner)
+  // The owner's role and status never change, and an admin cannot touch the owner's
+  // account — so for an admin the row says that once. The owner can set their own password
+  // here too (owner decision, 2026-09-23): the hub allows it to the owner alone.
+  if (owner && !self)
     return (
       <span className="text-xs text-muted" data-testid="owner-note">
         {t('people.owner_note')}
       </span>
+    );
+  if (owner)
+    return (
+      <>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setResetting(true)}
+          data-testid="user-password"
+        >
+          {t('people.lock_password')}
+        </Button>
+        {resetting && <SetPassword user={user} onClose={() => setResetting(false)} />}
+      </>
     );
 
   const confirmDelete = () => {
@@ -247,6 +262,9 @@ function UserMenu({ user }: { user: HubUser }) {
 
 function SetPassword({ user, onClose }: { user: HubUser; onClose: () => void }) {
   const { t } = useI18n();
+  const { session } = useAuth();
+  // Your own password, set here: this device stays signed in (the hub keeps its token).
+  const own = isSelf(user, session?.user.id);
   const update = useUpdateUser();
   const [password, setPassword] = useState('');
   const short = password.length > 0 && password.length < 8;
@@ -256,7 +274,7 @@ function SetPassword({ user, onClose }: { user: HubUser; onClose: () => void }) 
       open
       onOpenChange={(open) => !open && onClose()}
       title={t('people.set_password_for', { name: user.display_name || user.username })}
-      description={t('people.password_note')}
+      description={t(own ? 'account.password_hint' : 'people.password_note')}
       closeLabel={t('common.cancel')}
       testId="set-password"
       footer={
