@@ -2,6 +2,7 @@
 // routes under /api/v1, and a 501 stub for each contract operation no module implements yet.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
+  PRODUCT,
   listOperations,
   toRoutePattern,
   type ClientMethod,
@@ -34,7 +35,7 @@ export interface RoutesOptions {
 }
 
 /** The display name. One hub, one name; an owner-set one is a later setting, not a guess. */
-const HUB_NAME = 'Majlis';
+const HUB_NAME = PRODUCT.name;
 
 /** The two languages this client and this server are written in (`docs/CONTENT-DIRECTION`). */
 const LOCALES = ['ar', 'en'] as const;

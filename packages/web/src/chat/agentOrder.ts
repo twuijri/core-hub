@@ -8,10 +8,11 @@
  * seen keeps its server position at the end, so installing one adds a chip instead of
  * shuffling the row.
  */
+import { derived } from '@majlis/contracts';
 import type { Agent } from '../types.js';
 
 export function agentOrderKey(profile: string): string {
-  return `majlis.agentOrder.${profile}`;
+  return `${derived.storagePrefix}agentOrder.${profile}`;
 }
 
 export function readAgentOrder(

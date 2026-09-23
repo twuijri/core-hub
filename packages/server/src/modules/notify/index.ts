@@ -20,7 +20,7 @@ import { createHmac } from 'node:crypto';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
-import { loadOpenApiDocument } from '@majlis/contracts';
+import { derived, loadOpenApiDocument } from '@majlis/contracts';
 import { newUlid } from '../../db/ids.js';
 import { createContractIndex } from '../../lib/contract.js';
 import { requireSqlite, type ModuleDb } from '../../lib/db.js';
@@ -691,7 +691,10 @@ export const notifyModule = defineModule({
             if (row.signingSecret) {
               // The receiver verifies this rather than trusting the body: that is the
               // whole reason a signing secret exists.
-              headers['x-majlis-signature'] = `sha256=${createHmac('sha256', row.signingSecret)
+              headers[derived.webhookSignatureHeader] = `sha256=${createHmac(
+                'sha256',
+                row.signingSecret,
+              )
                 .update(bodyText)
                 .digest('hex')}`;
             }

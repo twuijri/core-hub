@@ -1,3 +1,4 @@
+import { derived } from '@majlis/contracts';
 // The browser's token store: one JSON document in localStorage. Same shape as the reference
 // client's config file minus `server` (the web app is always same-origin with the hub).
 export interface StoredUser {
@@ -17,7 +18,7 @@ export interface StoredSession {
   user: StoredUser;
 }
 
-const KEY = 'majlis.session';
+const KEY = `${derived.storagePrefix}session`;
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 

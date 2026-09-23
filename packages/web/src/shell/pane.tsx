@@ -1,5 +1,6 @@
 // The right-hand split pane: artifacts, code, preview, tool output, later the tasks. One
 // provider; any screen can open content in it. Width is remembered per browser.
+import { derived } from '@majlis/contracts';
 import {
   createContext,
   useCallback,
@@ -29,7 +30,7 @@ interface PaneValue {
 }
 
 const PaneContext = createContext<PaneValue | null>(null);
-const WIDTH_KEY = 'majlis.pane.width';
+const WIDTH_KEY = `${derived.storagePrefix}pane.width`;
 export const PANE_MIN = 288;
 export const PANE_DEFAULT = 544;
 
