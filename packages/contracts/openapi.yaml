@@ -14735,6 +14735,23 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/Ulid'
+            external:
+              description: >-
+                Set when this card reflects a card on an agent's own board (today: Hermes's
+                kanban). That board owns the card: its title and description are read-only
+                here, moves are asked of it first, and it may refuse them.
+              oneOf:
+                - type: object
+                  required: [source, id]
+                  properties:
+                    source:
+                      type: string
+                      enum: [hermes]
+                    id:
+                      type: string
+                      maxLength: 64
+                      description: The card's id on that board.
+                - type: 'null'
     Subtask:
       type: object
       required: [id, task_id, index, title, status, note, blocked_reason, completed_at, updated_at]

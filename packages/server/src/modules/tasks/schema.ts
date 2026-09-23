@@ -169,9 +169,24 @@ export const tasks = sqliteTable(
     roomId: ulid('room_id'),
     attemptCount: integer('attempt_count').notNull().default(0),
     archivedAt: timestampMs('archived_at'),
+    /**
+     * Where this card really lives, when it is not only here.
+     *
+     * `hermes` means it is a card on Hermes's own kanban and this row is its reflection
+     * (owner decision, 2026-09-23): Hermes is the one doing the work, so on every read its
+     * title, status and result overwrite ours, and every move goes through `hermes
+     * kanban`. `null` is a card the hub alone keeps.
+     */
+    externalSource: text('external_source', { enum: ['hermes'] }),
+    /** Hermes's own id (`t_` + 8 hex). Not a ULID, which is why it is not our `id`. */
+    externalId: text('external_id', { length: 64 }),
+    /** When the reflection last matched Hermes. */
+    externalSyncedAt: timestampMs('external_synced_at'),
   },
   (t) => [
     uniqueIndex('tasks_project_number_uq').on(t.projectId, t.number),
+    // One reflection per Hermes card per workspace: a second sync must update, not copy.
+    uniqueIndex('tasks_external_uq').on(t.workspace, t.externalSource, t.externalId),
     index('tasks_workspace_status_idx').on(t.workspace, t.archivedAt, t.status, t.position),
     index('tasks_project_status_idx').on(t.projectId, t.status),
     index('tasks_assignee_agent_idx').on(t.assigneeAgentId, t.status),

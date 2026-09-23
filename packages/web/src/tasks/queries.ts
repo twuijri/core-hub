@@ -63,6 +63,8 @@ export interface Task {
   subtask_counts: { total: number; done: number };
   depends_on: string[];
   due_at: string | null;
+  /** Set when the card reflects one on an agent's own board (Hermes's kanban). */
+  external?: { source: 'hermes'; id: string } | null;
 }
 
 export interface Column {

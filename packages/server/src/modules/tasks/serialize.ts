@@ -116,6 +116,10 @@ export function toTask(
     due_at: row.dueAt?.toISOString() ?? null,
     started_at: row.startedAt?.toISOString() ?? null,
     completed_at: row.completedAt?.toISOString() ?? null,
+    external:
+      row.externalSource && row.externalId
+        ? { source: row.externalSource, id: row.externalId }
+        : null,
     archived_at: row.archivedAt?.toISOString() ?? null,
     attachment_ids: row.attachmentIds,
   };

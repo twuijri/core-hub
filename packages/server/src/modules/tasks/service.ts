@@ -302,6 +302,123 @@ export class TasksService {
     return this.createProject(scope, { name: 'المهام' });
   }
 
+  /**
+   * The reflection of a Hermes card, created or refreshed. **Hermes wins**: title, body,
+   * status and result are overwritten with Hermes's on every call, whatever the hub had.
+   *
+   * Position is the one field that stays the hub's — Hermes has no order within a column,
+   * and a card a person dragged to the top should not jump back down on the next read.
+   */
+  reflectExternal(
+    scope: Scope,
+    card: {
+      source: 'hermes';
+      id: string;
+      title: string;
+      body: string | null;
+      status: TaskStatus;
+      result: string | null;
+      agentId: string | null;
+    },
+    now: Date = new Date(),
+  ): { row: TaskRow; created: boolean } {
+    const existing = this.db
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.workspace, scope.workspace),
+          eq(tasks.externalSource, card.source),
+          eq(tasks.externalId, card.id),
+        ),
+      )
+      .get();
+    if (existing) {
+      const moved = existing.status !== card.status;
+      this.db
+        .update(tasks)
+        .set({
+          title: card.title,
+          description: card.body,
+          status: card.status,
+          latestSummary: card.result ?? existing.latestSummary,
+          // A card Hermes moved lands at the top of its new column, as a person's move does.
+          position: moved
+            ? between(
+                null,
+                this.column(scope, existing.projectId, card.status, true)[0]?.position ?? null,
+              )
+            : existing.position,
+          archivedAt: card.status === 'archived' ? (existing.archivedAt ?? now) : null,
+          completedAt: card.status === 'done' ? (existing.completedAt ?? now) : null,
+          externalSyncedAt: now,
+          updatedAt: moved ? now : existing.updatedAt,
+        })
+        .where(eq(tasks.id, existing.id))
+        .run();
+      if (moved) {
+        this.record(
+          scope,
+          { kind: 'agent', id: card.agentId, name: 'Hermes' },
+          existing.id,
+          'status',
+          existing.status,
+          card.status,
+          null,
+        );
+      }
+      return { row: this.task(scope, existing.id), created: false };
+    }
+    const project = this.defaultProject(scope);
+    const id = newUlid();
+    const number = project.taskCounter + 1;
+    this.db.update(projects).set({ taskCounter: number }).where(eq(projects.id, project.id)).run();
+    this.db
+      .insert(tasks)
+      .values({
+        id,
+        ownerId: scope.userId,
+        workspace: scope.workspace,
+        projectId: project.id,
+        number,
+        title: card.title,
+        description: card.body,
+        status: card.status,
+        priority: 'normal',
+        tags: [],
+        assigneeKind: card.agentId ? 'agent' : 'none',
+        assigneeAgentId: card.agentId,
+        position: append(this.lastPosition(scope, project.id, card.status)),
+        latestSummary: card.result,
+        archivedAt: card.status === 'archived' ? now : null,
+        completedAt: card.status === 'done' ? now : null,
+        externalSource: card.source,
+        externalId: card.id,
+        externalSyncedAt: now,
+      })
+      .run();
+    return { row: this.task(scope, id), created: true };
+  }
+
+  /** Every reflection of `source` in this workspace, so a sync can see what went missing. */
+  externalRows(scope: Scope, source: 'hermes'): TaskRow[] {
+    return this.db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.workspace, scope.workspace), eq(tasks.externalSource, source)))
+      .all();
+  }
+
+  /** Link an existing row to the card it was just created as. */
+  linkExternal(scope: Scope, id: string, source: 'hermes', externalId: string): TaskRow {
+    this.db
+      .update(tasks)
+      .set({ externalSource: source, externalId, externalSyncedAt: new Date() })
+      .where(and(eq(tasks.workspace, scope.workspace), eq(tasks.id, id)))
+      .run();
+    return this.task(scope, id);
+  }
+
   createTask(scope: Scope, actor: Actor, input: Record<string, unknown>): TaskRow {
     const asked = input.project_id;
     const project =
