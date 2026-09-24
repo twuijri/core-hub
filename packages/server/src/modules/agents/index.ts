@@ -54,6 +54,7 @@ import { HERMES_ENTRY } from './catalog/index.js';
 import { HermesRuntime, type HermesRuntimeStatus, type Spawner } from './hermes-runtime.js';
 import { HermesDashboard, type DashboardSpawner } from './hermes-dashboard.js';
 import { QR_PLATFORMS, pairWhatsApp, testMcpServer, type HermesApiCall } from './hermes-tools.js';
+import { namedHermesProfiles } from './hermes-profiles.js';
 import { hermesProfileName, profileHome } from './profile-home.js';
 import { SkillImportError, installPack, planImport, type UploadedFile } from './skill-import.js';
 import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './installer.js';
@@ -61,7 +62,14 @@ import type { AgentDirectoryPort, AgentInfo, AgentModelsPort, AgentRunnerPort } 
 import { AgentRunner } from './runner.js';
 import { AgentsService, type AgentPatchInput } from './service.js';
 import { ChannelError, clearChannel, listChannels, putChannel, type Channel } from './channels.js';
-import { MemoryError, deleteMemory, listMemory, putMemory, type MemoryDocument } from './memory.js';
+import {
+  MemoryError,
+  deleteMemory,
+  listMemory,
+  migrateLegacyMemory,
+  putMemory,
+  type MemoryDocument,
+} from './memory.js';
 import {
   McpError,
   deleteMcpServer,
@@ -221,6 +229,36 @@ export function registerAgentAttachments(
   factory: (app: FastifyInstance) => AgentAttachmentsPort,
 ): void {
   attachmentsFactory = factory;
+}
+
+/**
+ * Earlier hubs wrote `MEMORY.md` / `USER.md` at a profile's root, where Hermes never reads.
+ * At boot every profile's are moved once into `memories/` (`memory.ts` §migrateLegacyMemory),
+ * so the words reach the agent's next conversation without anyone opening the Memory page.
+ * Best effort: a profile that cannot be moved is logged and tried again on its next memory read.
+ */
+export function migrateMemoryOfEveryProfile(
+  root: string | null | undefined,
+  log: Pick<FastifyInstance['log'], 'info' | 'warn'>,
+): void {
+  if (!root) return;
+  const homes = [
+    { profile: 'default', home: root },
+    ...namedHermesProfiles(root).map((name) => ({
+      profile: name,
+      home: path.join(root, 'profiles', name),
+    })),
+  ];
+  for (const { profile, home } of homes) {
+    try {
+      const moved = migrateLegacyMemory(home);
+      if (moved.length > 0) {
+        log.info({ profile, moved }, 'agents: memory moved to where Hermes reads it');
+      }
+    } catch (error) {
+      log.warn({ profile, err: error }, 'agents: could not move memory to where Hermes reads it');
+    }
+  }
 }
 
 const contexts = new WeakMap<SocketServer, AgentsContext>();
@@ -467,6 +505,7 @@ export const agentsModule = defineModule({
     app.addHook('onReady', async () => {
       const mode = await ctx.runtime.start();
       app.log.info({ mode, endpoint: ctx.runtime.endpoint }, 'agents: hermes runtime');
+      migrateMemoryOfEveryProfile(ctx.runtime.status().home, app.log);
     });
     app.addHook('onClose', async () => {
       await ctx.runner.closeAll();
@@ -856,7 +895,7 @@ export const agentsModule = defineModule({
         if (error.reason === 'memory_document_protected') {
           throw new HubError('conflict', { details: { reason: error.reason } });
         }
-        throw new HubError('bad_request', { details: { reason: error.reason } });
+        throw new HubError('bad_request', { details: { reason: error.reason, ...error.details } });
       }
       throw error;
     };
