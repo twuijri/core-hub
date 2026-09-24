@@ -8,6 +8,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   SkillError,
+  categoryDescription,
   deleteSkill,
   getSkill,
   listSkills,
@@ -237,5 +238,117 @@ describe('the front-matter reader', () => {
   it('treats an unterminated front matter as all body, not as half a skill', () => {
     const { raw } = parseFrontMatter('---\nname: x\nstill going\n');
     expect(raw).toBe('');
+  });
+});
+
+/**
+ * Hermes keeps its own skills one level down, in category folders, and records the ones it
+ * seeded from its bundle (`tools/skills_sync.py`). Before, the page listed none of them.
+ */
+describe('skills in category folders, as Hermes keeps them', () => {
+  function seed(dir: string, rel: string, name: string, description = `${name} skill`): void {
+    mkdirSync(path.join(dir, 'skills', rel), { recursive: true });
+    writeFileSync(
+      path.join(dir, 'skills', rel, 'SKILL.md'),
+      `---\nname: ${name}\ndescription: ${description}\n---\n\nDo it.\n`,
+      'utf8',
+    );
+  }
+
+  function hermesHome(): string {
+    const dir = home();
+    seed(dir, 'apple/apple-notes', 'apple-notes');
+    seed(dir, 'apple/findmy', 'findmy');
+    seed(dir, 'research/arxiv', 'arxiv');
+    // A deeper layout Hermes also walks; the category is still the top folder.
+    seed(dir, 'mlops/training/axolotl', 'axolotl');
+    // A skill's own support folder is not a category, and Hermes's hub folder is skipped.
+    seed(dir, 'research/arxiv/references/not-a-skill', 'not-a-skill');
+    seed(dir, '.hub/cache/hidden', 'hidden');
+    writeFileSync(
+      path.join(dir, 'skills', 'apple', 'DESCRIPTION.md'),
+      'Apple / macOS skills — tools that interact with the Mac desktop\n(Finder, native apps).\n\nSecond paragraph.\n',
+    );
+    writeFileSync(
+      path.join(dir, 'skills', 'research', 'DESCRIPTION.md'),
+      '---\ndescription: Finding and reading sources.\n---\n# Research\n',
+    );
+    writeFileSync(
+      path.join(dir, 'skills', '.bundled_manifest'),
+      'apple-notes:0f1e2d\nfindmy:aa11\narxiv:bb22\naxolotl:cc33\n',
+    );
+    // One the person wrote themselves, flat, as the hub has always written them.
+    write(dir, 'my-notes', '---\nname: my-notes\ndescription: Mine.\n---\nbody\n');
+    return dir;
+  }
+
+  it('lists every skill below a category folder, with its category, and the flat ones too', () => {
+    const dir = hermesHome();
+    const listed = listSkills(dir).map((skill) => [skill.key, skill.category, skill.bundled]);
+    expect(listed).toEqual([
+      ['apple-notes', 'apple', true],
+      ['arxiv', 'research', true],
+      ['axolotl', 'mlops', true],
+      ['findmy', 'apple', true],
+      ['my-notes', null, false],
+    ]);
+  });
+
+  it("reads a category's own description: front matter, or its first paragraph", () => {
+    const dir = hermesHome();
+    expect(categoryDescription(dir, 'apple')).toBe(
+      'Apple / macOS skills — tools that interact with the Mac desktop (Finder, native apps).',
+    );
+    expect(categoryDescription(dir, 'research')).toBe('Finding and reading sources.');
+    expect(categoryDescription(dir, 'mlops')).toBeNull();
+    expect(categoryDescription(dir, '../etc')).toBeNull();
+  });
+
+  it('reads a category skill by its folder name, whole document', () => {
+    const dir = hermesHome();
+    const skill = getSkill(dir, 'findmy');
+    expect(skill?.category).toBe('apple');
+    expect(skill?.content).toContain('name: findmy');
+  });
+
+  it("refuses to write, switch or delete a skill Hermes seeded, and leaves Hermes's copy alone", () => {
+    const dir = hermesHome();
+    const file = path.join(dir, 'skills', 'apple', 'findmy', 'SKILL.md');
+    const before = readFileSync(file, 'utf8');
+    expect(() => putSkill(dir, 'findmy', { content: '---\nname: findmy\n---\nmine\n' })).toThrow(
+      /skill_bundled/,
+    );
+    expect(() => setSkillEnabled(dir, 'findmy', false)).toThrow(/skill_bundled/);
+    expect(() => deleteSkill(dir, 'findmy')).toThrow(/skill_bundled/);
+    expect(readFileSync(file, 'utf8')).toBe(before);
+  });
+
+  it('writes, switches and deletes a category skill that is not Hermes\'s, where it is', () => {
+    const dir = hermesHome();
+    seed(dir, 'research/lit-review', 'lit-review');
+    const folder = path.join(dir, 'skills', 'research', 'lit-review');
+    const edited = '---\nname: lit-review\ndescription: Edited.\n---\nNew body.\n';
+    const written = putSkill(dir, 'lit-review', { content: edited });
+    expect(written.category).toBe('research');
+    expect(readFileSync(path.join(folder, 'SKILL.md'), 'utf8')).toBe(edited);
+    // Not a second copy directly under skills/.
+    expect(existsSync(path.join(dir, 'skills', 'lit-review'))).toBe(false);
+
+    setSkillEnabled(dir, 'lit-review', false);
+    expect(existsSync(path.join(folder, 'SKILL.md.off'))).toBe(true);
+    expect(listSkills(dir).find((skill) => skill.key === 'lit-review')?.enabled).toBe(false);
+
+    deleteSkill(dir, 'lit-review');
+    expect(existsSync(folder)).toBe(false);
+    // The category folder is Hermes's and holds other skills.
+    expect(existsSync(path.join(dir, 'skills', 'research', 'arxiv', 'SKILL.md'))).toBe(true);
+  });
+
+  it('a skill directly under skills/ wins over a category skill of the same folder name', () => {
+    const dir = hermesHome();
+    write(dir, 'arxiv', '---\nname: arxiv\ndescription: Mine.\n---\nbody\n');
+    const arxiv = listSkills(dir).filter((skill) => skill.key === 'arxiv');
+    expect(arxiv).toHaveLength(1);
+    expect(arxiv[0]?.category).toBeNull();
   });
 });

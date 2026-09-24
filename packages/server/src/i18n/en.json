@@ -122,6 +122,11 @@
       "ended": "The pairing ended before a phone was linked.",
       "expired": "The pairing code expired before a phone was linked. Start again.",
       "not_saved": "The phone was linked, but Hermes did not turn the channel on:"
+    },
+    "plugin_install": {
+      "started": "Asking Hermes to install the plugin…",
+      "running": "Hermes is fetching, scanning and installing the plugin…",
+      "done": "Installed, switched off. Switch it on to load it in the agent's next session."
     }
   },
   "models": {

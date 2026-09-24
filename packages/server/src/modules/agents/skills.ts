@@ -19,6 +19,20 @@
  * **Disabling is a rename, not a delete.** `SKILL.md` → `SKILL.md.off` leaves every byte
  * in place and takes the skill out of the agent's reach, which is what "off" should mean
  * and what makes "on" free.
+ *
+ * **Categories are folders, as Hermes reads them** (`tools/skills_tool.py` §_find_all_skills
+ * and §_get_category_from_path, `agent/skill_utils.py` §iter_skill_index_files, tag
+ * v2026.9.14): a folder under `skills/` without a `SKILL.md` of its own is a category, every
+ * skill below it (`skills/<category>/<name>/SKILL.md`, deeper too) belongs to it, and its
+ * `DESCRIPTION.md` describes it. That is where Hermes seeds its built-in skills. Hermes skips
+ * the same folders here (`.hub`, `.git`, `node_modules` …, a skill's own `references/`,
+ * `scripts/` …), and names each skill after its folder.
+ *
+ * **Hermes's own skills are read-only here.** A skill Hermes copied from its bundle is named
+ * in `skills/.bundled_manifest` (`name:hash` per line), and Hermes updates it from there as
+ * long as its bytes still match the bundle (`tools/skills_sync.py`). Renaming its `SKILL.md`
+ * or rewriting it from this screen would be the hub quietly forking Hermes's copy, so those
+ * are listed, readable and pinnable, and refused (`skill_bundled`) for anything else.
  */
 import {
   existsSync,
@@ -38,6 +52,36 @@ export const DISABLED_SUFFIX = '.off';
 
 /** A key is a directory name, so it may not escape the skills directory. */
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+/** What a lookup accepts: a folder Hermes made may be longer than one the hub creates. */
+const LOOKUP_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
+/** Where Hermes records the skills it seeded from its bundle. */
+export const BUNDLED_MANIFEST = '.bundled_manifest';
+/** The folder describing a category, beside its skills. */
+export const CATEGORY_DESCRIPTION = 'DESCRIPTION.md';
+/** Folders Hermes never looks into for skills (`agent/skill_utils.py` §EXCLUDED_SKILL_DIRS). */
+const EXCLUDED = new Set([
+  '.git',
+  '.github',
+  '.hub',
+  '.archive',
+  '.curator_backups',
+  '.venv',
+  'venv',
+  'node_modules',
+  'site-packages',
+  '__pycache__',
+  '.tox',
+  '.nox',
+  '.pytest_cache',
+  '.mypy_cache',
+  '.ruff_cache',
+  // Organisation mirrors are token-gated in Hermes; the hub does not hold the token.
+  '_org',
+]);
+/** A skill's own support folders are not categories (`SKILL_SUPPORT_DIRS`). */
+const SUPPORT = new Set(['references', 'templates', 'assets', 'scripts']);
+/** Hermes walks the whole tree; four levels is every layout it ships and then some. */
+const MAX_DEPTH = 4;
 
 export interface Skill {
   key: string;
@@ -58,6 +102,10 @@ export interface Skill {
   content: string | null;
   /** Set when the file is there but unreadable, so the row can say why. */
   broken: string | null;
+  /** The category folder it lives in (`skills/<category>/…`), or null directly under `skills/`. */
+  category: string | null;
+  /** Hermes seeded it from its bundle (`.bundled_manifest`): read-only through the hub. */
+  bundled: boolean;
 }
 
 export function skillsDir(home: string): string {
@@ -108,8 +156,101 @@ function packOf(raw: string): string | null {
   return first && first !== '' ? first : null;
 }
 
-function readOne(dir: string, key: string): Skill | null {
-  const enabledPath = path.join(dir, key, SKILL_FILE);
+/** Where one skill lives, as the walk found it. */
+interface Located {
+  key: string;
+  /** Absolute path of the skill's folder. */
+  folder: string;
+  category: string | null;
+}
+
+function hasSkillFile(folder: string): boolean {
+  return (
+    existsSync(path.join(folder, SKILL_FILE)) ||
+    existsSync(path.join(folder, SKILL_FILE + DISABLED_SUFFIX))
+  );
+}
+
+function subfolders(dir: string): string[] {
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+      .filter(
+        (entry) =>
+          (entry.isDirectory() || entry.isSymbolicLink()) &&
+          !entry.name.startsWith('.') &&
+          !EXCLUDED.has(entry.name),
+      )
+      .map((entry) => entry.name)
+      .filter((name) => isDirectory(path.join(dir, name)))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+function isDirectory(target: string): boolean {
+  try {
+    return statSync(target).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Every skill folder under `skills/`, in Hermes's order: a folder with a `SKILL.md` is a skill
+ * (and is not looked into), one without is a category whose skills are below it. Two folders
+ * with the same name: the first wins, as the first skill of a name wins in Hermes.
+ */
+function walk(home: string): Located[] {
+  const root = skillsDir(home);
+  const found: Located[] = [];
+  const seen = new Set<string>();
+  const add = (key: string, folder: string, category: string | null) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    found.push({ key, folder, category });
+  };
+  const descend = (dir: string, category: string, depth: number) => {
+    for (const name of subfolders(dir)) {
+      const folder = path.join(dir, name);
+      if (hasSkillFile(folder)) add(name, folder, category);
+      else if (depth < MAX_DEPTH && !SUPPORT.has(name)) descend(folder, category, depth + 1);
+    }
+  };
+  if (!existsSync(root)) return found;
+  const top = subfolders(root);
+  // Skills directly under `skills/` first: those are the ones the hub has always written, and a
+  // category folder must not shadow one.
+  for (const name of top) {
+    const folder = path.join(root, name);
+    if (hasSkillFile(folder)) add(name, folder, null);
+  }
+  for (const name of top) {
+    const folder = path.join(root, name);
+    if (!hasSkillFile(folder)) descend(folder, name, 2);
+  }
+  return found;
+}
+
+/** The names Hermes seeded from its bundle. Empty when it never did. */
+export function bundledNames(home: string): Set<string> {
+  let text: string;
+  try {
+    text = readFileSync(path.join(skillsDir(home), BUNDLED_MANIFEST), 'utf8');
+  } catch {
+    return new Set();
+  }
+  return new Set(
+    text
+      .split('\n')
+      .map((line) => (line.split(':')[0] ?? '').trim())
+      .filter((name) => name !== ''),
+  );
+}
+
+function readOne(where: Located, bundled: ReadonlySet<string>): Skill | null {
+  const { key, folder, category } = where;
+  const enabledPath = path.join(folder, SKILL_FILE);
   const disabledPath = enabledPath + DISABLED_SUFFIX;
   const file = existsSync(enabledPath)
     ? enabledPath
@@ -133,13 +274,16 @@ function readOne(dir: string, key: string): Skill | null {
       updatedAt: new Date(0),
       content: null,
       broken: error instanceof Error ? error.message : 'unreadable',
+      category,
+      bundled: bundled.has(key),
     };
   }
   const { fields, raw } = parseFrontMatter(text);
+  const name = fields.get('name') ?? key;
   return {
     key,
     // A skill whose front matter forgot its name is still a skill; the folder names it.
-    name: fields.get('name') ?? key,
+    name,
     description: fields.get('description') ?? null,
     enabled,
     pack: packOf(raw),
@@ -147,24 +291,63 @@ function readOne(dir: string, key: string): Skill | null {
     updatedAt: statSync(file).mtime,
     content: text,
     broken: raw === '' ? 'front_matter_missing' : null,
+    category,
+    // Hermes records a seeded skill by its name; the folder carries the same one.
+    bundled: bundled.has(name) || bundled.has(key),
   };
 }
 
 export function listSkills(home: string): Skill[] {
-  const dir = skillsDir(home);
-  if (!existsSync(dir)) return [];
+  const bundled = bundledNames(home);
   const out: Skill[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
-    const skill = readOne(dir, entry.name);
+  for (const where of walk(home)) {
+    const skill = readOne(where, bundled);
     if (skill) out.push({ ...skill, content: null });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** Where the skill with this key lives: directly under `skills/` first, then in a category. */
+function locate(home: string, key: string): Located | null {
+  if (!LOOKUP_KEY.test(key)) return null;
+  const flat = path.join(skillsDir(home), key);
+  if (hasSkillFile(flat)) return { key, folder: flat, category: null };
+  return walk(home).find((where) => where.key === key) ?? null;
+}
+
+/**
+ * A category's own words: the `description` of its `DESCRIPTION.md` front matter, else the
+ * file's first paragraph. Null when it has none.
+ */
+export function categoryDescription(home: string, category: string): string | null {
+  if (!LOOKUP_KEY.test(category)) return null;
+  let raw: string;
+  try {
+    raw = readFileSync(path.join(skillsDir(home), category, CATEGORY_DESCRIPTION), 'utf8');
+  } catch {
+    return null;
+  }
+  const { fields, body } = parseFrontMatter(raw);
+  const described = fields.get('description');
+  if (described) return described;
+  const paragraph: string[] = [];
+  for (const line of body.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed === '') {
+      if (paragraph.length > 0) break;
+      continue;
+    }
+    if (trimmed.startsWith('#')) continue;
+    paragraph.push(trimmed);
+  }
+  const text = paragraph.join(' ');
+  if (text === '') return null;
+  return text.length > 500 ? `${text.slice(0, 499)}…` : text;
+}
+
 export function getSkill(home: string, key: string): Skill | null {
-  if (!KEY.test(key)) return null;
-  return readOne(skillsDir(home), key);
+  const where = locate(home, key);
+  return where ? readOne(where, bundledNames(home)) : null;
 }
 
 export class SkillError extends Error {
@@ -187,36 +370,49 @@ export interface SkillWrite {
  * so here is kinder than a runtime that refuses to boot tonight.
  */
 export function putSkill(home: string, key: string, input: SkillWrite): Skill {
-  if (!KEY.test(key)) throw new SkillError('skill_key_invalid');
+  const existing = locate(home, key);
+  if (!existing && !KEY.test(key)) throw new SkillError('skill_key_invalid');
+  const bundled = bundledNames(home);
+  if (existing && readOne(existing, bundled)?.bundled) throw new SkillError('skill_bundled');
   const { fields, raw } = parseFrontMatter(input.content);
   if (raw === '') throw new SkillError('skill_front_matter_missing');
   if ((fields.get('name') ?? '').trim() === '') throw new SkillError('skill_name_required');
 
-  const dir = skillsDir(home);
-  const folder = path.join(dir, key);
-  const enabledPath = path.join(folder, SKILL_FILE);
+  // An existing skill is written where it is, in its category or not; a new one directly
+  // under `skills/`, as the hub has always created them.
+  const where = existing ?? { key, folder: path.join(skillsDir(home), key), category: null };
+  const enabledPath = path.join(where.folder, SKILL_FILE);
   const disabledPath = enabledPath + DISABLED_SUFFIX;
   // A skill that was off stays off: saving an edit is not the same as turning it on.
   const target = !existsSync(enabledPath) && existsSync(disabledPath) ? disabledPath : enabledPath;
 
-  mkdirSync(folder, { recursive: true });
+  mkdirSync(where.folder, { recursive: true });
   writeFileSync(target, input.content, 'utf8');
-  const written = readOne(dir, key);
+  const written = readOne(where, bundled);
   if (!written) throw new SkillError('skill_write_failed');
   return written;
 }
 
+/** The skill a change is about, refused when it is Hermes's own. */
+function writable(home: string, key: string): { where: Located; bundled: Set<string> } {
+  if (!LOOKUP_KEY.test(key)) throw new SkillError('skill_key_invalid');
+  const where = locate(home, key);
+  if (!where) throw new SkillError('skill_not_found');
+  const bundled = bundledNames(home);
+  if (readOne(where, bundled)?.bundled) throw new SkillError('skill_bundled');
+  return { where, bundled };
+}
+
 /** On or off by renaming the file. Nothing is copied and nothing is lost. */
 export function setSkillEnabled(home: string, key: string, enabled: boolean): Skill {
-  if (!KEY.test(key)) throw new SkillError('skill_key_invalid');
-  const folder = path.join(skillsDir(home), key);
-  const enabledPath = path.join(folder, SKILL_FILE);
+  const { where, bundled } = writable(home, key);
+  const enabledPath = path.join(where.folder, SKILL_FILE);
   const disabledPath = enabledPath + DISABLED_SUFFIX;
   const from = enabled ? disabledPath : enabledPath;
   const to = enabled ? enabledPath : disabledPath;
   if (existsSync(from)) renameSync(from, to);
   else if (!existsSync(to)) throw new SkillError('skill_not_found');
-  const skill = readOne(skillsDir(home), key);
+  const skill = readOne(where, bundled);
   if (!skill) throw new SkillError('skill_not_found');
   return skill;
 }
@@ -225,15 +421,10 @@ export function setSkillEnabled(home: string, key: string, enabled: boolean): Sk
  * Remove the skill's folder.
  *
  * The whole folder, because a skill is a folder — leaving its scripts behind after its
- * `SKILL.md` is gone would leave the person with files nothing lists and nothing owns.
+ * `SKILL.md` is gone would leave the person with files nothing lists and nothing owns. The
+ * category folder around it stays: it is Hermes's, and may hold other skills.
  */
 export function deleteSkill(home: string, key: string): void {
-  if (!KEY.test(key)) throw new SkillError('skill_key_invalid');
-  const folder = path.join(skillsDir(home), key);
-  if (
-    !existsSync(path.join(folder, SKILL_FILE)) &&
-    !existsSync(path.join(folder, SKILL_FILE + DISABLED_SUFFIX))
-  )
-    throw new SkillError('skill_not_found');
-  rmSync(folder, { recursive: true, force: true });
+  const { where } = writable(home, key);
+  rmSync(where.folder, { recursive: true, force: true });
 }
