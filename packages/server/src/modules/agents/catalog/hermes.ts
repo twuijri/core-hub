@@ -32,6 +32,7 @@ export const hermes: CatalogEntry = {
     'resume',
     'jobs',
     'tasks',
+    'plugins',
   ],
   sections: [
     'jobs',

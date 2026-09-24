@@ -3938,6 +3938,17 @@ paths:
       operationId: agents.listSkills
       tags: [agents]
       summary: List an agent's skills by category
+      description: >-
+        The skills in the Hermes home of the profile in `X-Hub-Profile`, read the way Hermes
+        reads them: a folder with a `SKILL.md` directly under `skills/` is a skill of its own
+        (grouped by the pack its front matter names, or with the person's own skills), and a
+        folder without one is a **category** — every skill below it
+        (`skills/<category>/<name>/SKILL.md`, where Hermes keeps its built-in skills) lists
+        under that category, whose `description` is the category's `DESCRIPTION.md`. A skill
+        Hermes seeded from its own bundle (named in `skills/.bundled_manifest`) is `source:
+        builtin` and read-only here: it can be read and pinned, not written, switched or
+        deleted (`409 conflict`, `details.reason = skill_bundled`). A skill's `key` is its
+        folder's name wherever the folder is.
       x-rt-events: []
       responses:
         '200':
@@ -4080,6 +4091,11 @@ paths:
       operationId: agents.putSkill
       tags: [agents]
       summary: Create or replace a skill (admin)
+      description: >-
+        Writes the whole `SKILL.md` verbatim. An existing skill is written where it is, in its
+        category folder or directly under `skills/`; a new one is created directly under
+        `skills/<skill_key>/`. A built-in skill (`source: builtin`) is Hermes's own and is not
+        written: `409 conflict`, `details.reason = skill_bundled`.
       x-roles: [owner, admin]
       requestBody:
         required: true
@@ -4116,10 +4132,17 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
     patch:
       operationId: agents.updateSkill
       tags: [agents]
       summary: Enable, disable or pin a skill
+      description: >-
+        `enabled` switches a skill on or off by renaming its `SKILL.md`; a built-in skill
+        (`source: builtin`) is Hermes's own and is not switched here (`409 conflict`,
+        `details.reason = skill_bundled`). `pinned` is the hub's own order and works for every
+        skill.
       requestBody:
         required: true
         content:
@@ -4152,10 +4175,15 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
     delete:
       operationId: agents.deleteSkill
       tags: [agents]
       summary: Delete a user skill (admin; built-in skills cannot be deleted)
+      description: >-
+        Removes the skill's folder wherever it is. A built-in skill (`source: builtin`) is
+        `409 conflict` with `details.reason = skill_bundled`.
       x-roles: [owner, admin]
       x-rt-events: [agent.updated]
       responses:
@@ -4551,7 +4579,19 @@ paths:
     get:
       operationId: agents.listPlugins
       tags: [agents]
-      summary: List the plugins the agent's runtime knows (Hermes plugins, dsh plugin inventory)
+      summary: List the plugins the agent's runtime has in the profile
+      description: >-
+        What Hermes itself lists for the profile in `X-Hub-Profile` — `hermes plugins list`
+        run against that profile's home: the plugins it ships (`source: bundled`), the ones
+        installed into the profile (`user`), and Python packages that register one
+        (`external`), each with Hermes's own `status`. Hermes's dashboard plugin routes act on
+        the dashboard's own home only (they take no profile, unlike its MCP, skills and cron
+        routes), so the hub runs Hermes's command instead. A plugin Hermes's catalog has
+        withdrawn is listed with Hermes's reason in `warnings`; so is a name Hermes lists twice (it
+        ships a few under one name in two categories, and its commands take the name to mean the
+        first — the one listed). Only where the hub supervises
+        Hermes: otherwise `409 state_invalid` with `details.reason = hermes_not_supervised`;
+        an agent that is not Hermes is `409 state_invalid`, `plugins_are_hermes_only`.
       x-rt-events: []
       responses:
         '200':
@@ -4572,25 +4612,80 @@ paths:
                       type: string
               example:
                 items:
-                  - key: web-search
-                    name: 'بحث الويب'
-                    kind: standalone
-                    source: user
-                    version: 1.2.0
-                    description: null
+                  - key: disk-cleanup
+                    name: disk-cleanup
+                    kind: bundled
+                    source: bundled
+                    status: not_enabled
+                    version: 2.0.0
+                    description: 'Auto-track and clean up ephemeral files created during Hermes sessions.'
                     author: null
                     configured: true
-                    enabled: true
+                    enabled: false
                     manageable: true
-                    provides_tools: [web_search]
+                    removable: false
+                    provides_tools: []
                     provides_hooks: []
-                    requires_env: [SEARCH_API_KEY]
+                    requires_env: []
                     entries: []
                 warnings: []
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    post:
+      operationId: agents.installPlugin
+      tags: [agents]
+      summary: Install a plugin into the profile (admin)
+      description: >-
+        A job (`kind: plugin_install`, `resource: {kind: agent}`) in which Hermes installs the
+        plugin into the Hermes home of the profile in `X-Hub-Profile` — `hermes plugins install
+        <identifier> --no-enable`: a name from Hermes's curated catalog (installed at the
+        commit the catalog pins), a Git URL, or `owner/repo`. Hermes scans it, refuses what
+        its catalog has withdrawn, and installs it **switched off**; switching it on is
+        `agents.updatePlugin`, and Hermes loads it in its next session. The job fails with
+        Hermes's own sentence when Hermes refuses; its `result` is `{name, output}` when it
+        succeeds. Only where the hub supervises Hermes: otherwise `409 state_invalid` with
+        `details.reason = hermes_not_supervised`, and no job is created.
+      x-roles: [owner, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier]
+              properties:
+                identifier:
+                  type: string
+                  minLength: 1
+                  maxLength: 400
+                  pattern: '^[^\s-][^\s]*$'
+                  description: A catalog name, a Git URL or `owner/repo`; never an option.
+            example:
+              identifier: anpicasso/hermes-plugin-chrome-profiles
+      x-rt-events: [job.queued, job.progress, job.completed, job.failed]
+      responses:
+        '202':
+          description: Install started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAccepted'
+              example:
+                job_id: 01J8QK3ZR2W7M5N4P6T8V9X0JH
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /agents/{agent_id}/plugins/{plugin_key}:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -4605,6 +4700,14 @@ paths:
       operationId: agents.updatePlugin
       tags: [agents]
       summary: Enable or disable an agent plugin (admin)
+      description: >-
+        `hermes plugins enable|disable <key>` in the profile's home: Hermes's allow and deny
+        lists in that profile's `config.yaml`. Enabling grants no override of built-in tools
+        and no capability the plugin declares (Hermes asks for those interactively only, and
+        fails closed without a person at its terminal). Hermes applies it in its next
+        session. Answers the plugin as Hermes lists it afterwards. Hermes refusing (a plugin
+        it does not have) is `409 conflict`, `details.reason = hermes_refused`, with Hermes's
+        sentence in `details.message`; `hermes_not_supervised` as for `agents.listPlugins`.
       x-roles: [owner, admin]
       requestBody:
         required: true
@@ -4617,8 +4720,8 @@ paths:
                 enabled:
                   type: boolean
             example:
-              enabled: false
-      x-rt-events: [agent.updated]
+              enabled: true
+      x-rt-events: []
       responses:
         '200':
           description: The plugin.
@@ -4627,22 +4730,47 @@ paths:
               schema:
                 $ref: '#/components/schemas/AgentPlugin'
               example:
-                key: web-search
-                name: 'بحث الويب'
-                kind: standalone
-                source: user
-                version: 1.2.0
-                description: null
+                key: disk-cleanup
+                name: disk-cleanup
+                kind: bundled
+                source: bundled
+                status: enabled
+                version: 2.0.0
+                description: 'Auto-track and clean up ephemeral files created during Hermes sessions.'
                 author: null
                 configured: true
-                enabled: false
+                enabled: true
                 manageable: true
-                provides_tools: [web_search]
+                removable: false
+                provides_tools: []
                 provides_hooks: []
-                requires_env: [SEARCH_API_KEY]
+                requires_env: []
                 entries: []
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      operationId: agents.deletePlugin
+      tags: [agents]
+      summary: Remove a plugin installed into the profile (admin)
+      description: >-
+        `hermes plugins remove <key>` in the profile's home: the plugin's folder under the
+        profile's `plugins/`. Only a plugin that was installed there (`removable: true`); one
+        Hermes ships is switched off instead, never removed (`409 conflict`, `details.reason =
+        plugin_bundled`). Hermes refusing is `409 conflict`, `hermes_refused`, with its
+        sentence; `hermes_not_supervised` as for `agents.listPlugins`.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '204':
+          description: Removed.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -12019,6 +12147,7 @@ components:
           workflow_run,
           channel_login,
           import,
+          plugin_install,
         ]
     JobStatus:
       type: string
@@ -13943,6 +14072,10 @@ components:
           type: [string, 'null']
     SkillSource:
       type: string
+      description: >-
+        `builtin`: seeded by the agent from its own bundle (Hermes's `skills/.bundled_manifest`)
+        and read-only through the hub; `external`: installed from a pack that names itself;
+        `user`: written by a person.
       enum: [builtin, user, external]
     Skill:
       type: object
@@ -14171,18 +14304,25 @@ components:
                 type: integer
     AgentPlugin:
       type: object
+      description: >-
+        One plugin as the agent's runtime lists it. For Hermes, `name`, `version`,
+        `description` and `status` are Hermes's own; `provides_tools`, `provides_hooks`,
+        `requires_env` and `entries` are empty because Hermes's list does not report them, and
+        `configured` is always true for the same reason.
       required:
         [
           key,
           name,
           kind,
           source,
+          status,
           version,
           description,
           author,
           configured,
           enabled,
           manageable,
+          removable,
           provides_tools,
           provides_hooks,
           requires_env,
@@ -14191,6 +14331,7 @@ components:
       properties:
         key:
           type: string
+          description: What the plugin is addressed by (Hermes's plugin name).
         name:
           type: string
         kind:
@@ -14198,7 +14339,17 @@ components:
           enum: [standalone, bundled, preset]
         source:
           type: string
+          description: >-
+            `bundled`: ships with the runtime; `user`: installed into this profile (from the
+            catalog, Git, or by hand); `external`: registered by an installed Python package.
           enum: [bundled, user, external]
+        status:
+          type: string
+          description: >-
+            Hermes's word for it: `enabled` (on its allow list), `disabled` (on its deny list,
+            which wins), `not_enabled` (on neither — Hermes plugins are opt-in, so it does
+            not load).
+          enum: [enabled, disabled, not_enabled]
         version:
           type: [string, 'null']
         description:
@@ -14209,9 +14360,13 @@ components:
           type: boolean
         enabled:
           type: boolean
+          description: '`status == enabled`.'
         manageable:
           type: boolean
-          description: Whether `PATCH` may toggle it (false for bundled plugins).
+          description: Whether `PATCH` may switch it on or off.
+        removable:
+          type: boolean
+          description: Whether `DELETE` may remove it (installed into the profile, not shipped).
         provides_tools:
           type: array
           items:

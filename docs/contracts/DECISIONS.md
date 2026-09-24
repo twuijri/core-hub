@@ -664,3 +664,39 @@ can pause at a step until someone answers. What that settles in the contract:
 Rejected: a separate gate resource beside `Approval` (the contract already names
 `workflow_step` and the two fields; one inbox and one answer is the point), and answering
 `runNow` before the run exists (the ids would be promises the hub might break).
+
+## 36. An agent's plugins are what Hermes lists in the profile; its jobs are its schedules
+
+2026-09-24, with the agent's Plugins and Jobs pages and Hermes's skills in category folders.
+
+- **Plugins are Hermes's, per profile.** `agents.listPlugins` and `agents.updatePlugin`, stubs
+  until now, answer with what Hermes's own `hermes plugins` command says in the Hermes home of
+  the profile in `X-Hub-Profile`. Hermes's dashboard has plugin routes too, but they take no
+  profile (unlike its MCP, skills and cron routes) and so could only ever reach the default
+  profile. Two operations are added: `agents.installPlugin` (`POST /agents/{agent_id}/plugins`,
+  a job of the new `JobKind` `plugin_install`, installed switched off) and `agents.deletePlugin`
+  (`DELETE /agents/{agent_id}/plugins/{plugin_key}`, only what was installed into the profile;
+  what Hermes ships answers `409 conflict`, `details.reason = plugin_bundled`).
+- **`AgentPlugin` gains `status` and `removable`.** `status` is Hermes's own word —
+  `enabled`, `disabled` (its deny list, which wins) or `not_enabled` (on neither; Hermes
+  plugins are opt-in) — because a boolean would have folded the last two together.
+  `removable` says what `DELETE` accepts; `manageable` now means "may be switched", which is
+  true of every plugin Hermes lists, the ones it ships included (they are opt-in too). Fields
+  Hermes's list does not report stay in the schema and are empty, and the schema says so.
+- **A name Hermes lists twice is listed once.** Hermes ships a few plugins under one name in two
+  categories, and its commands take the name to mean the first; the second is named in
+  `warnings`.
+- **Where the hub does not supervise Hermes** every plugin operation answers `409
+  state_invalid`, `details.reason = hermes_not_supervised`, as the other tools that need
+  Hermes to act; an agent that is not Hermes is `plugins_are_hermes_only`.
+- **Jobs need no operation of their own.** For Hermes an agent's jobs are the jobs in Hermes's
+  own scheduler, which `schedules.list` already returns (`profile` + `agent_id`, the
+  "an agent's Jobs screen" its summary always named), and which the schedules operations
+  already run, pause and delete. A second list would have been a second truth.
+- **Skills in category folders.** `agents.listSkills` lists every skill below a folder that has
+  no `SKILL.md` of its own, under that folder as its category (described by its
+  `DESCRIPTION.md`) — Hermes's layout for its built-in skills. A skill Hermes seeded from its
+  bundle (`skills/.bundled_manifest`) is `source: builtin`, and `putSkill`, `updateSkill`
+  (`enabled`) and `deleteSkill` answer `409 conflict`, `details.reason = skill_bundled`;
+  pinning, the hub's own order, still works. `putSkill` and `updateSkill` gain the `409` they
+  can now answer.

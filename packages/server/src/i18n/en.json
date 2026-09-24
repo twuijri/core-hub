@@ -122,6 +122,11 @@
       "ended": "The pairing ended before a phone was linked.",
       "expired": "The pairing code expired before a phone was linked. Start again.",
       "not_saved": "The phone was linked, but Hermes did not turn the channel on:"
+    },
+    "plugin_install": {
+      "started": "Asking Hermes to install the plugin…",
+      "running": "Hermes is fetching, scanning and installing the plugin…",
+      "done": "Installed, switched off. Switch it on to load it in the agent's next session."
     }
   },
   "models": {
@@ -169,6 +174,9 @@
     "mcp_test": {
       "no_answer": "The server did not answer within {seconds} s (its connect_timeout).",
       "hermes_silent": "Hermes did not report back within {seconds} s."
+    },
+    "plugins": {
+      "duplicate": "Hermes lists more than one plugin by this name; the one shown is the one its commands act on."
     }
   }
 }
