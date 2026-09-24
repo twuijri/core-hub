@@ -4,7 +4,7 @@ Measured on this branch by asking a booted hub which contract operations are
 still the built-in 501 stub. Regenerate it the same way after a phase:
 every operation that answers `501 not_implemented` is not built yet.
 
-**185 of 251 contract operations are implemented.** Nothing fakes a success:
+**186 of 252 contract operations are implemented.** Nothing fakes a success:
 an unbuilt operation answers `501` with its operation id. Measured on this
 branch, 2026-09-22, by asking a booted hub which operations are still the
 built-in stub — and `packages/server/tests/unit/status.test.ts` keeps this
@@ -26,7 +26,7 @@ number from claiming more than the hub answers.
 | schedules | 20 | 23 | schedules with a real `next_run_at` (cron, interval, once, in the schedule's own timezone), run history, workflow definitions with validation, workflow-run history and cancel, and workflow import preview/confirm — and since 2026-09-23 **Hermes's own cron on the same page**: a schedule for the Hermes agent is created, edited, paused, deleted and fired *in Hermes's scheduler* through its `/api/jobs`, so it really runs; jobs Hermes made itself appear too, Hermes wins on every read, and the runs Hermes reports land in the history. And since 2026-09-23 **workflows run**: `runWorkflow` and `rerunWorkflowFromNode` walk the drawing step by step — `condition`, `delay` and `notify` done by the engine, `agent` as a real turn in a session of its own (source `workflow`), each step's output readable by the next as `{{steps.<id>.output}}`; cancel stops a run at once, a restart fails the runs it cut short, and conditions and templates are checked when the workflow is saved. `approval` steps are not built and fail saying so. `runNow` for a schedule that is not Hermes's still answers `501`, because nothing fires the hub's own schedules yet |
 | rooms | 0 | 28 | several agents in one room |
 | devices | 0 | 17 | device registry and push |
-| notify | 11 | 11 | the inbox — and since 2026-09-22 something actually writes to it: a run that finishes and an approval that is raised, in the recipient's own language, announced on `/rt/devices`. Per-kind preferences decide whether a notice is written at all, quiet hours are stored as given, and webhooks check their URL against private addresses before anything is sent, with an HMAC signature and a delivery record |
+| notify | 12 | 12 | the inbox — and since 2026-09-22 something actually writes to it: a run that finishes and an approval that is raised, in the recipient's own language, announced on `/rt/devices`. Per-kind preferences decide whether a notice is written at all, quiet hours are stored as given, and webhooks check their URL against private addresses before anything is sent, with an HMAC signature and a delivery record; since 2026-09-24 a webhook's recent deliveries are readable (`listWebhookDeliveries`). **The only delivery a webhook receives today is the test one**: nothing forwards the hub's events to a webhook yet, so the events it subscribes to are stored and not sent |
 
 **Phase 4 of the roadmap is complete**: `knowledge`, `plugins`, the `updates`
 channel and the `audit` dashboards all answer. Of Phase 1, `tasks` is complete
@@ -50,11 +50,13 @@ and cards that live in them.**
   schedules, notifications, people, workspaces, knowledge, plugins, updates,
   about, settings, pairing. Screens whose module is still 501 say so explicitly
   instead of showing an empty page.
-  Ten destinations are still that placeholder, and they are two different
-  things. Nine wait on a **module**: `rooms`, and the seven Hermes-gateway
-  pages of `agents` (skills, MCP, memory, jobs, channels, plugins, the global
-  agent). One waits only on a **screen**, because the hub already answers it:
-  `webhooks` (`privacy` has no operations of its own).
+  The destinations still showing that placeholder all wait on a **module**:
+  `rooms`, and the parts of `agents` its row above lists as not built. Since
+  2026-09-24 none waits only on a screen: **Webhooks** lists, adds, edits, enables, deletes and test-sends
+  (the test really arrives, signed, and its delivery is listed with the
+  endpoint's status), and **Privacy** lists the app tokens and paired devices
+  that can act as you and revokes them. Privacy's `redact_pii` switch is not
+  shown, because nothing in the hub applies it yet.
 - **Terminal** (`packages/cli`): the reference client — `setup`, login, pairing,
   agents, models, sessions, an interactive `chat` with resume and approvals.
 - Desktop, Android and iOS: not started (ADR 0007, ADR 0009).

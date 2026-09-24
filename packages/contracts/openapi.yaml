@@ -10816,6 +10816,61 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /notify/webhooks/{webhook_id}/deliveries:
+    parameters:
+      - name: webhook_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Ulid'
+    get:
+      operationId: notify.listWebhookDeliveries
+      tags: [notify]
+      summary: The most recent deliveries of one webhook, newest first (admin)
+      description: 'What the hub actually sent and what the endpoint answered. The payload is not returned: it may carry message text.'
+      x-scope: global
+      x-roles: [owner, admin]
+      x-rt-events: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: How many (1–50, default 20).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: Deliveries, newest first (not paged).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WebhookDelivery'
+              example:
+                items:
+                  - id: 01J8QK3ZR2W7M5N4P6T8V9X0WD
+                    webhook_id: 01J8QK3ZR2W7M5N4P6T8V9X0WH
+                    event: webhook.test
+                    status: delivered
+                    attempts: 1
+                    response_status: 200
+                    error: null
+                    created_at: '2026-09-21T10:15:40Z'
+                    delivered_at: '2026-09-21T10:15:41Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   # ================================================================== updates
   /updates/check:
     get:
@@ -16638,6 +16693,36 @@ components:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
           $ref: '#/components/schemas/Timestamp'
+    WebhookDelivery:
+      type: object
+      required:
+        [id, webhook_id, event, status, attempts, response_status, error, created_at, delivered_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Ulid'
+        webhook_id:
+          $ref: '#/components/schemas/Ulid'
+        event:
+          type: string
+          description: The event name sent, e.g. `webhook.test`.
+        status:
+          type: string
+          enum: [queued, delivered, failed, dead]
+          description: '`dead` = retries exhausted.'
+        attempts:
+          type: integer
+          minimum: 0
+        response_status:
+          type: [integer, 'null']
+          description: The HTTP status the endpoint answered; null when it could not be reached.
+        error:
+          type: [string, 'null']
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        delivered_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
     WebhookWrite:
       type: object
       properties:

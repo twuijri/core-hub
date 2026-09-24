@@ -965,7 +965,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
       request,
       'auth.profile_created',
       { kind: 'profile', id: row.id },
-      `workspace ${row.slug} created`,
+      `profile ${row.slug} created`,
       {
         clone_from: body.clone_from ?? null,
       },
@@ -1005,7 +1005,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
       request,
       'auth.profile_updated',
       { kind: 'profile', id: row.id },
-      `workspace ${updated.slug} updated`,
+      `profile ${updated.slug} updated`,
       {
         fields: Object.keys(body),
       },
@@ -1021,7 +1021,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
       request,
       'auth.profile_deleted',
       { kind: 'profile', id: row.id },
-      `workspace ${row.slug} archived`,
+      `profile ${row.slug} archived`,
     );
     return noContent(reply);
   });
@@ -1080,7 +1080,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
       request,
       'auth.profile_settings_updated',
       { kind: 'profile', id: row.id },
-      `workspace ${row.slug} settings updated`,
+      `profile ${row.slug} settings updated`,
       {
         sections: Object.keys(body),
       },
