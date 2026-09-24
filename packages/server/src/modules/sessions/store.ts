@@ -281,18 +281,21 @@ export class SessionsStore {
 
   /**
    * The newest `limit` messages, oldest first, or those before `beforeId`
-   * (contract `sessions.listMessages`).
+   * (contract `sessions.listMessages`). Keyset paging on `seq`, which is unique inside a
+   * session: a page is never shifted by messages written while the client reads. `null`
+   * when `beforeId` is not a message of this session.
    */
   listMessages(
     workspace: string,
     sessionId: string,
     beforeId: string | undefined,
     limit: number,
-  ): { items: MessageRow[]; hasMore: boolean } {
+  ): { items: MessageRow[]; hasMore: boolean } | null {
     const where: SQL[] = [eq(messages.workspace, workspace), eq(messages.sessionId, sessionId)];
     if (beforeId) {
       const anchor = this.getMessage(workspace, beforeId);
-      if (anchor) where.push(lt(messages.seq, anchor.seq));
+      if (!anchor || anchor.sessionId !== sessionId) return null;
+      where.push(lt(messages.seq, anchor.seq));
     }
     const rows = this.db
       .select()

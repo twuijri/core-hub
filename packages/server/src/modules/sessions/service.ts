@@ -263,7 +263,11 @@ export class SessionsService {
     };
   }
 
-  update(scope: EngineScope, sessionId: string, patch: SessionPatchInput): Record<string, unknown> {
+  async update(
+    scope: EngineScope,
+    sessionId: string,
+    patch: SessionPatchInput,
+  ): Promise<Record<string, unknown>> {
     const row = this.requireSession(scope, sessionId);
     if (patch.category_id !== undefined && patch.category_id !== null) {
       // `session_categories` is declared in the contract but has no table yet;
@@ -309,6 +313,10 @@ export class SessionsService {
     if (patch.notify !== undefined) changes.notify = patch.notify;
     if (patch.category_id === null) changes.categoryId = null;
 
+    // Putting a conversation away puts its work away too (owner, 2026-09-24): an archived
+    // chat whose agent kept working — and spending — would be out of sight, not stopped.
+    if (patch.archived === true) await this.stopLiveRuns(scope, row.id);
+
     const updated = this.store.updateSession(scope.workspace, row.id, changes) ?? row;
     const payload = this.sessionOf(scope, updated);
     this.realtime.emitToProfile(scope.profile, 'session.updated', { session: payload });
@@ -333,21 +341,42 @@ export class SessionsService {
     this.realtime.emitToProfile(scope.profile, 'session.deleted', { session_id: row.id });
   }
 
-  bulkUpdate(
+  /**
+   * Stop every live run of a session the way the chat's Stop does (`cancelRun`): a queued
+   * run is cancelled before it starts, an active one is interrupted and ends `cancelled`
+   * when the agent acknowledges. Queued runs go first, or ending the active one would hand
+   * the adapter the next in line. A run that ended in between is simply over.
+   */
+  private async stopLiveRuns(scope: EngineScope, sessionId: string): Promise<void> {
+    const live = this.store.liveRuns(scope.workspace, sessionId);
+    const ordered = [
+      ...live.filter((run) => run.status === 'queued'),
+      ...live.filter((run) => run.status !== 'queued'),
+    ];
+    for (const run of ordered) {
+      try {
+        await this.cancelRun(scope, sessionId, run.id);
+      } catch (error) {
+        if (!(error instanceof HubError && error.code === 'state_invalid')) throw error;
+      }
+    }
+  }
+
+  async bulkUpdate(
     scope: EngineScope,
     sessionIds: string[],
     patch: SessionPatchInput,
-  ): { results: Array<{ id: string; ok: boolean; error: unknown }> } {
-    return {
-      results: sessionIds.map((id) => {
-        try {
-          this.update(scope, id, patch);
-          return { id, ok: true, error: null };
-        } catch (error) {
-          return { id, ok: false, error: envelopeOf(error, scope.language) };
-        }
-      }),
-    };
+  ): Promise<{ results: Array<{ id: string; ok: boolean; error: unknown }> }> {
+    const results = [];
+    for (const id of sessionIds) {
+      try {
+        await this.update(scope, id, patch);
+        results.push({ id, ok: true, error: null });
+      } catch (error) {
+        results.push({ id, ok: false, error: envelopeOf(error, scope.language) });
+      }
+    }
+    return { results };
   }
 
   async bulkDelete(
@@ -475,6 +504,10 @@ export class SessionsService {
   ): { items: Record<string, unknown>[]; has_more: boolean } {
     this.requireSession(scope, sessionId);
     const page = this.store.listMessages(scope.workspace, sessionId, before, limit);
+    // A cursor that is not a message of this conversation (another chat's, or one deleted)
+    // is refused: answering with the newest page instead would hand a client paging back
+    // the messages it already holds, as if they were older.
+    if (!page) throw notFound({ resource: 'message', id: before ?? '' });
     return {
       items: page.items.map((row) => this.messageOf(scope, row)),
       has_more: page.hasMore,

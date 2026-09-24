@@ -14,6 +14,9 @@ import { overrideAgents } from '../../server/src/modules/agents/index.js';
 import { overrideModels } from '../../server/src/modules/models/index.js';
 import type { AgentInstaller } from '../../server/src/modules/agents/index.js';
 import { createSessionsModule } from '../../server/src/modules/sessions/index.js';
+import { SessionsStore } from '../../server/src/modules/sessions/store.js';
+import { sessions as sessionRows } from '../../server/src/modules/sessions/schema.js';
+import { requireSqlite } from '../../server/src/lib/db.js';
 import { createHermesCardApi, registerHermesBoard } from '../../server/src/modules/tasks/index.js';
 import { registerHermesCron } from '../../server/src/modules/schedules/index.js';
 import { createHermesJobs } from '../../server/src/modules/schedules/hermes-jobs.js';
@@ -166,6 +169,16 @@ function scriptFor(prompt: string): Step[] {
         text: '```ts\nsocket.emit("subscribe", { session_id, after_seq });\n```\n',
       },
       { type: 'usage', inputTokens: 41, outputTokens: 96 },
+      { type: 'completed' },
+    ];
+  }
+  if (/حتى أوقفك|until stopped/i.test(prompt)) {
+    // Works until somebody stops it — by the Stop button, or by archiving its conversation
+    // (zzz-chat-history): only an interrupt ends it.
+    return [
+      { type: 'message_delta', text: 'أعمل على ذلك… ' },
+      { type: 'delay', ms: 180_000 },
+      { type: 'message_delta', text: 'هذا الجزء لا يصل بعد الإيقاف.' },
       { type: 'completed' },
     ];
   }
@@ -492,6 +505,37 @@ const app = await buildServer({
 app.post('/__e2e/drop-sockets', async () => {
   app.hub.io.of('/rt/sessions').disconnectSockets(true);
   return { ok: true };
+});
+
+// Test-only control: a long history for a conversation that already exists — the texts are
+// appended in order, alternating the person and the agent, straight into the store (as if
+// written over months), so the chat has more than one page to scroll back through.
+app.post('/__e2e/seed-messages', async (request) => {
+  const { session_id, texts } = request.body as { session_id: string; texts: string[] };
+  const db = requireSqlite(app.hub.database);
+  const row = db
+    .select()
+    .from(sessionRows)
+    .all()
+    .find((each) => each.id === session_id);
+  if (!row) return { ok: false };
+  const store = new SessionsStore(db);
+  texts.forEach((text, index) => {
+    const user = index % 2 === 0;
+    store.appendMessage({
+      workspace: row.workspace,
+      ownerId: row.ownerId,
+      sessionId: row.id,
+      runId: null,
+      role: user ? 'user' : 'assistant',
+      authorKind: user ? 'user' : 'agent',
+      authorId: user ? row.ownerId : row.agentId,
+      content: text,
+      parts: [],
+      attachmentIds: [],
+    });
+  });
+  return { ok: true, count: texts.length };
 });
 
 // Test-only control: the same access token, already expired — what a laptop that slept

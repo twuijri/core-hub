@@ -1823,6 +1823,10 @@ paths:
       operationId: sessions.bulkUpdate
       tags: [sessions]
       summary: Update several sessions at once (history multi-select)
+      description: |
+        Each session is patched as `sessions.update` would patch it, one after another.
+        `archived: true` also stops every live run of each archived session, as
+        `sessions.update` does (contract decision §30).
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -1835,7 +1839,7 @@ paths:
               session_ids: [01J8QK3ZR2W7M5N4P6T8V9X0YA, 01J8QK3ZR2W7M5N4P6T8V9X0YB]
               patch:
                 archived: true
-      x-rt-events: [session.updated]
+      x-rt-events: [session.updated, run.cancelled]
       responses:
         '200':
           description: Per-item outcome; partial success is still 200.
@@ -2038,7 +2042,13 @@ paths:
       operationId: sessions.update
       tags: [sessions]
       summary: Rename, pin, archive, categorize or change the model of a session
-      description: 'JSON merge-patch. `reasoning_effort: null` returns to the profile default.'
+      description: |
+        JSON merge-patch. `reasoning_effort: null` returns to the profile default.
+
+        `archived: true` stops the work in the session as the chat's Stop does
+        (`sessions.cancelRun`) for every live run: queued runs are cancelled before they
+        start, an active run is interrupted and ends `cancelled` with its own
+        `run.cancelled`. Restoring (`archived: false`) starts nothing (contract decision §30).
       requestBody:
         required: true
         content:
@@ -2048,7 +2058,7 @@ paths:
             example:
               title: 'خطة إطلاق التطبيق — النسخة الثانية'
               pinned: true
-      x-rt-events: [session.updated]
+      x-rt-events: [session.updated, run.cancelled]
       responses:
         '200':
           description: The updated session.
@@ -2118,6 +2128,11 @@ paths:
         Without `before` the newest `limit` messages are returned, oldest first. Pass the first
         message's id as `before` to load older ones. Streaming messages appear with
         `status: streaming` and are completed by realtime deltas.
+
+        Keyset paging on the message's position in the session: a page is not shifted by
+        messages written meanwhile. A `before` that is not a message of this session answers
+        `404 not_found` (`details.resource = message`) rather than the newest page again
+        (contract decision §30).
       parameters:
         - name: before
           in: query
