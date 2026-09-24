@@ -421,7 +421,7 @@ export class ModelsService {
     if (existing && !existing.archivedAt) {
       throw conflict({
         reason: 'provider_exists',
-        detail: `${primarySlug} is already added to this workspace`,
+        detail: `${primarySlug} is already added to this profile`,
       });
     }
 
@@ -1676,7 +1676,7 @@ export class ModelsService {
       action: 'agent.reconfigured',
       entityKind: 'agent',
       entityId: 'hermes',
-      summary: 'Hermes received the workspace providers',
+      summary: 'Hermes received the profile providers',
       data: { changed, removed },
     });
     this.scheduleRestart();
@@ -1909,7 +1909,7 @@ export class ModelsService {
     if (!row || row.archivedAt) {
       throw validationFailed({
         field: 'model',
-        reason: 'the workspace has no such model on that provider',
+        reason: 'the profile has no such model on that provider',
         model: modelKeyOf(provider.slug, ref.model),
       });
     }
