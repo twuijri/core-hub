@@ -26,7 +26,7 @@ env:
 jobs:
   update:
     name: Rebuild the code map and propose it
-    if: github.repository == 'twuijri/majlis' && github.ref == 'refs/heads/main'
+    if: github.repository == 'twuijri/core-hub' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
