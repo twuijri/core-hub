@@ -185,10 +185,7 @@ export class TasksService {
     return row;
   }
 
-  listTasks(
-    scope: Scope,
-    query: Parameters<TasksService['listTasksAcross']>[1],
-  ): TaskRow[] {
+  listTasks(scope: Scope, query: Parameters<TasksService['listTasksAcross']>[1]): TaskRow[] {
     return this.listTasksAcross([scope.workspace], query);
   }
 

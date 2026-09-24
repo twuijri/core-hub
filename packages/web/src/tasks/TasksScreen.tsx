@@ -668,11 +668,7 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
           </p>
         )}
         {sessionHref && (
-          <Link
-            to={sessionHref}
-            className="task-card-session"
-            data-testid="task-session"
-          >
+          <Link to={sessionHref} className="task-card-session" data-testid="task-session">
             {t('tasks.open_session')}
           </Link>
         )}
