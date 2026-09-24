@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/core-hub-mark-dark.svg">
+    <img src="docs/assets/core-hub-mark-light.svg" alt="Core Hub" width="96" height="96">
+  </picture>
+</p>
+
 # Core Hub
 
 **One self-hosted hub for every AI agent you use: chat, tasks, schedules and workflows,
@@ -223,13 +230,8 @@ Every contract operation that is not built answers `501` with its id; nothing fa
 
 ## License
 
-From [LICENSE](LICENSE):
-
-> Copyright (c) 2026 twuijri. All rights reserved.
->
-> This repository is proprietary until the owner chooses a licence (see docs/adr/ for the
-> decision when it lands). No permission is granted to use, copy, modify or distribute this
-> software without the owner's written consent.
+Core Hub is licensed under the [Apache License, Version 2.0](LICENSE). See [NOTICE](NOTICE)
+for the copyright notice that must travel with copies.
 
 Third-party components reused under their own licences, and the projects whose ideas were
 adopted, are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Agent names and

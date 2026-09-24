@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Majlis — a self-hosted hub for AI agents. Server first; every client renders one contract.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=24",

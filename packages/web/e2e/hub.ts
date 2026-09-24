@@ -430,10 +430,11 @@ const hermesHome = (profile: string) =>
   profile === 'default'
     ? path.join(dataDir, 'hermes')
     : path.join(dataDir, 'hermes', 'profiles', profile);
-const pairingFile = (profile: string, kind: 'pending' | 'approved') =>
-  path.join(hermesHome(profile), 'platforms', 'pairing', `whatsapp-${kind}.json`);
-const readPairing = (profile: string, kind: 'pending' | 'approved') => {
-  const file = pairingFile(profile, kind);
+const PAIRING_PLATFORMS = ['whatsapp', 'telegram'] as const;
+const pairingFile = (profile: string, kind: 'pending' | 'approved', platform = 'whatsapp') =>
+  path.join(hermesHome(profile), 'platforms', 'pairing', `${platform}-${kind}.json`);
+const readPairing = (profile: string, kind: 'pending' | 'approved', platform = 'whatsapp') => {
+  const file = pairingFile(profile, kind, platform);
   return existsSync(file)
     ? (JSON.parse(readFileSync(file, 'utf8')) as Record<string, Record<string, unknown>>)
     : {};
@@ -442,9 +443,10 @@ const writePairing = (
   profile: string,
   kind: 'pending' | 'approved',
   value: Record<string, Record<string, unknown>>,
+  platform = 'whatsapp',
 ) => {
-  mkdirSync(path.dirname(pairingFile(profile, kind)), { recursive: true });
-  writeFileSync(pairingFile(profile, kind), JSON.stringify(value));
+  mkdirSync(path.dirname(pairingFile(profile, kind, platform)), { recursive: true });
+  writeFileSync(pairingFile(profile, kind, platform), JSON.stringify(value));
 };
 function seedPairing(): void {
   const now = Date.now() / 1000;
@@ -476,43 +478,56 @@ const scriptedHermesApi: HermesApiCall = async <T>(
     const profile = url.searchParams.get('profile') ?? 'default';
     const now = Date.now() / 1000;
     return answer({
-      pending: Object.entries(readPairing(profile, 'pending')).map(([id, entry]) => ({
-        platform: 'whatsapp',
-        request_id: id,
-        user_id: entry.user_id,
-        user_name: entry.user_name,
-        age_minutes: Math.floor((now - Number(entry.created_at)) / 60),
-      })),
-      approved: Object.entries(readPairing(profile, 'approved')).map(([id, entry]) => ({
-        platform: 'whatsapp',
-        user_id: id,
-        ...entry,
-      })),
+      pending: PAIRING_PLATFORMS.flatMap((platform) =>
+        Object.entries(readPairing(profile, 'pending', platform)).map(([id, entry]) => ({
+          platform,
+          request_id: id,
+          user_id: entry.user_id,
+          user_name: entry.user_name,
+          age_minutes: Math.floor((now - Number(entry.created_at)) / 60),
+        })),
+      ),
+      approved: PAIRING_PLATFORMS.flatMap((platform) =>
+        Object.entries(readPairing(profile, 'approved', platform)).map(([id, entry]) => ({
+          platform,
+          user_id: id,
+          ...entry,
+        })),
+      ),
     });
   }
   if (url.pathname.endsWith('/pairing/approve')) {
-    const { profile = 'default', request_id: id } = body as {
+    const {
+      profile = 'default',
+      request_id: id,
+      platform = 'whatsapp',
+    } = body as {
       profile?: string;
       request_id: string;
+      platform?: string;
     };
-    const pending = readPairing(profile, 'pending');
+    const pending = readPairing(profile, 'pending', platform);
     const entry = pending[id];
     if (!entry) throw new Error('Pairing request or code not found or expired');
     delete pending[id];
-    writePairing(profile, 'pending', pending);
-    const approved = readPairing(profile, 'approved');
+    writePairing(profile, 'pending', pending, platform);
+    const approved = readPairing(profile, 'approved', platform);
     approved[String(entry.user_id)] = {
       user_name: entry.user_name,
       approved_at: Date.now() / 1000,
     };
-    writePairing(profile, 'approved', approved);
+    writePairing(profile, 'approved', approved, platform);
     return answer({ ok: true, user: { user_id: entry.user_id, user_name: entry.user_name } });
   }
   if (url.pathname.endsWith('/pairing/revoke')) {
-    const { profile = 'default', user_id: user } = body as { profile?: string; user_id: string };
-    const approved = readPairing(profile, 'approved');
+    const {
+      profile = 'default',
+      user_id: user,
+      platform = 'whatsapp',
+    } = body as { profile?: string; user_id: string; platform?: string };
+    const approved = readPairing(profile, 'approved', platform);
     delete approved[user];
-    writePairing(profile, 'approved', approved);
+    writePairing(profile, 'approved', approved, platform);
     return answer({ ok: true });
   }
   const mcp = /^\/api\/mcp\/servers\/([^/]+)\/test/.exec(route);
@@ -584,6 +599,48 @@ const scriptedHermesApi: HermesApiCall = async <T>(
  */
 const scriptedPlugins = fakeHermesPlugins({ installDelayMs: 1500 });
 
+/**
+ * Telegram's Bot API as linking asks it (journey 31), scripted: one token belongs to the bot
+ * @majlis_e2e_bot, any other is refused as Telegram refuses it. The moment the bot is asked
+ * about, a stranger has "messaged" it in the default profile — Hermes's pairing file gets the
+ * request the journey then approves — so no phone and no network are involved.
+ */
+const E2E_TELEGRAM_TOKEN = '7012345678:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsawQ';
+const scriptedTelegram: typeof fetch = async (input) => {
+  const url = String(input instanceof Request ? input.url : input);
+  const json = (status: number, value: unknown) =>
+    new Response(JSON.stringify(value), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+  if (url.endsWith(`/bot${E2E_TELEGRAM_TOKEN}/getMe`)) {
+    writePairing(
+      'default',
+      'pending',
+      {
+        '5d1e2f3a4b5c6d7e': {
+          hash: 'e2e',
+          salt: 'e2e',
+          user_id: '555666777',
+          user_name: 'Noura',
+          created_at: Date.now() / 1000 - 60,
+        },
+      },
+      'telegram',
+    );
+    return json(200, {
+      ok: true,
+      result: {
+        id: 7012345678,
+        is_bot: true,
+        first_name: 'مساعد المجلس',
+        username: 'majlis_e2e_bot',
+      },
+    });
+  }
+  return json(401, { ok: false, error_code: 401, description: 'Unauthorized' });
+};
+
 overrideAgents({
   pathValue: path.join(dataDir, 'no-such-bin'),
   installer: e2eInstaller,
@@ -591,6 +648,7 @@ overrideAgents({
   hermesApi: scriptedHermesApi,
   hermesCli: scriptedPlugins.cli,
   pairingPollMs: 700,
+  telegramFetch: scriptedTelegram,
 });
 
 /**
