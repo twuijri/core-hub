@@ -251,11 +251,9 @@ export async function installPlugin(
 ): Promise<Record<string, unknown>> {
   const before = new Set((await listPlugins(cli, input.home)).items.map((item) => item.key));
   handle.progress(null, t('jobs.plugin_install.running', input.language));
-  const result = await cli(
-    input.home,
-    ['plugins', 'install', input.identifier, '--no-enable'],
-    { timeoutMs: PLUGIN_INSTALL_TIMEOUT_MS },
-  );
+  const result = await cli(input.home, ['plugins', 'install', input.identifier, '--no-enable'], {
+    timeoutMs: PLUGIN_INSTALL_TIMEOUT_MS,
+  });
   if (result.code !== 0) throw refusal(sentenceOf(result));
   const after = (await listPlugins(cli, input.home)).items;
   const added = after.find((item) => !before.has(item.key));

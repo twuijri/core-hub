@@ -323,7 +323,7 @@ describe('skills in category folders, as Hermes keeps them', () => {
     expect(readFileSync(file, 'utf8')).toBe(before);
   });
 
-  it('writes, switches and deletes a category skill that is not Hermes\'s, where it is', () => {
+  it("writes, switches and deletes a category skill that is not Hermes's, where it is", () => {
     const dir = hermesHome();
     seed(dir, 'research/lit-review', 'lit-review');
     const folder = path.join(dir, 'skills', 'research', 'lit-review');

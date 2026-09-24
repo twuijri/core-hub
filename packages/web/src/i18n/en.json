@@ -1108,7 +1108,11 @@
         "skill_duplicate": "The same skill ({skill}) is in the upload twice",
         "skill_exists": "This profile already has the skill {skill}; delete it first to replace it"
       }
-    }
+    },
+    "builtin": "Built into Hermes",
+    "builtin_hint": "One of Hermes's own skills. Hermes keeps it in step with its bundle, so it can be read and pinned here but not edited, switched off or deleted.",
+    "bundled_refused": "This is one of Hermes's own skills; it is read-only here.",
+    "close": "Close"
   },
   "mcp": {
     "title_of": "{name} MCP servers",
@@ -1190,5 +1194,41 @@
     "answered": "You answered:",
     "skipped": "Question skipped",
     "expired": "Time ran out without an answer"
+  },
+  "agent_jobs": {
+    "title_of": "{name} jobs",
+    "note": "What runs on its own for this agent in this profile. For Hermes these are the jobs in its own scheduler, and Hermes runs them. They are the same schedules the Schedules page shows; make or edit one there.",
+    "open_schedules": "Open Schedules",
+    "none": "No jobs",
+    "none_body": "Nothing is scheduled for this agent in this profile. Make a schedule on the Schedules page and it shows here.",
+    "active": "Active",
+    "in_hermes": "In Hermes's scheduler",
+    "delete_body": "It is deleted from Hermes's scheduler too."
+  },
+  "agent_plugins": {
+    "title_of": "{name} plugins",
+    "note": "The plugins Hermes has in this profile, in Hermes's own words. Hermes plugins are opt-in: one that is not enabled does not load. A change reaches the agent's next session.",
+    "none": "No plugins",
+    "none_body": "Hermes lists no plugin in this profile.",
+    "enabled": "Enabled",
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "not_enabled": "Not enabled"
+    },
+    "source": {
+      "bundled": "Ships with Hermes",
+      "user": "Installed",
+      "external": "From a package"
+    },
+    "install": "Install",
+    "install_label": "Plugin to install",
+    "install_placeholder": "catalog name, owner/repo or Git URL",
+    "install_hint": "Hermes fetches it, scans it and installs it into this profile switched off. Switch it on when you are ready.",
+    "installed": "Installed {name}, switched off.",
+    "remove": "Remove",
+    "remove_title": "Remove {name}?",
+    "remove_body": "Its folder is removed from this profile's plugins. Switching it off keeps it.",
+    "bundled_refused": "This plugin ships with Hermes; switch it off instead of removing it."
   }
 }

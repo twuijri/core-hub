@@ -64,20 +64,21 @@ describe("Hermes's list, read", () => {
         ']',
       ].join('\n'),
     );
-    expect(parsed.items.map((item) => [item.key, item.source, item.status, item.removable])).toEqual(
-      [
-        ['kanban', 'bundled', 'not_enabled', false],
-        ['langfuse', 'external', 'disabled', false],
-        ['old-thing', 'user', 'enabled', true],
-      ],
-    );
+    expect(
+      parsed.items.map((item) => [item.key, item.source, item.status, item.removable]),
+    ).toEqual([
+      ['kanban', 'bundled', 'not_enabled', false],
+      ['langfuse', 'external', 'disabled', false],
+      ['old-thing', 'user', 'enabled', true],
+    ]);
     expect(parsed.items[1]?.version).toBeNull();
     expect(parsed.warnings).toEqual(['old-thing: withdrawn: unsafe']);
   });
 
   it('reads "No plugins installed." as an empty list', () => {
-    expect(parsePluginList('No plugins installed.\nInstall with: hermes plugins install owner/repo\n'))
-      .toEqual({ items: [], warnings: [] });
+    expect(
+      parsePluginList('No plugins installed.\nInstall with: hermes plugins install owner/repo\n'),
+    ).toEqual({ items: [], warnings: [] });
   });
 
   it("takes Hermes's sentence from a refusal, and the traceback's last line from a crash", () => {
