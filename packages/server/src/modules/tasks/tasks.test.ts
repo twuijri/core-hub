@@ -273,6 +273,9 @@ describe('tasks: assignment', () => {
         payload: { project_id: project.id, max: 5 },
       });
       expect(response.statusCode).toBe(202);
+      // The contract's `JobAccepted` — the job's id, which is what a client reads to follow
+      // it — not the job itself (DECISIONS §32).
+      expect(response.json()).toEqual({ job_id: expect.stringMatching(/^[0-9A-Z]{26}$/) });
       await drainJobs(hub.app);
       const after = (
         await authed(hub, hub.token, { method: 'GET', url: `/api/v1/tasks/${task.id as string}` })
@@ -284,7 +287,7 @@ describe('tasks: assignment', () => {
       const job = (
         await authed(hub, hub.token, {
           method: 'GET',
-          url: `/api/v1/jobs/${(response.json() as Json).id as string}`,
+          url: `/api/v1/jobs/${(response.json() as Json).job_id as string}`,
         })
       ).json() as { result: { started: number; assignments: Json[] } };
       expect(job.result.started).toBe(0);

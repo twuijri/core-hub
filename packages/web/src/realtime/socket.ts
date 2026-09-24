@@ -9,6 +9,7 @@ export const NAMESPACES = {
   devices: '/rt/devices',
   jobs: '/rt/jobs',
   tasks: '/rt/tasks',
+  schedules: '/rt/schedules',
 } as const;
 export type NamespaceName = keyof typeof NAMESPACES;
 
@@ -18,8 +19,9 @@ export interface ConnectOptions {
   token: () => string | undefined;
   profile: () => string | undefined;
   /**
-   * `all` also hears every other profile the person may enter (ADR 0016): the chats list
-   * gathers them, and a conversation opened from another profile gets its approvals.
+   * `all` also hears every other profile the person may enter (ADR 0016): the chats list,
+   * the Tasks board and the Schedules page gather them, and a conversation opened from
+   * another profile gets its approvals.
    */
   profiles?: 'all';
   /**

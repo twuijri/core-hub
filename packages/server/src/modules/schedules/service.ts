@@ -12,7 +12,7 @@
  * What it does compute for real is `next_run_at` (`cron.ts`), so a saved schedule can
  * always say when it *would* run.
  */
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lt } from 'drizzle-orm';
 import { newUlid } from '../../db/ids.js';
 import type { ModuleDb } from '../../lib/db.js';
 import { conflict, notFound } from '../../lib/errors.js';
@@ -52,20 +52,36 @@ export class SchedulesService {
     scope: Scope,
     filter: { agentId?: string; workflowId?: string; enabled?: boolean },
   ): ScheduleRow[] {
-    return this.db
+    return this.listAcross([scope.workspace], filter);
+  }
+
+  /**
+   * The schedules of several workspaces in one statement — the Schedules page gathers every
+   * profile the person may enter (ADR 0016). Newest first (`id desc`), one keyset over all
+   * of them: `cursor` is the last id of the previous page, so a page never repeats or skips
+   * a schedule from another workspace. Which workspaces is the caller's business.
+   */
+  listAcross(
+    workspaces: readonly string[],
+    filter: { agentId?: string; workflowId?: string; enabled?: boolean },
+    page: { cursor?: string | null; limit?: number } = {},
+  ): ScheduleRow[] {
+    if (workspaces.length === 0) return [];
+    const query = this.db
       .select()
       .from(schedules)
       .where(
         and(
-          eq(schedules.workspace, scope.workspace),
+          inArray(schedules.workspace, [...workspaces]),
           isNull(schedules.archivedAt),
           filter.agentId ? eq(schedules.agentId, filter.agentId) : undefined,
           filter.workflowId ? eq(schedules.workflowId, filter.workflowId) : undefined,
           filter.enabled === undefined ? undefined : eq(schedules.enabled, filter.enabled),
+          page.cursor ? lt(schedules.id, page.cursor) : undefined,
         ),
       )
-      .orderBy(desc(schedules.id))
-      .all();
+      .orderBy(desc(schedules.id));
+    return page.limit === undefined ? query.all() : query.limit(page.limit).all();
   }
 
   get(scope: Scope, id: string): ScheduleRow {

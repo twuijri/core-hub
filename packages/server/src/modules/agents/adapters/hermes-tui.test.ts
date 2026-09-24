@@ -131,6 +131,73 @@ describe('Hermes over the TUI gateway', () => {
     expect((await HermesTuiSession.open(channel, 'majlis-gone')).id).toBe('stored-8');
   });
 
+  it("opens a conversation in the workspace's own profile and working folder", async () => {
+    const calls: Array<{ method: string; params: Json }> = [];
+    const gateway = fakeGateway((method, params) => {
+      calls.push({ method, params });
+      if (method === 'session.create') return { session_id: 'live1', stored_session_id: 'st-1' };
+      return {};
+    });
+    await HermesTuiSession.open(channelOver(gateway), null, {
+      profile: 'design',
+      cwd: '/data/workspaces/design/s1',
+    });
+    expect(calls).toEqual([
+      {
+        method: 'session.create',
+        params: { source: 'majlis', profile: 'design', cwd: '/data/workspaces/design/s1' },
+      },
+    ]);
+  });
+
+  it('resumes in the profile it was stored in, and moves it to the working folder', async () => {
+    const calls: Array<{ method: string; params: Json }> = [];
+    const gateway = fakeGateway((method, params) => {
+      calls.push({ method, params });
+      if (method === 'session.resume') {
+        return {
+          session_id: 'live7',
+          stored_session_id: 'stored-7',
+          info: { cwd: '/data/hermes' },
+        };
+      }
+      return {};
+    });
+    const session = await HermesTuiSession.open(channelOver(gateway), 'stored-7', {
+      profile: 'design',
+      cwd: '/data/workspaces/design/s1',
+    });
+    expect(session.id).toBe('stored-7');
+    expect(calls).toEqual([
+      {
+        method: 'session.resume',
+        params: { session_id: 'stored-7', omit_messages: true, profile: 'design' },
+      },
+      {
+        method: 'session.cwd.set',
+        params: { session_id: 'live7', cwd: '/data/workspaces/design/s1' },
+      },
+    ]);
+  });
+
+  it("sends no profile for Hermes's default one — the root home, as before", async () => {
+    const calls: Array<{ method: string; params: Json }> = [];
+    const gateway = fakeGateway((method, params) => {
+      calls.push({ method, params });
+      if (method === 'session.resume') {
+        return { session_id: 'l', stored_session_id: 's', info: { cwd: '/w/default/s' } };
+      }
+      return { session_id: 'l2', stored_session_id: 's2' };
+    });
+    const channel = channelOver(gateway);
+    await HermesTuiSession.open(channel, 's', { profile: 'default', cwd: '/w/default/s' });
+    await HermesTuiSession.open(channel, null, { profile: null });
+    expect(calls).toEqual([
+      { method: 'session.resume', params: { session_id: 's', omit_messages: true } },
+      { method: 'session.create', params: { source: 'majlis' } },
+    ]);
+  });
+
   it("carries the model's reasoning, each tool's result, and the usage", async () => {
     const gateway = fakeGateway((method, _params, api) => {
       if (method === 'session.create') return { session_id: 's', stored_session_id: 'st' };

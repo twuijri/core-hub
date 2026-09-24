@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/context.js';
 import { useProfiles } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
-import { Button } from '../ui/index.js';
+import { Button, MajlisMark } from '../ui/index.js';
 
 /**
  * A member enters only the profiles an admin gave them, and an empty list means none (owner,
@@ -52,7 +52,7 @@ function NoProfile({
       >
         <header className="gate-head">
           <span className="gate-mark" aria-hidden>
-            م
+            <MajlisMark size={36} />
           </span>
           <div className="gate-headings">
             <h1 id="no-profile-title" className="gate-title">

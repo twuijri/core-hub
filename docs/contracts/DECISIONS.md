@@ -538,3 +538,35 @@ stayed `running` on the board. And the chat only ever showed the newest 100 mess
   that no longer exists — answers `404 not_found` (`details.resource = message`). It used
   to be ignored, which answered the newest page again: a client paging back would have
   taken messages it already held for older ones.
+
+## 32. Tasks and schedules list every profile; `profiles=all` is the one word for it
+
+ADR 0016 stage 2 (owner, 2026-09-24: «الكرون جوب والمهام المفروض تطلع كل البروفايلات بدون
+تصنيف»). The Tasks board and the Schedules page show every profile the caller may enter,
+with no profile filter in the clients; each card and schedule names its own `profile`.
+
+- `tasks.listTasks` takes `profiles=all` exactly as `sessions.list` does (§28): without it
+  the header's profile alone, as before; with it every enterable profile, one keyset
+  (`id desc`) over all of them in one statement, and the header must still name one of them.
+- `tasks.getColumns` and `schedules.list` were global already (`x-scope: global`, since
+  2026-09-23). They accept `profiles=all` too, as an explicit synonym of what they answer
+  anyway, so a client asks every list across profiles in the same words. Together with their
+  older `profile` narrowing it is a contradiction and answers `400 validation_failed`. The
+  `profile` narrowing stays for API callers; the clients do not offer it (ADR 0016 §4).
+- `schedules.list` now honours the `cursor` and `limit` it always declared: newest first
+  (`id desc`), one keyset across every profile. It used to answer everything with
+  `next_cursor: null`; a client that read one page and ignored the cursor saw the first 50.
+- **Acting on an item is an ordinary scoped call with the item's `profile` in
+  `X-Hub-Profile`** — editing, moving, assigning, stopping, commenting, deleting, firing. The
+  server checks that profile like any other: a member outside it gets `404
+  profile_not_found`, and an item that is not in the named profile is `404 not_found`, never
+  found in another. The top selector's profile only decides where a **new** task or schedule
+  is made.
+- Realtime: `profiles: 'all'` in the handshake of `/rt/tasks` and `/rt/schedules` joins the
+  room of every enterable profile, by the same rule as `/rt/sessions` (§28).
+- A task's `assignee.name` is resolved by the hub (the agents registry, the user's display
+  name), never left to the client to guess from the agents of the profile it happens to be in.
+
+Rejected: a profile filter on either page (the owner's words above); a new global operation
+beside `tasks.listTasks` (the same reason as §28); changing the default of the two global
+lists to "the header's profile" (it would silently narrow every existing caller).

@@ -14,7 +14,7 @@ import { useTheme } from '../design/theme.js';
 import { useSetupState } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { HOME_PATH, LOGIN_PATH } from '../navigation/routes.js';
-import { Button, Card, Field, Input, Notice, Separator, Spinner } from '../ui/index.js';
+import { Button, Card, Field, Input, Notice, Separator, Spinner, MajlisMark } from '../ui/index.js';
 import { IconGlobe } from '../ui/icons.js';
 
 const MIN_PASSWORD = 8;
@@ -73,7 +73,7 @@ export function SetupScreen() {
       >
         <header className="gate-head">
           <span className="gate-mark" aria-hidden>
-            م
+            <MajlisMark size={36} />
           </span>
           <div className="gate-headings">
             <h1 id="setup-title" className="gate-title">

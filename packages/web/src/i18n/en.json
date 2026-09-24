@@ -630,6 +630,7 @@
     "project": "Project",
     "count": "{count} tasks",
     "new_task": "New task",
+    "new_task_in": "New task in {name}",
     "add": "Add",
     "no_projects": "No project yet",
     "no_projects_body": "Tasks live inside a project. Create one to start.",
@@ -684,9 +685,7 @@
     "confirm": {
       "archive": "Archive “{title}”?"
     },
-    "all_workspaces": "All profiles",
     "all_projects": "All projects",
-    "workspace": "Profile",
     "hermes": {
       "origin": "On Hermes's board",
       "refused": "Hermes said no: {message}",
@@ -778,8 +777,7 @@
       "prompt_required": "A schedule for Hermes needs a prompt.",
       "fired": "Hermes will run it on its next tick."
     },
-    "workspace": "Profile",
-    "all_workspaces": "All profiles"
+    "in_profile": "New schedules are made in {name}. To make one in another profile, switch the profile at the top of the page."
   },
   "audit": {
     "period": "Period",

@@ -1154,20 +1154,20 @@ test.describe('web smoke journeys', () => {
     // Not Hermes (journey 18): an agent without a scheduler of its own waits for the worker.
     await page.getByTestId('schedule-agent').click();
     await page.getByRole('option', { name: /Direct|مباشر/ }).click();
-    // The workspace is chosen here, not by the header: a schedule for the Labs workspace
-    // (made in journey 13) while the header still says Default.
-    await page.getByTestId('schedule-workspace').click();
-    await page.getByRole('option', { name: 'Labs' }).click();
+    // A new schedule is made in the profile the person is in — the top selector — and the
+    // form says so rather than offering a second picker (ADR 0016). Labs (journey 13) makes
+    // two profiles, so the page names it and badges each schedule; there is no profile
+    // filter (journey 26 walks both profiles).
+    await expect(page.getByTestId('schedule-new-profile')).toHaveAttribute(
+      'data-profile',
+      'default',
+    );
+    await expect(page.getByTestId('schedule-workspace')).toHaveCount(0);
+    await expect(page.getByTestId('schedule-filter')).toHaveCount(0);
     await page.getByTestId('schedule-save').click();
 
     const card = page.getByTestId('schedule-card').filter({ hasText: 'تقرير الصباح' });
-    await expect(card.getByTestId('schedule-workspace-badge')).toHaveText('Labs');
-    // One page for every workspace, narrowed by the filter when asked.
-    await page.getByTestId('schedule-filter').click();
-    await page.getByRole('option', { name: 'Labs' }).click();
-    await expect(page.getByTestId('schedule-card')).toHaveCount(1);
-    await page.getByTestId('schedule-filter').click();
-    await page.getByRole('option', { name: 'كل البروفايلات' }).click();
+    await expect(card.getByTestId('schedule-profile')).toHaveAttribute('data-profile', 'default');
 
     await expect(card).toBeVisible();
     // The hub computed a real next time rather than leaving it blank.

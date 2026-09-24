@@ -36,6 +36,8 @@ import {
   type TuiChannel,
 } from './adapters/hermes-tui.js';
 import type { RuntimeState } from './adapters/types.js';
+import { hermesProfileRunner, type ProfileRunner } from './hermes-profiles.js';
+import { HubError } from '../../lib/errors.js';
 
 export type HermesRuntimeMode = 'undecided' | 'external' | 'managed' | 'absent';
 
@@ -94,7 +96,12 @@ export interface HermesRuntimeOptions {
   tuiRetireIntervalMs?: number;
   /** Called on every state change (the registry row follows it). */
   onState?: (status: HermesRuntimeStatus) => void;
+  /** Injected in tests: a scripted `hermes <argv>` instead of the executable. */
+  profileRun?: ProfileRunner;
 }
+
+/** Hermes's profile id rule (`_PROFILE_ID_RE`); a hub slug always satisfies it. */
+const PROFILE_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
 export const HERMES_DEFAULT_ENDPOINT = 'http://127.0.0.1:8642';
 const RESTART_BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 30_000, 60_000];
@@ -158,6 +165,8 @@ export class HermesRuntime {
    * flight, and then they are closed (`sweepRetiredTui`).
    */
   private readonly retiredTui = new Set<TuiChannel>();
+  /** Profiles being made right now, so two turns in the same new profile make it once. */
+  private readonly makingProfiles = new Map<string, Promise<void>>();
   private retireTimer: NodeJS.Timeout | null = null;
   private healthyAt: number | null = null;
   private stopping = false;
@@ -226,6 +235,13 @@ export class HermesRuntime {
    * tui_gateway.entry` child, started on first use with this Hermes's home and the shared
    * provider keys, and started again after it exits. `null` when there is no Hermes
    * installed beside the hub — a gateway reached from elsewhere keeps the run surface.
+   *
+   * One child for **every profile** (ADR 0014 stage 3): Hermes binds a profile's home per
+   * session (`session.create`'s `profile`), so another profile costs a few MiB inside this
+   * process where a process per profile would cost ~220 MiB each (measured 2026-09-24: 217
+   * MiB after a turn in one profile, 224 MiB after turns in three). The provider keys in its
+   * environment reach every profile — Hermes reads a profile's `.env` first and this
+   * environment after it — so nobody enters a key per profile (ADR 0010).
    */
   tuiChannel(): TuiChannel | null {
     if (this.tui?.alive) return this.tui;
@@ -251,6 +267,57 @@ export class HermesRuntime {
       else this.log.warn({ reason }, 'hermes: the TUI gateway stopped');
     });
     return channel;
+  }
+
+  /**
+   * Makes sure Hermes has the profile a conversation is about to run in (ADR 0014 stage 3).
+   *
+   * One TUI gateway serves every profile — `profile` is a parameter of `session.create` —
+   * so nothing is started per profile; but Hermes refuses a profile it does not have
+   * (`Profile 'x' does not exist.`). A workspace made before workspaces became profiles has
+   * none, and neither has one whose profile somebody removed by hand. Such a profile is made
+   * the first time a conversation needs it, **as a copy of `default`** — the profile those
+   * conversations ran in until now — with Hermes's own `hermes profile create --clone-from
+   * default`, so its model, providers, SOUL, memory and skills are what they were and diverge
+   * from there. `default` itself is the root home and always exists.
+   */
+  async ensureProfile(name: string): Promise<void> {
+    if (name === 'default') return;
+    const home = this.status().home;
+    if (!home) return; // no Hermes home of ours: nothing runs here to look for it
+    if (!PROFILE_ID.test(name)) {
+      throw new HubError('agent_unavailable', {
+        message: `"${name}" cannot be a Hermes profile`,
+        details: { reason: 'hermes_profile_unavailable', profile: name },
+      });
+    }
+    if (existsSync(path.join(home, 'profiles', name))) return;
+    const pending = this.makingProfiles.get(name);
+    if (pending) return pending;
+    const making = this.makeProfile(home, name).finally(() => this.makingProfiles.delete(name));
+    this.makingProfiles.set(name, making);
+    return making;
+  }
+
+  private async makeProfile(home: string, name: string): Promise<void> {
+    const hermes = this.executable();
+    const run =
+      this.options.profileRun ??
+      (hermes ? hermesProfileRunner({ command: hermes, home, env: this.cliEnv() }) : null);
+    const refuse = (message: string) =>
+      new HubError('agent_unavailable', {
+        message: `the Hermes profile "${name}" could not be made: ${message}`,
+        details: { reason: 'hermes_profile_unavailable', profile: name },
+      });
+    if (!run) throw refuse('no `hermes` executable on this host');
+    const result = await run(['profile', 'create', name, '--no-alias', '--clone-from', 'default']);
+    // Another hub process (or a person) may have made it meanwhile; what counts is that it is there.
+    if (result.code !== 0 && !existsSync(path.join(home, 'profiles', name))) {
+      const why = lastLine(result.stderr) || lastLine(result.stdout) || `exit ${result.code}`;
+      this.log.warn({ profile: name, reason: why }, 'hermes: could not make a missing profile');
+      throw refuse(why);
+    }
+    this.log.info({ profile: name }, 'hermes: made a missing profile as a copy of default');
   }
 
   private retireTui(channel: TuiChannel): void {
@@ -541,3 +608,14 @@ const defaultSpawner: Spawner = (command, args, options) => {
   });
   return child as unknown as SpawnedProcess;
 };
+
+/** Hermes says why on its last line (`Error: Profile 'x' already exists …`). */
+function lastLine(text: string): string {
+  return (
+    text
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .at(-1) ?? ''
+  );
+}

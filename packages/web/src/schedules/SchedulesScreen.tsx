@@ -7,15 +7,19 @@
  * disabled, and says why in its tooltip rather than being hidden. Someone who came to run
  * something deserves to know the hub cannot yet, not to wonder where the button went.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/context.js';
 import { HubApiError } from '@majlis/contracts';
 import { describeError } from '../auth/client.js';
-import { useAgents, useProfiles } from '../hub/queries.js';
+import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { termKey } from '../navigation/manifest.js';
+import { useRealtime } from '../realtime/context.js';
+import { SCHEDULE_EVENTS, isEnvelope } from '../realtime/envelope.js';
 import { AppShell } from '../shell/AppShell.js';
+import { ProfileBadge } from '../shell/ProfileBadge.js';
+import { useManyProfiles, useProfileName } from '../shell/profiles.js';
 import {
   Badge,
   Button,
@@ -37,7 +41,7 @@ import { Tooltip } from '../ui/Tooltip.js';
 
 interface Schedule {
   id: string;
-  /** The workspace it belongs to: the page shows every workspace (owner, 2026-09-23). */
+  /** The profile it belongs to: the page shows every profile (ADR 0016). */
   profile: string;
   name: string;
   enabled: boolean;
@@ -56,24 +60,64 @@ interface Schedule {
   external?: { source: 'hermes'; id: string } | null;
 }
 
-/** One page for every workspace; the key is the filter, not the header's workspace. */
-const key = (filter: string) => ['schedules', filter || 'all'] as const;
+/**
+ * One page for every profile the person may enter, with no profile filter (ADR 0016, owner
+ * 2026-09-24: «الكرون جوب والمهام المفروض تطلع كل البروفايلات بدون تصنيف»). The hub decides
+ * which profiles; the key is never a profile, so the top selector does not change the page.
+ */
+const KEY = ['schedules', 'all'] as const;
 
-function useSchedules(filter: string) {
+/** Enough pages for any page a person reads; the list is one keyset, newest first. */
+const PAGE_LIMIT = 200;
+const MAX_PAGES = 10;
+
+function useSchedules() {
   const { client, session } = useAuth();
   return useQuery({
-    queryKey: key(filter),
-    queryFn: async () =>
-      (
-        await client.request('get', '/schedules', {
-          ...(filter ? { query: { profile: filter } } : {}),
-        })
-      ).data as unknown as { items: Schedule[] },
+    queryKey: KEY,
+    queryFn: async () => {
+      // The hub pages the list (`cursor`, one order over every profile); the page shows
+      // all of it, so it follows the cursor to the end.
+      const items: Schedule[] = [];
+      let cursor: string | null = null;
+      for (let page = 0; page < MAX_PAGES; page += 1) {
+        const { data } = await client.request('get', '/schedules', {
+          query: { profiles: 'all', limit: PAGE_LIMIT, ...(cursor ? { cursor } : {}) },
+        });
+        const body = data as unknown as { items: Schedule[]; next_cursor: string | null };
+        items.push(...body.items);
+        cursor = body.next_cursor;
+        if (!cursor) break;
+      }
+      return { items };
+    },
     enabled: !!session,
   });
 }
 
-/** Every write goes to the schedule's own workspace, whichever one the header shows. */
+/**
+ * The page follows `/rt/schedules`, which hears every profile the person may enter
+ * (`profiles: 'all'`, realtime/context.tsx): a schedule made, changed or fired anywhere —
+ * another tab, Hermes — redraws it.
+ */
+function useScheduleEvents(): void {
+  const realtime = useRealtime();
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const socket = realtime.socket('schedules');
+    const handler = (raw: unknown) => {
+      if (!isEnvelope(raw)) return;
+      void queryClient.invalidateQueries({ queryKey: ['schedules'] });
+    };
+    for (const name of SCHEDULE_EVENTS) socket.on(name, handler);
+    if (!socket.connected) socket.connect();
+    return () => {
+      for (const name of SCHEDULE_EVENTS) socket.off(name, handler);
+    };
+  }, [queryClient, realtime.epoch]);
+}
+
+/** Every write goes to the schedule's own profile, whichever one the top selector shows. */
 const inWorkspace = (profile: string) => ({ headers: { 'X-Hub-Profile': profile } });
 
 function useScheduleWrite() {
@@ -173,17 +217,17 @@ function describeScheduleError(error: unknown, t: Translate): string {
 export function SchedulesScreen() {
   const { t, language } = useI18n();
   const title = t(termKey('schedules'));
-  const { profile: headerProfile } = useAuth();
-  const workspaces = useProfiles().data ?? [];
-  // Filters, not prerequisites: the page opens on every workspace.
-  const [filter, setFilter] = useState('');
-  const schedules = useSchedules(filter);
+  // A new schedule is made in the profile the person is in — the top selector — and the
+  // agents offered are that profile's. One control decides where things are made, so the
+  // form has no second picker to disagree with it (ADR 0016).
+  const { homeProfile } = useAuth();
+  const many = useManyProfiles();
+  const profileName = useProfileName();
+  const schedules = useSchedules();
+  useScheduleEvents();
   const { create, update, run, remove } = useScheduleWrite();
   const agents = useAgents();
-  // A new schedule goes where the person says — design, content… — the header's by default.
-  const [workspace, setWorkspace] = useState<string | null>(null);
-  const target = workspace ?? headerProfile;
-  const nameOf = (slug: string) => workspaces.find((w) => w.slug === slug)?.name ?? slug;
+  const target = homeProfile;
   const { ask, dialog } = useConfirm();
   const [name, setName] = useState('');
   const [agentId, setAgentId] = useState<string | null>(null);
@@ -285,18 +329,14 @@ export function SchedulesScreen() {
               />
             )}
           </Field>
-          {workspaces.length > 1 && (
-            <Field label={t('schedules.workspace')}>
-              {() => (
-                <Select
-                  value={target}
-                  onValueChange={(next) => setWorkspace(next ?? null)}
-                  options={workspaces.map((w) => ({ value: w.slug, label: w.name }))}
-                  label={t('schedules.workspace')}
-                  testId="schedule-workspace"
-                />
-              )}
-            </Field>
+          {many && (
+            <p
+              className="text-xs text-muted"
+              data-testid="schedule-new-profile"
+              data-profile={target}
+            >
+              {t('schedules.in_profile', { name: profileName(target) })}
+            </p>
           )}
           {agentOptions.length > 0 && (
             <Field label={t('schedules.agent')}>
@@ -360,19 +400,6 @@ export function SchedulesScreen() {
           ))}
         </SkeletonGroup>
       )}
-      {workspaces.length > 1 && (
-        <div className="mb-3 flex justify-end">
-          <Select
-            value={filter}
-            placeholder={t('schedules.all_workspaces')}
-            onValueChange={(next) => setFilter(next ?? '')}
-            // The placeholder is the "every workspace" choice; the kit offers it as an option.
-            options={workspaces.map((w) => ({ value: w.slug, label: w.name }))}
-            label={t('schedules.workspace')}
-            testId="schedule-filter"
-          />
-        </div>
-      )}
       {schedules.isError && <Notice tone="danger">{describeError(schedules.error, t)}</Notice>}
       {(update.isError || run.isError || remove.isError) && (
         <Notice tone="danger">
@@ -417,9 +444,9 @@ export function SchedulesScreen() {
                   }
                   actions={
                     <span className="flex items-center gap-1">
-                      {/* Whose schedule this is, once there is more than one workspace. */}
-                      {workspaces.length > 1 && (
-                        <Badge testId="schedule-workspace-badge">{nameOf(schedule.profile)}</Badge>
+                      {/* Whose schedule this is, once there is more than one profile. */}
+                      {many && (
+                        <ProfileBadge profile={schedule.profile} testId="schedule-profile" />
                       )}
                       <Badge tone={schedule.state === 'scheduled' ? 'accent' : 'neutral'}>
                         {t(`schedules.state.${schedule.state}`)}
