@@ -7975,6 +7975,8 @@ paths:
                     last_status: succeeded
                     last_error: null
                     last_delivery_error: null
+                    run_if_missed: false
+                    overlap: wait
                 next_cursor: null
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -8065,6 +8067,8 @@ paths:
                 last_status: null
                 last_error: null
                 last_delivery_error: null
+                run_if_missed: false
+                overlap: wait
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -8127,6 +8131,8 @@ paths:
                 last_status: succeeded
                 last_error: null
                 last_delivery_error: null
+                run_if_missed: false
+                overlap: wait
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -8189,6 +8195,8 @@ paths:
                 last_status: succeeded
                 last_error: null
                 last_delivery_error: null
+                run_if_missed: false
+                overlap: wait
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -8291,6 +8299,7 @@ paths:
                     workflow_run_id: null
                     status: succeeded
                     trigger: schedule
+                    waiting: false
                     output_preview: 'أُنجز أمس: تبويب الحساب… مخطط اليوم: تبويب العرض…'
                     output: null
                     output_size_bytes: 1830
@@ -8336,6 +8345,7 @@ paths:
                 workflow_run_id: null
                 status: succeeded
                 trigger: schedule
+                waiting: false
                 output_preview: 'أُنجز أمس: تبويب الحساب… مخطط اليوم: تبويب العرض…'
                 output: "أُنجز أمس: تبويب الحساب الحالي.\nمخطط اليوم: تبويب العرض والخصوصية.\n"
                 output_size_bytes: 1830
@@ -16002,6 +16012,8 @@ components:
               last_status,
               last_error,
               last_delivery_error,
+              run_if_missed,
+              overlap,
             ]
           properties:
             name:
@@ -16044,6 +16056,26 @@ components:
               type: [string, 'null']
             last_delivery_error:
               type: [string, 'null']
+            run_if_missed:
+              description: >-
+                Whether a time missed while the hub was not running still runs, once, when
+                the hub is back within 24 hours of it (DECISIONS §39). `false` skips it and
+                records why in the history. A run up to two minutes late is on time and
+                runs either way. `null` for a schedule in an agent's own scheduler
+                (`external`), which decides this itself.
+              type: [boolean, 'null']
+            overlap:
+              description: >-
+                What happens when this schedule's time comes and its previous run is still
+                going (DECISIONS §39): `skip` records the time as skipped; `wait` runs it as
+                soon as the previous run ends, with at most one time waiting (a further one
+                is skipped and recorded); `parallel` starts it alongside, in a session of its
+                own; `replace` stops the previous run, then starts. "Run now" always starts
+                at once and stops nothing. `null` for a schedule in an agent's own scheduler
+                (`external`), which decides this itself.
+              oneOf:
+                - $ref: '#/components/schemas/ScheduleOverlap'
+                - type: 'null'
             external:
               description: >-
                 Set when this schedule lives in an agent's own scheduler (today: Hermes's
@@ -16083,6 +16115,23 @@ components:
               minimum: 1
         enabled:
           type: boolean
+        run_if_missed:
+          type: boolean
+          description: >-
+            `Schedule.run_if_missed`; `false` when a new schedule does not say. Refused for a
+            schedule in Hermes's scheduler (`409`, `details.reason = hermes_run_options`).
+        overlap:
+          allOf:
+            - $ref: '#/components/schemas/ScheduleOverlap'
+          description: >-
+            `Schedule.overlap`; `wait` when a new schedule does not say. Refused for a schedule
+            in Hermes's scheduler (`409`, `details.reason = hermes_run_options`).
+    ScheduleOverlap:
+      type: string
+      enum: [skip, wait, parallel, replace]
+      description: >-
+        What a schedule does when its time comes while its previous run is still going. See
+        `Schedule.overlap`.
     ScheduleRun:
       type: object
       required:
@@ -16095,6 +16144,7 @@ components:
           workflow_run_id,
           status,
           trigger,
+          waiting,
           output_preview,
           output,
           output_size_bytes,
@@ -16128,6 +16178,11 @@ components:
         trigger:
           type: string
           enum: [schedule, manual]
+        waiting:
+          type: boolean
+          description: >-
+            `true` while this time waits for the schedule's previous run to end (`overlap:
+            wait`); its `status` is `queued`. It starts when that run ends.
         output_preview:
           type: [string, 'null']
         output:

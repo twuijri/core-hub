@@ -5557,7 +5557,9 @@
             "last_run_at",
             "last_status",
             "last_error",
-            "last_delivery_error"
+            "last_delivery_error",
+            "run_if_missed",
+            "overlap"
           ],
           "properties": {
             "name": {
@@ -5629,10 +5631,30 @@
             },
             "last_delivery_error": {
               "type": ["string", "null"]
+            },
+            "run_if_missed": {
+              "description": "Whether a time missed while the hub was not running still runs, once, when the hub is back within 24 hours of it (DECISIONS §39). `false` skips it and records why in the history. A run up to two minutes late is on time and runs either way. `null` for a schedule in an agent's own scheduler (`external`), which decides this itself.",
+              "type": ["boolean", "null"]
+            },
+            "overlap": {
+              "description": "What happens when this schedule's time comes and its previous run is still going (DECISIONS §39): `skip` records the time as skipped; `wait` runs it as soon as the previous run ends, with at most one time waiting (a further one is skipped and recorded); `parallel` starts it alongside, in a session of its own; `replace` stops the previous run, then starts. \"Run now\" always starts at once and stops nothing. `null` for a schedule in an agent's own scheduler (`external`), which decides this itself.",
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ScheduleOverlap"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           }
         }
       ]
+    },
+    "ScheduleOverlap": {
+      "type": "string",
+      "enum": ["skip", "wait", "parallel", "replace"],
+      "description": "What a schedule does when its time comes while its previous run is still going. See `Schedule.overlap`."
     },
     "ScheduleWrite": {
       "type": "object",
@@ -5676,6 +5698,7 @@
         "workflow_run_id",
         "status",
         "trigger",
+        "waiting",
         "output_preview",
         "output",
         "output_size_bytes",
@@ -5731,6 +5754,10 @@
         "trigger": {
           "type": "string",
           "enum": ["schedule", "manual"]
+        },
+        "waiting": {
+          "type": "boolean",
+          "description": "`true` while this time waits for the schedule's previous run to end (`overlap: wait`); its `status` is `queued`. It starts when that run ends."
         },
         "output_preview": {
           "type": ["string", "null"]
