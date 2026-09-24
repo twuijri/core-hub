@@ -70,21 +70,25 @@
   `/__e2e/expire-token` في `e2e/hub.ts`.
 - دُمج `main` بعد #73: `profiles: 'all'` محفوظ، وصار يملأ `socket.data.workspaces` فتعمل متابعة
   محادثة من بروفايل آخر يحق دخوله، ولا تتجاوزه.
+- ثم دُمج `main` بعد #74 (العضو يدخل ما مُنح صراحةً فقط): لا تعارض في المنطق لأننا نستدعي
+  `resolveWorkspaceFor`/`listWorkspacesFor`/`canEnter` ولا نكرر القاعدة؛ تعارض الاستيراد في
+  `routes.ts` حُلّ بإبقاء الاثنين. الفحوص أدناه على الفرع بعد الدمجين.
 
 ## الفحوص
 ```
 pnpm lint                      All matched files use Prettier code style! (exit 0)
 pnpm typecheck                 exit 0
 pnpm contracts:lint            contracts:lint  OK
-pnpm contracts:check-clients   check-clients  OK — 218 client file(s) scanned, 166 contract path(s) known.
+pnpm contracts:check-clients   check-clients  OK — 220 client file(s) scanned, 166 contract path(s) known.
 pnpm contract:test             Test Files  2 passed (2) · Tests  254 passed (254)
 pnpm i18n:check                i18n:check  OK
 pnpm nav:check                 nav:check  OK — 34 destinations, 2 pre-auth screens (login, setup), 38 terms, ar/en complete, routes for web
-pnpm --filter @majlis/server test   Test Files  72 passed | 6 skipped (78) · Tests  766 passed | 18 skipped (784)
-pnpm --filter @majlis/web test      Test Files  36 passed (36) · Tests  461 passed (461)
+pnpm --filter @majlis/server test   Test Files  74 passed | 6 skipped (80) · Tests  773 passed | 18 skipped (791)
+pnpm --filter @majlis/web test      Test Files  37 passed (37) · Tests  470 passed (470)
 pnpm --filter @majlis/cli test      Test Files  11 passed (11) · Tests  64 passed (64)
-pnpm --filter @majlis/web build     ✓ built in 709ms
-PLAYWRIGHT_CHANNEL=chrome pnpm web:e2e   28 passed (1.8m)
+pnpm --filter @majlis/web build     ✓ built in 782ms
+PLAYWRIGHT_CHANNEL=chrome pnpm web:e2e   28 passed (1.9m)
+pnpm change-record:check       change-record  OK — 1 record(s) valid
 ```
 **الاختبارات تلتقط الثغرة** (كود `main` بعد #73 مكان الإصلاح، والاختبارات الجديدة كما هي):
 ```
