@@ -5,8 +5,10 @@
  * (`propagation.ts`): into Hermes's own home through its `.env`, and into a coding
  * agent's process environment at start. Nobody configures a provider per agent.
  *
- * All tables are workspace-scoped (ADR 0005: each workspace has its own providers and
- * models). `secrets` is the only table that holds ciphertext; every column marked
+ * Every table carries `workspace`, but `providers`, `models` and the provider keys in
+ * `secrets` are the hub's: they are stored under the default profile and every profile uses
+ * them (contract decision §34). `model_defaults`, `ensembles` and `speech_settings` are each
+ * profile's own choices. `secrets` is the only table that holds ciphertext; every column marked
  * ENCRYPTED is AES-256-GCM under the server data key (`<data>/keys/data.key`), rotated
  * by `key_id`, masked as `[stored]` on read, never logged, never returned.
  *

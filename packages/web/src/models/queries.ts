@@ -225,7 +225,7 @@ export interface TestResult {
 
 /** A failure is a `200` with `ok: false`; the screen shows the provider's own words. */
 export function useTestProvider() {
-  const { client, profile } = useAuth();
+  const { client } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) =>

@@ -570,3 +570,44 @@ with no profile filter in the clients; each card and schedule names its own `pro
 Rejected: a profile filter on either page (the owner's words above); a new global operation
 beside `tasks.listTasks` (the same reason as §28); changing the default of the two global
 lists to "the header's profile" (it would silently narrow every existing caller).
+
+## 34. Providers, keys and models are the hub's; the model choice is the profile's
+
+ADR 0010 said a provider is added **once** and every agent inherits it. The contract still read
+"the providers this workspace has added", and the server stored them per profile — so a profile
+made later had no provider, no model, and Hermes refused its turns, and saving providers in any
+profile rewrote Hermes's default profile with that profile's keys and model (found while building
+ADR 0014 stage 3, 2026-09-24).
+
+- `models.listProviders`, `createProvider`, `updateProvider`, `deleteProvider`, `testProvider`,
+  `refreshProvider`, `putModel`, `deleteModel`, `listCatalogue`, `listVoices` and the provider half
+  of `updateSpeech` act on **one hub-wide list**, whichever profile `X-Hub-Profile` names. The header
+  stays required: it still decides who may call and which profile's *choices* a call reads or
+  writes. Adding a preset the hub already has, from any profile, is `409 provider_exists`.
+- The rows are stored under the `default` profile — it always exists and can be neither renamed nor
+  archived — so `Provider.profile` is always `default`. Keys stay `[stored]` on every read.
+- **What stays per profile: the choices.** `models.getDefaults` / `setDefaults` and the speech
+  choice (`stt_provider_id`, `tts_provider_id`) are the profile's. A role the profile has not chosen
+  is the `default` profile's; `ModelDefaults.inherited` (new, optional) names those roles —
+  `default` for the chat model with its fallbacks, else the auxiliary key. Saving a role makes it
+  the profile's own; saving `null` goes back to inheriting. The first chat default the hub sets by
+  itself (the first provider's first model) is the `default` profile's.
+- **Hermes.** Its root home is its `default` profile: the hub's keys and the `default` profile's
+  model, whoever saves. A named profile gets the hub's endpoints (`providers:` blocks) in its own
+  `config.yaml` and the keys through the process environment (ADR 0014 stage 3); the hub's key
+  names are removed from a named profile's own `.env`, because Hermes reads it before the
+  environment and a copy of `default` (`--clone-from`) carries stale keys there. The same is done
+  before each turn in a named profile and right after the hub makes one, so a profile made later is
+  ready before it runs. A key removed from the hub is removed from the root `.env` too.
+- **Existing rows** (`drizzle/0011_providers_shared.sql`): every live provider of a live profile
+  moves to the `default` profile with its id. The same slug in several profiles keeps the `default`
+  profile's row, else the oldest profile's; the others are archived where they are, with their
+  keys, and each choice is an audit row `provider.merged` naming both profiles. A credential
+  family's key is the one of the highest profile in that order that has one. Nothing is deleted;
+  an old id still resolves to the kept row of the same slug.
+
+Rejected: a copy of every provider in every profile (it is the per-profile key entry ADR 0010 said
+no to, and a profile made later still starts empty); a new global operation beside
+`models.listProviders` (every existing caller would keep reading the per-profile answer); a
+sentinel "hub" workspace id (rows no profile listing knows about, and the `default` profile already
+has every property the hub scope needs).

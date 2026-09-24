@@ -1122,7 +1122,8 @@ export class ModelsService {
     const hubId = this.hub({ id: workspace }).id;
     if (hubId === workspace) return null;
     const shared = this.store.defaultFor(hubId, role);
-    if (shared && this.refOf({ id: hubId }, shared.modelId)) return { row: shared, inherited: true };
+    if (shared && this.refOf({ id: hubId }, shared.modelId))
+      return { row: shared, inherited: true };
     return null;
   }
 

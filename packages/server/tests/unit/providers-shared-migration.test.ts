@@ -59,7 +59,12 @@ describe(`migration ${TAG}`, () => {
          VALUES (?, ?, ?, ?, 'admin', 'owner', 'active', 'x', 'ar')`,
       )
       .run(owner, owner, t0, t0);
-    const ws = { def: newUlid(t0), old: newUlid(t0 + 1), work: newUlid(t0 + 2), gone: newUlid(t0 + 3) };
+    const ws = {
+      def: newUlid(t0),
+      old: newUlid(t0 + 1),
+      work: newUlid(t0 + 2),
+      gone: newUlid(t0 + 3),
+    };
     const workspace = sqlite.prepare(
       `INSERT INTO workspaces (id, owner_id, created_at, updated_at, slug, name, is_default, settings, archived_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?)`,
@@ -171,7 +176,13 @@ describe(`migration ${TAG}`, () => {
     const liveInDefault = live.filter((row) => row.workspace === ws.def).map((row) => row.slug);
 
     // One live row per provider, all in the default profile — except the archived profile's.
-    expect(liveInDefault.sort()).toEqual(['anthropic', 'custom-lm', 'groq', 'openai', 'openrouter']);
+    expect(liveInDefault.sort()).toEqual([
+      'anthropic',
+      'custom-lm',
+      'groq',
+      'openai',
+      'openrouter',
+    ]);
     expect(byId.get(p.goneMistral)).toMatchObject({ workspace: ws.gone, archived_at: null });
 
     // Duplicates: the default profile's row, else the oldest profile's, is kept.
@@ -211,8 +222,14 @@ describe(`migration ${TAG}`, () => {
       .all() as { id: string; workspace: string; provider_id: string; model_key: string }[];
     const modelOf = new Map(models.map((row) => [row.id, row]));
     expect(modelOf.get(m.groqLlama)).toMatchObject({ workspace: ws.def, provider_id: p.workGroq });
-    expect(modelOf.get(m.workOnly)).toMatchObject({ workspace: ws.def, provider_id: p.defAnthropic });
-    expect(modelOf.get(m.workSonnet)).toMatchObject({ workspace: ws.work, provider_id: p.workAnthropic });
+    expect(modelOf.get(m.workOnly)).toMatchObject({
+      workspace: ws.def,
+      provider_id: p.defAnthropic,
+    });
+    expect(modelOf.get(m.workSonnet)).toMatchObject({
+      workspace: ws.work,
+      provider_id: p.workAnthropic,
+    });
     expect(models).toHaveLength(4);
 
     // The work profile keeps its own choice of model, now naming the kept row's model.
@@ -221,7 +238,9 @@ describe(`migration ${TAG}`, () => {
 
     // Every choice is in the audit trail, with both profiles named.
     const audit = sqlite
-      .prepare(`SELECT id, entity_id, data, actor_kind FROM audit_events WHERE action = 'provider.merged'`)
+      .prepare(
+        `SELECT id, entity_id, data, actor_kind FROM audit_events WHERE action = 'provider.merged'`,
+      )
       .all() as { id: string; entity_id: string; data: string; actor_kind: string }[];
     expect(audit.map((row) => row.entity_id).sort()).toEqual(
       [p.workAnthropic, p.workCustom, p.workOpenai].sort(),

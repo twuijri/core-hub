@@ -13,7 +13,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import YAML from 'yaml';
-import { authed, drainJobs, settle, signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
+import {
+  authed,
+  drainJobs,
+  settle,
+  signedInHub,
+  type TestHub,
+} from '../../../tests/unit/helpers.js';
 import { agentsServiceFor } from '../agents/index.js';
 import { parseEnv } from './dotenv.js';
 import { modelsServiceFor } from './index.js';
@@ -426,9 +432,9 @@ describe("models: Hermes's default profile is not the last saver's", () => {
       mkdirSync(fresh, { recursive: true });
       writeFileSync(path.join(fresh, '.env'), 'ANTHROPIC_API_KEY=sk-ant-stale-copy\n');
       modelsServiceFor(hub.app).prepareProfile(fresh);
-      expect(parseEnv(readFileSync(path.join(fresh, '.env'), 'utf8')).has('ANTHROPIC_API_KEY')).toBe(
-        false,
-      );
+      expect(
+        parseEnv(readFileSync(path.join(fresh, '.env'), 'utf8')).has('ANTHROPIC_API_KEY'),
+      ).toBe(false);
     } finally {
       await hub.close();
     }

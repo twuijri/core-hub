@@ -1,8 +1,17 @@
 # models
 
 Owns: `secret`, `provider`, `model`, `model_default`, `ensemble`,
-`speech_settings`. Schema: `packages/server/src/modules/models/schema.ts`. All
-scoped (ADR 0005: each workspace has its own models). Base columns omitted.
+`speech_settings`. Schema: `packages/server/src/modules/models/schema.ts`. Base
+columns omitted.
+
+**Hub-wide rows, per-profile choices** (contract decision §34, 2026-09-24). `provider`,
+`model` and the provider keys in `secret` (`provider:<family>`) belong to the hub: they are
+stored under the default profile — it always exists and can be neither renamed nor archived —
+and every profile reads and writes that one list, whichever `X-Hub-Profile` a call names.
+`model_default`, `ensemble` and `speech_settings` stay per profile: they are choices, and a
+profile that made none uses the default profile's. The other secrets (webhook signing keys,
+agent `secret_refs`) stay the profile's own. `drizzle/0011_providers_shared.sql` merged the
+per-profile rows of earlier builds; its rules are in decision §34.
 
 This module is **the hub's one credential store** (ADR 0010): a person adds a
 provider key once, here, and the hub propagates it to Hermes and to every
@@ -19,7 +28,7 @@ The vocabulary is the contract's: `providers.kind`, `providers.api_mode`,
 exactly the values of `ProviderKind`, `Provider.api_mode`, `Visibility.mode`,
 `ModelKind` and `ModelCapability` in `packages/contracts/openapi.yaml`.
 
-## secret (scoped)
+## secret (scoped; provider keys hub-wide under the default profile)
 
 | column | type | meaning |
 |---|---|---|
@@ -41,7 +50,7 @@ is additive — mint a version, make it active, re-seal the rows that are not on
 it yet, then drop the old version. A row sealed under a version the ring no
 longer holds is *reported*, never silently skipped: that is data loss.
 
-## provider (scoped)
+## provider (hub-wide, stored under the default profile)
 
 | column | type | meaning |
 |---|---|---|
@@ -92,7 +101,7 @@ and the only thing allowed to report a key as missing is the endpoint's own
 answer. A preset declares `keyRequirement: required | optional`, and that is the
 only vocabulary there is (contract decision §26; the defect of 2026-09-22).
 
-## model (scoped)
+## model (hub-wide, stored under the default profile)
 
 | column | type | meaning |
 |---|---|---|
@@ -166,6 +175,13 @@ with a key"; `reason` is an i18n key, never a sentence in one language.
 
 ## Propagation (ADR 0010)
 
+- **Every profile** (decision §34): Hermes's root home is its `default` profile and gets the
+  hub's keys and the default profile's chat model, whichever profile saved. A named profile
+  gets the `providers:` blocks in its own `config.yaml`, its keys through the process
+  environment, and none of the hub's key names in its own `.env` (Hermes reads that file
+  before the environment, so a stale copy there would win). This is done on every save, right
+  after the hub makes a profile, and before each turn in a named profile
+  (`ModelsService.prepareProfile`).
 - **Hermes**: the hub writes the provider keys into `${HERMES_HOME}/.env` (a
   merge that touches only the variables it owns), **puts the same variables into
   the gateway's own process environment at spawn** (the file is what `hermes

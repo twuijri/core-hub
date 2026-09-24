@@ -605,7 +605,7 @@ describe('models screen', () => {
     expect(screen.getByText(/مشتركون بين كل البروفايلات/)).toBeTruthy();
   });
 
-  it("marks a default this profile inherited from the default profile, and only that one", async () => {
+  it('marks a default this profile inherited from the default profile, and only that one', async () => {
     const { fetchImpl } = hub({
       models: [MODEL],
       defaults: {
