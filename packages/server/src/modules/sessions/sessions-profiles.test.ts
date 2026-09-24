@@ -33,7 +33,7 @@ const made: Record<'default' | 'designer', string[]> = { default: [], designer: 
 
 async function inject(
   token: string,
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'PATCH',
   url: string,
   profile: string,
   payload?: unknown,
@@ -48,7 +48,10 @@ async function inject(
 
 const list = async (token: string, profile: string, query: string) => {
   const res = await inject(token, 'GET', `/sessions?${query}`, profile);
-  return { status: res.statusCode, body: res.json() as PageBody & { code?: string } };
+  return {
+    status: res.statusCode,
+    body: res.json() as PageBody & { code?: string; details?: Record<string, unknown> },
+  };
 };
 
 async function login(username: string, password: string): Promise<string> {
@@ -96,10 +99,23 @@ beforeAll(async () => {
       })
     ).statusCode,
   ).toBe(201);
-  // A member with no enrolment may enter every workspace (the contract: empty = every profile).
+  // A member is always created with an explicit list (contract decision §29). Withdrawing it
+  // leaves them with none — which must mean no profile at all, never every profile.
   expect(
     (await person({ username: 'free', password: 'free-password-1', role: 'member' })).statusCode,
-  ).toBe(201);
+  ).toBe(400);
+  const free = await person({
+    username: 'free',
+    password: 'free-password-1',
+    role: 'member',
+    profiles: ['default'],
+  });
+  expect(free.statusCode).toBe(201);
+  const freeId = (free.json() as { id: string }).id;
+  expect(
+    (await inject(tokens.owner, 'PATCH', `/auth/users/${freeId}`, 'default', { profiles: [] }))
+      .statusCode,
+  ).toBe(200);
   tokens.admin = await login('adm', 'adm-password-1');
   tokens.member = await login('mem', 'mem-password-1');
   tokens.free = await login('free', 'free-password-1');
@@ -153,9 +169,11 @@ describe('sessions.list?profiles=all — who sees what', () => {
     expect(outside.body.code).toBe('profile_not_found');
   });
 
-  it('gives a member with no enrolment every profile, as the header rule does', async () => {
-    const { body } = await list(tokens.free, 'default', 'profiles=all');
-    expect(body.items).toHaveLength(made.default.length + made.designer.length);
+  it('gives a member with no profile nothing: not every profile, and a clear refusal', async () => {
+    const refused = await list(tokens.free, 'default', 'profiles=all');
+    expect(refused.status).toBe(404);
+    expect(refused.body.code).toBe('profile_not_found');
+    expect(refused.body.details).toMatchObject({ reason: 'no_profile_granted' });
   });
 
   it('keeps the list without `profiles` exactly as it was: the header profile alone', async () => {
