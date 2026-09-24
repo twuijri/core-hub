@@ -75,6 +75,7 @@ export {
 export {
   DEFAULT_WORKSPACE_SLUG,
   canEnter,
+  defaultWorkspace,
   findWorkspace,
   listWorkspacesFor,
   requireWorkspace,

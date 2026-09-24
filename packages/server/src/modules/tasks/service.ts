@@ -185,8 +185,17 @@ export class TasksService {
     return row;
   }
 
-  listTasks(
-    scope: Scope,
+  listTasks(scope: Scope, query: Parameters<TasksService['listTasksAcross']>[1]): TaskRow[] {
+    return this.listTasksAcross([scope.workspace], query);
+  }
+
+  /**
+   * Tasks of several workspaces in one statement (`tasks.listTasks?profiles=all`, ADR 0016):
+   * one keyset, `id desc`, over all of them — so a page never repeats or skips a task from
+   * another workspace. Which workspaces is the caller's business (`auth`'s rule), not this one's.
+   */
+  listTasksAcross(
+    workspaces: readonly string[],
     query: {
       projectId?: string | undefined;
       status?: TaskStatus | undefined;
@@ -198,13 +207,14 @@ export class TasksService {
       limit: number;
     },
   ): TaskRow[] {
+    if (workspaces.length === 0) return [];
     const needle = query.q?.trim();
     return this.db
       .select()
       .from(tasks)
       .where(
         and(
-          eq(tasks.workspace, scope.workspace),
+          inArray(tasks.workspace, [...workspaces]),
           query.projectId ? eq(tasks.projectId, query.projectId) : undefined,
           query.status ? eq(tasks.status, query.status) : undefined,
           query.includeArchived ? undefined : isNull(tasks.archivedAt),

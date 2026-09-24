@@ -124,6 +124,12 @@ test.describe('lists across profiles', () => {
       await row(page, id).getByRole('link').click();
       await expect(page).toHaveURL(new RegExp(`/chat/${id}\\?profile=${slug}$`));
       await expect(page.getByTestId('chat-profile')).toHaveAttribute('data-profile', slug);
+      // Count only once the transcript is on screen: each chat already has its first reply,
+      // and counting while it still loads read 0 on a busy hub (a race, not a failure).
+      await expect(page.getByTestId('message-assistant').first()).toHaveAttribute(
+        'data-status',
+        'complete',
+      );
       const before = await page.getByTestId('message-assistant').count();
       await page.getByTestId('composer-input').fill(`وماذا بعد في ${slug}؟`);
       await page.getByTestId('send').click();

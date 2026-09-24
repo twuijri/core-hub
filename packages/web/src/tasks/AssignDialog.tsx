@@ -44,7 +44,16 @@ export function AssignDialog({ task, onClose }: { task: Task | null; onClose(): 
   const submit = (start: boolean) => {
     if (!task || !agentId) return;
     assign.mutate(
-      { id: task.id, agent_id: agentId, start, instructions: instructions.trim() || null },
+      {
+        id: task.id,
+        // The card's own profile: the board holds every profile, and a task is assigned
+        // where it lives (ADR 0016). The dialog's agents are that profile's too (the board
+        // opens it inside the card's `ProfileScope`).
+        workspace: task.profile,
+        agent_id: agentId,
+        start,
+        instructions: instructions.trim() || null,
+      },
       {
         onSuccess: (result) => {
           onClose();

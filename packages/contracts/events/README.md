@@ -35,7 +35,9 @@ other profile the signed-in person may enter — the server decides which, as it
 for `sessions.list?profiles=all` — so a client showing one list across profiles hears
 `session.*` and `approval.*` from all of them. Each envelope names its `profile`, and
 `seq` stays per (namespace, profile): a client that resumes a session keeps the highest
-`seq` of **that session's profile** only.
+`seq` of **that session's profile** only. The same handshake on `/rt/tasks` and
+`/rt/schedules` (DECISIONS §32) hears `task.*`, `project.*`, `schedule.*` and
+`workflow*.*` of every profile the Tasks board and the Schedules page show.
 
 The token is the same bearer as HTTP and is **required on every namespace** —
 there is no anonymous realtime. A handshake without one, or with one the hub
