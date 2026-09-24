@@ -31,7 +31,23 @@ export async function registerModuleEvents(
     await module.registerEvents(io);
     registered.push(module.name);
   }
+  requirePrincipal(io);
   return registered;
+}
+
+/**
+ * The last handshake middleware on every namespace, after every module's: a socket that no
+ * middleware admitted (no principal) is refused. `auth` already refuses such a socket; this
+ * keeps the hub closed if a composition ever leaves `auth` out, instead of open. The main
+ * namespace `/` carries nothing and no middleware admits anyone there, so it is closed too.
+ */
+function requirePrincipal(io: SocketServer): void {
+  for (const namespace of ['/', ...Object.values(REALTIME_NAMESPACES)]) {
+    io.of(namespace).use((socket, next) => {
+      if ((socket.data as { principal?: unknown }).principal) return next();
+      next(Object.assign(new Error('unauthorized'), { data: { code: 'unauthorized' } }));
+    });
+  }
 }
 
 export function listNamespaces(io: SocketServer): string[] {

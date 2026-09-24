@@ -37,13 +37,19 @@ export interface RequestScope {
   userName: string;
 }
 
+/**
+ * Who is asking: an HTTP request, or a socket's verified principal (`subscribe` on
+ * `/rt/sessions` asks the same question as `GET /sessions/{id}`).
+ */
+export type ScopeCaller = Pick<FastifyRequest, 'principal' | 'authError'>;
+
 export interface ScopeResolver {
   /**
    * `null` when the profile does not exist — the caller answers `profile_not_found`.
-   * `request` carries who is asking (`auth` reads its principal from it); the derived
+   * `caller` carries who is asking (`auth` reads its principal from it); the derived
    * resolver ignores it.
    */
-  resolve(profile: string, request: FastifyRequest): Promise<RequestScope | null>;
+  resolve(profile: string, caller: ScopeCaller): Promise<RequestScope | null>;
 }
 
 /**

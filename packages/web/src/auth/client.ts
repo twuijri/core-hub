@@ -18,6 +18,12 @@ export interface HubClientBundle {
   client: HubClient;
   /** Unauthenticated client for login, meta and pairing claims. */
   anonymous: HubClient;
+  /**
+   * Trades the refresh token for a new access token (single flight, shared with the HTTP
+   * client). True when the store now holds a new token; a refused refresh signs out.
+   * The realtime sockets call it when the hub refuses their handshake token.
+   */
+  refresh(): Promise<boolean>;
 }
 
 export interface BundleOptions {
@@ -104,6 +110,7 @@ export function createClientBundle(options: BundleOptions): HubClientBundle {
   return {
     client: { raw, request: raw as unknown as HubClient['request'] },
     anonymous,
+    refresh,
   };
 }
 

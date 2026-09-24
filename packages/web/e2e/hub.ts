@@ -29,6 +29,11 @@ import type {
   AgentRunner,
 } from '../../server/src/modules/sessions/ports.js';
 import { fakeHermes } from '../../server/src/modules/sessions/testing/fake-runner.js';
+import {
+  loadOrCreateSigningKey,
+  signAccessToken,
+  verifyAccessToken,
+} from '../../server/src/modules/auth/tokens.js';
 
 export const E2E_PASSWORD = 'e2e-owner-password';
 
@@ -465,6 +470,21 @@ const app = await buildServer({
 app.post('/__e2e/drop-sockets', async () => {
   app.hub.io.of('/rt/sessions').disconnectSockets(true);
   return { ok: true };
+});
+
+// Test-only control: the same access token, already expired — what a laptop that slept
+// past the token's lifetime wakes up holding (zzz-realtime-token).
+app.post('/__e2e/expire-token', async (request) => {
+  const { token } = request.body as { token: string };
+  const key = loadOrCreateSigningKey(dataDir);
+  const claims = await verifyAccessToken(key, token, Date.now());
+  const expired = await signAccessToken(
+    key,
+    { userId: claims.sub, role: claims.role, sessionId: claims.sid },
+    Date.now() - 60 * 60_000,
+    60,
+  );
+  return { token: expired };
 });
 
 await app.listen({ port, host: '127.0.0.1' });

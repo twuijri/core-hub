@@ -10,26 +10,27 @@
  * across sessions.
  *
  * Rooms:
- * - `profile:<slug>` — joined on connect; carries the profile-wide events
- *   (`session.*`, `approval.*`) the contract marks "no subscription needed".
- * - `session:<id>` — joined by the `subscribe` command; carries the
- *   transcript events of one session.
+ * - `profile:<slug>` — joined by `auth`'s handshake middleware, from the
+ *   verified token and only for a workspace the caller may enter; carries the
+ *   profile-wide events (`session.*`, `approval.*`) the contract marks "no
+ *   subscription needed". This module never joins a profile room itself.
+ * - `session:<id>` — joined by the `subscribe` command, and only after the
+ *   `FollowCheck` the module wires in (`index.ts`) has found the session in
+ *   one of the socket's workspaces, exactly as `GET /sessions/{id}` would;
+ *   carries the transcript events of one session.
  *
  * Commands (client -> server) are only `subscribe` / `unsubscribe`: every
  * mutation goes over HTTP (events/README.md §Connecting and subscribing).
  *
- * Authentication is not enforced here yet — the `auth` module owns tokens and
- * lands in a parallel branch. The handshake's `profile` is read, the `token`
- * is not verified; the check belongs in one place and this module must not
- * invent a second one.
+ * Authentication is `auth`'s (`modules/auth/sockets.ts`): a socket reaches
+ * this namespace only with a verified principal. Until the module wires the
+ * follow check, every `subscribe` is refused — closed, not open.
  */
 import type { Namespace, Server as SocketServer, Socket } from 'socket.io';
 import { REALTIME_NAMESPACES } from '../../lib/module.js';
 import { ResumeJournal, type JournalEntry } from './journal.js';
 
 export const SESSIONS_NAMESPACE = REALTIME_NAMESPACES.sessions;
-export const DEFAULT_PROFILE = 'default';
-const PROFILE_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/;
 
 export type SessionEventName =
   | 'session.created'
@@ -76,9 +77,20 @@ export interface ErrorAck {
 export const profileRoom = (profile: string): string => `profile:${profile}`;
 export const sessionRoom = (sessionId: string): string => `session:${sessionId}`;
 
+/**
+ * May this socket follow this session? True only when the session exists in a workspace
+ * the socket was admitted to — the same lookup `GET /sessions/{id}` makes. Anything else
+ * (another workspace, an unknown id, no principal) is false and the caller hears
+ * `not_found`, so a refusal does not reveal whether the id exists elsewhere.
+ */
+export type FollowCheck = (socket: Socket, sessionId: string) => Promise<boolean>;
+
+const refuseAll: FollowCheck = () => Promise.resolve(false);
+
 export class SessionsRealtime {
   readonly journal: ResumeJournal;
   private readonly sequences = new Map<string, number>();
+  private canFollow: FollowCheck = refuseAll;
 
   constructor(
     private readonly nsp: Namespace,
@@ -131,20 +143,30 @@ export class SessionsRealtime {
     return envelope;
   }
 
+  /** Wires the check `subscribe` runs before joining a session's room (`index.ts`). */
+  authorizeFollowWith(check: FollowCheck): void {
+    this.canFollow = check;
+  }
+
   /** Attach the namespace handlers. Called once per app from `registerEvents`. */
   attach(): void {
     this.nsp.on('connection', (socket: Socket) => {
-      const profile = readProfile(socket);
-      void socket.join(profileRoom(profile));
-
       socket.on('subscribe', (payload: unknown, ack?: (reply: SubscribeAck | ErrorAck) => void) => {
         const sessionId = readSessionId(payload);
         if (!sessionId) return reply(ack, badRequest('session_id is required'));
-        void socket.join(sessionRoom(sessionId));
-        const afterSeq = readAfterSeq(payload);
-        const slice = this.journal.since(sessionId, afterSeq);
-        for (const entry of slice.entries) socket.emit(entry.envelope.event, entry.envelope);
-        reply(ack, { ok: true, replayed: slice.entries.length, truncated: slice.truncated });
+        this.canFollow(socket, sessionId).then(
+          (allowed) => {
+            if (!allowed) return reply(ack, notFound(sessionId));
+            // The socket may have gone while the check ran; nothing to join then.
+            if (socket.disconnected) return;
+            void socket.join(sessionRoom(sessionId));
+            const afterSeq = readAfterSeq(payload);
+            const slice = this.journal.since(sessionId, afterSeq);
+            for (const entry of slice.entries) socket.emit(entry.envelope.event, entry.envelope);
+            reply(ack, { ok: true, replayed: slice.entries.length, truncated: slice.truncated });
+          },
+          () => reply(ack, notFound(sessionId)),
+        );
       });
 
       socket.on(
@@ -189,12 +211,6 @@ export function sessionsRealtimeFor(io: SocketServer): SessionsRealtime | undefi
   return layers.get(io);
 }
 
-function readProfile(socket: Socket): string {
-  const auth = socket.handshake.auth as { profile?: unknown } | undefined;
-  const raw = typeof auth?.profile === 'string' ? auth.profile.trim() : '';
-  return PROFILE_PATTERN.test(raw) ? raw : DEFAULT_PROFILE;
-}
-
 function readSessionId(payload: unknown): string | null {
   if (!payload || typeof payload !== 'object') return null;
   const value = (payload as { session_id?: unknown }).session_id;
@@ -209,6 +225,10 @@ function readAfterSeq(payload: unknown): number {
 
 function badRequest(message: string): ErrorAck {
   return { ok: false, error: message, code: 'bad_request' };
+}
+
+function notFound(sessionId: string): ErrorAck {
+  return { ok: false, error: `session ${sessionId} not found`, code: 'not_found' };
 }
 
 function reply(

@@ -25,16 +25,19 @@ export interface PrincipalScope {
   userName: string;
 }
 
+/** An HTTP request, or a socket's verified principal (`/rt/sessions` `subscribe`). */
+export type PrincipalScopeCaller = Pick<FastifyRequest, 'principal' | 'authError'>;
+
 export interface PrincipalScopeResolver {
-  resolve(profile: string, request: FastifyRequest): Promise<PrincipalScope | null>;
+  resolve(profile: string, caller: PrincipalScopeCaller): Promise<PrincipalScope | null>;
 }
 
 export function principalScopeResolver(app: FastifyInstance): PrincipalScopeResolver {
   const db = requireSqlite(app.hub.database);
   return {
-    async resolve(profile, request) {
-      const principal = request.principal;
-      if (!principal) throw request.authError ?? new HubError('unauthorized');
+    async resolve(profile, caller) {
+      const principal = caller.principal;
+      if (!principal) throw caller.authError ?? new HubError('unauthorized');
       const workspace = resolveWorkspaceFor(db, principal.user, profile);
       // Jobs store the workspace id and report its slug (`/rt/jobs` names the profile).
       auditFor(app).rememberWorkspace(workspace.id, workspace.slug);
