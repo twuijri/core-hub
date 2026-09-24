@@ -26,6 +26,13 @@ export interface ProfileMirror {
    * when it refuses (an existing name, a bad source).
    */
   create(name: string, origin: ProfileOrigin): Promise<void>;
+  /**
+   * Sets the runtime's display name for a profile (`''` clears it). The runtime's id and
+   * folder never change: for `default` that is the runtime's own rule, and for a named
+   * profile it is the hub's, because channels, schedules and chats find the profile by its
+   * id. Throws `ProfileMirrorError` with the runtime's words when it refuses.
+   */
+  setDisplayName(name: string, displayName: string): Promise<void>;
 }
 
 export class ProfileMirrorError extends Error {}
@@ -57,6 +64,35 @@ export function profileMirrorFor(app: FastifyInstance): ProfileMirror | null {
 /** The runtime's name for a workspace: its slug, except the default one. */
 export function runtimeProfileName(row: Pick<WorkspaceRow, 'slug' | 'isDefault'>): string {
   return row.isDefault ? RUNTIME_DEFAULT_PROFILE : row.slug;
+}
+
+/**
+ * What the runtime should show for a workspace: its name — or nothing for a named profile
+ * whose name is its id, which the runtime shows bare anyway (Hermes's `format_profile_label`).
+ */
+export function runtimeDisplayName(row: Pick<WorkspaceRow, 'slug' | 'isDefault' | 'name'>): string {
+  const name = row.name.trim();
+  return !row.isDefault && name === row.slug ? '' : name;
+}
+
+/**
+ * Writes a workspace's name to the runtime, where there is one. Best effort: used when the
+ * profile was just made (created or imported), where the profile itself already exists and a
+ * refused name must not undo it — the failure is logged and a rename writes it again.
+ */
+export async function mirrorDisplayName(app: FastifyInstance, row: WorkspaceRow): Promise<void> {
+  const mirror = profileMirrorFor(app);
+  if (!mirror) return;
+  try {
+    // Written even when empty: an imported archive carries its source's display name, which
+    // is not this profile's.
+    await mirror.setDisplayName(runtimeProfileName(row), runtimeDisplayName(row));
+  } catch (error) {
+    app.log.warn(
+      { err: error, profile: row.slug },
+      "auth: could not write the profile's name to the runtime",
+    );
+  }
 }
 
 /** A hub slug (`^[a-z0-9][a-z0-9-]{0,39}$`) is narrower than a Hermes name. */

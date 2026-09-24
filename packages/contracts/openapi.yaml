@@ -1416,6 +1416,20 @@ paths:
       operationId: auth.updateProfile
       tags: [auth]
       summary: Rename a workspace, change its slug, avatar or default model (admin)
+      description: |
+        **Renaming** (`name`, decision §43) works for every profile, `default` included, and
+        changes only what people see: the slug stays. Where the hub mirrors Hermes profiles
+        (ADR 0014) the name is written to Hermes first as the profile's display name — for
+        `default`, `hermes profile rename default <name>`, which keeps Hermes's id `default`;
+        for a named profile, `display_name` in its `profile.yaml`, the folder unmoved. A name
+        equal to the slug clears Hermes's display name. When Hermes refuses, nothing changes
+        and the answer is `409` with `details.reason = hermes_refused` and Hermes's words in
+        `details.message`.
+
+        **The slug** of `default` never changes (`409`). Where the hub mirrors Hermes, no
+        slug changes: it is the Hermes folder that channels, schedules and chats use, so the
+        answer is `409` with `details.reason = profile_id_fixed`, before anything is written.
+        Without Hermes (the hub's own filter) a named profile's slug may still change.
       x-scope: global
       x-roles: [owner, admin]
       x-rt-events: []
@@ -1592,7 +1606,9 @@ paths:
         when absent), so it arrives on that profile's `/rt/jobs` room and `jobs.get` finds it
         there. Its `result` is `{attachment_id, profile, name, size_bytes, expires_at,
         removed, masked}`: `attachment_id` points at the archive (`name` is
-        `<slug>-<YYYYMMDD-HHMMSS>.tar.gz`), downloaded through `/attachments/{id}/content`
+        `<profile name>-<YYYYMMDD-HHMMSS>.tar.gz`: the profile's name without what a file name
+        cannot carry — path separators, `:*?"<>|`, control and direction marks — or its slug
+        when nothing is left; decision §43), downloaded through `/attachments/{id}/content`
         with the bearer header (never a token in a URL) and the same `X-Hub-Profile`; only
         the person who exported it can read that attachment, and it is deleted after
         `expires_at` (24 hours). `removed` lists the paths inside the archive the hub left
@@ -13201,8 +13217,7 @@ components:
         slug:
           $ref: '#/components/schemas/ProfileSlug'
         name:
-          type: string
-          maxLength: 80
+          $ref: '#/components/schemas/ProfileName'
         clone_from:
           oneOf:
             - $ref: '#/components/schemas/ProfileSlug'
@@ -13213,9 +13228,11 @@ components:
       properties:
         slug:
           $ref: '#/components/schemas/ProfileSlug'
+          description: |
+            Refused (`409`) for `default`, and for every profile where the hub mirrors Hermes
+            (`details.reason = profile_id_fixed`); see `auth.updateProfile`.
         name:
-          type: string
-          maxLength: 80
+          $ref: '#/components/schemas/ProfileName'
         avatar:
           oneOf:
             - $ref: '#/components/schemas/AvatarInput'
@@ -13224,6 +13241,15 @@ components:
           oneOf:
             - $ref: '#/components/schemas/ModelRef'
             - type: 'null'
+    ProfileName:
+      type: string
+      description: |
+        What people call a profile — any language, shown everywhere the profile is named — and
+        Hermes's display name for it (decision §43). Trimmed; at most 64 characters, Hermes's
+        own limit for a display name. Never the profile's id: that is `slug`.
+      minLength: 1
+      maxLength: 64
+      examples: ['الرئيسي']
     ProfileSettings:
       type: object
       required: [proxy, compression, privacy, appearance]
@@ -13334,9 +13360,7 @@ components:
           $ref: '#/components/schemas/ProfileSlug'
           description: The new profile's id in the hub and in Hermes; must not be taken.
         name:
-          type: string
-          minLength: 1
-          maxLength: 80
+          $ref: '#/components/schemas/ProfileName'
           description: Display name of the new workspace; the slug when absent.
     # ---------------------------------------------------------------- sessions
     SessionSource:

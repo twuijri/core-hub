@@ -25,6 +25,7 @@ import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import { Button, Dialog, Field, Input, Notice, Segmented, useToast } from '../ui/index.js';
 import {
+  PROFILE_NAME_MAX,
   jobFinished,
   peopleKeys,
   useExportWorkspace,
@@ -250,6 +251,19 @@ export function slugFromArchive(fileName: string): string {
     .replace(/-+$/, '');
 }
 
+/**
+ * `الرئيسي-20260925-101500.tar.gz` → `الرئيسي`: an export is named after the profile's name
+ * (contract decision §43), which the import offers back as the new profile's name.
+ */
+export function nameFromArchive(fileName: string): string {
+  return fileName
+    .replace(/\.(tar\.gz|tgz)$/i, '')
+    .replace(/-\d{8}-\d{6}$/, '')
+    .trim()
+    .slice(0, PROFILE_NAME_MAX)
+    .trim();
+}
+
 /** The suggestion, made free: `design`, else `design-2`, `design-3` … */
 function freeSlug(base: string, taken: ReadonlySet<string>): string {
   if (!base) return '';
@@ -312,9 +326,13 @@ export function ImportDialog({
     setFile(chosen);
     setFailure(null);
     if (!slug) {
-      const suggested = freeSlug(slugFromArchive(chosen.name), taken);
+      const base = slugFromArchive(chosen.name);
+      const suggested = freeSlug(base, taken);
       setSlug(suggested);
-      if (!name) setName(suggested);
+      // A file named after a profile's name offers that name; one named by an id (older
+      // exports) offers the id chosen here, as before.
+      const named = nameFromArchive(chosen.name);
+      if (!name) setName(named && named !== base ? named : suggested);
     }
   };
 
@@ -414,6 +432,7 @@ export function ImportDialog({
             <Input
               {...props}
               dir="auto"
+              maxLength={PROFILE_NAME_MAX}
               value={name}
               onChange={(event) => setName(event.target.value)}
             />

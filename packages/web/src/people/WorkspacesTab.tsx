@@ -11,6 +11,10 @@
  * **Each one moves as Hermes's archive** (ADR 0014 stage 2): exported to a file that leaves
  * every credential behind, and imported from one as a new profile (`ProfileTransfer.tsx`).
  *
+ * **Renaming one changes its name, never its id** (contract decision §43): any profile,
+ * `default` included, can be called anything, in any language, and Hermes shows that name
+ * too. The slug stays, because it is the Hermes folder chats, channels and schedules use.
+ *
  * **Removing one archives it**, which is the hub's own word: the rows stay and only the
  * memberships go, and the Hermes profile stays as it is. The button says archive for that reason — a delete that archives is a
  * lie the person finds out later, and the opposite would be worse.
@@ -36,6 +40,7 @@ import {
 } from '../ui/index.js';
 import { ExportDialog, ImportDialog } from './ProfileTransfer.js';
 import {
+  PROFILE_NAME_MAX,
   useArchiveWorkspace,
   useCreateWorkspace,
   useUpdateWorkspace,
@@ -126,7 +131,15 @@ function WorkspaceCard({ workspace }: { workspace: Workspace }) {
         })}
         actions={
           <span className="flex items-center gap-1">
-            <Button size="sm" variant="ghost" onClick={() => setName(workspace.name)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              data-testid="rename-workspace"
+              onClick={() => {
+                update.reset();
+                setName(workspace.name);
+              }}
+            >
               {t('common.rename')}
             </Button>
             <Button
@@ -166,8 +179,9 @@ function WorkspaceCard({ workspace }: { workspace: Workspace }) {
         <Dialog
           open
           onOpenChange={(open) => !open && setName(null)}
-          title={t('common.rename')}
+          title={t('workspaces.rename_title', { name: workspace.name })}
           closeLabel={t('common.cancel')}
+          testId="rename-workspace-dialog"
           footer={
             <>
               <Button variant="ghost" onClick={() => setName(null)}>
@@ -188,18 +202,29 @@ function WorkspaceCard({ workspace }: { workspace: Workspace }) {
             </>
           }
         >
-          <Field label={t('workspaces.name')}>
-            {(props) => (
-              <Input {...props} value={name} onChange={(event) => setName(event.target.value)} />
-            )}
-          </Field>
+          <div className="flex flex-col gap-3">
+            <Field
+              label={t('workspaces.name')}
+              hint={t('workspaces.rename_hint', { slug: workspace.slug })}
+            >
+              {(props) => (
+                <Input
+                  {...props}
+                  dir="auto"
+                  maxLength={PROFILE_NAME_MAX}
+                  value={name}
+                  data-testid="workspace-name-input"
+                  onChange={(event) => setName(event.target.value)}
+                />
+              )}
+            </Field>
+            {update.isError && <Notice tone="danger">{refusal(update.error, t)}</Notice>}
+          </div>
         </Dialog>
       )}
       {exporting && <ExportDialog workspace={workspace} onClose={() => setExporting(false)} />}
       {dialog}
-      {(update.isError || archive.isError) && (
-        <Notice tone="danger">{describeError(update.error ?? archive.error, t)}</Notice>
-      )}
+      {archive.isError && <Notice tone="danger">{describeError(archive.error, t)}</Notice>}
     </Card>
   );
 }
@@ -258,6 +283,7 @@ function AddWorkspace({ existing, onClose }: { existing: Workspace[]; onClose: (
           {(props) => (
             <Input
               {...props}
+              maxLength={PROFILE_NAME_MAX}
               value={name}
               onChange={(event) => {
                 setName(event.target.value);

@@ -18,6 +18,7 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { requireSqlite } from '../../src/lib/db.js';
 import { profileTransferPorts } from '../../src/modules/index.js';
 import { registerProfileTransfer } from '../../src/modules/auth/index.js';
+import { archiveStemOf } from '../../src/modules/auth/profile-transfer.js';
 import { fakeProfileRuntime } from '../../src/modules/auth/testing/fake-profile-runtime.js';
 import { tarGz } from '../../src/modules/auth/testing/tar.js';
 import { attachments } from '../../src/modules/knowledge/schema.js';
@@ -130,7 +131,11 @@ describe('profile export', () => {
     ]);
     const hub = await signedInHub();
     try {
-      const created = await json(hub, 'POST', '/api/v1/profiles', { slug: 'design', name: 'D' });
+      // The file is named after the profile's name, which people see — not its id.
+      const created = await json(hub, 'POST', '/api/v1/profiles', {
+        slug: 'design',
+        name: 'التصميم: الفريق',
+      });
       expect(created.status).toBe(201);
       const workspace = (await profiles(hub)).find((p) => p.slug === 'default')!.id as string;
       storeProviderKey(hub, workspace);
@@ -151,7 +156,7 @@ describe('profile export', () => {
         removed: ['design/.env'],
         masked: ['design/SOUL.md'],
       });
-      expect(String(result.name)).toMatch(/^design-\d{8}-\d{6}\.tar\.gz$/);
+      expect(String(result.name)).toMatch(/^التصميم الفريق-\d{8}-\d{6}\.tar\.gz$/);
       const expires = Date.parse(String(result.expires_at)) - Date.now();
       expect(expires).toBeGreaterThan(23 * 60 * 60_000);
       expect(expires).toBeLessThanOrEqual(24 * 60 * 60_000);
@@ -391,5 +396,15 @@ describe('a hub that does not supervise Hermes', () => {
     } finally {
       await hub.close();
     }
+  });
+});
+
+describe("an export's file name", () => {
+  it("is the profile's name without what a file name cannot carry, else its id", () => {
+    expect(archiveStemOf({ name: 'الرئيسي', slug: 'default' })).toBe('الرئيسي');
+    expect(archiveStemOf({ name: 'Design / Team: v2?', slug: 'design' })).toBe('Design Team v2');
+    expect(archiveStemOf({ name: '\u2067عمل\u2069 ..', slug: 'work' })).toBe('عمل');
+    expect(archiveStemOf({ name: ' ... ', slug: 'work' })).toBe('work');
+    expect(archiveStemOf({ name: '<>|', slug: 'work' })).toBe('work');
   });
 });

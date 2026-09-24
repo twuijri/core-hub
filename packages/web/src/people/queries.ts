@@ -153,6 +153,9 @@ export function useClearLockouts() {
   });
 }
 
+/** The contract's `ProfileName`: at most Hermes's own limit for a display name. */
+export const PROFILE_NAME_MAX = 64;
+
 export function useWorkspaces() {
   const { client, session } = useAuth();
   return useQuery({

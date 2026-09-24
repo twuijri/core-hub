@@ -220,6 +220,13 @@ registerProfileMirror((app) => {
         throw error instanceof HermesProfileError ? new ProfileMirrorError(error.message) : error;
       }
     },
+    async setDisplayName(name, displayName) {
+      try {
+        await profiles.setDisplayName(name, displayName);
+      } catch (error) {
+        throw error instanceof HermesProfileError ? new ProfileMirrorError(error.message) : error;
+      }
+    },
   };
 });
 
