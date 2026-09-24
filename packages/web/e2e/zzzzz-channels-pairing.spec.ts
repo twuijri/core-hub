@@ -1,5 +1,5 @@
 /**
- * Journey 29: after WhatsApp is linked (the owner's report of 2026-09-24, «سويت رستارت وراسلته
+ * Journey 30: after WhatsApp is linked (the owner's report of 2026-09-24, «سويت رستارت وراسلته
  * ولا رد»), the Channels page says it is linked and to whom, how to use it, and who is waiting
  * for approval — against the real hub with Hermes's pairing scripted on its own files
  * (`e2e/hub.ts`):
@@ -40,7 +40,7 @@ async function openChannels(page: Page) {
   await expect(page).toHaveURL(/\/channels$/);
 }
 
-test('29. a linked WhatsApp: how to use it, the senders waiting for approval, and Unlink', async ({
+test('30. a linked WhatsApp: how to use it, the senders waiting for approval, and Unlink', async ({
   page,
 }) => {
   await login(page);

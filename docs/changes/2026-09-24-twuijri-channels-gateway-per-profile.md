@@ -95,7 +95,7 @@ failed»، وسجل البوابة يقول `Unknown provider 'majlis-custom-cli
   (`POST …/pairing/{platform}/requests/{request_id}/approve` → `PairedSender`)، `agents.denyPairing`
   (`DELETE …/pairing/{platform}/requests/{request_id}`)، `agents.revokePairing`
   (`DELETE …/pairing/{platform}/approved/{user_id}`)؛ معاملا المسار `PairingRequestId` و`PairedUserId`.
-- العدد: 259 عملية، 198 منفّذة (كان 254 و193).
+- العدد: 259 عملية، 201 منفّذة بعد دمج `main` (كان 254؛ خمس عمليات جديدة كلها منفّذة، وثلاث من #92).
 
 ## الملفات والتأثير
 - الخادم: `modules/agents/hermes-gateways.ts` (جديد: المشرف على بوابات البروفايلات، قراءة
@@ -108,7 +108,7 @@ failed»، وسجل البوابة يقول `Unknown provider 'majlis-custom-cli
 - العقد: `packages/contracts/openapi.yaml`.
 - الويب: `agents/AgentChannelsScreen.tsx`، `agents/skills.ts`، `agents/toolErrors.ts`،
   `agents/AgentManagerScreen.tsx`، `i18n/ar.json` و`en.json`؛ `e2e/hub.ts` (هرمز مُمثَّل للاقتران
-  وجلسة الربط)، رحلة جديدة `e2e/zzzzz-channels-pairing.spec.ts`.
+  وجلسة الربط)، رحلة جديدة 30 `e2e/zzzzz-channels-pairing.spec.ts`.
 - الاختبارات: `hermes-gateways.test.ts`، `hermes-pairing.test.ts`، `channels-gateway.routes.test.ts`،
   إضافات `channels.test.ts`، `tests/unit/gateway-providers.test.ts` (إعادة إنتاج `Unknown provider`)،
   `tests/unit/gateways.real.test.ts` (هرمز الحقيقي)، `packages/web/tests/channels-pairing.test.tsx`.
@@ -117,7 +117,62 @@ failed»، وسجل البوابة يقول `Unknown provider 'majlis-custom-cli
 **الذاكرة**: بوابة إضافية (~200 م.ب) لكل بروفايل مسمّى فيه قناة مفعّلة ومربوطة، ولا شيء لغيره.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-(تُملأ بعد التشغيل.)
+كلها عبر `mj-run` (حدّ ذاكرة 7 غ.ب)، بعد دمج `origin/main` (#92) في الفرع.
+
+إعادة إنتاج `Unknown provider` **قبل الإصلاح** (منفذ `prepareGatewayProfile` معطّل مؤقتًا)، ثم بعده:
+```
+$ vitest run --project unit tests/unit/gateway-providers.test.ts   # بلا الإصلاح
+     × the default one, after another profile's save rewrote the root file 1809ms
+     × a named profile one, on the model that profile chats with 1674ms
+AssertionError: providers.majlis-custom-cli-proxy-api (Hermes: "Unknown provider 'majlis-custom-cli-proxy-api'"): expected undefined to be defined
+      Tests  2 failed (2)
+$ vitest run --project unit tests/unit/gateway-providers.test.ts   # بالإصلاح
+      Tests  2 passed (2)
+```
+
+هرمز الحقيقي من الصورة (`ghcr.io/twuijri/majlis:latest`، بوابتان في حاوية واحدة كما في الإنتاج):
+```
+$ MAJLIS_HERMES_IMAGE=ghcr.io/twuijri/majlis:latest vitest run --project unit --reporter=verbose --silent=false tests/unit/gateways.real.test.ts
+stdout | … runs the default gateway and «manger»'s side by side, each answering through the custom provider
+the container with both gateways: 450.2MiB / 28.52GiB; provider calls: 16
+ ✓ … runs the default gateway and «manger»'s side by side, each answering through the custom provider 8996ms
+ ✓ … lists, approves, denies and revokes pairing requests in «manger» through Hermes's API 3233ms
+      Tests  2 passed (2)
+```
+
+باقي الفحوص:
+```
+$ pnpm lint
+All matched files use Prettier code style!
+$ pnpm typecheck            # بلا أخطاء
+$ pnpm contracts:lint
+Woohoo! Your API description is valid. 🎉
+contracts:lint  OK
+$ pnpm contracts:check-clients
+check-clients  OK — 256 client file(s) scanned, 172 contract path(s) known.
+$ pnpm i18n:check
+i18n:check  web: 1103 keys, ar/en in parity
+i18n:check  OK
+$ pnpm nav:check
+nav:check  OK — 34 destinations, 2 pre-auth screens (login, setup), 39 terms, ar/en complete, routes for web
+$ pnpm --filter @majlis/server test
+ Test Files  93 passed | 13 skipped (106)
+      Tests  976 passed | 37 skipped (1013)
+$ pnpm --filter @majlis/web test
+ Test Files  48 passed (48)
+      Tests  567 passed (567)
+$ pnpm contract:test
+ Test Files  3 passed (3)
+      Tests  264 passed (264)
+$ pnpm build
+✓ built in 731ms
+$ PLAYWRIGHT_CHANNEL=chrome pnpm web:e2e --workers=1
+  ✓  23 … 23. the agent tools ask Hermes: an MCP test, a skill pack imported, WhatsApp linked by QR (7.9s)
+  ✓  40 … 30. a linked WhatsApp: how to use it, the senders waiting for approval, and Unlink (1.3s)
+  42 passed (2.9m)
+```
+لقطات الشاشة: أُعيدت كل لقطة لا علاقة لها بالقنوات إلى ما كانت عليه؛ تغيّرت لقطات القنوات الثلاث وأُضيفت
+`agent-channels-pairing-ar-light.png` و`agent-channels-unlinked-ar-light.png`.
 
 ## المخاطر والرجوع
 - **مخاطر**: بوابة البروفايل تشغّل أيضًا مجدول هرمز (cron) لذلك البروفايل — وهذا ما يجب، لكنه جديد:

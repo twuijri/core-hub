@@ -207,7 +207,15 @@ function hub(options: { linked?: boolean; applies?: 'now' | 'on_restart' } = {})
     if (approve) {
       const row = pending.find((entry) => entry.request_id === approve[1]);
       pending = pending.filter((entry) => entry !== row);
-      approved = [...approved, { ...row!, approved_at: new Date().toISOString() }];
+      approved = [
+        ...approved,
+        {
+          platform: row!.platform,
+          user_id: row!.user_id,
+          user_name: row!.user_name ?? '',
+          approved_at: new Date().toISOString(),
+        },
+      ];
       return json({ ...row, approved_at: new Date().toISOString() });
     }
     const deny = /\/pairing\/whatsapp\/requests\/([0-9a-f]+)$/.exec(path);

@@ -390,7 +390,7 @@ let pairingPolls = 0;
 /**
  * Hermes's pairing store, played on the files Hermes keeps it in (`platforms/pairing/` of the
  * profile) — so a Deny, which the hub makes on that file itself, is seen by the next list, as
- * it is with the real Hermes. Journey 29 starts with two senders waiting in `default`.
+ * it is with the real Hermes. Journey 30 starts with two senders waiting in `default`.
  */
 const hermesHome = (profile: string) =>
   profile === 'default'
@@ -438,7 +438,7 @@ const scriptedHermesApi: HermesApiCall = async <T>(
 ): Promise<T> => {
   const answer = (value: unknown) => value as T;
   const url = new URL(route, 'http://hermes');
-  if (method === 'GET' && url.pathname === '/api/pairing') {
+  if (method === 'GET' && url.pathname.endsWith('/pairing')) {
     const profile = url.searchParams.get('profile') ?? 'default';
     const now = Date.now() / 1000;
     return answer({
@@ -456,7 +456,7 @@ const scriptedHermesApi: HermesApiCall = async <T>(
       })),
     });
   }
-  if (url.pathname === '/api/pairing/approve') {
+  if (url.pathname.endsWith('/pairing/approve')) {
     const { profile = 'default', request_id: id } = body as {
       profile?: string;
       request_id: string;
@@ -474,7 +474,7 @@ const scriptedHermesApi: HermesApiCall = async <T>(
     writePairing(profile, 'approved', approved);
     return answer({ ok: true, user: { user_id: entry.user_id, user_name: entry.user_name } });
   }
-  if (url.pathname === '/api/pairing/revoke') {
+  if (url.pathname.endsWith('/pairing/revoke')) {
     const { profile = 'default', user_id: user } = body as { profile?: string; user_id: string };
     const approved = readPairing(profile, 'approved');
     delete approved[user];
@@ -533,7 +533,7 @@ const scriptedHermesApi: HermesApiCall = async <T>(
       account_phone: '966500000000',
     });
   }
-  if (method === 'PUT' && url.pathname === '/api/messaging/platforms/whatsapp') {
+  if (method === 'PUT' && url.pathname.endsWith('/messaging/platforms/whatsapp')) {
     // What Hermes writes when the pairing is applied: the switch, in the profile's `.env`.
     const home = hermesHome(url.searchParams.get('profile') ?? 'default');
     mkdirSync(home, { recursive: true });
