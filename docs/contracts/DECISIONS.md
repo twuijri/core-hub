@@ -858,7 +858,7 @@ reason, §35).
 
 The product is Core Hub (ADR 0017, owner 2026-09-24). What changes in the contract:
 
-- **`info`**: `title: Core Hub API`, contact and licence URLs on `github.com/twuijri/core-hub`.
+- **`info`**: `title: Core Hub API`, the contact URL `github.com/twuijri/core-hub`.
   The event schemas' `$id` are under `https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/`.
   `meta.get` answers `name: "Core Hub"`.
 - **Webhook signature header**: `X-CoreHub-Signature: sha256=<hex>` (the hub sent
