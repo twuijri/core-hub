@@ -86,6 +86,7 @@ Conflict` معلنة على `tasks.updateTask` و`tasks.deleteTask` و`tasks.cre
 - لم يُمسّ شيء من الجلسات ولا قائمة الجلسات ولا البحث ولا `WorkspaceSwitcher`/`TopBar`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
+بعد دمج `origin/main` (#71 و#67) في الفرع، بلا تعارض، أُعيدت كلها:
 ```
 $ pnpm lint
 $ eslint . && prettier --check .
@@ -96,7 +97,7 @@ $ pnpm contracts:check-clients   -> check-clients  OK — 216 client file(s) sca
 $ pnpm contract:test
  Test Files  2 passed (2)
       Tests  254 passed (254)
-$ pnpm i18n:check                -> web: 831 keys, ar/en in parity ... i18n:check  OK
+$ pnpm i18n:check                -> web: 829 keys, ar/en in parity ... i18n:check  OK
 $ pnpm nav:check                 -> nav:check  OK — 34 destinations, 2 pre-auth screens (login, setup), 38 terms, ar/en complete, routes for web
 $ pnpm --filter @majlis/server test
  Test Files  71 passed | 7 skipped (78)
@@ -106,8 +107,9 @@ $ pnpm --filter @majlis/web test
       Tests  453 passed (453)
 $ pnpm --filter @majlis/web build  -> ✓ built
 $ PLAYWRIGHT_CHANNEL=chrome pnpm web:e2e
-  ✓  11 [chromium] › e2e/smoke.spec.ts:559:3 › web smoke journeys › 17. Hermes's own cards: marked as Hermes's, edited on Hermes, and Hermes's refusal in its own words (2.0s)
-  26 passed (2.8m)
+  ✓  11 [chromium] › e2e/smoke.spec.ts:559:3 › web smoke journeys › 17. Hermes's own cards: marked as Hermes's, edited on Hermes, and Hermes's refusal in its own words (1.1s)
+  26 passed (1.8m)
+$ pnpm change-record:check       -> change-record  OK — 1 record(s) valid
 
 # هرمز الحقيقي من الصورة (ghcr.io/twuijri/majlis:latest، sha256:ddbc7cd4…، 2026-09-23):
 $ MAJLIS_HERMES_IMAGE=ghcr.io/twuijri/majlis:latest pnpm --filter @majlis/server exec \
