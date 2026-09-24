@@ -47,6 +47,13 @@ function capabilityLabel(t: Translator, capability: string): string {
   return label === key ? capability : label;
 }
 
+const GATEWAY_TONE: Record<string, 'success' | 'danger' | 'neutral' | 'info'> = {
+  running: 'success',
+  starting: 'info',
+  error: 'danger',
+  stopped: 'neutral',
+};
+
 const STATUS_TONE: Record<Agent['status'], BadgeTone> = {
   available: 'success',
   not_installed: 'neutral',
@@ -139,6 +146,40 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
       />
       {agent.limited && <Notice tone="warning">{t('agents.limited')}</Notice>}
       {agent.runtime.error && <Notice tone="danger">{agent.runtime.error}</Notice>}
+      {/* Hermes's messaging gateways: the default profile's and one per named profile with a
+          channel. The Restart below restarts all of them. */}
+      {agent.runtime.gateways && agent.runtime.gateways.length > 0 && (
+        <div className="flex flex-col gap-1" data-testid="agent-gateways">
+          <p className="text-xs font-medium text-muted">{t('agents.gateways.title')}</p>
+          <ul className="flex flex-col gap-1">
+            {agent.runtime.gateways.map((gateway) => (
+              <li
+                key={gateway.profile}
+                className="flex flex-wrap items-center gap-2 text-xs"
+                data-testid={`agent-gateway-${gateway.profile}`}
+                data-state={gateway.state}
+              >
+                <span className="font-medium" dir="auto">
+                  {gateway.profile === 'default' ? t('agents.gateways.default') : gateway.profile}
+                </span>
+                <Badge tone={GATEWAY_TONE[gateway.state] ?? 'neutral'}>
+                  {t(`agents.gateways.state.${gateway.state}`)}
+                </Badge>
+                <span className="text-muted" dir="ltr">
+                  {gateway.channels.length > 0
+                    ? gateway.channels.join(', ')
+                    : t('agents.gateways.no_channels')}
+                </span>
+                {gateway.error && (
+                  <span className="text-danger-soft-text" dir="auto">
+                    {gateway.error}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {agent.install.error && <Notice tone="danger">{agent.install.error}</Notice>}
       {/* What the agent can do — information, not a way anywhere. */}
       <ul className="flex flex-wrap gap-1" data-testid="agent-capabilities">

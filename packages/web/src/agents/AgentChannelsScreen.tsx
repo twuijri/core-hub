@@ -16,7 +16,15 @@
  * **WhatsApp pairs by QR.** "Link WhatsApp" starts Hermes's own pairing in this profile as a
  * job; the code Hermes hands out is drawn here and replaced whenever Hermes replaces it, until
  * a phone scans it, the code expires, or the person closes the dialog (which stops the pairing
- * in Hermes too).
+ * in Hermes too). Linked, the row names the account and offers Unlink instead.
+ *
+ * **Who may message the agent.** A linked WhatsApp answers a new sender with a pairing code;
+ * the request waits in "Waiting for approval" until someone approves or turns it down here.
+ * The list is read again every ten seconds while the page is open.
+ *
+ * **When a change takes effect** is said by the gateway that serves the profile: at once in a
+ * named profile (the hub restarts that profile's messaging gateway), after Hermes's Restart in
+ * the default one.
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
@@ -44,14 +52,21 @@ import { QrCode } from '../screens/DeviceConnectionsScreen.js';
 import type { Job } from '../types.js';
 import {
   channelKeys,
+  useApprovePairing,
   useCancelJob,
   useChannels,
   useClearChannel,
+  useDenyPairing,
   useJob,
   useLoginChannel,
+  usePairing,
+  useRevokePairing,
+  useUnlinkChannel,
   useUpdateChannel,
   type Channel,
   type ChannelField,
+  type ChannelGateway,
+  type ChannelLink,
   type PairingState,
 } from './skills.js';
 import { describeToolError } from './toolErrors.js';
@@ -68,22 +83,28 @@ export function AgentChannelsScreen() {
   const agent = agents.data?.find((entry) => entry.id === agentId);
   const title = agent ? t('channels.title_of', { name: agent.name }) : t('nav.agent_channels');
   const items = channels.data?.items ?? [];
+  const gateway = channels.data?.gateway ?? null;
+  const whatsapp = items.find((channel) => channel.platform === 'whatsapp');
+  const linked = whatsapp?.link?.linked === true;
 
   return (
     <AppShell title={title}>
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-lg font-semibold">{title}</h1>
-          <Button
-            className="ms-auto"
-            size="sm"
-            onClick={() => setPairing('whatsapp')}
-            data-testid="channel-pair-whatsapp"
-          >
-            {t('channels.login.whatsapp')}
-          </Button>
+          {!linked && (
+            <Button
+              className="ms-auto"
+              size="sm"
+              onClick={() => setPairing('whatsapp')}
+              data-testid="channel-pair-whatsapp"
+            >
+              {t('channels.login.whatsapp')}
+            </Button>
+          )}
         </div>
-        <Notice>{t('channels.restart_note')}</Notice>
+        <GatewayNote gateway={gateway} />
+        {linked && whatsapp?.link && <HowToUse link={whatsapp.link} gateway={gateway} />}
 
         {channels.isPending && (
           <SkeletonGroup label={t('common.loading')}>
@@ -112,6 +133,7 @@ export function AgentChannelsScreen() {
               ))}
             </ul>
           ))}
+        {channels.data && <PairingSection agentId={agentId} />}
       </div>
       {editing && (
         <ChannelEditor agentId={agentId} channel={editing} onClose={() => setEditing(null)} />
@@ -137,56 +159,326 @@ function ChannelRow({
   const { t } = useI18n();
   const update = useUpdateChannel(agentId);
   const clear = useClearChannel(agentId);
+  const unlink = useUnlinkChannel(agentId);
   const { ask, dialog } = useConfirm();
+  const link = channel.link;
+  const account = link ? accountOf(link) : '';
 
   return (
-    <div className="skill-row" data-enabled={channel.enabled || undefined}>
-      <Switch
-        checked={channel.enabled}
-        label={t('channels.enabled')}
-        labelHidden
-        testId={`channel-toggle-${channel.platform}`}
-        onChange={(next) => update.mutate({ platform: channel.platform, enabled: next })}
-      />
-      <button type="button" className="skill-open" onClick={onEdit}>
-        <span className="flex items-center gap-2">
-          <span className="font-medium" dir="ltr">
-            {channel.label}
+    <div className="flex flex-col gap-2">
+      <div className="skill-row" data-enabled={channel.enabled || undefined}>
+        <Switch
+          checked={channel.enabled}
+          label={t('channels.enabled')}
+          labelHidden
+          testId={`channel-toggle-${channel.platform}`}
+          onChange={(next) => update.mutate({ platform: channel.platform, enabled: next })}
+        />
+        <button type="button" className="skill-open" onClick={onEdit}>
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="font-medium" dir="ltr">
+              {channel.label}
+            </span>
+            {channel.exclusive && <Badge tone="warning">{t('channels.exclusive')}</Badge>}
+            {link ? (
+              <Badge
+                tone={link.linked ? 'success' : 'neutral'}
+                testId={`channel-link-${channel.platform}`}
+              >
+                {t(link.linked ? 'channels.linked' : 'channels.not_linked')}
+              </Badge>
+            ) : (
+              !channel.configured && <Badge>{t('channels.not_configured')}</Badge>
+            )}
+            {channel.status !== 'unknown' && (
+              <Badge
+                tone={STATUS_TONE[channel.status]}
+                testId={`channel-status-${channel.platform}`}
+              >
+                {t(`channels.status.${channel.status}`)}
+              </Badge>
+            )}
           </span>
-          {channel.exclusive && <Badge tone="warning">{t('channels.exclusive')}</Badge>}
-          {!channel.configured && <Badge>{t('channels.not_configured')}</Badge>}
-        </span>
-        <span className="skill-description">
-          {t('channels.fields_n', { count: String(channel.fields.length) })}
-        </span>
-      </button>
-      {channel.login === 'qr' && (
-        <Button size="sm" data-testid={`channel-login-${channel.platform}`} onClick={onPair}>
-          {t('channels.login.button')}
-        </Button>
+          <span className="skill-description" data-testid={`channel-account-${channel.platform}`}>
+            {link?.linked && account ? (
+              <span dir="auto">{t('channels.linked_as', { account })}</span>
+            ) : (
+              t('channels.fields_n', { count: String(channel.fields.length) })
+            )}
+          </span>
+        </button>
+        {channel.login === 'qr' && !link?.linked && (
+          <Button size="sm" data-testid={`channel-login-${channel.platform}`} onClick={onPair}>
+            {t('channels.login.button')}
+          </Button>
+        )}
+        {link?.linked && (
+          <Button
+            size="sm"
+            variant="danger"
+            data-testid={`channel-unlink-${channel.platform}`}
+            disabled={unlink.isPending}
+            onClick={() => {
+              void ask({
+                title: t('channels.unlink_title', { name: channel.label }),
+                body: t('channels.unlink_body'),
+                confirmLabel: t('channels.unlink'),
+              }).then((yes) => {
+                if (yes) unlink.mutate(channel.platform);
+              });
+            }}
+          >
+            {t('channels.unlink')}
+          </Button>
+        )}
+        {!link && channel.configured && (
+          <Button
+            size="sm"
+            variant="ghost"
+            data-testid={`channel-clear-${channel.platform}`}
+            onClick={() => {
+              void ask({
+                title: t('channels.clear_title', { name: channel.label }),
+                // Not a delete: the settings the person tuned are not what they asked to
+                // clear, only the identity.
+                body: t('channels.clear_body'),
+                confirmLabel: t('channels.clear'),
+              }).then((yes) => {
+                if (yes) clear.mutate(channel.platform);
+              });
+            }}
+          >
+            {t('channels.clear')}
+          </Button>
+        )}
+        {dialog}
+      </div>
+      {channel.status === 'error' && channel.error && (
+        <Notice tone="danger">
+          <span dir="auto">{channel.error}</span>
+        </Notice>
       )}
-      {channel.configured && (
-        <Button
-          size="sm"
-          variant="ghost"
-          data-testid={`channel-clear-${channel.platform}`}
-          onClick={() => {
-            void ask({
-              title: t('channels.clear_title', { name: channel.label }),
-              // Not a delete: the settings the person tuned are not what they asked to
-              // clear, only the identity.
-              body: t('channels.clear_body'),
-              confirmLabel: t('channels.clear'),
-            }).then((yes) => {
-              if (yes) clear.mutate(channel.platform);
-            });
-          }}
-        >
-          {t('channels.clear')}
-        </Button>
+      {unlink.isError && <Notice tone="danger">{describeToolError(unlink.error, t)}</Notice>}
+      {unlink.isSuccess && (
+        <Notice>
+          <span data-testid="channel-unlinked">{t('channels.unlinked_note')}</span>
+        </Notice>
+      )}
+    </div>
+  );
+}
+
+const STATUS_TONE: Record<Channel['status'], 'success' | 'danger' | 'neutral'> = {
+  online: 'success',
+  error: 'danger',
+  offline: 'neutral',
+  unknown: 'neutral',
+};
+
+/** "Office · +966500000000", whichever of the two Hermes knows. */
+function accountOf(link: ChannelLink): string {
+  return [link.account_name, link.account_phone ? `+${link.account_phone}` : null]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/**
+ * When a change on this page takes effect, and how the profile's messaging gateway is.
+ * `gateway` is null where the hub does not run Hermes: it cannot know, and says the rule.
+ */
+function GatewayNote({ gateway }: { gateway: ChannelGateway | null }) {
+  const { t } = useI18n();
+  if (!gateway || gateway.applies === 'on_restart') {
+    return (
+      <Notice>
+        <span data-testid="channel-gateway-note">{t('channels.restart_note')}</span>
+      </Notice>
+    );
+  }
+  return (
+    <Notice>
+      <span className="flex flex-wrap items-center gap-2" data-testid="channel-gateway-note">
+        <span>{t('channels.applies_now')}</span>
+        <span data-testid="channel-gateway-state" data-state={gateway.state}>
+          <Badge
+            tone={
+              gateway.state === 'running'
+                ? 'success'
+                : gateway.state === 'error'
+                  ? 'danger'
+                  : 'neutral'
+            }
+          >
+            {t(`channels.gateway.${gateway.state}`)}
+          </Badge>
+        </span>
+      </span>
+      {gateway.error && (
+        <span className="mt-1 block text-xs" dir="auto">
+          {gateway.error}
+        </span>
+      )}
+    </Notice>
+  );
+}
+
+/** What to do once WhatsApp is linked, in plain words, and what linking a personal number means. */
+function HowToUse({ link, gateway }: { link: ChannelLink; gateway: ChannelGateway | null }) {
+  const { t } = useI18n();
+  const account = accountOf(link);
+  return (
+    <Notice tone="info">
+      <span className="flex flex-col gap-1" data-testid="channel-how-to-use">
+        <strong>{t('channels.how.title')}</strong>
+        <span dir="auto">
+          {account
+            ? t('channels.how.step_message_as', { account })
+            : t('channels.how.step_message')}
+        </span>
+        <span>{t('channels.how.step_approve')}</span>
+        {gateway?.applies === 'on_restart' && <span>{t('channels.how.step_restart')}</span>}
+        <span className="text-warning-soft-text" data-testid="channel-personal-warning">
+          {t('channels.how.personal_warning')}
+        </span>
+      </span>
+    </Notice>
+  );
+}
+
+/** Minutes since a request, in words. */
+function ageOf(iso: string, t: (key: string, values?: Record<string, string>) => string): string {
+  const minutes = Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 60_000));
+  if (minutes < 1) return t('channels.pairing.just_now');
+  if (minutes < 60) return t('channels.pairing.minutes_ago', { count: String(minutes) });
+  return t('channels.pairing.hours_ago', { count: String(Math.floor(minutes / 60)) });
+}
+
+/**
+ * «طلبات بانتظار الموافقة»: the senders Hermes answered with a pairing code in this profile,
+ * each approved or turned down here, and below them the approved ones, each revocable.
+ * Hidden for a person who may not manage the channels (the hub answers them 403).
+ */
+function PairingSection({ agentId }: { agentId: string | undefined }) {
+  const { t } = useI18n();
+  const pairing = usePairing(agentId);
+  const approve = useApprovePairing(agentId);
+  const deny = useDenyPairing(agentId);
+  const revoke = useRevokePairing(agentId);
+  const { ask, dialog } = useConfirm();
+  if (pairing.isError && (pairing.error as { status?: number } | null)?.status === 403) return null;
+  const pending = pairing.data?.pending ?? [];
+  const approved = pairing.data?.approved ?? [];
+  const failed = approve.error ?? deny.error ?? revoke.error;
+
+  return (
+    <section className="flex flex-col gap-3" data-testid="pairing-section">
+      <h2 className="text-base font-semibold">{t('channels.pairing.title')}</h2>
+      <p className="text-sm text-muted">{t('channels.pairing.note')}</p>
+      {pairing.isPending && (
+        <SkeletonGroup label={t('common.loading')}>
+          <Skeleton height="3rem" radius="md" />
+        </SkeletonGroup>
+      )}
+      {pairing.isError && <Notice tone="danger">{describeToolError(pairing.error, t)}</Notice>}
+      {failed && <Notice tone="danger">{describeToolError(failed, t)}</Notice>}
+      {pairing.data && pending.length === 0 && (
+        <p className="text-sm text-muted" data-testid="pairing-none">
+          {t('channels.pairing.none')}
+        </p>
+      )}
+      {pending.length > 0 && (
+        <ul className="flex flex-col gap-2" data-testid="pairing-pending">
+          {pending.map((request) => (
+            <li
+              key={`${request.platform}:${request.request_id}`}
+              className="skill-row"
+              data-testid={`pairing-request-${request.request_id}`}
+            >
+              <span className="skill-open">
+                <span className="flex flex-wrap items-center gap-2">
+                  <Badge>{request.platform}</Badge>
+                  <span className="font-medium" dir="auto">
+                    {request.user_name ?? t('channels.pairing.unnamed')}
+                  </span>
+                </span>
+                <span className="skill-description">
+                  <span dir="ltr">{request.user_id}</span>
+                  {' · '}
+                  {ageOf(request.requested_at, t)}
+                </span>
+              </span>
+              <Button
+                size="sm"
+                variant="primary"
+                data-testid={`pairing-approve-${request.request_id}`}
+                disabled={approve.isPending}
+                onClick={() => approve.mutate(request)}
+              >
+                {t('channels.pairing.approve')}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                data-testid={`pairing-deny-${request.request_id}`}
+                disabled={deny.isPending}
+                onClick={() => deny.mutate(request)}
+              >
+                {t('channels.pairing.deny')}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <h3 className="text-sm font-semibold">{t('channels.pairing.approved_title')}</h3>
+      {pairing.data && approved.length === 0 && (
+        <p className="text-sm text-muted" data-testid="pairing-approved-none">
+          {t('channels.pairing.approved_none')}
+        </p>
+      )}
+      {approved.length > 0 && (
+        <ul className="flex flex-col gap-2" data-testid="pairing-approved">
+          {approved.map((sender) => (
+            <li
+              key={`${sender.platform}:${sender.user_id}`}
+              className="skill-row"
+              data-testid={`pairing-sender-${sender.user_id}`}
+            >
+              <span className="skill-open">
+                <span className="flex flex-wrap items-center gap-2">
+                  <Badge>{sender.platform}</Badge>
+                  <span className="font-medium" dir="auto">
+                    {sender.user_name ?? t('channels.pairing.unnamed')}
+                  </span>
+                </span>
+                <span className="skill-description" dir="ltr">
+                  {sender.user_id}
+                </span>
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                data-testid={`pairing-revoke-${sender.user_id}`}
+                disabled={revoke.isPending}
+                onClick={() => {
+                  void ask({
+                    title: t('channels.pairing.revoke_title', {
+                      name: sender.user_name ?? sender.user_id,
+                    }),
+                    body: t('channels.pairing.revoke_body'),
+                    confirmLabel: t('channels.pairing.revoke'),
+                  }).then((yes) => {
+                    if (yes) revoke.mutate(sender);
+                  });
+                }}
+              >
+                {t('channels.pairing.revoke')}
+              </Button>
+            </li>
+          ))}
+        </ul>
       )}
       {dialog}
-    </div>
+    </section>
   );
 }
 
@@ -394,10 +686,21 @@ function PairDialog({
             })}
           </p>
         )}
+        {!done && (
+          <Notice tone="warning">
+            <span data-testid="channel-pair-warning">{t('channels.how.personal_warning')}</span>
+          </Notice>
+        )}
         {job?.status === 'succeeded' && (
           <Notice tone="success">
-            <span data-testid="channel-pair-done">
-              {account ? t('channels.login.done_as', { account }) : t('channels.login.done')}
+            <span data-testid="channel-pair-done" dir="auto">
+              {state.applies === 'now'
+                ? account
+                  ? t('channels.login.done_as_now', { account })
+                  : t('channels.login.done_now')
+                : account
+                  ? t('channels.login.done_as', { account })
+                  : t('channels.login.done')}
             </span>
           </Notice>
         )}

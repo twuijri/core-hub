@@ -300,11 +300,30 @@ export interface Channel {
   status: 'online' | 'offline' | 'error' | 'unknown';
   error: string | null;
   login: 'qr' | null;
+  /** WhatsApp only: whether this profile holds a session, and whose. */
+  link: ChannelLink | null;
   fields: ChannelField[];
+}
+
+export interface ChannelLink {
+  linked: boolean;
+  account_id: string | null;
+  account_name: string | null;
+  account_phone: string | null;
+}
+
+/** The messaging gateway serving the profile's channels (`agents.listChannels`). */
+export interface ChannelGateway {
+  profile: string;
+  state: 'running' | 'starting' | 'stopped' | 'error';
+  /** `now` in a named profile; `on_restart` in the default one. */
+  applies: 'now' | 'on_restart';
+  error: string | null;
 }
 
 export const channelKeys = {
   list: (profile: string, agentId: string) => ['agent-channels', profile, agentId] as const,
+  pairing: (profile: string, agentId: string) => ['agent-pairing', profile, agentId] as const,
 };
 
 export function useChannels(agentId: string | undefined) {
@@ -316,8 +335,13 @@ export function useChannels(agentId: string | undefined) {
         await client.request('get', '/agents/{agent_id}/channels', {
           params: { agent_id: agentId ?? '' },
         })
-      ).data as unknown as { items: Channel[] },
+      ).data as unknown as { items: Channel[]; gateway: ChannelGateway | null },
     enabled: !!session && !!agentId,
+    // A gateway that is starting says so; read again until it has said how it went.
+    refetchInterval: (query) => {
+      const data = query.state.data as { gateway: ChannelGateway | null } | undefined;
+      return data?.gateway?.state === 'starting' ? 3000 : false;
+    },
   });
 }
 
@@ -364,6 +388,128 @@ export function useClearChannel(agentId: string | undefined) {
         })
       ).data,
     onSuccess: invalidate,
+  });
+}
+
+/** Unlink WhatsApp from the profile (`agents.unlinkChannel`). */
+export function useUnlinkChannel(agentId: string | undefined) {
+  const { client } = useAuth();
+  const invalidate = useChannelInvalidation(agentId);
+  return useMutation({
+    mutationFn: async (platform: string) =>
+      (
+        await client.request('post', '/agents/{agent_id}/channels/{platform}/unlink', {
+          params: { agent_id: agentId ?? '', platform },
+        })
+      ).data as unknown as Channel,
+    onSuccess: invalidate,
+  });
+}
+
+// ------------------------------------------------------------ pairing approvals
+
+export interface PairingRequest {
+  platform: string;
+  request_id: string;
+  user_id: string;
+  user_name: string | null;
+  requested_at: string;
+}
+
+export interface PairedSender {
+  platform: string;
+  user_id: string;
+  user_name: string | null;
+  approved_at: string | null;
+}
+
+/** How often the waiting list is read again while the page is open. */
+export const PAIRING_POLL_MS = 10_000;
+
+/**
+ * Senders waiting for approval and the approved ones, in the selected profile. Read again
+ * every ten seconds while the page is open: a new request arrives as a WhatsApp message to
+ * the agent, and nothing tells the page but asking.
+ */
+export function usePairing(agentId: string | undefined, enabled = true) {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: channelKeys.pairing(profile, agentId ?? ''),
+    queryFn: async () =>
+      (
+        await client.request('get', '/agents/{agent_id}/pairing', {
+          params: { agent_id: agentId ?? '' },
+        })
+      ).data as unknown as { pending: PairingRequest[]; approved: PairedSender[] },
+    enabled: !!session && !!agentId && enabled,
+    refetchInterval: PAIRING_POLL_MS,
+    retry: false,
+  });
+}
+
+function usePairingInvalidation(agentId: string | undefined) {
+  const queryClient = useQueryClient();
+  const { profile } = useAuth();
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: channelKeys.pairing(profile, agentId ?? '') });
+  };
+}
+
+export function useApprovePairing(agentId: string | undefined) {
+  const { client } = useAuth();
+  const invalidate = usePairingInvalidation(agentId);
+  return useMutation({
+    mutationFn: async (request: { platform: string; request_id: string }) =>
+      (
+        await client.request(
+          'post',
+          '/agents/{agent_id}/pairing/{platform}/requests/{request_id}/approve',
+          {
+            params: {
+              agent_id: agentId ?? '',
+              platform: request.platform,
+              request_id: request.request_id,
+            },
+          },
+        )
+      ).data,
+    onSettled: invalidate,
+  });
+}
+
+export function useDenyPairing(agentId: string | undefined) {
+  const { client } = useAuth();
+  const invalidate = usePairingInvalidation(agentId);
+  return useMutation({
+    mutationFn: async (request: { platform: string; request_id: string }) =>
+      (
+        await client.request(
+          'delete',
+          '/agents/{agent_id}/pairing/{platform}/requests/{request_id}',
+          {
+            params: {
+              agent_id: agentId ?? '',
+              platform: request.platform,
+              request_id: request.request_id,
+            },
+          },
+        )
+      ).data,
+    onSettled: invalidate,
+  });
+}
+
+export function useRevokePairing(agentId: string | undefined) {
+  const { client } = useAuth();
+  const invalidate = usePairingInvalidation(agentId);
+  return useMutation({
+    mutationFn: async (sender: { platform: string; user_id: string }) =>
+      (
+        await client.request('delete', '/agents/{agent_id}/pairing/{platform}/approved/{user_id}', {
+          params: { agent_id: agentId ?? '', platform: sender.platform, user_id: sender.user_id },
+        })
+      ).data,
+    onSettled: invalidate,
   });
 }
 
@@ -422,6 +568,8 @@ export interface PairingState {
   expires_at?: string | null;
   account_name?: string | null;
   account_phone?: string | null;
+  /** When the agent answers on it: at once (a named profile) or after Hermes's restart. */
+  applies?: 'now' | 'on_restart';
 }
 
 export function useLoginChannel(agentId: string | undefined) {
