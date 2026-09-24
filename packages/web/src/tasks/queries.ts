@@ -150,7 +150,7 @@ export function useBoard(filter: BoardFilter) {
       (
         await client.request('get', '/task-columns', {
           query: {
-            // Every profile the person may enter — the hub decides which (DECISIONS §30).
+            // Every profile the person may enter — the hub decides which (DECISIONS §31).
             profiles: 'all',
             ...(filter.projectId ? { project_id: filter.projectId } : {}),
             ...(filter.agentId ? { agent_id: filter.agentId } : {}),

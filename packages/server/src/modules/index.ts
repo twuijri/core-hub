@@ -24,6 +24,7 @@ import {
   hermesDashboardFor,
   hermesProfileRunner,
   hermesRuntimeFor,
+  registerAgentAttachments,
 } from './agents/index.js';
 import {
   attachmentReferences,
@@ -103,6 +104,13 @@ export const sessionsModule = createSessionsModule({
 // The other direction of the same pair: `knowledge` refuses to delete a file a message
 // still points at, and only `sessions` knows that (contract `409` on deleteAttachment).
 registerAttachmentReferences(attachmentReferences);
+
+// A skill pack is an uploaded file (`purpose: skill`); `agents` installs it and `knowledge`
+// owns the bytes. Only the copy-out is lent, the same one a chat turn uses.
+registerAgentAttachments((app) => ({
+  materialise: (workspace, ids, directory) =>
+    attachmentsPort(app).materialise(workspace, ids, directory),
+}));
 
 /**
  * The Tasks board reflects Hermes's own kanban (owner decision, 2026-09-23). `agents`
@@ -264,7 +272,7 @@ registerTaskRunner((app) => {
  * The names a card shows: an agent's from the registry (`agents`), a person's from `auth`.
  * Resolved on the hub, so a card from any profile carries its agent's name — the board
  * gathers every profile, and a client guessing from the agents of the profile it is in
- * would show an id for the rest (DECISIONS §30).
+ * would show an id for the rest (DECISIONS §31).
  */
 registerTaskNames((app) => (kind, id) => {
   if (kind === 'agent') return agentsServiceFor(app).loadAgent(id).name;

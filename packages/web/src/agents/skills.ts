@@ -4,7 +4,9 @@
  * the truth, and a cache that disagreed with it would be a second, wrong truth.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useUploadAttachment } from '../attachments/queries.js';
 import { useAuth } from '../auth/context.js';
+import type { Job } from '../types.js';
 
 export interface Skill {
   key: string;
@@ -362,5 +364,101 @@ export function useClearChannel(agentId: string | undefined) {
         })
       ).data,
     onSuccess: invalidate,
+  });
+}
+
+// ------------------------------------------------------------ live tools
+//
+// The three things these pages ask Hermes to *do* (ADR 0015): connect to an MCP server
+// once, pair a channel by QR, install a pack of skills. Each acts on the selected profile.
+
+export interface McpTestResult {
+  ok: boolean;
+  tools: Array<{ name: string; description: string | null }>;
+  error: string | null;
+  duration_ms: number;
+}
+
+export function useTestMcpServer(agentId: string | undefined) {
+  const { client } = useAuth();
+  return useMutation({
+    mutationFn: async (name: string) =>
+      (
+        await client.request('post', '/agents/{agent_id}/mcp-servers/{server_name}/test', {
+          params: { agent_id: agentId ?? '', server_name: name },
+        })
+      ).data as unknown as McpTestResult,
+  });
+}
+
+/**
+ * Upload the files as skill packs (`purpose: skill`) and install them. The uploads stay in
+ * the profile's files as the record of what was imported; the same pack uploaded again is the
+ * same attachment, and the hub refuses it as a skill that already exists.
+ */
+export function useImportSkills(agentId: string | undefined) {
+  const { client } = useAuth();
+  const { upload } = useUploadAttachment();
+  const invalidate = useSkillInvalidation(agentId);
+  return useMutation({
+    mutationFn: async (files: readonly File[]) => {
+      const ids: string[] = [];
+      for (const file of files) ids.push((await upload({ file, purpose: 'skill' })).id);
+      return (
+        await client.request('post', '/agents/{agent_id}/skills', {
+          params: { agent_id: agentId ?? '' },
+          body: { attachment_ids: ids } as never,
+        })
+      ).data as unknown as { items: Skill[] };
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/** What a `channel_login` job carries while it runs (`agents.loginChannel`). */
+export interface PairingState {
+  status?: string;
+  qr?: string | null;
+  expires_at?: string | null;
+  account_name?: string | null;
+  account_phone?: string | null;
+}
+
+export function useLoginChannel(agentId: string | undefined) {
+  const { client } = useAuth();
+  return useMutation({
+    mutationFn: async (platform: string) =>
+      (
+        await client.request('post', '/agents/{agent_id}/channels/{platform}/login', {
+          params: { agent_id: agentId ?? '', platform },
+        })
+      ).data as { job_id: string },
+  });
+}
+
+/**
+ * One job, read again every two seconds until it ends: the fallback under `/rt/jobs`, so a
+ * dropped socket never leaves a QR code on screen that Hermes has already replaced.
+ */
+export function useJob(jobId: string | null) {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: ['job', profile, jobId ?? ''],
+    queryFn: async () =>
+      (await client.request('get', '/jobs/{job_id}', { params: { job_id: jobId ?? '' } }))
+        .data as unknown as Job,
+    enabled: !!session && !!jobId,
+    refetchInterval: (query) => {
+      const status = (query.state.data as Job | undefined)?.status;
+      return status === 'succeeded' || status === 'failed' || status === 'cancelled' ? false : 2000;
+    },
+  });
+}
+
+export function useCancelJob() {
+  const { client } = useAuth();
+  return useMutation({
+    mutationFn: async (jobId: string) =>
+      (await client.request('post', '/jobs/{job_id}/cancel', { params: { job_id: jobId } })).data,
   });
 }

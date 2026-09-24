@@ -26,7 +26,7 @@ export function qrSvgPath(text: string): { path: string; size: number } {
   return { path, size };
 }
 
-function QrCode({ text }: { text: string }) {
+export function QrCode({ text }: { text: string }) {
   const { path, size } = useMemo(() => qrSvgPath(text), [text]);
   return (
     <svg

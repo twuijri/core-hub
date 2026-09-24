@@ -1,5 +1,5 @@
 /**
- * Tasks and Schedules across profiles (ADR 0016 stage 2, DECISIONS §30).
+ * Tasks and Schedules across profiles (ADR 0016 stage 2, DECISIONS §31).
  *
  * The owner: «الكرون جوب والمهام المفروض تطلع كل البروفايلات بدون تصنيف» — both pages show
  * every profile the person may enter, with no profile filter; each card and schedule says

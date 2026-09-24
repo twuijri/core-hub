@@ -12,10 +12,17 @@
  *
  * **Nothing claims the channel is online.** The hub writes the file; whether Telegram is
  * answering is something only the running gateway knows.
+ *
+ * **WhatsApp pairs by QR.** "Link WhatsApp" starts Hermes's own pairing in this profile as a
+ * job; the code Hermes hands out is drawn here and replaced whenever Hermes replaces it, until
+ * a phone scans it, the code expires, or the person closes the dialog (which stops the pairing
+ * in Hermes too).
  */
-import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router';
 import { describeError } from '../auth/client.js';
+import { useAuth } from '../auth/context.js';
 import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { AppShell } from '../shell/AppShell.js';
@@ -33,13 +40,22 @@ import {
   useConfirm,
 } from '../ui/index.js';
 import { IconGlobe } from '../ui/icons.js';
+import { QrCode } from '../screens/DeviceConnectionsScreen.js';
+import type { Job } from '../types.js';
 import {
+  channelKeys,
+  useCancelJob,
   useChannels,
   useClearChannel,
+  useJob,
+  useLoginChannel,
   useUpdateChannel,
   type Channel,
   type ChannelField,
+  type PairingState,
 } from './skills.js';
+import { describeToolError } from './toolErrors.js';
+import { useJobs } from './useJobs.js';
 
 export function AgentChannelsScreen() {
   const { t } = useI18n();
@@ -47,6 +63,7 @@ export function AgentChannelsScreen() {
   const agents = useAgents();
   const channels = useChannels(agentId);
   const [editing, setEditing] = useState<Channel | null>(null);
+  const [pairing, setPairing] = useState<string | null>(null);
 
   const agent = agents.data?.find((entry) => entry.id === agentId);
   const title = agent ? t('channels.title_of', { name: agent.name }) : t('nav.agent_channels');
@@ -55,7 +72,17 @@ export function AgentChannelsScreen() {
   return (
     <AppShell title={title}>
       <div className="flex flex-col gap-4">
-        <h1 className="text-lg font-semibold">{title}</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-lg font-semibold">{title}</h1>
+          <Button
+            className="ms-auto"
+            size="sm"
+            onClick={() => setPairing('whatsapp')}
+            data-testid="channel-pair-whatsapp"
+          >
+            {t('channels.login.whatsapp')}
+          </Button>
+        </div>
         <Notice>{t('channels.restart_note')}</Notice>
 
         {channels.isPending && (
@@ -63,7 +90,7 @@ export function AgentChannelsScreen() {
             <Skeleton height="4rem" radius="md" />
           </SkeletonGroup>
         )}
-        {channels.isError && <Notice tone="danger">{describeError(channels.error, t)}</Notice>}
+        {channels.isError && <Notice tone="danger">{describeToolError(channels.error, t)}</Notice>}
         {channels.data &&
           (items.length === 0 ? (
             <EmptyState
@@ -79,6 +106,7 @@ export function AgentChannelsScreen() {
                     agentId={agentId}
                     channel={channel}
                     onEdit={() => setEditing(channel)}
+                    onPair={() => setPairing(channel.platform)}
                   />
                 </li>
               ))}
@@ -88,6 +116,9 @@ export function AgentChannelsScreen() {
       {editing && (
         <ChannelEditor agentId={agentId} channel={editing} onClose={() => setEditing(null)} />
       )}
+      {pairing && (
+        <PairDialog agentId={agentId} platform={pairing} onClose={() => setPairing(null)} />
+      )}
     </AppShell>
   );
 }
@@ -96,10 +127,12 @@ function ChannelRow({
   agentId,
   channel,
   onEdit,
+  onPair,
 }: {
   agentId: string | undefined;
   channel: Channel;
   onEdit: () => void;
+  onPair: () => void;
 }) {
   const { t } = useI18n();
   const update = useUpdateChannel(agentId);
@@ -127,6 +160,11 @@ function ChannelRow({
           {t('channels.fields_n', { count: String(channel.fields.length) })}
         </span>
       </button>
+      {channel.login === 'qr' && (
+        <Button size="sm" data-testid={`channel-login-${channel.platform}`} onClick={onPair}>
+          {t('channels.login.button')}
+        </Button>
+      )}
       {channel.configured && (
         <Button
           size="sm"
@@ -245,6 +283,132 @@ function ChannelEditor({
           );
         })}
         {update.isError && <Notice tone="danger">{describeError(update.error, t)}</Notice>}
+      </div>
+    </Dialog>
+  );
+}
+
+const TERMINAL = new Set(['succeeded', 'failed', 'cancelled']);
+
+/** The newer of what the socket said and what the last read said. */
+function latest(a: Job | undefined, b: Job | undefined): Job | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  if (TERMINAL.has(a.status) !== TERMINAL.has(b.status)) return TERMINAL.has(a.status) ? a : b;
+  return a.updated_at >= b.updated_at ? a : b;
+}
+
+/**
+ * Pairing by QR: one `channel_login` job, started when the dialog opens. Closing it before
+ * the phone is linked cancels the job, and the hub tells Hermes to forget the pairing.
+ */
+function PairDialog({
+  agentId,
+  platform,
+  onClose,
+}: {
+  agentId: string | undefined;
+  platform: string;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const { profile } = useAuth();
+  const queryClient = useQueryClient();
+  const jobs = useJobs();
+  const login = useLoginChannel(agentId);
+  const cancel = useCancelJob();
+  const [jobId, setJobId] = useState<string | null>(null);
+  const polled = useJob(jobId);
+  const started = useRef(false);
+
+  const start = () => {
+    setJobId(null);
+    login.mutate(platform, { onSuccess: (data) => setJobId(data.job_id) });
+  };
+  useEffect(() => {
+    // Once, even under React's development double effects.
+    if (started.current) return;
+    started.current = true;
+    start();
+  }, []);
+
+  const job = jobId ? latest(jobs[jobId], polled.data) : undefined;
+  const state = (job?.result ?? {}) as PairingState;
+  const done = job ? TERMINAL.has(job.status) : false;
+  useEffect(() => {
+    if (job?.status === 'succeeded') {
+      void queryClient.invalidateQueries({
+        queryKey: channelKeys.list(profile, agentId ?? ''),
+      });
+    }
+  }, [job?.status, queryClient, profile, agentId]);
+
+  const close = () => {
+    if (jobId && !done) cancel.mutate(jobId);
+    onClose();
+  };
+  const account = [state.account_name, state.account_phone].filter(Boolean).join(' · ');
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && close()}
+      title={t('channels.login.title', { name: platform })}
+      description={t('channels.login.note')}
+      closeLabel={t('common.cancel')}
+      testId="channel-pair"
+      footer={
+        <>
+          {job && (job.status === 'failed' || job.status === 'cancelled') && (
+            <Button onClick={start} data-testid="channel-pair-again">
+              {t('channels.login.again')}
+            </Button>
+          )}
+          <Button variant="ghost" onClick={close}>
+            {done ? t('channels.login.close') : t('common.cancel')}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col items-center gap-3" data-status={job?.status ?? 'starting'}>
+        {login.isError && <Notice tone="danger">{describeToolError(login.error, t)}</Notice>}
+        {!login.isError && !done && !state.qr && (
+          <SkeletonGroup label={t('common.loading')}>
+            <Skeleton height="14rem" radius="md" />
+          </SkeletonGroup>
+        )}
+        {!done && state.qr && (
+          <div data-testid="channel-pair-qr" data-qr={state.qr}>
+            <QrCode text={state.qr} />
+          </div>
+        )}
+        {!done && job?.progress.message && (
+          <p className="text-center text-sm" data-testid="channel-pair-message">
+            {job.progress.message}
+          </p>
+        )}
+        {!done && state.expires_at && (
+          <p className="text-xs text-muted">
+            {t('channels.login.expires', {
+              time: new Date(state.expires_at).toLocaleTimeString(),
+            })}
+          </p>
+        )}
+        {job?.status === 'succeeded' && (
+          <Notice tone="success">
+            <span data-testid="channel-pair-done">
+              {account ? t('channels.login.done_as', { account }) : t('channels.login.done')}
+            </span>
+          </Notice>
+        )}
+        {job?.status === 'failed' && (
+          <Notice tone="danger">
+            <span data-testid="channel-pair-failed" dir="auto">
+              {job.error?.error ?? t('channels.login.failed')}
+            </span>
+          </Notice>
+        )}
+        {job?.status === 'cancelled' && <Notice>{t('channels.login.cancelled')}</Notice>}
       </div>
     </Dialog>
   );
