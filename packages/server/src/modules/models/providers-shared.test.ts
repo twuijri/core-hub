@@ -1,14 +1,15 @@
 /**
- * Providers belong to the hub, not to a profile (decision §SHARED of
- * `docs/contracts/DECISIONS.md`, ADR 0010).
+ * Two provider scopes (contract decision §37, ADR 0010).
  *
- * The owner adds a provider **once** and every agent in every profile uses it — a profile
- * made a minute later included. What stays per profile is the *choice* of model: a
- * profile may pick its own chat default, and one that picked none uses the default
- * profile's. Hermes's default profile keeps its own selection whichever profile somebody
- * happened to be in when they saved a provider.
+ * A **shared** provider is added once and every profile uses it — a profile made a minute
+ * later included. A profile may also have providers of its **own** (a team with its own
+ * subscription): in that profile its own wins over the shared one of the same preset, and no
+ * other profile ever uses its key. What stays per profile besides: the choice of model, which
+ * falls back on the default profile's. Hermes's default profile keeps its own keys and model
+ * whichever profile somebody saved in, and each named Hermes profile's `.env` holds exactly
+ * the keys that differ from the root's.
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -30,6 +31,7 @@ interface Provider {
   id: string;
   slug: string;
   profile: string;
+  scope: 'all' | 'profile';
   api_key: string | null;
   models: { model: string; key: string }[];
 }
@@ -79,12 +81,13 @@ async function addProvider(
   preset: string,
   apiKey: string | null,
   profile = 'default',
+  scope: 'all' | 'profile' = 'all',
 ): Promise<Provider> {
   const response = await authed(hub, hub.token, {
     method: 'POST',
     url: '/api/v1/models/providers',
     profile,
-    payload: { preset, label: preset, kind: 'llm', api_key: apiKey },
+    payload: { preset, label: preset, kind: 'llm', api_key: apiKey, scope },
   });
   if (response.statusCode !== 201) {
     throw new Error(`adding ${preset} answered ${String(response.statusCode)}: ${response.body}`);
@@ -435,6 +438,218 @@ describe("models: Hermes's default profile is not the last saver's", () => {
       expect(
         parseEnv(readFileSync(path.join(fresh, '.env'), 'utf8')).has('ANTHROPIC_API_KEY'),
       ).toBe(false);
+    } finally {
+      await hub.close();
+    }
+  });
+});
+
+describe("models: a profile's own providers and the shared ones (decision §37)", () => {
+  it("uses a profile's own key in that profile, and the shared key in every other", async () => {
+    const { fetchImpl } = twoProviders();
+    const home = hermesHome();
+    const design = path.join(home, 'profiles', 'design');
+    const finance = path.join(home, 'profiles', 'finance');
+    mkdirSync(design, { recursive: true });
+    mkdirSync(finance, { recursive: true });
+    let processEnv: Record<string, string> = {};
+    const hub = await signedInHub(
+      {},
+      {
+        models: {
+          fetchImpl,
+          hermes: {
+            home: () => home,
+            profileHomes: () => [design, finance],
+            restart: () => Promise.resolve(true),
+            applyEnvironment: (env) => {
+              processEnv = { ...env };
+              return true;
+            },
+          },
+        },
+      },
+    );
+    try {
+      const designId = await makeProfile(hub, 'design');
+      const financeId = await makeProfile(hub, 'finance');
+      const defaultId = await workspaceIdOf(hub, 'default');
+      await addProvider(hub, 'anthropic', 'sk-ant-shared-key');
+      // The Design team's own subscription, typed in the Design profile.
+      const own = await addProvider(hub, 'anthropic', 'sk-ant-design-key', 'design', 'profile');
+      expect(own).toMatchObject({ scope: 'profile', profile: 'design', api_key: '[stored]' });
+      await drainJobs(hub.app);
+
+      // Design lists both, each saying which it is; Finance only the shared one.
+      const inDesign = await providersIn(hub, 'design');
+      expect(inDesign.map((p) => [p.slug, p.scope, p.profile])).toEqual([
+        ['anthropic', 'profile', 'design'],
+        ['anthropic', 'all', 'default'],
+      ]);
+      const inFinance = await providersIn(hub, 'finance');
+      expect(inFinance.map((p) => [p.slug, p.scope])).toEqual([['anthropic', 'all']]);
+      // Keys never come back, in either scope.
+      expect(JSON.stringify([...inDesign, ...inFinance])).not.toMatch(/sk-ant-(shared|design)/);
+
+      // Agents: Design's own key in Design, the shared key everywhere else.
+      expect(claudeCodeEnv(hub, designId)).toEqual({ ANTHROPIC_API_KEY: 'sk-ant-design-key' });
+      expect(claudeCodeEnv(hub, financeId)).toEqual({ ANTHROPIC_API_KEY: 'sk-ant-shared-key' });
+      expect(claudeCodeEnv(hub, defaultId)).toEqual({ ANTHROPIC_API_KEY: 'sk-ant-shared-key' });
+
+      // Hermes: the shared key in the root and the process; Design's own in Design's `.env`,
+      // which Hermes reads first; nothing in Finance's.
+      const root = parseEnv(readFileSync(path.join(home, '.env'), 'utf8'));
+      expect(root.get('ANTHROPIC_API_KEY')).toBe('sk-ant-shared-key');
+      expect(processEnv.ANTHROPIC_API_KEY).toBe('sk-ant-shared-key');
+      const designEnv = parseEnv(readFileSync(path.join(design, '.env'), 'utf8'));
+      expect(designEnv.get('ANTHROPIC_API_KEY')).toBe('sk-ant-design-key');
+      expect(existsSync(path.join(finance, '.env'))).toBe(false);
+
+      // The same preset twice in one scope is refused; its removal leaves the shared one.
+      const twice = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/models/providers',
+        profile: 'design',
+        payload: { preset: 'anthropic', label: 'a', kind: 'llm', api_key: 'x', scope: 'profile' },
+      });
+      expect(twice.statusCode).toBe(409);
+      const removed = await authed(hub, hub.token, {
+        method: 'DELETE',
+        url: `/api/v1/models/providers/${own.id}`,
+        profile: 'design',
+      });
+      expect(removed.statusCode).toBe(204);
+      expect(claudeCodeEnv(hub, designId)).toEqual({ ANTHROPIC_API_KEY: 'sk-ant-shared-key' });
+      expect(parseEnv(readFileSync(path.join(design, '.env'), 'utf8')).has('ANTHROPIC_API_KEY')).toBe(
+        false,
+      );
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it("does not show a profile's own provider to another profile, nor let it act on it", async () => {
+    const { fetchImpl } = twoProviders();
+    const hub = await signedInHub({}, { models: { fetchImpl } });
+    try {
+      await makeProfile(hub, 'design');
+      await makeProfile(hub, 'finance');
+      const own = await addProvider(hub, 'groq', 'gsk-design-only', 'design', 'profile');
+      expect(await providersIn(hub, 'finance')).toEqual([]);
+      expect(await providersIn(hub, 'default')).toEqual([]);
+      const reach = await authed(hub, hub.token, {
+        method: 'PATCH',
+        url: `/api/v1/models/providers/${own.id}`,
+        profile: 'finance',
+        payload: { label: 'mine now' },
+      });
+      expect(reach.statusCode).toBe(404);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it("runs a turn on a profile's own provider when the turn names the shared one", async () => {
+    const { fetchImpl, auth } = twoProviders();
+    const hub = await signedInHub({}, { models: { fetchImpl } });
+    try {
+      const designId = await makeProfile(hub, 'design');
+      const financeId = await makeProfile(hub, 'finance');
+      const shared = await addProvider(hub, 'groq', 'gsk-shared-key');
+      const own = await addProvider(hub, 'groq', 'gsk-design-key', 'design', 'profile');
+      await drainJobs(hub.app);
+
+      const say = async (workspace: string) => {
+        for await (const event of modelsServiceFor(hub.app).chat(workspace, {
+          providerId: shared.id,
+          model: 'llama-3.3-70b-versatile',
+          messages: [{ role: 'user', text: 'hi' }],
+        })) {
+          expect(event.type).not.toBe('failed');
+        }
+      };
+      await say(designId);
+      await say(financeId);
+      expect(auth).toEqual(['Bearer gsk-design-key', 'Bearer gsk-shared-key']);
+      // Hermes in Design is told Design's own provider.
+      expect(hermesTurn(hub, designId).modelProviderId).toBe(own.id);
+      expect(hermesTurn(hub, financeId).modelProviderId).toBe(shared.id);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it("does not let another profile fall back on the default profile's own key", async () => {
+    const { fetchImpl } = twoProviders();
+    const home = hermesHome();
+    const finance = path.join(home, 'profiles', 'finance');
+    mkdirSync(finance, { recursive: true });
+    const hub = await signedInHub(
+      {},
+      {
+        models: {
+          fetchImpl,
+          hermes: {
+            home: () => home,
+            profileHomes: () => [finance],
+            restart: () => Promise.resolve(true),
+          },
+        },
+      },
+    );
+    try {
+      const financeId = await makeProfile(hub, 'finance');
+      const defaultId = await workspaceIdOf(hub, 'default');
+      await addProvider(hub, 'groq', 'gsk-default-own-key', 'default', 'profile');
+      await drainJobs(hub.app);
+      const service = modelsServiceFor(hub.app);
+      expect(service.environmentFor(defaultId, { groq: 'GROQ_API_KEY' })).toEqual({
+        GROQ_API_KEY: 'gsk-default-own-key',
+      });
+      expect(service.environmentFor(financeId, { groq: 'GROQ_API_KEY' })).toEqual({});
+      // Hermes loads the root `.env` into its environment, so Finance's own `.env` blocks
+      // the name: Finance has no key of that name to use.
+      expect(parseEnv(readFileSync(path.join(home, '.env'), 'utf8')).get('GROQ_API_KEY')).toBe(
+        'gsk-default-own-key',
+      );
+      expect(parseEnv(readFileSync(path.join(finance, '.env'), 'utf8')).get('GROQ_API_KEY')).toBe(
+        '',
+      );
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('gives a profile made as a copy its source\'s own providers, keys included', async () => {
+    const { fetchImpl } = twoProviders();
+    const hub = await signedInHub({}, { models: { fetchImpl } });
+    try {
+      const designId = await makeProfile(hub, 'design');
+      await addProvider(hub, 'anthropic', 'sk-ant-design-key', 'design', 'profile');
+      await drainJobs(hub.app);
+      const copied = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/profiles',
+        payload: { slug: 'design-copy', name: 'Design copy', clone_from: 'design' },
+      });
+      expect(copied.statusCode).toBe(201);
+      const copyId = (copied.json() as { id: string }).id;
+      const inCopy = await providersIn(hub, 'design-copy');
+      expect(inCopy.map((p) => [p.slug, p.scope, p.profile, p.api_key])).toEqual([
+        ['anthropic', 'profile', 'design-copy', '[stored]'],
+      ]);
+      expect(inCopy[0]!.models.length).toBe(2);
+      expect(claudeCodeEnv(hub, copyId)).toEqual({ ANTHROPIC_API_KEY: 'sk-ant-design-key' });
+      // Its own row: the source keeps its own, and removing the copy's leaves the source's.
+      await authed(hub, hub.token, {
+        method: 'DELETE',
+        url: `/api/v1/models/providers/${inCopy[0]!.id}`,
+        profile: 'design-copy',
+      });
+      expect(claudeCodeEnv(hub, designId)).toEqual({ ANTHROPIC_API_KEY: 'sk-ant-design-key' });
+      // A profile made from scratch takes nothing of anybody's own.
+      await makeProfile(hub, 'blank');
+      expect(await providersIn(hub, 'blank')).toEqual([]);
     } finally {
       await hub.close();
     }
