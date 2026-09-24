@@ -3924,7 +3924,19 @@ paths:
     post:
       operationId: agents.importSkills
       tags: [agents]
-      summary: Import skill files into a category (admin)
+      summary: Import a skill pack into the profile's skills (admin)
+      description: >-
+        Installs uploaded skill packs (`sessions.uploadAttachment` with `purpose: skill`) into
+        the Hermes home of the profile in `X-Hub-Profile`, as `skills/<name>/`. A pack is one
+        `SKILL.md`, or a zip (`.zip`, `.skill`) holding one skill or several: every folder with
+        a `SKILL.md` is a skill, and the files beside it (`references/`, `scripts/` …) are
+        installed with it. Every file is written byte for byte — the front matter is never
+        rewritten. A `SKILL.md` must open with a closed YAML front matter carrying `name` and
+        `description`, have a body, and stay under 100,000 characters; the skill's name
+        (front matter `name`, else its folder) must match `^[a-z0-9][a-z0-9._-]{0,63}$`.
+        All or nothing: a pack with one bad skill, or a skill that already exists, installs
+        nothing — `400 bad_request` or `409 conflict` with `details.reason`, `details.skill`,
+        `details.file` and `details.message` saying which and why.
       x-roles: [owner, admin]
       requestBody:
         required: true
@@ -3968,6 +3980,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /agents/{agent_id}/skills/{skill_key}:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -4259,6 +4273,16 @@ paths:
       operationId: agents.testMcpServer
       tags: [agents]
       summary: Connect once and list tools (admin)
+      description: >-
+        Asks Hermes to connect to the server as configured in the profile in `X-Hub-Profile`,
+        list its tools and disconnect (Hermes's own `POST /api/mcp/servers/{name}/test`,
+        ADR 0015). `error` is Hermes's sentence; when Hermes gives none (the server never
+        answered within its `connect_timeout`, 30 s unless configured) the hub says so. The hub
+        waits `connect_timeout` + 15 s at most. Only where the hub supervises Hermes: otherwise
+        `409 state_invalid` with `details.reason = hermes_not_supervised`; Hermes refusing the
+        request is `409 conflict` with `details.reason = hermes_refused` and Hermes's
+        `details.message`; Hermes's API not starting is `503` with `details.reason =
+        hermes_api_unavailable`.
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
@@ -4281,6 +4305,10 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   # ---------------------------------------------------------------- memory
   /agents/{agent_id}/memory:
     parameters:
@@ -4821,7 +4849,19 @@ paths:
       operationId: agents.loginChannel
       tags: [agents]
       summary: Start an interactive login for platforms that pair by QR (admin)
-      description: A job whose `progress.message` carries the QR/URL to show; on success the credentials are stored.
+      description: >-
+        A `channel_login` job. Today one platform pairs by QR: `whatsapp` (Hermes's own
+        onboarding, ADR 0015); any other answers `409 state_invalid` with `details.reason =
+        login_not_supported`, and a hub that does not supervise Hermes answers `409` with
+        `details.reason = hermes_not_supervised`. While the job runs, every change is a
+        `job.progress` whose `progress.message` is a line for the person and whose `result` is
+        `{status, qr, expires_at}` — `status` is `installing`, `starting` or `waiting`, `qr` the
+        text to draw as a QR code (null until there is one), `expires_at` when Hermes gives the
+        code up (ten minutes). Paired, the hub enables the channel in the profile's Hermes home
+        and the job succeeds with `{status: connected, account_name, account_phone}`; the agent
+        answers on it after its next restart. An expired code fails the job with
+        `state_invalid`, a pairing Hermes reports as failed with `agent_error` — both in
+        Hermes's words. `jobs.cancel` stops the pairing in Hermes too.
       x-roles: [owner, admin]
       x-rt-events: [job.queued, job.progress, job.completed, job.failed, agent.updated]
       responses:
@@ -4841,6 +4881,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   # ================================================================== rooms
   /rooms:
     get:
@@ -10816,6 +10858,61 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /notify/webhooks/{webhook_id}/deliveries:
+    parameters:
+      - name: webhook_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Ulid'
+    get:
+      operationId: notify.listWebhookDeliveries
+      tags: [notify]
+      summary: The most recent deliveries of one webhook, newest first (admin)
+      description: 'What the hub actually sent and what the endpoint answered. The payload is not returned: it may carry message text.'
+      x-scope: global
+      x-roles: [owner, admin]
+      x-rt-events: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: How many (1–50, default 20).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: Deliveries, newest first (not paged).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WebhookDelivery'
+              example:
+                items:
+                  - id: 01J8QK3ZR2W7M5N4P6T8V9X0WD
+                    webhook_id: 01J8QK3ZR2W7M5N4P6T8V9X0WH
+                    event: webhook.test
+                    status: delivered
+                    attempts: 1
+                    response_status: 200
+                    error: null
+                    created_at: '2026-09-21T10:15:40Z'
+                    delivered_at: '2026-09-21T10:15:41Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   # ================================================================== updates
   /updates/check:
     get:
@@ -11563,6 +11660,18 @@ components:
             code: internal
             details:
               request_id: req_01J8QK3ZR2W7M5N4P6T8V9X0RQ
+    ServiceUnavailable:
+      description: A dependency the hub needs for this call is not answering (`service_unavailable`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: 'الخدمة غير جاهزة بعد'
+            code: service_unavailable
+            details:
+              reason: hermes_api_unavailable
+              message: "Hermes's dashboard API did not become ready in time"
   schemas:
     # ---------------------------------------------------------------- common
     Ulid:
@@ -11790,6 +11899,7 @@ components:
           export,
           schedule_run,
           workflow_run,
+          channel_login,
         ]
     JobStatus:
       type: string
@@ -11859,7 +11969,10 @@ components:
                 subject (a host-wide agent discovery).
             result:
               type: [object, 'null']
-              description: Kind-specific outcome (an install's `version`, an export's `attachment_id`).
+              description: >-
+                Kind-specific outcome (an install's `version`, an export's `attachment_id`). A
+                `channel_login` job also carries its state here while it runs: `{status, qr,
+                expires_at}` (`agents.loginChannel`).
               additionalProperties: true
             error:
               oneOf:
@@ -13760,10 +13873,14 @@ components:
           type: boolean
     SkillImport:
       type: object
-      required: [category, attachment_ids]
+      required: [attachment_ids]
       properties:
         category:
           type: string
+          description: >-
+            Not used for placement: an imported skill is installed beside the others, and the
+            category it lists under is read from the skill itself (the pack it names), as for
+            every other skill. Kept optional so an older client's request is still valid.
         attachment_ids:
           type: array
           minItems: 1
@@ -16638,6 +16755,36 @@ components:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
           $ref: '#/components/schemas/Timestamp'
+    WebhookDelivery:
+      type: object
+      required:
+        [id, webhook_id, event, status, attempts, response_status, error, created_at, delivered_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Ulid'
+        webhook_id:
+          $ref: '#/components/schemas/Ulid'
+        event:
+          type: string
+          description: The event name sent, e.g. `webhook.test`.
+        status:
+          type: string
+          enum: [queued, delivered, failed, dead]
+          description: '`dead` = retries exhausted.'
+        attempts:
+          type: integer
+          minimum: 0
+        response_status:
+          type: [integer, 'null']
+          description: The HTTP status the endpoint answered; null when it could not be reached.
+        error:
+          type: [string, 'null']
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        delivered_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
     WebhookWrite:
       type: object
       properties:

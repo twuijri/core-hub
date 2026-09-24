@@ -21,7 +21,7 @@
   },
   "option": {
     "server": "Hub origin, e.g. https://hub.example (remembered at login)",
-    "profile": "Workspace (profile) slug for this call",
+    "profile": "Profile slug for this call",
     "json": "Print the contract's JSON instead of text",
     "strict": "Validate every realtime envelope against its schema; stop at the first mismatch",
     "lang": "Output language: ar or en (default: MAJLIS_LANG, then LANG)",
@@ -54,7 +54,7 @@
     "provider": "Only this provider's models.",
     "role": "Which default to set: chat (the default), coding, title, summary or embedding.",
     "display_name": "Display name for the owner (asked for when omitted)",
-    "workspace_name": "Name of the first workspace (asked for when omitted)",
+    "workspace_name": "Name of the first profile (asked for when omitted)",
     "base_url": "The endpoint's base URL (required when the preset has no default).",
     "provider_name": "A name for this provider, instead of the preset label.",
     "no_key": "Add it without asking for a key.",
@@ -80,12 +80,12 @@
     "sessions_delete": "Delete a session",
     "chat": "Chat in a session and stream the reply",
     "help": "Show help for a command",
-    "providers_list": "List the providers this workspace added, with their address and whether a key is stored.",
+    "providers_list": "List the providers this profile added, with their address and whether a key is stored.",
     "providers_add": "Add a provider from a preset, or store a key for one you already added.",
     "providers_test": "Ask the provider whether the stored key works.",
     "providers_remove": "Remove a provider, or (--clear-key) only forget its stored key.",
     "models_list": "List the models the providers reported.",
-    "models_default": "Show the workspace's default models, or set one.",
+    "models_default": "Show the profile's default models, or set one.",
     "providers_presets": "List the provider types you can add, local model servers included.",
     "files_upload": "Upload a file and print its attachment id",
     "files_show": "Show one attachment",
@@ -127,16 +127,16 @@
     "token": "Setup token: ",
     "username": "Username for the owner: ",
     "display_name": "Display name (optional): ",
-    "workspace_name": "Workspace name (optional, \"Default\"): ",
+    "workspace_name": "Profile name (optional, \"Default\"): ",
     "password": "Password (8+ characters): ",
     "confirm": "Confirm the password: ",
-    "success": "Owner account {username} created on {server} and signed in. Workspace: {profile}."
+    "success": "Owner account {username} created on {server} and signed in. Profile: {profile}."
   },
   "login": {
     "username": "Username: ",
     "password": "Password: ",
     "hub": "{name} · server {version} · contract {contract}",
-    "success": "Signed in as {username} ({role}). Workspace: {profile}.",
+    "success": "Signed in as {username} ({role}). Profile: {profile}.",
     "stored": "Token stored in {file}."
   },
   "logout": {
@@ -148,8 +148,8 @@
     "name": "Name",
     "role": "Role",
     "server": "Hub",
-    "profile": "Workspace",
-    "profiles": "Workspaces",
+    "profile": "Profile",
+    "profiles": "Profiles",
     "token": "Token",
     "token_session": "web session",
     "token_app": "app token"

@@ -10,6 +10,7 @@ import { phaseOf } from '../screens/PlaceholderScreen.js';
 import { EmptyState, Notice } from '../ui/index.js';
 import { IconSettings } from '../ui/icons.js';
 import { NotificationsTab } from '../notify/NotificationsTab.js';
+import { WebhooksTab } from '../notify/WebhooksTab.js';
 import { UsersTab } from '../people/UsersTab.js';
 import { WorkspacesTab } from '../people/WorkspacesTab.js';
 import { AboutTab } from './AboutTab.js';
@@ -18,6 +19,7 @@ import { AuditReport } from './AuditReport.js';
 import { DisplayTab } from './DisplayTab.js';
 import { KnowledgeTab } from './KnowledgeTab.js';
 import { PluginsTab } from './PluginsTab.js';
+import { PrivacyTab } from './PrivacyTab.js';
 import { UpdatesTab } from './UpdatesTab.js';
 import { ThemeTool } from './ThemeTool.js';
 
@@ -41,6 +43,8 @@ const SECTIONS: Record<string, () => ReactElement> = {
   about: () => <AboutTab />,
   display: () => <DisplayTab />,
   theme: () => <ThemeTool />,
+  webhooks: () => <WebhooksTab />,
+  privacy: () => <PrivacyTab />,
   // The three reports the audit module answers; `skills` is still a 501 and stays a
   // placeholder, which is what the hub itself says about it.
   usage: () => <AuditReport kind="usage" />,
