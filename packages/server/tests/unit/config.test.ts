@@ -14,13 +14,15 @@ function walk(dir: string): string[] {
 }
 
 describe('config', () => {
-  it('reads only DATA_DIR, PORT, DATABASE_URL, HUB_ADMIN_PASSWORD and COREHUB_VERSION', () => {
+  it('reads only the hub variables, and nothing else from the environment', () => {
     expect([...ENV_KEYS]).toEqual([
       'DATA_DIR',
       'PORT',
       'DATABASE_URL',
       'HUB_ADMIN_PASSWORD',
       'COREHUB_VERSION',
+      'COREHUB_SETUP_OPEN_MINUTES',
+      'COREHUB_RESET_OWNER',
     ]);
     const picked = pickEnv({
       DATA_DIR: '/x',
@@ -51,6 +53,20 @@ describe('config', () => {
     expect(config.port).toBe(8080);
     expect(config.database).toEqual({ kind: 'sqlite', file: '/tmp/hub-data/hub.sqlite' });
     expect(config.bootstrapAdminPassword).toBeUndefined();
+  });
+
+  it('first-run setup is open for 60 minutes by default; 0 is token only; reset is opt-in (ADR 0019)', () => {
+    expect(loadConfig({}).setupOpenMinutes).toBe(60);
+    expect(loadConfig({ COREHUB_SETUP_OPEN_MINUTES: '0' }).setupOpenMinutes).toBe(0);
+    expect(loadConfig({ COREHUB_SETUP_OPEN_MINUTES: '15' }).setupOpenMinutes).toBe(15);
+    expect(() => loadConfig({ COREHUB_SETUP_OPEN_MINUTES: '-1' })).toThrow(
+      /COREHUB_SETUP_OPEN_MINUTES/,
+    );
+    expect(() => loadConfig({ COREHUB_SETUP_OPEN_MINUTES: 'soon' })).toThrow(ConfigError);
+    expect(loadConfig({}).resetOwner).toBe(false);
+    expect(loadConfig({ COREHUB_RESET_OWNER: '1' }).resetOwner).toBe(true);
+    expect(loadConfig({ COREHUB_RESET_OWNER: '0' }).resetOwner).toBe(false);
+    expect(() => loadConfig({ COREHUB_RESET_OWNER: 'yes' })).toThrow(/COREHUB_RESET_OWNER/);
   });
 
   it('switches to PostgreSQL when DATABASE_URL is set', () => {

@@ -109,7 +109,7 @@
     "not_signed_in": "Not signed in. Run `corehub login --server URL` first.",
     "server_required": "No hub is configured. Pass --server URL.",
     "server_invalid": "{server} is not an http(s) origin.",
-    "setup_required": "The hub has no owner account yet. Run `corehub setup --server URL` with the setup token from its log, or open the hub in a browser.",
+    "setup_required": "The hub has no owner account yet. Run `corehub setup --server URL` (the setup token from its log is asked for only once the open window has ended), or open the hub in a browser.",
     "connection": "Could not reach {server}: {reason}",
     "api": "{message} [{code}, HTTP {status}]",
     "not_implemented": "The hub declares {operation} in the contract but does not implement it yet [not_implemented, HTTP 501].",
@@ -125,6 +125,7 @@
     "password_mismatch": "The two passwords are not the same; nothing was sent."
   },
   "setup": {
+    "open": "{server} has no owner yet and setup is OPEN to whoever arrives first until {until} — no token needed. Finish it now.",
     "where": "{server} has no account yet. Its setup token was printed once in the hub log and written to setup-token.txt in its data directory (docker compose logs hub, or docker compose exec hub cat /data/setup-token.txt).",
     "token": "Setup token: ",
     "username": "Username for the owner: ",

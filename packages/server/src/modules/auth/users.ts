@@ -88,8 +88,12 @@ export async function bootstrap(
   return result;
 }
 
+/**
+ * No owner account: a fresh hub, or one whose owner `COREHUB_RESET_OWNER` just stepped down
+ * (ADR 0019) — other accounts may exist, but nobody owns the hub until setup runs again.
+ */
 export function setupRequired(db: ModuleDb): boolean {
-  return db.select({ id: users.id }).from(users).limit(1).get() === undefined;
+  return db.select({ id: users.id }).from(users).where(eq(users.role, 'owner')).get() === undefined;
 }
 
 export function findUser(db: ModuleDb, id: string): UserRow | null {

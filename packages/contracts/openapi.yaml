@@ -115,6 +115,8 @@ paths:
                   [/rt/sessions, /rt/rooms, /rt/tasks, /rt/schedules, /rt/devices, /rt/jobs]
                 locales: [ar, en]
                 setup_required: false
+                setup_open: false
+                setup_open_until: null
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -297,13 +299,18 @@ paths:
     post:
       operationId: auth.completeSetup
       tags: [auth]
-      summary: Create the owner account with the hub's first-run setup token
+      summary: Create the owner account on a hub that has none (first run)
       description: |
-        First run only. While no user exists the hub writes a random setup token to
-        `<DATA_DIR>/setup-token.txt` (mode 0600) and logs it once; the operator reads it from the
-        container log or that file and pastes it here. On success the owner and the default
-        workspace are created, the token file is deleted, and the answer is the same `TokenPair`
-        `auth.login` returns, so the client is signed in immediately.
+        First run only (ADR 0011, amended by ADR 0019). For a window after the hub process
+        starts with no owner — `COREHUB_SETUP_OPEN_MINUTES`, 60 by default — setup is open to
+        whoever arrives first: `token` may be omitted and is ignored. `meta.get` says whether the
+        window is open (`setup_open`) and until when (`setup_open_until`). A restart opens a
+        fresh window. After the window, or always when the variable is `0`, the claim token is
+        required: the hub writes it to `<DATA_DIR>/setup-token.txt` (mode 0600) and logs it on
+        every boot while no owner exists. On success the owner and the default workspace are
+        created, the token file is deleted, and the answer is the same `TokenPair` `auth.login`
+        returns, so the client is signed in immediately. Two setups racing are serialized: exactly
+        one creates the owner, the other is `409`.
 
         The token is compared in constant time and failures are throttled per IP by the same
         lockout that protects `auth.login` (`kind: password` in `/auth/lockouts`). Once an owner
@@ -357,7 +364,9 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
-          description: The setup token is wrong or no longer on disk (`unauthorized`).
+          description: |
+            The window is closed and the setup token is missing (`auth.setup_token_required`),
+            wrong, or no longer on disk (`unauthorized`).
           content:
             application/json:
               schema:
@@ -1276,6 +1285,8 @@ paths:
                     [/rt/sessions, /rt/rooms, /rt/tasks, /rt/schedules, /rt/devices, /rt/jobs]
                   locales: [ar, en]
                   setup_required: false
+                  setup_open: false
+                  setup_open_until: null
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -12582,6 +12593,8 @@ components:
           realtime_namespaces,
           locales,
           setup_required,
+          setup_open,
+          setup_open_until,
         ]
       properties:
         name:
@@ -12606,7 +12619,19 @@ components:
             $ref: '#/components/schemas/Locale'
         setup_required:
           type: boolean
-          description: True until the owner account exists (first boot).
+          description: |
+            True while the hub has no owner: before first-run setup, and again after
+            `COREHUB_RESET_OWNER` disabled the owner (ADR 0019). This is the "needs an owner" bit.
+        setup_open:
+          type: boolean
+          description: |
+            True while `auth.completeSetup` needs no token: the hub has no owner and the window
+            after this process started (`COREHUB_SETUP_OPEN_MINUTES`) has not ended. False once an
+            owner exists, after the window, and always when the window is `0` (token only).
+        setup_open_until:
+          type: [string, 'null']
+          format: date-time
+          description: When the open window ends; null whenever `setup_open` is false.
     # ---------------------------------------------------------------- jobs
     JobKind:
       type: string
@@ -12792,14 +12817,16 @@ components:
             setup token and the presence of its file are never part of an answer.
     SetupRequest:
       type: object
-      required: [token, username, password]
+      required: [username, password]
       properties:
         token:
           type: string
           format: password
           minLength: 8
           maxLength: 256
-          description: The token the hub wrote to `<DATA_DIR>/setup-token.txt` and logged on boot.
+          description: |
+            The token the hub wrote to `<DATA_DIR>/setup-token.txt` and logged on boot. Required
+            only once the open window has ended (`Meta.setup_open` is false); ignored inside it.
         username:
           type: string
           pattern: '^[a-z0-9._-]{2,40}$'

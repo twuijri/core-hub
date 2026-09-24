@@ -323,25 +323,29 @@ describe.skipIf(!doc)('contract: auth operations answer their success path', () 
 });
 
 // The success path of first-run setup needs the opposite hub: no owner and no
-// HUB_ADMIN_PASSWORD, so the claim token on disk is the only way in (ADR 0011).
+// HUB_ADMIN_PASSWORD. Two of them: one token-only (`COREHUB_SETUP_OPEN_MINUTES=0`, ADR 0011),
+// where the claim token on disk is the only way in, and one inside the open window (ADR 0019).
 describe.skipIf(!doc)('contract: first-run setup on a hub with no owner', () => {
   const document = doc!;
   const ops = operationsById(document);
   const schemas = ajvFor(document);
   let hub: TestHub;
   let anonymous: HubClient;
+  let openHub: TestHub;
+  let openAnonymous: HubClient;
 
   async function call(
     operationId: string,
     expectedStatus: number,
     body?: unknown,
+    as: HubClient = anonymous,
   ): Promise<Record<string, unknown>> {
     const op = ops.get(operationId);
     if (!op) throw new Error(`unknown operation ${operationId}`);
     let status: number;
     let data: unknown;
     try {
-      const res = await anonymous.raw(op.method as ClientMethod, op.path, {
+      const res = await as.raw(op.method as ClientMethod, op.path, {
         ...(body !== undefined ? { body } : {}),
       });
       status = res.status;
@@ -357,18 +361,52 @@ describe.skipIf(!doc)('contract: first-run setup on a hub with no owner', () => 
     return (data ?? {}) as Record<string, unknown>;
   }
 
-  beforeAll(async () => {
-    hub = await testHub();
-    await hub.app.listen({ port: 0, host: '127.0.0.1' });
-    const address = hub.app.server.address();
-    anonymous = createHubClient({
+  const listen = async (target: TestHub) => {
+    await target.app.listen({ port: 0, host: '127.0.0.1' });
+    const address = target.app.server.address();
+    return createHubClient({
       baseUrl: `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`,
       apiBase: serverBasePath(document),
       profile: 'default',
     });
+  };
+
+  beforeAll(async () => {
+    hub = await testHub({ COREHUB_SETUP_OPEN_MINUTES: '0' });
+    anonymous = await listen(hub);
+    openHub = await testHub();
+    openAnonymous = await listen(openHub);
   });
   afterAll(async () => {
     await hub.close();
+    await openHub.close();
+  });
+
+  it('meta.get carries the first-run fields: open window, then closed for good (ADR 0019)', async () => {
+    const before = await call('meta.get', 200, undefined, openAnonymous);
+    expect(before).toMatchObject({ setup_required: true, setup_open: true });
+    const until = Date.parse(String(before.setup_open_until));
+    expect(until).toBeGreaterThan(Date.now() + 59 * 60_000);
+    expect(until).toBeLessThanOrEqual(Date.now() + 60 * 60_000);
+    // Token-only hub: needs an owner, but not open.
+    expect(await call('meta.get', 200)).toMatchObject({
+      setup_required: true,
+      setup_open: false,
+      setup_open_until: null,
+    });
+    // Inside the window `token` is left out entirely, and the owner is signed in.
+    const pair = await call(
+      'auth.completeSetup',
+      200,
+      { username: 'layla', password: 'a-good-owner-password' },
+      openAnonymous,
+    );
+    expect((pair.user as { role: string }).role).toBe('owner');
+    expect(await call('meta.get', 200, undefined, openAnonymous)).toMatchObject({
+      setup_required: false,
+      setup_open: false,
+      setup_open_until: null,
+    });
   });
 
   it('auth.getSetup then auth.completeSetup: wrong token 401, the real one signs the owner in', async () => {

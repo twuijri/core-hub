@@ -28,9 +28,10 @@
   "auth": {
     "invalid_credentials": "Wrong username or password.",
     "user_disabled": "This account is disabled.",
-    "setup_required": "The owner account does not exist yet; open the hub in a browser and finish setup with the setup token.",
+    "setup_required": "The owner account does not exist yet; open the hub in a browser and finish first-run setup.",
     "setup_done": "This hub is already set up; sign in instead.",
     "setup_token_invalid": "The setup token is not correct.",
+    "setup_token_required": "First-run setup is no longer open without the setup token. Paste the token from the hub log, or restart the hub to open setup again for a while.",
     "token_invalid": "The access token is not valid.",
     "token_revoked": "This token was revoked or its session ended.",
     "locked_out": "Too many failed attempts; wait before trying again.",

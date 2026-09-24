@@ -56,7 +56,14 @@ import {
   type HubSettingsPatch,
 } from './profiles.js';
 import { APP_TOKEN_SCOPES, LOCALES, PAIRING_CONNECTIONS, appTokens, workspaces } from './schema.js';
-import { clearSetupToken, completeSetup, readSetupToken, setupTokenMatches } from './setup.js';
+import {
+  clearSetupToken,
+  completeSetup,
+  readSetupToken,
+  setupMeta,
+  setupTokenMatches,
+  setupWindowOpen,
+} from './setup.js';
 import {
   hubSettingsOf,
   preferencesOf,
@@ -124,7 +131,8 @@ const LoginBody = z.object({
   password: z.string().min(1).max(1024),
 });
 const SetupBody = z.object({
-  token: z.string().min(8).max(256),
+  // Optional while the open window lasts (ADR 0019); required, and checked, after it.
+  token: z.string().min(8).max(256).optional(),
   username: Username,
   password: Password,
   display_name: z.string().max(80).optional(),
@@ -336,6 +344,9 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     user: presentUser(db, user),
   });
 
+  /** First run (ADR 0019): no owner yet, and the window without a token has not ended. */
+  const setupIsOpen = () => setupWindowOpen(ctx.setupOpenUntil, now()) && setupRequired(db);
+
   const serverMeta = () => ({
     name: PRODUCT.name,
     server_version: ctx.version,
@@ -343,7 +354,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     api_versions: ['v1'],
     realtime_namespaces: ctx.namespaces(),
     locales: ['ar', 'en'],
-    setup_required: setupRequired(db),
+    ...setupMeta(setupRequired(db), ctx.setupOpenUntil, now()),
   });
 
   /** A workspace the caller may see, by id; 404 `profile_not_found` otherwise. */
@@ -415,8 +426,13 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     assertNotLocked(db, 'password', ip, now());
     // Checked before the token is looked at: a replayed token answers like any other.
     if (!setupRequired(db)) throw new HubError('conflict', { messageKey: 'auth.setup_done' });
-    const expected = readSetupToken(ctx.dataDir);
-    if (!expected || !setupTokenMatches(expected, body.token)) {
+    // Inside the window whoever arrives first sets the hub up, token or not (ADR 0019).
+    const open = setupIsOpen();
+    if (!open && body.token === undefined) {
+      throw new HubError('unauthorized', { messageKey: 'auth.setup_token_required' });
+    }
+    const expected = open ? null : readSetupToken(ctx.dataDir);
+    if (!open && (!expected || !setupTokenMatches(expected, body.token!))) {
       const locked = recordFailure(db, 'password', ip, now(), attributionId());
       ledger.record(
         {
@@ -445,7 +461,11 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     );
     // The account exists now, so nothing on disk may still create one.
     clearSetupToken(ctx.dataDir);
-    ctx.log.info('auth: owner account created from the first-run setup token');
+    ctx.log.info(
+      open
+        ? 'auth: owner account created by first-run setup (open window, no token)'
+        : 'auth: owner account created from the first-run setup token',
+    );
     touchLogin(db, user.id, now());
     const agent = String(request.headers['user-agent'] ?? 'web').slice(0, 80);
     const session = createSession(db, user, now(), `web · ${agent}`);
@@ -457,7 +477,11 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
         entityKind: 'user',
         entityId: user.id,
         summary: 'owner account created by first-run setup',
-        data: { session_id: session.sessionId, username: user.username },
+        data: {
+          session_id: session.sessionId,
+          username: user.username,
+          mode: open ? 'open_window' : 'token',
+        },
         requestId: request.id,
         ownerId: user.id,
       },
