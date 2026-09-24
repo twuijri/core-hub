@@ -172,22 +172,43 @@ $ playwright test e2e/zzzzz-channels-telegram.spec.ts   # بعد إضافة خط
   1 passed (17.9s)
 ```
 
-هرمز الحقيقي (`MAJLIS_HERMES_IMAGE=ghcr.io/twuijri/majlis:latest vitest run tests/unit/telegram.real.test.ts`):
+هرمز الحقيقي في حاوية واحدة، وتيليجرام مُمثَّل على هذا الجهاز (`platforms.telegram.extra.base_url`، يكتبه
+الاختبار وحده). البروفايل «tgbot» صنعه هرمز، والربط والإعدادات كتبها كود المركز نفسه، والبوابة
+`hermes -p tgbot gateway run` هي ما يشغّله المشرف:
 ```
- ✓ … reads the saved settings where the panel wrote them 1463ms
- × … is a channel the hub starts a gateway for, and the gateway connects with the profile’s token
- × … answers a stranger with a pairing code and keeps the request in the profile
+$ MAJLIS_HERMES_IMAGE=majlis:local vitest run --project unit --reporter=verbose tests/unit/telegram.real.test.ts
+ ✓ … is a channel the hub starts a gateway for, and the gateway connects with the profile’s token 20033ms
+ ✓ … answers a stranger with a pairing code and keeps the request in the profile 8005ms
+ ✓ … reads the saved settings where the panel wrote them 548ms
+      Tests  3 passed (3)
+(سجل البوابة)
+[Telegram] Connecting to Telegram (attempt 1/8)…
+[Telegram] Connected to Telegram (polling mode)
+gateway.run: Unauthorized user: 555666777 (Noura) on telegram
 ```
-سجلّ البوابة في المحاولة الأولى:
-`Platform 'Telegram' requirements not met (Run hermes setup to install Telegram support.)`.
-السبب أن الصورة بلا `python-telegram-bot`، وأن التثبيت الكسول فشل لأن `/data` غير قابل للكتابة في حاوية
-الاختبار. الاختبار صار يضبط `HERMES_LAZY_INSTALL_TARGET` على وحدة بيانات قابلة للكتابة كما في الإنتاج،
-وتشغيله قيد المتابعة (يُحدَّث هنا).
+البوابة ثبّتت `python-telegram-bot` بنفسها في مجلد البيانات، واتصلت بالرمز الموجود في `.env` البروفايل.
+ردّت على الغريب برمز اقتران (`sendMessage`) رغم وجود قائمة المعتمدين، وكتبت طلبه في
+`profiles/tgbot/platforms/pairing/telegram-pending.json`. ومحمّل الإعدادات في هرمز نفسه قرأ ما كتبته اللوحة:
+`show_reasoning: true`، `require_mention: true`، `unauthorized_dm_behavior: pair`.
+
+الصورة المنشورة `ghcr.io/twuijri/majlis:latest` (بتاريخ 2026-09-23) فشل عليها الاختباران الأوّلان. السجل قال:
+`Platform 'Telegram' requirements not met`. وسؤال التثبيت الكسول مباشرة أعطى:
+```
+FAIL FeatureUnavailable("Feature 'platform.telegram' unavailable: pip install failed: pip not available and ensurepip failed …")
+$ docker run --rm --entrypoint /opt/hermes/.venv/bin/python ghcr.io/twuijri/majlis:latest -m pip --version
+/opt/hermes/.venv/bin/python: No module named pip
+$ docker run --rm --entrypoint /opt/hermes/.venv/bin/python majlis:local -m pip --version
+pip 25.0.1 from /opt/hermes/.venv/lib/python3.12/site-packages/pip (python 3.12)
+```
+معنى ذلك: تيليجرام يعمل على صورة مبنية من `main` الحالي (فيها pip داخل البيئة المختومة). ولا يعمل على
+صورة `latest` المنشورة يوم 2026-09-23.
 
 ## المخاطر والرجوع
-- **أول ربط يحتاج PyPI**: هرمز يثبّت `python-telegram-bot` في `/data/hermes-packages` عند أول تشغيل. بلا
-  إنترنت تبقى البوابة بلا تيليجرام، والصفحة تعرض خطأ البوابة. البديل (مقترح للمالك): إضافة الحزمة إلى
-  الصورة (~بضعة م.ب).
+- **أول ربط يحتاج PyPI**: هرمز يثبّت `python-telegram-bot` في `/data/hermes-packages` عند أول تشغيل
+  (بضع ثوانٍ). بلا إنترنت تبقى البوابة بلا تيليجرام، والصفحة تعرض خطأ البوابة. البديل، وهو مقترح للمالك:
+  إضافة الحزمة إلى الصورة (بضعة م.ب).
+- **صورة `latest` القديمة لا تكفي**: فيها لا يوجد pip داخل البيئة، فيفشل التثبيت الكسول. يلزم بناء صورة من
+  `main` الحالي.
 - الخيارات المشتركة (الصوت) تغيّر كل قنوات البروفايل، واللوحة تقول ذلك.
 - حفظ الإعدادات في البروفايل الافتراضي لا يسري قبل «أعد تشغيل هرمز»، والصفحة تقول ذلك.
 - الرجوع: عكس الدمج. الرمز يبقى في `.env` البروفايل، وهرمز يقرؤه كما يقرؤه دائمًا. المفاتيح التي كُتبت في
@@ -195,4 +216,4 @@ $ playwright test e2e/zzzzz-channels-telegram.spec.ts   # بعد إضافة خط
 
 ## التسليم والخطوة التالية
 - طلب الدمج: https://github.com/twuijri/core-hub/pull/97 (بالإنجليزية إلى `main`).
-- الخطوة التالية: إكمال اختبار هرمز الحقيقي، ثم كامل الفحوص بعد دمج `main` (وإعادة التسمية إن دُمجت).
+- الخطوة التالية: CI أخضر، ثم دمج `main` (وإعادة التسمية Core Hub إن دُمجت أولًا) قبل المراجعة.
