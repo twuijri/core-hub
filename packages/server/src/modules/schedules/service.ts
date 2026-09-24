@@ -483,14 +483,12 @@ export class SchedulesService {
     const lastRunAt = decision.fire ? now : row.lastRunAt;
     const next = this.nextFor({ ...row, lastRunAt }, now);
     const id = newUlid(now.getTime());
-    let claimed = false;
     try {
-      claimed = this.claimIn(row.id, tick, id, now, next, decision, row);
+      if (!this.claimIn(row.id, tick, id, now, next, decision, row)) return null;
     } catch (error) {
       if (!(error instanceof AlreadyFired)) throw error;
-      claimed = false;
+      return null;
     }
-    if (!claimed) return null;
     return this.db.select().from(scheduleRuns).where(eq(scheduleRuns.id, id)).get() ?? null;
   }
 

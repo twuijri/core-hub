@@ -115,8 +115,43 @@
 ## الفحوص (الأوامر ونواتجها الفعلية)
 كل الأوامر الثقيلة عبر `mj-run` (ذاكرة ٧ غ، عاملان).
 ```
-(تُملأ بعد التشغيل الأخير قبل الرفع)
+$ pnpm lint                      # exit 0 — All matched files use Prettier code style!
+$ pnpm typecheck                 # exit 0
+$ pnpm contracts:lint
+contracts:lint  validating 90 event schema file(s)
+contracts:lint  OK
+$ pnpm contracts:check-clients
+check-clients  OK — 249 client file(s) scanned, 167 contract path(s) known.
+$ pnpm i18n:check
+i18n:check  web: 1023 keys, ar/en in parity
+i18n:check  OK
+$ pnpm nav:check
+nav:check  OK — 34 destinations, 2 pre-auth screens (login, setup), 39 terms, ar/en complete, routes for web
+$ pnpm change-record:check
+change-record  OK — 1 record(s) valid
+$ pnpm contract:test
+ Test Files  3 passed (3)
+      Tests  257 passed (257)
+$ pnpm --filter @majlis/server test
+ Test Files  88 passed | 11 skipped (99)
+      Tests  924 passed | 30 skipped (954)
+$ pnpm --filter @majlis/web test
+ Test Files  46 passed (46)
+      Tests  551 passed (551)
+$ pnpm build                     # exit 0
+$ PLAYWRIGHT_CHANNEL=chrome pnpm web:e2e
+  40 passed (2.5m)
 ```
+- **تفشل على الكود القديم**: اختبارات `runNow` (كان `501`)، والمُجدول (لم يكن موجودًا)، والموافقة (كانت
+  تُفشل الخطوة)، وسجلّ `session_id` (كان `null` دائمًا)، واختبار الويب («شغّله الآن» كان معطّلًا لغير
+  هرمز، ولا سجل ولا نافذة تشغيل)، والرحلتان 28 و29. واختبار الهجرة يفشل إن أُزيلت إعادة روابط
+  `tool_calls.approval_id` — شغّلته كذلك فرأيته يفشل (`approval_id: null`)، ثم أعدت السطر.
+- **وجدها الاختبار أثناء العمل**: (١) `WorkflowRun` كان يُرسل `waiting_approval` و`trigger` نصًّا بخلاف
+  المخطط؛ (٢) `failStaleRuns` كان سيُلغي موافقات سير العمل عند كل إعادة تشغيل؛ (٣) drizzle-kit ولّد
+  `INSERT … SELECT` بعمودين غير موجودين؛ (٤) في Playwright أُعيد اتصال المقبس بعد الدخول فضاع حدث نهاية
+  التشغيل فبقي السطر «يعمل» — صار الويب يعيد السؤال عند الاتصال ويسأل كل ٣ ثوانٍ ما دام شيء جاريًا.
+- `git fetch && git merge origin/main`: لا جديد في `main` وقت التشغيل (آخره #89).
+- اللقطات: أُعيدت كل اللقطات إلى نسخة `main` إلا صفحات الجدولة التي تغيّرت فعلًا.
 
 ## المخاطر والرجوع
 - **الهجرة تعيد بناء `approvals`**: مغطّاة باختبار يثبت بقاء كل موافقة وكل رابط `tool_calls.approval_id`
