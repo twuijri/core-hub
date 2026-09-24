@@ -995,10 +995,7 @@
   place-items: center;
   inline-size: 1.75rem;
   block-size: 1.75rem;
-  border-radius: var(--mj-radius-md);
-  background: var(--mj-color-accent);
-  color: var(--mj-color-accent-text);
-  font-weight: 600;
+  color: var(--mj-color-accent);
 }
 .mj-sidebar-name {
   font-size: var(--mj-font-size-md);
