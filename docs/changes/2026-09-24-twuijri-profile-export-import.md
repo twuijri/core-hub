@@ -87,7 +87,7 @@ export job: 2051 ms {"profile":"design","name":"design-20260924-135651.tar.gz","
       Tests  1 passed (1)
 $ pnpm contracts:lint            → contracts:lint  OK
 $ pnpm contracts:check-clients   → check-clients  OK — 241 client file(s) scanned, 167 contract path(s) known.
-$ pnpm i18n:check                → i18n:check  OK (server 136, cli 249, web 986 keys)
+$ pnpm i18n:check                → i18n:check  OK (server 136, cli 249, web 984 keys)
 $ pnpm nav:check                 → nav:check  OK — 34 destinations
 $ pnpm typecheck / eslint . / prettier --check . / pnpm build → بلا أخطاء
 $ PLAYWRIGHT_CHANNEL=chrome npx playwright test --workers=1
