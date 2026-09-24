@@ -85,6 +85,36 @@ export interface TaskAssigned {
   session_id: string | null;
 }
 
+/** What was said on a task (contract `Comment`). */
+export interface TaskComment {
+  id: string;
+  task_id: string;
+  author: { kind: 'user' | 'agent' | 'system'; id: string | null; name: string };
+  content: string;
+  created_at: string;
+}
+
+/** One task opened on its own (contract `TaskDetail`): the card, and what was said on it. */
+export interface TaskDetail extends Task {
+  comments: TaskComment[];
+}
+
+/**
+ * The board holds every workspace, so a write names the workspace **the card** is in, not
+ * the one in the header — a card from another workspace is acted on where it lives, as a
+ * schedule on the global Schedules page is. Without it the hub looks for the card in the
+ * header's workspace and answers 404.
+ */
+function inWorkspace(profile: string | undefined): { headers?: Record<string, string> } {
+  return profile ? { headers: { 'X-Hub-Profile': profile } } : {};
+}
+
+/** A card to act on: its id, and the workspace it is in when the board said. */
+export interface TaskRef {
+  id: string;
+  profile?: string | undefined;
+}
+
 export interface Column {
   status: TaskStatus;
   count: number;
@@ -178,6 +208,7 @@ function useInvalidateBoard(): () => void {
   const queryClient = useQueryClient();
   return () => {
     void queryClient.invalidateQueries({ queryKey: ['task-columns'] });
+    void queryClient.invalidateQueries({ queryKey: ['task'] });
     void queryClient.invalidateQueries({ queryKey: taskKeys.projects(profile) });
   };
 }
@@ -220,15 +251,22 @@ export function useMoveTask() {
   return useMutation({
     mutationFn: async ({
       id,
+      profile,
       ...body
     }: {
       id: string;
+      profile?: string | undefined;
       status: TaskStatus;
       after_task_id?: string | null;
       reason?: string | null;
     }) =>
-      (await client.request('post', '/tasks/{task_id}/move', { params: { task_id: id }, body }))
-        .data,
+      (
+        await client.request('post', '/tasks/{task_id}/move', {
+          params: { task_id: id },
+          body,
+          ...inWorkspace(profile),
+        })
+      ).data,
     onSuccess: refresh,
   });
 }
@@ -237,10 +275,59 @@ export function useUpdateTask() {
   const { client } = useAuth();
   const refresh = useInvalidateBoard();
   return useMutation({
-    mutationFn: async ({ id, patch }: { id: string; patch: Record<string, unknown> }) =>
-      (await client.request('patch', '/tasks/{task_id}', { params: { task_id: id }, body: patch }))
-        .data,
+    mutationFn: async ({
+      id,
+      profile,
+      patch,
+    }: {
+      id: string;
+      profile?: string | undefined;
+      patch: Record<string, unknown>;
+    }) =>
+      (
+        await client.request('patch', '/tasks/{task_id}', {
+          params: { task_id: id },
+          body: patch,
+          ...inWorkspace(profile),
+        })
+      ).data as unknown as Task,
     onSuccess: refresh,
+  });
+}
+
+/**
+ * One task with what was said on it. For a card on Hermes's board the hub reads it from
+ * Hermes as it answers, so this is Hermes's card and Hermes's comments.
+ */
+export function useTaskDetail(ref: TaskRef | null) {
+  const { client, session } = useAuth();
+  return useQuery({
+    queryKey: ['task', ref?.id ?? '', ref?.profile ?? ''] as const,
+    queryFn: async () =>
+      (
+        await client.request('get', '/tasks/{task_id}', {
+          params: { task_id: ref!.id },
+          ...inWorkspace(ref!.profile),
+        })
+      ).data as unknown as TaskDetail,
+    enabled: !!session && !!ref,
+  });
+}
+
+/** Say something on a task. On a Hermes card it is said on Hermes's card, in your name. */
+export function useAddComment() {
+  const { client } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, profile, content }: TaskRef & { content: string }) =>
+      (
+        await client.request('post', '/tasks/{task_id}/comments', {
+          params: { task_id: id },
+          body: { content },
+          ...inWorkspace(profile),
+        })
+      ).data as unknown as TaskComment,
+    onSuccess: (_comment, { id }) => void queryClient.invalidateQueries({ queryKey: ['task', id] }),
   });
 }
 
@@ -248,8 +335,11 @@ export function useDeleteTask() {
   const { client } = useAuth();
   const refresh = useInvalidateBoard();
   return useMutation({
-    mutationFn: async (id: string) => {
-      await client.request('delete', '/tasks/{task_id}', { params: { task_id: id } });
+    mutationFn: async ({ id, profile }: TaskRef) => {
+      await client.request('delete', '/tasks/{task_id}', {
+        params: { task_id: id },
+        ...inWorkspace(profile),
+      });
       return id;
     },
     onSuccess: refresh,
@@ -266,9 +356,15 @@ export function useAssignTask() {
   return useMutation({
     mutationFn: async ({
       id,
+      workspace,
+      handTo,
       ...body
     }: {
       id: string;
+      /** The workspace the card is in (the request's scope). */
+      workspace?: string | undefined;
+      /** A Hermes card only: the workspace whose Hermes profile takes it (contract `profile`). */
+      handTo?: string | undefined;
       agent_id: string;
       start: boolean;
       instructions: string | null;
@@ -276,7 +372,8 @@ export function useAssignTask() {
       (
         await client.request('post', '/tasks/{task_id}/assign', {
           params: { task_id: id },
-          body: { ...body, model: null, provider: null },
+          body: { ...body, model: null, provider: null, ...(handTo ? { profile: handTo } : {}) },
+          ...inWorkspace(workspace),
         })
       ).data as unknown as TaskAssigned,
     onSuccess: refresh,
@@ -288,8 +385,11 @@ export function useStopTask() {
   const { client } = useAuth();
   const refresh = useInvalidateBoard();
   return useMutation({
-    mutationFn: async (id: string) => {
-      await client.request('post', '/tasks/{task_id}/stop', { params: { task_id: id } });
+    mutationFn: async ({ id, profile }: TaskRef) => {
+      await client.request('post', '/tasks/{task_id}/stop', {
+        params: { task_id: id },
+        ...inWorkspace(profile),
+      });
       return id;
     },
     onSuccess: refresh,
@@ -301,8 +401,11 @@ export function useUnassignTask() {
   const { client } = useAuth();
   const refresh = useInvalidateBoard();
   return useMutation({
-    mutationFn: async (id: string) => {
-      await client.request('delete', '/tasks/{task_id}/assign', { params: { task_id: id } });
+    mutationFn: async ({ id, profile }: TaskRef) => {
+      await client.request('delete', '/tasks/{task_id}/assign', {
+        params: { task_id: id },
+        ...inWorkspace(profile),
+      });
       return id;
     },
     onSuccess: refresh,

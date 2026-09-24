@@ -321,6 +321,13 @@ export class TasksService {
       agentId: string | null;
       /** When the card reached `done` on its own board; `null` when that board did not say. */
       completedAt?: Date | null;
+      /** Hermes's priority, when the hub can write it back (`hermes-api.ts`); absent: the hub's stays. */
+      priority?: TaskRow['priority'];
+      /**
+       * The workspace of the profile Hermes gave the card to (ADR 0014), when there is one:
+       * the card moves there. Absent or `null`: it stays where it is.
+       */
+      workspace?: string | null;
     },
     now: Date = new Date(),
   ): { row: TaskRow; created: boolean } {
@@ -334,44 +341,52 @@ export class TasksService {
       .get();
     if (existing) {
       const moved = existing.status !== card.status;
+      // Hermes handed the card to another profile: it goes to that profile's workspace.
+      const current =
+        card.workspace && card.workspace !== existing.workspace
+          ? this.moveToWorkspace(existing, { ...scope, workspace: card.workspace }, now)
+          : existing;
       // The card's own workspace, not the one the board is being read from.
-      const own = { ...scope, workspace: existing.workspace };
+      const own = { ...scope, workspace: current.workspace };
       this.db
         .update(tasks)
         .set({
           title: card.title,
           description: card.body,
           status: card.status,
-          latestSummary: card.result ?? existing.latestSummary,
+          ...(card.priority ? { priority: card.priority } : {}),
+          latestSummary: card.result ?? current.latestSummary,
           // A card Hermes moved lands at the top of its new column, as a person's move does.
           position: moved
             ? between(
                 null,
-                this.column(own, existing.projectId, card.status, true)[0]?.position ?? null,
+                this.column(own, current.projectId, card.status, true)[0]?.position ?? null,
               )
-            : existing.position,
-          archivedAt: card.status === 'archived' ? (existing.archivedAt ?? now) : null,
+            : current.position,
+          archivedAt: card.status === 'archived' ? (current.archivedAt ?? now) : null,
           completedAt:
-            card.status === 'done' ? (card.completedAt ?? existing.completedAt ?? now) : null,
+            card.status === 'done' ? (card.completedAt ?? current.completedAt ?? now) : null,
           externalSyncedAt: now,
-          updatedAt: moved ? now : existing.updatedAt,
+          updatedAt: moved ? now : current.updatedAt,
         })
-        .where(eq(tasks.id, existing.id))
+        .where(eq(tasks.id, current.id))
         .run();
       if (moved) {
         this.record(
           own,
           { kind: 'agent', id: card.agentId, name: 'Hermes' },
-          existing.id,
+          current.id,
           'status',
-          existing.status,
+          current.status,
           card.status,
           null,
         );
       }
-      return { row: this.task(own, existing.id), created: false };
+      return { row: this.task(own, current.id), created: false };
     }
-    const project = this.defaultProject(scope);
+    // A card Hermes gave to a profile lands in that profile's workspace.
+    const home = card.workspace ? { ...scope, workspace: card.workspace } : scope;
+    const project = this.defaultProject(home);
     const id = newUlid();
     const number = project.taskCounter + 1;
     this.db.update(projects).set({ taskCounter: number }).where(eq(projects.id, project.id)).run();
@@ -380,17 +395,17 @@ export class TasksService {
       .values({
         id,
         ownerId: scope.userId,
-        workspace: scope.workspace,
+        workspace: home.workspace,
         projectId: project.id,
         number,
         title: card.title,
         description: card.body,
         status: card.status,
-        priority: 'normal',
+        priority: card.priority ?? 'normal',
         tags: [],
         assigneeKind: card.agentId ? 'agent' : 'none',
         assigneeAgentId: card.agentId,
-        position: append(this.lastPosition(scope, project.id, card.status)),
+        position: append(this.lastPosition(home, project.id, card.status)),
         latestSummary: card.result,
         archivedAt: card.status === 'archived' ? now : null,
         completedAt: card.status === 'done' ? (card.completedAt ?? now) : null,
@@ -399,7 +414,7 @@ export class TasksService {
         externalSyncedAt: now,
       })
       .run();
-    return { row: this.task(scope, id), created: true };
+    return { row: this.task(home, id), created: true };
   }
 
   /**
@@ -438,6 +453,36 @@ export class TasksService {
       );
     }
     return stale.length;
+  }
+
+  /**
+   * Move a task to another workspace: into that workspace's own project, at the end of its
+   * column, with a number of that project's. What was said and done on it goes along, so
+   * the card reads the same wherever it is.
+   */
+  private moveToWorkspace(row: TaskRow, target: Scope, now: Date): TaskRow {
+    const project = this.defaultProject(target);
+    const number = project.taskCounter + 1;
+    this.db.update(projects).set({ taskCounter: number }).where(eq(projects.id, project.id)).run();
+    this.db
+      .update(tasks)
+      .set({
+        workspace: target.workspace,
+        projectId: project.id,
+        number,
+        position: append(this.lastPosition(target, project.id, row.status)),
+        updatedAt: now,
+      })
+      .where(eq(tasks.id, row.id))
+      .run();
+    for (const table of [subtasks, taskComments, taskTransitions, worktrees]) {
+      this.db
+        .update(table)
+        .set({ workspace: target.workspace })
+        .where(eq(table.taskId, row.id))
+        .run();
+    }
+    return this.db.select().from(tasks).where(eq(tasks.id, row.id)).get()!;
   }
 
   /** Every reflection of `source` in this workspace, so a sync can see what went missing. */
@@ -946,6 +991,51 @@ export class TasksService {
       })
       .run();
     return this.db.select().from(taskComments).where(eq(taskComments.id, id)).get()!;
+  }
+
+  /**
+   * Comments kept elsewhere (Hermes's), reflected on the task: each one the hub does not
+   * have yet — the same author, words and second — is added with its own time. Answers the
+   * task's comments, oldest first.
+   */
+  reflectComments(
+    row: TaskRow,
+    comments: ReadonlyArray<{
+      author: string;
+      authorKind: 'user' | 'agent';
+      authorId: string | null;
+      body: string;
+      createdAt: Date;
+    }>,
+  ): CommentRow[] {
+    const keyOf = (author: string | null, body: string, at: Date) =>
+      `${Math.floor(at.getTime() / 1000)}\u0000${author ?? ''}\u0000${body}`;
+    const known = new Set(
+      this.commentsOf(row.id).map((comment) =>
+        keyOf(comment.authorName, comment.body, comment.createdAt),
+      ),
+    );
+    for (const comment of comments) {
+      const key = keyOf(comment.author, comment.body, comment.createdAt);
+      if (known.has(key)) continue;
+      known.add(key);
+      this.db
+        .insert(taskComments)
+        .values({
+          id: newUlid(),
+          ownerId: row.ownerId,
+          workspace: row.workspace,
+          taskId: row.id,
+          authorKind: comment.authorKind,
+          authorId: comment.authorId,
+          authorName: comment.author,
+          body: comment.body,
+          createdAt: comment.createdAt,
+          updatedAt: comment.createdAt,
+        })
+        .run();
+    }
+    return this.commentsOf(row.id);
   }
 
   commentsOf(taskId: string): CommentRow[] {

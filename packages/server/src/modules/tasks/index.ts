@@ -28,9 +28,21 @@ import { clampLimit, decodeCursor, encodeCursor } from '../../lib/pagination.js'
 import { createRealtime, type Realtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
 import { HermesRefusal } from './hermes-kanban.js';
+import {
+  HermesApiUnavailable,
+  toHermesPriority,
+  type HermesCardApi,
+  type HubPriority,
+} from './hermes-api.js';
 import { ARCHIVE_AFTER_MS, HermesMirror, type HermesBoardPort } from './hermes-mirror.js';
 import { jobRunnerFor, serializeJob } from '../audit/index.js';
-import { listWorkspacesFor, requireRole, requireUser, requireWorkspace } from '../auth/index.js';
+import {
+  findUser,
+  listWorkspacesFor,
+  requireRole,
+  requireUser,
+  requireWorkspace,
+} from '../auth/index.js';
 import { TasksService, type Actor, type Scope, type TaskStatus } from './service.js';
 import { TaskRuns, type TaskRunPort, type TaskRunScope } from './runs.js';
 import {
@@ -48,6 +60,14 @@ export { TasksService } from './service.js';
 export type { Actor, Scope, TaskStatus } from './service.js';
 export { between, append } from './position.js';
 export type { TaskRunPort, TaskRunScope, TaskRunOutcome } from './runs.js';
+export type { HermesBoardPort } from './hermes-mirror.js';
+export {
+  HermesApiUnavailable,
+  createHermesCardApi,
+  type HermesApiRequest,
+  type HermesCardApi,
+} from './hermes-api.js';
+export { HermesRefusal } from './hermes-kanban.js';
 
 /** How a name is found for an assignee. Injected so this module never reads another's tables. */
 export interface TasksOverrides {
@@ -98,14 +118,47 @@ function mirrorOf(app: FastifyInstance): HermesMirror | null {
   return mirror;
 }
 
-/** Hermes said no: answer 409 with Hermes's own sentence and change nothing. */
+/**
+ * Hermes said no: answer 409 with Hermes's own sentence and change nothing. Hermes's server
+ * could not be reached at all: 503, saying so — the change was not made, and it is not the
+ * card's fault.
+ */
 function refusedByHermes(error: unknown): never {
   if (error instanceof HermesRefusal) {
     throw new HubError('conflict', {
       details: { reason: 'hermes_refused', verb: error.verb, message: error.message },
     });
   }
+  if (error instanceof HermesApiUnavailable) {
+    throw new HubError('service_unavailable', {
+      message: `Hermes's API is not available: ${error.message}`,
+      details: { reason: 'hermes_api_unavailable', message: error.message },
+    });
+  }
   throw error;
+}
+
+/**
+ * Hermes's server for this card, when the card is Hermes's and the hub runs that server
+ * (ADR 0015). `null` for the hub's own cards — and for Hermes's where the hub does not run
+ * Hermes, which keep today's refusals.
+ */
+function hermesApiOf(
+  app: FastifyInstance,
+  row: TaskRow,
+): { mirror: HermesMirror; api: HermesCardApi; id: string } | null {
+  if (!HermesMirror.isHermes(row) || !row.externalId) return null;
+  const mirror = mirrorOf(app);
+  const api = mirror?.api() ?? null;
+  return mirror && api ? { mirror, api, id: row.externalId } : null;
+}
+
+/** The name a person's comment carries on Hermes's board: their display name, else username. */
+function displayNameOf(request: FastifyRequest): string {
+  const principal = request.principal;
+  if (!principal) return 'Majlis';
+  const row = findUser(requireSqlite(request.server.hub.database), principal.user.id);
+  return row?.displayName?.trim() || principal.user.username;
 }
 
 /**
@@ -261,6 +314,93 @@ export const tasksModule = defineModule({
     };
 
     /**
+     * Read a Hermes card back from Hermes after a write, so the reflection is what Hermes
+     * kept. Answers the refreshed row — in the workspace Hermes's answer put it in — or the
+     * row as it was when Hermes could not be read (the write itself already succeeded).
+     */
+    const refreshFromHermes = async (
+      request: FastifyRequest,
+      service: TasksService,
+      scope: Scope,
+      row: TaskRow,
+    ): Promise<TaskRow> => {
+      const hermes = hermesApiOf(request.server, row);
+      if (!hermes) return row;
+      try {
+        const detail = await hermes.api.show(hermes.id);
+        const fresh = hermes.mirror.reflectCard(service, scope, detail.task);
+        hermes.mirror.reflectComments(service, fresh, detail.comments);
+        return fresh;
+      } catch (error) {
+        request.log.warn(
+          { err: error instanceof Error ? error.message : String(error), taskId: row.id },
+          'tasks: could not read the card back from Hermes',
+        );
+        return row;
+      }
+    };
+
+    /**
+     * Hand a Hermes card to another Hermes profile — which is another workspace (ADR 0014).
+     * Hermes first: a card that is running has its run stopped by Hermes before it moves
+     * (`reclaim_first`; the client asks the person before it sends this). The card then
+     * follows Hermes's answer into the workspace of its new profile.
+     */
+    const handToProfile = async (
+      request: FastifyRequest,
+      service: TasksService,
+      scope: Scope,
+      current: TaskRow,
+      slug: string,
+    ): Promise<void> => {
+      const hermes = hermesApiOf(request.server, current);
+      if (!hermes) {
+        refuseOnHermesCard(current, 'reassign');
+        return;
+      }
+      const target = hermes.mirror.target(slug);
+      const principal = request.principal;
+      const enterable =
+        !!target &&
+        !!principal &&
+        listWorkspacesFor(requireSqlite(request.server.hub.database), principal.user).some(
+          (row) => row.id === target.workspace,
+        );
+      if (!target || !enterable) throw notFound({ resource: 'profile', id: slug });
+      await hermes.api
+        .reassign(hermes.id, target.profile, { reclaimFirst: current.status === 'running' })
+        .catch(refusedByHermes);
+      const fresh = await refreshFromHermes(request, service, scope, current);
+      const own = {
+        ...scope,
+        workspace: fresh.workspace,
+        profile: hermes.mirror.target(fresh.workspace)?.slug ?? scope.profile,
+      };
+      const rendered = renderTask(service, own, fresh.id);
+      for (const profile of new Set([scope.profile, own.profile])) {
+        realtimeOf(request.server).emit(
+          REALTIME_NAMESPACES.tasks,
+          'task.assigned',
+          { profile },
+          { task: rendered },
+        );
+        if (fresh.status !== current.status) {
+          realtimeOf(request.server).emit(
+            REALTIME_NAMESPACES.tasks,
+            'task.moved',
+            { profile },
+            {
+              task: rendered,
+              from: current.status,
+              to: fresh.status,
+              actor: authorOf(actorOf(request)),
+            },
+          );
+        }
+      }
+    };
+
+    /**
      * Assign a task and, when asked, start it: open its session, queue its run, move it to
      * `running`. The session and the run are opened **first**, so an agent that cannot take
      * the turn (`404`, `422`) leaves the task exactly as it was.
@@ -311,6 +451,8 @@ export const tasksModule = defineModule({
             title: current.title,
             body: brief === '' ? null : brief,
             triage: false,
+            workspace: scope.workspace,
+            priority: current.priority,
           });
           if (externalId) current = service.linkExternal(scope, id, 'hermes', externalId);
         } catch (error) {
@@ -472,6 +614,10 @@ export const tasksModule = defineModule({
         // and the hub has one Hermes home. Read before answering, so what the person sees
         // is what Hermes has — throttled, and never able to fail the board.
         const mirror = mirrorOf(request.server);
+        // A person who opened the board is about to edit, comment or reassign: start
+        // Hermes's server now, in the background, so that call does not wait for it (owner,
+        // 2026-09-24). Each opening counts as a use, so it stays up ten minutes after the last.
+        mirror?.warm();
         const home = chosen.find((row) => row.isDefault);
         if (mirror && home) {
           const report = await mirror
@@ -633,6 +779,8 @@ export const tasksModule = defineModule({
               title: row.title,
               body: row.description,
               triage: row.status === 'triage',
+              workspace: scope.workspace,
+              priority: row.priority,
             });
             if (externalId) row = service.linkExternal(scope, row.id, 'hermes', externalId);
           } catch (error) {
@@ -648,33 +796,56 @@ export const tasksModule = defineModule({
 
     defineRoute(app, deps, {
       operationId: 'tasks.bulkUpdateTasks',
-      handler: (request, { body }) => {
+      handler: async (request, { body }) => {
         const scope = scopeOf(request);
         const service = serviceOf(request);
         const input = body as { task_ids: string[]; patch: Record<string, unknown> };
-        const results = input.task_ids.map((id) => {
+        const results = [];
+        for (const id of input.task_ids) {
           try {
-            if (
-              input.patch.title !== undefined ||
-              input.patch.description !== undefined ||
-              input.patch.status !== undefined
+            let patch = input.patch;
+            const row = service.task(scope, id);
+            const hermes = hermesApiOf(request.server, row);
+            if (hermes) {
+              // As one edit does: Hermes's words and priority on Hermes first, a new
+              // status through Hermes's own move, and the rest is the hub's.
+              const words: { title?: string; body?: string | null; priority?: number } = {};
+              if (patch.title !== undefined) words.title = String(patch.title);
+              if (patch.description !== undefined) words.body = patch.description as string | null;
+              if (patch.priority !== undefined)
+                words.priority = toHermesPriority(patch.priority as HubPriority);
+              if (Object.keys(words).length > 0) {
+                const card = await hermes.api.update(hermes.id, words).catch(refusedByHermes);
+                hermes.mirror.reflectCard(service, scope, card);
+              }
+              if (typeof patch.status === 'string' && patch.status !== row.status) {
+                await hermes.mirror
+                  .moveThrough(row, patch.status as TaskStatus, null)
+                  .catch(refusedByHermes);
+              }
+              const { title: _t, description: _d, priority: _p, ...rest } = patch;
+              patch = rest;
+            } else if (
+              patch.title !== undefined ||
+              patch.description !== undefined ||
+              patch.status !== undefined
             ) {
-              refuseOnHermesCard(service.task(scope, id), 'bulk_update');
+              refuseOnHermesCard(row, 'bulk_update');
             }
-            service.bulkUpdate(scope, actorOf(request), [id], input.patch);
-            return { id, ok: true, error: null };
+            service.bulkUpdate(scope, actorOf(request), [id], patch);
+            results.push({ id, ok: true, error: null });
           } catch (error) {
             // One bad id must not lose the other ninety-nine: the caller is told which.
-            return {
+            results.push({
               id,
               ok: false,
               error:
                 error instanceof HubError
                   ? { error: error.code, code: error.code }
                   : { error: 'internal', code: 'internal' },
-            };
+            });
           }
-        });
+        }
         announce(request, 'task.updated', { task_ids: input.task_ids });
         return { results };
       },
@@ -682,23 +853,27 @@ export const tasksModule = defineModule({
 
     defineRoute(app, deps, {
       operationId: 'tasks.bulkDeleteTasks',
-      handler: (request, { query }) => {
+      handler: async (request, { query }) => {
         const scope = scopeOf(request);
         const ids = String(query.ids ?? '')
           .split(',')
           .map((id) => id.trim())
           .filter(Boolean);
         const service = serviceOf(request);
-        const results = ids.map((id) => {
+        const results = [];
+        for (const id of ids) {
           try {
-            refuseOnHermesCard(service.task(scope, id), 'delete');
+            const row = service.task(scope, id);
+            const hermes = hermesApiOf(request.server, row);
+            if (hermes) await hermes.api.remove(hermes.id).catch(refusedByHermes);
+            else refuseOnHermesCard(row, 'delete');
             service.deleteTask(scope, id);
-            return { id, ok: true, error: null };
+            results.push({ id, ok: true, error: null });
           } catch (error) {
             const code = error instanceof HubError ? error.code : 'not_found';
-            return { id, ok: false, error: { error: code, code } };
+            results.push({ id, ok: false, error: { error: code, code } });
           }
-        });
+        }
         announce(request, 'task.deleted', { task_ids: ids });
         return { results };
       },
@@ -706,11 +881,29 @@ export const tasksModule = defineModule({
 
     defineRoute(app, deps, {
       operationId: 'tasks.getTask',
-      handler: (request, { params }) => {
+      handler: async (request, { params }) => {
         const scope = scopeOf(request);
         const service = serviceOf(request);
         const id = params.task_id as string;
-        const row = service.task(scope, id);
+        let row = service.task(scope, id);
+        // A Hermes card is read from Hermes when it is opened: the card as Hermes has it
+        // now, and what was said on it there. A Hermes that cannot answer leaves the last
+        // reflection showing — opening a card must not fail because a helper did.
+        const hermes = hermesApiOf(request.server, row);
+        if (hermes) {
+          try {
+            const detail = await hermes.api.show(hermes.id);
+            row = hermes.mirror.reflectCard(service, scope, detail.task);
+            hermes.mirror.reflectComments(service, row, detail.comments);
+            row = service.task(scope, id);
+          } catch (error) {
+            if (error instanceof HubError) throw error;
+            request.log.warn(
+              { err: error instanceof Error ? error.message : String(error), taskId: id },
+              'tasks: could not read the card from Hermes',
+            );
+          }
+        }
         return {
           ...toTask(row, scope.profile, {
             nameOf,
@@ -731,12 +924,36 @@ export const tasksModule = defineModule({
       handler: async (request, { params, body }) => {
         const scope = scopeOf(request);
         const service = serviceOf(request);
-        const patch = body as Record<string, unknown>;
+        let patch = body as Record<string, unknown>;
         const current = service.task(scope, params.task_id as string);
-        if (HermesMirror.isHermes(current)) {
-          // Hermes's CLI edits a card's result, never its title or body — so the hub
-          // cannot either. Accepting the edit here would last until the next read, when
-          // Hermes wins and it silently vanishes.
+        const hermes = hermesApiOf(request.server, current);
+        if (hermes) {
+          // Hermes's words and priority are written on Hermes first, through its server;
+          // the reflection then takes what Hermes answered. A refusal changes nothing.
+          const words: { title?: string; body?: string | null; priority?: number } = {};
+          if (patch.title !== undefined) words.title = String(patch.title);
+          if (patch.description !== undefined) words.body = patch.description as string | null;
+          if (patch.priority !== undefined)
+            words.priority = toHermesPriority(patch.priority as HubPriority);
+          if (Object.keys(words).length > 0) {
+            const card = await hermes.api.update(hermes.id, words).catch(refusedByHermes);
+            hermes.mirror.reflectCard(service, scope, card);
+          }
+          const { title: _title, description: _description, priority: _priority, ...rest } = patch;
+          patch = rest;
+          if (typeof patch.status === 'string' && patch.status !== current.status) {
+            await hermes.mirror
+              .moveThrough(
+                current,
+                patch.status as TaskStatus,
+                (patch.status_reason as string | null) ?? null,
+              )
+              .catch(refusedByHermes);
+          }
+        } else if (HermesMirror.isHermes(current)) {
+          // Without Hermes's server the CLI edits a card's result, never its title or body —
+          // so the hub cannot either. Accepting the edit here would last until the next
+          // read, when Hermes wins and it silently vanishes.
           if (patch.title !== undefined || patch.description !== undefined) {
             throw new HubError('conflict', {
               details: {
@@ -755,12 +972,7 @@ export const tasksModule = defineModule({
               .catch(refusedByHermes);
           }
         }
-        service.updateTask(
-          scope,
-          actorOf(request),
-          params.task_id as string,
-          body as Record<string, unknown>,
-        );
+        service.updateTask(scope, actorOf(request), params.task_id as string, patch);
         const updated = task(request, service, scope, params.task_id as string);
         announce(request, 'task.updated', { task: updated });
         return updated;
@@ -774,7 +986,10 @@ export const tasksModule = defineModule({
         const scope = scopeOf(request);
         const service = serviceOf(request);
         const current = service.task(scope, params.task_id as string);
-        refuseOnHermesCard(current, 'delete');
+        // A Hermes card is deleted on Hermes first; only then does its reflection go.
+        const hermes = hermesApiOf(request.server, current);
+        if (hermes) await hermes.api.remove(hermes.id).catch(refusedByHermes);
+        else refuseOnHermesCard(current, 'delete');
         // A task deleted mid-run takes its run with it.
         await leaveRun(
           request,
@@ -835,6 +1050,15 @@ export const tasksModule = defineModule({
         const scope = runScopeOf(request);
         const service = serviceOf(request);
         const id = params.task_id as string;
+        // A Hermes card handed to a workspace goes to that workspace's Hermes profile.
+        const profile = (body as { profile?: string | null }).profile;
+        if (profile) {
+          const current = service.task(scope, id);
+          if (HermesMirror.isHermes(current)) {
+            await handToProfile(request, service, scope, current, profile);
+            return { job_id: null, run_id: null, session_id: null, task_id: id };
+          }
+        }
         const ids = await assignAndStart(
           request,
           service,
@@ -870,6 +1094,15 @@ export const tasksModule = defineModule({
         const service = serviceOf(request);
         const id = params.task_id as string;
         const current = service.task(scope, id);
+        const hermes = hermesApiOf(request.server, current);
+        if (hermes) {
+          // Hermes's run is Hermes's to end: Hermes terminates it, then the card is read
+          // back from Hermes, which decides where a stopped card goes.
+          await hermes.api.stop(hermes.id).catch(refusedByHermes);
+          await refreshFromHermes(request, service, scope, current);
+          announceMove(request, service, scope, id, current.status);
+          return null;
+        }
         refuseOnHermesCard(current, 'stop');
         // The run is cancelled; the task stays with its agent and waits in `ready`.
         await leaveRun(request, () => service.stop(scope, actorOf(request), id), current);
@@ -943,14 +1176,36 @@ export const tasksModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'tasks.createComment',
       status: 201,
-      handler: (request, { params, body }) => {
+      handler: async (request, { params, body }) => {
         const scope = scopeOf(request);
-        const row = serviceOf(request).comment(
-          scope,
-          actorOf(request),
-          params.task_id as string,
-          String((body as { content?: string }).content ?? ''),
-        );
+        const service = serviceOf(request);
+        const content = String((body as { content?: string }).content ?? '');
+        const current = service.task(scope, params.task_id as string);
+        const hermes = hermesApiOf(request.server, current);
+        if (hermes) {
+          // Said on Hermes's card, in the person's name, and read back from Hermes: the
+          // comment the hub shows is the one Hermes kept.
+          const author = displayNameOf(request);
+          await hermes.api.comment(hermes.id, content, author).catch(refusedByHermes);
+          const detail = await hermes.api.show(hermes.id).catch(refusedByHermes);
+          const comments = hermes.mirror.reflectComments(service, current, detail.comments, {
+            id: request.principal?.user.id ?? null,
+            name: author,
+            body: content,
+          });
+          const mine = comments.filter(
+            (comment) => comment.authorName === author && comment.body === content,
+          );
+          const row = mine.at(-1);
+          if (!row) {
+            throw new HubError('internal', {
+              message: 'Hermes accepted the comment but does not show it',
+            });
+          }
+          announce(request, 'task.commented', { task_id: params.task_id });
+          return toComment(row, nameOf);
+        }
+        const row = service.comment(scope, actorOf(request), current.id, content);
         announce(request, 'task.commented', { task_id: params.task_id });
         return toComment(row, nameOf);
       },

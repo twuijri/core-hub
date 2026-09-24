@@ -396,3 +396,40 @@ describe("Hermes dashboard API: Hermes's own words", () => {
     await service.close();
   });
 });
+
+describe('Hermes dashboard API: warming', () => {
+  it('starts the server in the background without a call, and the next call uses it', async () => {
+    const { service, spawner, fetcher } = dashboard();
+    service.warm();
+    expect(fetcher.calls).toHaveLength(0);
+    await sleep(30);
+    expect(spawner.spawned).toHaveLength(1);
+    expect(service.status().running).toBe(true);
+    await service.request('GET', '/api/status');
+    expect(spawner.spawned).toHaveLength(1);
+    await service.close();
+  });
+
+  it('counts as a use: the idle clock starts again from the warm-up', async () => {
+    const { service, spawner } = dashboard({ idleMs: 80 });
+    await service.request('GET', '/api/status');
+    await sleep(50);
+    service.warm();
+    await sleep(50);
+    // 100 ms after the call, but 50 ms after the warm-up: still running.
+    expect(spawner.spawned[0]!.child.killed).toEqual([]);
+    await sleep(100);
+    expect(spawner.spawned[0]!.child.killed).toEqual(['SIGTERM']);
+  });
+
+  it('does nothing where the hub does not supervise Hermes, and never throws', async () => {
+    const { service, spawner } = dashboard({ mode: 'external' });
+    service.warm();
+    await sleep(20);
+    expect(spawner.spawned).toHaveLength(0);
+    const crashing = dashboard({ spawner: fakeSpawner('crash') });
+    crashing.service.warm();
+    await sleep(30);
+    expect(crashing.lines.some((l) => String(l.msg).includes('warm-up failed'))).toBe(true);
+  });
+});
