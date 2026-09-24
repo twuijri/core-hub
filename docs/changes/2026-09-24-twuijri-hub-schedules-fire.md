@@ -101,7 +101,7 @@
   (٦)، `tests/unit/hub-schedules-migration.test.ts`، `tests/contract/schedules.contract.test.ts` (٢)؛
   ومعدّلة لتقول الحقيقة الجديدة: `schedules.test.ts` و`hermes-cron.test.ts` (كان `501`)،
   و`workflow-engine.test.ts` (كان «approval غير مبنية»).
-- الويب: جديد `src/schedules/ScheduleRuns.tsx`؛ معدّل `schedules/SchedulesScreen.tsx`،
+- الويب: جديد `src/schedules/ScheduleRuns.tsx`؛ معدّل `schedules/SchedulesScreen.tsx`، `agents/AgentJobsScreen.tsx` (بعد #91)،
   `notify/{NotificationsTab.tsx,queries.ts}`، `realtime/envelope.ts`، `i18n/{ar,en}.json` (مفاتيح
   `schedules.fired`، `schedules.target_unavailable`، `schedules.history.*`، `schedules.run.*`؛ حُذف
   `schedules.run_unavailable`). اختبار جديد `tests/schedule-runs.test.tsx` (٤).
@@ -150,7 +150,25 @@ $ PLAYWRIGHT_CHANNEL=chrome pnpm web:e2e
   المخطط؛ (٢) `failStaleRuns` كان سيُلغي موافقات سير العمل عند كل إعادة تشغيل؛ (٣) drizzle-kit ولّد
   `INSERT … SELECT` بعمودين غير موجودين؛ (٤) في Playwright أُعيد اتصال المقبس بعد الدخول فضاع حدث نهاية
   التشغيل فبقي السطر «يعمل» — صار الويب يعيد السؤال عند الاتصال ويسأل كل ٣ ثوانٍ ما دام شيء جاريًا.
-- `git fetch && git merge origin/main`: لا جديد في `main` وقت التشغيل (آخره #89).
+- **بعد دمج `origin/main` (#91، صفحتا «المهام المجدولة» و«الإضافات» للوكيل)** أُعيدت كل الفحوص:
+  تعارض واحد في `DECISIONS.md` (#91 أخذ §36، فبقي هذا §35)، واختبار i18n فشل لأن صفحة «مهام الوكيل»
+  الجديدة تستعمل `schedules.run_unavailable` الذي حذفته — فصار «شغّله الآن» فيها فعّالًا لكل مهمة
+  (المجلس يُطلق ما ليس لهرمز) برسالة «بدأ «…»»، وعُدّل اختبارها ليقول ذلك.
+```
+$ pnpm lint · typecheck · contracts:lint · contracts:check-clients · i18n:check · nav:check · change-record:check
+                                  # كلها exit 0 (check-clients: 254 client file(s), 167 contract path(s))
+$ pnpm contract:test
+      Tests  259 passed (259)
+$ pnpm --filter @majlis/server test
+ Test Files  89 passed | 12 skipped (101)
+      Tests  942 passed | 35 skipped (977)
+$ pnpm --filter @majlis/web test
+ Test Files  47 passed (47)
+      Tests  561 passed (561)
+$ pnpm build                      # exit 0
+$ PLAYWRIGHT_CHANNEL=chrome pnpm web:e2e
+  41 passed (2.6m)
+```
 - اللقطات: أُعيدت كل اللقطات إلى نسخة `main` إلا صفحات الجدولة التي تغيّرت فعلًا.
 
 ## المخاطر والرجوع

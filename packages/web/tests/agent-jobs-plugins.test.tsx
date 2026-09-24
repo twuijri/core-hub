@@ -315,7 +315,7 @@ describe("an agent's Jobs page", () => {
     ).toEqual(['agent_skills', 'agent_memory', 'agent_jobs', 'agent_plugins', 'agent_settings']);
   });
 
-  it("runs a Hermes job now in its own profile, pauses it, and cannot run one Hermes doesn't hold", async () => {
+  it('runs a Hermes job now in its own profile, pauses it, and runs one the hub holds too', async () => {
     const { fetchImpl, sent } = hub();
     mount(`/agents/${HERMES}/jobs`, fetchImpl);
     const run = await screen.findByTestId(`agent-job-run-${JOB}`);
@@ -325,7 +325,10 @@ describe("an agent's Jobs page", () => {
       (call) => call.method === 'POST' && call.url.endsWith(`/schedules/${JOB}/run`),
     );
     expect(fired?.profile).toBe('default');
-    expect((screen.getByTestId(`agent-job-run-${LOCAL}`) as HTMLButtonElement).disabled).toBe(true);
+    // The hub fires its own schedules since 2026-09-24: a job Hermes does not hold runs too.
+    expect((screen.getByTestId(`agent-job-run-${LOCAL}`) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
 
     fireEvent.click(screen.getByTestId(`agent-job-enabled-${JOB}`));
     await waitFor(() =>
