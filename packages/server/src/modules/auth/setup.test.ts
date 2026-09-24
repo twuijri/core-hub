@@ -12,11 +12,14 @@ const tokenOf = (dataDir: string) => readFileSync(tokenFile(dataDir), 'utf8').tr
 const mode = (file: string) => (statSync(file).mode & 0o777).toString(8);
 
 const OWNER = { username: 'tariq', password: 'a-good-owner-password' };
+// These cases are the token path: the open window (ADR 0019) is switched off, as
+// `COREHUB_SETUP_OPEN_MINUTES=0` does in production. The window has its own file.
+const TOKEN_ONLY = { COREHUB_SETUP_OPEN_MINUTES: '0' } as const;
 
 describe('auth: first-run setup', () => {
   it('writes the token 0600, logs it once with where to read it, and asks for setup', async () => {
     const { logger, lines } = capturingLogger();
-    const hub = await testHub({}, { logger });
+    const hub = await testHub(TOKEN_ONLY, { logger });
     try {
       const file = tokenFile(hub.dataDir);
       expect(existsSync(file)).toBe(true);
@@ -42,11 +45,11 @@ describe('auth: first-run setup', () => {
   });
 
   it('a fresh token is issued on every boot while setup is still pending', async () => {
-    const first = await testHub();
+    const first = await testHub(TOKEN_ONLY);
     const { dataDir } = first;
     const before = tokenOf(dataDir);
     await first.app.close();
-    const second = await testHub({ DATA_DIR: dataDir });
+    const second = await testHub({ ...TOKEN_ONLY, DATA_DIR: dataDir });
     try {
       const after = tokenOf(dataDir);
       expect(after).not.toBe(before);
@@ -64,7 +67,7 @@ describe('auth: first-run setup', () => {
   });
 
   it('completes setup: owner + default workspace, the file is deleted, the answer signs you in', async () => {
-    const hub = await testHub();
+    const hub = await testHub(TOKEN_ONLY);
     try {
       const token = tokenOf(hub.dataDir);
       const response = await hub.app.inject({
@@ -124,7 +127,7 @@ describe('auth: first-run setup', () => {
   });
 
   it('a wrong token is 401 and leaves the file in place; the right one still works after', async () => {
-    const hub = await testHub();
+    const hub = await testHub(TOKEN_ONLY);
     try {
       const token = tokenOf(hub.dataDir);
       const wrong = await hub.app.inject({
@@ -148,7 +151,7 @@ describe('auth: first-run setup', () => {
   });
 
   it('replaying the same token after the owner exists is 409, and so is any setup attempt', async () => {
-    const hub = await testHub();
+    const hub = await testHub(TOKEN_ONLY);
     try {
       const token = tokenOf(hub.dataDir);
       expect(
@@ -220,7 +223,7 @@ describe('auth: first-run setup', () => {
   });
 
   it('five wrong tokens lock the IP for the flow, with Retry-After, and the lockout is listed', async () => {
-    const hub = await testHub();
+    const hub = await testHub(TOKEN_ONLY);
     try {
       const token = tokenOf(hub.dataDir);
       const attempt = (value: string) =>
@@ -242,7 +245,7 @@ describe('auth: first-run setup', () => {
   });
 
   it('the password policy of the rest of auth applies, and the token is compared in constant time', async () => {
-    const hub = await testHub();
+    const hub = await testHub(TOKEN_ONLY);
     try {
       const token = tokenOf(hub.dataDir);
       const weak = await hub.app.inject({

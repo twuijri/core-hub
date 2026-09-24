@@ -9,7 +9,7 @@ import { LEGACY, derived, loadOpenApiDocument, type OpenApiDocument } from '@cor
 import { createLogger, type Logger } from '../lib/logger.js';
 import type { HubModule } from '../lib/module.js';
 import { modules as allModules } from '../modules/index.js';
-import { ownerUser } from '../modules/auth/index.js';
+import { ownerUser, setupMetaFor } from '../modules/auth/index.js';
 import { requireSqlite } from '../lib/db.js';
 import { loadConfig, type HubConfig } from './config.js';
 import { createDatabase, packageRoot, type HubDatabase } from './db.js';
@@ -118,7 +118,12 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
     contract,
     // `auth` owns the question; the app only forwards it, so `/meta` does not have to
     // know what an owner is (ADR 0011).
-    setupRequired: () => ownerUser(requireSqlite(database)) === null,
+    setupMeta: () =>
+      setupMetaFor(io) ?? {
+        setup_required: ownerUser(requireSqlite(database)) === null,
+        setup_open: false,
+        setup_open_until: null,
+      },
   });
   hub.modules = routes.modules.filter((name) => events.includes(name));
   hub.namespaces = listNamespaces(io);

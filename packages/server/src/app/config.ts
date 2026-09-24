@@ -9,6 +9,8 @@ export const ENV_KEYS = [
   'DATABASE_URL',
   'HUB_ADMIN_PASSWORD',
   'COREHUB_VERSION',
+  'COREHUB_SETUP_OPEN_MINUTES',
+  'COREHUB_RESET_OWNER',
 ] as const;
 export type EnvKey = (typeof ENV_KEYS)[number];
 export type EnvSource = Partial<Record<EnvKey, string | undefined>> & {
@@ -44,6 +46,25 @@ const envSchema = z.object({
    * /api/v1/health and /api/v1/meta. Empty outside an image: a working tree is no release.
    */
   COREHUB_VERSION: z.string().trim().optional(),
+  /**
+   * First run (ADR 0019): how long after the process starts with no owner `/setup` is open to
+   * whoever arrives first, without the claim token. `0` is the strict mode — token only.
+   */
+  COREHUB_SETUP_OPEN_MINUTES: z.coerce
+    .number()
+    .int('COREHUB_SETUP_OPEN_MINUTES must be a whole number of minutes')
+    .min(0, 'COREHUB_SETUP_OPEN_MINUTES must be 0 or more')
+    .max(1440, 'COREHUB_SETUP_OPEN_MINUTES must be at most 1440 (one day)')
+    .default(60),
+  /**
+   * Recovery (ADR 0019): `1` disables the owner account(s) on this boot and reopens first-run
+   * setup — once; a marker in DATA_DIR stops it repeating while the variable stays set.
+   */
+  COREHUB_RESET_OWNER: z
+    .enum(['0', '1', 'true', 'false'], {
+      message: 'COREHUB_RESET_OWNER must be 1 (reset) or 0',
+    })
+    .optional(),
 });
 
 export type DatabaseConfig = { kind: 'sqlite'; file: string } | { kind: 'postgres'; url: string };
@@ -80,6 +101,10 @@ export interface HubConfig {
   version: string | undefined;
   /** Variables that were read under their old (Majlis) name; logged once at boot. */
   deprecatedEnv?: readonly string[];
+  /** Minutes first-run setup stays open without the claim token (`0` = token only). */
+  setupOpenMinutes: number;
+  /** `COREHUB_RESET_OWNER=1`: disable the owner and reopen setup on this boot (once). */
+  resetOwner: boolean;
 }
 
 export class ConfigError extends Error {
@@ -112,6 +137,8 @@ export function loadConfig(
     version: env.COREHUB_VERSION,
     hostEnv,
     deprecatedEnv: source.deprecated ?? [],
+    setupOpenMinutes: env.COREHUB_SETUP_OPEN_MINUTES,
+    resetOwner: env.COREHUB_RESET_OWNER === '1' || env.COREHUB_RESET_OWNER === 'true',
   };
 }
 

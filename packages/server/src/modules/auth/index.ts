@@ -8,10 +8,19 @@ import { defineModule } from '../../lib/module.js';
 import type { AuthContext } from './context.js';
 import { authenticateHook } from './principal.js';
 import { registerAuthRoutes } from './routes.js';
-import { clearSetupToken, issueSetupToken, setupTokenLog } from './setup.js';
+import {
+  clearSetupToken,
+  issueSetupToken,
+  ownerResetLog,
+  resetOwnerOnBoot,
+  setupMeta,
+  setupTokenLog,
+  setupWindowUntil,
+  type SetupMeta,
+} from './setup.js';
 import { registerSocketAuth } from './sockets.js';
 import { loadOrCreateSigningKey } from './tokens.js';
-import { bootstrap } from './users.js';
+import { bootstrap, setupRequired } from './users.js';
 
 /** One context per Socket.IO server, so several hubs in one process (tests) do not mix. */
 const contexts = new WeakMap<SocketServer, AuthContext>();
@@ -31,16 +40,25 @@ export const authModule = defineModule({
       contractVersion: loadOpenApiDocument()?.info.version ?? '0.0.0',
       namespaces: () => hub.namespaces,
       now: () => Date.now(),
+      setupOpenUntil: null,
     };
     contexts.set(hub.io, ctx);
 
     const boot = await bootstrap(db, hub.config.bootstrapAdminPassword, ctx.now());
     if (boot.ownerCreated) app.log.info('auth: owner account created from HUB_ADMIN_PASSWORD');
     if (boot.workspaceCreated) app.log.info('auth: default workspace created');
-    if (boot.setupRequired) {
-      // First run without HUB_ADMIN_PASSWORD: the owner is created from the browser with a
-      // claim token (ADR 0011). A fresh token on every boot; the old one stops working.
-      app.log.info(setupTokenLog(hub.config.dataDir, issueSetupToken(hub.config.dataDir)));
+    // Recovery (ADR 0019): runs before "does the hub need an owner?" is asked, so a reset
+    // reopens setup on this very boot.
+    const reset = resetOwnerOnBoot(db, hub.config.dataDir, hub.config.resetOwner, ctx.now());
+    const resetMessage = ownerResetLog(reset);
+    if (resetMessage) app.log.warn(resetMessage);
+    if (setupRequired(db)) {
+      // No owner: setup is open to the first comer for a window after this boot, and needs
+      // the claim token after it (ADR 0011, 0019). A fresh token on every boot; the old one
+      // stops working.
+      ctx.setupOpenUntil = setupWindowUntil(ctx.now(), hub.config.setupOpenMinutes);
+      const token = issueSetupToken(hub.config.dataDir);
+      app.log.info(setupTokenLog(hub.config.dataDir, token, ctx.setupOpenUntil));
     } else {
       // The owner exists: nothing may still be claimable on disk.
       clearSetupToken(hub.config.dataDir);
@@ -59,6 +77,16 @@ export const authModule = defineModule({
 });
 
 export const registerRoutes = authModule.registerRoutes.bind(authModule);
+
+/**
+ * First-run fields of `meta.get` (ADR 0019) for the hub on this Socket.IO server; `null` when
+ * auth is not composed into it. The app forwards them, so `/meta` needs no idea what an owner is.
+ */
+export function setupMetaFor(io: SocketServer): SetupMeta | null {
+  const ctx = contexts.get(io);
+  return ctx ? setupMeta(setupRequired(ctx.db), ctx.setupOpenUntil, ctx.now()) : null;
+}
+export type { SetupMeta } from './setup.js';
 export const registerEvents = authModule.registerEvents.bind(authModule);
 
 // ---------------------------------------------------------------- for other modules

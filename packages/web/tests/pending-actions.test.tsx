@@ -1,6 +1,6 @@
 /**
  * The pending-actions bar (NAVIGATION §4, contract COVERAGE "Pending-actions bar") and the
- * global agent's page (contract decision §45).
+ * global agent's page (contract decision §46).
  *
  * - What waits is gathered from every profile the person may enter, oldest first, each asked
  *   in its own profile; the top bar says how many, and the sheet lists them with a way to

@@ -140,7 +140,7 @@ export class SessionsStore {
   }
 
   /**
-   * The person's global-agent conversation in this workspace (contract decision §45): the
+   * The person's global-agent conversation in this workspace (contract decision §46): the
    * oldest one, should two ever exist, so every open lands on the same conversation.
    */
   findGlobalAgent(workspace: string, ownerId: string): SessionRow | undefined {

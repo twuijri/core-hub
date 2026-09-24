@@ -53,16 +53,25 @@ is judged afresh.
 - **First boot** (`users.ts` `bootstrap`): with no user and `HUB_ADMIN_PASSWORD` set, the user
   `admin` (role `owner`) and the `default` workspace are created. The HS256 key for access
   tokens is created at `<DATA_DIR>/keys/jwt.secret` (mode 0600).
-- **First run without that variable** (`setup.ts`, ADR 0011): the hub writes a random claim
-  token to `<DATA_DIR>/setup-token.txt` (mode 0600) and logs it once with where to read it
-  again; a fresh token on every boot until an owner exists, and the file is deleted the moment
-  one does (on success, and at boot if it was left behind). `GET /auth/setup` answers
-  `{ required }` and nothing more; `POST /auth/setup` compares the token in constant time
-  (SHA-256 digests through `timingSafeEqual`), creates the owner and the `default` workspace in
-  one transaction, deletes the file and answers the `TokenPair` of `auth.login`. Wrong tokens
-  count on the **password** lockout row of the caller's IP — one throttle, one admin screen —
-  and once an owner exists the operation is `409 conflict`, checked before the token is read.
-  Sign-in on a hub with no user answers `401` with `auth.setup_required`.
+- **First run without that variable** (`setup.ts`, ADR 0011 amended by ADR 0019): when the hub
+  starts with no owner, `ctx.setupOpenUntil` is boot time + `COREHUB_SETUP_OPEN_MINUTES` (60;
+  `0` = none, token only). Inside that window `POST /auth/setup` creates the owner with no
+  token (it is ignored if sent). After it, the random claim token the hub wrote to
+  `<DATA_DIR>/setup-token.txt` (mode 0600) and logged is required: compared in constant time
+  (SHA-256 digests through `timingSafeEqual`), a missing one is `401 auth.setup_token_required`,
+  a wrong one `401 auth.setup_token_invalid` and counts on the **password** lockout row of the
+  caller's IP. A fresh token (and window) on every boot while there is no owner; the file is
+  deleted the moment one exists. The owner and the `default` workspace are created in one
+  transaction that checks again that no owner exists — two racing setups make one owner, the
+  other is `409`. `GET /auth/setup` answers `{ required }` only; `meta.get` adds
+  `setup_open` / `setup_open_until` (`setupMeta`, forwarded to `/meta` through
+  `setupMetaFor(io)`). "Needs an owner" (`setupRequired`) means no row with role `owner`.
+  Sign-in while there is no owner answers `401` with `auth.setup_required`.
+- **Owner reset** (`resetOwnerOnBoot`, ADR 0019): `COREHUB_RESET_OWNER=1` on a boot disables
+  every owner, steps it down to `admin` (so the next owner can re-enable or delete it) and
+  revokes all its tokens; nothing is deleted; logged at warning level. It runs once: the
+  marker `<DATA_DIR>/owner-reset.json` (`reset_at`, `disabled_owner_ids`) makes later boots
+  with the variable ignore it; a boot without the variable removes the marker.
 - **Passwords**: Argon2id (`passwords.ts`, OWASP parameters).
 - **Sign-in** (`POST /auth/login`): a `web` row in `app_tokens` is the rotating refresh token
   (SHA-256 stored, 30 days); the access token is a 15-minute JWT whose `sid` is that row. A

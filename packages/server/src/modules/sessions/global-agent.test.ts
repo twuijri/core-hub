@@ -1,5 +1,5 @@
 /**
- * The global agent (contract decision §45): one standing conversation per person per
+ * The global agent (contract decision §46): one standing conversation per person per
  * profile, opened — and made the first time — by `sessions.openGlobalAgent`, never archived,
  * and never copied into a second one by a fork.
  */

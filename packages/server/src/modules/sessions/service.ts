@@ -193,7 +193,7 @@ export class SessionsService {
   }
 
   /**
-   * `sessions.openGlobalAgent` (contract decision §45): the caller's own global-agent
+   * `sessions.openGlobalAgent` (contract decision §46): the caller's own global-agent
    * conversation in this workspace, made with `agent_id` the first time. Two first opens at
    * once may both create one; the store always answers the oldest, so the younger is
    * removed at once and both callers land on the same conversation.
@@ -316,7 +316,7 @@ export class SessionsService {
     }
     if (patch.pinned !== undefined) changes.pinned = patch.pinned;
     // The global agent is reached from search and the pending-actions bar, not from the
-    // list, so an archived one would have nowhere to be restored from (§45).
+    // list, so an archived one would have nowhere to be restored from (§46).
     if (patch.archived === true && row.source === 'global_agent') {
       throw new HubError('state_invalid', {
         details: { field: 'archived', reason: 'global_agent' },
@@ -462,7 +462,7 @@ export class SessionsService {
       ownerId: scope.userId,
       agentId: agent?.id ?? source.agentId,
       title: input.title ?? source.title,
-      // A fork is a new chat: the person keeps one global agent (§45).
+      // A fork is a new chat: the person keeps one global agent (§46).
       source: source.source === 'global_agent' ? 'chat' : source.source,
       // A new agent brings its own default model unless the caller named one; the same
       // agent keeps whatever the source was running on.

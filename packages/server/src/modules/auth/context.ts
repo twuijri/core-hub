@@ -18,4 +18,10 @@ export interface AuthContext {
   namespaces: () => string[];
   /** Injectable clock so tests can move time (pairing expiry, lockouts). */
   now: () => number;
+  /**
+   * First run (ADR 0019): until when `POST /auth/setup` needs no claim token. Set at boot when
+   * the hub has no owner — boot time + `COREHUB_SETUP_OPEN_MINUTES` — and `null` otherwise
+   * (an owner exists, or the window is 0 = token only).
+   */
+  setupOpenUntil: number | null;
 }

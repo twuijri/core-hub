@@ -1,5 +1,5 @@
 /**
- * The global agent (NAVIGATION §4, contract decision §45): the person's one standing
+ * The global agent (NAVIGATION §4, contract decision §46): the person's one standing
  * conversation in a profile, outside the chats list. No menu leads here; search results
  * and the pending-actions bar do. The page asks the hub for it (`sessions.openGlobalAgent`,
  * which makes it the first time, with the first agent the person would start a chat with)

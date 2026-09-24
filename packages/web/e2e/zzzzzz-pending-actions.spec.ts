@@ -1,4 +1,4 @@
-// 40. The pending-actions bar and the global agent (NAVIGATION §4, contract decision §45):
+// 40. The pending-actions bar and the global agent (NAVIGATION §4, contract decision §46):
 // an approval a chat is blocked on shows in the bar at the top of another screen, opens
 // there and is answered there, and the bar clears; the bar leads to the global agent, whose
 // conversation is not in the chats list but is found by search, which opens its page.

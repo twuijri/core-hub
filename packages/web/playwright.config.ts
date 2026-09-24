@@ -4,8 +4,8 @@ import { defineConfig } from '@playwright/test';
 // Four smoke journeys against the real hub (e2e/hub.ts boots it with the scripted runner and
 // serves the built client from /). `pnpm build` must have run first.
 // Two hubs: the signed-in one (an owner from HUB_ADMIN_PASSWORD) and, for journey 4, one with
-// no owner and no password at all, whose data directory the test reads the claim token from
-// (ADR 0011). The second is wiped and re-created every time it starts, so a retry is the same
+// no owner and no password at all, set up in the open window with no token (ADR 0019); the test
+// checks the fallback claim token in its data directory (ADR 0011). The second is wiped and re-created every time it starts, so a retry is the same
 // journey as the first run.
 const port = Number(process.env.COREHUB_E2E_PORT ?? 8791);
 const baseURL = `http://127.0.0.1:${port}`;
