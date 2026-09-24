@@ -70,7 +70,7 @@ with `connect_error` `unauthorized`.
   clear them.
 - **Workspaces**: `X-Hub-Profile` carries the slug (or id). Owner and admin enter every
   workspace; a member enters exactly the ones in `workspace_members` — **none** when they have
-  no rows (owner, 2026-09-24; contract decision §28). Nothing enrolls anyone implicitly: a new
+  no rows (owner, 2026-09-24; contract decision §29). Nothing enrolls anyone implicitly: a new
   workspace is nobody's until an admin grants it. A member cannot be created, or an admin made
   a member, without a list (`auth.member_needs_profile`); a member refused for having no
   workspace at all hears `profile_not_found` with `details.reason = no_profile_granted`

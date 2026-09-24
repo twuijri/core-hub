@@ -58,7 +58,7 @@ list in the same request. An admin may still withdraw every row explicitly (`PAT
 `profiles: []`): the member can sign in and enters nothing; every scoped request answers
 `profile_not_found` with `details.reason = no_profile_granted`, and the web shows "ask an
 admin". Hubs from before this rule were migrated by `drizzle/0010_member_profiles_explicit.sql`
-(contract decision §28): each member with no rows was enrolled in every workspace that
+(contract decision §29): each member with no rows was enrolled in every workspace that
 existed and was not archived at upgrade time, and in nothing created afterwards.
 
 | column | type | meaning |
