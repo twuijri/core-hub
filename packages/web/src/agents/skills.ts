@@ -4,7 +4,7 @@
  * the truth, and a cache that disagreed with it would be a second, wrong truth.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useDeleteAttachment, useUploadAttachment } from '../attachments/queries.js';
+import { useUploadAttachment } from '../attachments/queries.js';
 import { useAuth } from '../auth/context.js';
 import type { Job } from '../types.js';
 
@@ -392,29 +392,24 @@ export function useTestMcpServer(agentId: string | undefined) {
 }
 
 /**
- * Upload the files as skill packs, install them, and take the uploads back out: the pack is
- * in the agent's folder now, and a copy left in the profile's files would be clutter nobody
- * asked for.
+ * Upload the files as skill packs (`purpose: skill`) and install them. The uploads stay in
+ * the profile's files as the record of what was imported; the same pack uploaded again is the
+ * same attachment, and the hub refuses it as a skill that already exists.
  */
 export function useImportSkills(agentId: string | undefined) {
   const { client } = useAuth();
   const { upload } = useUploadAttachment();
-  const remove = useDeleteAttachment();
   const invalidate = useSkillInvalidation(agentId);
   return useMutation({
     mutationFn: async (files: readonly File[]) => {
       const ids: string[] = [];
-      try {
-        for (const file of files) ids.push((await upload({ file, purpose: 'skill' })).id);
-        return (
-          await client.request('post', '/agents/{agent_id}/skills', {
-            params: { agent_id: agentId ?? '' },
-            body: { attachment_ids: ids } as never,
-          })
-        ).data as unknown as { items: Skill[] };
-      } finally {
-        for (const id of ids) remove.mutate(id);
-      }
+      for (const file of files) ids.push((await upload({ file, purpose: 'skill' })).id);
+      return (
+        await client.request('post', '/agents/{agent_id}/skills', {
+          params: { agent_id: agentId ?? '' },
+          body: { attachment_ids: ids } as never,
+        })
+      ).data as unknown as { items: Skill[] };
     },
     onSuccess: invalidate,
   });
