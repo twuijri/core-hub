@@ -469,7 +469,7 @@
       "tts_providers": "Text to speech"
     },
     "providers": {
-      "hint": "The providers you added. They are shared by every profile: a key is typed once here, and every agent in every profile uses it.",
+      "hint": "The providers you added. A shared one is added once and every profile uses it; a profile's own is used only in that profile, instead of a shared one of the same kind.",
       "empty": "No provider of this kind is configured.",
       "none": "No providers yet. Add the first one and its models arrive with it."
     },
@@ -493,7 +493,9 @@
       "model_count": "{count} models",
       "key_optional": "Key optional",
       "confirm_remove": "Remove the provider \"{label}\"?",
-      "confirm_remove_body": "Its key and its model list go with it, and there is no undo."
+      "confirm_remove_body": "Its key and its model list go with it, and there is no undo.",
+      "scope_shared": "Shared",
+      "scope_only": "{profile} only"
     },
     "defaults": {
       "hint": "This profile's chat and coding models. Every agent here inherits them unless it is pinned to something else; a choice this profile has not made comes from the default profile.",
@@ -566,7 +568,12 @@
       "fetch_failed": "The provider did not return a model list.",
       "fetch_empty": "The provider answered, but listed no models.",
       "submit": "Add",
-      "loopback": "This address is loopback, and the hub runs in a container — it would reach the container itself, not your machine. Try {url}, and on a Linux host add extra_hosts: [\"host.docker.internal:host-gateway\"] to the stack."
+      "loopback": "This address is loopback, and the hub runs in a container — it would reach the container itself, not your machine. Try {url}, and on a Linux host add extra_hosts: [\"host.docker.internal:host-gateway\"] to the stack.",
+      "scope": "Who is this provider for?",
+      "scope_all": "All profiles",
+      "scope_profile": "This profile only",
+      "scope_all_hint": "Shared: every profile uses it, including profiles made later.",
+      "scope_profile_hint": "Only {profile} uses it, and its key wins there over a shared provider of the same kind. Other profiles never see it."
     },
     "runtime": {
       "title": "Runtime",
@@ -1000,7 +1007,12 @@
     "import_no_file": "No file chosen",
     "import_uploading": "Uploading the archive…",
     "import_too_large": "The archive is larger than the hub accepts for an upload (50 MB).",
-    "import_done": "{name} was imported."
+    "import_done": "{name} was imported.",
+    "export_providers": "Providers",
+    "export_without_providers": "Without providers",
+    "export_with_providers": "With providers",
+    "export_keys_warning": "The file will contain this profile's providers with their API keys in the clear — its own and the shared ones it uses. Anyone who has the file can use those keys. Importing it makes them the new profile's own.",
+    "export_providers_carried": "Providers in the file, keys included: {count}"
   },
   "knowledge": {
     "kind": "Kind",

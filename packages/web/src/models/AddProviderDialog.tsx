@@ -6,6 +6,10 @@
  * show/hide eye, marked optional wherever it is), and a default-model select with a
  * Fetch button that asks the endpoint itself.
  *
+ * First question (contract decision §37, owner 2026-09-24): who is it for — every profile
+ * (shared, the default) or only the profile selected at the top, whose own key then wins
+ * there over a shared one. A provider never changes scope afterwards.
+ *
  * Three rules it exists to keep:
  * - the key field is **always** there. A preset whose key is optional is added without
  *   one, and a local proxy behind a master key still has somewhere to type it.
@@ -43,12 +47,18 @@ export function AddProviderDialog({
   presets,
   host,
   taken,
+  profileName,
   onClose,
 }: {
   presets: ProviderPreset[];
   host: ProviderHost | undefined;
-  /** Preset ids already added: a non-repeatable one is offered once (409 otherwise). */
-  taken: ReadonlySet<string>;
+  /**
+   * Preset ids already added, per scope: a non-repeatable one is offered once in each
+   * (409 otherwise) — once shared and once as this profile's own is allowed.
+   */
+  taken: { all: ReadonlySet<string>; profile: ReadonlySet<string> };
+  /** The profile selected at the top: the one "this profile only" means. */
+  profileName: string;
   onClose(): void;
 }) {
   const { t } = useI18n();
@@ -58,9 +68,10 @@ export function AddProviderDialog({
   const saveDefaults = useSaveDefaults();
   const firstField = useRef<HTMLButtonElement>(null);
 
+  const [scope, setScope] = useState<'all' | 'profile'>('all');
   const offered = useMemo(
-    () => presets.filter((preset) => preset.repeatable || !taken.has(preset.id)),
-    [presets, taken],
+    () => presets.filter((preset) => preset.repeatable || !taken[scope].has(preset.id)),
+    [presets, taken, scope],
   );
   const [mode, setMode] = useState<'preset' | 'custom'>('preset');
   const [presetId, setPresetId] = useState<string>(offered[0]?.id ?? '');
@@ -83,6 +94,12 @@ export function AddProviderDialog({
   }, [preset?.id, preset?.base_url]);
 
   useEffect(() => firstField.current?.focus(), []);
+
+  // A preset already added in the chosen scope is not offered; move off it when the scope
+  // changes rather than submitting a 409.
+  useEffect(() => {
+    if (!offered.some((item) => item.id === presetId)) setPresetId(offered[0]?.id ?? '');
+  }, [offered, presetId]);
 
   const usingPreset = mode === 'preset' && preset !== undefined;
   const keyOptional = usingPreset ? preset.key === 'optional' : true;
@@ -125,6 +142,7 @@ export function AddProviderDialog({
       kind: usingPreset ? (preset.kind as 'llm' | 'stt' | 'tts') : 'llm',
       base_url: baseUrl.trim(),
       ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
+      scope,
     };
     create.mutate(body, {
       onSuccess: async (provider) => {
@@ -152,6 +170,36 @@ export function AddProviderDialog({
     >
       <form className="flex flex-col gap-3" onSubmit={submit}>
         <fieldset className="flex flex-col gap-1">
+          <legend className="mj-label">{t('models.add.scope')}</legend>
+          <Segmented
+            className="self-start"
+            label={t('models.add.scope')}
+            value={scope}
+            onChange={(next) => setScope(next === 'profile' ? 'profile' : 'all')}
+            wrap
+            testId="add-scope"
+            options={[
+              {
+                value: 'all',
+                label: t('models.add.scope_all'),
+                ref: firstField,
+                itemProps: { 'data-testid': 'add-scope-all' },
+              },
+              {
+                value: 'profile',
+                label: t('models.add.scope_profile'),
+                itemProps: { 'data-testid': 'add-scope-profile' },
+              },
+            ]}
+          />
+          <p className="text-xs text-muted" data-testid="add-scope-hint">
+            {scope === 'all'
+              ? t('models.add.scope_all_hint')
+              : t('models.add.scope_profile_hint', { profile: profileName })}
+          </p>
+        </fieldset>
+
+        <fieldset className="flex flex-col gap-1">
           <legend className="mj-label">{t('models.add.type')}</legend>
           <Segmented
             className="self-start"
@@ -175,7 +223,6 @@ export function AddProviderDialog({
               {
                 value: 'preset',
                 label: t('models.add.type_preset'),
-                ref: firstField,
                 itemProps: { 'data-testid': 'add-mode-preset' },
               },
               {

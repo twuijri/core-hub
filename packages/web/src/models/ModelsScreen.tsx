@@ -24,6 +24,7 @@ import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { canOpen, navigation, routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
+import { useProfileName } from '../shell/profiles.js';
 import {
   AlertDialog,
   Badge,
@@ -97,6 +98,8 @@ export function ModelsScreen() {
   const refresh = useRefreshProvider();
   const runtime = useRuntimeReport();
   const [adding, setAdding] = useState(false);
+  const { profile } = useAuth();
+  const profileName = useProfileName();
 
   const configured = providers.data ?? [];
   const refreshAll = () => {
@@ -182,7 +185,11 @@ export function ModelsScreen() {
         <AddProviderDialog
           presets={presets.data?.items ?? []}
           host={presets.data?.host}
-          taken={new Set(configured.map((provider) => provider.slug))}
+          taken={{
+            all: new Set(configured.filter((p) => p.scope === 'all').map((p) => p.slug)),
+            profile: new Set(configured.filter((p) => p.scope === 'profile').map((p) => p.slug)),
+          }}
+          profileName={profileName(profile)}
           onClose={() => setAdding(false)}
         />
       )}
@@ -294,6 +301,7 @@ function ProviderCard({
   defaultModel: string | null;
 }) {
   const { t } = useI18n();
+  const profileName = useProfileName();
   const save = useSaveProvider();
   const test = useTestProvider();
   const refresh = useRefreshProvider();
@@ -327,6 +335,14 @@ function ProviderCard({
         }
       />
       <ul className="flex flex-wrap gap-1">
+        <li data-scope={provider.scope}>
+          {/* Who it is for (decision §37): every profile, or this one alone. */}
+          <Badge tone={provider.scope === 'profile' ? 'accent' : 'neutral'} testId="provider-scope">
+            {provider.scope === 'profile'
+              ? t('models.provider.scope_only', { profile: profileName(provider.profile) })
+              : t('models.provider.scope_shared')}
+          </Badge>
+        </li>
         <li>
           <Badge>{t(provider.builtin ? 'models.badge.builtin' : 'models.badge.custom')}</Badge>
         </li>

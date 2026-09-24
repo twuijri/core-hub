@@ -1,25 +1,25 @@
 /**
- * The hub's providers reach every Hermes profile — with the real Hermes (contract decision
- * §34, ADR 0010, ADR 0014 stage 3).
+ * The two provider scopes in real Hermes profiles (contract decision §37, ADR 0010, ADR 0014
+ * stage 3).
  *
- * One provider is added once, through the hub's own API, as a person adds it. Then, in one
- * `python -m tui_gateway.entry` from the image that holds the key **only in its process
- * environment**, as the hub hands it over:
+ * Providers are added through the hub's own API, as a person adds them: LM Studio **shared**
+ * (every profile) and again as the Design profile's **own** (its own subscription), and
+ * LiteLLM as the default profile's own. One `python -m tui_gateway.entry` from the image
+ * serves every profile with the environment the hub hands it (the root's keys). The model on
+ * this machine answers with the bearer token it received, so the test sees exactly which key
+ * Hermes used:
  *
- * - a profile made from scratch **after** the provider was added — no model, no key, no
- *   endpoint of its own — answers once the hub has prepared it (what it does before each
- *   turn in a named profile);
- * - a profile made as a copy of `default` keeps a copy of the root `.env`, and Hermes reads a
- *   profile's `.env` before the environment: left alone it still sends the key from before the
- *   key was changed (the control). Prepared by the hub, it sends the current key.
+ * - Design uses its own key — its `.env`, which Hermes reads before the environment;
+ * - Finance and the default profile use the shared key;
+ * - Finance never falls back on the default profile's own LiteLLM key, although Hermes loads
+ *   the root `.env` (where that key lives) into its environment;
+ * - a profile made from scratch after all of that, prepared as before each turn, uses the
+ *   shared key at once.
  *
- * The model on this machine answers with the bearer token it received, so the test sees
- * exactly which key Hermes used.
- *
- *   MAJLIS_HERMES_IMAGE=majlis:local npx vitest run --maxWorkers=1 providers-shared.real
+ *   MAJLIS_HERMES_IMAGE=majlis:local npx vitest run --maxWorkers=1 provider-scopes.real
  */
 import { execFile } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -29,7 +29,7 @@ import { authed, drainJobs, signedInHub, type TestHub } from '../../../../tests/
 import { createHermesProfiles, type ProfileRunner } from '../hermes-profiles.js';
 import { HermesTuiSession, stdioTuiChannel, type TuiChannel } from './hermes-tui.js';
 import type { AgentEvent } from './types.js';
-import { modelsServiceFor, parseEnv } from '../../models/index.js';
+import { modelsServiceFor } from '../../models/index.js';
 
 const image = process.env.MAJLIS_HERMES_IMAGE;
 
@@ -74,26 +74,23 @@ function keyReportingModel(): http.Server {
   });
 }
 
-describe.skipIf(!image)('the hub providers in every Hermes profile (real Hermes)', () => {
+describe.skipIf(!image)('provider scopes in real Hermes profiles', () => {
   let model: http.Server;
   let home: string;
   let hub: TestHub & { token: string };
   let channel: TuiChannel;
   let processEnv: Record<string, string> = {};
-  let providerName = '';
-  let keyEnv = '';
   const known: string[] = [];
 
-  const docker = (args: string[], stdin?: string) =>
+  const docker = (args: string[]) =>
     new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
-      const child = execFile('docker', args, { timeout: 180_000 }, (error, stdout, stderr) =>
+      execFile('docker', args, { timeout: 180_000 }, (error, stdout, stderr) =>
         resolve({
           code: error ? ((error as { code?: number }).code ?? 1) : 0,
           stdout: String(stdout),
           stderr: String(stderr),
         }),
       );
-      if (stdin !== undefined) child.stdin!.end(stdin);
     });
 
   const hermes: ProfileRunner = (argv) =>
@@ -144,11 +141,22 @@ describe.skipIf(!image)('the hub providers in every Hermes profile (real Hermes)
     }
   };
 
+  const add = async (profile: string, body: Record<string, unknown>) => {
+    const res = await authed(hub, hub.token, {
+      method: 'POST',
+      url: '/api/v1/models/providers',
+      profile,
+      payload: body,
+    });
+    expect(res.statusCode, res.body).toBe(201);
+  };
+
   beforeAll(async () => {
     model = keyReportingModel();
     await new Promise<void>((resolve) => model.listen(0, '127.0.0.1', resolve));
     const port = (model.address() as AddressInfo).port;
-    home = mkdtempSync(path.join(tmpdir(), 'majlis-shared-providers-'));
+    const url = `http://127.0.0.1:${port}/v1`;
+    home = mkdtempSync(path.join(tmpdir(), 'majlis-provider-scopes-'));
     chmodSync(home, 0o777);
 
     hub = await signedInHub(
@@ -159,8 +167,6 @@ describe.skipIf(!image)('the hub providers in every Hermes profile (real Hermes)
           restartDelayMs: 0,
           hermes: {
             home: () => home,
-            // Only the profiles the hub already knew at a save; one made later is prepared
-            // before its turn instead.
             profileHomes: () => [...known],
             restart: () => Promise.resolve(true),
             applyEnvironment: (env) => {
@@ -172,47 +178,47 @@ describe.skipIf(!image)('the hub providers in every Hermes profile (real Hermes)
       },
     );
 
-    // 1. The provider, added once, with the key it had then.
-    const created = await authed(hub, hub.token, {
-      method: 'POST',
-      url: '/api/v1/models/providers',
-      payload: {
-        label: 'fake',
-        kind: 'llm',
-        base_url: `http://127.0.0.1:${port}/v1`,
-        api_key: 'key-before-change',
-        api_mode: 'chat_completions',
-      },
-    });
-    expect(created.statusCode).toBe(201);
-    const providerId = (created.json() as { id: string }).id;
-    await drainJobs(hub.app);
-    const rootEnv = parseEnv(readFileSync(path.join(home, '.env'), 'utf8'));
-    keyEnv = [...rootEnv.entries()].find(([, value]) => value === 'key-before-change')![0];
-    const config = readFileSync(path.join(home, 'config.yaml'), 'utf8');
-    providerName = /provider: (majlis-[a-z0-9-]+)/.exec(config)![1]!;
-
-    hostOpen();
-    // 2. Two profiles made by Hermes while that key was current: a copy of `default` (it
-    //    carries a copy of the root `.env`) and the control, made the same way.
+    // Hermes makes the two profiles; the hub has a workspace of each name.
     const profiles = createHermesProfiles({ home, run: hermes });
-    await profiles.create('copied', { kind: 'clone', source: 'default' });
-    await profiles.create('control', { kind: 'clone', source: 'default' });
+    for (const name of ['design', 'finance']) {
+      await profiles.create(name, { kind: 'blank' });
+      const made = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/profiles',
+        payload: { slug: name, name },
+      });
+      expect(made.statusCode).toBe(201);
+      known.push(profileHome(name));
+    }
     await openUp();
-    known.push(profileHome('copied'));
 
-    // 3. The key changes, in the hub, from the default profile.
-    const changed = await authed(hub, hub.token, {
-      method: 'PATCH',
-      url: `/api/v1/models/providers/${providerId}`,
-      payload: { api_key: 'key-after-change' },
+    // Shared LM Studio; Design's own LM Studio (its own key); the default profile's own LiteLLM.
+    await add('default', {
+      preset: 'lmstudio',
+      label: 'LM Studio',
+      kind: 'llm',
+      base_url: url,
+      api_key: 'key-shared-000000',
     });
-    expect(changed.statusCode).toBe(200);
+    await add('design', {
+      preset: 'lmstudio',
+      label: 'LM Studio',
+      kind: 'llm',
+      base_url: url,
+      api_key: 'key-design-000000',
+      scope: 'profile',
+    });
+    await add('default', {
+      preset: 'litellm',
+      label: 'LiteLLM',
+      kind: 'llm',
+      base_url: url,
+      api_key: 'key-default-own-0000',
+      scope: 'profile',
+    });
     await drainJobs(hub.app);
-    expect(processEnv[keyEnv]).toBe('key-after-change');
-    hostOpen();
 
-    // 4. A profile made from scratch after all of that: nothing of its own.
+    // A profile made from scratch after all of that.
     await profiles.create('later', { kind: 'blank' });
     await openUp();
     hostOpen();
@@ -229,9 +235,8 @@ describe.skipIf(!image)('the hub providers in every Hermes profile (real Hermes)
         `${home}:/hh`,
         '-e',
         'HERMES_HOME=/hh',
-        // The key in the process environment only, as the hub hands it over.
-        '-e',
-        `${keyEnv}=${processEnv[keyEnv]}`,
+        // The environment the hub hands the gateway.
+        ...Object.entries(processEnv).flatMap(([name, value]) => ['-e', `${name}=${value}`]),
         '--entrypoint',
         '/opt/hermes/.venv/bin/python',
         image!,
@@ -254,11 +259,12 @@ describe.skipIf(!image)('the hub providers in every Hermes profile (real Hermes)
     }
   });
 
-  async function ask(profile: string): Promise<string> {
+  /** One turn; the reply, or `failed: …` when Hermes refused it. */
+  async function ask(profile: string | null, provider: string): Promise<string> {
     const session = await HermesTuiSession.open(channel, null, {
       profile,
       model: 'fake-1',
-      provider: providerName,
+      provider,
     });
     const events: AgentEvent[] = [];
     const reading = (async () => {
@@ -270,7 +276,8 @@ describe.skipIf(!image)('the hub providers in every Hermes profile (real Hermes)
     await session.send({ text: 'which key?' });
     await reading;
     await session.close();
-    expect(events.at(-1)).toMatchObject({ type: 'run.completed' });
+    const last = events.at(-1);
+    if (last?.type === 'run.failed') return `failed: ${JSON.stringify(last)}`;
     return events
       .filter(
         (e): e is Extract<AgentEvent, { type: 'message.delta' }> => e.type === 'message.delta',
@@ -279,30 +286,21 @@ describe.skipIf(!image)('the hub providers in every Hermes profile (real Hermes)
       .join('');
   }
 
-  it('a profile made after the provider was added runs a turn on it once prepared', async () => {
+  it('Design uses its own key; Finance and the default profile the shared one', async () => {
+    expect(await ask('design', 'majlis-lmstudio')).toContain('key=key-design-000000');
+    expect(await ask('finance', 'majlis-lmstudio')).toContain('key=key-shared-000000');
+    expect(await ask(null, 'majlis-lmstudio')).toContain('key=key-shared-000000');
+  }, 300_000);
+
+  it("Finance never falls back on the default profile's own key; the default profile uses it", async () => {
+    expect(await ask(null, 'majlis-litellm')).toContain('key=key-default-own-0000');
+    const finance = await ask('finance', 'majlis-litellm');
+    expect(finance).not.toContain('key-default-own-0000');
+  }, 300_000);
+
+  it('a profile made later uses the shared provider as soon as it is prepared', async () => {
     modelsServiceFor(hub.app).prepareProfile(profileHome('later'));
     hostOpen();
-    const config = readFileSync(path.join(profileHome('later'), 'config.yaml'), 'utf8');
-    expect(config).toContain(`${providerName}:`);
-    expect(await ask('later')).toContain('key=key-after-change');
+    expect(await ask('later', 'majlis-lmstudio')).toContain('key=key-shared-000000');
   }, 240_000);
-
-  it("a copy of default left alone still sends the old key; the hub's copy sends the current one", async () => {
-    // The control: Hermes reads the profile's own `.env` before the process environment.
-    expect(
-      parseEnv(readFileSync(path.join(profileHome('control'), '.env'), 'utf8')).get(keyEnv),
-    ).toBe('key-before-change');
-    expect(await ask('control')).toContain('key=key-before-change');
-
-    // The profile the hub knew at the save: its copy of the key was taken out then.
-    expect(
-      parseEnv(readFileSync(path.join(profileHome('copied'), '.env'), 'utf8')).has(keyEnv),
-    ).toBe(false);
-    expect(await ask('copied')).toContain('key=key-after-change');
-
-    // And the control, prepared the way every named profile is before its turn.
-    modelsServiceFor(hub.app).prepareProfile(profileHome('control'));
-    hostOpen();
-    expect(await ask('control')).toContain('key=key-after-change');
-  }, 300_000);
 });

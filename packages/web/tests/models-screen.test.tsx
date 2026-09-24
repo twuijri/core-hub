@@ -45,6 +45,7 @@ function provider(over: Record<string, unknown> = {}) {
     slug: 'anthropic',
     label: 'Anthropic',
     kind: 'llm',
+    scope: 'all',
     builtin: true,
     enabled: true,
     api_key: null,
@@ -593,16 +594,16 @@ describe('models screen', () => {
     expect(inheriting.textContent).toContain('Not chosen');
   });
 
-  it('says the providers are shared by every profile, in both languages', async () => {
+  it('says what shared and a profile\'s own mean, in both languages', async () => {
     const { fetchImpl } = hub();
     renderScreen(fetchImpl);
     await waitFor(() => expect(screen.getByTestId('provider-list')).toBeTruthy());
-    expect(screen.getByText(/shared by every profile/)).toBeTruthy();
-    expect(screen.getByText(/every agent in every profile uses it/)).toBeTruthy();
+    expect(screen.getByText(/A shared one is added once and every profile uses it/)).toBeTruthy();
+    expect(screen.getByText(/a profile's own is used only in that profile/)).toBeTruthy();
     cleanup();
     renderScreen(hub().fetchImpl, 'ar');
     await waitFor(() => expect(screen.getByTestId('provider-list')).toBeTruthy());
-    expect(screen.getByText(/مشتركون بين كل البروفايلات/)).toBeTruthy();
+    expect(screen.getByText(/المشترك يُضاف مرة واحدة ويستخدمه كل بروفايل/)).toBeTruthy();
   });
 
   it('marks a default this profile inherited from the default profile, and only that one', async () => {
@@ -625,6 +626,54 @@ describe('models screen', () => {
     expect(mark.textContent).toBe('From the default profile');
     // The coding model is this profile's own choice: nothing to say about it.
     expect(screen.queryByTestId('default-coding-inherited')).toBeNull();
+  });
+
+  it("badges each provider shared or the profile's own", async () => {
+    const { fetchImpl } = hub({
+      providers: [
+        provider({ api_key: '[stored]', auth: { kind: 'api_key', signed_in: true } }),
+        provider({
+          id: '01J8QK3ZR2W7M5N4P6T8V9X0PW',
+          profile: 'design',
+          scope: 'profile',
+          api_key: '[stored]',
+          auth: { kind: 'api_key', signed_in: true },
+        }),
+      ],
+    });
+    renderScreen(fetchImpl);
+    await waitFor(() => expect(screen.getAllByTestId('provider-scope')).toHaveLength(2));
+    const badges = screen.getAllByTestId('provider-scope').map((badge) => badge.textContent);
+    expect(badges).toEqual(['Shared', 'design only']);
+    cleanup();
+    renderScreen(
+      hub({ providers: [provider({ scope: 'profile', profile: 'design' })] }).fetchImpl,
+      'ar',
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('provider-scope').textContent).toBe('\u200f\u2068design\u2069 فقط'),
+    );
+  });
+
+  it("asks who a new provider is for, and offers a shared preset again as this profile's own", async () => {
+    const { state, fetchImpl } = hub();
+    renderScreen(fetchImpl);
+    const dialog = await openDialog();
+    expect(within(dialog).getByText('Who is this provider for?')).toBeTruthy();
+    // Shared is the default, and Anthropic is already shared: not offered there.
+    expect(await presetLabels()).not.toContain('Anthropic');
+    await userEvent.click(within(dialog).getByTestId('add-scope-profile'));
+    expect(within(dialog).getByTestId('add-scope-hint').textContent).toContain('default');
+    expect(await presetLabels()).toContain('Anthropic');
+    await chooseOption(userEvent, screen.getByTestId('add-preset'), 'Anthropic');
+    await userEvent.type(screen.getByTestId('add-api-key'), 'sk-ant-own');
+    await userEvent.click(screen.getByTestId('add-submit'));
+    await waitFor(() => {
+      const post = state.sent.find(
+        (call) => call.url.endsWith('/models/providers') && call.method === 'POST',
+      );
+      expect(post?.body).toMatchObject({ preset: 'anthropic', scope: 'profile' });
+    });
   });
 
   it('folds the Runtime card to one line when every check passes', async () => {

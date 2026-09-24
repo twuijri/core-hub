@@ -148,6 +148,8 @@ export interface ProviderCreate {
   base_url: string;
   /** Sent only when the person typed one; every provider accepts one, none demands it. */
   api_key?: string;
+  /** Every profile (`all`, shared) or only the one selected at the top (decision §37). */
+  scope: 'all' | 'profile';
 }
 
 export function useCreateProvider() {
