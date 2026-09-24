@@ -24,6 +24,7 @@
  * agent starts with and the default model an agent inherits, so the `agents` module never
  * asks a person for a key (ADR 0010 §Propagation).
  */
+import path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
 import { loadOpenApiDocument } from '@majlis/contracts';
@@ -45,6 +46,7 @@ import { auditFor, jobRunnerFor } from '../audit/index.js';
 import {
   agentRunnerFor,
   hermesRuntimeFor,
+  namedHermesProfiles,
   registerAgentModelsPort,
   type AgentModelsPort,
 } from '../agents/index.js';
@@ -165,6 +167,12 @@ function contextOf(app: FastifyInstance): ModelsService {
     // Only a runtime this hub supervises has a home the hub may write into; an
     // external gateway is somebody else's process with somebody else's files.
     home: () => runtime.status().home,
+    // Every named Hermes profile's home: a conversation runs in its workspace's profile
+    // (ADR 0014 stage 3), and the endpoints a turn may name must be declared there too.
+    profileHomes: () => {
+      const home = runtime.status().home;
+      return home ? namedHermesProfiles(home).map((name) => path.join(home, 'profiles', name)) : [];
+    },
     restart: async () => {
       if (runtime.status().mode !== 'managed') return false;
       await runtime.restart();

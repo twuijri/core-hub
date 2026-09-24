@@ -5,7 +5,7 @@
  * The scripted `fetch` below is the only provider these tests ever talk to. A real key is
  * never needed; `models-live.test.ts` is the gated exception.
  */
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -1118,6 +1118,53 @@ describe('models: one key, every agent (ADR 0010)', () => {
       ).toEqual({ provider_id: groq.id, model: 'llama-3.3-70b-versatile' });
       expect(config).toContain('default: llama-3.3-70b-versatile');
       expect(config).toContain('provider: majlis-groq');
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it("declares the endpoint in every Hermes profile's config too, and nothing else there", async () => {
+    // A conversation runs in its workspace's own Hermes profile (ADR 0014 stage 3), which
+    // reads its own `config.yaml`: a turn that names `majlis-groq` must find it there. The
+    // key is not copied — it reaches every profile through the process environment.
+    const groqModels = scriptedFetch((url) =>
+      url.startsWith('https://api.groq.com')
+        ? { json: { data: [{ id: 'llama-3.3-70b-versatile' }] } }
+        : { status: 503, json: {} },
+    );
+    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    homes.push(home);
+    const design = path.join(home, 'profiles', 'design');
+    mkdirSync(design, { recursive: true });
+    writeFileSync(
+      path.join(design, 'config.yaml'),
+      '# design profile\nmodel:\n  default: its-own-model\n  provider: anthropic\n',
+    );
+    const hub = await signedInHub(
+      {},
+      {
+        models: {
+          fetchImpl: groqModels.fetchImpl,
+          hermes: {
+            home: () => home,
+            profileHomes: () => [design],
+            restart: () => Promise.resolve(true),
+          },
+        },
+      },
+    );
+    try {
+      await addProvider(hub, 'groq', { api_key: 'gsk-scripted' });
+      await drainJobs(hub.app);
+      const config = readFileSync(path.join(design, 'config.yaml'), 'utf8');
+      expect(config).toContain('# design profile');
+      expect(config).toContain('majlis-groq:');
+      expect(config).toContain('base_url: https://api.groq.com/openai/v1');
+      expect(config).toContain('key_env: GROQ_API_KEY');
+      // The profile's own model is its own; the hub names a model on every turn.
+      expect(config).toContain('default: its-own-model');
+      expect(config).not.toContain('llama-3.3-70b-versatile');
+      expect(existsSync(path.join(design, '.env'))).toBe(false);
     } finally {
       await hub.close();
     }

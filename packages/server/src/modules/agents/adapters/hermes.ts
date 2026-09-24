@@ -589,6 +589,12 @@ export interface HermesAdapterOptions {
    * is `null`, through the API server's run surface as before.
    */
   tui?: () => TuiChannel | null;
+  /**
+   * Makes sure the Hermes profile a conversation names exists before it opens there (ADR
+   * 0014 stage 3) — a workspace older than its profile gets one the first time it runs.
+   * Throws, in the hub's words, when it cannot. Absent: the profile is taken as it is.
+   */
+  ensureProfile?: (name: string) => Promise<void>;
 }
 
 export function createHermesAdapter(options: HermesAdapterOptions): AgentAdapter {
@@ -771,12 +777,18 @@ export function createHermesAdapter(options: HermesAdapterOptions): AgentAdapter
       }
       const tui = options.tui?.() ?? null;
       if (tui) {
+        // The workspace's own Hermes profile (ADR 0014 stage 3). One gateway process serves
+        // every profile: the profile is a parameter of the session, not of the process.
+        const profile = target.profile ?? null;
+        if (profile && profile !== 'default') await options.ensureProfile?.(profile);
         // Resumed by the stored id the hub kept, or created; Hermes names the conversation
         // here, and the runner records that name as this session's reference.
         return HermesTuiSession.open(tui, sessionRef, {
           model: target.model ?? null,
           provider: target.modelProvider ?? null,
           reasoningEffort: target.reasoningEffort ?? null,
+          profile,
+          cwd: target.cwd ?? null,
         });
       }
       const transport = options.transport

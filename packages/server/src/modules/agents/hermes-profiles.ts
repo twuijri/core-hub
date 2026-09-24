@@ -39,24 +39,9 @@ export function createHermesProfiles(options: {
   home: string;
   run: ProfileRunner;
 }): HermesProfiles {
-  const root = path.join(options.home, 'profiles');
   return {
     async list() {
-      let entries: string[];
-      try {
-        entries = readdirSync(root);
-      } catch {
-        return []; // no named profile yet
-      }
-      return entries
-        .filter(
-          (name) =>
-            name !== 'default' &&
-            PROFILE_ID.test(name) &&
-            isDirectory(path.join(root, name)) &&
-            !existsSync(path.join(root, DELETED, name)),
-        )
-        .sort();
+      return namedHermesProfiles(options.home);
     },
 
     async create(name, origin) {
@@ -70,6 +55,29 @@ export function createHermesProfiles(options: {
       }
     },
   };
+}
+
+/**
+ * Hermes's named profiles under `home` (never `default`, which is `home` itself), deleted
+ * ones left out — Hermes's own `_iter_named_profile_dirs` rule, as a directory read.
+ */
+export function namedHermesProfiles(home: string): string[] {
+  const root = path.join(home, 'profiles');
+  let entries: string[];
+  try {
+    entries = readdirSync(root);
+  } catch {
+    return []; // no named profile yet
+  }
+  return entries
+    .filter(
+      (name) =>
+        name !== 'default' &&
+        PROFILE_ID.test(name) &&
+        isDirectory(path.join(root, name)) &&
+        !existsSync(path.join(root, DELETED, name)),
+    )
+    .sort();
 }
 
 /** Runs `hermes <argv>` against one home, with the whole environment given. */

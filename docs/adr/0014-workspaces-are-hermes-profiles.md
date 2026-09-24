@@ -56,6 +56,22 @@ Reading Hermes's MIT source (never the owner's Studio fork, ADR 0004):
    the TUI gateway's `session.create` takes a `profile`; provider keys reach every profile.
 4. Tasks and schedules per profile (Hermes's multiplexed gateway, `/p/<profile>/…`).
 
+Progress (appended, the decision above unchanged):
+- **Stage 3, conversations — built 2026-09-24** (`docs/changes/2026-09-24-twuijri-chat-runs-in-profile.md`).
+  One TUI gateway serves every profile: `session.create` and `session.resume` take `profile`,
+  and Hermes binds that profile's home, `.env` and terminal policy for the session's build and
+  each turn (`tui_gateway/model_switch.py` §_session_profile_runtime_scope). Measured: ~217 MiB
+  for the process after one profile's turn, ~224 MiB after three profiles' turns — so no
+  process per profile. Keys reach every profile through the process environment (Hermes reads
+  a profile's `.env`, then the environment); the hub's `providers:` blocks are written into
+  every profile's `config.yaml`. A missing profile is made on first use as a copy of `default`.
+  A resume in a profile adopts a conversation an older hub left in the default store (Hermes's
+  own `_resume_adopt_stranded`). The tool pages act on the selected profile's home since
+  PR #80, so stage 3 is complete.
+- Observed while building stage 3: in Hermes v2026.9.14 `--clone-from` **does** copy
+  `memories/MEMORY.md` and `memories/USER.md` (`hermes_cli/profiles.py` §_CLONE_SUBDIR_FILES) —
+  the Context above says it does not; sessions and channels are still not copied.
+
 ## Consequences
 - A Hermes profile whose name a hub slug cannot carry (`_`, or longer than 40) is not listed;
   it is logged once. Widening `ProfileSlug` touches every event schema and is its own change.

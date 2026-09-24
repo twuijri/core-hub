@@ -39,6 +39,7 @@ import { createRealtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
 import { t } from '../../i18n/index.js';
 import {
+  findWorkspace,
   ownerUser,
   registerWorkspaceStatsProvider,
   requireRole,
@@ -139,6 +140,7 @@ export {
   HermesProfileError,
   createHermesProfiles,
   hermesProfileRunner,
+  namedHermesProfiles,
   type HermesProfiles,
 } from './hermes-profiles.js';
 export type {
@@ -273,6 +275,7 @@ function contextOf(app: FastifyInstance): AgentsContext {
       hermes: {
         apiKey: () => runtime.apiKey(),
         tui: () => runtime.tuiChannel(),
+        ensureProfile: (name: string) => runtime.ensureProfile(name),
         ...own.adapterOptions?.hermes,
       },
       // The hub's own agent reaches the providers through the same port every other
@@ -293,6 +296,13 @@ function contextOf(app: FastifyInstance): AgentsContext {
     adapters,
     installer: own.installer ?? createNpmInstaller({ dataDir: hub.config.dataDir, host }),
     models: () => modelsPorts.get(hub.io) ?? null,
+    // A workspace is a Hermes profile (ADR 0014): its slug, or `default` for the hub's
+    // default workspace whatever it is called. An archived or unknown one has none.
+    profileOf: (workspaceId: string) => {
+      const row = findWorkspace(requireSqlite(hub.database), workspaceId);
+      if (!row || row.id !== workspaceId) return null;
+      return hermesProfileName(row);
+    },
   });
   const runner = new AgentRunner({ service, adapters, log: app.log });
   // Hermes's own web server as an internal API (ADR 0015): nothing runs until a caller
