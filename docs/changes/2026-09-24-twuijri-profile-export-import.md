@@ -68,17 +68,17 @@
 - الوثائق: `docs/STATUS.md`، DECISIONS §33.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-كل أمر ثقيل عبر `mj-run` (عاملان لـ vitest، حد ٧ غيغابايت)، بعد دمج `origin/main` (3741080):
+كل أمر ثقيل عبر `mj-run` (عاملان لـ vitest، حد ٧ غيغابايت)، بعد دمج `origin/main` (4123ff3، مع #84 و#85):
 ```
 $ pnpm --filter @majlis/server test
- Test Files  82 passed | 10 skipped (92)
-      Tests  864 passed | 27 skipped (891)
+ Test Files  83 passed | 10 skipped (93)
+      Tests  882 passed | 27 skipped (909)
 $ pnpm contract:test
  Test Files  2 passed (2)
       Tests  255 passed (255)
 $ pnpm --filter @majlis/web test
- Test Files  41 passed (41)
-      Tests  521 passed (521)
+ Test Files  43 passed (43)
+      Tests  534 passed (534)
 $ pnpm --filter @majlis/contracts test
       Tests  15 passed (15)
 $ MAJLIS_HERMES_IMAGE=majlis:profexport vitest run src/modules/auth/profile-transfer.real.test.ts
@@ -86,17 +86,12 @@ export job: 2051 ms {"profile":"design","name":"design-20260924-135651.tar.gz","
  ✓ exports a profile with its SOUL and memory, and imports it under a new name 6223ms
       Tests  1 passed (1)
 $ pnpm contracts:lint            → contracts:lint  OK
-$ pnpm contracts:check-clients   → check-clients  OK — 237 client file(s) scanned, 167 contract path(s) known.
+$ pnpm contracts:check-clients   → check-clients  OK — 241 client file(s) scanned, 167 contract path(s) known.
 $ pnpm i18n:check                → i18n:check  OK (server 136, cli 249, web 986 keys)
 $ pnpm nav:check                 → nav:check  OK — 34 destinations
 $ pnpm typecheck / eslint . / prettier --check . / pnpm build → بلا أخطاء
 $ PLAYWRIGHT_CHANNEL=chrome npx playwright test --workers=1
-  1 failed   (zzz-profiles.spec.ts:130 — عدّ رسائل المساعد قبل تحميلها)
-  34 passed (2.8m)
-$ PLAYWRIGHT_CHANNEL=chrome npx playwright test e2e/zzz-profiles.spec.ts e2e/zzzz-profile-transfer.spec.ts
-  ✓ lists across profiles … (5.7s)
-  ✓ profile export and import … (3.2s)
-  2 passed (17.2s)
+  36 passed (2.4m)
 ```
 - **هرمز الحقيقي** (صورة محلية `docker build -f packages/server/Dockerfile`): بروفايل `design` فيه SOUL
   وذاكرة مميّزتان و`.env` فيه مفتاح مخزَّن في المجلس أيضًا ← صُدِّر عبر مسار المجلس (`hermes serve`
@@ -107,8 +102,8 @@ $ PLAYWRIGHT_CHANNEL=chrome npx playwright test e2e/zzz-profiles.spec.ts e2e/zzz
   مجلد العمل المؤقت يُفرَّغ، ولم تبقَ حاويات بعد الاختبار.
 - **الاختبارات تلتقط غياب الإصلاح**: بإعادة `auth/routes.ts` إلى نسخة `main` سقطت الستة في
   `tests/unit/profile-transfer.test.ts` (`Tests  6 failed (6)`).
-- **فشل Playwright الواحد ليس من هذا الفرع**: `zzz-profiles` يقرأ عدد ردود المساعد قبل أن تُحمَّل
-  الرسائل فيتوقع ١ ويجد ٢؛ نجح عند إعادته. لم ألمس ذلك الملف.
+- قبل الدمج الأخير فشلت رحلة `zzz-profiles` مرة (تعدّ ردود المساعد قبل تحميلها) ونجحت بإعادتها؛
+  أصلحها #84 في `main`، وبعد دمجه نجحت الرحلات كلها (٣٦).
 
 ## المخاطر والرجوع
 - التصدير يحمل **ذاكرة البروفايل ومحادثاته** (هذا قرار هرمز لبروفايل مسمّى)؛ لذلك الملف لصاحبه
