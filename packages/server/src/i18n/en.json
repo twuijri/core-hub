@@ -168,7 +168,9 @@
     }
   },
   "knowledge": {
-    "attachment_in_use": "A message already points at this file, so it cannot be deleted."
+    "attachment_in_use": "A message already points at this file, so it cannot be deleted.",
+    "attachment_bytes_gone": "The file was removed while it was being uploaded. Upload it again.",
+    "attachment_conflict": "The file could not be stored because of a conflicting record. Upload it again."
   },
   "agents": {
     "mcp_test": {

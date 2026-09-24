@@ -7,6 +7,7 @@
  */
 import { and, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { ModuleDb } from '../../lib/db.js';
+import { HubError } from '../../lib/errors.js';
 import { attachments, type AttachmentMeta } from './schema.js';
 
 export type AttachmentRow = typeof attachments.$inferSelect;
@@ -30,8 +31,21 @@ export class AttachmentStore {
   constructor(private readonly db: ModuleDb) {}
 
   create(input: AttachmentInsert): AttachmentRow {
-    const [row] = this.db.insert(attachments).values(input).returning().all();
-    return row as AttachmentRow;
+    try {
+      const [row] = this.db.insert(attachments).values(input).returning().all();
+      return row as AttachmentRow;
+    } catch (error) {
+      // No constraint on this table can fail for a well-formed upload any more (the storage
+      // key is shared on purpose). Should one ever do, the client hears a conflict it can
+      // act on rather than an internal error.
+      if (isConstraintError(error)) {
+        throw new HubError('conflict', {
+          messageKey: 'knowledge.attachment_conflict',
+          details: { reason: 'attachment_conflict' },
+        });
+      }
+      throw error;
+    }
   }
 
   /** Live row (bytes present) for this workspace, or `undefined`. */
@@ -71,22 +85,6 @@ export class AttachmentStore {
     return found;
   }
 
-  /** An identical upload already in this workspace, so the bytes are stored once. */
-  findBySha(workspace: string, sha256: string, sizeBytes: number): AttachmentRow | undefined {
-    return this.db
-      .select()
-      .from(attachments)
-      .where(
-        and(
-          eq(attachments.workspace, workspace),
-          eq(attachments.sha256, sha256),
-          eq(attachments.sizeBytes, sizeBytes),
-          isNull(attachments.deletedAt),
-        ),
-      )
-      .get();
-  }
-
   /** How many live rows still point at these bytes (the last one owns their removal). */
   referencesTo(workspace: string, storageKey: string): number {
     const row = this.db
@@ -105,8 +103,7 @@ export class AttachmentStore {
 
   /**
    * Remove the row itself, for a file nothing refers to by design (an uploaded profile
-   * archive once its import ended). Its storage key is free again afterwards, so the same
-   * bytes can be uploaded anew.
+   * archive once its import ended): there is no reference left to render as "removed".
    */
   purge(workspace: string, id: string): AttachmentRow | undefined {
     return this.db
@@ -134,4 +131,15 @@ export class AttachmentStore {
       .where(and(lte(attachments.expiresAt, now), isNull(attachments.deletedAt)))
       .all();
   }
+}
+
+/** better-sqlite3's `SQLITE_CONSTRAINT_*` (unique, check, not null …). */
+function isConstraintError(error: unknown): boolean {
+  // Drizzle may wrap the driver's error; the code is on it or on its cause.
+  for (let current = error, depth = 0; current && depth < 3; depth += 1) {
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === 'string' && code.startsWith('SQLITE_CONSTRAINT')) return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
 }

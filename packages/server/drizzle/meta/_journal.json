@@ -92,6 +92,13 @@
       "when": 1790272535887,
       "tag": "0012_provider_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1790278263918,
+      "tag": "0013_attachments_shared_bytes",
+      "breakpoints": true
     }
   ]
 }
