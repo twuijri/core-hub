@@ -35,7 +35,23 @@ other profile the signed-in person may enter — the server decides which, as it
 for `sessions.list?profiles=all` — so a client showing one list across profiles hears
 `session.*` and `approval.*` from all of them. Each envelope names its `profile`, and
 `seq` stays per (namespace, profile): a client that resumes a session keeps the highest
-`seq` of **that session's profile** only. Without a token, `profiles` joins nothing.
+`seq` of **that session's profile** only.
+
+The token is the same bearer as HTTP and is **required on every namespace** —
+there is no anonymous realtime. A handshake without one, or with one the hub
+refuses, fails: the client's `connect_error` carries the error code as its
+message and as `data.code` (`unauthorized`, `token_expired`, `rate_limited`),
+and `profile_not_found` when `profile` names a workspace the caller may not
+enter. Socket.IO does not retry a refused handshake; a client refreshes its
+token and connects again. The rooms a socket hears are decided by the server
+from the verified token: its own user-level events, and the profile-wide events
+of the workspaces it was admitted to (`profile`, and with `profiles: 'all'`
+every one it may enter) — never another's. A `subscribe` to an entity that is
+not in one of those workspaces (another workspace's session, an unknown id) is
+refused with `not_found`, as `GET` of it would be. When access is taken
+away — sign-out, a revoked token, a disabled or deleted user, a changed role or
+membership, an archived workspace — the server disconnects the socket, and the
+same token cannot bring it back.
 
 | Namespace | Command | Payload | What it does |
 |---|---|---|---|

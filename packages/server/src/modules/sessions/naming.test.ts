@@ -12,7 +12,7 @@
 import { io as connect, type Socket } from 'socket.io-client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { modules as defaultModules } from '../index.js';
-import { testHub, type TestHub } from '../../../tests/unit/helpers.js';
+import { signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
 import { createSessionsModule } from './index.js';
 import { FakeAgentDirectory, FakeAgentRunner, fakeHermes } from './testing/fake-runner.js';
 import { cleanTitle, fallbackTitle, titlePrompt, trimToWords } from './titles.js';
@@ -89,7 +89,7 @@ async function hubThatNames(options: { answer?: string | null } = {}): Promise<N
     agents: new FakeAgentDirectory([fakeHermes(AGENT_ID)]),
     runner,
   });
-  const hub = await testHub(
+  const hub = await signedInHub(
     {},
     { modules: defaultModules.map((m) => (m.name === 'sessions' ? sessions : m)) },
   );
@@ -99,7 +99,7 @@ async function hubThatNames(options: { answer?: string | null } = {}): Promise<N
   const socket = connect(`${baseUrl}/rt/sessions`, {
     path: SOCKET_PATH,
     transports: ['websocket'],
-    auth: { profile: PROFILE },
+    auth: { profile: PROFILE, token: hub.token },
   });
   await new Promise<void>((resolve, reject) => {
     socket.once('connect', () => resolve());

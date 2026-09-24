@@ -22,16 +22,27 @@ export interface ConnectOptions {
    * gathers them, and a conversation opened from another profile gets its approvals.
    */
   profiles?: 'all';
+  /**
+   * The hub refused the handshake's token (`unauthorized`, `token_expired`). socket.io does
+   * not retry a refused handshake on its own; the caller gets a fresh token and reconnects.
+   * `used` is the token the refused handshake carried.
+   */
+  onAuthRefused?: (socket: Socket, used: string | undefined) => void;
 }
+
+/** Handshake refusals that a new access token can cure (`modules/auth/sockets.ts`). */
+const TOKEN_REFUSALS = new Set(['unauthorized', 'token_expired']);
 
 /** Reconnects with backoff capped at 30 s, as events/README.md §Reconnection asks. */
 export function connectNamespace(options: ConnectOptions): Socket {
+  let used: string | undefined;
   const socket = io(`${options.baseUrl}${options.namespace}`, {
     path: SOCKET_PATH,
     transports: ['websocket', 'polling'],
     auth: (cb) => {
       const token = options.token();
       const profile = options.profile();
+      used = token;
       cb({
         ...(token ? { token } : {}),
         ...(profile ? { profile } : {}),
@@ -47,6 +58,9 @@ export function connectNamespace(options: ConnectOptions): Socket {
   // its own; the session is still ours, so come back like after any other drop.
   socket.on('disconnect', (reason) => {
     if (reason === 'io server disconnect') setTimeout(() => socket.connect(), 1_000);
+  });
+  socket.on('connect_error', (error: Error) => {
+    if (!socket.active && TOKEN_REFUSALS.has(error.message)) options.onAuthRefused?.(socket, used);
   });
   return socket;
 }

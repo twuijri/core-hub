@@ -9,7 +9,8 @@
  *
  * Modules emit through this interface and never touch Socket.IO directly, so the rooms a
  * payload reaches stay in one place: `profile:<slug>` for workspace-wide events and
- * `user:<id>` for user-level ones.
+ * `user:<id>` for user-level ones. Only the server joins a socket to a room, from the
+ * authenticated principal (`modules/auth/sockets.ts`).
  */
 import type { Server as SocketServer } from 'socket.io';
 import type { RealtimeNamespace } from './module.js';
@@ -71,7 +72,8 @@ export function createRealtime(io: SocketServer, now: () => Date = () => new Dat
       const room = target.room ?? (target.userId ? userRoom(target.userId) : undefined);
       if (room) nsp.to(room).emit(event, envelope);
       else if (profile) nsp.to(profileRoom(profile)).emit(event, envelope);
-      else nsp.emit(event, envelope);
+      // No room and no profile names nobody: never the whole namespace, which would be
+      // every signed-in person of every workspace.
       return envelope;
     },
   };

@@ -21,7 +21,7 @@ import { io as connect, type Socket } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { contractsRoot } from '@majlis/contracts';
 import { modules as defaultModules } from '../index.js';
-import { testHub, type TestHub } from '../../../tests/unit/helpers.js';
+import { signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
 import { createSessionsModule } from './index.js';
 import {
   FakeAgentDirectory,
@@ -94,7 +94,7 @@ const SESSION_EVENTS = [
 ] as const;
 
 interface Harness {
-  hub: TestHub;
+  hub: TestHub & { token: string };
   baseUrl: string;
   runner: FakeAgentRunner;
   socket: Socket;
@@ -112,7 +112,7 @@ async function startHarness(script: ScriptStep[]): Promise<Harness> {
   const sessions = createSessionsModule({ agents, runner, agentTimeoutMs: 2_000 });
   const modules = defaultModules.map((module) => (module.name === 'sessions' ? sessions : module));
 
-  const hub = await testHub({}, { modules });
+  const hub = await signedInHub({}, { modules });
   await hub.app.listen({ port: 0, host: '127.0.0.1' });
   const address = hub.app.server.address();
   const baseUrl = typeof address === 'object' && address ? `http://127.0.0.1:${address.port}` : '';
@@ -120,7 +120,7 @@ async function startHarness(script: ScriptStep[]): Promise<Harness> {
   const socket = connect(`${baseUrl}/rt/sessions`, {
     path: SOCKET_PATH,
     transports: ['websocket'],
-    auth: { profile: PROFILE },
+    auth: { profile: PROFILE, token: hub.token },
   });
   await new Promise<void>((resolve, reject) => {
     socket.once('connect', () => resolve());
@@ -577,7 +577,7 @@ describe('resume after a dropped socket', () => {
     const reconnected = connect(`${baseUrl}/rt/sessions`, {
       path: SOCKET_PATH,
       transports: ['websocket'],
-      auth: { profile: PROFILE },
+      auth: { profile: PROFILE, token: harness.hub.token },
     });
     const replayed: Envelope[] = [];
     for (const name of SESSION_EVENTS) {
