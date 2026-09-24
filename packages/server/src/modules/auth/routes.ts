@@ -1098,7 +1098,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
 
   /**
    * Export and import are jobs of the caller's current profile (`X-Hub-Profile`, contract
-   * decision §33): that is the room their `/rt/jobs` events reach and where `jobs.get` finds
+   * decision §34): that is the room their `/rt/jobs` events reach and where `jobs.get` finds
    * them. Only where the hub supervises Hermes (ADR 0015); anywhere else the refusal is
    * named before any job exists.
    */

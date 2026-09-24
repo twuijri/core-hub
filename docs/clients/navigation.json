@@ -16,8 +16,8 @@
       "ar": "اتصالات الأجهزة"
     },
     "agent_manager": {
-      "en": "Agent Manager",
-      "ar": "مدير الوكلاء"
+      "en": "Agents",
+      "ar": "الوكلاء"
     },
     "models": {
       "en": "Models",
@@ -154,6 +154,10 @@
     "setup": {
       "en": "First-run setup",
       "ar": "تهيئة أول تشغيل"
+    },
+    "back_to_agents": {
+      "en": "Back to agents",
+      "ar": "رجوع إلى الوكلاء"
     }
   },
   "destinations": [
@@ -195,12 +199,12 @@
       "id": "agent_manager",
       "title": "agent_manager",
       "module": "agents",
-      "level": "settings",
+      "level": "app",
       "entry": {
-        "kind": "settings-management"
+        "kind": "rail"
       },
       "roles": ["admin"],
-      "note": "The registry from the server; each agent card enters the agent level. A Settings page since 2026-09-22."
+      "note": "The agent cards: the registry from the server. A main-sidebar entry directly above Tasks since 2026-09-24 (owner: putting agents inside Settings was a design mistake). Each card's chips and its Settings button open that agent's pages directly. Owners and admins only."
     },
     {
       "id": "models",
@@ -516,7 +520,7 @@
         "kind": "agent"
       },
       "roles": ["admin"],
-      "note": "Always last. Tabs come from the adapter's settings descriptor (ADR 0002)."
+      "note": "Always last. Tabs come from the adapter's settings descriptor (ADR 0002). Shown for every agent the card offers a Settings button for (an installed one), whether or not it lists `settings` among its capabilities."
     },
     {
       "id": "global_agent",
@@ -531,7 +535,7 @@
       "note": "No menu entry; reached from search results and the pending-actions bar."
     }
   ],
-  "rail": ["new_chat", "search", "tasks", "schedules"],
+  "rail": ["new_chat", "search", "agent_manager", "tasks", "schedules"],
   "segments": ["chat", "rooms"],
   "footer": ["settings"],
   "settingsTabs": [
@@ -544,7 +548,7 @@
     "this_device",
     "about"
   ],
-  "settingsManagement": ["agent_manager", "models", "device_connections", "knowledge"],
+  "settingsManagement": ["models", "device_connections", "knowledge"],
   "settingsTools": ["logs", "usage", "performance", "theme", "workspaces", "updates", "plugins"],
   "agentLevel": [
     "agent_skills",
@@ -596,7 +600,7 @@
       "new_chat": "/new",
       "search": "/search",
       "device_connections": "/settings/devices",
-      "agent_manager": "/settings/agents",
+      "agent_manager": "/agents",
       "models": "/settings/models",
       "knowledge": "/settings/knowledge",
       "chat": "/chat/:sessionId?",
@@ -618,14 +622,25 @@
       "workspaces": "/settings/workspaces",
       "updates": "/settings/updates",
       "plugins": "/settings/plugins",
-      "agent_skills": "/settings/agents/:agentId/skills",
-      "agent_mcp": "/settings/agents/:agentId/mcp",
-      "agent_memory": "/settings/agents/:agentId/memory",
-      "agent_jobs": "/settings/agents/:agentId/jobs",
-      "agent_channels": "/settings/agents/:agentId/channels",
-      "agent_plugins": "/settings/agents/:agentId/plugins",
-      "agent_settings": "/settings/agents/:agentId/settings",
+      "agent_skills": "/agents/:agentId/skills",
+      "agent_mcp": "/agents/:agentId/mcp",
+      "agent_memory": "/agents/:agentId/memory",
+      "agent_jobs": "/agents/:agentId/jobs",
+      "agent_channels": "/agents/:agentId/channels",
+      "agent_plugins": "/agents/:agentId/plugins",
+      "agent_settings": "/agents/:agentId/settings",
       "global_agent": "/global-agent"
+    }
+  },
+  "agentShell": {
+    "$comment": "Inside an agent's pages the sidebar becomes that agent's list, the way Settings does (owner, 2026-09-24): a `back` row to the Agents page, then the agent's name and mark, then its `agentLevel` entries in order, only those its adapter declares. The rail and the segments step aside; the top-bar profile chip stays, because skills, MCP, memory and channels are per profile. Phones: the list is the page, and an opened page shows the way back.",
+    "back": "back_to_agents",
+    "returnsTo": "agent_manager"
+  },
+  "legacyRoutes": {
+    "$comment": "Old URLs a client must still honour by redirecting. Each key is a path prefix on that surface that no destination uses any more; its value is the prefix it now lives under. The rest of the path is kept.",
+    "web": {
+      "/settings/agents": "/agents"
     }
   }
 }

@@ -220,7 +220,7 @@ export class KnowledgeService {
    *
    * A profile export (`source_kind = export`) holds a profile's memory and chats: only the
    * person who asked for it may see it, and once past `expires_at` nobody may, even before
-   * the sweep has removed the bytes (contract decision §33). To anyone else it does not
+   * the sweep has removed the bytes (contract decision §34). To anyone else it does not
    * exist — the same `404` as an id that was never issued.
    */
   require(scope: AttachmentScope, id: string, now: Date = new Date()): AttachmentRow {

@@ -215,7 +215,7 @@ export function useArchiveWorkspace() {
 }
 
 /**
- * A profile moved as Hermes's own archive (ADR 0014 stage 2, contract decision §33). Both
+ * A profile moved as Hermes's own archive (ADR 0014 stage 2, contract decision §34). Both
  * operations answer a job at once; the job lives in the profile the person is in, so the
  * `/rt/jobs` room this client already listens to hears it, and `jobs.get` finds it.
  */

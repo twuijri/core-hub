@@ -274,7 +274,7 @@ describe.skipIf(!doc)('contract: auth operations answer their success path', () 
     expect((settings.settings as { privacy: { redact_pii: boolean } }).privacy.redact_pii).toBe(
       true,
     );
-    // A hub that does not supervise Hermes names the reason (contract decision §33) …
+    // A hub that does not supervise Hermes names the reason (contract decision §34) …
     const unmanaged = await call('auth.exportProfile', 409, {
       params: { profile_id: work.id as string },
     });

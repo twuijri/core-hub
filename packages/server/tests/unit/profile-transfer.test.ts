@@ -1,6 +1,6 @@
 /**
  * Profile export and import through the hub's own routes (ADR 0014 stage 2, contract
- * decision §33), with Hermes scripted (`auth/testing/fake-profile-runtime.ts`) and
+ * decision §34), with Hermes scripted (`auth/testing/fake-profile-runtime.ts`) and
  * everything else real: the jobs runner, the file registry, the secret store.
  *
  * What must hold: an export is a real job whose archive downloads, carries no credential

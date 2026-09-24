@@ -32,7 +32,7 @@ import { workspaces } from './schema.js';
 import type { WorkspaceRow } from './serialize.js';
 import { findWorkspace } from './workspace.js';
 
-/** How long a finished export stays downloadable (contract decision §33). */
+/** How long a finished export stays downloadable (contract decision §34). */
 export const EXPORT_KEEP_MS = 24 * 60 * 60_000;
 /** An export larger than this is refused rather than stored (the hub's disk is not a backup). */
 export const MAX_EXPORT_BYTES = 1024 * 1024 * 1024;

@@ -38,7 +38,7 @@
   والواجهة تقترح معرّفًا حرًّا من اسم الملف (`design` ← `design-2`). الملف المرفوع يُحذف بانتهاء
   المهمة. رفض هرمز يعود بكلماته: «Hermes refused to import the archive: Profile 'x' already exists».
 - **أين تعيش المهمة**: العمليتان عالميتان، والمهمة تُسجَّل في البروفايل الحالي للطالب
-  (`X-Hub-Profile`) لتصل غرفته على `/rt/jobs` ويجدها `jobs.get` (قرار العقد §33؛ §30–§32 محجوزة).
+  (`X-Hub-Profile`) لتصل غرفته على `/rt/jobs` ويجدها `jobs.get` (قرار العقد §34؛ §30–§32 محجوزة).
 - مجلد العمل المؤقت `/data/tmp/profile-transfer/<job>/` يُحذف بانتهاء المهمة أيًّا كانت نتيجتها.
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
@@ -47,7 +47,7 @@
 - `auth.importProfile`: وصف كامل، `404`، والحقل الاختياري `name` في `ProfileImport`.
 - `JobKind` + `import`؛ `ResourceRef.kind` + `profile` و`attachment` (في OpenAPI وكل مخططات
   الأحداث التي تحملها).
-- `docs/contracts/DECISIONS.md` §33.
+- `docs/contracts/DECISIONS.md` §34.
 
 ## الملفات والتأثير
 - الخادم: `auth/profile-archive.ts` (جديد: قراءة/إعادة كتابة tar.gz تدفّقًا)، `auth/profile-transfer.ts`
@@ -65,7 +65,7 @@
   `auth/profile-transfer.real.test.ts` (هرمز الحقيقي)، إضافات في `hermes-profiles.test.ts`
   و`hermes-dashboard.test.ts` و`auth.contract.test.ts`، `web/tests/profile-transfer.test.tsx`،
   ورحلة Playwright `e2e/zzzz-profile-transfer.spec.ts` مع لقطتين.
-- الوثائق: `docs/STATUS.md`، DECISIONS §33.
+- الوثائق: `docs/STATUS.md`، DECISIONS §34.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 كل أمر ثقيل عبر `mj-run` (عاملان لـ vitest، حد ٧ غيغابايت)، بعد دمج `origin/main` (4123ff3، مع #84 و#85):

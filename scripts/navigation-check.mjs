@@ -169,6 +169,31 @@ for (const [surface, routes] of Object.entries(manifest.surfaceRoutes ?? {})) {
   }
 }
 
+// agentShell: what an agent's pages put in the sidebar (owner, 2026-09-24) — a back row whose
+// label is a term, returning to the page the agent cards live on.
+const agentShell = manifest.agentShell;
+if (agentShell) {
+  if (!terms[agentShell.back]) fail(`agentShell.back: term "${agentShell.back}" is not in terms`);
+  if (!byId.has(agentShell.returnsTo))
+    fail(`agentShell.returnsTo: "${agentShell.returnsTo}" is not a destination`);
+}
+
+// legacyRoutes: old path prefixes a surface still redirects. An old prefix must not be the
+// start of any live route (it would shadow it), and the new one must be where routes now live.
+const under = (route, prefix) => route === prefix || route.startsWith(`${prefix}/`);
+for (const [surface, map] of Object.entries(manifest.legacyRoutes ?? {})) {
+  if (surface.startsWith('$')) continue;
+  const live = Object.values(manifest.surfaceRoutes?.[surface] ?? {});
+  for (const [from, to] of Object.entries(map ?? {})) {
+    if (!from.startsWith('/') || !String(to).startsWith('/'))
+      fail(`legacyRoutes.${surface}: "${from}" -> "${to}" must be absolute paths`);
+    const shadowed = live.find((route) => under(route, from));
+    if (shadowed) fail(`legacyRoutes.${surface}: "${from}" is still the start of "${shadowed}"`);
+    if (!live.some((route) => under(route, to)))
+      fail(`legacyRoutes.${surface}: "${to}" is not where any ${surface} route lives`);
+  }
+}
+
 if (failures > 0) {
   console.error(
     `nav:check  FAILED with ${failures} problem(s) in ${path.relative(repoRoot, manifestPath)}`,
