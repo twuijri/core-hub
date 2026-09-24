@@ -78,38 +78,36 @@
   (`profileScope`)، `docs/STATUS.md`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-كل الأوامر الثقيلة عبر `mj-run` (ذاكرة ٧ غ، عاملان)، بعد دمج `origin/main` (b21d31e).
+كل الأوامر الثقيلة عبر `mj-run` (ذاكرة ٧ غ، عاملان)، بعد دمج `origin/main` (e646bb1، بعد #80 و#82).
 ```
-$ pnpm lint
-All matched files use Prettier code style!                       # exit 0
+$ pnpm lint                                                       # exit 0
 $ pnpm typecheck                                                  # exit 0
 $ pnpm contracts:lint
 contracts:lint  OK
 $ pnpm contracts:check-clients
-check-clients  OK — 233 client file(s) scanned, 167 contract path(s) known.
+check-clients  OK — 236 client file(s) scanned, 167 contract path(s) known.
 $ pnpm contract:test
- Test Files  2 passed (2)
       Tests  255 passed (255)
 $ pnpm i18n:check
 i18n:check  OK
 $ pnpm nav:check
 nav:check  OK — 34 destinations, 2 pre-auth screens (login, setup), 38 terms, ar/en complete, routes for web
+$ pnpm change-record:check
+change-record  OK — 1 record(s) valid
 $ pnpm --filter @majlis/server test
- Test Files  79 passed | 8 skipped (87)
-      Tests  846 passed | 23 skipped (869)
+ Test Files  81 passed | 8 skipped (89)
+      Tests  853 passed | 23 skipped (876)
 $ pnpm --filter @majlis/web test
- Test Files  40 passed (40)
-      Tests  512 passed (512)
+ Test Files  41 passed (41)
+      Tests  526 passed (526)
 $ pnpm --filter @majlis/cli test
- Test Files  11 passed (11)
       Tests  64 passed (64)
-$ pnpm build
-✓ built in 761ms                                                  # exit 0
+$ pnpm build                                                      # exit 0
 $ MAJLIS_E2E_PORT=8895 MAJLIS_E2E_SETUP_PORT=8896 PLAYWRIGHT_CHANNEL=chrome npx playwright test --workers=1
-  ✓  28 [chromium] › e2e/zzz-profiles.spec.ts:80:3 › lists across profiles › two profiles, one list: …
-  ✓  32 [chromium] › e2e/zzzz-profiles-boards.spec.ts:77:1 › 26. the Tasks board and the Schedules page hold every profile, each item badged and acted on in its own (4.2s)
-  32 passed (2.1m)
+  ✓  35 [chromium] › e2e/zzzz-profiles-boards.spec.ts:77:1 › 26. the Tasks board and the Schedules page hold every profile, each item badged and acted on in its own (4.5s)
+  35 passed (2.4m)
 ```
+عدد العمليات في `docs/STATUS.md` بقي 189 من 252: هذا التغيير لا يضيف عملية (معاملات فقط).
 **الاختبارات الجديدة تسقط على الكود القديم** (قبل الدمج، بإرجاع ملفات الخادم/الويب إلى `main`
 مع بقاء الاختبارات والعقد):
 ```
