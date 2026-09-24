@@ -176,12 +176,94 @@ export interface ModelsServiceOptions {
   restartDelayMs?: number;
   now?: () => Date;
   /**
-   * The profile the hub's providers are stored under: the default profile, which always
-   * exists and can never be renamed or archived (contract decision §34). Providers, their
-   * keys and their models are the hub's, not a profile's — every profile reads them from
-   * here. Null only before the owner exists; the caller's own profile stands in then.
+   * The profile the **shared** providers are stored under: the default profile, which
+   * always exists and can never be renamed or archived (contract decision §37). Null only
+   * before the owner exists; the caller's own profile stands in then.
    */
   hubScope?: () => WorkspaceScope | null;
+  /**
+   * The workspace id behind a named Hermes profile (its slug), or null when the hub has
+   * none: that profile then uses the shared providers only.
+   */
+  profileWorkspace?: (profile: string) => string | null;
+}
+
+/** Where a provider row is stored: the shared scope, or one profile's own (decision §37). */
+interface ProviderOwner {
+  workspace: string;
+  shared: boolean;
+}
+
+export const PROVIDER_BUNDLE_FORMAT = 'majlis-providers';
+
+/**
+ * A profile's providers with their keys, as an export that carries them writes them into
+ * the archive (`majlis-providers.json`, decision §37). Keys are in the clear: the dialog
+ * that asks for this says so.
+ */
+export interface ProviderBundle {
+  format: typeof PROVIDER_BUNDLE_FORMAT;
+  version: 1;
+  providers: ProviderBundleItem[];
+}
+
+export interface ProviderBundleItem {
+  slug: string;
+  label: string;
+  kind: ProviderRow['kind'];
+  family: string;
+  builtin: boolean;
+  enabled: boolean;
+  base_url: string | null;
+  api_mode: ProviderRow['apiMode'];
+  auth_kind: ProviderRow['authKind'];
+  headers: Record<string, string>;
+  capabilities: ProviderCapabilities;
+  settings: SpeechProviderSettings;
+  visibility_mode: ProviderRow['visibilityMode'];
+  visible_models: string[];
+  api_key: string | null;
+  models: {
+    model_key: string;
+    label: string;
+    alias: string | null;
+    kind: ModelRow['kind'];
+    context_window: number | null;
+    max_output_tokens: number | null;
+    pricing: ModelPricing;
+    capabilities: ModelRow['capabilities'];
+    enabled: boolean;
+    visible: boolean;
+    preview: boolean;
+    source: ModelRow['source'];
+  }[];
+}
+
+/** Reads a bundle from an archive somebody uploaded: only the shape the hub writes. */
+export function parseProviderBundle(value: unknown): ProviderBundle {
+  const bad = (why: string) => validationFailed({ field: 'majlis-providers.json', reason: why });
+  if (!value || typeof value !== 'object') throw bad('not an object');
+  const bundle = value as Partial<ProviderBundle>;
+  if (bundle.format !== PROVIDER_BUNDLE_FORMAT || bundle.version !== 1) {
+    throw bad('not a provider list this hub writes');
+  }
+  if (!Array.isArray(bundle.providers)) throw bad('no providers');
+  const kinds = new Set(['llm', 'stt', 'tts']);
+  for (const item of bundle.providers) {
+    if (
+      !item ||
+      typeof item.slug !== 'string' ||
+      !/^[a-z0-9][a-z0-9_.-]{0,63}$/.test(item.slug) ||
+      typeof item.label !== 'string' ||
+      typeof item.family !== 'string' ||
+      !kinds.has(item.kind) ||
+      !Array.isArray(item.models) ||
+      (item.api_key !== null && typeof item.api_key !== 'string')
+    ) {
+      throw bad('a provider entry is not one this hub writes');
+    }
+  }
+  return bundle as ProviderBundle;
 }
 
 /**
@@ -199,6 +281,8 @@ export interface ProviderCreateInput {
   base_url?: string | null;
   api_key?: string | null;
   api_mode?: 'chat_completions' | 'responses';
+  /** Who it is for: every profile (the default), or only the one in `X-Hub-Profile` (§37). */
+  scope?: 'all' | 'profile';
 }
 
 /** One entry of `models.listProviderPresets`. */
@@ -344,9 +428,9 @@ export class ModelsService {
   private hubCache: WorkspaceScope | null = null;
 
   /**
-   * Where the hub's providers, keys and models live (contract decision §34): the default
-   * profile. Cached — that profile's id never changes. `fallback` is the caller's own
-   * profile, used only on a hub that has no default profile yet.
+   * The default profile: where the **shared** providers, their models and their keys are
+   * stored (contract decision §37). Cached — that profile's id never changes. `fallback` is
+   * the caller's own profile, used only on a hub that has no default profile yet.
    */
   private hub(fallback?: Pick<WorkspaceScope, 'id'> & Partial<WorkspaceScope>): WorkspaceScope {
     if (this.hubCache) return this.hubCache;
@@ -363,26 +447,210 @@ export class ModelsService {
     };
   }
 
-  /**
-   * A provider row by id, as the hub knows it now. A row the merge of 2026-09-24 archived in
-   * another profile (`drizzle/0011_providers_shared.sql`) still answers, as the hub's row of
-   * the same slug: a session, an agent pin or a default saved before the merge keeps working.
-   */
-  private canonicalProvider(id: string): ProviderRow | undefined {
-    const row = this.db.select().from(providers).where(eq(providers.id, id)).get();
-    if (!row) return undefined;
-    const hubId = this.hub({ id: row.workspace }).id;
-    if (row.workspace === hubId) return row;
-    return this.store.providerBySlug(hubId, row.slug) ?? undefined;
+  /** Where a new provider of this scope is stored: shared, or the profile's own. */
+  private ownerFor(scope: Pick<WorkspaceScope, 'id'>, shared: boolean): ProviderOwner {
+    return shared ? { workspace: this.hub(scope).id, shared: true } : { workspace: scope.id, shared };
   }
 
-  /** A model row by id, by the same rule: another profile's copy answers as the hub's. */
-  private canonicalModel(id: string): ModelRow | undefined {
-    const row = this.db.select().from(models).where(eq(models.id, id)).get();
+  private ownerOf(row: ProviderRow): ProviderOwner {
+    return { workspace: row.workspace, shared: row.shared };
+  }
+
+  /**
+   * Every live provider a profile can see: its own and the shared ones, both listed (each
+   * says which it is), own first when a slug is both.
+   */
+  private visibleRows(workspace: string, kind?: string): ProviderRow[] {
+    const own = this.store.scopeRows(workspace, false, kind);
+    const shared = this.store.scopeRows(this.hub({ id: workspace }).id, true, kind);
+    return [...own, ...shared].sort(
+      (a, b) => a.slug.localeCompare(b.slug) || Number(a.shared) - Number(b.shared),
+    );
+  }
+
+  /**
+   * The providers a profile actually uses: its own, and every shared one whose slug it has
+   * no own row for — a profile's own provider of the same preset wins (decision §37).
+   */
+  private effectiveRows(workspace: string, kind?: string): ProviderRow[] {
+    const own = this.store.scopeRows(workspace, false, kind);
+    const mine = new Set(own.map((row) => row.slug));
+    const shared = this.store
+      .scopeRows(this.hub({ id: workspace }).id, true, kind)
+      .filter((row) => !mine.has(row.slug));
+    return [...own, ...shared].sort((a, b) => a.slug.localeCompare(b.slug));
+  }
+
+  /** A live row this profile can see (its own, or a shared one), by id. */
+  private visibleRow(workspace: string, id: string): ProviderRow | undefined {
+    const row = this.store.providerById(id);
+    if (!row || row.archivedAt) return undefined;
+    if (row.shared ? row.workspace === this.hub({ id: workspace }).id : row.workspace === workspace) {
+      return row;
+    }
+    return undefined;
+  }
+
+  /**
+   * The row this profile uses for the provider a stored id names: the one of the same slug
+   * it actually uses — its own over a shared one. A session, a default or a pin that named
+   * the shared row keeps working, and runs on the profile's own provider once it has one.
+   */
+  private effectiveFor(workspace: string, providerId: string): ProviderRow | undefined {
+    const row = this.store.providerById(providerId);
     if (!row) return undefined;
-    if (row.workspace === this.hub({ id: row.workspace }).id) return row;
-    const provider = this.canonicalProvider(row.providerId);
-    return provider ? this.store.model(provider.id, row.modelKey) : undefined;
+    return this.effectiveRows(workspace).find((candidate) => candidate.slug === row.slug);
+  }
+
+  // ------------------------------------------------- a profile's own, copied and moved
+
+  /**
+   * A profile made as a copy of another gets the source's **own** providers, with their
+   * keys and their models (owner, 2026-09-24: «علشان لو الكي نسيته ما ابلش وينه» — so a key
+   * is not lost by making a copy; the owner removes what the copy should not keep). The
+   * shared providers it already has. Returns how many rows were copied.
+   */
+  copyOwnProviders(sourceWorkspace: string, targetWorkspace: string, actor: Actor): number {
+    const bundle = this.providerBundle(sourceWorkspace, { ownOnly: true });
+    return this.restoreProviderBundle(targetWorkspace, actor, bundle);
+  }
+
+  /**
+   * The providers a profile uses, with their keys in the clear, for an export that carries
+   * them (decision §37): its own, and the shared ones it has no own row of the same slug for
+   * — every one written as a provider of that profile alone, because that is what it
+   * becomes where the archive is imported.
+   */
+  exportProviders(workspace: string): ProviderBundle {
+    return this.providerBundle(workspace, { ownOnly: false });
+  }
+
+  /** An imported archive's providers become the imported profile's own (decision §37). */
+  importProviders(workspace: string, actor: Actor, bundle: unknown): number {
+    return this.restoreProviderBundle(workspace, actor, parseProviderBundle(bundle));
+  }
+
+  private providerBundle(workspace: string, options: { ownOnly: boolean }): ProviderBundle {
+    const rows = options.ownOnly
+      ? this.store.scopeRows(workspace, false)
+      : this.effectiveRows(workspace);
+    return {
+      format: PROVIDER_BUNDLE_FORMAT,
+      version: 1,
+      providers: rows.map((row) => ({
+        slug: row.slug,
+        label: row.label,
+        kind: row.kind,
+        family: row.family,
+        builtin: row.builtin,
+        enabled: row.enabled,
+        base_url: row.baseUrl,
+        api_mode: row.apiMode,
+        auth_kind: row.authKind,
+        headers: { ...row.headers },
+        capabilities: { ...row.capabilities },
+        settings: { ...row.settings },
+        visibility_mode: row.visibilityMode,
+        visible_models: [...row.visibleModels],
+        api_key: row.apiKeySecretId
+          ? this.options.secrets.reveal(row.workspace, row.apiKeySecretId)
+          : null,
+        models: this.store.modelsOf(row.id).map((model) => ({
+          model_key: model.modelKey,
+          label: model.label,
+          alias: model.alias,
+          kind: model.kind,
+          context_window: model.contextWindow,
+          max_output_tokens: model.maxOutputTokens,
+          pricing: { ...model.pricing },
+          capabilities: [...model.capabilities],
+          enabled: model.enabled,
+          visible: model.visible,
+          preview: model.preview,
+          source: model.source,
+        })),
+      })),
+    };
+  }
+
+  private restoreProviderBundle(workspace: string, actor: Actor, bundle: ProviderBundle): number {
+    const owner: ProviderOwner = { workspace, shared: false };
+    const at = this.now();
+    let copied = 0;
+    for (const item of bundle.providers) {
+      // A profile's own row of that slug is already there: it stays as it is.
+      const existing = this.store.scopeRowBySlug(workspace, false, item.slug);
+      if (existing && !existing.archivedAt) continue;
+      const id = this.materialize(owner, actor, {
+        slug: item.slug,
+        label: item.label,
+        kind: item.kind,
+        family: item.family,
+        baseUrl: item.base_url ?? '',
+        apiMode: item.api_mode,
+        authKind: item.auth_kind,
+        builtin: item.builtin,
+        capabilities: item.capabilities,
+        settings: item.settings,
+        at,
+      });
+      this.db
+        .update(providers)
+        .set({
+          enabled: item.enabled,
+          baseUrl: item.base_url,
+          headers: item.headers,
+          visibilityMode: item.visibility_mode,
+          visibleModels: item.visible_models,
+          catalogueStatus: item.models.length > 0 ? 'ready' : 'loading',
+          catalogueRefreshedAt: item.models.length > 0 ? at : null,
+        })
+        .where(eq(providers.id, id))
+        .run();
+      for (const model of item.models) {
+        if (this.store.model(id, model.model_key)) continue;
+        this.db
+          .insert(models)
+          .values({
+            id: newUlid(),
+            ownerId: actor.userId,
+            workspace,
+            createdAt: at,
+            updatedAt: at,
+            providerId: id,
+            modelKey: model.model_key,
+            label: model.label,
+            alias: model.alias,
+            kind: model.kind,
+            contextWindow: model.context_window,
+            maxOutputTokens: model.max_output_tokens,
+            pricing: model.pricing,
+            capabilities: model.capabilities,
+            enabled: model.enabled,
+            visible: model.visible,
+            preview: model.preview,
+            source: model.source,
+          })
+          .run();
+      }
+      if (item.api_key) this.storeKey(owner, actor, item.family, item.api_key);
+      copied += 1;
+    }
+    if (copied > 0) {
+      this.options.audit.record({
+        workspace,
+        ownerId: actor.userId,
+        actorKind: 'user',
+        actorId: actor.userId,
+        action: 'provider.created',
+        entityKind: 'workspace',
+        entityId: workspace,
+        summary: `${String(copied)} provider(s) added to the profile as its own`,
+        // Never a key; only which providers arrived.
+        data: { slugs: bundle.providers.map((item) => item.slug), scope: 'profile' },
+      });
+    }
+    return copied;
   }
 
   // ------------------------------------------------------------------ providers
@@ -413,10 +681,9 @@ export class ModelsService {
     return { items, host: hostInfo() };
   }
 
+  /** The shared providers and this profile's own, each saying which (decision §37). */
   listProviders(scope: WorkspaceScope, filter: { kind?: string } = {}): ContractProvider[] {
-    return this.store
-      .listProviders(this.hub(scope).id, filter.kind)
-      .map((row) => this.present(scope, row));
+    return this.visibleRows(scope.id, filter.kind).map((row) => this.present(scope, row));
   }
 
   getProvider(scope: WorkspaceScope, id: string): ContractProvider {
@@ -484,22 +751,23 @@ export class ModelsService {
     // person names each instance, and each instance owns its own key.
     const repeatable = !preset || preset.repeatable === true;
     const at = this.now();
-    const hub = this.hub(scope);
-    const primarySlug = repeatable ? this.freeSlug(hub.id, label) : preset.slug;
+    // Who it is for (decision §37): every profile (the default), or only this one.
+    const owner = this.ownerFor(scope, (input.scope ?? 'all') === 'all');
+    const primarySlug = repeatable ? this.freeSlug(scope.id, owner, label) : preset.slug;
     const family = repeatable ? `custom:${primarySlug}` : preset.family;
     const kind = preset && !repeatable ? preset.kind : input.kind;
 
-    const existing = this.store.providerBySlug(hub.id, primarySlug);
+    const existing = this.store.scopeRowBySlug(owner.workspace, owner.shared, primarySlug);
     if (existing && !existing.archivedAt) {
-      // Providers are the hub's, not a profile's (contract decision §34): adding the same
-      // preset from another profile is adding it twice.
       throw conflict({
         reason: 'provider_exists',
-        detail: `${primarySlug} is already added; every profile uses it`,
+        detail: owner.shared
+          ? `${primarySlug} is already added for every profile`
+          : `${primarySlug} is already added to this profile`,
       });
     }
 
-    const primaryId = this.materialize(scope, actor, {
+    const primaryId = this.materialize(owner, actor, {
       slug: primarySlug,
       label,
       kind,
@@ -521,10 +789,10 @@ export class ModelsService {
     if (preset && !repeatable) {
       for (const entry of familyEntries(preset.family)) {
         if (entry.slug === preset.slug || entry.repeatable) continue;
-        const row = this.store.providerBySlug(hub.id, entry.slug);
+        const row = this.store.scopeRowBySlug(owner.workspace, owner.shared, entry.slug);
         if (row && !row.archivedAt) continue;
         siblings.push(
-          this.materialize(scope, actor, {
+          this.materialize(owner, actor, {
             slug: entry.slug,
             label: entry.label,
             kind: entry.kind,
@@ -541,7 +809,7 @@ export class ModelsService {
       }
     }
 
-    if (apiKey) this.storeKey(scope, actor, family, apiKey);
+    if (apiKey) this.storeKey(owner, actor, family, apiKey);
     // The card shows what the provider answered, without a second click on Test.
     if (verdict) this.recordCheck(primaryId, verdict);
     this.options.audit.record({
@@ -554,7 +822,13 @@ export class ModelsService {
       entityId: primaryId,
       summary: `provider ${primarySlug} added`,
       // Never the key; only that one arrived with it.
-      data: { slug: primarySlug, kind, preset: preset?.slug ?? null, key_set: apiKey !== '' },
+      data: {
+        slug: primarySlug,
+        kind,
+        preset: preset?.slug ?? null,
+        scope: owner.shared ? 'all' : 'profile',
+        key_set: apiKey !== '',
+      },
     });
     // The endpoint itself reaches Hermes even before a key does: a local server that
     // needs none is otherwise added, listed and unusable.
@@ -569,11 +843,11 @@ export class ModelsService {
 
   /**
    * Insert a provider row, or bring back the archived row that already holds its slug —
-   * `(workspace, slug)` is unique, so a provider that was removed and is being added
-   * again is the same row with its history reset.
+   * `(workspace, shared, slug)` is unique, so a provider that was removed and is being added
+   * again to the same scope is the same row with its history reset.
    */
   private materialize(
-    scope: WorkspaceScope,
+    owner: ProviderOwner,
     actor: Actor,
     row: {
       slug: string;
@@ -589,10 +863,10 @@ export class ModelsService {
       at: Date;
     },
   ): string {
-    const hub = this.hub(scope);
     const values = {
       ownerId: actor.userId,
-      workspace: hub.id,
+      workspace: owner.workspace,
+      shared: owner.shared,
       updatedAt: row.at,
       slug: row.slug,
       label: row.label,
@@ -613,7 +887,7 @@ export class ModelsService {
       lastError: null,
       archivedAt: null,
     };
-    const existing = this.store.providerBySlug(hub.id, row.slug);
+    const existing = this.store.scopeRowBySlug(owner.workspace, owner.shared, row.slug);
     if (existing) {
       this.db.update(providers).set(values).where(eq(providers.id, existing.id)).run();
       return existing.id;
@@ -659,11 +933,11 @@ export class ModelsService {
       // given a key still read as "no key needed", and one that had not been given a key
       // was told "Missing API key" by a check the hub had no business making.
       if (value === '') {
-        this.clearKey(scope, row.family);
+        this.clearKey(this.ownerOf(row), row.family);
         changes.status = 'unconfigured';
         changes.lastError = null;
       } else {
-        this.storeKey(scope, actor, row.family, value);
+        this.storeKey(this.ownerOf(row), actor, row.family, value);
         // Nothing has been proven yet: the status stays `unconfigured` until a test or a
         // refresh actually reaches the provider.
         changes.status = 'unconfigured';
@@ -693,7 +967,7 @@ export class ModelsService {
       // just arrived would look absent and its catalogue would never be fetched.
       const fresh = this.loadProvider(scope, row.id);
       // A key that just arrived deserves the model list it unlocks, without a second click.
-      if (keyChanged && this.hasKey(scope, fresh)) this.refreshFamily(scope, actor, fresh.family);
+      if (keyChanged && this.hasKey(scope, fresh)) this.refreshFamily(scope, actor, fresh);
     }
     return this.getProvider(scope, row.id);
   }
@@ -712,9 +986,9 @@ export class ModelsService {
       .where(eq(providers.id, row.id))
       .run();
     const remaining = this.store
-      .familyRows(this.hub(scope).id, row.family)
+      .scopeFamilyRows(row.workspace, row.shared, row.family)
       .filter((sibling) => sibling.id !== row.id && !sibling.archivedAt);
-    if (remaining.length === 0) this.clearKey(scope, row.family);
+    if (remaining.length === 0) this.clearKey(this.ownerOf(row), row.family);
     this.options.audit.record({
       workspace: scope.id,
       ownerId: actor.userId,
@@ -920,7 +1194,7 @@ export class ModelsService {
           });
         }
         const report = this.store.replaceCatalogue(
-          { workspace: this.hub(scope).id, ownerId: actor.userId },
+          { workspace: row.workspace, ownerId: actor.userId },
           row.id,
           result.models,
         );
@@ -946,8 +1220,8 @@ export class ModelsService {
   }
 
   /** Every provider of one credential family gets its catalogue refreshed. */
-  private refreshFamily(scope: WorkspaceScope, actor: Actor, family: string): void {
-    for (const row of this.store.familyRows(this.hub(scope).id, family)) {
+  private refreshFamily(scope: WorkspaceScope, actor: Actor, of: ProviderRow): void {
+    for (const row of this.store.scopeFamilyRows(of.workspace, of.shared, of.family)) {
       if (row.archivedAt || !row.enabled) continue;
       const entry = this.entryOf(row);
       if (entry && entry.capabilities.listModels === false) continue;
@@ -968,8 +1242,11 @@ export class ModelsService {
       limit?: number;
     },
   ): { items: ContractModel[]; next_cursor: string | null } {
-    const hub = this.hub(scope);
-    const bySlug = new Map(this.store.listProviders(hub.id).map((row) => [row.id, row]));
+    // The models of the providers this profile uses: its own, and the shared ones it has no
+    // own row of the same slug for (decision §37) — so a `Model.key` names one model.
+    const asked = query.provider_id ? this.visibleRow(scope.id, query.provider_id) : undefined;
+    const rows = query.provider_id ? (asked ? [asked] : []) : this.effectiveRows(scope.id);
+    const bySlug = new Map(rows.map((row) => [row.id, row]));
     const needle = query.q?.trim().toLowerCase();
     const visible = query.visible ?? true;
     // The catalogue is ordered by (provider, model), so its cursor is that pair rather
@@ -977,7 +1254,7 @@ export class ModelsService {
     const after = decodeCatalogueCursor(query.cursor);
     const limit = clampLimit(query.limit);
     const matching = this.store
-      .allModels(hub.id)
+      .modelsOfProviders([...bySlug.keys()])
       .filter((row) => {
         const provider = bySlug.get(row.providerId);
         if (!provider || !provider.enabled || provider.archivedAt) return false;
@@ -1080,7 +1357,7 @@ export class ModelsService {
    * The profile's model choices, as they are in effect. A role this profile chose is its
    * own; a role it left alone is the default profile's, and `inherited` names it (`default`
    * for the chat model, else the auxiliary key) so a client can say where it came from
-   * (contract decision §34). In the default profile nothing is inherited.
+   * (contract decision §37). In the default profile nothing is inherited.
    */
   getDefaults(scope: WorkspaceScope): {
     default: ModelRefInput | null;
@@ -1130,8 +1407,10 @@ export class ModelsService {
     if (own && this.refOf({ id: workspace }, own.modelId)) return { row: own, inherited: false };
     const hubId = this.hub({ id: workspace }).id;
     if (hubId === workspace) return null;
+    // The default profile's choice, as this profile can use it: the same model on the
+    // provider of the same slug this profile uses (its own or a shared one).
     const shared = this.store.defaultFor(hubId, role);
-    if (shared && this.refOf({ id: hubId }, shared.modelId))
+    if (shared && this.refOf({ id: workspace }, shared.modelId))
       return { row: shared, inherited: true };
     return null;
   }
@@ -1290,7 +1569,7 @@ export class ModelsService {
 
   /**
    * Which speech providers a profile speaks with: its own choice, else the default
-   * profile's — the same rule as the model defaults (contract decision §34).
+   * profile's — the same rule as the model defaults (contract decision §37).
    */
   private speechChoice(
     scope: WorkspaceScope,
@@ -1343,8 +1622,8 @@ export class ModelsService {
       }
       if (entry.api_key !== undefined && !isMask(entry.api_key)) {
         const value = entry.api_key?.trim() ?? '';
-        if (value === '') this.clearKey(scope, row.family);
-        else this.storeKey(scope, actor, row.family, value);
+        if (value === '') this.clearKey(this.ownerOf(row), row.family);
+        else this.storeKey(this.ownerOf(row), actor, row.family, value);
         keyChanged = true;
       }
       this.db.update(providers).set(rowChanges).where(eq(providers.id, row.id)).run();
@@ -1421,12 +1700,13 @@ export class ModelsService {
    * the list there.
    */
   ensureChatDefault(scope: WorkspaceScope, actor: Actor, providerId: string): ContractModel | null {
-    // The first default is the hub's — the default profile's — and every profile that has
-    // not chosen its own uses it (contract decision §34).
-    const hub = this.hub(scope);
-    if (this.store.defaultFor(hub.id, 'chat')) return null;
-    const row = this.store.provider(hub.id, providerId);
+    // A shared provider gives the default profile its first model — and every profile that
+    // has not chosen its own uses that. A profile's own provider gives that profile its own,
+    // when it has no model in effect yet (decision §37).
+    const row = this.store.providerById(providerId);
     if (!row || row.archivedAt || !row.enabled || row.kind !== 'llm') return null;
+    const target = row.shared ? this.hub(scope).id : row.workspace;
+    if (this.effectiveDefault(target, 'chat')) return null;
     const model = this.store
       .modelsOf(row.id)
       .find(
@@ -1438,15 +1718,15 @@ export class ModelsService {
           this.passesVisibility(row, candidate.modelKey),
       );
     if (!model) return null;
-    this.store.setDefault({ workspace: hub.id, ownerId: actor.userId }, 'chat', model.id, []);
+    this.store.setDefault({ workspace: target, ownerId: actor.userId }, 'chat', model.id, []);
     this.options.audit.record({
-      workspace: hub.id,
+      workspace: target,
       ownerId: actor.userId,
       actorKind: 'system',
       actorId: actor.userId,
       action: 'model_default.updated',
       entityKind: 'workspace',
-      entityId: hub.id,
+      entityId: target,
       summary: `chat default set to ${row.slug}/${model.modelKey}`,
       data: { role: 'chat', provider: row.slug, model: model.modelKey, reason: 'first_provider' },
     });
@@ -1478,8 +1758,11 @@ export class ModelsService {
     });
 
     // 2. The keys, read back from the file the runtime reads — not from what we meant to
-    //    write. A workspace whose providers all take no key passes with none.
-    const wanted = state ? hermesEnvPlan(home as string, state) : null;
+    //    write. A workspace whose providers all take no key passes with none. The root
+    //    `.env` is the default profile's (decision §37); a named profile's own keys are
+    //    checked in its own `.env` before each of its turns (`prepareProfile`).
+    const rootState = home ? this.state(this.hub({ id: workspace }).id) : null;
+    const wanted = rootState ? hermesEnvPlan(home as string, rootState) : null;
     const onDisk = home ? readEnvFile(path.join(home, '.env')) : new Map<string, string>();
     const missingKeys = wanted
       ? wanted.owned.filter((name) => onDisk.get(name) !== wanted.values[name])
@@ -1493,9 +1776,7 @@ export class ModelsService {
     // 3. Did the provider itself accept the key? Stored when it was saved and refreshed
     //    by every Test; a provider that has never answered is not a failure, only
     //    unproven — the endpoint may simply be one that is asked nothing until a run.
-    const rows = this.store
-      .listProviders(this.hub({ id: workspace }).id)
-      .filter((row) => row.enabled && !row.archivedAt);
+    const rows = this.effectiveRows(workspace).filter((row) => row.enabled && !row.archivedAt);
     const rejected = rows.filter((row) => row.status === 'error');
     checks.push({
       id: 'provider_verified',
@@ -1559,10 +1840,15 @@ export class ModelsService {
     const credentials: ResolvedCredential[] = [];
     const hermesProviders: HermesProviderRoute[] = [];
     const seen = new Set<string>();
-    // The providers and keys are the hub's (decision §34); only the model choice below is
-    // the profile's.
-    const hubId = this.hub({ id: workspace }).id;
-    for (const row of this.store.listProviders(hubId)) {
+    const named = new Set<string>();
+    // The providers this profile uses: its own first, then the shared ones it has no own row
+    // of the same slug for — so its own key wins wherever both name one variable (§37).
+    const effective = this.effectiveRows(workspace);
+    const ordered = [
+      ...effective.filter((row) => !row.shared),
+      ...effective.filter((row) => row.shared),
+    ];
+    for (const row of ordered) {
       if (!row.enabled) continue;
       const entry = this.entryOf(row);
       const route = hermesRouteOf(entry);
@@ -1582,16 +1868,20 @@ export class ModelsService {
         }
       }
 
-      if (seen.has(row.family) || !row.apiKeySecretId) continue;
-      const value = this.options.secrets.reveal(hubId, row.apiKeySecretId);
+      const familyKey = `${String(row.shared)}:${row.family}`;
+      if (seen.has(familyKey) || !row.apiKeySecretId) continue;
+      const value = this.options.secrets.reveal(row.workspace, row.apiKeySecretId);
       if (!value) continue;
-      seen.add(row.family);
+      seen.add(familyKey);
       // A provider with no world-wide variable name still has one Hermes reads it by: the
       // `key_env` of its own `providers:` block. Skipping those rows was why a key typed
       // into a custom or local provider reached nothing (the defect of 2026-09-22).
       const envVar = entry?.envVar ?? hermesKeyEnvOf(row.slug, entry);
-      const hermesEnvVars =
-        entry && entry.hermesEnvVars.length > 0 ? [...entry.hermesEnvVars] : [envVar];
+      const hermesEnvVars = (
+        entry && entry.hermesEnvVars.length > 0 ? [...entry.hermesEnvVars] : [envVar]
+      ).filter((name) => !named.has(name));
+      if (hermesEnvVars.length === 0) continue;
+      for (const name of hermesEnvVars) named.add(name);
       credentials.push({ family: row.family, envVar, hermesEnvVars, value });
     }
     const chat = this.hermesModelChoice(workspace);
@@ -1600,7 +1890,7 @@ export class ModelsService {
       hermesProviders,
       hermesModel: chat.choice,
       hermesModelBlocked: chat.blocked,
-      ownedEnv: this.ownedEnvNames(hubId),
+      ownedEnv: this.ownedEnvNames(),
     };
   }
 
@@ -1611,12 +1901,11 @@ export class ModelsService {
    * and none of them may sit in a named profile's own `.env`, where Hermes would read it
    * before the process environment the hub hands every profile.
    */
-  private ownedEnvNames(hubId: string): string[] {
+  private ownedEnvNames(): string[] {
     const names = new Set<string>();
-    const rows = this.db.select().from(providers).where(eq(providers.workspace, hubId)).all();
-    for (const row of rows) {
-      // A removed row the merge renamed (`<slug>~<id>`) names nothing any more.
-      if (row.slug.includes('~')) continue;
+    // Every row of every profile, removed ones included: a name the hub once wrote is one
+    // it owns, so a key taken away is taken out of the files too.
+    for (const row of this.store.everyProviderRow()) {
       const entry = this.entryOf(row);
       if (entry && entry.hermesEnvVars.length > 0) {
         for (const name of entry.hermesEnvVars) names.add(name);
@@ -1626,6 +1915,7 @@ export class ModelsService {
     }
     return [...names].sort();
   }
+
 
   /**
    * The environment a coding agent starts with, derived from the shared providers. The
@@ -1641,11 +1931,7 @@ export class ModelsService {
   ): Record<string, string> {
     const secretRefValues: Record<string, string> = {};
     for (const [name, secretId] of Object.entries(extra.secretRefs ?? {})) {
-      // A pin to a provider key made before providers were the hub's points at a key that
-      // now lives under the default profile (decision §34).
-      const value =
-        this.options.secrets.reveal(workspace, secretId) ??
-        this.options.secrets.reveal(this.hub({ id: workspace }).id, secretId);
+      const value = this.options.secrets.reveal(workspace, secretId);
       if (value !== null) secretRefValues[name] = value;
     }
     return agentEnvironment({
@@ -1685,9 +1971,11 @@ export class ModelsService {
     const trimmed = key.trim();
     if (!trimmed) return null;
     const slash = trimmed.indexOf('/');
-    const hubId = this.hub({ id: workspace }).id;
+    // The providers this profile uses: a slug names its own row over a shared one (§37).
+    const effective = this.effectiveRows(workspace);
     if (slash > 0) {
-      const provider = this.store.providerBySlug(hubId, trimmed.slice(0, slash));
+      const slug = trimmed.slice(0, slash);
+      const provider = effective.find((row) => row.slug === slug);
       const modelKey = trimmed.slice(slash + 1);
       if (provider && !provider.archivedAt && modelKey) {
         const row = this.store.model(provider.id, modelKey);
@@ -1695,7 +1983,10 @@ export class ModelsService {
       }
     }
     // A bare id: the workspace's own catalogue decides which provider serves it.
-    for (const provider of this.store.listProviders(hubId)) {
+    for (const provider of [
+      ...effective.filter((row) => !row.shared),
+      ...effective.filter((row) => row.shared),
+    ]) {
       if (provider.archivedAt || !provider.enabled) continue;
       const row = this.store.model(provider.id, trimmed);
       if (row && !row.archivedAt) return { provider_id: provider.id, model: row.modelKey };
@@ -1713,8 +2004,8 @@ export class ModelsService {
    * rather than guessing — an image posted to a model that cannot see is a paid request
    * that comes back confused.
    */
-  modelFacts(_workspace: string, providerId: string, model: string): DirectModelFacts | null {
-    const provider = this.canonicalProvider(providerId);
+  modelFacts(workspace: string, providerId: string, model: string): DirectModelFacts | null {
+    const provider = this.effectiveFor(workspace, providerId);
     if (!provider || provider.archivedAt) return null;
     const row = this.store.model(provider.id, model);
     if (!row || row.archivedAt) return null;
@@ -1739,7 +2030,7 @@ export class ModelsService {
    * a run loop that will one day forget to.
    */
   async *chat(workspace: string, request: DirectChatRequest): AsyncIterable<DirectChatEvent> {
-    const provider = this.canonicalProvider(request.providerId);
+    const provider = this.effectiveFor(workspace, request.providerId);
     if (!provider || provider.archivedAt || !provider.enabled) {
       yield {
         type: 'failed',
@@ -1796,9 +2087,9 @@ export class ModelsService {
     const home = this.options.hermes.home();
     if (!home) return;
     // Hermes's root home is its `default` profile, which is the hub's default profile —
-    // whichever profile the person saving happens to be in. Its keys are the hub's and its
-    // model is the default profile's choice; another profile's choice never lands there
-    // (the defect of 2026-09-24: the last profile to save a provider set everyone's model).
+    // whichever profile the person saving happens to be in: the providers and keys it uses
+    // (its own over the shared ones) and its model. Another profile's never land there (the
+    // defect of 2026-09-24: the last profile to save a provider set everyone's model).
     const state = this.state(this.hub(scope).id);
     if (state.hermesModelBlocked) {
       this.options.log.warn(
@@ -1844,60 +2135,68 @@ export class ModelsService {
     this.scheduleRestart();
   }
 
-  /**
-   * The endpoints (`providers:` blocks) in every named profile's `config.yaml` too — the
-   * same blocks, by the same rule: the hub's own keys only, everything else in the file
-   * untouched. Keys are not copied: they reach every profile through the process
-   * environment, which Hermes reads after a profile's own `.env` (ADR 0010, ADR 0014 stage
-   * 3). A profile's model stays its own — every hub turn names its model anyway. Nothing
-   * restarts: a conversation reads its profile's configuration when it opens.
-   */
-  private propagateToProfiles(state: PropagationState): void {
+  /** Every named Hermes profile, made ready against the root it falls back on. */
+  private propagateToProfiles(root: PropagationState): void {
     for (const profileHome of this.options.hermes.profileHomes?.() ?? []) {
-      this.prepareProfileWith(profileHome, state);
+      this.prepareProfileWith(profileHome, root);
     }
   }
 
   /**
-   * Makes one named Hermes profile ready for a turn with the hub's providers: the endpoints
-   * in its `config.yaml`, and none of the hub's key names in its own `.env`.
+   * Makes one named Hermes profile ready for a turn with the providers **it** uses
+   * (contract decision §37): its own, and the shared ones it has no own row of the same
+   * slug for.
    *
-   * The second half matters because Hermes reads a profile's `.env` **before** the process
-   * environment (`agent/secret_scope.py` §get_secret), and a profile made as a copy of
-   * `default` (`--clone-from`) carries a copy of the root `.env`. A key left there would win
-   * over the one the hub hands every profile — a rotated key would never take effect there,
-   * and a removed one would keep working. So the keys live in one place (the root home and
-   * the process), and a profile folder — which `hermes profile export` packs — holds none of
-   * them. Every other line of the profile's `.env` is left as it is.
+   * - `config.yaml`: the endpoints (`providers:` blocks) of those providers — a turn that
+   *   names `majlis-<slug>` finds it, with this profile's address when it has its own.
+   * - `.env`: Hermes reads a profile's `.env` **before** the process environment
+   *   (`agent/secret_scope.py` §get_secret), and the process environment is the root's —
+   *   Hermes loads the root `.env` into it at start. So for every variable the hub owns, the
+   *   profile's `.env` says what differs from the root: its own key (which then wins), the
+   *   shared key where the root has its own instead, or an empty value where the root has a
+   *   key this profile must not use. A variable whose value is the root's is left out — the
+   *   shared keys stay in one place. Every other line of the file is left as it is, and a
+   *   copy of `default` (`--clone-from`) loses the keys it copied that are not its own.
    *
-   * Called for every profile on each save, and for one profile before each of its turns
-   * (`prepareProfile`), so a profile made later — by the hub, by Hermes, or on first use —
-   * is put right before it runs. Never throws.
+   * Called for every named profile on each save, right after the hub makes a profile, and
+   * for one profile before each of its turns (`prepareProfile`), so a profile made later —
+   * by the hub, by Hermes, or on first use — is right before it runs. Never throws.
    */
   prepareProfile(profileHome: string): void {
     this.prepareProfileWith(profileHome, this.state(this.hub().id));
   }
 
-  private prepareProfileWith(profileHome: string, state: PropagationState): void {
+  private prepareProfileWith(profileHome: string, root: PropagationState): void {
     const profile = path.basename(profileHome);
     try {
-      const written = writeHermesProviders(profileHome, state.hermesProviders);
+      const workspace = this.options.profileWorkspace?.(profile) ?? `hermes-profile:${profile}`;
+      const mine = this.state(workspace);
+      const written = writeHermesProviders(profileHome, mine.hermesProviders);
+      const rootValues = hermesProcessEnv(root);
+      const ownValues = hermesProcessEnv(mine);
       const owned = [
         ...new Set([
-          ...(state.ownedEnv ?? []),
-          ...state.credentials.flatMap((credential) => credential.hermesEnvVars),
+          ...(root.ownedEnv ?? []),
+          ...Object.keys(rootValues),
+          ...Object.keys(ownValues),
         ]),
       ];
-      const env = writeHermesEnv({ file: path.join(profileHome, '.env'), owned, values: {} });
+      const values: Record<string, string> = {};
+      for (const name of owned) {
+        if (ownValues[name] === rootValues[name]) continue;
+        // Empty blocks the root's key: this profile has no key of that name to use.
+        values[name] = ownValues[name] ?? '';
+      }
+      const env = writeHermesEnv({ file: path.join(profileHome, '.env'), owned, values });
       if (written.dirty || env.dirty) {
         this.options.log.info(
           // Names only, never a value.
           {
             profile,
-            changed: written.changed,
+            changed: [...written.changed, ...env.changed],
             removed: [...written.removed, ...env.removed],
           },
-          'models: Hermes profile made ready for the hub providers',
+          'models: Hermes profile made ready for its providers',
         );
       }
     } catch (error) {
@@ -1963,20 +2262,18 @@ export class ModelsService {
   private present(scope: WorkspaceScope, row: ProviderRow): ContractProvider {
     const entry = this.entryOf(row);
     return serializeProvider(row, {
-      // Stored once, under the default profile, whichever profile asks (decision §34).
-      profile: this.hub(scope).slug,
+      // A shared row is stored under the default profile; an own row is the asking one's.
+      profile: row.shared ? this.hub(scope).slug : scope.slug,
       models: this.store.modelsOf(row.id),
       keyStored: this.hasKey(scope, row),
       refreshable: entry ? entry.capabilities.listModels !== false : true,
     });
   }
 
-  /** A live provider of the hub, from any profile (decision §34). */
+  /** A live provider this profile can see — its own, or a shared one (decision §37). */
   private loadProvider(scope: WorkspaceScope, id: string): ProviderRow {
-    const row = this.canonicalProvider(id);
-    if (!row || row.archivedAt || row.workspace !== this.hub(scope).id) {
-      throw notFound({ resource: 'provider', id });
-    }
+    const row = this.visibleRow(scope.id, id);
+    if (!row) throw notFound({ resource: 'provider', id });
     return row;
   }
 
@@ -1996,14 +2293,15 @@ export class ModelsService {
     return catalogueEntry(row.slug);
   }
 
-  private contextOf(scope: WorkspaceScope, row: ProviderRow): ProviderContext {
+  private contextOf(_scope: Pick<WorkspaceScope, 'id'>, row: ProviderRow): ProviderContext {
     const entry = this.entryOf(row);
     return {
       slug: row.slug,
       label: row.label,
       baseUrl: row.baseUrl ?? entry?.baseUrl ?? '',
+      // A key is stored where its row is: the default profile for a shared one.
       apiKey: row.apiKeySecretId
-        ? this.options.secrets.reveal(this.hub(scope).id, row.apiKeySecretId)
+        ? this.options.secrets.reveal(row.workspace, row.apiKeySecretId)
         : null,
       // `auth_kind` is the requirement, not "has a key": a provider that does not demand
       // one is asked without one, and whatever the endpoint answers is the answer.
@@ -2014,25 +2312,25 @@ export class ModelsService {
     };
   }
 
-  private hasKey(scope: WorkspaceScope, row: ProviderRow): boolean {
-    return this.options.secrets.has(this.hub(scope).id, row.apiKeySecretId);
+  private hasKey(_scope: Pick<WorkspaceScope, 'id'>, row: ProviderRow): boolean {
+    return this.options.secrets.has(row.workspace, row.apiKeySecretId);
   }
 
   /**
-   * Stores one key for a whole credential family and points every provider row of that
-   * family at it. This is the line that makes the OpenAI key entered on the chat tab the
-   * same key the dictation tab uses (ADR 0010 §One key, many rows).
+   * Stores one key for a whole credential family **of one scope** and points every row of
+   * that family in that scope at it. This is the line that makes the OpenAI key entered on
+   * the chat tab the same key the dictation tab uses (ADR 0010 §One key, many rows) — and
+   * that keeps a profile's own OpenAI key apart from the shared one (decision §37).
    */
-  private storeKey(scope: WorkspaceScope, actor: Actor, family: string, plaintext: string): void {
-    const hub = this.hub(scope);
+  private storeKey(owner: ProviderOwner, actor: Actor, family: string, plaintext: string): void {
     const secretId = this.options.secrets.put(
-      { workspace: hub.id, ownerId: actor.userId },
-      secretNameOf(family),
+      { workspace: owner.workspace, ownerId: actor.userId },
+      secretNameOf(family, owner.shared),
       plaintext,
       'api_key',
     );
     const at = this.now();
-    for (const row of this.store.familyRows(hub.id, family)) {
+    for (const row of this.store.scopeFamilyRows(owner.workspace, owner.shared, family)) {
       this.db
         .update(providers)
         .set({ apiKeySecretId: secretId, updatedAt: at })
@@ -2041,11 +2339,10 @@ export class ModelsService {
     }
   }
 
-  private clearKey(scope: WorkspaceScope, family: string): void {
-    const hub = this.hub(scope);
-    const rows = this.store.familyRows(hub.id, family);
+  private clearKey(owner: ProviderOwner, family: string): void {
+    const rows = this.store.scopeFamilyRows(owner.workspace, owner.shared, family);
     const secretId = rows.find((row) => row.apiKeySecretId)?.apiKeySecretId;
-    if (secretId) this.options.secrets.wipe(hub.id, secretId);
+    if (secretId) this.options.secrets.wipe(owner.workspace, secretId);
     const at = this.now();
     for (const row of rows) {
       this.db
@@ -2061,13 +2358,19 @@ export class ModelsService {
     return provider.visibleModels.includes(modelKey);
   }
 
-  private refOf(_scope: Pick<WorkspaceScope, 'id'>, modelId: string): ModelRefInput | null {
-    const row = this.canonicalModel(modelId);
+  /**
+   * A stored model id, as this profile can run it: the model of that name on the provider of
+   * that slug the profile uses — its own over a shared one (decision §37). Null when the
+   * profile has no such provider or model, or the provider was removed.
+   */
+  private refOf(scope: Pick<WorkspaceScope, 'id'>, modelId: string): ModelRefInput | null {
+    const row = this.store.modelRowById(modelId);
     if (!row || row.archivedAt) return null;
-    // A model of a removed provider is no choice at all: removing a provider applies to
-    // every profile that had picked one of its models (decision §34).
-    if (this.canonicalProvider(row.providerId)?.archivedAt) return null;
-    return { provider_id: row.providerId, model: row.modelKey };
+    const provider = this.effectiveFor(scope.id, row.providerId);
+    if (!provider) return null;
+    const model = provider.id === row.providerId ? row : this.store.model(provider.id, row.modelKey);
+    if (!model || model.archivedAt) return null;
+    return { provider_id: provider.id, model: model.modelKey };
   }
 
   /** The role's model in effect for a profile: its own choice, else the default profile's. */
@@ -2092,7 +2395,7 @@ export class ModelsService {
   } {
     const ref = this.refOfRole(workspace, 'chat');
     if (!ref) return { choice: null, blocked: null };
-    const provider = this.canonicalProvider(ref.provider_id);
+    const provider = this.store.providerById(ref.provider_id);
     if (!provider) return { choice: null, blocked: null };
     const name = this.hermesNameOfProvider(provider);
     if (!name) return { choice: null, blocked: provider.slug };
@@ -2105,8 +2408,9 @@ export class ModelsService {
    * inheriting whatever the last default write left in `config.yaml` (ADR 0008 §1: the
    * run surface takes `provider` and `model` on every `POST /v1/runs`).
    */
-  hermesProviderName(_workspace: string, providerId: string): string | null {
-    const row = this.canonicalProvider(providerId);
+  hermesProviderName(workspace: string, providerId: string): string | null {
+    // The provider of that slug this profile uses: its own over a shared one (§37).
+    const row = this.effectiveFor(workspace, providerId);
     if (!row || row.archivedAt) return null;
     return this.hermesNameOfProvider(row);
   }
@@ -2179,11 +2483,11 @@ export class ModelsService {
     reason: string | null;
     providers: ContractSpeechProvider[];
   } {
-    const rows = this.store.listProviders(this.hub(scope).id, kind);
+    const rows = this.visibleRows(scope.id, kind);
     const list = rows.map((row) =>
       serializeSpeechProvider(row, { keyStored: this.hasKey(scope, row) }),
     );
-    const activeRowId = activeId ? this.canonicalProvider(activeId)?.id : undefined;
+    const activeRowId = activeId ? this.effectiveFor(scope.id, activeId)?.id : undefined;
     const active = activeRowId ? rows.find((row) => row.id === activeRowId) : undefined;
     const configured = active ? active.authKind === 'none' || this.hasKey(scope, active) : false;
     const ready = !!active && active.enabled && configured;
@@ -2199,7 +2503,11 @@ export class ModelsService {
     return { active_provider_id: active?.id ?? null, ready, reason, providers: list };
   }
 
-  private freeSlug(workspace: string, label: string): string {
+  /**
+   * A slug for somebody's own endpoint, free in the scope it goes to and among what the
+   * asking profile sees — two providers one profile lists never share a name.
+   */
+  private freeSlug(workspace: string, owner: ProviderOwner, label: string): string {
     const base =
       `custom-${label}`
         .toLowerCase()
@@ -2208,7 +2516,10 @@ export class ModelsService {
         .slice(0, 36) || 'custom-provider';
     let candidate = base;
     for (let n = 2; n < 100; n += 1) {
-      if (!this.store.providerBySlug(workspace, candidate)) return candidate;
+      const taken =
+        this.store.scopeRowBySlug(owner.workspace, owner.shared, candidate) ??
+        this.visibleRows(workspace).find((row) => row.slug === candidate);
+      if (!taken) return candidate;
       candidate = `${base}-${n}`;
     }
     throw conflict({ reason: 'slug_exhausted', detail: label });

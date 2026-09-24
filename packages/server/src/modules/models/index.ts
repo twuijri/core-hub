@@ -36,6 +36,7 @@ import { defineRoute } from '../../lib/route.js';
 import { t } from '../../i18n/index.js';
 import {
   defaultWorkspace,
+  findWorkspace,
   ownerUser,
   requireRole,
   requireUser,
@@ -196,11 +197,16 @@ function contextOf(app: FastifyInstance): ModelsService {
     audit: auditFor(app),
     jobs: jobRunnerFor(app),
     hermes,
-    // Providers, keys and models are the hub's, stored under the default profile
-    // (contract decision §34).
+    // Shared providers, their models and keys are stored under the default profile
+    // (contract decision §37).
     hubScope: () => {
       const row = defaultWorkspace(db);
       return row ? { id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault } : null;
+    },
+    // A named Hermes profile is the workspace of that slug (ADR 0014).
+    profileWorkspace: (profile) => {
+      const row = findWorkspace(db, profile);
+      return row && !row.isDefault ? row.id : null;
     },
     ...(own.fetchImpl ? { fetchImpl: own.fetchImpl } : {}),
     ...(own.restartDelayMs === undefined ? {} : { restartDelayMs: own.restartDelayMs }),
@@ -275,8 +281,8 @@ export const modelsModule = defineModule({
       directChat(workspace, request) {
         return contextOf(app).chat(workspace, request);
       },
-      // A named Hermes profile, just before one of its turns: the hub's endpoints in its
-      // config, none of the hub's key names in its own `.env` (decision §34).
+      // A named Hermes profile, just before one of its turns: the endpoints it uses in its
+      // config, and in its own `.env` exactly the keys that differ from the root's (§37).
       prepareRuntimeProfile(profileHome) {
         contextOf(app).prepareProfile(profileHome);
       },
@@ -302,7 +308,7 @@ export const modelsModule = defineModule({
       const owner = ownerUser(db);
       if (!owner) return;
       const service = contextOf(app);
-      // Once: the providers are the hub's, not a profile's (decision §34). Reconciling per
+      // Once: the root is the default profile's, whoever saved (decision §37). Reconciling per
       // profile used to leave Hermes with whichever profile came last.
       const row = defaultWorkspace(db);
       if (!row) return;

@@ -48,6 +48,7 @@ import {
   createProfile,
   deleteProfile,
   patchProfileSettings,
+  profileCreated,
   slugTaken,
   statsOf,
   updateProfile,
@@ -250,6 +251,9 @@ const ProfileSettingsPatch = z.object({
     })
     .optional(),
 });
+/** `auth.exportProfile`'s optional body (contract decision §37). */
+const ProfileExport = z.object({ providers: z.boolean().optional() });
+
 const ProfileImport = z.object({
   attachment_id: Ulid,
   slug: ProfileSlug,
@@ -968,6 +972,12 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
       name: body.name,
       cloneFrom: body.clone_from ?? null,
     });
+    // What other modules keep per profile follows: a copy's own providers and keys (§37).
+    await profileCreated(app, {
+      profile: row,
+      source: body.clone_from ? findWorkspace(db, body.clone_from) : null,
+      actorId: principalOf(request).user.id,
+    });
     audit(
       request,
       'auth.profile_created',
@@ -1118,6 +1128,9 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
 
   route('POST', '/profiles/:profile_id/export', admin, async (request, reply) => {
     const row = workspaceFor(request);
+    // With the profile's providers and their keys, only when asked (§37).
+    const body = parse(ProfileExport, request.body ?? {});
+    const withProviders = body.providers === true;
     const context = transferContext(request);
     const job = jobRunnerFor(app).start(
       {
@@ -1126,10 +1139,10 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
         kind: 'auth.export',
         entityKind: 'profile',
         entityId: row.id,
-        input: { slug: row.slug },
+        input: { slug: row.slug, providers: withProviders },
         message: t('jobs.queued', context.language),
       },
-      (handle) => runExport(context, handle, row),
+      (handle) => runExport(context, handle, row, { providers: withProviders }),
     );
     audit(
       request,
@@ -1138,6 +1151,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
       `workspace ${row.slug} export started`,
       {
         job_id: job.id,
+        providers: withProviders,
       },
     );
     return reply.code(202).send({ job_id: job.id });

@@ -88,6 +88,30 @@ export interface ProfileTransferPorts {
   files: ProfileArchiveFiles;
   /** Every credential value the hub holds; none of them may leave in an export. */
   secrets(): readonly string[];
+  /**
+   * A profile's providers and their keys, for an export that carries them, and back into
+   * an imported profile as its own (contract decision §37). Absent in a hub composed
+   * without `models`: such an export carries none, and such an import adds none.
+   */
+  providers?: {
+    exportOf(workspaceId: string): unknown;
+    importInto(workspaceId: string, actorId: string, bundle: unknown): number;
+  };
+  /** Other modules set up a profile an import just added (its Hermes side, for one). */
+  added?(profile: WorkspaceRow, actorId: string): Promise<void>;
+}
+
+/**
+ * The file an export "with providers" adds at the top of the profile folder (§37). An
+ * import reads it before Hermes sees the archive and never hands it on.
+ */
+export const PROVIDERS_FILE = 'majlis-providers.json';
+
+function isProvidersFile(root: string | null) {
+  return (entryPath: string) => {
+    const parts = entryPath.split('/').filter(Boolean);
+    return parts.length === 2 && parts[1] === PROVIDERS_FILE && (!root || parts[0] === root);
+  };
 }
 
 let factory: ((app: FastifyInstance) => ProfileTransferPorts | null) | null = null;
@@ -192,6 +216,7 @@ export async function runExport(
   context: TransferContext,
   handle: JobHandle,
   profile: WorkspaceRow,
+  options: { providers?: boolean } = {},
 ): Promise<Record<string, unknown>> {
   const { ports, language, scope } = context;
   const now = context.now ?? (() => new Date());
@@ -213,11 +238,30 @@ export async function runExport(
     const at = now();
     const fileName = `${profile.slug}-${stampOf(at)}.tar.gz`;
     const checked = path.join(staging, fileName);
+    // With providers (§37): this profile's own and the shared ones it uses, keys in the
+    // clear, in one file of its own. Every other file is still checked as before — the keys
+    // are masked everywhere else — and the file itself is added after that check.
+    const bundle =
+      options.providers && ports.providers ? ports.providers.exportOf(profile.id) : null;
+    const carried =
+      bundle && typeof bundle === 'object'
+        ? ((bundle as { providers?: unknown[] }).providers?.length ?? 0)
+        : 0;
     let report;
     try {
       report = await rewriteArchive(raw, checked, {
-        drop: isCredentialFile,
+        drop: (entry) => isCredentialFile(entry) || isProvidersFile(null)(entry),
         secrets: ports.secrets(),
+        ...(bundle
+          ? {
+              append: [
+                {
+                  path: `${name}/${PROVIDERS_FILE}`,
+                  data: Buffer.from(`${JSON.stringify(bundle, null, 2)}\n`, 'utf8'),
+                },
+              ],
+            }
+          : {}),
       });
     } catch (error) {
       fromArchive(error, language);
@@ -245,6 +289,7 @@ export async function runExport(
       expires_at: expiresAt.toISOString().replace(/\.\d{3}Z$/, 'Z'),
       removed: report.removed,
       masked: report.masked,
+      providers: carried,
     };
   } finally {
     await rm(staging, { recursive: true, force: true });
@@ -279,9 +324,14 @@ export async function runImport(
     await mkdir(staging, { recursive: true, mode: 0o700 });
     handle.progress(10, t('auth.profile_import_checking', language));
     const archive = path.join(staging, `${input.slug}.tar.gz`);
+    // Checked — and the hub's providers file, when an export "with providers" wrote one, is
+    // read here (§37): its keys go to the hub's store, never into the profile's folder.
     let report;
     try {
-      report = await rewriteArchive(upload.path, null, { maxUnpackedBytes: MAX_UNPACKED_BYTES });
+      report = await rewriteArchive(upload.path, null, {
+        maxUnpackedBytes: MAX_UNPACKED_BYTES,
+        capture: isProvidersFile(null),
+      });
     } catch (error) {
       fromArchive(error, language);
     }
@@ -296,7 +346,23 @@ export async function runImport(
         [...report.unsafe, ...report.unsupported].slice(0, 3).join(', '),
       );
     }
-    await copyFile(upload.path, archive);
+    const providersFile = Object.values(report.captured)[0] ?? null;
+    let bundle: unknown = null;
+    if (providersFile) {
+      try {
+        bundle = JSON.parse(providersFile.toString('utf8'));
+      } catch {
+        throw failure('bad_request', 'auth.profile_archive_entries', language, PROVIDERS_FILE);
+      }
+      // Hermes gets the archive without it.
+      try {
+        await rewriteArchive(upload.path, archive, { drop: isProvidersFile(null) });
+      } catch (error) {
+        fromArchive(error, language);
+      }
+    } else {
+      await copyFile(upload.path, archive);
+    }
     if (handle.cancelRequested()) return {};
     // Checked when the job was asked for, and again now: another import may have won.
     if (slugTaken(db, input.slug)) {
@@ -322,8 +388,18 @@ export async function runImport(
           .returning()
           .get()
       : createProfile(db, scope.userId, { slug: input.slug, name: input.name, cloneFrom: null });
+    // The providers the archive carried become this profile's own (§37).
+    let providers = 0;
+    if (bundle !== null && ports.providers) {
+      try {
+        providers = ports.providers.importInto(row.id, scope.userId, bundle);
+      } catch {
+        throw failure('bad_request', 'auth.profile_archive_entries', language, PROVIDERS_FILE);
+      }
+    }
+    await ports.added?.(row, scope.userId);
     handle.progress(100, t('auth.profile_import_done', language));
-    return { profile_id: row.id, slug: row.slug, name: row.name };
+    return { profile_id: row.id, slug: row.slug, name: row.name, providers };
   } finally {
     ports.files.discard(scope, input.attachmentId);
     await rm(staging, { recursive: true, force: true });

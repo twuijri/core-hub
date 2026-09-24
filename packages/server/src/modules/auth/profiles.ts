@@ -1,5 +1,6 @@
 // Workspaces ("profiles" in the contract): the filter every scoped row carries (ADR 0005).
 import { eq } from 'drizzle-orm';
+import type { FastifyInstance } from 'fastify';
 import type { ModuleDb } from '../../lib/db.js';
 import { HubError } from '../../lib/errors.js';
 import { deleteAvatar, writeAvatar, type DecodedAvatar } from './avatars.js';
@@ -30,6 +31,45 @@ const statsProviders: WorkspaceStatsProvider[] = [];
 
 export function registerWorkspaceStatsProvider(provider: WorkspaceStatsProvider): void {
   statsProviders.push(provider);
+}
+
+/**
+ * A profile just came into existence — made here, or made as a copy of `source`. Other
+ * modules copy what they keep per profile (`models`: a copy carries its source's own
+ * providers and keys, contract decision §37) and prepare the runtime's profile. `auth`
+ * knows nothing of what they do; a listener that throws is logged and skipped.
+ */
+export interface ProfileCreatedEvent {
+  profile: WorkspaceRow;
+  source: WorkspaceRow | null;
+  actorId: string;
+}
+export type ProfileCreatedListener = (
+  app: FastifyInstance,
+  event: ProfileCreatedEvent,
+) => void | Promise<void>;
+
+const createdListeners: ProfileCreatedListener[] = [];
+
+/** Wired once, from `modules/index.ts`. */
+export function onProfileCreated(listener: ProfileCreatedListener): void {
+  createdListeners.push(listener);
+}
+
+export async function profileCreated(
+  app: FastifyInstance,
+  event: ProfileCreatedEvent,
+): Promise<void> {
+  for (const listener of createdListeners) {
+    try {
+      await listener(app, event);
+    } catch (error) {
+      app.log.warn(
+        { err: error, profile: event.profile.slug },
+        'auth: a module could not finish setting up a new profile',
+      );
+    }
+  }
 }
 
 export function statsOf(workspaceId: string): ProfileStats {

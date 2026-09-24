@@ -66,6 +66,80 @@ export class ModelsStore {
       .get();
   }
 
+  /**
+   * The live rows of one provider scope (contract decision §37): the shared rows (stored
+   * under the default profile, `shared = true`) or one profile's own (`shared = false`).
+   */
+  scopeRows(workspace: string, shared: boolean, kind?: string): ProviderRow[] {
+    return this.db
+      .select()
+      .from(providers)
+      .where(
+        and(
+          eq(providers.workspace, workspace),
+          eq(providers.shared, shared),
+          isNull(providers.archivedAt),
+        ),
+      )
+      .orderBy(asc(providers.slug))
+      .all()
+      .filter((row) => !kind || row.kind === kind);
+  }
+
+  /** A row of one scope by slug, archived ones included (`materialize` brings them back). */
+  scopeRowBySlug(workspace: string, shared: boolean, slug: string): ProviderRow | undefined {
+    return this.db
+      .select()
+      .from(providers)
+      .where(
+        and(
+          eq(providers.workspace, workspace),
+          eq(providers.shared, shared),
+          eq(providers.slug, slug),
+        ),
+      )
+      .get();
+  }
+
+  /** One credential family inside one scope: "one key, many rows", never across scopes. */
+  scopeFamilyRows(workspace: string, shared: boolean, family: string): ProviderRow[] {
+    return this.db
+      .select()
+      .from(providers)
+      .where(
+        and(
+          eq(providers.workspace, workspace),
+          eq(providers.shared, shared),
+          eq(providers.family, family),
+        ),
+      )
+      .all();
+  }
+
+  providerById(id: string): ProviderRow | undefined {
+    return this.db.select().from(providers).where(eq(providers.id, id)).get();
+  }
+
+  modelRowById(id: string): ModelRow | undefined {
+    return this.db.select().from(models).where(eq(models.id, id)).get();
+  }
+
+  /** Live models of these providers, ordered by provider then model (the catalogue's order). */
+  modelsOfProviders(providerIds: readonly string[]): ModelRow[] {
+    if (providerIds.length === 0) return [];
+    return this.db
+      .select()
+      .from(models)
+      .where(and(inArray(models.providerId, [...providerIds]), isNull(models.archivedAt)))
+      .orderBy(asc(models.providerId), asc(models.modelKey))
+      .all();
+  }
+
+  /** Every provider row the hub has or had, in any profile: whose key names it owns. */
+  everyProviderRow(): ProviderRow[] {
+    return this.db.select().from(providers).all();
+  }
+
   /** Every provider row that shares one credential family — "one key, many rows". */
   familyRows(workspace: string, family: string): ProviderRow[] {
     return this.db

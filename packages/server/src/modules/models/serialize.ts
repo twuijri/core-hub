@@ -46,6 +46,8 @@ export interface ContractProvider {
   slug: string;
   label: string;
   kind: string;
+  /** `all`: every profile's; `profile`: only `profile`'s own (contract decision §37). */
+  scope: 'all' | 'profile';
   builtin: boolean;
   enabled: boolean;
   api_key: string | null;
@@ -138,6 +140,7 @@ export function serializeProvider(
     slug: row.slug,
     label: row.label,
     kind: row.kind,
+    scope: row.shared ? 'all' : 'profile',
     builtin: row.builtin,
     enabled: row.enabled,
     // The one shape a stored key takes on the way out.
