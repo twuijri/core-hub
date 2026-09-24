@@ -94,7 +94,12 @@ describe('testing an MCP server through Hermes', () => {
         { ok: false, error: "[Errno 2] No such file or directory: 'nope'", tools: [] },
       ],
     });
-    const result = await testMcpServer(api, { profile: 'default', name: 'x', config: {}, language: 'en' });
+    const result = await testMcpServer(api, {
+      profile: 'default',
+      name: 'x',
+      config: {},
+      language: 'en',
+    });
     expect(result).toMatchObject({
       ok: false,
       tools: [],
@@ -103,8 +108,15 @@ describe('testing an MCP server through Hermes', () => {
   });
 
   it('names the silence when Hermes gives an empty reason (the server never answered)', async () => {
-    const { api } = scripted({ 'POST /api/mcp/servers/x/test': [{ ok: false, error: '', tools: [] }] });
-    const en = await testMcpServer(api, { profile: 'default', name: 'x', config: {}, language: 'en' });
+    const { api } = scripted({
+      'POST /api/mcp/servers/x/test': [{ ok: false, error: '', tools: [] }],
+    });
+    const en = await testMcpServer(api, {
+      profile: 'default',
+      name: 'x',
+      config: {},
+      language: 'en',
+    });
     expect(en.error).toBe('The server did not answer within 30 s (its connect_timeout).');
     const ar = await testMcpServer(api, {
       profile: 'default',
@@ -118,17 +130,29 @@ describe('testing an MCP server through Hermes', () => {
   it('answers ok:false in its own words when Hermes itself does not answer in time', async () => {
     const { api } = scripted({
       'POST /api/mcp/servers/x/test': [
-        new HermesDashboardUnavailable('did not answer: The operation was aborted due to timeout', true),
+        new HermesDashboardUnavailable(
+          'did not answer: The operation was aborted due to timeout',
+          true,
+        ),
       ],
     });
-    const result = await testMcpServer(api, { profile: 'default', name: 'x', config: {}, language: 'en' });
+    const result = await testMcpServer(api, {
+      profile: 'default',
+      name: 'x',
+      config: {},
+      language: 'en',
+    });
     expect(result).toMatchObject({ ok: false, error: 'Hermes did not report back within 45 s.' });
   });
 
   it("turns Hermes's refusal and a missing Hermes into the hub's errors", async () => {
     const refused = scripted({
       'POST /api/mcp/servers/x/test': [
-        new HermesDashboardRefusal('POST /api/mcp/servers/x/test', 404, "Profile 'nope' does not exist."),
+        new HermesDashboardRefusal(
+          'POST /api/mcp/servers/x/test',
+          404,
+          "Profile 'nope' does not exist.",
+        ),
       ],
     });
     const error = await testMcpServer(refused.api, {
@@ -156,7 +180,12 @@ describe('testing an MCP server through Hermes', () => {
 });
 
 describe('pairing WhatsApp through Hermes', () => {
-  const start = { pairing_id: 'p1', status: 'installing', qr_payload: null, expires_at: '2099-01-01T00:00:00Z' };
+  const start = {
+    pairing_id: 'p1',
+    status: 'installing',
+    qr_payload: null,
+    expires_at: '2099-01-01T00:00:00Z',
+  };
 
   it('publishes each new code, enables the channel in the profile, and forgets the pairing', async () => {
     const { api, calls } = scripted({
@@ -171,18 +200,22 @@ describe('pairing WhatsApp through Hermes', () => {
       'DELETE /api/messaging/whatsapp/onboarding/p1': [{ ok: true }],
     });
     const { handle, progress } = fakeHandle();
-    const outcome = await pairWhatsApp(api, handle, { profile: 'work', language: 'en', sleep: noSleep });
+    const outcome = await pairWhatsApp(api, handle, {
+      profile: 'work',
+      language: 'en',
+      sleep: noSleep,
+    });
 
-    expect(outcome).toEqual({ status: 'connected', account_name: 'Office', account_phone: '966500000000' });
+    expect(outcome).toEqual({
+      status: 'connected',
+      account_name: 'Office',
+      account_phone: '966500000000',
+    });
     expect(calls[0]).toMatchObject({ body: { mode: 'bot', profile: 'work' } });
     // One progress per change, not per question: installing, QR-ONE, QR-TWO, saving, done.
-    expect(progress.map((step) => (step.result as { qr?: unknown } | undefined)?.qr ?? null)).toEqual([
-      null,
-      'QR-ONE',
-      'QR-TWO',
-      null,
-      null,
-    ]);
+    expect(
+      progress.map((step) => (step.result as { qr?: unknown } | undefined)?.qr ?? null),
+    ).toEqual([null, 'QR-ONE', 'QR-TWO', null, null]);
     expect(progress[1]).toMatchObject({
       percent: null,
       message: expect.stringContaining('Linked devices'),
@@ -204,12 +237,20 @@ describe('pairing WhatsApp through Hermes', () => {
     const failed = scripted({
       'POST /api/messaging/whatsapp/onboarding/start': [start],
       'GET /api/messaging/whatsapp/onboarding/p1': [
-        { ...start, status: 'error', error: 'npm was not found. WhatsApp setup needs Node.js and npm.' },
+        {
+          ...start,
+          status: 'error',
+          error: 'npm was not found. WhatsApp setup needs Node.js and npm.',
+        },
       ],
       'DELETE /api/messaging/whatsapp/onboarding/p1': [{ ok: true }],
     });
     await expect(
-      pairWhatsApp(failed.api, fakeHandle().handle, { profile: 'default', language: 'en', sleep: noSleep }),
+      pairWhatsApp(failed.api, fakeHandle().handle, {
+        profile: 'default',
+        language: 'en',
+        sleep: noSleep,
+      }),
     ).rejects.toMatchObject({
       code: 'agent_error',
       message: 'npm was not found. WhatsApp setup needs Node.js and npm.',
@@ -222,7 +263,11 @@ describe('pairing WhatsApp through Hermes', () => {
       ],
     });
     await expect(
-      pairWhatsApp(expired.api, fakeHandle().handle, { profile: 'default', language: 'en', sleep: noSleep }),
+      pairWhatsApp(expired.api, fakeHandle().handle, {
+        profile: 'default',
+        language: 'en',
+        sleep: noSleep,
+      }),
     ).rejects.toMatchObject({
       code: 'state_invalid',
       message: 'WhatsApp QR setup expired. Start a new setup.',
@@ -230,7 +275,12 @@ describe('pairing WhatsApp through Hermes', () => {
   });
 
   it('stops asking once the hub is past Hermes’s own expiry, and says the code expired', async () => {
-    const stale = { ...start, status: 'waiting', qr_payload: 'Q', expires_at: '2026-01-01T00:00:00Z' };
+    const stale = {
+      ...start,
+      status: 'waiting',
+      qr_payload: 'Q',
+      expires_at: '2026-01-01T00:00:00Z',
+    };
     const { api } = scripted({
       'POST /api/messaging/whatsapp/onboarding/start': [stale],
       'DELETE /api/messaging/whatsapp/onboarding/p1': [{ ok: true }],
@@ -248,7 +298,9 @@ describe('pairing WhatsApp through Hermes', () => {
   it('forgets the pairing in Hermes when the job is cancelled', async () => {
     const { api, calls } = scripted({
       'POST /api/messaging/whatsapp/onboarding/start': [start],
-      'GET /api/messaging/whatsapp/onboarding/p1': [{ ...start, status: 'waiting', qr_payload: 'Q' }],
+      'GET /api/messaging/whatsapp/onboarding/p1': [
+        { ...start, status: 'waiting', qr_payload: 'Q' },
+      ],
       'DELETE /api/messaging/whatsapp/onboarding/p1': [{ ok: true }],
     });
     const outcome = await pairWhatsApp(api, fakeHandle(2).handle, {
@@ -257,7 +309,10 @@ describe('pairing WhatsApp through Hermes', () => {
       sleep: noSleep,
     });
     expect(outcome).toEqual({ status: 'cancelled' });
-    expect(calls.at(-1)).toMatchObject({ method: 'DELETE', path: '/api/messaging/whatsapp/onboarding/p1' });
+    expect(calls.at(-1)).toMatchObject({
+      method: 'DELETE',
+      path: '/api/messaging/whatsapp/onboarding/p1',
+    });
     expect(calls.some((call) => call.method === 'PUT')).toBe(false);
   });
 

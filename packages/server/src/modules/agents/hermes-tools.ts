@@ -257,7 +257,10 @@ export async function pairWhatsApp(
       state = await api<HermesPairing>('GET', `${base}/${encodeURIComponent(id)}`);
     } catch (error) {
       // 410 is Hermes saying the code expired; 404 that it no longer knows the pairing.
-      if (error instanceof HermesDashboardRefusal && (error.status === 410 || error.status === 404)) {
+      if (
+        error instanceof HermesDashboardRefusal &&
+        (error.status === 410 || error.status === 404)
+      ) {
         throw new HubError('state_invalid', { message: error.message });
       }
       if (error instanceof HermesDashboardRefusal) {

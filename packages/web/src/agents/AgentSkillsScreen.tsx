@@ -142,9 +142,7 @@ export function AgentSkillsScreen() {
             <Skeleton height="4rem" radius="md" />
           </SkeletonGroup>
         )}
-        {skills.isError && (
-          <Notice tone="danger">{describeToolError(skills.error, t)}</Notice>
-        )}
+        {skills.isError && <Notice tone="danger">{describeToolError(skills.error, t)}</Notice>}
         {skills.data &&
           (total === 0 ? (
             <EmptyState

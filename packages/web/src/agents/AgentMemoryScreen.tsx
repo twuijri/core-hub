@@ -45,9 +45,7 @@ export function AgentMemoryScreen() {
             <Skeleton height="5rem" radius="md" />
           </SkeletonGroup>
         )}
-        {memory.isError && (
-          <Notice tone="danger">{describeToolError(memory.error, t)}</Notice>
-        )}
+        {memory.isError && <Notice tone="danger">{describeToolError(memory.error, t)}</Notice>}
         {memory.data && (
           <ul className="flex flex-col gap-2" data-testid="memory-list">
             {memory.data.items.map((item) => (

@@ -94,10 +94,16 @@ export function readZip(data: Buffer, limits: ZipLimits = DEFAULT_ZIP_LIMITS): Z
   const size = data.readUInt32LE(end + 12);
   const offset = data.readUInt32LE(end + 16);
   if (count === 0xffff || size === 0xffffffff || offset === 0xffffffff) {
-    throw new ZipError('pack_unsupported', 'ZIP64 archives are not supported; a skill pack is small');
+    throw new ZipError(
+      'pack_unsupported',
+      'ZIP64 archives are not supported; a skill pack is small',
+    );
   }
   if (count > limits.maxEntries) {
-    throw new ZipError('pack_too_large', `the pack holds ${count} entries (at most ${limits.maxEntries})`);
+    throw new ZipError(
+      'pack_too_large',
+      `the pack holds ${count} entries (at most ${limits.maxEntries})`,
+    );
   }
   if (offset + size > end) throw new ZipError('pack_corrupt', 'the archive index is out of bounds');
 

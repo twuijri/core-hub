@@ -52,12 +52,7 @@ import type { AdapterKind } from './adapters/types.js';
 import { HERMES_ENTRY } from './catalog/index.js';
 import { HermesRuntime, type HermesRuntimeStatus, type Spawner } from './hermes-runtime.js';
 import { HermesDashboard, type DashboardSpawner } from './hermes-dashboard.js';
-import {
-  QR_PLATFORMS,
-  pairWhatsApp,
-  testMcpServer,
-  type HermesApiCall,
-} from './hermes-tools.js';
+import { QR_PLATFORMS, pairWhatsApp, testMcpServer, type HermesApiCall } from './hermes-tools.js';
 import { hermesProfileName, profileHome } from './profile-home.js';
 import { SkillImportError, installPack, planImport, type UploadedFile } from './skill-import.js';
 import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './installer.js';

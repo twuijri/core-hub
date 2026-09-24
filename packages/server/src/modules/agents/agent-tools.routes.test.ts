@@ -6,12 +6,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-  authed,
-  drainJobs,
-  signedInHub,
-  type TestHub,
-} from '../../../tests/unit/helpers.js';
+import { authed, drainJobs, signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
 import { auditFor, serializeJob } from '../audit/index.js';
 import type { HermesApiCall } from './hermes-tools.js';
 import { makeZip } from './testing/make-zip.js';
@@ -105,9 +100,13 @@ describe('importing a skill pack', () => {
     ]);
     expect(readFileSync(path.join(root, 'skills', 'pdf-notes', 'SKILL.md'), 'utf8')).toBe(SKILL);
 
-    const listed = await authed(h, h.token, { method: 'GET', url: `/api/v1/agents/${agent}/skills` });
-    const keys = (listed.json() as { categories: Array<{ skills: Array<{ key: string }> }> })
-      .categories.flatMap((category) => category.skills.map((skill) => skill.key));
+    const listed = await authed(h, h.token, {
+      method: 'GET',
+      url: `/api/v1/agents/${agent}/skills`,
+    });
+    const keys = (
+      listed.json() as { categories: Array<{ skills: Array<{ key: string }> }> }
+    ).categories.flatMap((category) => category.skills.map((skill) => skill.key));
     expect(keys).toContain('pdf-notes');
   });
 
@@ -128,9 +127,9 @@ describe('importing a skill pack', () => {
       payload: { category: 'ignored', attachment_ids: [id] },
     });
     expect(first.statusCode, first.body).toBe(201);
-    expect(readFileSync(path.join(root, 'skills', 'pdf-notes', 'references', 'style.md'), 'utf8')).toBe(
-      'Keep headings.',
-    );
+    expect(
+      readFileSync(path.join(root, 'skills', 'pdf-notes', 'references', 'style.md'), 'utf8'),
+    ).toBe('Keep headings.');
 
     const again = await authed(h, h.token, {
       method: 'POST',
@@ -278,7 +277,12 @@ describe('pairing a channel by QR', () => {
         polls += 1;
         return (
           polls < 3
-            ? { pairing_id: 'p1', status: 'waiting', qr_payload: 'QR-DATA', expires_at: '2099-01-01T00:00:00Z' }
+            ? {
+                pairing_id: 'p1',
+                status: 'waiting',
+                qr_payload: 'QR-DATA',
+                expires_at: '2099-01-01T00:00:00Z',
+              }
             : { pairing_id: 'p1', status: 'connected', account_name: 'Office' }
         ) as T;
       }

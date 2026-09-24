@@ -140,7 +140,9 @@ describe.skipIf(!image)('agent tools (real Hermes; set MAJLIS_HERMES_IMAGE to ru
       config: {},
       language: 'en',
     });
-    console.log(`MCP test (default profile, first call includes the start): ${root.duration_ms} ms`);
+    console.log(
+      `MCP test (default profile, first call includes the start): ${root.duration_ms} ms`,
+    );
     expect(root).toMatchObject({
       ok: true,
       error: null,

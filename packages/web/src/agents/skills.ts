@@ -455,9 +455,7 @@ export function useJob(jobId: string | null) {
     enabled: !!session && !!jobId,
     refetchInterval: (query) => {
       const status = (query.state.data as Job | undefined)?.status;
-      return status === 'succeeded' || status === 'failed' || status === 'cancelled'
-        ? false
-        : 2000;
+      return status === 'succeeded' || status === 'failed' || status === 'cancelled' ? false : 2000;
     },
   });
 }

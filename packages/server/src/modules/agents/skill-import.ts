@@ -25,7 +25,15 @@
  * and the file. Then everything is written to a hidden folder beside the skills and moved into
  * place, so a failure half-way leaves nothing half-installed.
  */
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { SKILL_FILE, DISABLED_SUFFIX, skillsDir } from './skills.js';
@@ -80,7 +88,7 @@ export function checkSkillDocument(text: string, where: { skill?: string; file: 
       `SKILL.md is ${text.length} characters (Hermes reads at most ${MAX_SKILL_CHARS})`,
     );
   }
-  const body = text.replace(/^﻿/, '');
+  const body = text.replace(/^\uFEFF/, '');
   if (!body.startsWith('---')) {
     fail('skill_front_matter_missing', 'SKILL.md must start with a YAML front matter block (---)');
   }
@@ -176,7 +184,8 @@ export function readPack(file: UploadedFile, limits: ZipLimits = DEFAULT_ZIP_LIM
       file: file.name,
     });
   }
-  const inside = (dir: string, root: string) => root === '' || dir === root || dir.startsWith(`${root}/`);
+  const inside = (dir: string, root: string) =>
+    root === '' || dir === root || dir.startsWith(`${root}/`);
   for (const [index, root] of roots.entries()) {
     const outer = roots.slice(0, index).find((other) => inside(root, other));
     if (outer !== undefined) {
@@ -201,7 +210,11 @@ export function readPack(file: UploadedFile, limits: ZipLimits = DEFAULT_ZIP_LIM
       source: `${file.name}: ${skillPath}`,
       files: entries
         .filter((entry) => entry.path.startsWith(prefix))
-        .map((entry) => ({ path: entry.path.slice(prefix.length), data: entry.data, mode: entry.mode })),
+        .map((entry) => ({
+          path: entry.path.slice(prefix.length),
+          data: entry.data,
+          mode: entry.mode,
+        })),
     };
   });
 }

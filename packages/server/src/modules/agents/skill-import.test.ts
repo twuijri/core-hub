@@ -15,7 +15,13 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { SkillImportError, checkSkillDocument, installPack, planImport, readPack } from './skill-import.js';
+import {
+  SkillImportError,
+  checkSkillDocument,
+  installPack,
+  planImport,
+  readPack,
+} from './skill-import.js';
 import { listSkills } from './skills.js';
 import { makeZip } from './testing/make-zip.js';
 import { ZipError, readZip, safeEntryPath } from './zip.js';
@@ -100,9 +106,9 @@ describe('the zip reader', () => {
 
   it('refuses an archive that would expand past the ceiling', () => {
     const zip = makeZip([{ path: 'big.bin', data: Buffer.alloc(4096, 0) }]);
-    expect(() => readZip(zip, { maxEntries: 10, maxFileBytes: 1024, maxTotalBytes: 1 << 20 })).toThrow(
-      /expands to 4096 bytes/,
-    );
+    expect(() =>
+      readZip(zip, { maxEntries: 10, maxFileBytes: 1024, maxTotalBytes: 1 << 20 }),
+    ).toThrow(/expands to 4096 bytes/);
     expect(() =>
       readZip(
         makeZip([
@@ -148,7 +154,10 @@ describe("Hermes's reading rules for SKILL.md", () => {
       ['---\n- a list\n---\n\nbody\n', 'skill_front_matter_invalid'],
       ['---\ndescription: y\n---\n\nbody\n', 'skill_name_required'],
       ['---\nname: x\n---\n\nbody\n', 'skill_description_required'],
-      [`---\nname: x\ndescription: ${'d'.repeat(1025)}\n---\n\nbody\n`, 'skill_description_too_long'],
+      [
+        `---\nname: x\ndescription: ${'d'.repeat(1025)}\n---\n\nbody\n`,
+        'skill_description_too_long',
+      ],
       ['---\nname: x\ndescription: y\n---\n\n   \n', 'skill_body_empty'],
       [`---\nname: x\ndescription: y\n---\n\n${'b'.repeat(100_001)}`, 'skill_too_large'],
     ];
