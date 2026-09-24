@@ -1295,6 +1295,94 @@ describe('models: one key, every agent (ADR 0010)', () => {
     }
   });
 
+  it('moves a Hermes home written before the rename to the new names at boot (ADR 0017)', async () => {
+    // The owner's test stack: a custom endpoint added under Majlis, so Hermes's files say
+    // `majlis-custom-cli-proxy-api` and `MAJLIS_PROVIDER_…`, and a named profile's model
+    // names that block. Replacing only the image must leave that profile able to answer.
+    const proxy = scriptedFetchWithAuth('http://proxy.example:8317/v1/models', () => 'sk-proxy', {
+      data: [{ id: 'gpt-5.4' }],
+    });
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-home-'));
+    homes.push(home);
+    const design = path.join(home, 'profiles', 'design');
+    mkdirSync(design, { recursive: true });
+    const hermes = {
+      home: () => home,
+      profileHomes: () => [design],
+      restart: () => Promise.resolve(true),
+    };
+    const first = await signedInHub({}, { models: { fetchImpl: proxy.fetchImpl, hermes } });
+    const dataDir = first.dataDir;
+    try {
+      const provider = await addProvider(first, 'openai-compatible', {
+        label: 'CLI Proxy API',
+        base_url: 'http://proxy.example:8317/v1',
+        api_key: 'sk-proxy',
+      });
+      expect(provider.slug).toBe('custom-cli-proxy-api');
+      await drainJobs(first.app);
+    } finally {
+      await first.app.close();
+    }
+
+    // What an older hub left behind, byte for byte in the old names.
+    const oldBlock = [
+      'providers:',
+      '  majlis-custom-cli-proxy-api:',
+      '    name: majlis-custom-cli-proxy-api',
+      '    base_url: http://proxy.example:8317/v1',
+      '    key_env: MAJLIS_PROVIDER_CUSTOM_CLI_PROXY_API_API_KEY',
+      '    api_mode: chat_completions',
+    ];
+    writeFileSync(
+      path.join(home, 'config.yaml'),
+      ['model:', '  default: gpt-5.4', '  provider: majlis-custom-cli-proxy-api', ...oldBlock, ''].join(
+        '\n',
+      ),
+    );
+    writeFileSync(
+      path.join(design, 'config.yaml'),
+      [
+        '# design profile',
+        'model:',
+        '  default: gpt-5.4',
+        '  provider: majlis-custom-cli-proxy-api',
+        ...oldBlock,
+        '',
+      ].join('\n'),
+    );
+    writeFileSync(
+      path.join(home, '.env'),
+      [
+        '# managed by Majlis — edit the provider in the hub, not here',
+        'MAJLIS_PROVIDER_CUSTOM_CLI_PROXY_API_API_KEY=sk-proxy',
+        '',
+      ].join('\n'),
+    );
+
+    const second = await signedInHub(
+      { DATA_DIR: dataDir },
+      { models: { fetchImpl: proxy.fetchImpl, hermes } },
+    );
+    try {
+      await authed(second, second.token, { method: 'GET', url: '/api/v1/models/providers' });
+      for (const file of [path.join(home, 'config.yaml'), path.join(design, 'config.yaml')]) {
+        const config = readFileSync(file, 'utf8');
+        expect(config, file).toContain('corehub-custom-cli-proxy-api:');
+        expect(config, file).toContain('provider: corehub-custom-cli-proxy-api');
+        expect(config, file).toContain('key_env: COREHUB_PROVIDER_CUSTOM_CLI_PROXY_API_API_KEY');
+        expect(config, file).not.toContain('majlis');
+      }
+      expect(readFileSync(path.join(design, 'config.yaml'), 'utf8')).toContain('# design profile');
+      const env = readFileSync(path.join(home, '.env'), 'utf8');
+      expect(parseEnv(env).get('COREHUB_PROVIDER_CUSTOM_CLI_PROXY_API_API_KEY')).toBe('sk-proxy');
+      expect(env).not.toContain('MAJLIS');
+      expect(env).not.toContain('Majlis');
+    } finally {
+      await second.close();
+    }
+  });
+
   it('rewrites the Hermes home at boot when the volume no longer matches the rows', async () => {
     // A restored backup, an image upgrade, a hand-edited config: the rows are right and
     // the files are not. Writing only on change meant that state could never heal.

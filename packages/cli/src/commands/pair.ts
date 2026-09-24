@@ -146,7 +146,7 @@ interface QrPayload {
   code: string;
 }
 
-function parseQrPayload(text: string): QrPayload | null {
+export function parseQrPayload(text: string): QrPayload | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
