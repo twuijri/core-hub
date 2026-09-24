@@ -34,6 +34,8 @@ export function PlaceholderScreen({ id }: { id: string }) {
   const destination = destinationsById.get(id);
   const title = t(termKey(id));
   const underSettings = navigation.settingsManagement.includes(id);
+  // An agent's page has its side list too: the agent's own (`agents/AgentNav.tsx`).
+  const hasSideList = underSettings || destination?.level === 'agent';
   const trail: Crumb[] = [
     ...(underSettings
       ? [
@@ -52,9 +54,9 @@ export function PlaceholderScreen({ id }: { id: string }) {
   ];
   const body = (
     <>
-      {/* Under Settings the side list already says where this page sits; a crumb would
-          say it twice. Outside Settings (an agent page) the crumb is the only trail. */}
-      {!underSettings && <Breadcrumb label={t('ui.breadcrumb')} items={trail} />}
+      {/* Under Settings and under an agent the side list already says where this page
+          sits; a crumb would say it twice. Elsewhere the crumb is the only trail. */}
+      {!hasSideList && <Breadcrumb label={t('ui.breadcrumb')} items={trail} />}
       <h1 className="mt-2 text-xl font-semibold">{title}</h1>
       {agentId && (
         <p className="mt-1 text-xs text-muted">{t('placeholder.agent', { id: agentId })}</p>

@@ -45,8 +45,8 @@ const SPECIAL: Record<string, () => ReactElement> = {
 function elementFor(id: string): ReactElement {
   const special = SPECIAL[id];
   if (special) return special();
-  // The management pages that need a screen of their own (agents, models, devices) are in
-  // SPECIAL above. Everything else under /settings — tabs, tools, and `knowledge`, which
+  // The pages that need a screen of their own (the agents and their pages, models, devices)
+  // are in SPECIAL above. Everything else under /settings — tabs, tools, and `knowledge`, which
   // is a list and not a manager — is a section of the Settings screen.
   if (
     id === 'settings' ||

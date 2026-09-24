@@ -12,11 +12,19 @@ import { useAuth } from '../auth/context.js';
 import { useTheme, themeIcon, nextTheme } from '../design/theme.js';
 import { useI18n } from '../i18n/context.js';
 import { useMeta } from '../hub/queries.js';
-import { navigation, routeOf, termKey, visibleEntries } from '../navigation/manifest.js';
+import {
+  agentPageFromPath,
+  navigation,
+  routeOf,
+  termKey,
+  visibleEntries,
+} from '../navigation/manifest.js';
 import { useRealtime } from '../realtime/context.js';
 import { SessionList } from '../sessions/SessionList.js';
 import { SettingsNav, settingsIdFromPath } from '../settings/SettingsNav.js';
+import { AgentBackRow, AgentNav } from '../agents/AgentNav.js';
 import {
+  IconAgents,
   IconArrowStart,
   IconGlobe,
   IconPlus,
@@ -43,6 +51,7 @@ import { useNoticeStream } from '../notify/queries.js';
 const RAIL_ICONS: Record<string, (p: { size?: number }) => ReactElement> = {
   new_chat: IconPlus,
   search: IconSearch,
+  agent_manager: IconAgents,
   tasks: IconTasks,
   schedules: IconSchedules,
 };
@@ -88,6 +97,11 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
    */
   const settingsId = settingsIdFromPath(location.pathname);
   /**
+   * Inside an agent's pages the sidebar becomes that agent's list, the same way (owner,
+   * 2026-09-24): a row back to the Agents page, the agent, and its pages.
+   */
+  const agentPage = settingsId === null ? agentPageFromPath(location.pathname) : null;
+  /**
    * Inside Settings the rail gives way to one row back to where the person was (owner,
    * 2026-09-23: «اذا دخلت الاعدادات تروح رسالة جديدة والسيرش … واذا برجع للمحادثات يصير فيه
    * زر رجوع»). Where they were is the last page outside Settings — the conversation they
@@ -127,9 +141,12 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     <SidebarFrame label={t('shell.sidebar')}>
       <SidebarBrand mark="م" name={t('app.name')} />
 
-      {/* Slim by design (NAVIGATION §1, 2026-09-22): starting a chat, finding one, and the
-          list. Everything configured once lives on a page inside Settings. */}
-      {settingsId !== null ? (
+      {/* Slim by design (NAVIGATION §1): starting a chat, finding one, the agents, tasks,
+          schedules, and the list. Everything configured once lives on a page inside
+          Settings. */}
+      {agentPage !== null ? (
+        <AgentBackRow onNavigate={onNavigate} />
+      ) : settingsId !== null ? (
         <SidebarGroup testId="settings-back">
           <SidebarRow
             icon={<IconArrowStart size={18} />}
@@ -172,7 +189,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         </SidebarGroup>
       )}
 
-      {settingsId === null && (
+      {settingsId === null && agentPage === null && (
         <div className="mx-2 mt-3">
           <Segmented
             label={t('shell.segments')}
@@ -193,6 +210,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <SidebarBody>
         {settingsId !== null ? (
           <SettingsNav current={settingsId} onNavigate={onNavigate} />
+        ) : agentPage !== null ? (
+          <AgentNav agentId={agentPage.agentId} current={agentPage.id} onNavigate={onNavigate} />
         ) : selected === 'chat' ? (
           <SessionList {...(onNavigate ? { onOpen: onNavigate } : {})} />
         ) : (

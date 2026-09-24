@@ -20,7 +20,7 @@ import {
   visibleEntries,
   webDestinations,
 } from '../navigation/manifest.js';
-import { IconAgents, IconDevices, IconKnowledge, IconModels } from '../ui/icons.js';
+import { IconDevices, IconKnowledge, IconModels } from '../ui/icons.js';
 import { Badge, SidebarGroup, SidebarRow } from '../ui/index.js';
 import { useUnreadCount } from '../notify/queries.js';
 
@@ -50,15 +50,13 @@ export function settingsIdFromPath(pathname: string): string | null {
 /** The management pages keep the icon they had, so nothing feels moved away. */
 function rowIcon(id: string) {
   const Icon =
-    id === 'agent_manager'
-      ? IconAgents
-      : id === 'models'
-        ? IconModels
-        : id === 'device_connections'
-          ? IconDevices
-          : id === 'knowledge'
-            ? IconKnowledge
-            : null;
+    id === 'models'
+      ? IconModels
+      : id === 'device_connections'
+        ? IconDevices
+        : id === 'knowledge'
+          ? IconKnowledge
+          : null;
   return Icon ? <Icon size={16} /> : null;
 }
 

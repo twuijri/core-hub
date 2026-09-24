@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './auth/context.js';
 import { SessionStore } from './auth/store.js';
 import { ThemeProvider, useTheme } from './design/theme.js';
 import { I18nProvider } from './i18n/context.js';
+import { canOpen, legacyRedirect, navigation } from './navigation/manifest.js';
 import { HOME_PATH, LOGIN_PATH, SETUP_PATH, routes } from './navigation/routes.js';
 import { RealtimeProvider } from './realtime/context.js';
 import { LoginScreen } from './screens/LoginScreen.js';
@@ -22,6 +23,28 @@ function RequireAuth({ children }: { children: ReactNode }) {
     </ProfileGate>
   );
 }
+
+/**
+ * A destination the person's role may not open is not drawn for them: the router refuses what
+ * the menu hides (NAVIGATION rule 6), and sends them home. The hub refuses the data anyway;
+ * this keeps a typed or bookmarked URL from opening a shell full of refusals.
+ */
+function RequireRole({ id, children }: { id: string; children: ReactNode }) {
+  const { session } = useAuth();
+  if (!canOpen(id, session?.user.role ?? 'member')) return <Navigate to={HOME_PATH} replace />;
+  return children;
+}
+
+/** An old URL (`legacyRoutes.web`) goes to where that page lives now, the rest kept. */
+function LegacyRedirect() {
+  const location = useLocation();
+  const pathname = legacyRedirect(location.pathname) ?? HOME_PATH;
+  return <Navigate to={{ pathname, search: location.search, hash: location.hash }} replace />;
+}
+
+const LEGACY_PREFIXES = Object.keys(navigation.legacyRoutes?.web ?? {}).filter(
+  (from) => !from.startsWith('$'),
+);
 
 function Localised({ children }: { children: ReactNode }) {
   const { prefs } = useTheme();
@@ -61,8 +84,15 @@ export function App({ store, baseUrl, fetchImpl, router }: AppProps) {
         <Route
           key={route.id}
           path={route.path}
-          element={<RequireAuth>{route.element}</RequireAuth>}
+          element={
+            <RequireAuth>
+              <RequireRole id={route.id}>{route.element}</RequireRole>
+            </RequireAuth>
+          }
         />
+      ))}
+      {LEGACY_PREFIXES.map((from) => (
+        <Route key={from} path={`${from}/*`} element={<LegacyRedirect />} />
       ))}
       <Route path="*" element={<Navigate to={HOME_PATH} replace />} />
     </Routes>

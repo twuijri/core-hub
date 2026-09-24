@@ -7,6 +7,9 @@ import ar from '../src/i18n/ar.json' with { type: 'json' };
 import en from '../src/i18n/en.json' with { type: 'json' };
 import {
   agentMenu,
+  agentPageFromPath,
+  canOpen,
+  legacyRedirect,
   navigation,
   routeOf,
   termKey,
@@ -98,8 +101,9 @@ describe('navigation parity (web)', () => {
     expect(ids).not.toContain('history');
     expect(raw.terms.history).toBeUndefined();
     expect(navigation.segments).toEqual(['chat', 'rooms']);
-    // Tasks and Schedules took the rail places the management pages left.
-    expect(navigation.rail).toEqual(['new_chat', 'search', 'tasks', 'schedules']);
+    // Tasks and Schedules took the rail places the management pages left; Agents came back
+    // to the rail, above Tasks, on 2026-09-24.
+    expect(navigation.rail).toEqual(['new_chat', 'search', 'agent_manager', 'tasks', 'schedules']);
     expect(Object.keys(raw.surfaceRoutes.web ?? {})).not.toContain('history');
     // What it offered is a filter on the list, carried in the URL.
     expect(scopeFromParams(new URLSearchParams(''))).toBe('active');
@@ -112,24 +116,52 @@ describe('navigation parity (web)', () => {
   });
 
   it('6. roles: admin entries are hidden from members', () => {
-    // The sidebar is slim (2026-09-22): the rail is `new_chat` and `search`, and the pages
-    // configured once are Settings pages — Agent Manager among them, admin-only as before.
+    // Agents is a rail entry directly above Tasks (owner, 2026-09-24), for owners and admins.
     expect(visibleEntries(navigation.rail, 'owner').map((d) => d.id)).toEqual([
+      'new_chat',
+      'search',
+      'agent_manager',
+      'tasks',
+      'schedules',
+    ]);
+    expect(visibleEntries(navigation.rail, 'admin').map((d) => d.id)).toContain('agent_manager');
+    expect(visibleEntries(navigation.rail, 'member').map((d) => d.id)).toEqual([
       'new_chat',
       'search',
       'tasks',
       'schedules',
     ]);
-    const memberManagement = visibleEntries(navigation.settingsManagement, 'member').map(
-      (d) => d.id,
-    );
-    expect(memberManagement).not.toContain('agent_manager');
-    expect(visibleEntries(navigation.settingsManagement, 'admin').map((d) => d.id)).toContain(
-      'agent_manager',
-    );
+    // …and it left Settings → Management.
+    expect(navigation.settingsManagement).not.toContain('agent_manager');
+    // The router refuses what the menu hides.
+    expect(canOpen('agent_manager', 'member')).toBe(false);
+    expect(canOpen('agent_memory', 'member')).toBe(false);
+    expect(canOpen('agent_manager', 'admin')).toBe(true);
+    expect(canOpen('users', 'member')).toBe(false);
+    expect(canOpen('models', 'member')).toBe(true);
     const memberTabs = visibleEntries(navigation.settingsTabs, 'member').map((d) => d.id);
     expect(memberTabs).not.toContain('users');
     expect(memberTabs).not.toContain('webhooks');
+  });
+
+  it('the Agents page and the agent level live under /agents; the old /settings/agents URLs move', () => {
+    expect(routeOf('agent_manager')).toBe('/agents');
+    for (const id of navigation.agentLevel)
+      expect(routeOf(id)).toMatch(/^\/agents\/:agentId\/[a-z]+$/);
+    expect(agentPageFromPath('/agents/01J8QK3ZR2W7M5N4P6T8V9X0AG/memory')).toEqual({
+      id: 'agent_memory',
+      agentId: '01J8QK3ZR2W7M5N4P6T8V9X0AG',
+    });
+    expect(agentPageFromPath('/agents')).toBeNull();
+    expect(agentPageFromPath('/agents/x/y/memory')).toBeNull();
+    expect(agentPageFromPath('/tasks')).toBeNull();
+    expect(legacyRedirect('/settings/agents')).toBe('/agents');
+    expect(legacyRedirect('/settings/agents/abc/skills')).toBe('/agents/abc/skills');
+    expect(legacyRedirect('/settings/agentsx')).toBeNull();
+    expect(legacyRedirect('/settings/models')).toBeNull();
+    expect(raw.agentShell.back).toBe('back_to_agents');
+    expect((ar.nav as Record<string, string>).back_to_agents).toBe('رجوع إلى الوكلاء');
+    expect((ar.nav as Record<string, string>).agent_manager).toBe('الوكلاء');
   });
 
   it('7. agent level is capability-driven', () => {

@@ -49,7 +49,7 @@ import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
-import { routeOf } from '../navigation/manifest.js';
+import { canOpen, routeOf } from '../navigation/manifest.js';
 import type { Agent } from '../types.js';
 import { agentMark } from '../ui/brand/marks.js';
 import { IconPlus } from '../ui/icons.js';
@@ -94,8 +94,10 @@ export function AgentChips({
   mode?: 'select' | 'current';
 }) {
   const { t } = useI18n();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const navigate = useNavigate();
+  // The Agents page is for owners and admins; a member is not offered a way to it.
+  const canManage = canOpen('agent_manager', user?.role ?? 'member');
   const agents = useAgents();
   const [manual, setManual] = useState<string[]>(() => readAgentOrder(storage(), profile));
 
@@ -151,12 +153,16 @@ export function AgentChips({
             overflow
             className="min-w-0 flex-1"
             testId="agent-chips"
-            action={{
-              label: t('composer.add_agent'),
-              icon: <IconPlus size={16} />,
-              onSelect: () => navigate(routeOf('agent_manager')),
-              testId: 'agent-add',
-            }}
+            {...(canManage
+              ? {
+                  action: {
+                    label: t('composer.add_agent'),
+                    icon: <IconPlus size={16} />,
+                    onSelect: () => navigate(routeOf('agent_manager')),
+                    testId: 'agent-add',
+                  },
+                }
+              : {})}
           >
             {items.map((agent) => (
               <AgentOption
