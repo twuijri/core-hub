@@ -72,7 +72,18 @@ import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './insta
 import type { AgentDirectoryPort, AgentInfo, AgentModelsPort, AgentRunnerPort } from './ports.js';
 import { AgentRunner } from './runner.js';
 import { AgentsService, type AgentPatchInput } from './service.js';
-import { ChannelError, clearChannel, listChannels, putChannel, type Channel } from './channels.js';
+import {
+  ChannelError,
+  clearChannel,
+  listChannels,
+  putChannel,
+  unlinkWhatsApp,
+  whatsappLink,
+  whatsappSessionDir,
+  type Channel,
+} from './channels.js';
+import { stopOrphanBridge, type GatewayStatus } from './hermes-gateways.js';
+import { approvePairing, denyPairing, listPairing, revokePairing } from './hermes-pairing.js';
 import {
   MemoryError,
   deleteMemory,
@@ -189,7 +200,12 @@ export interface AgentsOverrides {
   /** Options for the real adapter set (a stubbed `fetch` for the Hermes gateway probe). */
   adapterOptions?: Omit<AdapterSetOptions, 'host'>;
   /** The Hermes runtime supervisor's seams (a fake spawner, a health interval). */
-  runtime?: { spawnImpl?: Spawner; healthIntervalMs?: number };
+  runtime?: {
+    spawnImpl?: Spawner;
+    healthIntervalMs?: number;
+    gatewayBackoffMs?: number[];
+    gatewayRescanMs?: number;
+  };
   /** Hermes's dashboard API's seams (a fake spawner and `fetch`, a short idle). */
   dashboard?: { spawnImpl?: DashboardSpawner; fetchImpl?: typeof fetch; idleMs?: number };
   /**
@@ -314,14 +330,28 @@ function contextOf(app: FastifyInstance): AgentsContext {
     ...(own.runtime?.healthIntervalMs !== undefined
       ? { healthIntervalMs: own.runtime.healthIntervalMs }
       : {}),
+    ...(own.runtime?.gatewayBackoffMs ? { gatewayBackoffMs: own.runtime.gatewayBackoffMs } : {}),
+    ...(own.runtime?.gatewayRescanMs !== undefined
+      ? { gatewayRescanMs: own.runtime.gatewayRescanMs }
+      : {}),
+    // Every messaging gateway starts on the providers and model a chat in its profile uses
+    // (`models` writes them, looked up per start because it mounts after this module).
+    prepareGateway: (profile: string, home: string) => {
+      modelsPorts.get(hub.io)?.prepareGatewayProfile?.(profile, home);
+    },
     onState: (status: HermesRuntimeStatus) => {
       const ctx = contexts.get(hub.io);
       if (!ctx) return;
-      ctx.service.setRuntime(HERMES_ENTRY.id, {
-        state: status.state,
-        url: status.state === 'running' ? status.endpoint : null,
-        error: status.lastError,
-      });
+      try {
+        ctx.service.setRuntime(HERMES_ENTRY.id, {
+          state: status.state,
+          url: status.state === 'running' ? status.endpoint : null,
+          error: status.lastError,
+        });
+      } catch {
+        // The hub closing stops Hermes after its database is gone; there is no row to update.
+        return;
+      }
       if (status.state === 'running') {
         void ctx.service.reprobe(HERMES_ENTRY.id).catch((error: unknown) => {
           app.log.warn({ err: error }, 'agents: hermes reprobe failed');
@@ -372,6 +402,9 @@ function contextOf(app: FastifyInstance): AgentsContext {
       if (!row || row.id !== workspaceId) return null;
       return hermesProfileName(row);
     },
+    // Hermes's card shows every messaging gateway the hub runs (the default one and each
+    // named profile's).
+    gateways: () => runtime.gateways().map(toMessagingGateway),
   });
   const runner = new AgentRunner({ service, adapters, log: app.log });
   // Hermes's own web server as an internal API (ADR 0015): nothing runs until a caller
@@ -1035,7 +1068,40 @@ export const agentsModule = defineModule({
       throw error;
     };
 
-    const toChannel = (channel: Channel): Record<string, unknown> => ({
+    /**
+     * `status` is what the gateway serving the profile says about the platform
+     * (`gateway_state.json`, written by Hermes): `online` connected, `error` with Hermes's
+     * sentence, `offline` otherwise. `unknown` where the hub does not run that gateway — an
+     * external Hermes — or while it has not said anything yet.
+     */
+    const channelStatus = (
+      request: FastifyRequest,
+      profile: string,
+      channel: Channel,
+    ): { status: string; error: string | null } => {
+      const { runtime } = contextOf(request.server);
+      if (runtime.status().mode !== 'managed') return { status: 'unknown', error: null };
+      if (!channel.enabled || !channel.configured) return { status: 'offline', error: null };
+      const record = runtime.gatewayRecord(profile);
+      const platform = record?.platforms[channel.platform];
+      if (!record || !platform) {
+        const gateway = runtime.gateways().find((entry) => entry.profile === profile);
+        return {
+          status: gateway && gateway.state === 'starting' ? 'unknown' : 'offline',
+          error: gateway?.lastError ?? null,
+        };
+      }
+      if (platform.state === 'connected') return { status: 'online', error: null };
+      if (platform.state === 'fatal' || platform.state === 'error') {
+        return { status: 'error', error: platform.errorMessage };
+      }
+      return { status: 'offline', error: platform.errorMessage };
+    };
+
+    const toChannel = (
+      channel: Channel,
+      health: { status: string; error: string | null } = { status: 'unknown', error: null },
+    ): Record<string, unknown> => ({
       platform: channel.platform,
       // The platform's own name. A table of pretty labels would go stale the moment
       // Hermes adds one, and the slug is what the person put in the file.
@@ -1043,9 +1109,17 @@ export const agentsModule = defineModule({
       enabled: channel.enabled,
       configured: channel.configured,
       exclusive: channel.exclusive,
-      status: 'unknown',
-      error: null,
+      status: health.status,
+      error: health.error,
       login: (QR_PLATFORMS as readonly string[]).includes(channel.platform) ? 'qr' : null,
+      link: channel.link
+        ? {
+            linked: channel.link.linked,
+            account_id: channel.link.accountId,
+            account_name: channel.link.accountName,
+            account_phone: channel.link.accountPhone,
+          }
+        : null,
       fields: channel.fields.map((field) => ({
         key: field.key,
         label: { ar: field.key, en: field.key },
@@ -1056,12 +1130,43 @@ export const agentsModule = defineModule({
       })),
     });
 
+    /** The gateway that serves the profile's channels, as the Channels page shows it. */
+    const channelGateway = (request: FastifyRequest, profile: string) => {
+      const { runtime } = contextOf(request.server);
+      if (runtime.status().mode !== 'managed') return null;
+      const gateway = runtime.gateways().find((entry) => entry.profile === profile);
+      return {
+        profile,
+        state: gateway ? gatewayState(gateway.state) : 'stopped',
+        applies: profile === 'default' ? 'on_restart' : 'now',
+        error: gateway?.lastError ?? null,
+      };
+    };
+
+    /**
+     * A channel of the profile changed: its gateway follows (`hermes-runtime.ts`
+     * §channelsChanged). Not awaited — a gateway may take seconds to stop — and never the
+     * reason a save fails.
+     */
+    const followChannels = (request: FastifyRequest, profile: string): void => {
+      void contextOf(request.server)
+        .runtime.channelsChanged(profile)
+        .catch((error: unknown) => {
+          request.log.warn({ err: error, profile }, 'agents: a profile gateway did not follow');
+        });
+    };
+
     defineRoute(app, deps, {
       operationId: 'agents.listChannels',
       handler: (request, { params }) => {
-        const home = skillHome(request, params.agent_id as string);
+        const { home, profile } = toolHome(request, params.agent_id as string);
         try {
-          return { items: listChannels(home).map(toChannel) };
+          return {
+            items: listChannels(home).map((channel) =>
+              toChannel(channel, channelStatus(request, profile, channel)),
+            ),
+            gateway: channelGateway(request, profile),
+          };
         } catch (error) {
           return channelFault(error);
         }
@@ -1071,7 +1176,7 @@ export const agentsModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'agents.updateChannel',
       handler: (request, { params, body }) => {
-        const home = skillHome(request, params.agent_id as string);
+        const { home, profile } = toolHome(request, params.agent_id as string);
         const input = body as {
           enabled?: boolean;
           credentials?: Record<string, string>;
@@ -1088,6 +1193,8 @@ export const agentsModule = defineModule({
           );
         } catch (error) {
           return channelFault(error);
+        } finally {
+          followChannels(request, profile);
         }
       },
     });
@@ -1095,12 +1202,98 @@ export const agentsModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'agents.clearChannel',
       handler: (request, { params }) => {
-        const home = skillHome(request, params.agent_id as string);
+        const { home, profile } = toolHome(request, params.agent_id as string);
         try {
           return toChannel(clearChannel(home, params.platform as string));
         } catch (error) {
           return channelFault(error);
+        } finally {
+          followChannels(request, profile);
         }
+      },
+    });
+
+    /**
+     * Unlink WhatsApp: the gateway that runs the bridge is held down while the session goes,
+     * so the bridge cannot write it back, and comes back up when the profile still needs it.
+     */
+    defineRoute(app, deps, {
+      operationId: 'agents.unlinkChannel',
+      handler: async (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const platform = params.platform as string;
+        const { home, profile } = toolHome(request, agentId);
+        if (platform !== 'whatsapp') {
+          throw new HubError('state_invalid', {
+            details: { agent_id: agentId, platform, reason: 'unlink_not_supported' },
+          });
+        }
+        if (!whatsappLink(home).linked) {
+          throw new HubError('state_invalid', {
+            details: { agent_id: agentId, platform, reason: 'not_linked' },
+          });
+        }
+        const { runtime } = contextOf(request.server);
+        const channel = await runtime.withGatewayStopped(profile, () => {
+          if (stopOrphanBridge(whatsappSessionDir(home))) {
+            request.log.info({ profile }, 'agents: stopped a WhatsApp bridge left running');
+          }
+          return unlinkWhatsApp(home);
+        });
+        request.log.info({ profile }, 'agents: WhatsApp unlinked');
+        return toChannel(channel, channelStatus(request, profile, channel));
+      },
+    });
+
+    /**
+     * Pairing: who may message the agent. Hermes's own API in the selected profile
+     * (`hermes-pairing.ts`); turning one request down is the hub's, because Hermes has no verb
+     * for it.
+     */
+    defineRoute(app, deps, {
+      operationId: 'agents.listPairing',
+      handler: async (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const { profile } = toolHome(request, agentId);
+        return listPairing(hermesApiOf(request, agentId), profile);
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.approvePairing',
+      handler: async (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const { profile } = toolHome(request, agentId);
+        return approvePairing(hermesApiOf(request, agentId), {
+          profile,
+          platform: params.platform as string,
+          requestId: params.request_id as string,
+        });
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.denyPairing',
+      status: 204,
+      handler: (request, { params }) => {
+        const { home } = toolHome(request, params.agent_id as string);
+        denyPairing(home, params.platform as string, params.request_id as string);
+        return null;
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.revokePairing',
+      status: 204,
+      handler: async (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const { profile } = toolHome(request, agentId);
+        await revokePairing(hermesApiOf(request, agentId), {
+          profile,
+          platform: params.platform as string,
+          userId: params.user_id as string,
+        });
+        return null;
       },
     });
 
@@ -1195,7 +1388,22 @@ export const agentsModule = defineModule({
             input: { platform, profile },
             message: t('jobs.channel_login.started', language),
           },
-          (handle) => pairWhatsApp(api, handle, { profile, language, pollMs }),
+          async (handle) => {
+            const outcome = await pairWhatsApp(api, handle, { profile, language, pollMs });
+            // Linked: a named profile's gateway starts now and answers the number; the default
+            // profile's picks it up at Hermes's next restart (`channelGateway` §applies).
+            if (outcome.status === 'connected') {
+              await contextOf(app)
+                .runtime.channelsChanged(profile)
+                .catch((error: unknown) => {
+                  app.log.warn(
+                    { err: error, profile },
+                    'agents: the profile gateway did not start',
+                  );
+                });
+            }
+            return { ...outcome, applies: profile === 'default' ? 'on_restart' : 'now' };
+          },
         );
         return { job_id: job.id };
       },
@@ -1287,5 +1495,24 @@ export function agentDirectory(app: FastifyInstance): AgentDirectoryPort {
         ...(available ? {} : { unavailableReason: enabled ? row.installState : 'disabled' }),
       });
     },
+  };
+}
+
+/** A gateway's state as the contract says it: nothing in between is not applicable here. */
+function gatewayState(state: GatewayStatus['state']): 'running' | 'starting' | 'stopped' | 'error' {
+  return state === 'not_applicable' ? 'stopped' : state;
+}
+
+/** The contract's `MessagingGateway`. */
+function toMessagingGateway(gateway: GatewayStatus) {
+  return {
+    profile: gateway.profile,
+    state: gatewayState(gateway.state),
+    pid: gateway.pid,
+    restarts: gateway.restarts,
+    started_at: gateway.startedAt === null ? null : new Date(gateway.startedAt).toISOString(),
+    error: gateway.lastError,
+    channels: gateway.channels,
+    scheduled_jobs: gateway.cronJobs,
   };
 }

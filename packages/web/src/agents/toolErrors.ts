@@ -64,6 +64,10 @@ export function describeToolError(error: unknown, t: T): string {
         return t('agents.tools.runtime_absent');
       case 'login_not_supported':
         return t('channels.login.not_supported');
+      case 'not_linked':
+        return t('channels.unlink_not_linked');
+      case 'unlink_not_supported':
+        return t('channels.unlink_not_supported');
       case 'skill_bundled':
         return t('skills.bundled_refused');
       case 'plugin_bundled':

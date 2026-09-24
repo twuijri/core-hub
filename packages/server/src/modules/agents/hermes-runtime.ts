@@ -36,6 +36,14 @@ import {
   type TuiChannel,
 } from './adapters/hermes-tui.js';
 import type { RuntimeState } from './adapters/types.js';
+import { activeChannels } from './channels.js';
+import {
+  ProfileGateways,
+  activeCronJobs,
+  readGatewayRecord,
+  type GatewayRuntimeRecord,
+  type GatewayStatus,
+} from './hermes-gateways.js';
 import { hermesProfileRunner, type ProfileRunner } from './hermes-profiles.js';
 import { HubError } from '../../lib/errors.js';
 
@@ -98,6 +106,17 @@ export interface HermesRuntimeOptions {
   onState?: (status: HermesRuntimeStatus) => void;
   /** Injected in tests: a scripted `hermes <argv>` instead of the executable. */
   profileRun?: ProfileRunner;
+  /**
+   * Called right before any messaging gateway starts — the default one and every profile's —
+   * with the Hermes profile and its home: the models module writes the hub's endpoints and
+   * that profile's model into its `config.yaml` there, so the gateway resolves the providers
+   * a chat in the same profile does. Never expected to throw; a throw is logged.
+   */
+  prepareGateway?: (profile: string, home: string) => void;
+  /** Between two restarts of a crashed profile gateway (tests shorten it). */
+  gatewayBackoffMs?: readonly number[];
+  /** How often the profiles needing a gateway are checked again (tests turn it off with 0). */
+  gatewayRescanMs?: number;
 }
 
 /** Hermes's profile id rule (`_PROFILE_ID_RE`); a hub slug always satisfies it. */
@@ -173,6 +192,13 @@ export class HermesRuntime {
   private restartRequested = false;
   private restartTimer: NodeJS.Timeout | null = null;
   private healthTimer: NodeJS.Timeout | null = null;
+  /** Set while the default gateway is held down on purpose (`withDefaultGatewayStopped`). */
+  private relaunchGate: Promise<void> | null = null;
+  /**
+   * The messaging gateways of the named profiles (`hermes-gateways.ts`). The process above
+   * serves the default profile only; each other profile with a channel gets its own.
+   */
+  readonly profileGateways: ProfileGateways;
 
   constructor(private readonly options: HermesRuntimeOptions) {
     this.endpoint = (options.endpoint ?? HERMES_DEFAULT_ENDPOINT).replace(/\/$/, '');
@@ -180,6 +206,93 @@ export class HermesRuntime {
     this.log = options.log;
     this.spawnImpl = options.spawnImpl ?? defaultSpawner;
     this.healthIntervalMs = options.healthIntervalMs ?? 30_000;
+    this.profileGateways = new ProfileGateways({
+      // Only a Hermes this hub runs: an external gateway's profiles are somebody else's.
+      root: () => (this.mode === 'managed' ? this.home : null),
+      executable: () => this.executable(),
+      env: () => this.cliEnv(),
+      spawnImpl: this.spawnImpl,
+      log: this.log,
+      prepare: (profile, home) => this.options.prepareGateway?.(profile, home),
+      ...(options.gatewayBackoffMs ? { backoffMs: options.gatewayBackoffMs } : {}),
+      ...(options.gatewayRescanMs !== undefined ? { rescanMs: options.gatewayRescanMs } : {}),
+    });
+  }
+
+  /**
+   * Every messaging gateway and its state: the default profile's (this process, when the hub
+   * runs Hermes) and each named profile's. Empty when the hub does not run Hermes.
+   */
+  gateways(): GatewayStatus[] {
+    if (this.mode !== 'managed') return [];
+    return [
+      {
+        profile: 'default',
+        state: this.state,
+        pid: this.child?.pid ?? null,
+        restarts: this.restarts,
+        startedAt: this.child ? this.startedAt : null,
+        lastError: this.lastError,
+        channels: activeChannels(this.home),
+        cronJobs: activeCronJobs(this.home),
+      },
+      ...this.profileGateways.status(),
+    ];
+  }
+
+  /**
+   * What Hermes itself reports about the gateway serving `profile` — its platforms' states —
+   * when that gateway is the one this hub started. `null` otherwise, including for a record a
+   * stopped gateway left behind.
+   */
+  gatewayRecord(profile: string): GatewayRuntimeRecord | null {
+    if (this.mode !== 'managed') return null;
+    if (profile !== 'default') return this.profileGateways.record(profile);
+    const record = readGatewayRecord(this.home);
+    return record && this.child && record.pid === this.child.pid ? record : null;
+  }
+
+  /**
+   * A channel of `profile` changed. A named profile's gateway exists for its channels, so it
+   * is started, restarted or stopped to match now. The default profile's gateway also carries
+   * the API server and Hermes's own schedulers, so a change there waits for its next restart,
+   * as it always has.
+   */
+  channelsChanged(profile: string): Promise<void> {
+    if (this.mode !== 'managed') return Promise.resolve();
+    return this.profileGateways.channelsChanged(profile);
+  }
+
+  /**
+   * Hermes's scheduled jobs changed somewhere (the hub's schedules page wrote one): a profile
+   * that now has an active job gets its gateway, one with neither a job nor a channel left
+   * loses it. A gateway reads its jobs on every tick, so a running one is not restarted.
+   */
+  scheduledJobsChanged(): Promise<void> {
+    if (this.mode !== 'managed') return Promise.resolve();
+    return this.profileGateways.reconcile();
+  }
+
+  /**
+   * Holds down the gateway that serves `profile` while `work` runs, then starts it again — so
+   * a file that gateway holds open (a WhatsApp session) is not written back behind the hub.
+   */
+  async withGatewayStopped<T>(profile: string, work: () => T | Promise<T>): Promise<T> {
+    if (this.mode !== 'managed') return await work();
+    if (profile !== 'default') return this.profileGateways.withStopped(profile, work);
+    const child = this.child;
+    if (!child) return await work();
+    let release: () => void = () => {};
+    this.relaunchGate = new Promise<void>((resolve) => (release = resolve));
+    this.restartRequested = true;
+    this.log.info({ pid: child.pid }, 'hermes: gateway held down while a channel is changed');
+    await this.terminate(child);
+    try {
+      return await work();
+    } finally {
+      this.relaunchGate = null;
+      release();
+    }
   }
 
   /** The key the adapter sends; minted lazily so a hub that never uses Hermes writes none. */
@@ -420,6 +533,12 @@ export class HermesRuntime {
     this.mode = 'managed';
     this.launch(binary);
     this.scheduleHealth();
+    // Every named profile with a channel to answer on or a job to fire gets its gateway at
+    // boot too, and the set is checked again from then on.
+    void this.profileGateways.reconcile().catch((error: unknown) => {
+      this.log.warn({ err: error }, 'hermes: could not start the profile gateways');
+    });
+    this.profileGateways.watch();
     return this.mode;
   }
 
@@ -428,11 +547,15 @@ export class HermesRuntime {
     if (this.mode !== 'managed') {
       throw new Error(`hermes runtime is ${this.mode}, not managed by this hub`);
     }
+    // Every messaging gateway: the keys and endpoints a restart makes live are theirs too.
+    const others = this.profileGateways.restartAll();
     const child = this.child;
-    if (!child) return;
-    this.log.info({ pid: child.pid }, 'hermes: restart requested');
-    this.restartRequested = true;
-    await this.terminate(child);
+    if (child) {
+      this.log.info({ pid: child.pid }, 'hermes: restart requested');
+      this.restartRequested = true;
+      await this.terminate(child);
+    }
+    await others;
   }
 
   async stop(): Promise<void> {
@@ -448,7 +571,7 @@ export class HermesRuntime {
     this.restartTimer = null;
     this.healthTimer = null;
     const child = this.child;
-    if (child) await this.terminate(child);
+    await Promise.all([child ? this.terminate(child) : null, this.profileGateways.stopAll()]);
     if (this.mode === 'managed') this.setState('stopped', null);
   }
 
@@ -456,6 +579,11 @@ export class HermesRuntime {
 
   private launch(binary: string): void {
     mkdirSync(this.home, { recursive: true });
+    try {
+      this.options.prepareGateway?.('default', this.home);
+    } catch (error) {
+      this.log.warn({ err: error }, 'hermes: could not prepare the gateway configuration');
+    }
     const url = new URL(this.endpoint);
     const env: NodeJS.ProcessEnv = {
       ...(this.options.host.inherited ?? {}),
@@ -497,7 +625,14 @@ export class HermesRuntime {
         this.restartRequested = false;
         this.log.info({ code, signal }, 'hermes: gateway stopped for restart');
         this.setState('starting', null);
-        this.launch(binary);
+        const gate = this.relaunchGate;
+        if (gate) {
+          void gate.then(() => {
+            if (!this.stopping && !this.child) this.launch(binary);
+          });
+        } else {
+          this.launch(binary);
+        }
         return;
       }
       this.log.error({ code, signal }, 'hermes: gateway crashed; restarting');

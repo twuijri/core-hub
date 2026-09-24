@@ -286,6 +286,11 @@ export const modelsModule = defineModule({
       prepareRuntimeProfile(profileHome) {
         contextOf(app).prepareProfile(profileHome);
       },
+      // A messaging gateway about to start (`agents/hermes-gateways.ts`): the same preparation,
+      // plus the model, which a gateway reads from its file where a turn names its own.
+      prepareGatewayProfile(profile, home) {
+        contextOf(app).prepareGateway(profile, home);
+      },
     };
     registerAgentModelsPort(app.hub.io, port);
 

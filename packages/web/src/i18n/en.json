@@ -371,7 +371,19 @@
     },
     "sections": "{name} sections",
     "open_section": "{section} · {name}",
-    "not_found": "No agent with this id in this profile."
+    "not_found": "No agent with this id in this profile.",
+    "gateways": {
+      "title": "Messaging gateways",
+      "default": "default profile",
+      "no_channels": "no channels",
+      "state": {
+        "running": "running",
+        "starting": "starting",
+        "stopped": "stopped",
+        "error": "failing"
+      },
+      "jobs_n": "{count} scheduled jobs"
+    }
   },
   "jobs": {
     "status": {
@@ -1240,7 +1252,55 @@
       "cancelled": "The pairing was stopped.",
       "again": "Start again",
       "close": "Close",
-      "not_supported": "This platform does not pair by QR; fill in its fields instead."
+      "not_supported": "This platform does not pair by QR; fill in its fields instead.",
+      "done_now": "Linked. The agent answers on it now; the first person to message it waits for your approval here.",
+      "done_as_now": "Linked as {account}. The agent answers on it now; the first person to message it waits for your approval here."
+    },
+    "linked": "linked",
+    "not_linked": "not linked",
+    "linked_as": "Linked as {account}",
+    "unlink": "Unlink",
+    "unlink_title": "Unlink {name}?",
+    "unlink_body": "The agent stops answering this number, its session is deleted from this profile and the channel is switched off. Approved senders stay. Remove the device on the phone too: WhatsApp → Linked devices.",
+    "unlinked_note": "Unlinked. Remove the device from WhatsApp on the phone too: Settings → Linked devices.",
+    "unlink_not_linked": "No number is linked in this profile.",
+    "unlink_not_supported": "This platform is not linked to a device, so there is nothing to unlink; forget its identity instead.",
+    "applies_now": "In this profile the hub restarts the messaging gateway itself, so a change takes effect at once.",
+    "status": {
+      "online": "online",
+      "offline": "offline",
+      "error": "error",
+      "unknown": "unknown"
+    },
+    "gateway": {
+      "running": "gateway running",
+      "starting": "gateway starting",
+      "stopped": "no gateway running",
+      "error": "gateway failing"
+    },
+    "how": {
+      "title": "How to use it",
+      "step_message": "1) Message the linked number from another WhatsApp account.",
+      "step_message_as": "1) Message {account} from another WhatsApp account.",
+      "step_approve": "2) The sender receives a pairing code and the request appears here under “Waiting for approval”: approve it and the agent starts answering them.",
+      "step_restart": "In the default profile, restart Hermes from its card first so it starts answering.",
+      "personal_warning": "Warning: if you link your personal number, everyone who messages it receives the agent's pairing reply. A number dedicated to the agent is better."
+    },
+    "pairing": {
+      "title": "Waiting for approval",
+      "note": "Someone who messages the agent for the first time receives a pairing code and waits here. A request expires after an hour. The list refreshes every ten seconds.",
+      "none": "No requests right now.",
+      "unnamed": "no name",
+      "approve": "Approve",
+      "deny": "Deny",
+      "approved_title": "Approved senders",
+      "approved_none": "Nobody is approved yet.",
+      "revoke": "Revoke",
+      "revoke_title": "Revoke {name}?",
+      "revoke_body": "The agent will not answer them any more, and their next message becomes a new pairing request.",
+      "just_now": "just now",
+      "minutes_ago": "{count} min ago",
+      "hours_ago": "{count} h ago"
     }
   },
   "question": {

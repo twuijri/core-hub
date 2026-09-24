@@ -1,7 +1,7 @@
 // The e2e hub: the real server (auth, sessions, realtime, static web client) with a scripted
 // agent runner in place of the adapters, so the smoke journeys run without a model.
 // The script an agent plays is chosen by the text of the prompt (see `scriptFor`).
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -387,8 +387,100 @@ const scriptedGateway: typeof fetch = async (input) => {
  * replaced, and the channel linked, without a phone or a network.
  */
 let pairingPolls = 0;
-const scriptedHermesApi: HermesApiCall = async <T>(method: string, route: string): Promise<T> => {
+/**
+ * Hermes's pairing store, played on the files Hermes keeps it in (`platforms/pairing/` of the
+ * profile) — so a Deny, which the hub makes on that file itself, is seen by the next list, as
+ * it is with the real Hermes. Journey 30 starts with two senders waiting in `default`.
+ */
+const hermesHome = (profile: string) =>
+  profile === 'default'
+    ? path.join(dataDir, 'hermes')
+    : path.join(dataDir, 'hermes', 'profiles', profile);
+const pairingFile = (profile: string, kind: 'pending' | 'approved') =>
+  path.join(hermesHome(profile), 'platforms', 'pairing', `whatsapp-${kind}.json`);
+const readPairing = (profile: string, kind: 'pending' | 'approved') => {
+  const file = pairingFile(profile, kind);
+  return existsSync(file)
+    ? (JSON.parse(readFileSync(file, 'utf8')) as Record<string, Record<string, unknown>>)
+    : {};
+};
+const writePairing = (
+  profile: string,
+  kind: 'pending' | 'approved',
+  value: Record<string, Record<string, unknown>>,
+) => {
+  mkdirSync(path.dirname(pairingFile(profile, kind)), { recursive: true });
+  writeFileSync(pairingFile(profile, kind), JSON.stringify(value));
+};
+function seedPairing(): void {
+  const now = Date.now() / 1000;
+  writePairing('default', 'pending', {
+    '3f9a1c0e7b2d4a55': {
+      hash: 'e2e',
+      salt: 'e2e',
+      user_id: '966500000001@s.whatsapp.net',
+      user_name: 'سارة',
+      created_at: now - 4 * 60,
+    },
+    '8c21d0f4a9e3b716': {
+      hash: 'e2e',
+      salt: 'e2e',
+      user_id: '966500000002@s.whatsapp.net',
+      user_name: '',
+      created_at: now - 30,
+    },
+  });
+}
+const scriptedHermesApi: HermesApiCall = async <T>(
+  method: string,
+  route: string,
+  body?: unknown,
+): Promise<T> => {
   const answer = (value: unknown) => value as T;
+  const url = new URL(route, 'http://hermes');
+  if (method === 'GET' && url.pathname.endsWith('/pairing')) {
+    const profile = url.searchParams.get('profile') ?? 'default';
+    const now = Date.now() / 1000;
+    return answer({
+      pending: Object.entries(readPairing(profile, 'pending')).map(([id, entry]) => ({
+        platform: 'whatsapp',
+        request_id: id,
+        user_id: entry.user_id,
+        user_name: entry.user_name,
+        age_minutes: Math.floor((now - Number(entry.created_at)) / 60),
+      })),
+      approved: Object.entries(readPairing(profile, 'approved')).map(([id, entry]) => ({
+        platform: 'whatsapp',
+        user_id: id,
+        ...entry,
+      })),
+    });
+  }
+  if (url.pathname.endsWith('/pairing/approve')) {
+    const { profile = 'default', request_id: id } = body as {
+      profile?: string;
+      request_id: string;
+    };
+    const pending = readPairing(profile, 'pending');
+    const entry = pending[id];
+    if (!entry) throw new Error('Pairing request or code not found or expired');
+    delete pending[id];
+    writePairing(profile, 'pending', pending);
+    const approved = readPairing(profile, 'approved');
+    approved[String(entry.user_id)] = {
+      user_name: entry.user_name,
+      approved_at: Date.now() / 1000,
+    };
+    writePairing(profile, 'approved', approved);
+    return answer({ ok: true, user: { user_id: entry.user_id, user_name: entry.user_name } });
+  }
+  if (url.pathname.endsWith('/pairing/revoke')) {
+    const { profile = 'default', user_id: user } = body as { profile?: string; user_id: string };
+    const approved = readPairing(profile, 'approved');
+    delete approved[user];
+    writePairing(profile, 'approved', approved);
+    return answer({ ok: true });
+  }
   const mcp = /^\/api\/mcp\/servers\/([^/]+)\/test/.exec(route);
   if (mcp) {
     return mcp[1] === 'broken'
@@ -426,11 +518,27 @@ const scriptedHermesApi: HermesApiCall = async <T>(method: string, route: string
         expires_at: expires,
       });
     }
+    // Linked: Hermes's bridge leaves the phone's session in the profile, and the channel is
+    // read from it — the account the Channels page names afterwards.
+    const session = path.join(hermesHome('default'), 'platforms', 'whatsapp', 'session');
+    mkdirSync(session, { recursive: true });
+    writeFileSync(
+      path.join(session, 'creds.json'),
+      JSON.stringify({ me: { id: '966500000000:4@s.whatsapp.net', name: 'مكتب المجلس' } }),
+    );
+    if (pairingPolls === 8) seedPairing();
     return answer({
       status: 'connected',
       account_name: 'مكتب المجلس',
       account_phone: '966500000000',
     });
+  }
+  if (method === 'PUT' && url.pathname.endsWith('/messaging/platforms/whatsapp')) {
+    // What Hermes writes when the pairing is applied: the switch, in the profile's `.env`.
+    const home = hermesHome(url.searchParams.get('profile') ?? 'default');
+    mkdirSync(home, { recursive: true });
+    writeFileSync(path.join(home, '.env'), 'WHATSAPP_ENABLED=true\nWHATSAPP_MODE=bot\n');
+    return answer({ ok: true });
   }
   return answer({ ok: true });
 };

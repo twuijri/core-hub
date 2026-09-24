@@ -53,6 +53,7 @@ import {
   writeHermesConfiguration,
   writeHermesEnv,
   writeHermesProviders,
+  writeHermesRoute,
   type HermesModelChoice,
   type HermesProviderRoute,
   type PropagationState,
@@ -2138,6 +2139,49 @@ export class ModelsService {
     this.scheduleRestart();
   }
 
+  /**
+   * Makes a Hermes profile ready for its **messaging gateway**, right before the gateway starts.
+   *
+   * A chat names its provider and model on every turn; a gateway answering WhatsApp names
+   * nothing and reads `model.provider` from its own profile's `config.yaml`, resolving it
+   * against the `providers:` blocks of that same file. When the file names a block it does not
+   * have, Hermes answers the sender "Provider authentication failed" (`Unknown provider …`, the
+   * defect of 2026-09-24). So a gateway gets exactly what a chat in its profile uses:
+   *
+   * - `default` (the root home): the root's whole configuration, as `propagate` writes it —
+   *   the hub's providers, the default profile's keys and its model;
+   * - a named profile: the same preparation as before each of its turns (`prepareProfileWith`:
+   *   its providers, own and shared, and the keys that differ from the root's in its `.env`),
+   *   **plus its model**, which a turn names itself but a gateway does not.
+   *
+   * Never throws: a gateway still starts on what is there, and the log says why.
+   */
+  prepareGateway(profile: string, home: string): void {
+    const root = this.state(this.hub().id);
+    if (profile !== 'default') {
+      this.prepareProfileWith(home, root, { model: true });
+      return;
+    }
+    try {
+      const written = writeHermesConfiguration(home, root);
+      if (written.dirty) {
+        this.options.log.info(
+          {
+            profile,
+            changed: [...written.env.changed, ...written.config.changed],
+            removed: [...written.env.removed, ...written.config.removed],
+          },
+          'models: a messaging gateway was given its profile providers and model',
+        );
+      }
+    } catch (error) {
+      this.options.log.warn(
+        { err: error, profile },
+        'models: could not write the providers of a messaging gateway; it starts on what is there',
+      );
+    }
+  }
+
   /** Every named Hermes profile, made ready against the root it falls back on. */
   private propagateToProfiles(root: PropagationState): void {
     for (const profileHome of this.options.hermes.profileHomes?.() ?? []) {
@@ -2169,12 +2213,19 @@ export class ModelsService {
     this.prepareProfileWith(profileHome, this.state(this.hub().id));
   }
 
-  private prepareProfileWith(profileHome: string, root: PropagationState): void {
+  private prepareProfileWith(
+    profileHome: string,
+    root: PropagationState,
+    options: { model?: boolean } = {},
+  ): void {
     const profile = path.basename(profileHome);
     try {
       const workspace = this.options.profileWorkspace?.(profile) ?? `hermes-profile:${profile}`;
       const mine = this.state(workspace);
-      const written = writeHermesProviders(profileHome, mine.hermesProviders);
+      // A messaging gateway also needs the model: it names none (`prepareGateway`).
+      const written = options.model
+        ? writeHermesRoute(profileHome, mine)
+        : writeHermesProviders(profileHome, mine.hermesProviders);
       const rootValues = hermesProcessEnv(root);
       const ownValues = hermesProcessEnv(mine);
       const owned = [

@@ -85,6 +85,15 @@ export interface AgentModelsPort {
    * which Hermes reads before the process environment (contract decision §37). Never throws.
    */
   prepareRuntimeProfile?(profileHome: string): void;
+  /**
+   * A messaging gateway is about to start for the Hermes profile `profile` (`default` is the
+   * root home): write the hub's endpoints and that profile's model into its `config.yaml` at
+   * `home`, so the gateway resolves the providers a chat in the same profile does. A gateway
+   * reads `model.provider` from its own profile's file; a block missing there is Hermes's
+   * "Unknown provider" (the defect of 2026-09-24). The same preparation as
+   * `prepareRuntimeProfile` for a named profile, plus the model. Never throws.
+   */
+  prepareGatewayProfile?(profile: string, home: string): void;
 }
 
 // ------------------------------------------------- the direct path (ADOPTION §2.15)
