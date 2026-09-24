@@ -93,7 +93,7 @@
   و`screens/DeviceConnectionsScreen.tsx` (تصدير `QrCode` فقط)، و`i18n/{ar,en}.json`.
 - `packages/web/e2e/hub.ts` (واجهة هرمز مكتوبة للرحلات) و`e2e/zz-agent-tools.spec.ts` (الرحلة 23)
   وأربع لقطات جديدة.
-- `docs/STATUS.md`: صفّ `agents` والعدد (188 من 251).
+- `docs/STATUS.md`: صفّ `agents` والعدد (189 من 252 بعد دمج `main`).
 
 ## الفحوص
 ```
@@ -129,6 +129,16 @@ $ MAJLIS_HERMES_IMAGE=majlis:local MAJLIS_REAL_WHATSAPP=1 vitest run src/modules
 - الاختبارات الجديدة تفشل على الكود القديم: كانت المسارات الثلاث ⁨501⁩، وصفحات الأدوات كانت تقرأ
   بيت هرمز الجذري لكل بروفايل (اختبار «the tool pages act on the selected profile»).
 - لقطات الرحلات الأخرى التي تغيّرت بالتشغيل أُرجعت؛ الأربع الجديدة لهذه الرحلة فقط.
+- **بعد دمج `main` (061dd3e، PR #79)** أُعيدت كل الفحوص بـ`mj-run` واحدًا بعد الآخر:
+```
+lint · typecheck · contracts:lint · contracts:check-clients (231 files, 167 paths) · i18n:check · nav:check · change-record:check → كلها exit 0
+server:   Test Files 78 passed | 8 skipped (86) · Tests 828 passed | 23 skipped (851)
+contract: Test Files 2 passed (2) · Tests 255 passed (255)
+web:      Test Files 39 passed (39) · Tests 502 passed (502)
+build     → exit 0
+web:e2e   → 31 passed (2.1m)
+```
+  وعدد `STATUS`: ‏186 من 252 في `main` + العمليات الثلاث = **189 من 252**.
 
 ## المخاطر والرجوع
 - **عيب قائم في `knowledge` (خارج النطاق، لم أصلحه)**: رفع الملف نفسه بعد حذفه، أو بالبايتات نفسها
@@ -148,7 +158,7 @@ $ MAJLIS_HERMES_IMAGE=majlis:local MAJLIS_REAL_WHATSAPP=1 vitest run src/modules
 - الرجوع: الفرع وحده. لا هجرة؛ `channel_login` قيمة مضافة للتعداد.
 
 ## التسليم والخطوة التالية
-الفرع `feat/agent-tools-live` فوق `main` (c62e3e8)، وطلب دمج إلى `main`.
+الفرع `feat/agent-tools-live` فوق `main` (061dd3e بعد الدمج)، وطلب الدمج #80 إلى `main`.
 
 القرارات المقترحة للمالك: واتساب فقط لربط QR؛ `category` اختياري في `SkillImport`؛ عدم استدعاء
 `apply` في هرمز. الخطوة التالية: إصلاح عيب رفع الملف نفسه في `knowledge`، وقراءة المهارات المصنّفة
