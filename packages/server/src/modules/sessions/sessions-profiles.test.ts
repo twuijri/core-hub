@@ -4,7 +4,8 @@
  *
  * The rules under test are all about **who decides**: the server lists every profile the
  * caller may enter — owners and admins every one, a member only the ones they are enrolled
- * in — and nothing the client sends can widen that. Paging stays one order across every
+ * in — and nothing the client sends can widen that. (Only enrolled members are used: what an
+ * empty enrolment means is `auth`'s rule, and it is being changed on its own branch.) Paging stays one order across every
  * profile, and a list without `profiles` is exactly what it was before.
  */
 import { io as connect, type Socket } from 'socket.io-client';
@@ -22,11 +23,10 @@ type PageBody = { items: Item[]; next_cursor: string | null };
 
 let hub: TestHub;
 let baseUrl = '';
-const tokens: Record<'owner' | 'admin' | 'member' | 'free', string> = {
+const tokens: Record<'owner' | 'admin' | 'member', string> = {
   owner: '',
   admin: '',
   member: '',
-  free: '',
 };
 /** Session ids by profile, as the owner created them. */
 const made: Record<'default' | 'designer', string[]> = { default: [], designer: [] };
@@ -96,13 +96,8 @@ beforeAll(async () => {
       })
     ).statusCode,
   ).toBe(201);
-  // A member with no enrolment may enter every workspace (the contract: empty = every profile).
-  expect(
-    (await person({ username: 'free', password: 'free-password-1', role: 'member' })).statusCode,
-  ).toBe(201);
   tokens.admin = await login('adm', 'adm-password-1');
   tokens.member = await login('mem', 'mem-password-1');
-  tokens.free = await login('free', 'free-password-1');
 
   for (const [profile, titles] of [
     ['default', ['خطة الإطلاق', 'default two', 'default three']],
@@ -151,11 +146,6 @@ describe('sessions.list?profiles=all — who sees what', () => {
     const outside = await list(tokens.member, 'default', 'profiles=all');
     expect(outside.status).toBe(404);
     expect(outside.body.code).toBe('profile_not_found');
-  });
-
-  it('gives a member with no enrolment every profile, as the header rule does', async () => {
-    const { body } = await list(tokens.free, 'default', 'profiles=all');
-    expect(body.items).toHaveLength(made.default.length + made.designer.length);
   });
 
   it('keeps the list without `profiles` exactly as it was: the header profile alone', async () => {

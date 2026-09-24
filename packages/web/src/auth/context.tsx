@@ -25,17 +25,20 @@ export interface AuthValue {
    */
   profile: string;
   /**
-   * The concrete profile the person is in: where a new chat or task is created and which
-   * profile a configuration page edits (ADR 0016). Never changed by opening an item.
+   * The profile the person is in — the top selector, always concrete: where a new chat or
+   * task is created and which profile a configuration page edits (ADR 0016). Never changed
+   * by opening an item, nor by the chats list's filter.
    */
   homeProfile: string;
   setProfile(slug: string): void;
   /**
-   * Lists gather every profile the person may enter (ADR 0016). On by default every time
-   * the app is entered; kept in memory only, so a reload starts on "All profiles" again.
+   * The chats list's own filter (ADR 0016): `ALL_PROFILES` ('*') — every profile the
+   * person may enter, the default on every entry into the app — or one profile's slug. It
+   * is not the top selector: neither ever moves the other. Kept in memory only, so a
+   * reload starts on "All profiles" again.
    */
-  allProfiles: boolean;
-  setAllProfiles(on: boolean): void;
+  listFilter: string;
+  setListFilter(filter: string): void;
   client: HubClient;
   anonymous: HubClient;
   signIn(username: string, password: string): Promise<StoredSession>;
@@ -163,9 +166,10 @@ export function AuthProvider({
     }
   }, [bundle, store, queryClient]);
 
-  // Every entry into the app starts on "All profiles" (owner, 2026-09-24: «كل البروفايلات
-  // افتراضيا»), not on the last profile the lists were narrowed to.
-  const [allProfiles, setAllProfiles] = useState(true);
+  // The chats list opens on "All profiles" on every entry into the app (owner, 2026-09-24:
+  // «كل البروفايلات افتراضيا»). Here rather than in the list because every page draws its
+  // own sidebar, and the filter must survive moving between pages.
+  const [listFilter, setListFilter] = useState('*');
 
   const setProfile = useCallback(
     (slug: string) => {
@@ -186,15 +190,15 @@ export function AuthProvider({
       profile: session?.profile ?? 'default',
       homeProfile: session?.profile ?? 'default',
       setProfile,
-      allProfiles,
-      setAllProfiles,
+      listFilter,
+      setListFilter,
       client: bundle.client,
       anonymous: bundle.anonymous,
       signIn,
       completeSetup,
       signOut,
     }),
-    [baseUrl, session, setProfile, allProfiles, bundle, signIn, completeSetup, signOut],
+    [baseUrl, session, setProfile, listFilter, bundle, signIn, completeSetup, signOut],
   );
   return (
     <RootAuthContext.Provider value={value}>
