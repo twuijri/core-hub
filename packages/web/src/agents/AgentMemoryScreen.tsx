@@ -21,6 +21,7 @@ import { useI18n } from '../i18n/context.js';
 import { AppShell } from '../shell/AppShell.js';
 import { Badge, Button, Dialog, Notice, Skeleton, SkeletonGroup, Textarea } from '../ui/index.js';
 import { useMemory, useSaveMemory, type MemoryItem } from './skills.js';
+import { describeToolError } from './toolErrors.js';
 
 export function AgentMemoryScreen() {
   const { t } = useI18n();
@@ -44,7 +45,7 @@ export function AgentMemoryScreen() {
             <Skeleton height="5rem" radius="md" />
           </SkeletonGroup>
         )}
-        {memory.isError && <Notice tone="danger">{describeError(memory.error, t)}</Notice>}
+        {memory.isError && <Notice tone="danger">{describeToolError(memory.error, t)}</Notice>}
         {memory.data && (
           <ul className="flex flex-col gap-2" data-testid="memory-list">
             {memory.data.items.map((item) => (

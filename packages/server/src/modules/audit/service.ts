@@ -210,7 +210,12 @@ export class AuditService {
   }
 
   /** `percent` null means "no measurable progress"; the message is already localised. */
-  progressJob(jobId: string, percent: number | null, message: string | null): void {
+  progressJob(
+    jobId: string,
+    percent: number | null,
+    message: string | null,
+    result?: Record<string, unknown>,
+  ): void {
     const row = this.job(jobId);
     if (
       !row ||
@@ -223,7 +228,13 @@ export class AuditService {
     const now = new Date();
     this.db
       .update(jobs)
-      .set({ progress: percent ?? -1, progressMessage: message, heartbeatAt: now, updatedAt: now })
+      .set({
+        progress: percent ?? -1,
+        progressMessage: message,
+        heartbeatAt: now,
+        updatedAt: now,
+        ...(result !== undefined ? { result } : {}),
+      })
       .where(eq(jobs.id, jobId))
       .run();
     if (message) this.appendJobEvent(jobId, message, 'progress');

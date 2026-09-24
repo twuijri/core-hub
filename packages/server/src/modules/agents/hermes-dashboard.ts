@@ -104,10 +104,20 @@ export class HermesDashboardRefusal extends Error {
 
 /** The server could not be reached at all: not managed here, would not start, or died. */
 export class HermesDashboardUnavailable extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    /** The call was sent and Hermes did not answer within the caller's timeout. */
+    readonly timedOut = false,
+  ) {
     super(message);
     this.name = 'HermesDashboardUnavailable';
   }
+}
+
+/** Per-call options. */
+export interface HermesDashboardCallOptions {
+  /** How long this one call may take, instead of the default (a probe that waits on purpose). */
+  timeoutMs?: number;
 }
 
 export interface HermesDashboardStatus {
@@ -190,7 +200,12 @@ export class HermesDashboard {
    * it is not running. Throws `HermesDashboardRefusal` with Hermes's own words when Hermes
    * answers with an error, `HermesDashboardUnavailable` when there is no server to ask.
    */
-  async request<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
+  async request<T = unknown>(
+    method: string,
+    path: string,
+    body?: unknown,
+    options: HermesDashboardCallOptions = {},
+  ): Promise<T> {
     if (!path.startsWith('/')) throw new Error(`dashboard path must start with "/": ${path}`);
     const verb = `${method.toUpperCase()} ${path}`;
     this.inFlight += 1;
@@ -199,14 +214,14 @@ export class HermesDashboard {
       let live = await this.ensure();
       let response: Response;
       try {
-        response = await this.send(live, method, path, body);
+        response = await this.send(live, method, path, body, options);
       } catch (error) {
         // Refused before it landed and the process is gone: it died between calls. One
         // fresh start and one retry — safe, because the request never reached Hermes.
         if (!refusedToConnect(error) || !live.exited) throw this.unreachable(verb, error);
         live = await this.ensure();
         try {
-          response = await this.send(live, method, path, body);
+          response = await this.send(live, method, path, body, options);
         } catch (retryError) {
           throw this.unreachable(verb, retryError);
         }
@@ -411,7 +426,13 @@ export class HermesDashboard {
     });
   }
 
-  private async send(live: Live, method: string, path: string, body: unknown): Promise<Response> {
+  private async send(
+    live: Live,
+    method: string,
+    path: string,
+    body: unknown,
+    options: HermesDashboardCallOptions,
+  ): Promise<Response> {
     const headers: Record<string, string> = {
       [TOKEN_HEADER]: this.token ?? '',
       accept: 'application/json',
@@ -419,7 +440,9 @@ export class HermesDashboard {
     const init: RequestInit = {
       method: method.toUpperCase(),
       headers,
-      signal: AbortSignal.timeout(this.options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(
+        options.timeoutMs ?? this.options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS,
+      ),
     };
     if (body !== undefined) {
       headers['content-type'] = 'application/json';
@@ -430,8 +453,10 @@ export class HermesDashboard {
 
   private unreachable(verb: string, error: unknown): HermesDashboardUnavailable {
     const reason = error instanceof Error ? error.message : String(error);
+    const timedOut = error instanceof Error && error.name === 'TimeoutError';
     return new HermesDashboardUnavailable(
       `Hermes's dashboard API did not answer ${verb}: ${reason}`,
+      timedOut,
     );
   }
 
