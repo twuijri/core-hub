@@ -1159,7 +1159,7 @@ test.describe('web smoke journeys', () => {
     // A new schedule is made in the profile the person is in — the top selector — and the
     // form says so rather than offering a second picker (ADR 0016). Labs (journey 13) makes
     // two profiles, so the page names it and badges each schedule; there is no profile
-    // filter (journey 24 walks both profiles).
+    // filter (journey 26 walks both profiles).
     await expect(page.getByTestId('schedule-new-profile')).toHaveAttribute(
       'data-profile',
       'default',

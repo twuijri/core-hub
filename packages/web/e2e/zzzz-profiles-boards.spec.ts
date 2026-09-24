@@ -1,5 +1,5 @@
 /**
- * 24. Tasks and Schedules across profiles, against the real hub (ADR 0016 stage 2).
+ * 26. Tasks and Schedules across profiles, against the real hub (ADR 0016 stage 2).
  *
  * The owner: «الكرون جوب والمهام المفروض تطلع كل البروفايلات بدون تصنيف». With two profiles,
  * the board and the Schedules page hold both, with no profile filter; each card and schedule
@@ -74,7 +74,7 @@ async function newSchedule(page: Page, slug: string, name: string) {
   await expect(page.getByTestId('schedule-card').filter({ hasText: name })).toBeVisible();
 }
 
-test('24. the Tasks board and the Schedules page hold every profile, each item badged and acted on in its own', async ({
+test('26. the Tasks board and the Schedules page hold every profile, each item badged and acted on in its own', async ({
   page,
 }) => {
   await login(page);
