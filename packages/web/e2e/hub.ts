@@ -27,6 +27,7 @@ import { createHermesCardApi, registerHermesBoard } from '../../server/src/modul
 import { registerHermesCron } from '../../server/src/modules/schedules/index.js';
 import { createHermesJobs } from '../../server/src/modules/schedules/hermes-jobs.js';
 import { FakeHermesApi } from '../../server/src/modules/schedules/testing/fake-hermes-api.js';
+import { fakeHermesPlugins } from '../../server/src/modules/agents/testing/fake-hermes-plugins.js';
 import { agentsServiceFor } from '../../server/src/modules/agents/index.js';
 import { HermesRefusal, type HermesTask } from '../../server/src/modules/tasks/hermes-kanban.js';
 import type {
@@ -425,11 +426,19 @@ const scriptedHermesApi: HermesApiCall = async <T>(method: string, route: string
   return answer({ ok: true });
 };
 
+/**
+ * Hermes's own `hermes plugins` command, played in memory (journey 28): Hermes ships `disk-cleanup` and
+ * `security-guidance`, its catalog has `chrome-profiles`, and an install takes long enough that the
+ * page is seen waiting on it.
+ */
+const scriptedPlugins = fakeHermesPlugins({ installDelayMs: 1500 });
+
 overrideAgents({
   pathValue: path.join(dataDir, 'no-such-bin'),
   installer: e2eInstaller,
   adapterOptions: { hermes: { fetchImpl: scriptedGateway } },
   hermesApi: scriptedHermesApi,
+  hermesCli: scriptedPlugins.cli,
   pairingPollMs: 700,
 });
 

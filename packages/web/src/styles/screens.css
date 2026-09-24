@@ -706,6 +706,10 @@
   cursor: pointer;
   color: inherit;
 }
+/* A row that opens nothing (an agent's job, a plugin): the same layout without the hand. */
+.skill-static {
+  cursor: default;
+}
 .skill-description {
   font-size: var(--mj-font-size-xs);
   color: var(--mj-color-text-muted);

@@ -13,6 +13,11 @@
  * **Off is not gone.** Turning a skill off takes it out of the agent's reach and leaves
  * every byte where it was, which is why it is a switch and deleting is a menu item.
  *
+ * **Hermes's own skills are shown, not edited.** Hermes keeps its built-in skills in category
+ * folders and updates them from its bundle; the page lists them under their category, opens
+ * them to read, lets them be pinned — and offers no switch, save or delete for them, because
+ * the hub rewriting one would quietly fork Hermes's copy.
+ *
  * **Import takes a pack as it is.** A `SKILL.md`, or a zip of one skill or several, lands in
  * this profile's folder byte for byte; a pack Hermes could not read is refused whole, with
  * the skill and the file named, and nothing half-installed.
@@ -165,10 +170,20 @@ export function AgentSkillsScreen() {
           ) : (
             <div className="flex flex-col gap-5" data-testid="skill-categories">
               {categories.map((category) => (
-                <section key={category.key} className="flex flex-col gap-2">
+                <section
+                  key={category.key}
+                  className="flex flex-col gap-2"
+                  data-testid="skill-category"
+                  data-category={category.key}
+                >
                   <h2 className="text-sm font-semibold text-muted">
                     {category.key === 'user' ? t('skills.category_user') : category.name}
                   </h2>
+                  {category.description && (
+                    <p className="text-xs text-muted" dir="auto">
+                      {category.description}
+                    </p>
+                  )}
                   <ul className="flex flex-col gap-2">
                     {category.skills.map((skill) => (
                       <li key={skill.key}>
@@ -207,11 +222,20 @@ function SkillRow({
   const { ask, dialog } = useConfirm();
   // The server marks an unreadable file by putting the reason where the description goes.
   const broken = (skill.description ?? '').startsWith('[');
+  // Hermes's own: readable and pinnable, never switched, rewritten or deleted from here.
+  const builtin = skill.source === 'builtin';
 
   return (
-    <div className="skill-row" data-enabled={skill.enabled || undefined}>
+    <div
+      className="skill-row"
+      data-enabled={skill.enabled || undefined}
+      data-testid="skill-row"
+      data-skill={skill.key}
+      data-source={skill.source}
+    >
       <Switch
         checked={skill.enabled}
+        disabled={builtin}
         label={t('skills.enabled')}
         labelHidden
         testId={`skill-toggle-${skill.key}`}
@@ -230,6 +254,13 @@ function SkillRow({
             </Tooltip>
           )}
           {broken && <Badge tone="warning">{t('skills.broken')}</Badge>}
+          {builtin && (
+            <Tooltip label={t('skills.builtin_hint')}>
+              <span>
+                <Badge>{t('skills.builtin')}</Badge>
+              </span>
+            </Tooltip>
+          )}
         </span>
         {skill.description && !broken && (
           <span className="skill-description" dir="auto">
@@ -247,24 +278,26 @@ function SkillRow({
         >
           <IconPin size={14} />
         </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          aria-label={t('common.delete')}
-          data-testid={`skill-delete-${skill.key}`}
-          onClick={() => {
-            void ask({
-              title: t('skills.delete_title', { name: skill.name }),
-              // The whole folder goes, because a skill is a folder.
-              body: t('skills.delete_body'),
-              confirmLabel: t('common.delete'),
-            }).then((yes) => {
-              if (yes) remove.mutate(skill.key);
-            });
-          }}
-        >
-          <IconTrash size={14} />
-        </Button>
+        {!builtin && (
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label={t('common.delete')}
+            data-testid={`skill-delete-${skill.key}`}
+            onClick={() => {
+              void ask({
+                title: t('skills.delete_title', { name: skill.name }),
+                // The whole folder goes, because a skill is a folder.
+                body: t('skills.delete_body'),
+                confirmLabel: t('common.delete'),
+              }).then((yes) => {
+                if (yes) remove.mutate(skill.key);
+              });
+            }}
+          >
+            <IconTrash size={14} />
+          </Button>
+        )}
       </span>
       {dialog}
     </div>
@@ -294,6 +327,7 @@ function SkillEditor({
   const [draft, setDraft] = useState<string | null>(null);
   const content = draft ?? existing.data?.content ?? (skillKey === '' ? TEMPLATE : '');
   const creating = skillKey === '';
+  const readOnly = existing.data?.source === 'builtin';
   const badKey = key !== '' && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(key);
 
   return (
@@ -302,21 +336,23 @@ function SkillEditor({
       size="lg"
       onOpenChange={(open) => !open && onClose()}
       title={creating ? t('skills.new') : skillKey}
-      description={t('skills.editor_note')}
+      description={readOnly ? t('skills.builtin_hint') : t('skills.editor_note')}
       closeLabel={t('common.cancel')}
       testId="skill-editor"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
-            {t('common.cancel')}
+            {readOnly ? t('skills.close') : t('common.cancel')}
           </Button>
-          <Button
-            disabled={key === '' || badKey || save.isPending}
-            data-testid="save-skill"
-            onClick={() => save.mutate({ key, content }, { onSuccess: onClose })}
-          >
-            {t('common.save')}
-          </Button>
+          {!readOnly && (
+            <Button
+              disabled={key === '' || badKey || save.isPending}
+              data-testid="save-skill"
+              onClick={() => save.mutate({ key, content }, { onSuccess: onClose })}
+            >
+              {t('common.save')}
+            </Button>
+          )}
         </>
       }
     >
@@ -337,6 +373,7 @@ function SkillEditor({
           dir="ltr"
           className="skill-editor"
           aria-label={t('skills.document')}
+          readOnly={readOnly}
           value={content}
           onChange={(event) => setDraft(event.target.value)}
           data-testid="skill-content"

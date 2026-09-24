@@ -12,12 +12,15 @@
  * The three tool operations that need Hermes to act — `agents.testMcpServer`,
  * `agents.loginChannel` (WhatsApp by QR) — go through Hermes's own API in the selected
  * profile (`hermes-tools.ts`, ADR 0015); `agents.importSkills` installs an uploaded pack into
- * the profile's `skills/` (`skill-import.ts`), because Hermes has no importer.
+ * the profile's `skills/` (`skill-import.ts`), because Hermes has no importer. The plugin
+ * operations (`agents.listPlugins`, `updatePlugin`, `installPlugin`, `deletePlugin`) run
+ * Hermes's own `hermes plugins` command against the selected profile's home
+ * (`hermes-plugins.ts`).
  *
  * Still documented 501 stubs, with the reason:
  * - `agents.getAvatar` — every agent is a `generated` avatar drawn from its slug until
  *   the `knowledge` module stores attachments.
- * - skills, MCP servers, memory, channels, plugins, presets, journey and config files —
+ * - presets, journey and config files —
  *   each is a read or a write against the agent's own home through its adapter, and that
  *   adapter surface (the Hermes gateway RPC) arrives with the `sessions` module.
  *
@@ -55,6 +58,14 @@ import { HermesRuntime, type HermesRuntimeStatus, type Spawner } from './hermes-
 import { HermesDashboard, type DashboardSpawner } from './hermes-dashboard.js';
 import { QR_PLATFORMS, pairWhatsApp, testMcpServer, type HermesApiCall } from './hermes-tools.js';
 import { namedHermesProfiles } from './hermes-profiles.js';
+import {
+  hermesCliRunner,
+  installPlugin,
+  listPlugins,
+  removePlugin,
+  setPluginEnabled,
+  type HermesCli,
+} from './hermes-plugins.js';
 import { hermesProfileName, profileHome } from './profile-home.js';
 import { SkillImportError, installPack, planImport, type UploadedFile } from './skill-import.js';
 import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './installer.js';
@@ -80,6 +91,7 @@ import {
 } from './mcp.js';
 import {
   SkillError,
+  categoryDescription,
   deleteSkill,
   skillsDir,
   getSkill,
@@ -143,6 +155,7 @@ export function agentModelsPort(io: SocketServer): AgentModelsPort | null {
 }
 export { AgentRunner, toRunnerEvent, toolKindOf, mintSessionRef } from './runner.js';
 export type { HermesApiCall } from './hermes-tools.js';
+export type { HermesCli } from './hermes-plugins.js';
 export { HermesRuntime, loadOrCreateHermesApiKey } from './hermes-runtime.js';
 export {
   HermesProfileError,
@@ -184,6 +197,11 @@ export interface AgentsOverrides {
    * dashboard — for a hub that does not supervise a real Hermes (the tests, the e2e hub).
    */
   hermesApi?: HermesApiCall;
+  /**
+   * Hermes's own command as the plugin pages run it (`hermes plugins …` against a profile's
+   * home), in place of the real `hermes` — for the tests and the e2e hub.
+   */
+  hermesCli?: HermesCli;
   /** Between two questions to Hermes while a pairing runs. Default 1 s. */
   pairingPollMs?: number;
 }
@@ -207,6 +225,8 @@ interface AgentsContext {
   dashboard: HermesDashboard;
   /** Hermes's API for the agent tools, or `null` where the hub does not supervise Hermes. */
   hermesApi(): HermesApiCall | null;
+  /** Hermes's own command, or `null` where the hub does not supervise Hermes. */
+  hermesCli(): HermesCli | null;
   pairingPollMs: number;
 }
 
@@ -367,6 +387,14 @@ function contextOf(app: FastifyInstance): AgentsContext {
       (dashboard.available()
         ? (method, route, body, options) => dashboard.request(method, route, body, options)
         : null),
+    hermesCli: () => {
+      if (own.hermesCli) return own.hermesCli;
+      // The same rule as Hermes's API: only a Hermes this hub runs, on this host.
+      const { mode, home } = runtime.status();
+      const command = runtime.executable();
+      if (mode !== 'managed' || !home || !command) return null;
+      return hermesCliRunner({ command, env: () => runtime.cliEnv() });
+    },
     pairingPollMs: own.pairingPollMs ?? 1000,
   };
   contexts.set(hub.io, created);
@@ -420,8 +448,9 @@ const actorOf = (request: FastifyRequest): { userId: string } => {
  * would read as a measurement. Here the field is required by the contract, so it is 0 and
  * this comment is the footnote.
  *
- * `source` is read from the file: a skill that names the pack it came from is `external`,
- * and one that names none was written by a person, which is `user`.
+ * `source` is read from the files: a skill Hermes seeded from its bundle is `builtin` (and
+ * read-only here), one that names the pack it came from is `external`, and one that names
+ * none was written by a person, which is `user`.
  */
 function toSkill(skill: Skill, pinned: readonly string[]): Record<string, unknown> {
   return {
@@ -430,7 +459,7 @@ function toSkill(skill: Skill, pinned: readonly string[]): Record<string, unknow
     description: skill.broken ? `[${skill.broken}]` : skill.description,
     enabled: skill.enabled,
     pinned: pinned.includes(skill.key),
-    source: skill.pack ? 'external' : 'user',
+    source: skill.bundled ? 'builtin' : skill.pack ? 'external' : 'user',
     use_count: 0,
     updated_at: skill.updatedAt.toISOString(),
     content: skill.content,
@@ -440,18 +469,22 @@ function toSkill(skill: Skill, pinned: readonly string[]): Record<string, unknow
 /**
  * Group the folder into the contract's categories.
  *
- * Hermes has no categories on disk, so the honest grouping is the one the files already
- * carry: the pack a skill came from. Everything hand-written lands in one category of its
- * own, and pinned skills come first inside each — an order a person chose beats one the
- * filesystem chose.
+ * A skill in a category folder (`skills/<category>/<name>/`, Hermes's layout for its own
+ * skills) lists under that category, described by its `DESCRIPTION.md`. A skill directly under
+ * `skills/` has no folder to say, so the grouping is the one its file carries: the pack it came
+ * from. Everything hand-written lands in one category of its own, and pinned skills come first
+ * inside each — an order a person chose beats one the filesystem chose.
  */
 function categorise(
+  home: string,
   skills: readonly Skill[],
   pinned: readonly string[],
 ): Array<Record<string, unknown>> {
   const groups = new Map<string, Skill[]>();
+  const folders = new Set<string>();
   for (const skill of skills) {
-    const key = skill.pack ?? 'user';
+    if (skill.category) folders.add(skill.category);
+    const key = skill.category ?? skill.pack ?? 'user';
     const list = groups.get(key);
     if (list) list.push(skill);
     else groups.set(key, [skill]);
@@ -463,7 +496,7 @@ function categorise(
       .map(([key, list]) => ({
         key,
         name: key,
-        description: null,
+        description: folders.has(key) ? categoryDescription(home, key) : null,
         skills: list
           .sort((a, b) => Number(pinned.includes(b.key)) - Number(pinned.includes(a.key)))
           .map((skill) => toSkill(skill, pinned)),
@@ -567,13 +600,14 @@ export const agentsModule = defineModule({
     const toolHome = (
       request: FastifyRequest,
       agentId: string,
+      onlyHermes = 'skills_are_hermes_only',
     ): { home: string; profile: string } => {
       const context = contextOf(request.server);
       const scope = scopeOf(request);
       const row = context.service.get(scope, agentId, request.language);
       if (row.kind !== 'hermes') {
         throw new HubError('state_invalid', {
-          details: { agent_id: agentId, reason: 'skills_are_hermes_only' },
+          details: { agent_id: agentId, reason: onlyHermes },
         });
       }
       const root = context.runtime.status().home;
@@ -606,9 +640,24 @@ export const agentsModule = defineModule({
       return api;
     };
 
+    /** Hermes's own command for the plugin pages, or the reason there is none. */
+    const hermesCliOf = (request: FastifyRequest, agentId: string): HermesCli => {
+      const cli = contextOf(request.server).hermesCli();
+      if (!cli) {
+        throw new HubError('state_invalid', {
+          details: { agent_id: agentId, reason: 'hermes_not_supervised' },
+        });
+      }
+      return cli;
+    };
+
     const skillFault = (error: unknown): never => {
       if (error instanceof SkillError) {
         if (error.reason === 'skill_not_found') throw notFound({ resource: 'skill' });
+        // Hermes's own skill: it keeps it in step with its bundle, so the hub leaves it be.
+        if (error.reason === 'skill_bundled') {
+          throw new HubError('conflict', { details: { reason: 'skill_bundled' } });
+        }
         throw new HubError('bad_request', { details: { reason: error.reason } });
       }
       throw error;
@@ -621,6 +670,7 @@ export const agentsModule = defineModule({
         const home = skillHome(request, agentId);
         return {
           categories: categorise(
+            home,
             listSkills(home),
             contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
           ),
@@ -1043,6 +1093,71 @@ export const agentsModule = defineModule({
         } catch (error) {
           return channelFault(error);
         }
+      },
+    });
+
+    /**
+     * Plugins: what Hermes itself lists and changes in the selected profile, through its own
+     * `hermes plugins` command (`hermes-plugins.ts` says why not its dashboard routes).
+     */
+    const pluginTarget = (request: FastifyRequest, agentId: string) => {
+      const { home, profile } = toolHome(request, agentId, 'plugins_are_hermes_only');
+      return { home, profile, cli: hermesCliOf(request, agentId) };
+    };
+
+    defineRoute(app, deps, {
+      operationId: 'agents.listPlugins',
+      handler: async (request, { params }) => {
+        const { home, cli } = pluginTarget(request, params.agent_id as string);
+        return listPlugins(cli, home, request.language);
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.updatePlugin',
+      handler: async (request, { params, body }) => {
+        const { home, cli } = pluginTarget(request, params.agent_id as string);
+        return setPluginEnabled(
+          cli,
+          home,
+          params.plugin_key as string,
+          (body as { enabled: boolean }).enabled,
+        );
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.deletePlugin',
+      status: 204,
+      handler: async (request, { params }) => {
+        const { home, cli } = pluginTarget(request, params.agent_id as string);
+        await removePlugin(cli, home, params.plugin_key as string);
+        return null;
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.installPlugin',
+      status: 202,
+      handler: (request, { params, body }) => {
+        const agentId = params.agent_id as string;
+        const { home, profile, cli } = pluginTarget(request, agentId);
+        const identifier = String((body as { identifier: string }).identifier).trim();
+        const scope = scopeOf(request);
+        const language = request.language;
+        const job = jobRunnerFor(request.server).start(
+          {
+            kind: 'agents.plugin_install',
+            workspace: scope.id,
+            ownerId: actorOf(request).userId,
+            entityKind: 'agent',
+            entityId: agentId,
+            input: { identifier, profile },
+            message: t('jobs.plugin_install.started', language),
+          },
+          (handle) => installPlugin(cli, handle, { home, identifier, language }),
+        );
+        return { job_id: job.id };
       },
     });
 

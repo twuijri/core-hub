@@ -320,3 +320,72 @@ describe('pairing a channel by QR', () => {
     expect(whatsapp.json()).toMatchObject({ details: { reason: 'hermes_not_supervised' } });
   });
 });
+
+describe("Hermes's own skills, in their category folders", () => {
+  it('lists them under their category with its description, built-in and read-only', async () => {
+    const { hub: h, agent, root } = await boot();
+    const seed = (rel: string, name: string) => {
+      mkdirSync(path.join(root, 'skills', rel), { recursive: true });
+      writeFileSync(
+        path.join(root, 'skills', rel, 'SKILL.md'),
+        `---\nname: ${name}\ndescription: ${name} skill\n---\n\nDo it.\n`,
+      );
+    };
+    seed('apple/findmy', 'findmy');
+    seed('research/lit-review', 'lit-review');
+    seed('my-notes', 'my-notes');
+    writeFileSync(path.join(root, 'skills', 'apple', 'DESCRIPTION.md'), 'Apple / macOS skills.\n');
+    writeFileSync(path.join(root, 'skills', '.bundled_manifest'), 'findmy:0f1e\n');
+
+    const listed = await authed(h, h.token, {
+      method: 'GET',
+      url: `/api/v1/agents/${agent}/skills`,
+    });
+    expect(listed.statusCode, listed.body).toBe(200);
+    const categories = (
+      listed.json() as {
+        categories: Array<{
+          key: string;
+          description: string | null;
+          skills: Array<{ key: string; source: string }>;
+        }>;
+      }
+    ).categories.map((category) => [
+      category.key,
+      category.description,
+      category.skills.map((skill) => `${skill.key}:${skill.source}`),
+    ]);
+    expect(categories).toEqual([
+      ['user', null, ['my-notes:user']],
+      ['apple', 'Apple / macOS skills.', ['findmy:builtin']],
+      ['research', null, ['lit-review:user']],
+    ]);
+
+    const read = await authed(h, h.token, {
+      method: 'GET',
+      url: `/api/v1/agents/${agent}/skills/findmy`,
+    });
+    expect(read.json()).toMatchObject({ key: 'findmy', source: 'builtin' });
+    expect((read.json() as { content: string }).content).toContain('name: findmy');
+
+    for (const request of [
+      { method: 'PATCH' as const, payload: { enabled: false } },
+      { method: 'PUT' as const, payload: { content: '---\nname: findmy\n---\nmine\n' } },
+      { method: 'DELETE' as const },
+    ]) {
+      const res = await authed(h, h.token, {
+        ...request,
+        url: `/api/v1/agents/${agent}/skills/findmy`,
+      });
+      expect(res.statusCode, `${request.method} ${res.body}`).toBe(409);
+      expect(res.json()).toMatchObject({ code: 'conflict', details: { reason: 'skill_bundled' } });
+    }
+    // Pinning is the hub's own order, not Hermes's file: it works for every skill.
+    const pinned = await authed(h, h.token, {
+      method: 'PATCH',
+      url: `/api/v1/agents/${agent}/skills/findmy`,
+      payload: { pinned: true },
+    });
+    expect(pinned.json()).toMatchObject({ key: 'findmy', pinned: true });
+  });
+});
