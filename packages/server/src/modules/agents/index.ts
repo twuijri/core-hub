@@ -39,7 +39,6 @@ import { createRealtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
 import { t } from '../../i18n/index.js';
 import {
-  RUNTIME_DEFAULT_PROFILE,
   findWorkspace,
   ownerUser,
   registerWorkspaceStatsProvider,
@@ -302,7 +301,7 @@ function contextOf(app: FastifyInstance): AgentsContext {
     profileOf: (workspaceId: string) => {
       const row = findWorkspace(requireSqlite(hub.database), workspaceId);
       if (!row || row.id !== workspaceId) return null;
-      return row.isDefault ? RUNTIME_DEFAULT_PROFILE : row.slug;
+      return hermesProfileName(row);
     },
   });
   const runner = new AgentRunner({ service, adapters, log: app.log });

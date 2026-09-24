@@ -66,7 +66,8 @@ Progress (appended, the decision above unchanged):
   a profile's `.env`, then the environment); the hub's `providers:` blocks are written into
   every profile's `config.yaml`. A missing profile is made on first use as a copy of `default`.
   A resume in a profile adopts a conversation an older hub left in the default store (Hermes's
-  own `_resume_adopt_stranded`). The tool pages are not yet per profile.
+  own `_resume_adopt_stranded`). The tool pages act on the selected profile's home since
+  PR #80, so stage 3 is complete.
 - Observed while building stage 3: in Hermes v2026.9.14 `--clone-from` **does** copy
   `memories/MEMORY.md` and `memories/USER.md` (`hermes_cli/profiles.py` §_CLONE_SUBDIR_FILES) —
   the Context above says it does not; sessions and channels are still not copied.
