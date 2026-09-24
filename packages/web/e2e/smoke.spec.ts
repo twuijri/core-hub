@@ -56,8 +56,9 @@ async function newChat(page: Page) {
 async function firstMessage(page: Page, text: string): Promise<string> {
   await page.getByTestId('composer-input').fill(text);
   await page.getByTestId('send').click();
-  await expect(page).toHaveURL(/\/chat\/[0-9A-Z]{26}$/);
-  return page.url().split('/').pop() as string;
+  // With more than one profile the address also says which (ADR 0016).
+  await expect(page).toHaveURL(/\/chat\/[0-9A-Z]{26}(\?profile=[a-z0-9-]+)?$/);
+  return new URL(page.url()).pathname.split('/').pop() as string;
 }
 
 test.describe('web smoke journeys', () => {
@@ -1161,7 +1162,7 @@ test.describe('web smoke journeys', () => {
 
     // The conversation is an ordinary chat: the task as the prompt, the agent's reply.
     await card.getByTestId('task-session').click();
-    await expect(page).toHaveURL(/\/chat\/[0-9A-Z]{26}$/);
+    await expect(page).toHaveURL(/\/chat\/[0-9A-Z]{26}(\?profile=[a-z0-9-]+)?$/);
     await expect(page.getByTestId('message-assistant').last()).toContainText(
       'جمعت ملاحظات الإصدار',
     );

@@ -83,6 +83,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           namespace: NAMESPACES[name],
           token: () => tokenRef.current,
           profile: () => profileRef.current,
+          // The sessions socket hears every profile the lists gather (ADR 0016); the
+          // others stay with the profile the person is in.
+          ...(name === 'sessions' ? { profiles: 'all' as const } : {}),
         });
         if (name === 'sessions') {
           setState('connecting');

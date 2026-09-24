@@ -69,7 +69,7 @@ test.describe('the chat surface, designed', () => {
     await login(page);
     await newChat(page);
     await say(page, 'مرحبا، اشرح لي كيف يعمل البث اللحظي');
-    await expect(page).toHaveURL(/\/chat\/[0-9A-Z]{26}$/);
+    await expect(page).toHaveURL(/\/chat\/[0-9A-Z]{26}(\?profile=[a-z0-9-]+)?$/);
     await expect(page.getByTestId('message-assistant').first()).toHaveAttribute(
       'data-status',
       'complete',
@@ -154,7 +154,7 @@ test.describe('the chat surface, designed', () => {
     await login(page);
     await newChat(page);
     await say(page, 'يفكّر الآن من فضلك');
-    await expect(page).toHaveURL(/\/chat\/[0-9A-Z]{26}$/);
+    await expect(page).toHaveURL(/\/chat\/[0-9A-Z]{26}(\?profile=[a-z0-9-]+)?$/);
 
     // A second message typed while the turn is alive does not vanish into the hub's
     // queue: it waits in this tab, where it can still be sent now, used to steer, or

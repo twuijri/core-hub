@@ -2,7 +2,7 @@ import { HubApiError } from '@majlis/contracts';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useAgents, useForkSession, usePatchSession, usePreferences } from '../hub/queries.js';
-import { useAuth } from '../auth/context.js';
+import { ProfileScope, useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import { routeOf, termKey } from '../navigation/manifest.js';
@@ -12,7 +12,14 @@ import type { ContentBlock, Message, ReasoningEffort } from '../types.js';
 import { Button, buttonClass, EmptyState, Notice, SkeletonText } from '../ui/index.js';
 import { IconClose, IconSpark } from '../ui/icons.js';
 import { AgentChips } from './AgentChips.js';
-import { ANCHOR_PARAM, QUERY_PARAM, readAnchor, type Anchor } from './anchor.js';
+import {
+  ANCHOR_PARAM,
+  QUERY_PARAM,
+  chatHref,
+  readAnchor,
+  readProfileParam,
+  type Anchor,
+} from './anchor.js';
 import { ApprovalCard } from './ApprovalCard.js';
 import { Composer } from './Composer.js';
 import { starterSuggestions } from './starters.js';
@@ -33,14 +40,18 @@ import { useApprovalMode, useComposerModels } from './useComposerControls.js';
 import { useFollowBottom } from './followBottom.js';
 import { useSessionStream } from './useSessionStream.js';
 import { WorkingDirPicker } from './WorkingDirPicker.js';
+import { ProfileBadge } from '../shell/ProfileBadge.js';
+import { useManyProfiles, useProfileInLink } from '../shell/profileSelector.js';
 
 export function ChatScreen() {
   const { t } = useI18n();
   const { sessionId } = useParams();
+  const [params] = useSearchParams();
+  const { homeProfile } = useAuth();
   const title = t(termKey('chat'));
   if (!sessionId) {
     return (
-      <AppShell title={title}>
+      <AppShell title={title} profiles="lists">
         <div className="flex flex-1 items-center justify-center">
           <EmptyState
             icon={<IconSpark size={20} />}
@@ -57,7 +68,14 @@ export function ChatScreen() {
       </AppShell>
     );
   }
-  return <OpenSession sessionId={sessionId} />;
+  // The conversation is opened in its own profile (ADR 0016): a list across profiles puts
+  // it in the address, and everything inside — the transcript, the models, the agents —
+  // asks that profile. The person's own profile and the top selector do not move.
+  return (
+    <ProfileScope profile={readProfileParam(params) ?? homeProfile}>
+      <OpenSession sessionId={sessionId} />
+    </ProfileScope>
+  );
 }
 
 /**
@@ -69,7 +87,9 @@ type OpenAnchor = Anchor & { sessionId: string; phase: AnchorPhase };
 
 function OpenSession({ sessionId }: { sessionId: string }) {
   const { t, language } = useI18n();
-  const { client } = useAuth();
+  const { client, profile } = useAuth();
+  const manyProfiles = useManyProfiles();
+  const inLink = useProfileInLink();
   const navigate = useNavigate();
 
   // A search result opens the chat at the message that matched (`?m=`, anchor.ts). The
@@ -174,7 +194,7 @@ function OpenSession({ sessionId }: { sessionId: string }) {
       { at_message_id: message.id },
       {
         onSuccess: (session) =>
-          navigate(routeOf('chat').replace(':sessionId?', (session as { id: string }).id)),
+          navigate(chatHref((session as { id: string }).id, null, undefined, inLink(profile))),
       },
     );
   };
@@ -296,7 +316,7 @@ function OpenSession({ sessionId }: { sessionId: string }) {
   return (
     // The whole width (owner decision, 2026-09-23): the agent's replies reach the left
     // edge and the person's the right, while the composer keeps its reading column.
-    <AppShell title={title}>
+    <AppShell title={title} profiles="lists">
       <div
         className="chat-flow"
         data-empty={messageCount === 0 ? 'true' : 'false'}
@@ -307,6 +327,9 @@ function OpenSession({ sessionId }: { sessionId: string }) {
           {/* Who this conversation is with, stated quietly now that the chip row is gone
               (owner decision, 2026-09-22). Changing it here forks the session. */}
           <SessionAgent sessionId={sessionId} agentId={agentId} />
+          {/* Which profile this conversation is in, once there is more than one: its
+              models and settings are that profile's (ADR 0016). */}
+          {manyProfiles && <ProfileBadge profile={profile} testId="chat-profile" />}
           <WorkingDirPicker
             value={state.session?.working_dir ?? null}
             onChange={(next) => patch.mutate({ working_dir: next })}
