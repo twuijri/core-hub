@@ -17,6 +17,13 @@
  *
  * One process serves every conversation; each is a live session id inside it, and the
  * stored id (`stored_session_id`) is what continues it after a restart.
+ *
+ * One process also serves **every profile** (ADR 0014 stage 3). `session.create` and
+ * `session.resume` take a `profile`: Hermes then binds that profile's home for the session's
+ * build and for every turn — its `config.yaml` (model, providers, MCP), its `.env` over the
+ * process environment, `SOUL.md`, `memories/`, skills and its own `state.db` — and a resume
+ * looks the stored id up in that profile's store (adopting one left in the default store by
+ * an older hub). No `profile` is the process's own home: Hermes's `default`.
  */
 import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process';
 import { createInterface } from 'node:readline';
@@ -397,15 +404,23 @@ export class HermesTuiSession implements AgentSession {
       model?: string | null;
       provider?: string | null;
       reasoningEffort?: string | null;
+      /** The Hermes profile the conversation runs in; absent or `default` = the root home. */
+      profile?: string | null;
+      /** The conversation's working folder, where its tools run. */
+      cwd?: string | null;
     } = {},
   ): Promise<HermesTuiSession> {
+    const scope = profileParams(options.profile);
     let result: Json | null = null;
+    let resumed = false;
     if (sessionRef) {
       try {
         result = await channel.request('session.resume', {
           session_id: sessionRef,
           omit_messages: true,
+          ...scope,
         });
+        resumed = !!result?.session_id;
       } catch {
         result = null;
       }
@@ -413,6 +428,8 @@ export class HermesTuiSession implements AgentSession {
     if (!result?.session_id) {
       result = await channel.request('session.create', {
         source: 'majlis',
+        ...scope,
+        ...(options.cwd ? { cwd: options.cwd } : {}),
         ...(options.model ? { model: options.model } : {}),
         ...(options.provider ? { provider: options.provider } : {}),
         ...(options.reasoningEffort && options.reasoningEffort !== 'none'
@@ -422,6 +439,14 @@ export class HermesTuiSession implements AgentSession {
     }
     const liveId = String(result.session_id);
     const storedId = String(result.stored_session_id ?? sessionRef ?? liveId);
+    if (resumed && options.cwd && workingFolderOf(result) !== options.cwd) {
+      // A conversation stored before the hub named its folder (or somewhere else) runs its
+      // tools where the hub keeps the session's files from now on. Best effort: a folder
+      // Hermes refuses leaves the conversation where it was rather than failing the turn.
+      await channel
+        .request('session.cwd.set', { session_id: liveId, cwd: options.cwd })
+        .catch(() => undefined);
+    }
     const session = new HermesTuiSession(channel, liveId, storedId);
     session.current = {
       model: options.model ?? null,
@@ -700,6 +725,23 @@ export class HermesTuiSession implements AgentSession {
     this.openTools.length = 0;
     turn?.resolve(stopReason);
   }
+}
+
+/**
+ * The `profile` a session call carries. Hermes's `default` is the process's own home, so it
+ * is sent as nothing at all — the wire a hub without profiles always spoke.
+ */
+function profileParams(profile: string | null | undefined): Json {
+  const name = profile?.trim();
+  return name && name !== 'default' ? { profile: name } : {};
+}
+
+/** The folder Hermes says a resumed session works in (`info.cwd`), when it says one. */
+function workingFolderOf(result: Json): string | null {
+  const info = result.info;
+  if (!info || typeof info !== 'object') return null;
+  const cwd = (info as Json).cwd;
+  return typeof cwd === 'string' ? cwd : null;
 }
 
 /** The strings in a list Hermes sent, or none. */

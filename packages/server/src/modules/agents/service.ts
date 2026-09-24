@@ -69,6 +69,12 @@ export interface AgentsServiceOptions {
    * an agent then starts with its own settings only, never with a wrong key.
    */
   models?: () => AgentModelsPort | null;
+  /**
+   * The agent runtime's profile for a workspace id (ADR 0014): its slug, `default` for the
+   * hub's default workspace, `null` for one the hub does not know (the runtime's default
+   * then). Filled from `auth` at composition; absent in a hub composed without it.
+   */
+  profileOf?: (workspaceId: string) => string | null;
   catalog?: readonly CatalogEntry[];
   language?: Language;
   now?: () => Date;
@@ -682,6 +688,9 @@ export class AgentsService {
       // The hub's own adapter has no process to hand an environment to: it resolves the
       // workspace's provider at the moment of each turn (`adapters/direct.ts`).
       workspace: workspaceId,
+      // Hermes runs the conversation in the workspace's own profile — its config, SOUL,
+      // memory, skills and sessions (ADR 0014 stage 3).
+      profile: this.options.profileOf?.(workspaceId) ?? null,
       ...(settings ? { settings: settings.settings } : {}),
       sessionRef: run.sessionRef,
       model: selection.model,
