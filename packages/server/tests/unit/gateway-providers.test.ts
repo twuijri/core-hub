@@ -101,12 +101,25 @@ async function boot() {
   return { hub, agent, started, root: path.join(hub.dataDir, 'hermes') };
 }
 
-async function addEndpoint(h: Hub, label: string, baseUrl: string, profile = 'default') {
+async function addEndpoint(
+  h: Hub,
+  label: string,
+  baseUrl: string,
+  profile = 'default',
+  scope: 'all' | 'profile' = 'all',
+) {
   const res = await authed(h, h.token, {
     method: 'POST',
     url: '/api/v1/models/providers',
     profile,
-    payload: { label, kind: 'llm', base_url: baseUrl, api_mode: 'chat_completions', api_key: 'k' },
+    payload: {
+      label,
+      kind: 'llm',
+      base_url: baseUrl,
+      api_mode: 'chat_completions',
+      api_key: 'k',
+      scope,
+    },
   });
   expect(res.statusCode, res.body).toBe(201);
   await drainJobs(h.app);
@@ -171,13 +184,28 @@ describe('every messaging gateway starts on the providers its profile chats with
     );
   });
 
-  it('a named profile one, on the model that profile chats with', async () => {
+  it('a named profile one, after the provider its copied file names was removed', async () => {
     const { hub: h, agent, root, started } = await boot();
     const proxy = await addEndpoint(h, 'cli-proxy-api', PROXY);
     const home = await makeProfile(h, 'manger');
     // Made as a copy of default at the time: its model names the proxy.
     writeFileSync(path.join(home, 'config.yaml'), readFileSync(path.join(root, 'config.yaml')));
-    const other = await addEndpoint(h, 'other-proxy', OTHER, 'manger');
+    // The owner moves to another endpoint and removes the proxy. Every profile loses the
+    // proxy's block; «manger»'s own file still names it — a chat there names the new default
+    // itself, a gateway would read the file and answer "Unknown provider".
+    const other = await addEndpoint(h, 'other-proxy', OTHER);
+    const chosen = await authed(h, h.token, {
+      method: 'PUT',
+      url: '/api/v1/models/defaults',
+      payload: { default: { provider_id: other.id, model: 'qwen-max' } },
+    });
+    expect(chosen.statusCode, chosen.body).toBe(200);
+    const removed = await authed(h, h.token, {
+      method: 'DELETE',
+      url: `/api/v1/models/providers/${proxy.id}`,
+    });
+    expect(removed.statusCode, removed.body).toBeLessThan(300);
+    await drainJobs(h.app);
     const byId = new Map([
       [proxy.id, PROXY],
       [other.id, OTHER],
@@ -192,9 +220,37 @@ describe('every messaging gateway starts on the providers its profile chats with
     });
     expect(put.statusCode, put.body).toBe(200);
     await vi.waitFor(() => expect(started.some((s) => s.profile === 'manger')).toBe(true));
-    expectResolvable(
-      started.filter((s) => s.profile === 'manger').at(-1),
-      await chatDefaultUrl(h, 'manger', byId),
-    );
+    const url = await chatDefaultUrl(h, 'manger', byId);
+    expect(url).toBe(OTHER);
+    expectResolvable(started.filter((s) => s.profile === 'manger').at(-1), url);
+  });
+
+  it('a named profile one, on its own profile-only provider chosen as its model', async () => {
+    const { hub: h, agent, started } = await boot();
+    await addEndpoint(h, 'cli-proxy-api', PROXY);
+    await makeProfile(h, 'manger');
+    // A provider only «manger» has (decision §37), made its chat model there.
+    const own = await addEndpoint(h, 'other-proxy', OTHER, 'manger', 'profile');
+    const chosen = await authed(h, h.token, {
+      method: 'PUT',
+      url: '/api/v1/models/defaults',
+      profile: 'manger',
+      payload: { default: { provider_id: own.id, model: 'qwen-max' } },
+    });
+    expect(chosen.statusCode, chosen.body).toBe(200);
+    const put = await authed(h, h.token, {
+      method: 'PUT',
+      url: `/api/v1/agents/${agent}/channels/telegram`,
+      profile: 'manger',
+      payload: { enabled: true, credentials: { token: '1234:abc' } },
+    });
+    expect(put.statusCode, put.body).toBe(200);
+    await vi.waitFor(() => expect(started.some((s) => s.profile === 'manger')).toBe(true));
+    const start = started.filter((s) => s.profile === 'manger').at(-1);
+    expectResolvable(start, OTHER);
+    expect(start?.config.model?.default).toBe('qwen-max');
+    // The default profile's gateway knows nothing of «manger»'s own provider.
+    const root = started.filter((s) => s.profile === 'default').at(-1);
+    expect(Object.values(root?.config.providers ?? {}).map((b) => b.base_url)).not.toContain(OTHER);
   });
 });

@@ -84,7 +84,7 @@ failed»، وسجل البوابة يقول `Unknown provider 'majlis-custom-cli
    البروفايل الافتراضي: أعد تشغيل هرمز أولًا)، مع تنبيه أن ربط رقم شخصي يجعل كل من يراسله يتلقّى ردّ
    الاقتران. والتنبيه نفسه في نافذة الربط قبل المسح.
 
-قرار العقد: `docs/contracts/DECISIONS.md` §37.
+قرار العقد: `docs/contracts/DECISIONS.md` §38.
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 - `Channel.link` (جديد، مطلوب، `ChannelLink | null`)؛ `agents.listChannels` يعيد `gateway`
@@ -112,7 +112,7 @@ failed»، وسجل البوابة يقول `Unknown provider 'majlis-custom-cli
 - الاختبارات: `hermes-gateways.test.ts`، `hermes-pairing.test.ts`، `channels-gateway.routes.test.ts`،
   إضافات `channels.test.ts`، `tests/unit/gateway-providers.test.ts` (إعادة إنتاج `Unknown provider`)،
   `tests/unit/gateways.real.test.ts` (هرمز الحقيقي)، `packages/web/tests/channels-pairing.test.tsx`.
-- الوثائق: `docs/STATUS.md`، `docs/contracts/DECISIONS.md` §37، هذا السجل.
+- الوثائق: `docs/STATUS.md`، `docs/contracts/DECISIONS.md` §38، هذا السجل.
 
 **الذاكرة**: بوابة إضافية (~200 م.ب) لكل بروفايل مسمّى فيه قناة مفعّلة ومربوطة، ولا شيء لغيره.
 

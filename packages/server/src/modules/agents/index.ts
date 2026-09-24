@@ -358,7 +358,15 @@ function contextOf(app: FastifyInstance): AgentsContext {
       hermes: {
         apiKey: () => runtime.apiKey(),
         tui: () => runtime.tuiChannel(),
-        ensureProfile: (name: string) => runtime.ensureProfile(name),
+        // Made if it is missing, then given the hub's providers before its turn: a profile
+        // made later — here, in Hermes, or on first use — runs on them like any other.
+        ensureProfile: async (name: string) => {
+          await runtime.ensureProfile(name);
+          const home = runtime.status().home;
+          if (home && name !== 'default') {
+            modelsPorts.get(hub.io)?.prepareRuntimeProfile?.(path.join(home, 'profiles', name));
+          }
+        },
         ...own.adapterOptions?.hermes,
       },
       // The hub's own agent reaches the providers through the same port every other

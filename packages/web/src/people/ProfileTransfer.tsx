@@ -23,7 +23,7 @@ import {
 } from '../attachments/queries.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
-import { Button, Dialog, Field, Input, Notice, useToast } from '../ui/index.js';
+import { Button, Dialog, Field, Input, Notice, Segmented, useToast } from '../ui/index.js';
 import {
   jobFinished,
   peopleKeys,
@@ -101,6 +101,8 @@ export function ExportDialog({
   const { save } = useDownloadAttachment();
   const [jobId, setJobId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<unknown>(null);
+  // «مع المزوّدين / بدون المزوّدين» (decision §37): without, the default, holds no key.
+  const [withProviders, setWithProviders] = useState(false);
   const job = useFollowedJob(jobId);
   const result =
     job?.status === 'succeeded' ? (job.result as unknown as ProfileExportResult) : null;
@@ -145,7 +147,12 @@ export function ExportDialog({
             <Button
               disabled={running}
               data-testid="start-export"
-              onClick={() => start.mutate(workspace.id, { onSuccess: (id) => setJobId(id) })}
+              onClick={() =>
+                start.mutate(
+                  { id: workspace.id, providers: withProviders },
+                  { onSuccess: (id) => setJobId(id) },
+                )
+              }
             >
               {t('workspaces.export')}
             </Button>
@@ -155,7 +162,36 @@ export function ExportDialog({
     >
       <div className="flex flex-col gap-3">
         <p className="text-sm">{t('workspaces.export_what')}</p>
-        <Notice>{t('workspaces.export_secrets')}</Notice>
+        <fieldset className="flex flex-col gap-1">
+          <legend className="mj-label">{t('workspaces.export_providers')}</legend>
+          <Segmented
+            className="self-start"
+            label={t('workspaces.export_providers')}
+            value={withProviders ? 'with' : 'without'}
+            onChange={(next) => setWithProviders(next === 'with')}
+            wrap
+            testId="export-providers"
+            options={[
+              {
+                value: 'without',
+                label: t('workspaces.export_without_providers'),
+                itemProps: { 'data-testid': 'export-without-providers' },
+              },
+              {
+                value: 'with',
+                label: t('workspaces.export_with_providers'),
+                itemProps: { 'data-testid': 'export-with-providers' },
+              },
+            ]}
+          />
+        </fieldset>
+        {withProviders ? (
+          <Notice tone="warning" role="alert">
+            <span data-testid="export-keys-warning">{t('workspaces.export_keys_warning')}</span>
+          </Notice>
+        ) : (
+          <Notice>{t('workspaces.export_secrets')}</Notice>
+        )}
         {jobId !== null && <JobProgress job={job} testId="export-progress" />}
         {result && (
           <Notice tone="success" role="status">
@@ -173,6 +209,11 @@ export function ExportDialog({
             {result.masked.length > 0 && (
               <span className="block text-xs" dir="auto">
                 {t('workspaces.export_masked', { files: list(result.masked) })}
+              </span>
+            )}
+            {(result.providers ?? 0) > 0 && (
+              <span className="block text-xs" data-testid="export-providers-carried">
+                {t('workspaces.export_providers_carried', { count: result.providers ?? 0 })}
               </span>
             )}
           </Notice>
