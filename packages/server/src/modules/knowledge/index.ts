@@ -153,6 +153,54 @@ export function attachmentsPort(app: FastifyInstance): AttachmentsPort {
   };
 }
 
+/**
+ * What `auth`'s profile export and import need from the file registry (ADR 0014 stage 2),
+ * for `src/modules/index.ts` to hand over: keep an export for its requester only, find an
+ * uploaded archive the caller may see, remove it once used, and sweep what expired.
+ */
+export function profileArchiveFiles(app: FastifyInstance, maxExportBytes: number) {
+  const service = () => knowledgeServiceFor(app);
+  const scopeOf = (scope: { workspace: string; userId: string }): AttachmentScope => ({
+    workspace: scope.workspace,
+    profile: '',
+    userId: scope.userId,
+  });
+  return {
+    async keep(
+      scope: { workspace: string; userId: string },
+      file: string,
+      name: string,
+      expiresAt: Date,
+    ): Promise<{ id: string; sizeBytes: number }> {
+      const row = await service().keepExport(scopeOf(scope), file, name, expiresAt, maxExportBytes);
+      return { id: row.id, sizeBytes: row.sizeBytes };
+    },
+    open(
+      scope: { workspace: string; userId: string },
+      attachmentId: string,
+    ): { path: string; name: string } | null {
+      const knowledge = service();
+      let row: AttachmentRow;
+      try {
+        row = knowledge.require(scopeOf(scope), attachmentId);
+      } catch {
+        return null;
+      }
+      if (!knowledge.blobs.exists(row.storageKey)) return null;
+      return { path: knowledge.blobs.pathOf(row.storageKey), name: row.filename };
+    },
+    discard(scope: { workspace: string; userId: string }, attachmentId: string): void {
+      service().discardUpload(scopeOf(scope), attachmentId);
+    },
+    sweep(): void {
+      service().purgeExpired();
+    },
+  };
+}
+
+/** How often expired files (profile exports) are swept away. */
+export const SWEEP_INTERVAL_MS = 60 * 60_000;
+
 const scopeOf = (request: FastifyRequest): AttachmentScope => {
   const workspace = request.workspace;
   const principal = request.principal;
@@ -204,7 +252,21 @@ export const knowledgeModule = defineModule({
     );
 
     const knowledge = () => knowledgeServiceFor(app);
+    // Temporary files (a profile export after its 24 hours) go on their own, at boot and
+    // every hour after; the timer never keeps a closing hub alive.
+    const sweep = () => {
+      try {
+        const purged = knowledge().purgeExpired();
+        if (purged > 0) app.log.info({ purged }, 'knowledge: expired files removed');
+      } catch (error) {
+        app.log.warn({ err: error }, 'knowledge: sweeping expired files failed');
+      }
+    };
+    const sweeper = setInterval(sweep, SWEEP_INTERVAL_MS);
+    sweeper.unref?.();
+    app.addHook('onReady', async () => sweep());
     app.addHook('onClose', async () => {
+      clearInterval(sweeper);
       knowledge().closeUploads();
     });
 

@@ -212,6 +212,23 @@ describe('Hermes dashboard API: starting', () => {
     await service.close();
   });
 
+  it('lets one call wait a time of its own (a profile export takes longer than a card edit)', async () => {
+    const hanging = {
+      calls: [],
+      fetchImpl: ((_url: unknown, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+        })) as typeof fetch,
+    } as unknown as ReturnType<typeof fakeFetch>;
+    const { service } = dashboard({ fetcher: hanging });
+    const began = Date.now();
+    await expect(
+      service.request('POST', '/api/profiles/work/export', { output: '/x' }, { timeoutMs: 50 }),
+    ).rejects.toBeInstanceOf(HermesDashboardUnavailable);
+    expect(Date.now() - began).toBeLessThan(5_000);
+    await service.close();
+  });
+
   it('keeps the token across hub restarts and never writes it to the log', async () => {
     const first = dashboard();
     await first.service.request('GET', '/api/status');

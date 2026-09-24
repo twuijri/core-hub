@@ -597,3 +597,28 @@ client decision; what it asks of the contract is recorded here so no client read
 Rejected: a new `agents.navigation` operation that tells clients which rows to draw (the
 capabilities already say it), and moving `agent_id` out of the path for a slug (a slug can be
 renamed; the id cannot).
+
+## 34. Profile export and import are jobs in the caller's profile
+
+ADR 0014 stage 2 makes `auth.exportProfile` and `auth.importProfile` do what they say, and
+three details of the contract had to be settled for that:
+
+- **Where the job lives.** Both operations are global (`x-scope: global`), but a job is a
+  profile's row and `/rt/jobs` is a profile's room. The job is recorded in the caller's
+  current profile (`X-Hub-Profile`, `default` when absent) — the one the client is already
+  listening to — and so is the exported archive. The profile the export is *about* is the
+  job's `resource: {kind: profile, id}`; the archive an import reads is `resource: {kind:
+  attachment, id}`. `ResourceRef.kind` gains `profile` and `attachment` for that, and
+  `JobKind` gains `import` (the stored kinds are `auth.export` and `auth.import`).
+- **Who may read the archive.** An export holds a profile's memory and chats. Its attachment
+  is readable only by the person who asked for it (`404` for anyone else, even in the same
+  profile), is not listed by `knowledge.listItems`, and is deleted 24 hours later
+  (`expires_at` in the job's result). An uploaded import archive is deleted when its job ends.
+- **What a hub without Hermes answers.** Only a hub that supervises Hermes can ask it for an
+  archive (ADR 0015). Elsewhere both operations answer `409 state_invalid` with
+  `details.reason = hermes_not_supervised` before any job exists, rather than a job that fails
+  a second later.
+
+The result shapes are written in the operations' descriptions rather than as components:
+`Job.result` is free-form for every kind, and a component nothing references is one the
+linter rightly calls unused.

@@ -10,7 +10,7 @@
  * descending", and a cursor is the last id seen, whichever table it came from. That is
  * what makes one cursor enough for three tables.
  */
-import { and, desc, eq, isNull, like, lt, or } from 'drizzle-orm';
+import { and, desc, eq, isNull, like, lt, ne, or } from 'drizzle-orm';
 import type { ModuleDb } from '../../lib/db.js';
 import { attachments, journalEntries, knowledgeNotes } from './schema.js';
 
@@ -134,6 +134,9 @@ export class KnowledgeItems {
           and(
             eq(attachments.workspace, query.workspace),
             isNull(attachments.deletedAt),
+            // A profile export is its requester's alone (contract decision §34), and it
+            // is on its way out: it is not one of the profile's files.
+            ne(attachments.sourceKind, 'export'),
             before ? lt(attachments.id, before) : undefined,
             needle ? like(attachments.filename, `%${needle}%`) : undefined,
           ),

@@ -182,7 +182,9 @@
             "device_request",
             "webhook",
             "approval",
-            "notice"
+            "notice",
+            "profile",
+            "attachment"
           ]
         },
         "id": {

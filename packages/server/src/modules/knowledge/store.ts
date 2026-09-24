@@ -103,6 +103,19 @@ export class AttachmentStore {
     return row?.count ?? 0;
   }
 
+  /**
+   * Remove the row itself, for a file nothing refers to by design (an uploaded profile
+   * archive once its import ended). Its storage key is free again afterwards, so the same
+   * bytes can be uploaded anew.
+   */
+  purge(workspace: string, id: string): AttachmentRow | undefined {
+    return this.db
+      .delete(attachments)
+      .where(and(eq(attachments.workspace, workspace), eq(attachments.id, id)))
+      .returning()
+      .get();
+  }
+
   /** Mark the row deleted; the caller removes the bytes when nothing else needs them. */
   markDeleted(workspace: string, id: string, at: Date = new Date()): AttachmentRow | undefined {
     return this.db

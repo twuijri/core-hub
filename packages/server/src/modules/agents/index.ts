@@ -138,9 +138,12 @@ export type { HermesApiCall } from './hermes-tools.js';
 export { HermesRuntime, loadOrCreateHermesApiKey } from './hermes-runtime.js';
 export {
   HermesProfileError,
+  PROFILE_ARCHIVE_TIMEOUT_MS,
+  createHermesProfileArchives,
   createHermesProfiles,
   hermesProfileRunner,
   namedHermesProfiles,
+  type HermesProfileArchives,
   type HermesProfiles,
 } from './hermes-profiles.js';
 export type {

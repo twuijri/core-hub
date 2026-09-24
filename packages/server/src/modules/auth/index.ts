@@ -91,6 +91,16 @@ export {
   type ProfileOrigin,
 } from './profile-mirror.js';
 export {
+  EXPORT_KEEP_MS,
+  MAX_EXPORT_BYTES,
+  ProfileArchiveRefusal,
+  ProfileArchiveUnavailable,
+  registerProfileTransfer,
+  type ProfileArchiveFiles,
+  type ProfileArchiveRuntime,
+  type ProfileTransferPorts,
+} from './profile-transfer.js';
+export {
   principalScopeResolver,
   type PrincipalScope,
   type PrincipalScopeResolver,
