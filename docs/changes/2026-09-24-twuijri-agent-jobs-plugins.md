@@ -113,7 +113,44 @@ Plugin installed but not enabled. Run `hermes plugins enable majlis-probe` to ac
 جاءت من `hermes plugins list` (لا `kanban` فيها، لأنها صفحة في اللوحة)، وتشغيل `disk-cleanup` في `work`
 لم يغيّر الافتراضي، والإزالة رُفضت للمدمجة، وإضافة من مستودع Git محلي ثُبّتت مطفأة ثم أُزيلت.
 
-(تُكمل نواتج بقية الفحوص أدناه.)
+بقية الفحوص على هذا الفرع:
+```
+$ pnpm lint
+All matched files use Prettier code style!
+$ pnpm typecheck                      # exit 0
+$ pnpm contracts:lint
+contracts:lint  OK
+$ pnpm contracts:check-clients
+check-clients  OK — 251 client file(s) scanned, 167 contract path(s) known.
+$ pnpm contract:test
+ Test Files  2 passed (2)
+      Tests  257 passed (257)
+$ pnpm i18n:check
+i18n:check  OK
+$ pnpm nav:check
+nav:check  OK — 34 destinations, 2 pre-auth screens (login, setup), 39 terms, ar/en complete, routes for web
+$ pnpm change-record:check
+change-record  OK — 1 record(s) valid
+$ pnpm --filter @majlis/server test
+ Test Files  85 passed | 12 skipped (97)
+      Tests  918 passed | 35 skipped (953)
+$ pnpm --filter @majlis/web test
+ Test Files  46 passed (46)
+      Tests  556 passed (556)
+$ pnpm build
+✓ built in 722ms
+$ MAJLIS_E2E_PORT=8891 MAJLIS_E2E_SETUP_PORT=8892 PLAYWRIGHT_CHANNEL=chrome pnpm web:e2e
+  39 passed (2.6m)
+```
+(المنفذ 8791 كان مشغولًا بتشغيل وكيل آخر، فشغّلت الحزمة على منفذين آخرين.) بعد تسمية قدرة
+`plugins` في الواجهة أعدت الرحلتين 27 و28: `3 passed`.
+
+الاختبارات الجديدة تفشل على كود `main` (أرجعت `packages/{web,server}/src` والعقد إلى `origin/main` مؤقتًا
+وأبقيت ملفات الاختبار):
+```
+tests/agent-jobs-plugins.test.tsx            Tests  7 failed (7)
+hermes-plugins.test.ts + skills.test.ts      Tests  14 failed | 24 passed (38)
+```
 
 ## المخاطر والرجوع
 - كل أمر إضافات يشغّل عملية `hermes` جديدة (قرابة ثانية). التشغيل والإزالة يقرآن القائمة قبل وبعد.
