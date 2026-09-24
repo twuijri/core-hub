@@ -85,6 +85,27 @@ export interface UsageState {
   costSource: 'provider' | 'estimated' | 'unknown';
 }
 
+/**
+ * One model turn: the model speaking once — before the first tool call, between tool calls,
+ * or after the last one. The hub cannot see the agent's own model calls, so it infers them
+ * from the stream: a turn opens when the run starts and whenever the last running tool has
+ * finished, and closes when a tool starts, a person is asked something, or the run ends.
+ * Offsets point into `RunState.text` / `RunState.reasoning`, so a turn's words can be cut out
+ * of the finished message later (the trajectory, contract decision §41).
+ */
+export interface ModelTurnState {
+  startedAt: number;
+  endedAt: number | null;
+  /** The first word or thought of the turn. */
+  firstTokenAt: number | null;
+  textStart: number;
+  textEnd: number | null;
+  reasoningStart: number;
+  reasoningEnd: number | null;
+  reasoningStartedAt: number | null;
+  reasoningEndedAt: number | null;
+}
+
 export interface RunState {
   status: RunStatus;
   /** The assistant message the run writes into; minted before the first delta. */
@@ -95,6 +116,8 @@ export interface RunState {
   reasoningMs: number | null;
   toolCalls: ToolCallState[];
   approvals: ApprovalState[];
+  /** The model's turns, in order; the last is open while the model is speaking. */
+  turns: ModelTurnState[];
   usage: UsageState[];
   context: { usedTokens: number; windowTokens: number | null } | null;
   interruptRequested: boolean;
@@ -164,6 +187,7 @@ export function initialRunState(messageId: string): RunState {
     reasoningMs: null,
     toolCalls: [],
     approvals: [],
+    turns: [],
     usage: [],
     context: null,
     interruptRequested: false,
@@ -185,9 +209,65 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
     next.status = to;
     if (to === 'starting' && next.startedAt === null) next.startedAt = ctx.now;
     if (isTerminal(to)) {
+      closeTurn();
       next.finishedAt = ctx.now;
       actions.push({ type: 'finished', status: to });
     }
+  };
+
+  const openTurn = (): ModelTurnState => {
+    const last = next.turns.at(-1);
+    if (last && last.endedAt === null) return last;
+    const turn: ModelTurnState = {
+      startedAt: ctx.now,
+      endedAt: null,
+      firstTokenAt: null,
+      textStart: next.text.length,
+      textEnd: null,
+      reasoningStart: next.reasoning.length,
+      reasoningEnd: null,
+      reasoningStartedAt: null,
+      reasoningEndedAt: null,
+    };
+    next.turns = [...next.turns, turn];
+    return turn;
+  };
+
+  /** Replace the open turn (turns are immutable like the rest of the state). */
+  const updateTurn = (patch: Partial<ModelTurnState>): void => {
+    const index = next.turns.length - 1;
+    const last = next.turns[index];
+    if (!last || last.endedAt !== null) return;
+    next.turns = next.turns.with(index, { ...last, ...patch });
+  };
+
+  const closeTurn = (): void => {
+    const last = next.turns.at(-1);
+    if (!last || last.endedAt !== null) return;
+    const said = next.text.length > last.textStart || next.reasoning.length > last.reasoningStart;
+    // A turn that said nothing and lasted no time at all is not a turn: the run ended the
+    // moment the last tool did.
+    if (!said && ctx.now === last.startedAt && last.firstTokenAt === null) {
+      next.turns = next.turns.slice(0, -1);
+      return;
+    }
+    updateTurn({
+      endedAt: ctx.now,
+      textEnd: next.text.length,
+      reasoningEnd: next.reasoning.length,
+      reasoningEndedAt:
+        last.reasoningStartedAt !== null && last.reasoningEndedAt === null
+          ? ctx.now
+          : last.reasoningEndedAt,
+    });
+  };
+
+  /** The model has the floor again once no tool runs and nobody is being asked anything. */
+  const resumeModelIfIdle = (): void => {
+    if (isTerminal(next.status)) return;
+    const toolBusy = next.toolCalls.some((c) => c.status === 'pending' || c.status === 'running');
+    const asking = next.approvals.some((a) => a.status === 'pending');
+    if (!toolBusy && !asking) openTurn();
   };
 
   /** Any agent frame proves the turn is alive; a blocked run resumes on it. */
@@ -212,6 +292,7 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
   switch (input.type) {
     case 'accepted':
       moveTo('starting');
+      openTurn();
       break;
 
     case 'interrupt':
@@ -282,6 +363,7 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
       }
       // Unblock only when nothing else is pending.
       if (!next.approvals.some((a) => a.status === 'pending')) moveTo('streaming');
+      resumeModelIfIdle();
       break;
     }
 
@@ -293,6 +375,15 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
           if (next.reasoningStartedAt !== null && next.reasoningMs === null) {
             next.reasoningMs = ctx.now - next.reasoningStartedAt;
           }
+          if (event.text.length > 0) {
+            const turn = openTurn();
+            updateTurn({
+              firstTokenAt: turn.firstTokenAt ?? ctx.now,
+              ...(turn.reasoningStartedAt !== null && turn.reasoningEndedAt === null
+                ? { reasoningEndedAt: ctx.now }
+                : {}),
+            });
+          }
           next.text += event.text;
           if (event.text.length > 0) actions.push({ type: 'message_delta', delta: event.text });
           break;
@@ -301,6 +392,13 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
         case 'reasoning_delta': {
           liven();
           if (next.reasoningStartedAt === null) next.reasoningStartedAt = ctx.now;
+          if (event.text.length > 0) {
+            const turn = openTurn();
+            updateTurn({
+              firstTokenAt: turn.firstTokenAt ?? ctx.now,
+              reasoningStartedAt: turn.reasoningStartedAt ?? ctx.now,
+            });
+          }
           next.reasoning += event.text;
           if (event.text.length > 0) actions.push({ type: 'reasoning_delta', delta: event.text });
           break;
@@ -310,6 +408,8 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
           liven();
           const existing = next.toolCalls.find((c) => c.ref === event.ref);
           if (existing) break;
+          // The model has handed over to a tool: its turn ends here.
+          closeTurn();
           const call: ToolCallState = {
             id: ctx.newId(),
             ref: event.ref,
@@ -351,6 +451,7 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
             type: event.type === 'tool_completed' ? 'tool_completed' : 'tool_failed',
             toolCallId: call.id,
           });
+          resumeModelIfIdle();
           break;
         }
 
@@ -388,6 +489,8 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
             });
           }
           actions.push({ type: 'approval_requested', approvalId: approval.id });
+          // Waiting on a person is nobody's model time.
+          closeTurn();
           moveTo(event.kind === 'question' ? 'waiting_input' : 'waiting_approval');
           break;
         }

@@ -115,6 +115,21 @@ export type MessagePart =
   | { type: 'tool_call'; toolCallId: string }
   | { type: 'approval'; approvalId: string };
 
+/** `runs.timing`: epoch milliseconds and offsets into the run's text and reasoning. */
+export interface RunTiming {
+  turns: Array<{
+    startedAt: number;
+    endedAt: number | null;
+    firstTokenAt: number | null;
+    textStart: number;
+    textEnd: number | null;
+    reasoningStart: number;
+    reasoningEnd: number | null;
+    reasoningStartedAt: number | null;
+    reasoningEndedAt: number | null;
+  }>;
+}
+
 export type SessionMetadata = {
   /** Skills the user picked for this session (Hermes). */
   skills?: string[];
@@ -245,6 +260,12 @@ export const runs = sqliteTable(
     cancelReason: text('cancel_reason', { length: 200 }),
     errorCode: text('error_code', { length: 64 }),
     errorMessage: text('error_message'),
+    /**
+     * The model's turns as the hub saw them (`run-reducer.ts` `ModelTurnState`), written when
+     * the run ends. `null` for runs from before it was recorded: their trajectory has no
+     * times for its turns (contract decision §41).
+     */
+    timing: json<RunTiming>('timing'),
   },
   (t) => [
     index('runs_session_idx').on(t.sessionId, t.createdAt),

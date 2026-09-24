@@ -149,6 +149,15 @@ export class RunEngine {
     await this.namer.settled();
   }
 
+  /**
+   * What a live run has done so far — its text, reasoning and model turns, which are only
+   * written when it ends. The trajectory reads it (contract decision §41); `undefined` once
+   * the run is no longer active.
+   */
+  liveState(runId: string): RunState | undefined {
+    return this.active.get(runId)?.state;
+  }
+
   isActive(runId: string): boolean {
     return this.active.has(runId);
   }
@@ -707,6 +716,10 @@ export class RunEngine {
     const { scope, state } = run;
     const status = state.status;
     const terminal = isTerminal(status) ? status : 'failed';
+
+    // Before anything is awaited: the run has left `active`, and a trajectory read in the
+    // meantime must find its turns on the row.
+    store.updateRun(scope.workspace, run.runId, { timing: { turns: state.turns } });
 
     const produced = await this.collectProduced(run);
     const note = refusalNote(produced.refused, scope.language);
