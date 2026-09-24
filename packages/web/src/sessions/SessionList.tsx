@@ -20,13 +20,16 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { NavLink, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useDeleteSession, useUpdateSession } from '../hub/queries.js';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import { routeOf } from '../navigation/manifest.js';
+import { chatHref } from '../chat/anchor.js';
+import { ProfileBadge } from '../shell/ProfileBadge.js';
+import { ALL_PROFILES, useManyProfiles, useProfileInLink } from '../shell/profileSelector.js';
 import type { Session } from '../types.js';
 import {
   IconArchive,
@@ -99,7 +102,13 @@ export function archivedFor(scope: SessionScope): 'true' | 'false' | 'all' {
 
 export function SessionList({ onOpen }: { onOpen?: () => void }) {
   const { t } = useI18n();
-  const { profile } = useAuth();
+  // The list gathers every profile the person may enter unless the top selector narrowed
+  // it to one (ADR 0016); a badge says which profile a row is from once there are several.
+  const { homeProfile, allProfiles } = useAuth();
+  const manyProfiles = useManyProfiles();
+  const showProfile = allProfiles && manyProfiles;
+  /** The manual order is kept per view: every profile together, or one profile. */
+  const orderScope = allProfiles ? ALL_PROFILES : homeProfile;
   const [filter, setFilter] = useState('');
   const [params, setParams] = useSearchParams();
   const { ask, dialog } = useConfirm();
@@ -107,14 +116,17 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
   const scope = scopeFromParams(params);
   // Live, not polled: a session that names itself after its first reply (contract
   // decision §26) changes this list with nothing on this screen having been clicked.
-  const sessions = useLiveSessions({ archived: archivedFor(scope) });
+  const sessions = useLiveSessions({ archived: archivedFor(scope), allProfiles });
   const update = useUpdateSession();
   const remove = useDeleteSession();
   const navigate = useNavigate();
   const { sessionId } = useParams();
   const [manual, setManual] = useState<string[]>(() =>
-    readOrder(typeof localStorage === 'undefined' ? null : localStorage, profile),
+    readOrder(typeof localStorage === 'undefined' ? null : localStorage, orderScope),
   );
+  useEffect(() => {
+    setManual(readOrder(typeof localStorage === 'undefined' ? null : localStorage, orderScope));
+  }, [orderScope]);
   /**
    * Selection, as a mode: `null` is the ordinary list, a set is the list with ticks on it
    * (owner decision, 2026-09-22). It is entered from the row menu rather than living in
@@ -146,7 +158,7 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
     const ids = items.map((s) => s.id);
     const next = move(ids, ids.indexOf(String(active.id)), ids.indexOf(String(over.id)));
     setManual(next);
-    writeOrder(typeof localStorage === 'undefined' ? null : localStorage, profile, next);
+    writeOrder(typeof localStorage === 'undefined' ? null : localStorage, orderScope, next);
   };
 
   const selecting = chosen !== null;
@@ -163,8 +175,12 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
       return next;
     });
 
+  /** Each row is acted on in its own profile, which is not always the person's. */
+  const profileOf = (id: string) => items.find((s) => s.id === id)?.profile;
+
   const onBulkArchive = async (archived: boolean) => {
-    for (const id of selectedHere) await update.mutateAsync({ id, patch: { archived } });
+    for (const id of selectedHere)
+      await update.mutateAsync({ id, patch: { archived }, profile: profileOf(id) });
     setChosen(null);
   };
 
@@ -177,7 +193,7 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
       confirmLabel: t('sessions.delete'),
     });
     if (!sure) return;
-    for (const id of selectedHere) await remove.mutateAsync(id);
+    for (const id of selectedHere) await remove.mutateAsync({ id, profile: profileOf(id) });
     if (sessionId && selectedHere.includes(sessionId)) navigate(routeOf('new_chat'));
     setChosen(null);
   };
@@ -190,7 +206,7 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
       confirmLabel: t('sessions.delete'),
     });
     if (!sure) return;
-    await remove.mutateAsync(session.id);
+    await remove.mutateAsync({ id: session.id, profile: session.profile });
     if (sessionId === session.id) navigate(routeOf('new_chat'));
   };
 
@@ -206,7 +222,7 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
       confirmLabel: t('common.save'),
     });
     if (typed === null) return;
-    update.mutate({ id: session.id, patch: { title: typed } });
+    update.mutate({ id: session.id, patch: { title: typed }, profile: session.profile });
   };
 
   /**
@@ -215,7 +231,7 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
    * so the row here changes on its own.
    */
   const onRetitle = (session: Session) => {
-    update.mutate({ id: session.id, patch: { title: null } });
+    update.mutate({ id: session.id, patch: { title: null }, profile: session.profile });
   };
 
   const chooseScope = (next: string) => {
@@ -335,9 +351,20 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
                 onOpen={onOpen}
                 onRename={() => void onRename(session)}
                 onRetitle={() => onRetitle(session)}
-                onPin={() => update.mutate({ id: session.id, patch: { pinned: !session.pinned } })}
+                showProfile={showProfile}
+                onPin={() =>
+                  update.mutate({
+                    id: session.id,
+                    patch: { pinned: !session.pinned },
+                    profile: session.profile,
+                  })
+                }
                 onArchive={() =>
-                  update.mutate({ id: session.id, patch: { archived: !session.archived } })
+                  update.mutate({
+                    id: session.id,
+                    patch: { archived: !session.archived },
+                    profile: session.profile,
+                  })
                 }
                 onDelete={() => void onDelete(session)}
                 onSelectMode={() => setChosen(new Set([session.id]))}
@@ -357,6 +384,7 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
 function SessionRow({
   session,
   active,
+  showProfile,
   onOpen,
   onRename,
   onRetitle,
@@ -369,6 +397,8 @@ function SessionRow({
 }: {
   session: Session;
   active: boolean;
+  /** Say which profile the row is from: the list holds more than one. */
+  showProfile: boolean;
   onOpen?: (() => void) | undefined;
   onRename: () => void;
   onRetitle: () => void;
@@ -382,6 +412,7 @@ function SessionRow({
   onToggle: () => void;
 }) {
   const { t } = useI18n();
+  const inLink = useProfileInLink();
   const {
     attributes,
     listeners,
@@ -434,7 +465,8 @@ function SessionRow({
             </button>
           )}
           <NavLink
-            to={routeOf('chat').replace(':sessionId?', session.id)}
+            // Opened in its own profile, which the address carries (ADR 0016).
+            to={chatHref(session.id, null, undefined, inLink(session.profile))}
             onClick={(event) => {
               // Selecting: the row is a tick, not a door. Opening one would throw away
               // the selection the person is still building.
@@ -454,9 +486,16 @@ function SessionRow({
                   {t(`sessions.status.${session.status}`)}
                 </Badge>
               )}
-              <span className="truncate" dir="auto">
+              <span className="min-w-0 truncate" dir="auto">
                 {title}
               </span>
+              {showProfile && (
+                <ProfileBadge
+                  profile={session.profile}
+                  testId="session-profile"
+                  className="ms-auto"
+                />
+              )}
             </span>
             {session.preview && (
               <span className="session-preview" dir="auto">

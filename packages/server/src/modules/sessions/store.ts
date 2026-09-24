@@ -156,13 +156,22 @@ export class SessionsStore {
     return result.changes > 0;
   }
 
+  /**
+   * One workspace, or several for a list across profiles (ADR 0016). Several is still one
+   * statement with one order and one keyset, so a cursor pages across every workspace at
+   * once — never a page per workspace glued together, which would repeat or skip rows.
+   */
   listSessions(
-    workspace: string,
+    workspace: string | readonly string[],
     filters: SessionFilters,
     cursor: string | undefined,
     limit: number,
   ): Page<SessionRow> {
-    const where: SQL[] = [eq(sessions.workspace, workspace)];
+    const where: SQL[] = [
+      typeof workspace === 'string'
+        ? eq(sessions.workspace, workspace)
+        : inArray(sessions.workspace, [...workspace]),
+    ];
     if (filters.agentId) where.push(eq(sessions.agentId, filters.agentId));
     if (filters.source) where.push(eq(sessions.source, filters.source as SessionRow['source']));
     if (filters.pinned !== undefined) where.push(eq(sessions.pinned, filters.pinned));
