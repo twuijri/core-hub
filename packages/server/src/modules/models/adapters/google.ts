@@ -144,7 +144,8 @@ export async function* googleChat(
       const output = count(usage.candidatesTokenCount);
       const cached = count(usage.cachedContentTokenCount);
       const thoughts = count(usage.thoughtsTokenCount);
-      if (input !== undefined) event.inputTokens = input;
+      // `promptTokenCount` includes the cached content; the hub's input excludes it (types.ts).
+      if (input !== undefined) event.inputTokens = Math.max(0, input - (cached ?? 0));
       if (output !== undefined) event.outputTokens = output;
       if (cached !== undefined) event.cacheReadTokens = cached;
       if (thoughts !== undefined) event.reasoningTokens = thoughts;

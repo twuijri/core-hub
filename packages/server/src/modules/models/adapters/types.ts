@@ -142,7 +142,12 @@ export type ChatEvent =
   | { type: 'delta'; text: string }
   | { type: 'reasoning'; text: string }
   | {
-      /** Cumulative totals for the turn, as the provider reports them. */
+      /**
+       * Cumulative totals for the turn. `inputTokens` are the prompt tokens **not** served
+       * from or written to the cache (Anthropic's convention); an adapter whose provider
+       * counts the cached part in its prompt total subtracts it. Cost estimates and the
+       * trajectory's cache hit rate both rely on it.
+       */
       type: 'usage';
       inputTokens?: number;
       outputTokens?: number;

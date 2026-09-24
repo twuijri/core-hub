@@ -380,6 +380,12 @@ export class HermesTuiSession implements AgentSession {
   private readonly openTools: Array<{ id: string; name: string }> = [];
   private counter = 0;
   private isClosed = false;
+  /**
+   * Hermes reports the usage of its whole live session on every `message.complete` (its
+   * counters add up across turns), while a hub run is one turn. What was reported for the
+   * earlier turns is kept here and subtracted, so each run records its own tokens.
+   */
+  private reported = { input: 0, output: 0, reasoning: 0 };
 
   /** What this conversation is running on, so a turn that names something else switches. */
   private current: { model: string | null; provider: string | null; effort: string | null } = {
@@ -629,13 +635,23 @@ export class HermesTuiSession implements AgentSession {
       const number = (value: unknown) => (typeof value === 'number' ? value : undefined);
       const input = number(usage.input) || number(usage.prompt);
       const output = number(usage.output) || number(usage.completion);
+      const reasoning = number(usage.reasoning);
+      const total = { input: input ?? 0, output: output ?? 0, reasoning: reasoning ?? 0 };
+      // A counter that went down means Hermes started the session's agent afresh (a model
+      // switch, a restart): its totals are this turn's alone.
+      const reset =
+        total.input < this.reported.input ||
+        total.output < this.reported.output ||
+        total.reasoning < this.reported.reasoning;
+      const base = reset ? { input: 0, output: 0, reasoning: 0 } : this.reported;
+      this.reported = total;
       this.queue.push({
         type: 'usage',
         modelLabel: text(usage.model),
         providerId: null,
-        ...(input !== undefined ? { inputTokens: input } : {}),
-        ...(output !== undefined ? { outputTokens: output } : {}),
-        ...(number(usage.reasoning) ? { reasoningTokens: number(usage.reasoning)! } : {}),
+        ...(input !== undefined ? { inputTokens: total.input - base.input } : {}),
+        ...(output !== undefined ? { outputTokens: total.output - base.output } : {}),
+        ...(reasoning ? { reasoningTokens: total.reasoning - base.reasoning } : {}),
       });
     }
     const status = String(payload.status ?? 'complete');

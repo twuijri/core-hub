@@ -125,7 +125,8 @@ describe('the OpenAI-compatible chat stream', () => {
         .map((e) => e.text)
         .join(''),
     ).toBe('Hello there');
-    expect(events[2]).toMatchObject({ inputTokens: 11, outputTokens: 2, cacheReadTokens: 4 });
+    // The 4 cached tokens are counted once, as cache reads, not also as input.
+    expect(events[2]).toMatchObject({ inputTokens: 7, outputTokens: 2, cacheReadTokens: 4 });
 
     // The request itself: the right endpoint, the key in the header, streaming asked for.
     expect(calls[0]?.url).toBe('https://api.example.test/v1/chat/completions');
@@ -388,6 +389,37 @@ describe('Anthropic', () => {
 });
 
 describe('Google', () => {
+  it('counts cached prompt tokens once, as cache reads', async () => {
+    const { fetchImpl } = scriptedStream(() => ({
+      frames: [
+        { candidates: [{ content: { parts: [{ text: 'Yes' }] } }] },
+        {
+          usageMetadata: {
+            promptTokenCount: 50,
+            cachedContentTokenCount: 40,
+            candidatesTokenCount: 1,
+          },
+        },
+      ],
+    }));
+    const events = await collect(
+      googleChat(
+        context(fetchImpl, {
+          slug: 'google',
+          baseUrl: 'https://generativelanguage.test/v1beta',
+          apiKey: 'goog-key',
+        }),
+        { model: 'gemini-test', messages: [{ role: 'user', text: 'ok?' }] },
+      ),
+    );
+    expect(events).toContainEqual({
+      type: 'usage',
+      inputTokens: 10,
+      outputTokens: 1,
+      cacheReadTokens: 40,
+    });
+  });
+
   it('asks for SSE explicitly and separates a thought from the answer', async () => {
     const { fetchImpl, calls } = scriptedStream(() => ({
       frames: [

@@ -251,6 +251,43 @@ describe('Hermes over the TUI gateway', () => {
     expect(events[4]).toMatchObject({ inputTokens: 12, outputTokens: 3 });
   });
 
+  it("records each turn's own tokens, though Hermes reports its session's running total", async () => {
+    // Hermes's `message.complete` usage adds up across the turns of a live session; a
+    // counter that goes down means it started the session's agent afresh.
+    const totals = [
+      { model: 'm', input: 12, output: 3 },
+      { model: 'm', input: 30, output: 8 },
+      { model: 'm', input: 4, output: 1 },
+    ];
+    let turn = 0;
+    const gateway = fakeGateway((method, _params, api) => {
+      if (method === 'session.create') return { session_id: 's', stored_session_id: 'st' };
+      if (method === 'prompt.submit') {
+        const usage = totals[turn++];
+        setImmediate(() => {
+          api.event('s', 'message.delta', { text: 'ok' });
+          api.event('s', 'message.complete', { text: 'ok', status: 'complete', usage });
+        });
+        return { status: 'streaming' };
+      }
+      return {};
+    });
+    const session = await HermesTuiSession.open(channelOver(gateway), null);
+    const reported: Array<{ inputTokens?: number; outputTokens?: number }> = [];
+    for (let i = 0; i < totals.length; i += 1) {
+      const reading = collect(session, terminal);
+      await session.send({ text: `turn ${i + 1}` });
+      const usage = (await reading).find((e) => e.type === 'usage') as
+        { inputTokens?: number; outputTokens?: number } | undefined;
+      reported.push({ inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens });
+    }
+    expect(reported).toEqual([
+      { inputTokens: 12, outputTokens: 3 },
+      { inputTokens: 18, outputTokens: 5 },
+      { inputTokens: 4, outputTokens: 1 },
+    ]);
+  });
+
   it('asks the person, and answers Hermes with their words, or "" when they skip', async () => {
     const gateway = fakeGateway((method, _params, api) => {
       if (method === 'session.create') return { session_id: 's', stored_session_id: 'st' };

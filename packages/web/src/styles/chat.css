@@ -795,3 +795,241 @@ summary.tool-head:hover {
 .chat-turns > .chat-older + .msg {
   margin-block-start: 0;
 }
+
+/* =============================================================================
+   The Trajectory tab (contract decision §43, docs/inspirations/trajectory.md).
+   Time flows in the reading direction: bars are placed with `inset-inline-start`,
+   so the first step is at the right edge in Arabic and at the left in English.
+   ============================================================================= */
+.chat-header-tabs {
+  margin-inline-start: auto;
+}
+.chat-flow[data-view='trajectory'] .composer-dock,
+.chat-flow[data-view='trajectory'] .chat-pad {
+  display: none;
+}
+.trajectory {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-3);
+  inline-size: 100%;
+  max-inline-size: var(--ch-layout-composer-max);
+  margin-inline: auto;
+  padding-block-end: var(--ch-space-4);
+}
+.trajectory-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-1);
+  padding: var(--ch-space-3);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-lg);
+  background: var(--ch-color-surface);
+}
+.trajectory-lane {
+  display: grid;
+  grid-template-columns: 5rem 1fr;
+  align-items: center;
+  gap: var(--ch-space-2);
+}
+.trajectory-lane-label {
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
+}
+.trajectory-track {
+  position: relative;
+  block-size: calc(var(--rows, 1) * 14px + 6px);
+  border-radius: var(--ch-radius-sm);
+  background: var(--ch-color-surface-2);
+}
+.trajectory-fold {
+  position: absolute;
+  inset-block: 0;
+  inline-size: 0;
+  border-inline-start: 1px dashed var(--ch-color-border-strong);
+}
+.trajectory-bar {
+  position: absolute;
+  inset-block-start: calc(var(--row, 0) * 14px + 3px);
+  block-size: 10px;
+  min-inline-size: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ch-radius-sm);
+  background: var(--ch-color-accent);
+  cursor: pointer;
+}
+.trajectory-bar:hover,
+.trajectory-bar:focus-visible {
+  box-shadow: 0 0 0 2px var(--ch-color-focus);
+  z-index: 1;
+}
+.trajectory-bar[data-kind='input'],
+.trajectory-dot[data-kind='input'] {
+  background: var(--ch-color-info-soft-text);
+}
+.trajectory-dot[data-kind='reasoning'] {
+  background: var(--ch-color-thinking);
+}
+/* Reasoning shares the model's lane with its turns; stripes tell the two apart. */
+.trajectory-bar[data-kind='reasoning'] {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--ch-color-thinking) 0 3px,
+    var(--ch-color-accent-soft) 3px 6px
+  );
+}
+.trajectory-bar[data-kind='tool'],
+.trajectory-dot[data-kind='tool'] {
+  background: var(--ch-color-status-scheduled);
+}
+/* A failed step is the danger colour in every lane. */
+.trajectory-bar[data-status='failed'],
+.trajectory-dot[data-status='failed'] {
+  background: var(--ch-color-danger);
+}
+.trajectory-bar[data-status='running'] {
+  animation: ch-pulse 1.4s var(--ch-motion-ease) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .trajectory-bar[data-status='running'] {
+    animation: none;
+  }
+}
+.trajectory-tip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-1);
+  max-inline-size: 22rem;
+}
+.trajectory-tip-text {
+  color: var(--ch-color-text-muted);
+}
+.trajectory-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ch-space-2);
+}
+.trajectory-chips {
+  display: flex;
+  gap: var(--ch-space-1);
+}
+.trajectory-search {
+  flex: 1 1 12rem;
+  min-inline-size: 10rem;
+}
+.trajectory-none {
+  color: var(--ch-color-text-muted);
+  font-size: var(--ch-font-size-sm);
+}
+.trajectory-steps {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-lg);
+  overflow: hidden;
+}
+.trajectory-step + .trajectory-step {
+  border-block-start: 1px solid var(--ch-color-border);
+}
+.trajectory-step:focus {
+  outline: none;
+}
+.trajectory-step[data-flash] {
+  animation: msg-anchored 2400ms var(--ch-motion-ease) 1 both;
+}
+.trajectory-step-head {
+  display: flex;
+  align-items: center;
+  gap: var(--ch-space-2);
+  inline-size: 100%;
+  padding: var(--ch-space-2) var(--ch-space-3);
+  border: 0;
+  background: var(--ch-color-surface);
+  color: var(--ch-color-text);
+  font-size: var(--ch-font-size-sm);
+  text-align: start;
+  cursor: pointer;
+}
+.trajectory-step-head:hover {
+  background: var(--ch-color-surface-2);
+}
+.trajectory-step-number {
+  min-inline-size: 1.5rem;
+  color: var(--ch-color-text-faint);
+  font-size: var(--ch-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+.trajectory-dot {
+  flex: none;
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: var(--ch-radius-full);
+  background: var(--ch-color-accent);
+}
+.trajectory-step-kind {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--ch-space-1);
+  font-weight: 500;
+}
+.trajectory-step-summary {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--ch-color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  unicode-bidi: isolate;
+}
+.trajectory-step-result {
+  color: var(--ch-color-text-faint);
+}
+.trajectory-step-time {
+  flex: none;
+  color: var(--ch-color-text-faint);
+  font-size: var(--ch-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+.trajectory-step-body {
+  padding: var(--ch-space-2) var(--ch-space-3) var(--ch-space-3);
+  background: var(--ch-color-bg-raised);
+  font-size: var(--ch-font-size-sm);
+}
+.trajectory-step-meta {
+  margin-block-end: var(--ch-space-2);
+  color: var(--ch-color-text-muted);
+  font-size: var(--ch-font-size-xs);
+}
+.trajectory-step-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.trajectory-metrics dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ch-space-2) var(--ch-space-5);
+  padding: var(--ch-space-3);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-lg);
+  background: var(--ch-color-surface);
+}
+.trajectory-metric dt {
+  color: var(--ch-color-text-muted);
+  font-size: var(--ch-font-size-xs);
+}
+.trajectory-metric dd {
+  font-size: var(--ch-font-size-md);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 640px) {
+  .trajectory-lane {
+    grid-template-columns: 3.5rem 1fr;
+  }
+  .trajectory-step-result {
+    display: none;
+  }
+}

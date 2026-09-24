@@ -1574,5 +1574,61 @@
     "remove_title": "Remove {name}?",
     "remove_body": "Its folder is removed from this profile's plugins. Switching it off keeps it.",
     "bundled_refused": "This plugin ships with Hermes; switch it off instead of removing it."
+  },
+  "trajectory": {
+    "tab": "Trajectory",
+    "chat_tab": "Chat",
+    "tabs_label": "Conversation views",
+    "timeline": "Timeline",
+    "lane": {
+      "input": "Input",
+      "model": "Model",
+      "tools": "Tools"
+    },
+    "kind": {
+      "input": "Input",
+      "turn": "Turn",
+      "reasoning": "Reasoning",
+      "tool": "Tool call"
+    },
+    "status": {
+      "running": "running",
+      "failed": "failed",
+      "cancelled": "stopped",
+      "succeeded": "done"
+    },
+    "tool_call_only": "tool call only",
+    "no_text": "no text",
+    "no_details": "Nothing more was recorded for this step.",
+    "first_token_here": "First word after {time}",
+    "filters": "Filter the steps",
+    "filter": {
+      "duration": "Duration",
+      "turns": "Turns",
+      "calls": "Calls"
+    },
+    "search": "Search the steps",
+    "no_match": "No step matches these filters.",
+    "download": "Session log",
+    "empty_title": "Nothing has happened yet",
+    "empty_body": "Send a message and each step the agent takes appears here.",
+    "untimed": "This conversation is from before the hub recorded step times, so there is no timeline — only the steps.",
+    "partial": "Earlier turns were recorded before the hub kept step times; the timeline shows the rest.",
+    "unit": {
+      "ms": "ms",
+      "s": "s",
+      "min": "min"
+    },
+    "metric": {
+      "turns": "Turns",
+      "steps": "Steps",
+      "model_time": "Model time",
+      "tool_time": "Tool time",
+      "first_token": "Avg. time to first token",
+      "tokens_per_second": "Tokens/s",
+      "cache_hit": "Cache hit",
+      "input_tokens": "Input tokens",
+      "output_tokens": "Output tokens"
+    }
   }
 }

@@ -54,7 +54,6 @@ function argumentsOf(call: ToolCall): string | null {
 
 function ToolRow({ call }: { call: ToolCall }) {
   const { t } = useI18n();
-  const pane = usePane();
   const output = call.output ?? '';
   const args = argumentsOf(call);
   const head = (
@@ -92,45 +91,60 @@ function ToolRow({ call }: { call: ToolCall }) {
   return (
     <details className="tool-row" data-testid="tool-call" data-status={call.status}>
       <summary className="tool-head">{head}</summary>
-      <div className="tool-body">
-        {args && (
-          <>
-            <p className="tool-label">{t('tool.arguments')}</p>
-            <pre className="tool-output" dir="ltr">
-              {args}
-            </pre>
-          </>
-        )}
-        {output && (
-          <>
-            <p className="tool-label">{t('tool.result')}</p>
-            <pre className="tool-output" dir="ltr">
-              {output}
-              {call.output_truncated && <span className="text-faint"> …{t('tool.truncated')}</span>}
-            </pre>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-2"
-              icon={<IconPanel size={14} />}
-              onClick={() =>
-                pane.open({
-                  kind: 'tool',
-                  title: `${call.name}${call.preview ? ` · ${call.preview}` : ''}`,
-                  node: (
-                    <pre className="tool-output" dir="ltr">
-                      {output}
-                    </pre>
-                  ),
-                })
-              }
-            >
-              {t('chat.open_in_pane')}
-            </Button>
-          </>
-        )}
-      </div>
+      <ToolCallBody call={call} />
     </details>
+  );
+}
+
+/**
+ * What a call was given and what it returned — the inside of a tool row, and of a tool step
+ * on the Trajectory tab. Renders nothing when the agent sent neither.
+ */
+export function ToolCallBody({ call }: { call: ToolCall }) {
+  const { t } = useI18n();
+  const pane = usePane();
+  const output = call.output ?? '';
+  const args = argumentsOf(call);
+  if (!output && !args) return null;
+  return (
+    <div className="tool-body">
+      {args && (
+        <>
+          <p className="tool-label">{t('tool.arguments')}</p>
+          <pre className="tool-output" dir="ltr">
+            {args}
+          </pre>
+        </>
+      )}
+      {output && (
+        <>
+          <p className="tool-label">{t('tool.result')}</p>
+          <pre className="tool-output" dir="ltr">
+            {output}
+            {call.output_truncated && <span className="text-faint"> …{t('tool.truncated')}</span>}
+          </pre>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-2"
+            icon={<IconPanel size={14} />}
+            onClick={() =>
+              pane.open({
+                kind: 'tool',
+                title: `${call.name}${call.preview ? ` · ${call.preview}` : ''}`,
+                node: (
+                  <pre className="tool-output" dir="ltr">
+                    {output}
+                  </pre>
+                ),
+              })
+            }
+          >
+            {t('chat.open_in_pane')}
+          </Button>
+        </>
+      )}
+    </div>
   );
 }
 

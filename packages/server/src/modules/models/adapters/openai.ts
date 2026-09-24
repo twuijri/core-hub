@@ -201,7 +201,9 @@ export async function* openAiChat(
       const output = count(frame.usage.completion_tokens);
       const cached = count(frame.usage.prompt_tokens_details?.cached_tokens);
       const reasoned = count(frame.usage.completion_tokens_details?.reasoning_tokens);
-      if (input !== undefined) usage.inputTokens = input;
+      // `prompt_tokens` counts the cached part too; the hub's input is what was not cached
+      // (types.ts), so a cached token is neither billed twice nor hidden in the hit rate.
+      if (input !== undefined) usage.inputTokens = Math.max(0, input - (cached ?? 0));
       if (output !== undefined) usage.outputTokens = output;
       if (cached !== undefined) usage.cacheReadTokens = cached;
       if (reasoned !== undefined) usage.reasoningTokens = reasoned;
