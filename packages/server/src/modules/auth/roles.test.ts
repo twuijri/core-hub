@@ -82,9 +82,29 @@ describe('auth: roles, principal and workspace scope', () => {
         })
       ).statusCode,
     ).toBe(201);
-    expect(
-      (await mk({ username: 'free', password: 'free-password-1', role: 'member' })).statusCode,
-    ).toBe(201);
+    // A member is never created with nothing to enter: the list is explicit (owner, 2026-09-24).
+    const bare = await mk({ username: 'free', password: 'free-password-1', role: 'member' });
+    expect(bare.statusCode).toBe(400);
+    expect(bare.json()).toMatchObject({
+      code: 'validation_failed',
+      details: { field: 'profiles' },
+    });
+    const free = await mk({
+      username: 'free',
+      password: 'free-password-1',
+      role: 'member',
+      profiles: ['work'],
+    });
+    expect(free.statusCode).toBe(201);
+    // …and every profile withdrawn afterwards leaves them with none, not with all.
+    const withdrawn = await hub.app.inject({
+      method: 'PATCH',
+      url: `/api/v1/auth/users/${free.json().id}`,
+      headers: { authorization: `Bearer ${tokens.owner}` },
+      payload: { profiles: [] },
+    });
+    expect(withdrawn.statusCode).toBe(200);
+    expect(withdrawn.json().profiles).toEqual([]);
     tokens.admin = (await login('adm', 'adm-password-1')).json().access_token;
     tokens.member = (await login('mem', 'mem-password-1')).json().access_token;
     tokens.free = (await login('free', 'free-password-1')).json().access_token;
@@ -119,10 +139,15 @@ describe('auth: roles, principal and workspace scope', () => {
     const outside = await get('/api/v1/__probe/scope', tokens.member, 'default');
     expect(outside.statusCode).toBe(404);
     expect(outside.json().code).toBe('profile_not_found');
-    // a member with no membership rows may enter every workspace (contract: empty = every profile)
-    expect((await get('/api/v1/__probe/scope', tokens.free, 'default')).json()).toEqual({
-      workspace: 'default',
-    });
+    // a member with no membership rows enters nothing — an empty list is not "every profile"
+    for (const slug of ['default', 'work']) {
+      const refused = await get('/api/v1/__probe/scope', tokens.free, slug);
+      expect(refused.statusCode).toBe(404);
+      expect(refused.json()).toMatchObject({
+        code: 'profile_not_found',
+        details: { profile: slug, reason: 'no_profile_granted' },
+      });
+    }
     expect((await get('/api/v1/__probe/scope', tokens.owner, 'work')).json()).toEqual({
       workspace: 'work',
     });
