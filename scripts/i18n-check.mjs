@@ -15,6 +15,8 @@ const LOCALE_SETS = [
   { name: 'desktop', dir: 'apps/desktop/src/i18n', required: false },
 ];
 
+const OLD_WORD = { en: /\bworkspaces?\b/i, ar: /مساح(?:ة|ات) (?:ال)?عمل/ };
+
 let failures = 0;
 const fail = (msg) => {
   failures += 1;
@@ -72,6 +74,15 @@ for (const set of LOCALE_SETS) {
     else if (placeholders(value) !== placeholders(other))
       fail(`${set.name}: "${key}" placeholders differ between ar and en`);
   }
+  // One word for one thing (owner, 2026-09-23): what the code calls a workspace, a person
+  // reads as «بروفايل» / "profile" — in the hub's own messages as much as in a client's.
+  // Keys, API fields and codes keep `workspace`; only the text a person reads is checked.
+  for (const [key, value] of en)
+    if (typeof value === 'string' && OLD_WORD.en.test(value))
+      fail(`${set.name}: en "${key}" says "workspace" — the product word is "profile"`);
+  for (const [key, value] of ar)
+    if (typeof value === 'string' && OLD_WORD.ar.test(value))
+      fail(`${set.name}: ar "${key}" says «مساحة العمل» — the product word is «بروفايل»`);
   console.log(`i18n:check  ${set.name}: ${en.size} keys, ar/en in parity`);
 }
 

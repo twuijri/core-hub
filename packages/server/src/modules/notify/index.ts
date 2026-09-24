@@ -2,7 +2,7 @@
  * Module `notify`: the notices a person sees, what they want to be told about, and the
  * webhooks that forward events out of the hub.
  *
- * All eleven operations answer.
+ * All twelve operations answer.
  *
  * **Nothing here invents a notice.** The inbox is what other modules wrote to it; a hub
  * where nothing has happened has an empty inbox, and that is the correct answer rather
@@ -28,7 +28,7 @@ import { HubError, notFound } from '../../lib/errors.js';
 import { REALTIME_NAMESPACES, defineModule } from '../../lib/module.js';
 import { clampLimit } from '../../lib/pagination.js';
 import { defineRoute } from '../../lib/route.js';
-import { jobRunnerFor, serializeJob } from '../audit/index.js';
+import { jobRunnerFor } from '../audit/index.js';
 import {
   DEFAULT_WORKSPACE_SLUG,
   emitToUser,
@@ -170,6 +170,20 @@ function toWebhook(row: typeof webhooks.$inferSelect): Record<string, unknown> {
     },
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
+  };
+}
+
+function toDelivery(row: typeof webhookDeliveries.$inferSelect): Record<string, unknown> {
+  return {
+    id: row.id,
+    webhook_id: row.webhookId,
+    event: row.eventName,
+    status: row.status,
+    attempts: row.attempts,
+    response_status: row.responseStatus,
+    error: row.lastError,
+    created_at: row.createdAt.toISOString(),
+    delivered_at: row.deliveredAt?.toISOString() ?? null,
   };
 }
 
@@ -650,6 +664,25 @@ export const notifyModule = defineModule({
     });
 
     defineRoute(app, deps, {
+      operationId: 'notify.listWebhookDeliveries',
+      handler: (request, { params, query }) => {
+        const id = params.webhook_id as string;
+        webhookOf(request, id);
+        const limit = Math.min(Math.max(Number(query.limit ?? 20) || 20, 1), 50);
+        const rows = dbOf(request)
+          .select()
+          .from(webhookDeliveries)
+          .where(eq(webhookDeliveries.webhookId, id))
+          .orderBy(desc(webhookDeliveries.id))
+          .limit(limit)
+          .all();
+        // The payload stays in the table: it may carry message text, and what a person
+        // needs here is whether it arrived and what the endpoint said.
+        return { items: rows.map(toDelivery) };
+      },
+    });
+
+    defineRoute(app, deps, {
       operationId: 'notify.testWebhook',
       status: 202,
       handler: (request, { params }) => {
@@ -726,6 +759,7 @@ export const notifyModule = defineModule({
                 attempts: 1,
                 responseStatus: status || null,
                 lastError: error,
+                deliveredAt: error ? null : new Date(),
               })
               .run();
             const now = new Date();
@@ -751,7 +785,9 @@ export const notifyModule = defineModule({
             return { delivered: !error, status, error };
           },
         );
-        return serializeJob(job, scope.profile);
+        // The contract's `JobAccepted`: the id to follow, not the job itself. A client reads
+        // `job_id`, and a body without it left the page with nothing to wait for.
+        return { job_id: job.id };
       },
     });
   },

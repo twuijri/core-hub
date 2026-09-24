@@ -312,7 +312,19 @@ describe('notify: webhooks', () => {
         url: `/api/v1/notify/webhooks/${created.id as string}/test`,
       });
       expect(test.statusCode).toBe(202);
+      // `JobAccepted`, as the contract says: the id a client follows.
+      const accepted = test.json() as Json;
+      expect(accepted).toEqual({ job_id: expect.stringMatching(/^[0-9A-Z]{26}$/) });
       await drainJobs(hub.app);
+
+      const job = await authed(hub, hub.token, {
+        method: 'GET',
+        url: `/api/v1/jobs/${accepted.job_id as string}`,
+      });
+      expect(job.json()).toMatchObject({
+        status: 'succeeded',
+        result: { delivered: true, status: 200, error: null },
+      });
 
       expect(calls).toHaveLength(1);
       // Signed, so the receiver can verify the body instead of trusting it.
@@ -323,6 +335,26 @@ describe('notify: webhooks', () => {
         await authed(hub, hub.token, { method: 'GET', url: '/api/v1/notify/webhooks' })
       ).json() as { items: Json[] };
       expect((after.items[0]!.stats as Json).delivered).toBe(1);
+
+      // The delivery itself is readable: what was sent and what the endpoint answered.
+      const deliveries = await authed(hub, hub.token, {
+        method: 'GET',
+        url: `/api/v1/notify/webhooks/${created.id as string}/deliveries`,
+      });
+      expect(deliveries.statusCode).toBe(200);
+      const items = (deliveries.json() as { items: Json[] }).items;
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({
+        webhook_id: created.id,
+        event: 'webhook.test',
+        status: 'delivered',
+        attempts: 1,
+        response_status: 200,
+        error: null,
+      });
+      expect(items[0]!.delivered_at).toEqual(expect.any(String));
+      // The payload is not returned: it may carry message text.
+      expect(items[0]).not.toHaveProperty('payload');
     } finally {
       overrideNotify({});
       await hub.close();
@@ -355,8 +387,36 @@ describe('notify: webhooks', () => {
       ).json() as { items: Json[] };
       expect((after.items[0]!.stats as Json).failed).toBe(1);
       expect((after.items[0]!.stats as Json).last_error).toContain('connection refused');
+
+      const items = (
+        (
+          await authed(hub, hub.token, {
+            method: 'GET',
+            url: `/api/v1/notify/webhooks/${created.id as string}/deliveries`,
+          })
+        ).json() as { items: Json[] }
+      ).items;
+      expect(items[0]).toMatchObject({
+        status: 'failed',
+        response_status: null,
+        delivered_at: null,
+      });
+      expect(items[0]!.error).toContain('connection refused');
     } finally {
       overrideNotify({});
+      await hub.close();
+    }
+  });
+
+  it('answers 404 for the deliveries of a webhook that does not exist', async () => {
+    const hub = await signedInHub();
+    try {
+      const response = await authed(hub, hub.token, {
+        method: 'GET',
+        url: '/api/v1/notify/webhooks/01J8QK3ZR2W7M5N4P6T8V9X0ZZ/deliveries',
+      });
+      expect(response.statusCode).toBe(404);
+    } finally {
       await hub.close();
     }
   });
