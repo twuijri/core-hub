@@ -12,7 +12,7 @@ import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { capturingLogger, unreachableFetch } from '../../../tests/unit/helpers.js';
 import { WHATSAPP_BRIDGE_PORT, whatsappBridgePort } from './channels.js';
-import { ProfileGateways, stopOrphanBridge } from './hermes-gateways.js';
+import { ProfileGateways, activeCronJobs, stopOrphanBridge } from './hermes-gateways.js';
 import { HermesRuntime, type SpawnedProcess, type Spawner } from './hermes-runtime.js';
 
 const dirs: string[] = [];
@@ -117,6 +117,7 @@ function gatewaysOver(
     log: logger,
     backoffMs: [5, 5],
     stopGraceMs: 50,
+    rescanMs: 0,
     ...extra,
   });
   return { gateways, ...spawner, lines };
@@ -371,5 +372,106 @@ describe('a bridge left behind', () => {
     writeFileSync(path.join(session, 'bridge.pid'), 'not-a-pid');
     expect(stopOrphanBridge(session)).toBe(false);
     expect(stopOrphanBridge(path.join(session, 'nothing-here'))).toBe(false);
+  });
+});
+
+/** Hermes's own `cron/jobs.json` in a profile, as its scheduler writes it. */
+function cronJobs(home: string, jobs: Array<Record<string, unknown>>): void {
+  mkdirSync(path.join(home, 'cron'), { recursive: true });
+  writeFileSync(path.join(home, 'cron', 'jobs.json'), JSON.stringify({ jobs }));
+}
+const job = (id: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  name: id,
+  enabled: true,
+  state: 'scheduled',
+  schedule: { kind: 'cron', expr: '0 9 * * *' },
+  ...extra,
+});
+
+describe("a profile's scheduled jobs need its gateway too", () => {
+  it("counts the jobs that will still fire, by Hermes's own rule", () => {
+    const home = tempDir();
+    expect(activeCronJobs(home)).toBe(0);
+    cronJobs(home, [
+      job('daily'),
+      job('paused', { enabled: false, state: 'paused', paused_at: '2026-09-24T10:00:00Z' }),
+      // Half-paused: Hermes never fires it either.
+      job('marker', { paused_at: '2026-09-24T10:00:00Z' }),
+      job('done', { state: 'completed', schedule: { kind: 'once' } }),
+      job('stuck-once', { state: 'error', schedule: { kind: 'once' } }),
+      // A recurring job in `error` still has occurrences.
+      job('stuck-cron', { state: 'error' }),
+    ]);
+    expect(activeCronJobs(home)).toBe(2);
+  });
+
+  it('starts a gateway for a profile with only a job, and stops it when the last one is paused', async () => {
+    const root = hermesRoot({ reports: NOTHING, quiet: NOTHING });
+    const home = path.join(root, 'profiles', 'reports');
+    cronJobs(home, [job('morning-brief')]);
+    const { gateways, spawned } = gatewaysOver(root);
+    await gateways.reconcile();
+    expect(spawned.map((entry) => entry.args)).toEqual([['-p', 'reports', 'gateway', 'run']]);
+    expect(gateways.status()[0]).toMatchObject({ profile: 'reports', channels: [], cronJobs: 1 });
+
+    cronJobs(home, [job('morning-brief', { enabled: false, state: 'paused' })]);
+    await gateways.reconcile();
+    expect(spawned[0]?.child.killed).toEqual(['SIGTERM']);
+    expect(gateways.status()).toEqual([]);
+    await gateways.stopAll();
+  });
+
+  it('notices a job scheduled behind its back, on the next check', async () => {
+    const root = hermesRoot({ reports: NOTHING });
+    const { gateways, spawned } = gatewaysOver(root, { rescanMs: 20 });
+    gateways.watch();
+    expect(spawned).toHaveLength(0);
+    // An agent scheduled it in a chat: Hermes wrote the file, the hub heard nothing.
+    cronJobs(path.join(root, 'profiles', 'reports'), [job('weekly')]);
+    await vi.waitFor(() => expect(spawned).toHaveLength(1));
+    await gateways.stopAll();
+  });
+
+  it('keeps a profile gateway with a job when its last channel is switched off', async () => {
+    const root = hermesRoot({ sales: TELEGRAM_ON });
+    const home = path.join(root, 'profiles', 'sales');
+    cronJobs(home, [job('daily')]);
+    const { gateways, spawned } = gatewaysOver(root);
+    await gateways.reconcile();
+    writeFileSync(path.join(home, 'config.yaml'), 'platforms:\n  telegram:\n    enabled: false\n');
+    await gateways.channelsChanged('sales');
+    // Restarted (its channels changed), not stopped: the job still needs it.
+    await vi.waitFor(() => expect(spawned).toHaveLength(2));
+    expect(gateways.status()[0]).toMatchObject({ channels: [], cronJobs: 1 });
+    await gateways.stopAll();
+  });
+});
+
+describe("Hermes's one kanban board", () => {
+  it('is dispatched by the default gateway only: a profile gateway is told not to', async () => {
+    const root = hermesRoot({ sales: TELEGRAM_ON });
+    const { gateways, spawned } = gatewaysOver(root);
+    await gateways.reconcile();
+    expect(spawned[0]?.env.HERMES_KANBAN_DISPATCH_IN_GATEWAY).toBe('false');
+    await gateways.stopAll();
+  });
+
+  it('leaves the default gateway dispatching', async () => {
+    const dataDir = tempDir();
+    const { logger } = capturingLogger();
+    const spawner = fakeSpawner();
+    const runtime = new HermesRuntime({
+      dataDir,
+      host: { pathValue: binDirWithHermes() },
+      log: logger,
+      fetchImpl: unreachableFetch,
+      spawnImpl: spawner.spawnImpl,
+      healthIntervalMs: 0,
+      gatewayRescanMs: 0,
+    });
+    await runtime.start();
+    expect(spawner.of('default')[0]?.env.HERMES_KANBAN_DISPATCH_IN_GATEWAY).toBeUndefined();
+    await runtime.stop();
   });
 });

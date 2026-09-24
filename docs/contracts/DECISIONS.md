@@ -779,7 +779,10 @@ profile «manger», Hermes restarted, the number never answered).
   `Channel.status` now says what that gateway reports (`online`, `error` with Hermes's
   sentence, `offline`), `unknown` where the hub cannot know.
 - **`AgentRuntime.gateways`** (optional; Hermes only): every messaging gateway, the default
-  one and each named profile's, with its state, restarts and channels.
+  one and each named profile's, with its state, restarts, channels and `scheduled_jobs`. A
+  named profile has one while it has a channel switched on and linked **or an active scheduled
+  job of Hermes's own**, because Hermes fires a profile's jobs only in a gateway scoped to that
+  profile; only the default gateway dispatches Hermes's one kanban board.
 - **Pairing approvals** are Hermes's pairing in the selected profile: `agents.listPairing`
   (`GET /agents/{agent_id}/pairing` → `PairingList`), `agents.approvePairing`
   (`POST …/pairing/{platform}/requests/{request_id}/approve` → `PairedSender`),

@@ -87,6 +87,7 @@ export interface MessagingGatewayView {
   started_at: string | null;
   error: string | null;
   channels: string[];
+  scheduled_jobs: number;
 }
 
 /** The runtime block, kept out of the row so an unreachable gateway is not a broken agent. */

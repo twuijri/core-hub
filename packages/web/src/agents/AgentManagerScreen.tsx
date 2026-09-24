@@ -170,6 +170,14 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
                     ? gateway.channels.join(', ')
                     : t('agents.gateways.no_channels')}
                 </span>
+                {gateway.scheduled_jobs > 0 && (
+                  <span
+                    className="text-muted"
+                    data-testid={`agent-gateway-jobs-${gateway.profile}`}
+                  >
+                    {t('agents.gateways.jobs_n', { count: String(gateway.scheduled_jobs) })}
+                  </span>
+                )}
                 {gateway.error && (
                   <span className="text-danger-soft-text" dir="auto">
                     {gateway.error}

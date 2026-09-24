@@ -93,6 +93,7 @@ const AGENT = {
         started_at: null,
         error: null,
         channels: [],
+        scheduled_jobs: 0,
       },
       {
         profile: 'manger',
@@ -102,6 +103,7 @@ const AGENT = {
         started_at: null,
         error: null,
         channels: ['whatsapp'],
+        scheduled_jobs: 2,
       },
     ],
   },
@@ -353,5 +355,8 @@ describe("Hermes's card", () => {
     );
     expect(within(gateways).getByTestId('agent-gateway-manger').textContent).toContain('whatsapp');
     expect(within(gateways).getByTestId('agent-gateway-default')).toBeTruthy();
+    // A profile's gateway also fires its scheduled jobs; the card says how many.
+    expect(within(gateways).getByTestId('agent-gateway-jobs-manger').textContent).toMatch(/2/);
+    expect(within(gateways).queryByTestId('agent-gateway-jobs-default')).toBeNull();
   });
 });

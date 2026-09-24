@@ -381,7 +381,8 @@
         "starting": "starting",
         "stopped": "stopped",
         "error": "failing"
-      }
+      },
+      "jobs_n": "{count} scheduled jobs"
     }
   },
   "jobs": {

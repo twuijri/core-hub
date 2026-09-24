@@ -134,7 +134,7 @@ describe.skipIf(!image)(
     const gatewaySpawn: Spawner = (_command, args, options) => {
       const profile = args[0] === '-p' ? args[1]! : 'default';
       const env: NodeJS.ProcessEnv = { ...options.env };
-      if (profile !== 'default') {
+      if (profile === 'manger') {
         env.API_SERVER_KEY = 'm'.repeat(48);
         env.API_SERVER_HOST = '127.0.0.1';
         env.API_SERVER_PORT = String(MANGER_PORT);
@@ -143,6 +143,7 @@ describe.skipIf(!image)(
         'HERMES_HOME',
         'HERMES_DASHBOARD',
         'PYTHONUNBUFFERED',
+        'HERMES_KANBAN_DISPATCH_IN_GATEWAY',
         KEY_ENV,
         'API_SERVER_ENABLED',
         'API_SERVER_KEY',
@@ -271,6 +272,22 @@ describe.skipIf(!image)(
         path.join(root, 'profiles', 'manger', 'config.yaml'),
         `${broken}platforms:\n  webhook:\n    enabled: true\n    extra:\n      port: ${WEBHOOK_PORT}\n      secret: e2e-webhook-secret\n`,
       );
+      // «reports»: no channel at all, one job an agent scheduled there — made by Hermes's own
+      // `hermes cron`.
+      hermesOnce(['profile', 'create', 'reports', '--no-alias']);
+      writeFileSync(path.join(root, 'profiles', 'reports', 'config.yaml'), broken);
+      hermesOnce([
+        '-p',
+        'reports',
+        'cron',
+        'create',
+        'every 1h',
+        'Say pong and nothing else.',
+        '--name',
+        'brief',
+        '--deliver',
+        'local',
+      ]);
 
       // A `hermes` on PATH so the runtime is `managed`; the spawner runs the image's instead.
       writeFileSync(path.join(bin, 'hermes'), '#!/bin/sh\nexit 0\n');
@@ -341,9 +358,12 @@ describe.skipIf(!image)(
         },
         { timeout: 240_000, interval: 2_000 },
       );
-      expect(runtime.gateways().map((gateway) => [gateway.profile, gateway.channels])).toEqual([
-        ['default', []],
-        ['manger', ['webhook']],
+      expect(
+        runtime.gateways().map((gateway) => [gateway.profile, gateway.channels, gateway.cronJobs]),
+      ).toEqual([
+        ['default', [], 0],
+        ['manger', ['webhook'], 0],
+        ['reports', [], 1],
       ]);
 
       // Each wrote its own state file and holds its own lock: nothing shared, nothing refused.
@@ -380,7 +400,64 @@ describe.skipIf(!image)(
         ['stats', '--no-stream', '--format', '{{.MemUsage}}', box],
         { encoding: 'utf8' },
       ).trim();
-      console.log(`the container with both gateways: ${memory}; provider calls: ${seen.length}`);
+      console.log(`the container with three gateways: ${memory}; provider calls: ${seen.length}`);
+    }, 420_000);
+
+    it("fires «reports»'s scheduled job in its own gateway, with no channel there, and leaves the one kanban dispatcher to the default gateway", async () => {
+      const home = path.join(root, 'profiles', 'reports');
+      const outputs = () => {
+        try {
+          return execFileSync('find', [path.join(home, 'cron', 'output'), '-name', '*.md'], {
+            encoding: 'utf8',
+          })
+            .split('\n')
+            .filter(Boolean);
+        } catch {
+          return [];
+        }
+      };
+      // «Run now», Hermes's way (`cron/jobs.py` §trigger_job, what its run endpoint calls): the
+      // job fires on the next tick of the gateway that serves the profile. This process has no
+      // provider key, so only a gateway could get the answer.
+      execFileSync(
+        'docker',
+        [
+          'exec',
+          '-e',
+          `HERMES_HOME=${home}`,
+          '-w',
+          '/opt/hermes/src',
+          box,
+          PYTHON,
+          '-c',
+          "from cron.jobs import trigger_job; print(bool(trigger_job('brief')))",
+        ],
+        { encoding: 'utf8', timeout: 120_000 },
+      );
+      const answered = () => outputs().some((file) => readFileSync(file, 'utf8').includes('pong'));
+      await vi.waitFor(() => expect(answered()).toBe(true), { timeout: 240_000, interval: 3_000 });
+      // The profile gateways were told not to dispatch; Hermes says so in their own logs, and
+      // the default gateway's log says it holds the one dispatcher lock.
+      const logsOf = (dir: string) => {
+        try {
+          return execFileSync('grep', ['-rh', 'kanban dispatcher', path.join(dir, 'logs')], {
+            encoding: 'utf8',
+          });
+        } catch {
+          return '';
+        }
+      };
+      await vi.waitFor(
+        () => {
+          for (const profile of ['manger', 'reports']) {
+            expect(logsOf(path.join(root, 'profiles', profile))).toMatch(
+              /disabled via HERMES_KANBAN_DISPATCH_IN_GATEWAY/,
+            );
+          }
+          expect(logsOf(root)).toMatch(/holding singleton dispatcher lock|embedded in gateway/);
+        },
+        { timeout: 60_000, interval: 2_000 },
+      );
     }, 420_000);
 
     it("lists, approves, denies and revokes pairing requests in «manger» through Hermes's API", async () => {

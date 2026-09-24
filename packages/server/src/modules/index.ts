@@ -298,11 +298,28 @@ registerHermesCron((app) => ({
     const runtime = hermesRuntimeFor(app);
     const { mode, endpoint } = runtime.status();
     if (mode !== 'managed' && mode !== 'external') return null;
-    return createHermesJobs({
+    const jobs = createHermesJobs({
       baseUrl: endpoint,
       apiKey: () => runtime.apiKey(),
       fetch: runtime.apiFetch(),
     });
+    // A job only fires where a gateway serves its profile (`agents/hermes-gateways.ts`): after
+    // every write the set of profiles needing one is checked again.
+    const then = <T>(written: Promise<T>): Promise<T> =>
+      written.finally(() => {
+        void runtime.scheduledJobsChanged().catch(() => {
+          // The periodic check catches up; a write that worked is not made to fail here.
+        });
+      });
+    return {
+      list: () => jobs.list(),
+      create: (input) => then(jobs.create(input)),
+      update: (id, patch) => then(jobs.update(id, patch)),
+      remove: (id) => then(jobs.remove(id)),
+      pause: (id) => then(jobs.pause(id)),
+      resume: (id) => then(jobs.resume(id)),
+      run: (id) => then(jobs.run(id)),
+    };
   },
   agentId: (workspace) => hermesAgentId(app, workspace),
   timezone: () => hermesRuntimeFor(app).timezone(),

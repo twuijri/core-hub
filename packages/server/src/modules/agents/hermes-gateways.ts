@@ -9,10 +9,24 @@
  * (the owner's report of 2026-09-24).
  *
  * So each named profile with at least one channel switched on and able to sign in
- * (`channels.ts` §activeChannels) gets its own `hermes -p <profile> gateway run`, supervised
- * the way the default one is: restarted with backoff when it dies, its lines in the hub's log
- * with the profile's name, stopped with the hub. A profile with no channel gets none — each is
- * a Python process of about 200 MB.
+ * (`channels.ts` §activeChannels) **or at least one active scheduled job of Hermes's own**
+ * (`activeCronJobs`) gets its own `hermes -p <profile> gateway run`, supervised the way the
+ * default one is: restarted with backoff when it dies, its lines in the hub's log with the
+ * profile's name, stopped with the hub. A profile with neither gets none — each is a Python
+ * process of about 200 MB.
+ *
+ * Why scheduled jobs: Hermes keeps a profile's jobs in that profile's own `cron/jobs.json` and
+ * only a gateway scoped to that profile fires them (`cron/jobs.py`: "a profile-scoped gateway
+ * runs that profile's jobs under that same HERMES_HOME"). A job an agent scheduled in «manger»
+ * never ran while «manger» had no gateway. Jobs change without the hub — an agent schedules one
+ * in a chat, a person runs `hermes cron` — so the set is checked again every half minute too,
+ * the interval Hermes's own multiplexer rescans at.
+ *
+ * Hermes's kanban has one board for every profile and one dispatcher for it. A gateway runs
+ * the dispatcher unless told not to, and the first gateway to take its lock keeps it, so a
+ * profile gateway started first would dispatch every profile's cards in its own environment.
+ * Profile gateways are started with `HERMES_KANBAN_DISPATCH_IN_GATEWAY=false`; the default
+ * gateway stays the one dispatcher (`gateway/kanban_watchers.py` §_kanban_dispatcher_boot).
  *
  * Why a process per profile and not Hermes's multiplexer (one gateway serving every profile):
  * under the multiplexer `os.environ` is process-wide and first-writer-wins, so a profile's own
@@ -57,6 +71,8 @@ export interface GatewayStatus {
   lastError: string | null;
   /** The channels it was started to serve. */
   channels: string[];
+  /** Hermes's scheduled jobs in the profile that are neither paused nor finished. */
+  cronJobs: number;
 }
 
 /** What Hermes writes about a running gateway (`gateway/status.py` §write_runtime_status). */
@@ -80,9 +96,13 @@ export interface ProfileGatewaysOptions {
   onChange?: () => void;
   backoffMs?: readonly number[];
   stopGraceMs?: number;
+  /** How often the set of profiles needing a gateway is checked again. 0 turns it off. */
+  rescanMs?: number;
 }
 
 const BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 30_000, 60_000] as const;
+/** Hermes's own multiplexer rescans its profiles this often (`_PROFILE_RESCAN_INTERVAL_SECS`). */
+export const GATEWAY_RESCAN_MS = 30_000;
 const STOP_GRACE_MS = 10_000;
 /** A gateway that stayed up this long earned a fresh backoff. */
 const HEALTHY_AFTER_MS = 60_000;
@@ -93,6 +113,46 @@ const API_SERVER_VARIABLES = [
   'API_SERVER_HOST',
   'API_SERVER_PORT',
 ] as const;
+
+/**
+ * Hermes's scheduled jobs in `<home>/cron/jobs.json` that will still fire: switched on, not
+ * paused, not a one-shot that already ran (`cron/jobs.py` §is_job_runnable, §is_terminal_job —
+ * a recurring job in `error` still has occurrences and counts).
+ */
+export function activeCronJobs(home: string): number {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(path.join(home, 'cron', 'jobs.json'), 'utf8'));
+  } catch {
+    return 0;
+  }
+  const jobs = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === 'object'
+      ? (raw as { jobs?: unknown }).jobs
+      : [];
+  const list = Array.isArray(jobs)
+    ? jobs
+    : jobs && typeof jobs === 'object'
+      ? Object.values(jobs as Record<string, unknown>)
+      : [];
+  return list.filter((entry) => {
+    if (!entry || typeof entry !== 'object') return false;
+    const job = entry as Record<string, unknown>;
+    if (job.enabled === false || job.state === 'paused' || job.paused_at) return false;
+    if (job.state === 'completed') return false;
+    if (job.state === 'error') {
+      const kind = (job.schedule as { kind?: unknown } | undefined)?.kind;
+      return kind === 'cron' || kind === 'interval';
+    }
+    return true;
+  }).length;
+}
+
+/** Whether a named profile needs a gateway: a channel to answer on, or a job to fire. */
+export function needsGateway(home: string): boolean {
+  return activeChannels(home).length > 0 || activeCronJobs(home) > 0;
+}
 
 /** Reads `<home>/gateway_state.json`; `null` when there is none or it cannot be read. */
 export function readGatewayRecord(home: string): GatewayRuntimeRecord | null {
@@ -152,6 +212,7 @@ class ProfileGateway {
       startedAt: this.child ? this.startedAt : null,
       lastError: this.lastError,
       channels: [...this.channels],
+      cronJobs: this.home ? activeCronJobs(this.home) : 0,
     };
   }
 
@@ -187,7 +248,13 @@ class ProfileGateway {
     }
     const env: NodeJS.ProcessEnv = { ...options.env() };
     for (const name of API_SERVER_VARIABLES) delete env[name];
-    Object.assign(env, { HERMES_HOME: root, HERMES_DASHBOARD: '0', PYTHONUNBUFFERED: '1' });
+    Object.assign(env, {
+      HERMES_HOME: root,
+      HERMES_DASHBOARD: '0',
+      PYTHONUNBUFFERED: '1',
+      // One board, one dispatcher: the default gateway's (see the top of this file).
+      HERMES_KANBAN_DISPATCH_IN_GATEWAY: 'false',
+    });
     let child: SpawnedProcess;
     try {
       child = options.spawnImpl(hermes, ['-p', this.profile, 'gateway', 'run'], {
@@ -313,6 +380,7 @@ export class ProfileGateways {
   /** One change at a time: two saves in a row must not start one profile's gateway twice. */
   private queue: Promise<void> = Promise.resolve();
   private closed = false;
+  private rescanTimer: NodeJS.Timeout | null = null;
 
   constructor(readonly options: ProfileGatewaysOptions) {}
 
@@ -332,14 +400,30 @@ export class ProfileGateways {
     return record && record.pid === gateway.child.pid ? record : null;
   }
 
-  /** Brings the set of running gateways in line with the profiles' channels. */
+  /**
+   * Checks the set again every half minute: a job an agent schedules in a chat, or a person
+   * with `hermes cron`, is not something the hub hears about. Called once the runtime is
+   * managed.
+   */
+  watch(): void {
+    const every = this.options.rescanMs ?? GATEWAY_RESCAN_MS;
+    if (every <= 0 || this.rescanTimer || this.closed) return;
+    this.rescanTimer = setInterval(() => {
+      void this.reconcile().catch((error: unknown) => {
+        this.options.log.warn({ err: error }, 'hermes: could not check the profile gateways');
+      });
+    }, every);
+    this.rescanTimer.unref?.();
+  }
+
+  /** Brings the set of running gateways in line with the profiles' channels and jobs. */
   reconcile(): Promise<void> {
     return this.serial(async () => {
       const root = this.options.root();
       const wanted = new Set(
         root
-          ? namedHermesProfiles(root).filter(
-              (name) => activeChannels(path.join(root, 'profiles', name)).length > 0,
+          ? namedHermesProfiles(root).filter((name) =>
+              needsGateway(path.join(root, 'profiles', name)),
             )
           : [],
       );
@@ -349,7 +433,7 @@ export class ProfileGateways {
         this.gateways.delete(name);
         this.options.log.info(
           { profile: name },
-          'hermes: no channel left; profile gateway stopped',
+          'hermes: no channel and no scheduled job left; profile gateway stopped',
         );
       }
       for (const name of wanted) {
@@ -371,13 +455,16 @@ export class ProfileGateways {
       const root = this.options.root();
       if (!root) return;
       const home = path.join(root, 'profiles', profile);
-      const wanted = namedHermesProfiles(root).includes(profile) && activeChannels(home).length > 0;
+      const wanted = namedHermesProfiles(root).includes(profile) && needsGateway(home);
       const gateway = this.gateways.get(profile);
       if (!wanted) {
         if (!gateway) return;
         await gateway.stop();
         this.gateways.delete(profile);
-        this.options.log.info({ profile }, 'hermes: no channel left; profile gateway stopped');
+        this.options.log.info(
+          { profile },
+          'hermes: no channel and no scheduled job left; profile gateway stopped',
+        );
       } else if (gateway) {
         await gateway.restart();
       } else {
@@ -404,7 +491,7 @@ export class ProfileGateways {
           !this.closed &&
           profile !== 'default' &&
           namedHermesProfiles(root).includes(profile) &&
-          activeChannels(path.join(root, 'profiles', profile)).length > 0
+          needsGateway(path.join(root, 'profiles', profile))
         ) {
           this.startOne(profile);
         }
@@ -422,6 +509,8 @@ export class ProfileGateways {
 
   async stopAll(): Promise<void> {
     this.closed = true;
+    if (this.rescanTimer) clearInterval(this.rescanTimer);
+    this.rescanTimer = null;
     await this.serial(async () => {
       await Promise.all([...this.gateways.values()].map((gateway) => gateway.stop()));
       this.gateways.clear();

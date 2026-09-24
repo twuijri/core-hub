@@ -14181,8 +14181,8 @@ components:
         gateways:
           description: >-
             Hermes only, where the hub runs it: every messaging gateway — the default profile's
-            and one per named profile with a channel switched on and linked. `agents.restart`
-            restarts all of them.
+            and one per named profile with a channel switched on and linked or an active
+            scheduled job. `agents.restart` restarts all of them.
           type: array
           items:
             $ref: '#/components/schemas/MessagingGateway'
@@ -14788,7 +14788,11 @@ components:
           type: [string, 'null']
     MessagingGateway:
       type: object
-      required: [profile, state, pid, restarts, started_at, error, channels]
+      description: >-
+        A named profile has one while it has a channel switched on and linked, or an active
+        scheduled job of Hermes's own: Hermes fires a profile's jobs only in a gateway scoped
+        to that profile.
+      required: [profile, state, pid, restarts, started_at, error, channels, scheduled_jobs]
       properties:
         profile:
           type: string
@@ -14809,6 +14813,10 @@ components:
           type: array
           items:
             type: string
+        scheduled_jobs:
+          type: integer
+          minimum: 0
+          description: Hermes's scheduled jobs in the profile that are neither paused nor finished.
     PairingRequest:
       type: object
       required: [platform, request_id, user_id, user_name, requested_at]

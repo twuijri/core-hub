@@ -200,7 +200,12 @@ export interface AgentsOverrides {
   /** Options for the real adapter set (a stubbed `fetch` for the Hermes gateway probe). */
   adapterOptions?: Omit<AdapterSetOptions, 'host'>;
   /** The Hermes runtime supervisor's seams (a fake spawner, a health interval). */
-  runtime?: { spawnImpl?: Spawner; healthIntervalMs?: number; gatewayBackoffMs?: number[] };
+  runtime?: {
+    spawnImpl?: Spawner;
+    healthIntervalMs?: number;
+    gatewayBackoffMs?: number[];
+    gatewayRescanMs?: number;
+  };
   /** Hermes's dashboard API's seams (a fake spawner and `fetch`, a short idle). */
   dashboard?: { spawnImpl?: DashboardSpawner; fetchImpl?: typeof fetch; idleMs?: number };
   /**
@@ -326,6 +331,9 @@ function contextOf(app: FastifyInstance): AgentsContext {
       ? { healthIntervalMs: own.runtime.healthIntervalMs }
       : {}),
     ...(own.runtime?.gatewayBackoffMs ? { gatewayBackoffMs: own.runtime.gatewayBackoffMs } : {}),
+    ...(own.runtime?.gatewayRescanMs !== undefined
+      ? { gatewayRescanMs: own.runtime.gatewayRescanMs }
+      : {}),
     // Every messaging gateway starts on the providers and model a chat in its profile uses
     // (`models` writes them, looked up per start because it mounts after this module).
     prepareGateway: (profile: string, home: string) => {
@@ -1505,5 +1513,6 @@ function toMessagingGateway(gateway: GatewayStatus) {
     started_at: gateway.startedAt === null ? null : new Date(gateway.startedAt).toISOString(),
     error: gateway.lastError,
     channels: gateway.channels,
+    scheduled_jobs: gateway.cronJobs,
   };
 }

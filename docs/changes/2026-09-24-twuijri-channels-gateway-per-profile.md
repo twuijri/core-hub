@@ -66,10 +66,28 @@ failed»، وسجل البوابة يقول `Unknown provider 'majlis-custom-cli
    أو تفعيل أو تعطيل أو تعديل أو نسيان أو إلغاء ربط، وعند الإقلاع. في البروفايل الافتراضي تحمل البوابة
    أيضًا خادم الـAPI ومجدولات هرمز، فيبقى التغيير بانتظار «إعادة التشغيل» كما كان، والصفحة تقول ذلك.
    «إعادة التشغيل» في بطاقة هرمز تعيد تشغيل كل البوابات، والبطاقة تعرض حالة كل واحدة.
-4. **المزوّدات**: قبل تشغيل أي بوابة — الافتراضية أيضًا — يكتب المركز في `config.yaml` بروفايلها كتل
-   المزوّدات والنموذج الذي يؤول إليه اختيار المحادثة في ذلك البروفايل (`models` §prepareGateway، عبر
-   منفذ `prepareGatewayProfile`). المفاتيح تصل كما في #83: من بيئة العملية، و`.env` البروفايل يُقرأ
-   فوقها. هذا متوافق مع #90: حين تصير المزوّدات مشتركة يكتب الإصلاح نفسه الكتل المشتركة والنموذج الموروث.
+4. **المزوّدات**: قبل تشغيل أي بوابة — الافتراضية أيضًا — يجهّز المركز بروفايلها بما تستعمله المحادثة
+   فيه (`models` §prepareGateway، عبر منفذ `prepareGatewayProfile`). **مساعد واحد لا اثنان**: بعد دمج
+   #90 (نطاق المزوّد: مشترك أو خاص ببروفايل) صار التجهيز هو نفسه تجهيز #90 قبل كل دور محادثة
+   (`prepareProfileWith`: كتل المزوّدات المشتركة والخاصة في `config.yaml`، والمفاتيح التي تختلف عن الجذر في
+   `.env` البروفايل)، **مع النموذج** زيادةً للبوابة، لأن الدور يسمّي نموذجه والبوابة لا تسمّي شيئًا. وللبروفايل
+   الافتراضي تُكتب تهيئة الجذر كاملة كما يكتبها الحفظ. فتجد كل بوابة المزوّدات نفسها التي تجدها المحادثة،
+   بما فيها المزوّد الخاص بالبروفايل ومزوّدات المركز المخصّصة مثل `majlis-custom-cli-proxy-api`.
+8. **المهام المجدولة** (طلب لاحق من المالك): بوابة البروفايل المسمّى تُشغَّل أيضًا إن كان فيه **مهمة مجدولة
+   نشطة لهرمز** ولو بلا قناة، وتُوقف حين لا تبقى قناة ولا مهمة. شرح «تُنفَّذ المهام المجدولة في بوابة
+   البروفايل» بكلام بسيط: هرمز يحفظ مهام كل بروفايل في ملف ذلك البروفايل (`profiles/<اسم>/cron/jobs.json`)،
+   والذي «يدقّ الساعة» ويشغّل المهمة حين يحين وقتها هو عملية البوابة التي تخدم ذلك البروفايل تحديدًا، مرة
+   كل دقيقة تقريبًا. فإن لم تكن للبروفايل بوابة تعمل، تبقى مهامه مكتوبة في ملفها ولا يشغّلها أحد أبدًا — وهذا
+   كان حال كل بروفايل مسمّى قبل هذا التغيير (وحال بروفايل بلا قناة حتى الإضافة الأخيرة). الآن: مهمة نشطة
+   (غير موقوفة ولا منتهية) في البروفايل = بوابة تعمل له = المهمة تعمل في موعدها بإعدادات ذلك البروفايل
+   ومفاتيحه ومهاراته. المركز يتحقّق كل نصف دقيقة (المهام قد يضيفها الوكيل نفسه في محادثة، أو شخص بـ
+   `hermes cron`، دون أن يعلم المركز)، وبعد كل كتابة يكتبها في مجدول هرمز من صفحة الجدولة. ملاحظة
+   صادقة: صفحة الجدولة في المركز تكتب مهام هرمز في مجدول **البروفايل الافتراضي** اليوم (مسار `/api/jobs`
+   في بوابته بلا بروفايل)، فبوابته تعمل دائمًا؛ البوابات المسمّاة تهمّ المهام المكتوبة داخل البروفايل نفسه.
+   **لوحة المهام (kanban)**: لهرمز لوحة واحدة لكل البروفايلات ومُوزِّع واحد لها. كل بوابة تشغّل الموزّع ما لم
+   تُمنع، وأول بوابة تأخذ قفله تحتفظ به — فلو سبقت بوابة بروفايل لوزّعت بطاقات الجميع ببيئتها. لذلك تُشغَّل
+   بوابات البروفايلات بـ`HERMES_KANBAN_DISPATCH_IN_GATEWAY=false`، ويبقى الموزّع الوحيد في البوابة
+   الافتراضية (مثبت على هرمز الحقيقي من سجلاته).
 5. **واتساب**: «مربوط» من `creds.json` لا من الحقول، مع اسم الحساب ورقمه إن عرفهما هرمز، والتفعيل
    بقاعدة هرمز (`.env` و`config.yaml`). **إلغاء الربط** (`agents.unlinkChannel`) يوقف البوابة التي
    تشغّل الجسر، ويوقف جسرًا تركته خلفها (بعد التحقّق أنه `node` لهذه الجلسة بالذات)، ويحذف مجلد الجلسة،
@@ -117,66 +135,73 @@ failed»، وسجل البوابة يقول `Unknown provider 'majlis-custom-cli
 **الذاكرة**: بوابة إضافية (~200 م.ب) لكل بروفايل مسمّى فيه قناة مفعّلة ومربوطة، ولا شيء لغيره.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-كلها عبر `mj-run` (حدّ ذاكرة 7 غ.ب)، بعد دمج `origin/main` (#92) في الفرع.
+كلها عبر `mj-run` (حدّ ذاكرة 7 غ.ب)، بعد دمج `origin/main` (#92 ثم #90) في الفرع.
 
-إعادة إنتاج `Unknown provider` **قبل الإصلاح** (منفذ `prepareGatewayProfile` معطّل مؤقتًا)، ثم بعده:
+إعادة إنتاج `Unknown provider` **قبل الإصلاح** (منفذ `prepareGatewayProfile` معطّل مؤقتًا)، ثم بعده.
+المرة الأولى على `main` القديم فشل الاختباران معًا؛ بعد دمج #90 صار الجذر سليمًا، فكتبت حالة ما زالت
+تفشل مع #90 وحده (البروفايل المسمّى نسخة من الافتراضي، ثم حُذف المزوّد الذي يسمّيه ملفه):
 ```
-$ vitest run --project unit tests/unit/gateway-providers.test.ts   # بلا الإصلاح
+$ vitest run --project unit tests/unit/gateway-providers.test.ts   # بلا الإصلاح، على main القديم
      × the default one, after another profile's save rewrote the root file 1809ms
      × a named profile one, on the model that profile chats with 1674ms
 AssertionError: providers.majlis-custom-cli-proxy-api (Hermes: "Unknown provider 'majlis-custom-cli-proxy-api'"): expected undefined to be defined
-      Tests  2 failed (2)
-$ vitest run --project unit tests/unit/gateway-providers.test.ts   # بالإصلاح
-      Tests  2 passed (2)
+$ vitest run --project unit tests/unit/gateway-providers.test.ts   # بلا الإصلاح، بعد دمج #90
+     × a named profile one, after the provider its copied file names was removed 1731ms
+AssertionError: providers.majlis-custom-cli-proxy-api (Hermes: "Unknown provider 'majlis-custom-cli-proxy-api'"): expected undefined to be defined
+      Tests  1 failed | 1 passed (2)
+$ vitest run --project unit tests/unit/gateway-providers.test.ts   # بالإصلاح (ومعه حالة المزوّد الخاص بالبروفايل)
+      Tests  3 passed (3)
 ```
 
-هرمز الحقيقي من الصورة (`ghcr.io/twuijri/majlis:latest`، بوابتان في حاوية واحدة كما في الإنتاج):
+هرمز الحقيقي من الصورة (`ghcr.io/twuijri/majlis:latest`، ثلاث بوابات في حاوية واحدة كما في الإنتاج):
 ```
 $ MAJLIS_HERMES_IMAGE=ghcr.io/twuijri/majlis:latest vitest run --project unit --reporter=verbose --silent=false tests/unit/gateways.real.test.ts
-stdout | … runs the default gateway and «manger»'s side by side, each answering through the custom provider
-the container with both gateways: 450.2MiB / 28.52GiB; provider calls: 16
- ✓ … runs the default gateway and «manger»'s side by side, each answering through the custom provider 8996ms
- ✓ … lists, approves, denies and revokes pairing requests in «manger» through Hermes's API 3233ms
-      Tests  2 passed (2)
+the container with three gateways: 642.4MiB / 28.52GiB; provider calls: 18
+ ✓ … runs the default gateway and «manger»'s side by side, each answering through the custom provider 8898ms
+ ✓ … fires «reports»'s scheduled job in its own gateway, with no channel there, and leaves the one kanban dispatcher to the default gateway 63300ms
+ ✓ … lists, approves, denies and revokes pairing requests in «manger» through Hermes's API 3034ms
+      Tests  3 passed (3)
 ```
+(في محاولة قبلها ظهر في سجلّ هرمز: «another gateway already holds the dispatcher lock … will NOT dispatch» —
+قفل هرمز الاحتياطي يعمل، لكن المتغيّر لم يصل لأن غلاف الاختبار كان يسقطه؛ بعد تمريره يقول سجلّ البوابتين
+المسمّاتين «disabled via HERMES_KANBAN_DISPATCH_IN_GATEWAY».)
 
 باقي الفحوص:
 ```
 $ pnpm lint
 All matched files use Prettier code style!
-$ pnpm typecheck            # بلا أخطاء
+$ pnpm typecheck            # exit 0، صفر أخطاء
 $ pnpm contracts:lint
-Woohoo! Your API description is valid. 🎉
 contracts:lint  OK
 $ pnpm contracts:check-clients
-check-clients  OK — 256 client file(s) scanned, 172 contract path(s) known.
+check-clients  OK — 257 client file(s) scanned, 172 contract path(s) known.
 $ pnpm i18n:check
-i18n:check  web: 1103 keys, ar/en in parity
+i18n:check  web: 1117 keys, ar/en in parity
 i18n:check  OK
 $ pnpm nav:check
 nav:check  OK — 34 destinations, 2 pre-auth screens (login, setup), 39 terms, ar/en complete, routes for web
 $ pnpm --filter @majlis/server test
- Test Files  93 passed | 13 skipped (106)
-      Tests  976 passed | 37 skipped (1013)
+ Test Files  96 passed | 14 skipped (110)
+      Tests  998 passed | 41 skipped (1039)
 $ pnpm --filter @majlis/web test
  Test Files  48 passed (48)
-      Tests  567 passed (567)
+      Tests  573 passed (573)
 $ pnpm contract:test
  Test Files  3 passed (3)
       Tests  264 passed (264)
-$ pnpm build
-✓ built in 731ms
+$ pnpm build               # exit 0
 $ PLAYWRIGHT_CHANNEL=chrome pnpm web:e2e --workers=1
-  ✓  23 … 23. the agent tools ask Hermes: an MCP test, a skill pack imported, WhatsApp linked by QR (7.9s)
-  ✓  40 … 30. a linked WhatsApp: how to use it, the senders waiting for approval, and Unlink (1.3s)
-  42 passed (2.9m)
+  ✓  23 … 23. the agent tools ask Hermes: an MCP test, a skill pack imported, WhatsApp linked by QR (7.6s)
+  ✓  40 … 30. a linked WhatsApp: how to use it, the senders waiting for approval, and Unlink (1.1s)
+  43 passed (2.7m)
 ```
-لقطات الشاشة: أُعيدت كل لقطة لا علاقة لها بالقنوات إلى ما كانت عليه؛ تغيّرت لقطات القنوات الثلاث وأُضيفت
-`agent-channels-pairing-ar-light.png` و`agent-channels-unlinked-ar-light.png`.
+لقطات الشاشة: أُعيدت كل لقطة لا علاقة لها بالقنوات إلى ما كانت عليه؛ لقطات القنوات فقط تغيّرت أو أُضيفت
+(`agent-channels-pairing-ar-light.png` و`agent-channels-unlinked-ar-light.png` جديدتان).
 
 ## المخاطر والرجوع
-- **مخاطر**: بوابة البروفايل تشغّل أيضًا مجدول هرمز (cron) لذلك البروفايل — وهذا ما يجب، لكنه جديد:
-  مهام مجدولة في بروفايل مسمّى لم تكن تعمل صارت تعمل متى وُجدت فيه قناة. منصّات تفتح منفذًا (webhook
+- **مخاطر**: مهام مجدولة في بروفايل مسمّى لم تكن تعمل قط صارت تعمل (هذا المقصود، لكنه جديد: مهمة
+  قديمة منسية في بروفايل ستبدأ بالعمل وتستهلك من المزوّد). بروفايل فيه مهمة نشطة يكلّف بوابة (~200
+  م.ب) ولو بلا قناة. منصّات تفتح منفذًا (webhook
   وغيرها) على المنفذ نفسه في بروفايلين تتعارض؛ المركز يوزّع منافذ جسر واتساب فقط، والباقي إعداد
   الشخص. رفض الطلب تعديل مباشر لملف هرمز (لا فعل له في هرمز): إن غيّر هرمز شكل الملف فشل الرفض بـ404 لا
   أكثر. إلغاء الربط لا يسجّل خروجًا من واتساب؛ الصفحة تقول ذلك.
@@ -187,4 +212,5 @@ $ PLAYWRIGHT_CHANNEL=chrome pnpm web:e2e --workers=1
 - طلب الدمج: https://github.com/twuijri/core-hub/pull/93 (بالإنجليزية إلى `main`)؛ بعد الدمج صورة التست عند طلب المالك.
 - للمالك: في «manger» بعد التحديث يظهر واتساب «مربوطًا» وتعمل بوابته فورًا؛ راسله من رقم آخر ووافق
   من «طلبات بانتظار الموافقة».
-- بعد #90: يبقى منفذ `prepareGatewayProfile` كما هو، وتصير الحالة المشتركة هي ما يُكتب.
+- دُمج #90 في الفرع: تجهيز البوابة يستعمل تجهيز #90 للبروفايل نفسه مع النموذج (لا كاتب ثانٍ للمزوّدات).
+- قرار العقد صار §38 (أخذ #90 الرقم §37). لا ترحيل في هذا الطلب؛ ترحيلات `main` حتى `0012` لا تتعارض.

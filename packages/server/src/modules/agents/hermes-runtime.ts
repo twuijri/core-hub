@@ -39,6 +39,7 @@ import type { RuntimeState } from './adapters/types.js';
 import { activeChannels } from './channels.js';
 import {
   ProfileGateways,
+  activeCronJobs,
   readGatewayRecord,
   type GatewayRuntimeRecord,
   type GatewayStatus,
@@ -114,6 +115,8 @@ export interface HermesRuntimeOptions {
   prepareGateway?: (profile: string, home: string) => void;
   /** Between two restarts of a crashed profile gateway (tests shorten it). */
   gatewayBackoffMs?: readonly number[];
+  /** How often the profiles needing a gateway are checked again (tests turn it off with 0). */
+  gatewayRescanMs?: number;
 }
 
 /** Hermes's profile id rule (`_PROFILE_ID_RE`); a hub slug always satisfies it. */
@@ -212,6 +215,7 @@ export class HermesRuntime {
       log: this.log,
       prepare: (profile, home) => this.options.prepareGateway?.(profile, home),
       ...(options.gatewayBackoffMs ? { backoffMs: options.gatewayBackoffMs } : {}),
+      ...(options.gatewayRescanMs !== undefined ? { rescanMs: options.gatewayRescanMs } : {}),
     });
   }
 
@@ -230,6 +234,7 @@ export class HermesRuntime {
         startedAt: this.child ? this.startedAt : null,
         lastError: this.lastError,
         channels: activeChannels(this.home),
+        cronJobs: activeCronJobs(this.home),
       },
       ...this.profileGateways.status(),
     ];
@@ -256,6 +261,16 @@ export class HermesRuntime {
   channelsChanged(profile: string): Promise<void> {
     if (this.mode !== 'managed') return Promise.resolve();
     return this.profileGateways.channelsChanged(profile);
+  }
+
+  /**
+   * Hermes's scheduled jobs changed somewhere (the hub's schedules page wrote one): a profile
+   * that now has an active job gets its gateway, one with neither a job nor a channel left
+   * loses it. A gateway reads its jobs on every tick, so a running one is not restarted.
+   */
+  scheduledJobsChanged(): Promise<void> {
+    if (this.mode !== 'managed') return Promise.resolve();
+    return this.profileGateways.reconcile();
   }
 
   /**
@@ -518,10 +533,12 @@ export class HermesRuntime {
     this.mode = 'managed';
     this.launch(binary);
     this.scheduleHealth();
-    // Every named profile with a channel to answer on gets its gateway at boot too.
+    // Every named profile with a channel to answer on or a job to fire gets its gateway at
+    // boot too, and the set is checked again from then on.
     void this.profileGateways.reconcile().catch((error: unknown) => {
       this.log.warn({ err: error }, 'hermes: could not start the profile gateways');
     });
+    this.profileGateways.watch();
     return this.mode;
   }
 
