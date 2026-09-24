@@ -20,7 +20,15 @@
  * Hermes writes it (a temporary file renamed over it). The sender is not told; Hermes's own
  * rate limit keeps them from asking again for ten minutes, and after that they may.
  */
-import { chmodSync, existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import { HubError, notFound } from '../../lib/errors.js';
 import { HermesDashboardRefusal } from './hermes-dashboard.js';

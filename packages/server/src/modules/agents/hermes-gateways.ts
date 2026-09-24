@@ -215,7 +215,10 @@ class ProfileGateway {
       if (this.child !== child) return;
       this.child = null;
       if (this.stopping) {
-        options.log.info({ profile: this.profile, code, signal }, 'hermes: profile gateway stopped');
+        options.log.info(
+          { profile: this.profile, code, signal },
+          'hermes: profile gateway stopped',
+        );
         this.owner.changed();
         return;
       }
@@ -249,7 +252,8 @@ class ProfileGateway {
   private scheduleRestart(): void {
     if (this.stopping) return;
     const backoff = this.owner.options.backoffMs ?? BACKOFF_MS;
-    if (this.startedAt !== null && Date.now() - this.startedAt > HEALTHY_AFTER_MS) this.restarts = 0;
+    if (this.startedAt !== null && Date.now() - this.startedAt > HEALTHY_AFTER_MS)
+      this.restarts = 0;
     const delay = backoff[Math.min(this.restarts, backoff.length - 1)] ?? 1_000;
     this.restarts += 1;
     this.timer = setTimeout(() => {
@@ -343,7 +347,10 @@ export class ProfileGateways {
         if (wanted.has(name)) continue;
         await gateway.stop();
         this.gateways.delete(name);
-        this.options.log.info({ profile: name }, 'hermes: no channel left; profile gateway stopped');
+        this.options.log.info(
+          { profile: name },
+          'hermes: no channel left; profile gateway stopped',
+        );
       }
       for (const name of wanted) {
         if (this.gateways.has(name)) continue;

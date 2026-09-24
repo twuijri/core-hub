@@ -14653,7 +14653,8 @@ components:
           type: [string, 'null']
     Channel:
       type: object
-      required: [platform, label, enabled, configured, exclusive, status, error, login, link, fields]
+      required:
+        [platform, label, enabled, configured, exclusive, status, error, login, link, fields]
       properties:
         platform:
           type: string

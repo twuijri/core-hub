@@ -302,7 +302,7 @@ export function whatsappLink(home: string): ChannelLink {
 export function readEnv(home: string): Record<string, string> {
   const file = path.join(home, '.env');
   const out: Record<string, string> = {};
-  let text = '';
+  let text: string;
   try {
     text = readFileSync(file, 'utf8');
   } catch {
@@ -487,7 +487,8 @@ export function whatsappBridgePort(home: string): number {
     return WHATSAPP_BRIDGE_PORT;
   }
   const extra = node?.extra as Record<string, unknown> | undefined;
-  const raw = (extra && typeof extra === 'object' ? extra.bridge_port : undefined) ?? node?.bridge_port;
+  const raw =
+    (extra && typeof extra === 'object' ? extra.bridge_port : undefined) ?? node?.bridge_port;
   const port = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN;
   return Number.isInteger(port) && port > 0 && port < 65_536 ? port : WHATSAPP_BRIDGE_PORT;
 }
@@ -512,7 +513,8 @@ export function ensureWhatsAppBridgePort(home: string, others: readonly string[]
     const doc = load(home);
     ensureMap(doc, [BLOCK, 'whatsapp']);
     const extra = doc.getIn([BLOCK, 'whatsapp', 'extra']);
-    if (isMap(extra) && extra.has('bridge_port')) doc.setIn([BLOCK, 'whatsapp', 'extra', 'bridge_port'], port);
+    if (isMap(extra) && extra.has('bridge_port'))
+      doc.setIn([BLOCK, 'whatsapp', 'extra', 'bridge_port'], port);
     else doc.setIn([BLOCK, 'whatsapp', 'bridge_port'], port);
     save(home, doc);
     return port;

@@ -276,7 +276,9 @@ export const modelsModule = defineModule({
         const owner = ownerUser(db);
         if (!owner) return;
         const row = listWorkspacesFor(db, owner).find((candidate) =>
-          profile === 'default' ? candidate.isDefault : !candidate.isDefault && candidate.slug === profile,
+          profile === 'default'
+            ? candidate.isDefault
+            : !candidate.isDefault && candidate.slug === profile,
         );
         if (!row) return;
         contextOf(app).prepareGateway(

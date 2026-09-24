@@ -334,11 +334,16 @@ function contextOf(app: FastifyInstance): AgentsContext {
     onState: (status: HermesRuntimeStatus) => {
       const ctx = contexts.get(hub.io);
       if (!ctx) return;
-      ctx.service.setRuntime(HERMES_ENTRY.id, {
-        state: status.state,
-        url: status.state === 'running' ? status.endpoint : null,
-        error: status.lastError,
-      });
+      try {
+        ctx.service.setRuntime(HERMES_ENTRY.id, {
+          state: status.state,
+          url: status.state === 'running' ? status.endpoint : null,
+          error: status.lastError,
+        });
+      } catch {
+        // The hub closing stops Hermes after its database is gone; there is no row to update.
+        return;
+      }
       if (status.state === 'running') {
         void ctx.service.reprobe(HERMES_ENTRY.id).catch((error: unknown) => {
           app.log.warn({ err: error }, 'agents: hermes reprobe failed');
@@ -1375,7 +1380,10 @@ export const agentsModule = defineModule({
               await contextOf(app)
                 .runtime.channelsChanged(profile)
                 .catch((error: unknown) => {
-                  app.log.warn({ err: error, profile }, 'agents: the profile gateway did not start');
+                  app.log.warn(
+                    { err: error, profile },
+                    'agents: the profile gateway did not start',
+                  );
                 });
             }
             return { ...outcome, applies: profile === 'default' ? 'on_restart' : 'now' };
