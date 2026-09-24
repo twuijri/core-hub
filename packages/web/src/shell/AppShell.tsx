@@ -1,7 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { useLocation } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { ChromeScope } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';
+import { agentPageFromPath, navigation, routeOf } from '../navigation/manifest.js';
+import { IconArrowStart } from '../ui/icons.js';
 import { Sheet } from '../ui/index.js';
 import { PaneProvider } from './pane.js';
 import { Sidebar } from './Sidebar.js';
@@ -55,7 +57,21 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
           </ChromeScope>
           <div className="flex min-h-0 flex-1">
             <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto" id="main">
-              <div className="flex w-full flex-1 flex-col px-4 py-4">{children}</div>
+              <div className="flex w-full flex-1 flex-col px-4 py-4">
+                {/* On a phone the agent's list is the drawer, so the page it opened shows
+                    the way back itself (the Settings pattern, NAVIGATION §4). */}
+                {agentPageFromPath(location.pathname) && (
+                  <Link
+                    to={routeOf(navigation.agentShell.returnsTo)}
+                    className="mb-3 inline-flex items-center gap-1 self-start text-sm text-muted md:hidden"
+                    data-testid="agent-page-back"
+                  >
+                    <IconArrowStart size={16} />
+                    {t(`nav.${navigation.agentShell.back}`)}
+                  </Link>
+                )}
+                {children}
+              </div>
             </main>
             <SplitPane />
           </div>

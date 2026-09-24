@@ -18,7 +18,7 @@ import { useRecentModels } from '../models/useModelPicker.js';
 import { WorkingDirPicker } from '../chat/WorkingDirPicker.js';
 import { useAgents, useCreateSession } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
-import { routeOf, termKey } from '../navigation/manifest.js';
+import { canOpen, routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import type { ContentBlock } from '../types.js';
 import { Notice } from '../ui/Notice.js';
@@ -32,7 +32,7 @@ export function NewChatScreen() {
   // Where this chat is made (ADR 0016): the profile in the top selector, always. Said on
   // the screen once there is more than one profile, so a list showing every profile never
   // makes it a guess; changed only at the top, so no second control can disagree with it.
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const manyProfiles = useManyProfiles();
   const nameOf = useProfileName();
   const inLink = useProfileInLink();
@@ -108,9 +108,13 @@ export function NewChatScreen() {
           {noneInstalled && (
             <Notice tone="warning">
               {t('new_chat.none_installed')}{' '}
-              <Link to={routeOf('agent_manager')} className="link underline">
-                {t('nav.agent_manager')}
-              </Link>
+              {canOpen('agent_manager', user?.role ?? 'member') ? (
+                <Link to={routeOf('agent_manager')} className="link underline">
+                  {t('nav.agent_manager')}
+                </Link>
+              ) : (
+                t('nav.agent_manager')
+              )}
             </Notice>
           )}
           {(error || create.isError) && (
