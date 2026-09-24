@@ -334,7 +334,8 @@ class ScriptedRunner implements AgentRunner {
 const here = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.COREHUB_E2E_PORT ?? 8791);
 // Journey 4 (first-run setup, ADR 0011) needs the opposite hub: no owner, no
-// HUB_ADMIN_PASSWORD, and a data directory the test can read the claim token from. Playwright
+// HUB_ADMIN_PASSWORD (set up in the open window, ADR 0019), and a data directory the test can
+// check for the fallback claim token. Playwright
 // starts that one as a second web server with COREHUB_E2E_MODE=setup and a data dir it names.
 const setupMode = process.env.COREHUB_E2E_MODE === 'setup';
 const namedDataDir = process.env.COREHUB_E2E_DATA_DIR;

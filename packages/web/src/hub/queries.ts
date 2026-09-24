@@ -48,6 +48,25 @@ export function useSetupState() {
   });
 }
 
+/**
+ * First run (ADR 0019): is setup open without the claim token right now, and until when?
+ * `meta.get`'s `setup_open` / `setup_open_until`, always fetched fresh — the setup screen
+ * picks the open form or the token field from it.
+ */
+export function useSetupWindow() {
+  const { anonymous } = useAuth();
+  return useQuery({
+    queryKey: [...keys.meta(), 'setup-window'] as const,
+    queryFn: async () => {
+      const meta = (await anonymous.request('get', '/meta')).data;
+      return { open: meta.setup_open === true, openUntil: meta.setup_open_until ?? null };
+    },
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
 export function useMe() {
   const { client, session } = useAuth();
   return useQuery({
