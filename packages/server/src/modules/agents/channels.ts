@@ -17,7 +17,17 @@
  * are the upstream adapters that take a platform lock — not a guess, and not extended by
  * guessing either.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import { isMap, parseDocument, type Document } from 'yaml';
 import { CONFIG_FILE, STORED } from './mcp.js';
@@ -68,13 +78,26 @@ export interface ChannelField {
   value: string | boolean | null;
 }
 
+/** A platform that pairs a device (WhatsApp): whether this profile holds a session, and whose. */
+export interface ChannelLink {
+  linked: boolean;
+  accountId: string | null;
+  accountName: string | null;
+  accountPhone: string | null;
+}
+
 export interface Channel {
   platform: string;
   enabled: boolean;
-  /** True once anything beyond `enabled` has been filled in. */
+  /**
+   * True once anything beyond `enabled` has been filled in — for WhatsApp, once a phone is
+   * linked, because its identity is the bridge's session folder and not a field.
+   */
   configured: boolean;
   exclusive: boolean;
   fields: ChannelField[];
+  /** Set for WhatsApp only: its session, read from the profile's own folder. */
+  link: ChannelLink | null;
 }
 
 export class ChannelError extends Error {
@@ -137,22 +160,198 @@ function fieldsOf(node: Record<string, unknown>): ChannelField[] {
 
 export function listChannels(home: string): Channel[] {
   const block = load(home).toJS()?.[BLOCK] as Record<string, unknown> | undefined;
-  if (!block || typeof block !== 'object') return [];
-  return Object.entries(block)
-    .filter(([, node]) => node && typeof node === 'object')
+  const nodes: Record<string, Record<string, unknown>> = {};
+  if (block && typeof block === 'object') {
+    for (const [platform, node] of Object.entries(block)) {
+      if (node && typeof node === 'object' && !Array.isArray(node)) {
+        nodes[platform] = node as Record<string, unknown>;
+      }
+    }
+  }
+  // WhatsApp needs no node to exist: Hermes's own pairing writes its switch to `.env`
+  // (`WHATSAPP_ENABLED`) and its identity to the session folder. A profile paired that way
+  // has a WhatsApp channel whether or not `config.yaml` names it.
+  const whatsapp = whatsappLink(home);
+  const env = readEnv(home);
+  if (!nodes.whatsapp && (whatsapp.linked || env.WHATSAPP_ENABLED !== undefined)) {
+    nodes.whatsapp = {};
+  }
+  return Object.entries(nodes)
     .map(([platform, node]) => {
-      const fields = fieldsOf(node as Record<string, unknown>);
+      const fields = fieldsOf(node);
+      if (platform === 'whatsapp') {
+        return {
+          platform,
+          enabled: whatsappEnabled(node, env.WHATSAPP_ENABLED),
+          configured: whatsapp.linked,
+          exclusive: true,
+          fields,
+          link: whatsapp,
+        };
+      }
       return {
         platform,
-        enabled: (node as { enabled?: unknown }).enabled !== false,
+        enabled: node.enabled !== false,
         // A node with nothing but `enabled` is a platform somebody turned on and never
         // told how to sign in; saying it is configured would be a lie the agent finds out.
         configured: fields.some((field) => field.value !== null && field.value !== ''),
         exclusive: (EXCLUSIVE as readonly string[]).includes(platform),
         fields,
+        link: null,
       };
     })
     .sort((a, b) => a.platform.localeCompare(b.platform));
+}
+
+/**
+ * The channels a messaging gateway would actually serve in this profile: switched on and
+ * able to sign in. A profile with none needs no gateway, and one is not started for it
+ * (each is a Python process of about 200 MB).
+ */
+export function activeChannels(home: string): string[] {
+  try {
+    return listChannels(home)
+      .filter((channel) => channel.enabled && channel.configured)
+      .map((channel) => channel.platform);
+  } catch {
+    // A config.yaml nobody can parse is one Hermes cannot read either.
+    return [];
+  }
+}
+
+/**
+ * Whether Hermes will start WhatsApp, by its own rule (`gateway/config_env.py` §_whatsapp):
+ * `WHATSAPP_ENABLED=false` turns it off whatever the file says; `WHATSAPP_ENABLED=true` turns
+ * it on unless the file says `enabled: false`; without the variable the file decides, and a
+ * node that does not say `enabled: true` is off (`PlatformConfig.enabled` defaults to false).
+ */
+function whatsappEnabled(node: Record<string, unknown>, flag: string | undefined): boolean {
+  const raw = (flag ?? '').trim().toLowerCase();
+  if (['false', '0', 'no'].includes(raw)) return false;
+  if (['true', '1', 'yes', 'on'].includes(raw)) return node.enabled !== false;
+  return node.enabled === true;
+}
+
+// ------------------------------------------------------------------ WhatsApp session
+
+/**
+ * The folder Hermes keeps a profile's WhatsApp session in (`hermes_constants.get_hermes_dir
+ * ("platforms/whatsapp/session", "whatsapp/session")`): the old `whatsapp/session` while it
+ * still holds anything, else `platforms/whatsapp/session`.
+ */
+export function whatsappSessionDir(home: string): string {
+  const legacy = path.join(home, 'whatsapp', 'session');
+  return hasContent(legacy) ? legacy : path.join(home, 'platforms', 'whatsapp', 'session');
+}
+
+function hasContent(target: string): boolean {
+  try {
+    const info = statSync(target);
+    return info.isDirectory() ? readdirSync(target).length > 0 : true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether a phone is linked in this profile, and whose, from the session's `creds.json` — the
+ * same reading Hermes's onboarding does (`_whatsapp_linked_account_from_session`): the account
+ * is under `me` (or `account`), its id is `id`/`jid`/`lid`, its name the first of `name`,
+ * `verifiedName`, `notify`, `pushName`, and the phone is the digits before `@` and `:`.
+ */
+export function whatsappLink(home: string): ChannelLink {
+  const file = path.join(whatsappSessionDir(home), 'creds.json');
+  if (!existsSync(file)) {
+    return { linked: false, accountId: null, accountName: null, accountPhone: null };
+  }
+  let payload: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as unknown;
+    if (parsed && typeof parsed === 'object') payload = parsed as Record<string, unknown>;
+  } catch {
+    // A session file the bridge is halfway through writing is still a linked session.
+  }
+  const candidates = [payload.me, payload.account, payload];
+  const first = (keys: readonly string[]): string | null => {
+    for (const candidate of candidates) {
+      if (!candidate || typeof candidate !== 'object') continue;
+      for (const key of keys) {
+        const value = (candidate as Record<string, unknown>)[key];
+        const text = value === null || value === undefined ? '' : String(value).trim();
+        if (text) return text;
+      }
+    }
+    return null;
+  };
+  const accountId = first(['id', 'jid', 'lid']);
+  const digits = accountId ? accountId.split('@')[0]!.split(':')[0]!.replace(/\D+/g, '') : '';
+  return {
+    linked: true,
+    accountId,
+    accountName: first(['name', 'verifiedName', 'notify', 'pushName']),
+    accountPhone: digits || null,
+  };
+}
+
+// ------------------------------------------------------------------ .env
+
+/**
+ * The profile's `.env`, read the way python-dotenv reads it for the lines Hermes writes:
+ * `KEY=value`, an optional `export `, quotes stripped. Comments and blank lines skipped.
+ */
+export function readEnv(home: string): Record<string, string> {
+  const file = path.join(home, '.env');
+  const out: Record<string, string> = {};
+  let text = '';
+  try {
+    text = readFileSync(file, 'utf8');
+  } catch {
+    return out;
+  }
+  for (const line of text.split(/\r?\n/)) {
+    const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+    if (!match) continue;
+    let value = match[2]!.trim();
+    if (
+      value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'")))
+    ) {
+      value = value.slice(1, -1);
+    }
+    out[match[1]!] = value;
+  }
+  return out;
+}
+
+/**
+ * Sets one variable of the profile's `.env` (or removes it, for `null`), every other line
+ * as it was. Written to a temporary file and renamed, mode 0600, the way Hermes writes it.
+ */
+export function writeEnvValue(home: string, key: string, value: string | null): void {
+  const file = path.join(home, '.env');
+  const existing = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  const pattern = new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=`);
+  const lines = existing === '' ? [] : existing.replace(/\n$/, '').split('\n');
+  let found = false;
+  const next: string[] = [];
+  for (const line of lines) {
+    if (!pattern.test(line)) {
+      next.push(line);
+      continue;
+    }
+    if (found || value === null) continue;
+    found = true;
+    next.push(`${key}=${value}`);
+  }
+  if (!found && value !== null) next.push(`${key}=${value}`);
+  const text = next.length > 0 ? `${next.join('\n')}\n` : '';
+  if (text === existing) return;
+  mkdirSync(home, { recursive: true });
+  const temp = `${file}.majlis-${process.pid}.tmp`;
+  writeFileSync(temp, text, { mode: 0o600 });
+  chmodSync(temp, 0o600);
+  renameSync(temp, file);
 }
 
 export function getChannel(home: string, platform: string): Channel | null {
@@ -205,6 +404,12 @@ export function putChannel(home: string, platform: string, input: ChannelWrite):
   if (input.enabled !== undefined) doc.setIn([BLOCK, platform, 'enabled'], input.enabled);
 
   save(home, doc);
+  // WhatsApp's switch has a second half in `.env`, and `WHATSAPP_ENABLED=false` there beats
+  // the file (`whatsappEnabled`). Switching it on here must not be silently undone by it.
+  if (platform === 'whatsapp' && input.enabled === true) {
+    const flag = (readEnv(home).WHATSAPP_ENABLED ?? '').trim().toLowerCase();
+    if (['false', '0', 'no'].includes(flag)) writeEnvValue(home, 'WHATSAPP_ENABLED', 'true');
+  }
   const written = getChannel(home, platform);
   if (!written) throw new ChannelError('channel_write_failed');
   return written;
@@ -237,4 +442,80 @@ export function clearChannel(home: string, platform: string): Channel {
   const written = getChannel(home, platform);
   if (!written) throw new ChannelError('channel_write_failed');
   return written;
+}
+
+/**
+ * Forget a linked WhatsApp in this profile: the session folder is deleted (the phone's
+ * identity lives there and nowhere else), the channel is switched off in both places Hermes
+ * reads (`platforms.whatsapp.enabled: false`, and `WHATSAPP_ENABLED` removed from `.env`).
+ * What the person tuned stays — the bridge port, the approved senders — so pairing again is
+ * pairing again and not setting up from scratch.
+ *
+ * The caller stops whatever gateway runs the bridge first: a bridge still running holds the
+ * session in memory and would write it back.
+ */
+export function unlinkWhatsApp(home: string): Channel {
+  for (const dir of [
+    path.join(home, 'whatsapp', 'session'),
+    path.join(home, 'platforms', 'whatsapp', 'session'),
+  ]) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  const doc = load(home);
+  ensureMap(doc, [BLOCK, 'whatsapp']);
+  doc.setIn([BLOCK, 'whatsapp', 'enabled'], false);
+  save(home, doc);
+  writeEnvValue(home, 'WHATSAPP_ENABLED', null);
+  const written = getChannel(home, 'whatsapp');
+  if (!written) throw new ChannelError('channel_write_failed');
+  return written;
+}
+
+// ------------------------------------------------------------------ bridge port
+
+/** Hermes's WhatsApp bridge listens here unless told otherwise (`adapter.py`, `bridge_port`). */
+export const WHATSAPP_BRIDGE_PORT = 3000;
+/** Where the hub finds a port for a second profile's bridge. */
+export const WHATSAPP_BRIDGE_PORTS = { first: 3001, last: 3999 } as const;
+
+/** The port a profile's WhatsApp bridge would listen on: `extra.bridge_port`, then `bridge_port`. */
+export function whatsappBridgePort(home: string): number {
+  let node: Record<string, unknown> | undefined;
+  try {
+    node = load(home).toJS()?.[BLOCK]?.whatsapp as Record<string, unknown> | undefined;
+  } catch {
+    return WHATSAPP_BRIDGE_PORT;
+  }
+  const extra = node?.extra as Record<string, unknown> | undefined;
+  const raw = (extra && typeof extra === 'object' ? extra.bridge_port : undefined) ?? node?.bridge_port;
+  const port = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN;
+  return Number.isInteger(port) && port > 0 && port < 65_536 ? port : WHATSAPP_BRIDGE_PORT;
+}
+
+/**
+ * Gives `home`'s WhatsApp bridge a port no other profile's bridge uses, and returns it.
+ *
+ * Two gateways side by side each start their own bridge, and Hermes's bridge takes port 3000
+ * unless told otherwise. On one port the second gateway either **adopts the first profile's
+ * bridge** — answering one profile's contacts from the other's phone — or kills it to take the
+ * port (`adapter.py` §_reuse_running_bridge, §_kill_port_process). So every profile but the
+ * default gets its own `platforms.whatsapp.bridge_port`, written once and kept; one somebody
+ * set by hand is kept as long as nobody else has it.
+ */
+export function ensureWhatsAppBridgePort(home: string, others: readonly string[]): number {
+  const taken = new Set(others.map((other) => whatsappBridgePort(other)));
+  taken.add(WHATSAPP_BRIDGE_PORT);
+  const current = whatsappBridgePort(home);
+  if (!taken.has(current)) return current;
+  for (let port = WHATSAPP_BRIDGE_PORTS.first; port <= WHATSAPP_BRIDGE_PORTS.last; port += 1) {
+    if (taken.has(port)) continue;
+    const doc = load(home);
+    ensureMap(doc, [BLOCK, 'whatsapp']);
+    const extra = doc.getIn([BLOCK, 'whatsapp', 'extra']);
+    if (isMap(extra) && extra.has('bridge_port')) doc.setIn([BLOCK, 'whatsapp', 'extra', 'bridge_port'], port);
+    else doc.setIn([BLOCK, 'whatsapp', 'bridge_port'], port);
+    save(home, doc);
+    return port;
+  }
+  throw new ChannelError('no_bridge_port_free');
 }

@@ -4920,13 +4920,28 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required: [items, gateway]
                 properties:
                   items:
                     type: array
                     items:
                       $ref: '#/components/schemas/Channel'
+                  gateway:
+                    description: >-
+                      The messaging gateway that serves this profile's channels, when the hub runs
+                      Hermes; null otherwise. `applies` says when a channel change takes effect:
+                      `now` in a named profile (the hub starts, restarts or stops that profile's
+                      gateway itself), `on_restart` in the default profile, whose gateway also
+                      carries the API server and waits for Hermes's Restart.
+                    oneOf:
+                      - $ref: '#/components/schemas/ChannelGateway'
+                      - type: 'null'
               example:
+                gateway:
+                  profile: default
+                  state: running
+                  applies: on_restart
+                  error: null
                 items:
                   - platform: telegram
                     label: Telegram
@@ -4936,6 +4951,7 @@ paths:
                     status: online
                     error: null
                     login: null
+                    link: null
                     fields:
                       - key: token
                         label:
@@ -5054,6 +5070,202 @@ paths:
                 $ref: '#/components/schemas/JobAccepted'
               example:
                 job_id: 01J8QK3ZR2W7M5N4P6T8V9X0JN
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /agents/{agent_id}/channels/{platform}/unlink:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/Platform'
+    post:
+      operationId: agents.unlinkChannel
+      tags: [agents]
+      summary: Unlink a device-paired channel (WhatsApp) from the selected profile (admin)
+      description: >-
+        Stops the messaging gateway that serves the profile, stops a bridge it left behind,
+        deletes the profile's WhatsApp session folder and switches the channel off
+        (`platforms.whatsapp.enabled: false`, `WHATSAPP_ENABLED` removed from `.env`); the
+        gateway starts again when another channel still needs it. Hermes and its bridge have no
+        logout, so the phone keeps listing the device under WhatsApp → Linked devices until it is
+        removed there. The bridge port and the approved senders stay. Only `whatsapp` pairs a
+        device: any other platform answers `409 state_invalid` with `details.reason =
+        unlink_not_supported`; a profile with nothing linked answers `409` with
+        `details.reason = not_linked`.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: Unlinked; the channel as it now reads.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Channel'
+              example:
+                platform: whatsapp
+                label: whatsapp
+                enabled: false
+                configured: false
+                exclusive: true
+                status: offline
+                error: null
+                login: qr
+                link:
+                  linked: false
+                  account_id: null
+                  account_name: null
+                  account_phone: null
+                fields: []
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  # ---------------------------------------------------------------- pairing (who may message the agent)
+  /agents/{agent_id}/pairing:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+    get:
+      operationId: agents.listPairing
+      tags: [agents]
+      summary: Senders waiting for approval, and the approved ones, in the selected profile (admin)
+      description: >-
+        Hermes's pairing in the profile (`GET /api/pairing?profile=`, ADR 0015). A channel linked
+        with the `pairing` policy answers a new sender with a pairing code and waits for an
+        approval here; codes are never listed, only request ids. A request expires after an hour.
+        Needs a Hermes the hub supervises (`409` with `details.reason = hermes_not_supervised`
+        otherwise); Hermes's refusal comes back in its words.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: Pending requests (newest first) and approved senders.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PairingList'
+              example:
+                pending:
+                  - platform: whatsapp
+                    request_id: 3f9a1c0e7b2d4a55
+                    user_id: '966500000001@s.whatsapp.net'
+                    user_name: 'سارة'
+                    requested_at: '2026-09-24T10:02:00Z'
+                approved:
+                  - platform: whatsapp
+                    user_id: '966500000002@s.whatsapp.net'
+                    user_name: 'خالد'
+                    approved_at: '2026-09-23T18:40:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /agents/{agent_id}/pairing/{platform}/requests/{request_id}/approve:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/Platform'
+      - $ref: '#/components/parameters/PairingRequestId'
+    post:
+      operationId: agents.approvePairing
+      tags: [agents]
+      summary: Approve a sender waiting for approval (admin)
+      description: >-
+        Hermes's `POST /api/pairing/approve` in the profile. From now on the sender may talk to
+        the agent on that platform. A request that expired or was already answered is `404`.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: Approved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PairedSender'
+              example:
+                platform: whatsapp
+                user_id: '966500000001@s.whatsapp.net'
+                user_name: 'سارة'
+                approved_at: '2026-09-24T10:05:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /agents/{agent_id}/pairing/{platform}/requests/{request_id}:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/Platform'
+      - $ref: '#/components/parameters/PairingRequestId'
+    delete:
+      operationId: agents.denyPairing
+      tags: [agents]
+      summary: Turn one waiting sender down (admin)
+      description: >-
+        Removes that one request from the profile's pending list. Hermes has no verb for a single
+        request (only one that clears every platform's), so the hub removes it from Hermes's own
+        pending file. The sender is not told; Hermes lets them ask again after its ten-minute
+        rate limit.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '204':
+          description: Denied.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /agents/{agent_id}/pairing/{platform}/approved/{user_id}:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/Platform'
+      - $ref: '#/components/parameters/PairedUserId'
+    delete:
+      operationId: agents.revokePairing
+      tags: [agents]
+      summary: Revoke an approved sender (admin)
+      description: >-
+        Hermes's `POST /api/pairing/revoke` in the profile. The sender's next message is a new
+        pairing request. One that is not approved is `404`.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '204':
+          description: Revoked.
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -11724,6 +11936,25 @@ components:
       schema:
         type: string
         pattern: '^[A-Za-z0-9._-]{1,60}$'
+    PairingRequestId:
+      name: request_id
+      in: path
+      required: true
+      description: Hermes's id of a pending pairing request (16 hex characters), as `agents.listPairing` lists it.
+      schema:
+        type: string
+        pattern: '^[0-9A-Fa-f]{16}$'
+        example: 3f9a1c0e7b2d4a55
+    PairedUserId:
+      name: user_id
+      in: path
+      required: true
+      description: The platform's id of an approved sender, as `agents.listPairing` lists it (URL-encoded).
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 200
+        example: '966500000002@s.whatsapp.net'
     Platform:
       name: platform
       in: path
@@ -13880,6 +14111,14 @@ components:
           type: [string, 'null']
         error:
           type: [string, 'null']
+        gateways:
+          description: >-
+            Hermes only, where the hub runs it: every messaging gateway — the default profile's
+            and one per named profile with a channel switched on and linked. `agents.restart`
+            restarts all of them.
+          type: array
+          items:
+            $ref: '#/components/schemas/MessagingGateway'
     Agent:
       allOf:
         - $ref: '#/components/schemas/Scoped'
@@ -14414,7 +14653,7 @@ components:
           type: [string, 'null']
     Channel:
       type: object
-      required: [platform, label, enabled, configured, exclusive, status, error, login, fields]
+      required: [platform, label, enabled, configured, exclusive, status, error, login, link, fields]
       properties:
         platform:
           type: string
@@ -14436,10 +14675,112 @@ components:
           type: [string, 'null']
           enum: [qr, null]
           description: Set when the platform pairs interactively via `/login` instead of fields.
+        link:
+          description: >-
+            For a platform that pairs a device (WhatsApp): whether this profile holds a session
+            and whose, read from the profile's session folder. Null for every other platform.
+            For WhatsApp `configured` is `link.linked`.
+          oneOf:
+            - $ref: '#/components/schemas/ChannelLink'
+            - type: 'null'
         fields:
           type: array
           items:
             $ref: '#/components/schemas/ChannelField'
+    ChannelLink:
+      type: object
+      required: [linked, account_id, account_name, account_phone]
+      properties:
+        linked:
+          type: boolean
+        account_id:
+          type: [string, 'null']
+        account_name:
+          type: [string, 'null']
+        account_phone:
+          type: [string, 'null']
+          description: Digits only, as WhatsApp names the account.
+    ChannelGateway:
+      type: object
+      required: [profile, state, applies, error]
+      properties:
+        profile:
+          type: string
+          description: Hermes's profile name (`default` for the default profile).
+        state:
+          type: string
+          enum: [running, starting, stopped, error]
+          description: >-
+            `stopped` in a named profile means no channel there is switched on and linked, so no
+            gateway runs for it.
+        applies:
+          type: string
+          enum: [now, on_restart]
+        error:
+          type: [string, 'null']
+    MessagingGateway:
+      type: object
+      required: [profile, state, pid, restarts, started_at, error, channels]
+      properties:
+        profile:
+          type: string
+        state:
+          type: string
+          enum: [running, starting, stopped, error]
+        pid:
+          type: [integer, 'null']
+        restarts:
+          type: integer
+          minimum: 0
+        started_at:
+          type: [string, 'null']
+          format: date-time
+        error:
+          type: [string, 'null']
+        channels:
+          type: array
+          items:
+            type: string
+    PairingRequest:
+      type: object
+      required: [platform, request_id, user_id, user_name, requested_at]
+      properties:
+        platform:
+          type: string
+        request_id:
+          type: string
+        user_id:
+          type: string
+        user_name:
+          type: [string, 'null']
+        requested_at:
+          type: string
+          format: date-time
+    PairedSender:
+      type: object
+      required: [platform, user_id, user_name, approved_at]
+      properties:
+        platform:
+          type: string
+        user_id:
+          type: string
+        user_name:
+          type: [string, 'null']
+        approved_at:
+          type: [string, 'null']
+          format: date-time
+    PairingList:
+      type: object
+      required: [pending, approved]
+      properties:
+        pending:
+          type: array
+          items:
+            $ref: '#/components/schemas/PairingRequest'
+        approved:
+          type: array
+          items:
+            $ref: '#/components/schemas/PairedSender'
     ChannelWrite:
       type: object
       properties:

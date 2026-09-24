@@ -78,6 +78,14 @@ export interface AgentModelsPort {
    * row and never sees a key (ADR 0010) — it names what to run and reads what comes out.
    */
   directChat(workspace: string, request: DirectChatRequest): AsyncIterable<DirectChatEvent>;
+  /**
+   * A messaging gateway is about to start for the Hermes profile `profile` (`default` is the
+   * root home): write the hub's endpoints and that profile's model into its `config.yaml` at
+   * `home`, so the gateway resolves the providers a chat in the same profile does. A gateway
+   * reads `model.provider` from its own profile's file; a block missing there is Hermes's
+   * "Unknown provider" (the defect of 2026-09-24). Never throws.
+   */
+  prepareGatewayProfile?(profile: string, home: string): void;
 }
 
 // ------------------------------------------------- the direct path (ADOPTION §2.15)

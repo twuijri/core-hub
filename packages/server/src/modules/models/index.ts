@@ -269,6 +269,21 @@ export const modelsModule = defineModule({
       directChat(workspace, request) {
         return contextOf(app).chat(workspace, request);
       },
+      // A messaging gateway about to start (`agents/hermes-gateways.ts`): its Hermes profile is
+      // the workspace of the same slug, and `default` is the hub's default workspace (ADR 0014).
+      prepareGatewayProfile(profile, home) {
+        const db = requireSqlite(app.hub.database);
+        const owner = ownerUser(db);
+        if (!owner) return;
+        const row = listWorkspacesFor(db, owner).find((candidate) =>
+          profile === 'default' ? candidate.isDefault : !candidate.isDefault && candidate.slug === profile,
+        );
+        if (!row) return;
+        contextOf(app).prepareGateway(
+          { id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault },
+          home,
+        );
+      },
     };
     registerAgentModelsPort(app.hub.io, port);
 

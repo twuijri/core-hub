@@ -52,6 +52,7 @@ export interface ContractAgent {
     state: 'running' | 'stopped' | 'starting' | 'error' | 'not_applicable';
     url: string | null;
     error: string | null;
+    gateways?: MessagingGatewayView[];
   };
   capabilities: string[];
   sections: string[];
@@ -77,11 +78,23 @@ export function agentStatus(row: AgentRow, enabled: boolean): ContractAgentStatu
   return 'available';
 }
 
+/** One messaging gateway on Hermes's card (the contract's `MessagingGateway`). */
+export interface MessagingGatewayView {
+  profile: string;
+  state: 'running' | 'starting' | 'stopped' | 'error';
+  pid: number | null;
+  restarts: number;
+  started_at: string | null;
+  error: string | null;
+  channels: string[];
+}
+
 /** The runtime block, kept out of the row so an unreachable gateway is not a broken agent. */
 export interface RuntimeState {
   state: ContractAgent['runtime']['state'];
   url: string | null;
   error: string | null;
+  gateways?: MessagingGatewayView[];
 }
 
 export function serializeAgent(

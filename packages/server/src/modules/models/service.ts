@@ -52,6 +52,7 @@ import {
   hermesEnvPlan,
   writeHermesConfiguration,
   writeHermesProviders,
+  writeHermesRoute,
   type HermesModelChoice,
   type HermesProviderRoute,
   type PropagationState,
@@ -1697,6 +1698,39 @@ export class ModelsService {
       data: { changed, removed },
     });
     this.scheduleRestart();
+  }
+
+  /**
+   * Makes a Hermes profile's `config.yaml` ready for its messaging gateway: the endpoints and
+   * the model `workspace` resolves to, written right before the gateway starts.
+   *
+   * A chat names its provider and model on every turn, so a profile whose `config.yaml` lags
+   * behind still chats; a gateway answering WhatsApp names nothing and reads `model.provider`
+   * from its own profile's file. When that names a `providers:` block the file does not have,
+   * Hermes answers the sender "Provider authentication failed" (`Unknown provider …`, the
+   * defect of 2026-09-24). Writing the same route the chat path uses, at the moment the
+   * gateway reads it, makes the two agree. Never throws: a gateway still starts on what is
+   * there, and the log says why.
+   */
+  prepareGateway(workspace: WorkspaceScope, home: string): void {
+    try {
+      const written = writeHermesRoute(home, this.state(workspace.id));
+      if (written.dirty) {
+        this.options.log.info(
+          {
+            profile: path.basename(home),
+            changed: written.changed,
+            removed: written.removed,
+          },
+          'models: a messaging gateway was given its profile providers and model',
+        );
+      }
+    } catch (error) {
+      this.options.log.warn(
+        { err: error, home },
+        'models: could not write the providers of a messaging gateway; it starts on what is there',
+      );
+    }
   }
 
   /**

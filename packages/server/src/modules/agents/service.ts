@@ -75,6 +75,11 @@ export interface AgentsServiceOptions {
    * then). Filled from `auth` at composition; absent in a hub composed without it.
    */
   profileOf?: (workspaceId: string) => string | null;
+  /**
+   * Hermes's messaging gateways, for its card (`AgentRuntime.gateways`). Absent, or empty,
+   * where the hub does not run Hermes.
+   */
+  gateways?: () => NonNullable<RuntimeState['gateways']>;
   catalog?: readonly CatalogEntry[];
   language?: Language;
   now?: () => Date;
@@ -807,6 +812,14 @@ export class AgentsService {
     this.runtimes.set(row.id, runtime);
   }
 
+  /** The runtime block of a row; Hermes's carries its messaging gateways when the hub runs them. */
+  private runtimeOf(row: AgentRow): RuntimeState {
+    const runtime = this.runtimes.get(row.id) ?? NOT_APPLICABLE;
+    if (row.adapterKind !== 'hermes' || !this.options.gateways) return runtime;
+    const gateways = this.options.gateways();
+    return gateways.length > 0 ? { ...runtime, gateways } : runtime;
+  }
+
   /** Re-run the adapter probe for one catalog entry (after the runtime came up). */
   async reprobe(slug: string): Promise<void> {
     const row = this.db.select().from(agents).where(eq(agents.slug, slug)).get();
@@ -824,7 +837,7 @@ export class AgentsService {
     return serializeAgent(row, {
       profile: scope.slug,
       settings,
-      runtime: this.runtimes.get(row.id) ?? NOT_APPLICABLE,
+      runtime: this.runtimeOf(row),
       defaultModel: this.defaultModelOf(row, scope.id),
       name: this.displayName(row, language),
     });

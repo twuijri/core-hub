@@ -249,6 +249,19 @@ export function writeHermesConfiguration(home: string, state: PropagationState):
   return { env, config, dirty: env.dirty || config.dirty };
 }
 
+/**
+ * The endpoints and the model selection alone, in one write of `config.yaml` — what a
+ * messaging gateway reads to know which provider answers (`gateway/run.py`
+ * §_resolve_runtime_agent_kwargs resolves `model.provider` against the `providers:` blocks of
+ * **its own** profile). No `.env`: keys reach every gateway through its environment.
+ */
+export function writeHermesRoute(home: string, state: PropagationState): HermesWriteResult {
+  return editHermesConfig(home, (document, result) => {
+    applyProviders(document, state.hermesProviders, result);
+    applyModel(document, state.hermesModel, result);
+  });
+}
+
 // ---------------------------------------------------------------- config.yaml
 
 /**
