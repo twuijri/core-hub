@@ -243,7 +243,7 @@ export async function runExport(
 
     handle.progress(60, t('auth.profile_export_checking', language));
     const at = now();
-    const fileName = `${profile.slug}-${stampOf(at)}.tar.gz`;
+    const fileName = `${archiveStemOf(profile)}-${stampOf(at)}.tar.gz`;
     const checked = path.join(staging, fileName);
     // With providers (§37): this profile's own and the shared ones it uses, keys in the
     // clear, in one file of its own. Every other file is still checked as before — the keys
@@ -301,6 +301,22 @@ export async function runExport(
   } finally {
     await rm(staging, { recursive: true, force: true });
   }
+}
+
+/**
+ * The archive's file name starts with the profile's name as people see it — `الرئيسي`, not
+ * `default` — cleaned of what a file name cannot carry; the id when nothing is left. The
+ * import dialog reads a name and an id suggestion back from it.
+ */
+export function archiveStemOf(profile: Pick<WorkspaceRow, 'name' | 'slug'>): string {
+  const stem = profile.name
+    .normalize('NFC')
+    // Path separators, characters Windows refuses, control and direction marks.
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069/\\:*?"<>|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s.]+|[\s.]+$/g, '');
+  return stem || profile.slug;
 }
 
 export interface ImportRequest {

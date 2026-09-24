@@ -19,6 +19,7 @@ import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import { agentRoute, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
+import { useProfileName } from '../shell/profiles.js';
 import type { Agent, Job } from '../types.js';
 import {
   Avatar,
@@ -64,6 +65,12 @@ const STATUS_TONE: Record<Agent['status'], BadgeTone> = {
   disabled: 'neutral',
 };
 
+/** A gateway is named after its profile: the name it was given, else what Hermes calls it. */
+function gatewayLabel(profile: string, nameOf: (slug: string) => string, t: Translator): string {
+  const name = nameOf(profile);
+  return name === 'default' ? t('agents.gateways.default') : name;
+}
+
 export function AgentManagerScreen() {
   const { t } = useI18n();
   const agents = useAgents();
@@ -96,6 +103,7 @@ export function AgentManagerScreen() {
 
 function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> }) {
   const { t } = useI18n();
+  const nameOf = useProfileName();
   const { client, user, profile } = useAuth();
   const queryClient = useQueryClient();
   const [jobId, setJobId] = useState<string | null>(null);
@@ -160,7 +168,9 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
                 data-state={gateway.state}
               >
                 <span className="font-medium" dir="auto">
-                  {gateway.profile === 'default' ? t('agents.gateways.default') : gateway.profile}
+                  {/* The name people gave the profile (decision §44); Hermes's id until the
+                      list of profiles has answered. */}
+                  {gatewayLabel(gateway.profile, nameOf, t)}
                 </span>
                 <Badge tone={GATEWAY_TONE[gateway.state] ?? 'neutral'}>
                   {t(`agents.gateways.state.${gateway.state}`)}

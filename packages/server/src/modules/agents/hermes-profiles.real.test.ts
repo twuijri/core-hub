@@ -1,7 +1,7 @@
 /**
  * Hermes's profiles with **the real Hermes** from the image (ADR 0014): `hermes profile
- * create` from scratch and as a copy, a refusal in Hermes's words, and the listing that
- * reads what Hermes wrote. Name the image to run it; without one it is skipped:
+ * create` from scratch and as a copy, a refusal in Hermes's words, the listing that reads
+ * what Hermes wrote, and display names (contract decision §44) that Hermes itself shows. Name the image to run it; without one it is skipped:
  *
  *   COREHUB_HERMES_IMAGE=ghcr.io/twuijri/core-hub:latest pnpm --filter @corehub/server test
  */
@@ -65,5 +65,56 @@ describe.skipIf(!image)('Hermes profiles (real Hermes; set COREHUB_HERMES_IMAGE 
     expect(String((refusal as Error).message)).toMatch(/design/);
 
     expect(await profiles.list()).toEqual(['design', 'worker']);
+  }, 300_000);
+
+  it('names default and a named profile the way Hermes shows them, ids and folders unmoved', async () => {
+    const profiles = createHermesProfiles({ home, run });
+    // A description Hermes keeps beside the display name, set by Hermes itself.
+    const described = await run(['profile', 'describe', 'design', '--text', 'Designs screens']);
+    expect(described.code).toBe(0);
+    // The container's user wrote the folder; the hub writes into it as Hermes's user does.
+    const opened = await new Promise<number>((resolve) =>
+      execFile(
+        'docker',
+        [
+          'run',
+          '--rm',
+          '-v',
+          `${home}:/hh`,
+          '--entrypoint',
+          'chmod',
+          image!,
+          '-R',
+          'a+rwX',
+          '/hh/profiles',
+        ],
+        (error) => resolve(error ? 1 : 0),
+      ),
+    );
+    expect(opened).toBe(0);
+
+    await profiles.setDisplayName('default', 'الرئيسي');
+    await profiles.setDisplayName('design', 'فريق التصميم');
+
+    const main = await run(['profile', 'show', 'default']);
+    expect(main.stdout).toContain('Profile: الرئيسي (default)');
+    const design = await run(['profile', 'show', 'design']);
+    expect(design.stdout).toContain('Profile: فريق التصميم (design)');
+    const description = await run(['profile', 'describe', 'design']);
+    expect(description.stdout).toContain('Designs screens');
+    // Nothing moved: the same ids, the same folders.
+    expect(await profiles.list()).toEqual(['design', 'worker']);
+    expect(existsSync(path.join(home, 'profiles', 'design', 'SOUL.md'))).toBe(true);
+
+    // Named back to its id, Hermes shows the bare id again.
+    await profiles.setDisplayName('design', '');
+    expect((await run(['profile', 'show', 'design'])).stdout).toContain('Profile: design\n');
+    // Hermes's own limit comes back in Hermes's words.
+    await expect(
+      profiles.setDisplayName('default', '-starts with a dash'),
+    ).resolves.toBeUndefined();
+    expect((await run(['profile', 'show', 'default'])).stdout).toContain(
+      'Profile: -starts with a dash (default)',
+    );
   }, 300_000);
 });

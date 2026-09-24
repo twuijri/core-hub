@@ -12,10 +12,26 @@
  * memory, sessions or messaging channels — Hermes's choice), and a blank one is Hermes's
  * fresh profile with its bundled skills. `--no-alias`: the hub never uses the wrapper
  * scripts, and a container has no PATH entry for them.
+ *
+ * A display name is Hermes's too (`hermes_cli/profiles.py`, `set_profile_display_name`): a
+ * presentation-only `display_name` in the profile's `profile.yaml`, at most 64 characters,
+ * that Hermes shows beside the id (`hermes profile list`, `show`) and never uses to find the
+ * profile. For `default` the hub runs `hermes profile rename default <name>`, which is
+ * exactly that write — the id stays `default`. For a named profile Hermes's `rename` moves
+ * the folder (and stops its gateway, rewrites its alias and Honcho host), so the hub writes
+ * the same key itself and the folder stays where every channel, schedule and chat expects it.
  */
 import { execFile } from 'node:child_process';
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
+import { isMap, parseDocument } from 'yaml';
 
 /** Hermes's `_PROFILE_ID_RE`. */
 const PROFILE_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
@@ -27,12 +43,17 @@ export type ProfileRunner = (
 
 export class HermesProfileError extends Error {}
 
+/** Hermes's limit on a display name (`set_profile_display_name`). */
+export const DISPLAY_NAME_MAX = 64;
+
 export interface HermesProfiles {
   list(): Promise<string[]>;
   create(
     name: string,
     origin: { kind: 'blank' } | { kind: 'clone'; source: string },
   ): Promise<void>;
+  /** Sets (or, with `''`, clears) the profile's display name; the id and folder stay. */
+  setDisplayName(name: string, displayName: string): Promise<void>;
 }
 
 export function createHermesProfiles(options: {
@@ -54,7 +75,59 @@ export function createHermesProfiles(options: {
         );
       }
     },
+
+    async setDisplayName(name, displayName) {
+      const cleaned = displayName.trim();
+      if (cleaned.length > DISPLAY_NAME_MAX) {
+        throw new HermesProfileError(
+          `Display name too long (${cleaned.length} chars, max ${DISPLAY_NAME_MAX}).`,
+        );
+      }
+      if (name === 'default') {
+        // Hermes's own command. `--` so a name that starts with a dash stays a name.
+        const result = await options.run(['profile', 'rename', '--', 'default', cleaned]);
+        if (result.code !== 0) {
+          throw new HermesProfileError(
+            lastLine(result.stderr) || lastLine(result.stdout) || `exit ${result.code}`,
+          );
+        }
+        return;
+      }
+      const dir = path.join(options.home, 'profiles', name);
+      if (!PROFILE_ID.test(name) || !isDirectory(dir)) {
+        throw new HermesProfileError(`Profile '${name}' does not exist.`);
+      }
+      writeDisplayName(dir, cleaned);
+    },
   };
+}
+
+/**
+ * `write_profile_meta(dir, display_name=…)` in our words: only `display_name` changes, every
+ * other key (the description the kanban decomposer reads) stays, an empty name removes the
+ * key, and the file is replaced in one rename so a crash never leaves half a file.
+ */
+export function writeDisplayName(profileDir: string, displayName: string): void {
+  const file = path.join(profileDir, 'profile.yaml');
+  // Nothing to clear in a profile that has no metadata yet.
+  if (!displayName && !existsSync(file)) return;
+  let doc = parseDocument('{}');
+  if (existsSync(file)) {
+    const read = parseDocument(readFileSync(file, 'utf8'));
+    // Hermes reads a file that is not a mapping as empty, and so does this.
+    if (read.errors.length === 0 && isMap(read.contents)) doc = read;
+  }
+  if (displayName) doc.set('display_name', displayName);
+  else doc.delete('display_name');
+  const staging = path.join(profileDir, `.profile.yaml.${process.pid}.tmp`);
+  try {
+    writeFileSync(staging, doc.toString(), 'utf8');
+    renameSync(staging, file);
+  } catch (error) {
+    throw new HermesProfileError(
+      `Could not write ${file}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 /**

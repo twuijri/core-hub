@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -61,6 +61,78 @@ describe("Hermes's profiles", () => {
     };
     await expect(profiles.create('worker', { kind: 'blank' })).rejects.toThrow(
       new HermesProfileError("Error: Profile 'worker' already exists"),
+    );
+  });
+});
+
+describe("Hermes's display names", () => {
+  it('names the default profile with `hermes profile rename default`, which keeps its id', async () => {
+    home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-'));
+    const calls: string[][] = [];
+    let answer = { code: 0, stdout: '✓ Display name set: الرئيسي', stderr: '' };
+    const profiles = createHermesProfiles({
+      home,
+      run: async (argv) => {
+        calls.push([...argv]);
+        return answer;
+      },
+    });
+    await profiles.setDisplayName('default', ' الرئيسي ');
+    await profiles.setDisplayName('default', '-dash first');
+    expect(calls).toEqual([
+      ['profile', 'rename', '--', 'default', 'الرئيسي'],
+      ['profile', 'rename', '--', 'default', '-dash first'],
+    ]);
+
+    answer = { code: 1, stdout: '', stderr: 'Error: Display name cannot be empty.\n' };
+    await expect(profiles.setDisplayName('default', 'x')).rejects.toThrow(
+      new HermesProfileError('Error: Display name cannot be empty.'),
+    );
+  });
+
+  it("writes a named profile's `display_name` in its profile.yaml, and never moves it", async () => {
+    home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-'));
+    const dir = path.join(home, 'profiles', 'design');
+    mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'profile.yaml');
+    writeFileSync(file, 'description: Designs the screens\ndescription_auto: false\n');
+    const calls: string[][] = [];
+    const profiles = createHermesProfiles({
+      home,
+      run: async (argv) => {
+        calls.push([...argv]);
+        return { code: 0, stdout: '', stderr: '' };
+      },
+    });
+
+    await profiles.setDisplayName('design', 'فريق التصميم');
+    // Hermes's other keys stay; only the display name is added.
+    expect(readFileSync(file, 'utf8')).toBe(
+      'description: Designs the screens\ndescription_auto: false\ndisplay_name: فريق التصميم\n',
+    );
+    await profiles.setDisplayName('design', 'Design Team');
+    expect(readFileSync(file, 'utf8')).toContain('display_name: Design Team\n');
+    // Empty clears it, as in Hermes.
+    await profiles.setDisplayName('design', '');
+    expect(readFileSync(file, 'utf8')).toBe(
+      'description: Designs the screens\ndescription_auto: false\n',
+    );
+    // No Hermes command ran: `hermes profile rename` would have moved the folder.
+    expect(calls).toEqual([]);
+    expect(existsSync(dir)).toBe(true);
+  });
+
+  it('creates no metadata to clear, and refuses a missing profile or a name over 64', async () => {
+    home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-'));
+    mkdirSync(path.join(home, 'profiles', 'fresh'), { recursive: true });
+    const profiles = createHermesProfiles({ home, run: idle });
+    await profiles.setDisplayName('fresh', '');
+    expect(existsSync(path.join(home, 'profiles', 'fresh', 'profile.yaml'))).toBe(false);
+    await expect(profiles.setDisplayName('gone', 'X')).rejects.toThrow(
+      new HermesProfileError("Profile 'gone' does not exist."),
+    );
+    await expect(profiles.setDisplayName('fresh', 'x'.repeat(65))).rejects.toThrow(
+      new HermesProfileError('Display name too long (65 chars, max 64).'),
     );
   });
 });
