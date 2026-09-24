@@ -270,6 +270,15 @@ export async function createUser(
   input: UserCreateInput,
   now: number,
 ): Promise<UserRow> {
+  // A member enters only what they are given, so a member is not created with nothing to
+  // enter: the list is required and explicit (owner, 2026-09-24). Owners and admins enter
+  // every workspace and need none.
+  if (input.role === 'member' && (input.profiles ?? []).length === 0) {
+    throw new HubError('validation_failed', {
+      messageKey: 'auth.member_needs_profile',
+      details: { field: 'profiles' },
+    });
+  }
   if (findUserByUsername(db, input.username)) {
     throw new HubError('conflict', { messageKey: 'auth.username_taken' });
   }
@@ -330,6 +339,19 @@ export async function updateUserAsAdmin(
   }
   if (target.id === actorId && input.status === 'disabled') {
     throw new HubError('forbidden', { messageKey: 'auth.self_immutable' });
+  }
+  // Making an admin a member decides, in the same request, what the member may enter: an
+  // admin holds no list (they enter everything), so a bare `{ role: 'member' }` would leave
+  // them with none — or, before 2026-09-24, with every profile implicitly.
+  if (
+    input.role === 'member' &&
+    target.role !== 'member' &&
+    (input.profiles === undefined || input.profiles.length === 0)
+  ) {
+    throw new HubError('validation_failed', {
+      messageKey: 'auth.member_needs_profile',
+      details: { field: 'profiles' },
+    });
   }
   const workspaceIds = input.profiles ? resolveSlugs(db, input.profiles) : null;
   const passwordHash = input.password ? await hashPassword(input.password) : null;

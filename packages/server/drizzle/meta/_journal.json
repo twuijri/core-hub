@@ -71,6 +71,13 @@
       "when": 1790170366442,
       "tag": "0009_hermes_cron_link",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790209089401,
+      "tag": "0010_member_profiles_explicit",
+      "breakpoints": true
     }
   ]
 }
