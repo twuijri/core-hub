@@ -219,9 +219,9 @@ test.describe('the rebuilt screens', () => {
   }) => {
     await login(page);
 
-    // Agents: one card per agent, from the kit's Card / Avatar / Badge / Button.
-    await page.getByRole('link', { name: 'الإعدادات' }).first().click();
-    await page.getByRole('link', { name: 'الوكلاء' }).click();
+    // Agents: one card per agent, from the kit's Card / Avatar / Badge / Button. A rail
+    // entry above Tasks since 2026-09-24.
+    await page.getByTestId('rail').getByRole('link', { name: 'الوكلاء' }).click();
     await expect(page.getByTestId('agent-card').first()).toBeVisible();
     await expect(page.getByTestId('agent-card').first().locator('.mj-avatar')).toBeVisible();
     await expect(page.getByTestId('agent-card').first().locator('.mj-badge').first()).toBeVisible();
@@ -229,9 +229,10 @@ test.describe('the rebuilt screens', () => {
 
     // Settings: the side list — its three groups — and the Display switch. The list is on
     // every settings page, so there is no "back to Settings" to click at this width.
+    await page.getByRole('link', { name: 'الإعدادات' }).first().click();
     await page.getByTestId('settings-nav').getByRole('link', { name: 'الحساب' }).click();
     await expect(page.getByTestId('settings-tabs')).toBeVisible();
-    await expect(page.getByTestId('settings-management').getByRole('link')).toHaveCount(4);
+    await expect(page.getByTestId('settings-management').getByRole('link')).toHaveCount(3);
     await expect(page.getByTestId('settings-tools').getByRole('link')).toHaveCount(7);
     await shot(page, 'design-settings-ar-light');
     await page.getByRole('link', { name: 'العرض' }).click();
@@ -262,10 +263,11 @@ test.describe('the rebuilt screens', () => {
 
     // Dark, for the two screens that carry the most surface.
     await setDisplay(page, 'الإعدادات', 'العرض', 'theme-dark');
-    await page.getByRole('link', { name: 'الإعدادات' }).first().click();
-    await page.getByRole('link', { name: 'الوكلاء' }).click();
+    await leaveSettings(page);
+    await page.getByTestId('rail').getByRole('link', { name: 'الوكلاء' }).click();
     await expect(page.getByTestId('agent-card').first()).toBeVisible();
     await shot(page, 'design-agents-ar-dark');
+    await page.getByRole('link', { name: 'الإعدادات', exact: true }).first().click();
     await page.getByTestId('settings-nav').getByRole('link', { name: 'النماذج' }).click();
     // Wait for the screen itself, not for the click: the navigation is client-side and a
     // screenshot taken on the click would photograph the page it came from.
