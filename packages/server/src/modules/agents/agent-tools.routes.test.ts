@@ -154,7 +154,10 @@ describe('importing a skill pack', () => {
     });
     expect(first.statusCode, first.body).toBe(201);
     // The web removes the uploaded pack after the import (useImportSkills).
-    const removed = await authed(h, h.token, { method: 'DELETE', url: `/api/v1/attachments/${id}` });
+    const removed = await authed(h, h.token, {
+      method: 'DELETE',
+      url: `/api/v1/attachments/${id}`,
+    });
     expect(removed.statusCode).toBe(204);
     // The installed skill does not depend on it.
     expect(readFileSync(path.join(root, 'skills', 'pdf-notes', 'SKILL.md'), 'utf8')).toBe(SKILL);

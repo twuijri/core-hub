@@ -13,12 +13,12 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { migrationsFolder } from '../../app/db.js';
 import { createLogger } from '../../lib/logger.js';
 import { HubError } from '../../lib/errors.js';
 import { newUlid } from '../../db/ids.js';
@@ -28,6 +28,9 @@ import { contentDispositionOf, sanitiseFilename, sniffMime, storedKindOf } from 
 import { KnowledgeService, type AttachmentScope } from './service.js';
 import { toAttachment } from './serialize.js';
 import { UploadRegistry } from './uploads.js';
+
+/** `packages/server/drizzle`: a module may not import `app/`, so the path is spelt out. */
+const migrationsFolder = fileURLToPath(new URL('../../../drizzle', import.meta.url));
 
 const png = Buffer.concat([
   Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),

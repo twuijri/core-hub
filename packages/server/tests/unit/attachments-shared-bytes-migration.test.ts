@@ -65,7 +65,9 @@ describe(`migration ${TAG}`, () => {
     migrate(db, { migrationsFolder });
 
     const rows = sqlite
-      .prepare('SELECT id, workspace, filename, storage_key, deleted_at FROM attachments ORDER BY id')
+      .prepare(
+        'SELECT id, workspace, filename, storage_key, deleted_at FROM attachments ORDER BY id',
+      )
       .all() as {
       id: string;
       workspace: string;
