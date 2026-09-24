@@ -146,6 +146,13 @@ RUN /opt/hermes/.venv/bin/python -m ensurepip --default-pip >/dev/null \
 # catalog agents with `npm install --global --prefix` (modules/agents/installer.ts).
 FROM debian:bookworm-slim AS runtime
 ARG COREHUB_VERSION
+# Who this image is, for a registry or `docker inspect`. A release adds the tag and revision on
+# top (docker/metadata-action in .github/workflows/release.yml).
+LABEL org.opencontainers.image.title="Core Hub" \
+      org.opencontainers.image.description="Core Hub: a self-hosted hub for AI agents, with Hermes inside." \
+      org.opencontainers.image.source="https://github.com/twuijri/core-hub" \
+      org.opencontainers.image.url="https://github.com/twuijri/core-hub" \
+      org.opencontainers.image.version="${COREHUB_VERSION}"
 ENV COREHUB_VERSION=${COREHUB_VERSION} \
     NODE_ENV=production \
     DATA_DIR=/data \
