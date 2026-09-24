@@ -1016,6 +1016,13 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
         });
       }
     }
+    // Decoded before Hermes hears anything: a bad image is refused with nothing written.
+    const avatar =
+      body.avatar === undefined || body.avatar === null
+        ? null
+        : body.avatar.kind === 'image'
+          ? { kind: 'image' as const, avatar: decodeAvatarDataUrl(body.avatar.data_url) }
+          : { kind: 'generated' as const };
     if (mirror && body.name !== undefined) {
       // Hermes first, as when creating: a name Hermes refused is not the hub's either.
       try {
@@ -1041,16 +1048,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
               : null,
           }
         : {}),
-      ...(body.avatar !== undefined
-        ? {
-            avatar:
-              body.avatar === null
-                ? null
-                : body.avatar.kind === 'image'
-                  ? { kind: 'image' as const, avatar: decodeAvatarDataUrl(body.avatar.data_url) }
-                  : { kind: 'generated' as const },
-          }
-        : {}),
+      ...(body.avatar !== undefined ? { avatar } : {}),
     });
     audit(
       request,
