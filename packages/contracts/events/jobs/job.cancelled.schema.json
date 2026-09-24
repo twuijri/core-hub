@@ -221,7 +221,8 @@
         "device_request",
         "export",
         "schedule_run",
-        "workflow_run"
+        "workflow_run",
+        "import"
       ]
     },
     "JobProgress": {
@@ -278,7 +279,9 @@
             "device_request",
             "webhook",
             "approval",
-            "notice"
+            "notice",
+            "profile",
+            "attachment"
           ]
         },
         "id": {

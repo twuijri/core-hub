@@ -2,7 +2,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { HermesProfileError, createHermesProfiles, type ProfileRunner } from './hermes-profiles.js';
+import {
+  HermesProfileError,
+  PROFILE_ARCHIVE_TIMEOUT_MS,
+  createHermesProfileArchives,
+  createHermesProfiles,
+  type ProfileRunner,
+} from './hermes-profiles.js';
 
 let home: string;
 afterEach(() => rmSync(home, { recursive: true, force: true }));
@@ -56,5 +62,45 @@ describe("Hermes's profiles", () => {
     await expect(profiles.create('worker', { kind: 'blank' })).rejects.toThrow(
       new HermesProfileError("Error: Profile 'worker' already exists"),
     );
+  });
+});
+
+describe("Hermes's profile archives (dashboard API)", () => {
+  it('asks for an export at a path and an import under a name, with the long timeout', async () => {
+    const calls: Array<{ method: string; path: string; body: unknown; timeoutMs?: number }> = [];
+    const archives = createHermesProfileArchives(async (method, route, body, options) => {
+      calls.push({ method, path: route, body, ...options });
+      return (
+        route.endsWith('/export')
+          ? { ok: true, archive: '/data/tmp/x/work.tar.gz' }
+          : {
+              ok: true,
+              name: 'restored',
+            }
+      ) as never;
+    });
+    expect(await archives.export('work', '/data/tmp/x/work.tar.gz')).toBe(
+      '/data/tmp/x/work.tar.gz',
+    );
+    await archives.import('/data/tmp/y/restored.tar.gz', 'restored');
+    expect(calls).toEqual([
+      {
+        method: 'POST',
+        path: '/api/profiles/work/export',
+        body: { output: '/data/tmp/x/work.tar.gz' },
+        timeoutMs: PROFILE_ARCHIVE_TIMEOUT_MS,
+      },
+      {
+        method: 'POST',
+        path: '/api/profiles/import',
+        body: { archive: '/data/tmp/y/restored.tar.gz', name: 'restored' },
+        timeoutMs: PROFILE_ARCHIVE_TIMEOUT_MS,
+      },
+    ]);
+  });
+
+  it('falls back to the path it asked for when Hermes does not say where it wrote', async () => {
+    const archives = createHermesProfileArchives(async () => ({ ok: true }) as never);
+    expect(await archives.export('default', '/tmp/a.tar.gz')).toBe('/tmp/a.tar.gz');
   });
 });

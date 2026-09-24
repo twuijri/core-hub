@@ -120,3 +120,49 @@ function lastLine(text: string): string {
     .filter(Boolean);
   return lines.at(-1) ?? '';
 }
+
+/**
+ * A profile as an archive (ADR 0014 stage 2), through Hermes's own dashboard API (ADR
+ * 0015): `POST /api/profiles/{name}/export` with an `output` path, and `POST
+ * /api/profiles/import` with an `archive` path and a `name` (`hermes_cli/web_routers/
+ * profiles.py`). Paths are exchanged, not bytes: the server shares the hub's filesystem.
+ *
+ * What Hermes puts in the archive is Hermes's decision (`hermes_cli/profiles.py`
+ * §export_profile): a named profile's whole folder without `.env` and `auth.json`; the
+ * default profile's known files only (config, SOUL, memory, skills, cron, sessions …); and
+ * in both, secret-shaped text force-redacted. The hub checks the result again before it
+ * hands it out (`auth/profile-archive.ts`).
+ */
+export interface HermesProfileArchives {
+  /** Answers the path Hermes wrote. */
+  export(name: string, output: string): Promise<string>;
+  import(archive: string, name: string): Promise<void>;
+}
+
+/** Long enough for a profile with a large chat history; Hermes's own verbs are seconds. */
+export const PROFILE_ARCHIVE_TIMEOUT_MS = 10 * 60_000;
+
+export function createHermesProfileArchives(
+  request: <T>(
+    method: string,
+    path: string,
+    body: unknown,
+    options: { timeoutMs?: number },
+  ) => Promise<T>,
+): HermesProfileArchives {
+  const timeout = { timeoutMs: PROFILE_ARCHIVE_TIMEOUT_MS };
+  return {
+    async export(name, output) {
+      const answer = await request<{ ok?: boolean; archive?: string }>(
+        'POST',
+        `/api/profiles/${encodeURIComponent(name)}/export`,
+        { output },
+        timeout,
+      );
+      return typeof answer?.archive === 'string' && answer.archive ? answer.archive : output;
+    },
+    async import(archive, name) {
+      await request('POST', '/api/profiles/import', { archive, name }, timeout);
+    },
+  };
+}

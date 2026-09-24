@@ -4,6 +4,7 @@ import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest }
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { isUlid } from '../../db/ids.js';
+import { t } from '../../i18n/index.js';
 import { HubError } from '../../lib/errors.js';
 import { REALTIME_NAMESPACES } from '../../lib/module.js';
 import { parse } from '../../lib/validate.js';
@@ -14,7 +15,7 @@ import {
   revokeDeviceByToken,
   serializeDevice,
 } from '../devices/index.js';
-import { AuditService } from '../audit/index.js';
+import { AuditService, auditFor, jobRunnerFor } from '../audit/index.js';
 import { decodeAvatarDataUrl, deleteAvatar, readAvatar } from './avatars.js';
 import type { AuthContext } from './context.js';
 import {
@@ -42,6 +43,7 @@ import {
   type ProfileOrigin,
 } from './profile-mirror.js';
 import { requireRole, requireUser, type Principal } from './principal.js';
+import { requireTransfer, runExport, runImport, type TransferContext } from './profile-transfer.js';
 import {
   createProfile,
   deleteProfile,
@@ -96,6 +98,7 @@ import {
   defaultWorkspace,
   findWorkspace,
   listWorkspacesFor,
+  resolveWorkspaceFor,
   workspaceRefusal,
 } from './workspace.js';
 import { emitToUser, revalidateSockets } from './sockets.js';
@@ -247,7 +250,11 @@ const ProfileSettingsPatch = z.object({
     })
     .optional(),
 });
-const ProfileImport = z.object({ attachment_id: Ulid, slug: ProfileSlug });
+const ProfileImport = z.object({
+  attachment_id: Ulid,
+  slug: ProfileSlug,
+  name: z.string().trim().min(1).max(80).optional(),
+});
 
 // ---------------------------------------------------------------- helpers
 
@@ -1089,31 +1096,83 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     return { settings: serializeProfileSettings(settings), restart_job_id: null };
   });
 
+  /**
+   * Export and import are jobs of the caller's current profile (`X-Hub-Profile`, contract
+   * decision §30): that is the room their `/rt/jobs` events reach and where `jobs.get` finds
+   * them. Only where the hub supervises Hermes (ADR 0015); anywhere else the refusal is
+   * named before any job exists.
+   */
+  const transferContext = (request: FastifyRequest): TransferContext => {
+    const user = principalOf(request).user;
+    const here = resolveWorkspaceFor(db, user, request.hubProfile);
+    // The jobs ledger reports a job's profile by slug; this is how it learns this one.
+    auditFor(app).rememberWorkspace(here.id, here.slug);
+    return {
+      db,
+      dataDir: ctx.dataDir,
+      ports: requireTransfer(app),
+      scope: { workspace: here.id, userId: user.id },
+      language: user.locale === 'ar' ? 'ar' : 'en',
+    };
+  };
+
   route('POST', '/profiles/:profile_id/export', admin, async (request, reply) => {
     const row = workspaceFor(request);
-    const jobId = ledger.createJob({
-      ownerId: principalOf(request).user.id,
-      workspace: row.id,
-      kind: 'auth.profile_export',
-      entityKind: 'profile',
-      entityId: row.id,
-      input: { slug: row.slug },
-    });
-    return reply.code(202).send({ job_id: jobId });
+    const context = transferContext(request);
+    const job = jobRunnerFor(app).start(
+      {
+        ownerId: context.scope.userId,
+        workspace: context.scope.workspace,
+        kind: 'auth.export',
+        entityKind: 'profile',
+        entityId: row.id,
+        input: { slug: row.slug },
+        message: t('jobs.queued', context.language),
+      },
+      (handle) => runExport(context, handle, row),
+    );
+    audit(
+      request,
+      'auth.profile_export_started',
+      { kind: 'profile', id: row.id },
+      `workspace ${row.slug} export started`,
+      {
+        job_id: job.id,
+      },
+    );
+    return reply.code(202).send({ job_id: job.id });
   });
 
   route('POST', '/profile-imports', admin, async (request, reply) => {
     const body = parse(ProfileImport, request.body);
-    if (findWorkspace(db, body.slug))
-      throw new HubError('conflict', { messageKey: 'auth.slug_taken' });
-    const jobId = ledger.createJob({
-      ownerId: principalOf(request).user.id,
-      workspace: null,
-      kind: 'auth.profile_import',
-      entityKind: 'attachment',
-      entityId: body.attachment_id,
-      input: { attachment_id: body.attachment_id, slug: body.slug },
+    if (slugTaken(db, body.slug)) throw new HubError('conflict', { messageKey: 'auth.slug_taken' });
+    const context = transferContext(request);
+    if (!context.ports.files.open(context.scope, body.attachment_id)) {
+      throw new HubError('not_found', {
+        details: { resource: 'attachment', id: body.attachment_id },
+      });
+    }
+    const job = jobRunnerFor(app).start(
+      {
+        ownerId: context.scope.userId,
+        workspace: context.scope.workspace,
+        kind: 'auth.import',
+        entityKind: 'attachment',
+        entityId: body.attachment_id,
+        input: { attachment_id: body.attachment_id, slug: body.slug },
+        message: t('jobs.queued', context.language),
+      },
+      (handle) =>
+        runImport(context, handle, {
+          attachmentId: body.attachment_id,
+          slug: body.slug,
+          name: body.name ?? body.slug,
+        }),
+    );
+    audit(request, 'auth.profile_import_started', null, `workspace ${body.slug} import started`, {
+      job_id: job.id,
+      slug: body.slug,
     });
-    return reply.code(202).send({ job_id: jobId });
+    return reply.code(202).send({ job_id: job.id });
   });
 }

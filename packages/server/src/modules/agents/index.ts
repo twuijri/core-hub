@@ -124,8 +124,11 @@ export { AgentRunner, toRunnerEvent, toolKindOf, mintSessionRef } from './runner
 export { HermesRuntime, loadOrCreateHermesApiKey } from './hermes-runtime.js';
 export {
   HermesProfileError,
+  PROFILE_ARCHIVE_TIMEOUT_MS,
+  createHermesProfileArchives,
   createHermesProfiles,
   hermesProfileRunner,
+  type HermesProfileArchives,
   type HermesProfiles,
 } from './hermes-profiles.js';
 export type {

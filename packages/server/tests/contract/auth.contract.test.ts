@@ -13,10 +13,32 @@ import {
   type ClientMethod,
   type HubClient,
 } from '@majlis/contracts';
-import { testHub, type TestHub } from '../unit/helpers.js';
+import { profileTransferPorts } from '../../src/modules/index.js';
+import { registerProfileTransfer } from '../../src/modules/auth/index.js';
+import { fakeProfileRuntime } from '../../src/modules/auth/testing/fake-profile-runtime.js';
+import { tarGz } from '../../src/modules/auth/testing/tar.js';
+import { drainJobs, testHub, type TestHub } from '../unit/helpers.js';
 import { ajvFor, operationsById, responseSchema } from './schema.js';
 
 const doc = loadOpenApiDocument();
+
+/** A profile archive as the browser's `FormData` sends it, with `purpose: import`. */
+function archiveUpload(body: Buffer) {
+  const boundary = '----majlisContractBoundary';
+  return {
+    payload: Buffer.concat([
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="work.tar.gz"\r\n` +
+          'Content-Type: application/gzip\r\n\r\n',
+      ),
+      body,
+      Buffer.from(
+        `\r\n--${boundary}\r\nContent-Disposition: form-data; name="purpose"\r\n\r\nimport\r\n--${boundary}--\r\n`,
+      ),
+    ]),
+    headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+  };
+}
 const PASSWORD = 'contract-test-password';
 const PNG_1X1 =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
@@ -252,10 +274,46 @@ describe.skipIf(!doc)('contract: auth operations answer their success path', () 
     expect((settings.settings as { privacy: { redact_pii: boolean } }).privacy.redact_pii).toBe(
       true,
     );
-    await call('auth.exportProfile', 202, { params: { profile_id: work.id as string } });
-    await call('auth.importProfile', 202, {
-      body: { attachment_id: '01J8QK3ZR2W7M5N4P6T8V9X0AW', slug: 'imported' },
+    // A hub that does not supervise Hermes names the reason (contract decision §30) …
+    const unmanaged = await call('auth.exportProfile', 409, {
+      params: { profile_id: work.id as string },
     });
+    expect(unmanaged.details).toEqual({ reason: 'hermes_not_managed' });
+    // … and with Hermes (scripted here) both are jobs that finish.
+    const previous = registerProfileTransfer((app) =>
+      profileTransferPorts(app, fakeProfileRuntime().runtime),
+    );
+    try {
+      await call('auth.exportProfile', 202, { params: { profile_id: work.id as string } });
+      const form = archiveUpload(tarGz([{ path: 'work/SOUL.md', content: 'soul' }]));
+      const uploaded = await hub.app.inject({
+        method: 'POST',
+        url: '/api/v1/attachments',
+        payload: form.payload,
+        headers: { ...form.headers, authorization: `Bearer ${token}`, 'x-hub-profile': 'default' },
+      });
+      expect(uploaded.statusCode).toBe(201);
+      await call('auth.importProfile', 202, {
+        body: {
+          attachment_id: (uploaded.json() as { id: string }).id,
+          slug: 'imported',
+          name: 'المستورد',
+        },
+      });
+      await call('auth.importProfile', 409, {
+        body: { attachment_id: '01J8QK3ZR2W7M5N4P6T8V9X0AW', slug: 'work' },
+      });
+      await drainJobs(hub.app);
+      const jobs = await call('jobs.list', 200);
+      expect(
+        (jobs.items as Array<{ kind: string; status: string }>)
+          .filter((job) => job.kind === 'export' || job.kind === 'import')
+          .map((job) => `${job.kind}:${job.status}`)
+          .sort(),
+      ).toEqual(['export:succeeded', 'import:succeeded']);
+    } finally {
+      registerProfileTransfer(previous);
+    }
     await call('auth.deleteProfile', 204, { params: { profile_id: work.id as string } });
 
     // sign-out ends the session immediately

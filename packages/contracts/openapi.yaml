@@ -1580,7 +1580,26 @@ paths:
       operationId: auth.exportProfile
       tags: [auth]
       summary: Export a workspace as an archive (admin)
-      description: A job; its `result.attachment_id` points at the archive, downloaded through `/attachments/{id}/content` with the bearer header (never a token in a URL).
+      description: |
+        A job (`kind: export`, `resource: {kind: profile}`) that asks Hermes for its own profile
+        archive (`hermes profile export`, a `.tar.gz` with one top-level folder named after the
+        profile — ADR 0014 stage 2), then checks it before anyone can download it: every
+        `.env` and `auth.json` is left out, and every provider key the hub stores (ADR 0010)
+        is overwritten wherever its bytes appear. Hermes itself already leaves the credential
+        files out and blanks secret-shaped text.
+
+        The job is recorded in the caller's current profile (`X-Hub-Profile`, `default`
+        when absent), so it arrives on that profile's `/rt/jobs` room and `jobs.get` finds it
+        there. Its `result` is `{attachment_id, profile, name, size_bytes, expires_at,
+        removed, masked}`: `attachment_id` points at the archive (`name` is
+        `<slug>-<YYYYMMDD-HHMMSS>.tar.gz`), downloaded through `/attachments/{id}/content`
+        with the bearer header (never a token in a URL) and the same `X-Hub-Profile`; only
+        the person who exported it can read that attachment, and it is deleted after
+        `expires_at` (24 hours). `removed` lists the paths inside the archive the hub left
+        out, `masked` the paths where a stored key was overwritten.
+
+        Only where the hub supervises Hermes: anywhere else the answer is `409 state_invalid`
+        with `details.reason = hermes_not_managed`, and no job is created.
       x-scope: global
       x-roles: [owner, admin]
       x-rt-events: [job.queued, job.progress, job.completed, job.failed]
@@ -1599,11 +1618,27 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /profile-imports:
     post:
       operationId: auth.importProfile
       tags: [auth]
       summary: Import a workspace archive (admin)
+      description: |
+        A job (`kind: import`, `resource: {kind: attachment}`) that hands a Hermes profile
+        archive to Hermes (`hermes profile import --name <slug>`) and, when Hermes made the
+        profile, adds the workspace `slug` (named `name`, else the slug). The archive is an
+        attachment uploaded with `purpose: import` in the caller's current profile
+        (`X-Hub-Profile`), where the job is recorded too; it is deleted once the job ends.
+
+        Refused before a job exists: a slug any workspace already uses (`409 conflict`,
+        `auth.slug_taken` — pick another), an attachment the caller cannot see (`404`), and
+        a hub that does not supervise Hermes (`409 state_invalid`, `details.reason =
+        hermes_not_managed`). The job fails, with Hermes's own sentence where Hermes said no,
+        when the file is not a profile archive (one top-level folder of folders and regular
+        files, gzip-compressed tar) or Hermes refuses it. The job's `result` is
+        `{profile_id, slug, name}`.
       x-scope: global
       x-roles: [owner, admin]
       x-rt-events: [job.queued, job.progress, job.completed, job.failed]
@@ -1616,6 +1651,7 @@ paths:
             example:
               attachment_id: 01J8QK3ZR2W7M5N4P6T8V9X0AW
               slug: imported
+              name: 'المستورد'
       responses:
         '202':
           description: Import started; the job's `result.profile_id` is the new workspace.
@@ -1631,6 +1667,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
   # ================================================================== sessions
@@ -11790,6 +11828,7 @@ components:
           export,
           schedule_run,
           workflow_run,
+          import,
         ]
     JobStatus:
       type: string
@@ -11836,6 +11875,8 @@ components:
               webhook,
               approval,
               notice,
+              profile,
+              attachment,
             ]
         id:
           $ref: '#/components/schemas/Ulid'
@@ -12478,6 +12519,12 @@ components:
           description: 'The archive, uploaded with `purpose: import`.'
         slug:
           $ref: '#/components/schemas/ProfileSlug'
+          description: The new profile's id in the hub and in Hermes; must not be taken.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: Display name of the new workspace; the slug when absent.
     # ---------------------------------------------------------------- sessions
     SessionSource:
       type: string

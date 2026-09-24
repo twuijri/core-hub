@@ -8,7 +8,13 @@ import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../../server/src/app/config.js';
 import { buildServer } from '../../server/src/app/server.js';
 import { createLogger } from '../../server/src/lib/logger.js';
-import { modules as defaultModules, notifierPort } from '../../server/src/modules/index.js';
+import {
+  modules as defaultModules,
+  notifierPort,
+  profileTransferPorts,
+} from '../../server/src/modules/index.js';
+import { registerProfileTransfer } from '../../server/src/modules/auth/index.js';
+import { fakeProfileRuntime } from '../../server/src/modules/auth/testing/fake-profile-runtime.js';
 import { principalScopeResolver } from '../../server/src/modules/auth/index.js';
 import { overrideAgents } from '../../server/src/modules/agents/index.js';
 import { overrideModels } from '../../server/src/modules/models/index.js';
@@ -465,6 +471,19 @@ registerHermesCron((app) => ({
   timezone: () => 'Pacific/Chatham',
   throttleMs: 0,
 }));
+
+/**
+ * Hermes's profile archives, scripted (ADR 0014 stage 2): an export is the archive Hermes
+ * would write — with a `.env` inside, so the journey sees the hub leave it out — and an
+ * import makes the profile. Everything after Hermes is the real hub: the job, the check of
+ * the archive, the file kept for its requester, the new workspace.
+ */
+const profileArchives = fakeProfileRuntime((profile) => [
+  { path: 'SOUL.md', content: `The ${profile} profile, exported for the e2e journey.\n` },
+  { path: 'memories/MEMORY.md', content: 'Remembers teal. يتذكّر الأزرق المخضر.\n' },
+  { path: '.env', content: 'OPENAI_API_KEY=sk-e2e-never-leaves-0123456789\n' },
+]);
+registerProfileTransfer((app) => profileTransferPorts(app, profileArchives.runtime));
 
 const sessions = createSessionsModule({
   agents: { find: async (_workspace, agentId) => fakeHermes(agentId) },

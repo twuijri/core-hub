@@ -190,7 +190,12 @@ export class HermesDashboard {
    * it is not running. Throws `HermesDashboardRefusal` with Hermes's own words when Hermes
    * answers with an error, `HermesDashboardUnavailable` when there is no server to ask.
    */
-  async request<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
+  async request<T = unknown>(
+    method: string,
+    path: string,
+    body?: unknown,
+    options: { timeoutMs?: number } = {},
+  ): Promise<T> {
     if (!path.startsWith('/')) throw new Error(`dashboard path must start with "/": ${path}`);
     const verb = `${method.toUpperCase()} ${path}`;
     this.inFlight += 1;
@@ -199,14 +204,14 @@ export class HermesDashboard {
       let live = await this.ensure();
       let response: Response;
       try {
-        response = await this.send(live, method, path, body);
+        response = await this.send(live, method, path, body, options.timeoutMs);
       } catch (error) {
         // Refused before it landed and the process is gone: it died between calls. One
         // fresh start and one retry — safe, because the request never reached Hermes.
         if (!refusedToConnect(error) || !live.exited) throw this.unreachable(verb, error);
         live = await this.ensure();
         try {
-          response = await this.send(live, method, path, body);
+          response = await this.send(live, method, path, body, options.timeoutMs);
         } catch (retryError) {
           throw this.unreachable(verb, retryError);
         }
@@ -411,7 +416,13 @@ export class HermesDashboard {
     });
   }
 
-  private async send(live: Live, method: string, path: string, body: unknown): Promise<Response> {
+  private async send(
+    live: Live,
+    method: string,
+    path: string,
+    body: unknown,
+    timeoutMs?: number,
+  ): Promise<Response> {
     const headers: Record<string, string> = {
       [TOKEN_HEADER]: this.token ?? '',
       accept: 'application/json',
@@ -419,7 +430,7 @@ export class HermesDashboard {
     const init: RequestInit = {
       method: method.toUpperCase(),
       headers,
-      signal: AbortSignal.timeout(this.options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs ?? this.options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS),
     };
     if (body !== undefined) {
       headers['content-type'] = 'application/json';

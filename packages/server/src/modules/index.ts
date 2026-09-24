@@ -4,12 +4,18 @@ import type { HubModule } from '../lib/module.js';
 import { requireSqlite } from '../lib/db.js';
 import type { SessionsNotifier } from './sessions/ports.js';
 import {
+  MAX_EXPORT_BYTES,
+  ProfileArchiveRefusal,
+  ProfileArchiveUnavailable,
   ProfileMirrorError,
   RUNTIME_DEFAULT_PROFILE,
   authModule,
   listWorkspacesFor,
   principalScopeResolver,
   registerProfileMirror,
+  registerProfileTransfer,
+  type ProfileArchiveRuntime,
+  type ProfileTransferPorts,
 } from './auth/index.js';
 import {
   HermesProfileError,
@@ -19,6 +25,8 @@ import {
   agentsServiceFor,
   HermesDashboardRefusal,
   HermesDashboardUnavailable,
+  type HermesDashboard,
+  createHermesProfileArchives,
   createHermesProfiles,
   hermesDashboardFor,
   hermesProfileRunner,
@@ -46,9 +54,10 @@ import { registerHermesCron, registerWorkflowPorts, schedulesModule } from './sc
 import {
   attachmentsPort,
   knowledgeModule,
+  profileArchiveFiles,
   registerAttachmentReferences,
 } from './knowledge/index.js';
-import { modelsModule } from './models/index.js';
+import { modelsModule, modelsServiceFor } from './models/index.js';
 import { devicesModule } from './devices/index.js';
 import { createNotifier, notifyModule } from './notify/index.js';
 import { updatesModule } from './updates/index.js';
@@ -191,6 +200,51 @@ registerProfileMirror((app) => {
     },
   };
 });
+
+/**
+ * A profile moves as Hermes's own archive (ADR 0014 stage 2). `auth` owns the operations,
+ * `agents` reaches Hermes's server — only where the hub supervises Hermes (ADR 0015), so
+ * anywhere else `runtime` is null and `auth` refuses by name — `knowledge` keeps the bytes,
+ * and `models` knows every provider key the export must not carry out (ADR 0010).
+ */
+export function profileTransferPorts(
+  app: FastifyInstance,
+  runtime: ProfileArchiveRuntime | null = hermesProfileArchives(app),
+): ProfileTransferPorts {
+  const hermes = hermesRuntimeFor(app);
+  return {
+    runtime,
+    files: profileArchiveFiles(app, MAX_EXPORT_BYTES),
+    secrets: () => {
+      const values = modelsServiceFor(app).storedSecretValues();
+      const apiKey = hermes.apiKey();
+      return apiKey ? [...values, apiKey] : values;
+    },
+  };
+}
+
+/** Hermes's archives through its server, with its errors in `auth`'s words; null unmanaged. */
+function hermesProfileArchives(app: FastifyInstance): ProfileArchiveRuntime | null {
+  const dashboard = hermesDashboardFor(app);
+  return dashboard ? hermesArchivesOver(dashboard) : null;
+}
+
+/** The archive calls over one dashboard server (the real-Hermes test hands in its own). */
+export function hermesArchivesOver(dashboard: HermesDashboard): ProfileArchiveRuntime {
+  return createHermesProfileArchives(async (method, path, body, options) => {
+    try {
+      return await dashboard.request(method, path, body, options);
+    } catch (error) {
+      if (error instanceof HermesDashboardRefusal) throw new ProfileArchiveRefusal(error.message);
+      if (error instanceof HermesDashboardUnavailable) {
+        throw new ProfileArchiveUnavailable(error.message);
+      }
+      throw error;
+    }
+  });
+}
+
+registerProfileTransfer((app) => profileTransferPorts(app));
 
 /**
  * Hermes's own scheduler on the Schedules page (`schedules/hermes-cron.ts`). Reached over
