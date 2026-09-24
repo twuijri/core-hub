@@ -93,7 +93,9 @@
           "last_run_at": "2026-09-21T06:00:00Z",
           "last_status": "succeeded",
           "last_error": null,
-          "last_delivery_error": null
+          "last_delivery_error": null,
+          "run_if_missed": false,
+          "overlap": "wait"
         },
         "schedule_run_id": "01J8QK3ZR2W7M5N4P6T8V9X0SR"
       }
@@ -162,7 +164,9 @@
             "last_run_at",
             "last_status",
             "last_error",
-            "last_delivery_error"
+            "last_delivery_error",
+            "run_if_missed",
+            "overlap"
           ],
           "properties": {
             "name": {
@@ -234,10 +238,30 @@
             },
             "last_delivery_error": {
               "type": ["string", "null"]
+            },
+            "run_if_missed": {
+              "description": "Whether a time missed while the hub was not running still runs, once, when the hub is back within 24 hours of it (DECISIONS §40). `false` skips it and records why in the history. A run up to two minutes late is on time and runs either way. `null` for a schedule in an agent's own scheduler (`external`), which decides this itself.",
+              "type": ["boolean", "null"]
+            },
+            "overlap": {
+              "description": "What happens when this schedule's time comes and its previous run is still going (DECISIONS §40): `skip` records the time as skipped; `wait` runs it as soon as the previous run ends, with at most one time waiting (a further one is skipped and recorded); `parallel` starts it alongside, in a session of its own; `replace` stops the previous run, then starts. \"Run now\" always starts at once and stops nothing. `null` for a schedule in an agent's own scheduler (`external`), which decides this itself.",
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ScheduleOverlap"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           }
         }
       ]
+    },
+    "ScheduleOverlap": {
+      "type": "string",
+      "enum": ["skip", "wait", "parallel", "replace"],
+      "description": "What a schedule does when its time comes while its previous run is still going. See `Schedule.overlap`."
     },
     "ScheduleTarget": {
       "type": "object",

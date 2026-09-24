@@ -7,6 +7,9 @@
  * workflow schedule's run from its line — and a run that waits for a person is answered
  * where it is shown (`ScheduleRuns.tsx`), or from the inbox, which opens it here
  * (`?workflow_run=<id>&profile=<slug>`).
+ *
+ * A schedule the hub fires has two run options (`RunOptions.tsx`): set when it is made, and
+ * changed from its card. Hermes decides both for its own jobs, so its schedules have none.
  */
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
@@ -24,6 +27,12 @@ import { ProfileBadge } from '../shell/ProfileBadge.js';
 import { useManyProfiles, useProfileInLink, useProfileName } from '../shell/profiles.js';
 import { chatHref } from '../chat/anchor.js';
 import { ScheduleHistory, WorkflowRunDialog } from './ScheduleRuns.js';
+import {
+  DEFAULT_RUN_OPTIONS,
+  RunOptions,
+  type Overlap,
+  type RunOptionsValue,
+} from './RunOptions.js';
 import {
   Badge,
   Button,
@@ -62,6 +71,9 @@ interface Schedule {
   last_error?: string | null;
   /** Set when the schedule lives in an agent's own scheduler (Hermes's cron). */
   external?: { source: 'hermes'; id: string } | null;
+  /** The run options; `null` for a schedule in Hermes's scheduler, which decides them. */
+  run_if_missed?: boolean | null;
+  overlap?: Overlap | null;
 }
 
 /**
@@ -225,6 +237,8 @@ function describeScheduleError(error: unknown, t: Translate): string {
       return t('schedules.hermes.delivery');
     case 'hermes_prompt_required':
       return t('schedules.hermes.prompt_required');
+    case 'hermes_run_options':
+      return t('schedules.hermes.run_options');
     case 'target_unavailable':
       return t('schedules.target_unavailable', { message: String(details.message ?? '') });
     default:
@@ -252,6 +266,8 @@ export function SchedulesScreen() {
   const [zone, setZone] = useState<string | null>(null);
   const [fired, setFired] = useState<{ schedule: Schedule; started: Fired } | null>(null);
   const [history, setHistory] = useState<Set<string>>(() => new Set());
+  const [optionsOpen, setOptionsOpen] = useState<Set<string>>(() => new Set());
+  const [options, setOptions] = useState<RunOptionsValue>(DEFAULT_RUN_OPTIONS);
   const inLink = useProfileInLink();
   // A workflow run opened from a line of history, or from the inbox by its address.
   const [params, setParams] = useSearchParams();
@@ -278,6 +294,10 @@ export function SchedulesScreen() {
     (agents.data ?? []).find((agent) => agent.slug === 'hermes')?.id ??
     agentOptions[0]?.value ??
     null;
+  // Hermes's own scheduler fires its schedules and decides the run options itself.
+  const forHermes = (agents.data ?? []).some(
+    (agent) => agent.id === chosenAgent && agent.slug === 'hermes',
+  );
   const zoneAsked = (() => {
     const details = detailsOf(create.error);
     return details?.reason === 'hermes_timezone' ? String(details.timezone ?? '') : null;
@@ -299,9 +319,15 @@ export function SchedulesScreen() {
             workflow_id: null,
             input: null,
           },
+          ...(forHermes ? {} : options),
         },
       },
-      { onSuccess: () => setName('') },
+      {
+        onSuccess: () => {
+          setName('');
+          setOptions(DEFAULT_RUN_OPTIONS);
+        },
+      },
     );
   const [kind, setKind] = useState<'cron' | 'interval' | 'once'>('cron');
   const [value, setValue] = useState('0 9 * * *');
@@ -399,6 +425,16 @@ export function SchedulesScreen() {
               />
             )}
           </Field>
+          {!forHermes && (
+            <fieldset className="flex flex-col gap-3 rounded-md border border-line p-3">
+              <legend className="px-1 text-sm font-medium">{t('schedules.options.title')}</legend>
+              <RunOptions
+                value={options}
+                onChange={(patch) => setOptions((current) => ({ ...current, ...patch }))}
+                testId="schedule-new-options"
+              />
+            </fieldset>
+          )}
           {create.isError && (
             <Notice tone="danger">
               <span className="flex flex-wrap items-center gap-2">
@@ -579,6 +615,28 @@ export function SchedulesScreen() {
                         : 'schedules.history.show',
                     )}
                   </Button>
+                  {!fromHermes && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-expanded={optionsOpen.has(schedule.id)}
+                      onClick={() =>
+                        setOptionsOpen((open) => {
+                          const next = new Set(open);
+                          if (next.has(schedule.id)) next.delete(schedule.id);
+                          else next.add(schedule.id);
+                          return next;
+                        })
+                      }
+                      data-testid="schedule-options-toggle"
+                    >
+                      {t(
+                        optionsOpen.has(schedule.id)
+                          ? 'schedules.options.hide'
+                          : 'schedules.options.show',
+                      )}
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -598,6 +656,20 @@ export function SchedulesScreen() {
                     data-testid="schedule-delete"
                   />
                 </div>
+                {!fromHermes && optionsOpen.has(schedule.id) && (
+                  <div className="mt-3 rounded-md border border-line p-3">
+                    {/* Each change is saved at once, like the switch beside it. */}
+                    <RunOptions
+                      value={{
+                        run_if_missed: schedule.run_if_missed ?? DEFAULT_RUN_OPTIONS.run_if_missed,
+                        overlap: schedule.overlap ?? DEFAULT_RUN_OPTIONS.overlap,
+                      }}
+                      onChange={(patch) => update.mutate({ schedule, patch: { ...patch } })}
+                      disabled={update.isPending && update.variables?.schedule.id === schedule.id}
+                      testId="schedule-options"
+                    />
+                  </div>
+                )}
                 {history.has(schedule.id) && (
                   <div className="mt-3">
                     <ScheduleHistory

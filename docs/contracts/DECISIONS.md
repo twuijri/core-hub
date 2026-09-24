@@ -815,3 +815,41 @@ skill import kept its uploaded packs for that reason alone (2026-09-24, agent to
   a plain `(workspace, storage_key)` index. No row changes.
 - The web deletes an imported skill pack's uploads once the import answered, whether it
   succeeded or was refused.
+
+## 40. A schedule says whether a missed time runs, and what happens when its previous run is still going
+
+The owner turned the two fixed rules of §35 into options of each schedule (2026-09-24):
+
+- **`Schedule.run_if_missed`** (boolean; `false` when a new schedule does not say). A time up
+  to two minutes late is on time — the hub looks every fifteen seconds — and runs either way.
+  Later than that the hub was not running at the time: with the option on, it runs **once**
+  if the hub is back within 24 hours of it; off, and always when older, the history records
+  it (`status: cancelled`, `error` saying why) and the schedule moves on from now. Off is the
+  default because «مرات الشي لزم ينرسل بوقت بالضبط علشان ما ينحاس المستخدم».
+- **`Schedule.overlap`** (`ScheduleOverlap`: `skip` | `wait` | `parallel` | `replace`; `wait`
+  when a new schedule does not say): what a time does when the schedule's previous run is
+  still going. `skip` records it; `wait` holds it and starts it as soon as the previous run
+  ends — **one** time waits at most, a further one is recorded as skipped; `parallel` starts
+  it alongside, in a session (or workflow run) of its own; `replace` cancels the previous run
+  for real (its line ends `cancelled`, "stopped: the next run of this schedule replaced it"),
+  then starts.
+- **"Run now" is never held back and stops nothing**, whatever `overlap` says: a person asked
+  for a run now. Its run does count as "the previous run" for the schedule's next time.
+- **`ScheduleRun.waiting`** (required boolean): `true` for the time held back by `wait`; its
+  `status` is `queued`. A restart that ends the run it waited for applies `run_if_missed` to
+  it, measured from its own time: on time or (option on and within 24 hours) it starts when
+  the hub is back; otherwise it is recorded as missed. A time still waiting when its schedule
+  is paused does not start.
+- **Hermes's schedules have neither** (both `null`): Hermes's scheduler fires them and has no
+  per-job setting for either. It runs a missed job once by a profile-wide
+  `cron.catch_up_missed` (on by default, with a grace window of half the job's period, between
+  two minutes and two hours) and always skips a job whose previous run is still going (read in
+  Hermes's MIT sources at the pinned tag, `cron/jobs.py` and `cron/scheduler.py`). A write
+  that sets either on a Hermes schedule is `409 conflict`, `details.reason =
+  hermes_run_options`, `details.field`; `schedules.create` and `schedules.update` now document
+  their `409`.
+
+Rejected: mapping `run_if_missed` onto Hermes's `cron.catch_up_missed` (it is one setting for
+every job of a profile; changing it from one schedule would change all of them), and a
+separate `skipped` status (the contract already says a time not run is `cancelled` with the
+reason, §35).

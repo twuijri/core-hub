@@ -24,7 +24,11 @@ import {
   FakeAgentRunner,
   fakeHermes,
 } from '../../src/modules/sessions/testing/fake-runner.js';
-import { workflowEngineFor } from '../../src/modules/schedules/index.js';
+import { eq } from 'drizzle-orm';
+import { newUlid } from '../../src/db/ids.js';
+import { requireSqlite } from '../../src/lib/db.js';
+import { schedulerFor, workflowEngineFor } from '../../src/modules/schedules/index.js';
+import { scheduleRuns, schedules } from '../../src/modules/schedules/schema.js';
 import { testHub, type TestHub } from '../unit/helpers.js';
 import { ajvFor, operationsById, responseSchema } from './schema.js';
 
@@ -195,6 +199,60 @@ describe.skipIf(!doc)('contract: schedules fire, and a workflow step waits for a
     for (const entry of envelopes.filter((e) =>
       /^schedule(\.fired|\.updated|_run\.)/.test(e.envelope.event),
     )) {
+      expect(validEvent(entry.namespace, entry.envelope), entry.envelope.event).toEqual([]);
+    }
+  });
+
+  it('a schedule carries its run options, and a time waiting for the previous run says so', async () => {
+    // Defaults when a new schedule does not say (owner, 2026-09-24).
+    const plain = await call('schedules.create', 201, {
+      body: { name: 'افتراضي', trigger, target },
+    });
+    expect(plain).toMatchObject({ run_if_missed: false, overlap: 'wait' });
+    const chosen = await call('schedules.create', 201, {
+      body: { name: 'مختار', trigger, target, run_if_missed: true, overlap: 'replace' },
+    });
+    expect(chosen).toMatchObject({ run_if_missed: true, overlap: 'replace' });
+    const edited = await call('schedules.update', 200, {
+      params: { schedule_id: chosen.id as string },
+      body: { run_if_missed: false, overlap: 'parallel' },
+    });
+    expect(edited).toMatchObject({ run_if_missed: false, overlap: 'parallel' });
+    expect(
+      await call('schedules.get', 200, { params: { schedule_id: chosen.id as string } }),
+    ).toMatchObject({ run_if_missed: false, overlap: 'parallel' });
+    // A word the contract does not have is refused.
+    await call('schedules.update', 400, {
+      params: { schedule_id: chosen.id as string },
+      body: { overlap: 'queue' },
+    });
+
+    // A run still going (written as the firing side would), then the schedule's time: it
+    // waits, and the history line validates as the contract's `ScheduleRun`.
+    const db = requireSqlite(hub.app.hub.database);
+    const row = db
+      .select()
+      .from(schedules)
+      .where(eq(schedules.id, plain.id as string))
+      .get()!;
+    db.insert(scheduleRuns)
+      .values({
+        id: newUlid(),
+        ownerId: row.ownerId,
+        workspace: row.workspace,
+        scheduleId: row.id,
+        scheduledFor: new Date(Date.now() - 60_000),
+        status: 'running',
+      })
+      .run();
+    // Other schedules of this hub are due at the same 09:00 and fire; this one waits.
+    await schedulerFor(hub.app).tick(row.nextRunAt!);
+    const runs = await call('schedules.listRuns', 200, {
+      params: { schedule_id: plain.id as string },
+    });
+    const waiting = (runs.items as Record<string, unknown>[]).find((line) => line.waiting);
+    expect(waiting).toMatchObject({ status: 'queued', waiting: true, trigger: 'schedule' });
+    for (const entry of envelopes.filter((e) => /^schedule\.updated/.test(e.envelope.event))) {
       expect(validEvent(entry.namespace, entry.envelope), entry.envelope.event).toEqual([]);
     }
   });

@@ -34,7 +34,15 @@ import {
 
 export const SCHEDULE_KINDS = ['cron', 'interval', 'once'] as const;
 export const SCHEDULE_TARGETS = ['prompt', 'workflow'] as const;
+/**
+ * The first overlap column's words (0000). Its CHECK cannot take `replace` without rebuilding
+ * `schedules`, whose history cascades on delete, so `overlap` (0014) superseded it; it is
+ * no longer read or written.
+ */
 export const OVERLAP_POLICIES = ['skip', 'queue', 'parallel'] as const;
+/** What a schedule does when its time comes and its previous run is still going. */
+export const SCHEDULE_OVERLAPS = ['skip', 'wait', 'parallel', 'replace'] as const;
+export type ScheduleOverlap = (typeof SCHEDULE_OVERLAPS)[number];
 export const MISFIRE_POLICIES = ['skip', 'run_once'] as const;
 export const SCHEDULE_RUN_STATUSES = [
   'queued',
@@ -171,8 +179,18 @@ export const schedules = sqliteTable(
     /** Stop after this many successful runs; null = unlimited. */
     repeatLimit: integer('repeat_limit'),
     repeatCount: integer('repeat_count').notNull().default(0),
+    /** Superseded by `overlap`; kept because dropping it means rebuilding the table. */
     overlapPolicy: text('overlap_policy', { enum: OVERLAP_POLICIES }).notNull().default('skip'),
+    /**
+     * The contract's `run_if_missed`: `run_once` runs a time missed while the hub was down,
+     * once, if the hub is back within 24 hours of it; `skip` (the default) does not.
+     */
     misfirePolicy: text('misfire_policy', { enum: MISFIRE_POLICIES }).notNull().default('skip'),
+    /**
+     * The contract's `overlap`. No CHECK: SQLite adds one to an existing table only by
+     * rebuilding it; the route's schema and the service hold the words.
+     */
+    overlap: text('overlap', { enum: SCHEDULE_OVERLAPS }).notNull().default('wait'),
     nextRunAt: timestampMs('next_run_at'),
     lastRunAt: timestampMs('last_run_at'),
     lastStatus: text('last_status', { enum: SCHEDULE_RUN_STATUSES }),
@@ -303,6 +321,11 @@ export const scheduleRuns = sqliteTable(
     sessionId: ulid('session_id'),
     /** `schedule` when its time came, `manual` when a person pressed "Run now". */
     trigger: text('trigger', { enum: SCHEDULE_RUN_TRIGGERS }).notNull().default('schedule'),
+    /**
+     * A time held back until the schedule's previous run ends (`overlap: wait`); `queued`
+     * while it waits. At most one line of a schedule waits.
+     */
+    waiting: bool('waiting').notNull().default(false),
     /** target=workflow: the workflow_run. */
     workflowRunId: ulid('workflow_run_id').references(() => workflowRuns.id, {
       onDelete: 'set null',

@@ -133,6 +133,44 @@ describe("schedules: Hermes's cron reflected", () => {
     }
   });
 
+  it('has no run options: Hermes decides them itself, and refuses them if sent', async () => {
+    const hub = await signedInHub();
+    try {
+      const created = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/schedules',
+        payload: forHermes(),
+      });
+      expect(created.statusCode).toBe(201);
+      const schedule = created.json() as Json;
+      // Hermes's scheduler decides both, per profile rather than per job.
+      expect(schedule).toMatchObject({ run_if_missed: null, overlap: null });
+      expect((await list(hub))[0]).toMatchObject({ run_if_missed: null, overlap: null });
+
+      for (const payload of [{ run_if_missed: true }, { overlap: 'wait' }]) {
+        const edited = await authed(hub, hub.token, {
+          method: 'PATCH',
+          url: `/api/v1/schedules/${schedule.id as string}`,
+          payload,
+        });
+        expect(edited.statusCode).toBe(409);
+        expect((edited.json() as Json).details).toMatchObject({
+          reason: 'hermes_run_options',
+          field: Object.keys(payload)[0],
+        });
+      }
+      const refused = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/schedules',
+        payload: forHermes({ overlap: 'parallel' }),
+      });
+      expect(refused.statusCode).toBe(409);
+      expect(await list(hub)).toHaveLength(1);
+    } finally {
+      await hub.close();
+    }
+  });
+
   it("makes nothing when Hermes refuses, and says so in Hermes's words", async () => {
     hermes.refuse = 'Prompt must be ≤ 5000 characters';
     const hub = await signedInHub();

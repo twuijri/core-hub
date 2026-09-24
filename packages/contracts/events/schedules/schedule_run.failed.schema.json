@@ -58,6 +58,7 @@
           "workflow_run_id": null,
           "status": "failed",
           "trigger": "schedule",
+          "waiting": false,
           "output_preview": "أُنجز أمس: تبويب الحساب…",
           "output": null,
           "output_size_bytes": 1830,
@@ -92,6 +93,7 @@
         "workflow_run_id",
         "status",
         "trigger",
+        "waiting",
         "output_preview",
         "output",
         "output_size_bytes",
@@ -147,6 +149,10 @@
         "trigger": {
           "type": "string",
           "enum": ["schedule", "manual"]
+        },
+        "waiting": {
+          "type": "boolean",
+          "description": "`true` while this time waits for the schedule's previous run to end (`overlap: wait`); its `status` is `queued`. It starts when that run ends."
         },
         "output_preview": {
           "type": ["string", "null"]
