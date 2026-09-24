@@ -129,6 +129,9 @@ $ vitest tests/schedule-run-options.test.tsx      (web)
 $ playwright test zzzzz-hub-schedules.spec.ts -g "30\."
   ✘ 30. a schedule's run options: set when it is made, changed from its card, none for Hermes
 ```
+الناجحة على القديم هي ما كان سلوكه أصلًا: «skips when told to» (كان التخطّي للجميع) و«"Run now" starts at
+once…»، والاختبارات السابقة في الملفات نفسها.
+
 **بعد دمج `origin/main` (#94، الذي أخذ §39 والهجرة `0013_attachments_shared_bytes`)**: صار القرار §40،
 وأُعيد توليد الهجرة `0014_schedule_run_options` بـ drizzle-kit فوق لقطة `0013` الجديدة (الدفتر واللقطة
 متسقان)، ثم أُعيدت كل الفحوص:
@@ -147,8 +150,6 @@ $ pnpm build                      # exit 0
 $ MAJLIS_E2E_PORT=8893 MAJLIS_E2E_SETUP_PORT=8894 PLAYWRIGHT_CHANNEL=chrome pnpm web:e2e
   44 passed (2.7m)
 ```
-الناجحة على القديم هي ما كان سلوكه أصلًا: «skips when told to» (كان التخطّي للجميع) و«"Run now" starts at
-once…»، والاختبارات السابقة في الملفات نفسها.
 
 ## المخاطر والرجوع
 - **تغيّر سلوك الجداول القائمة**: كانت كلها تُشغِّل الفائت خلال ٢٤ ساعة، وصارت بعد الهجرة **لا تُشغّله**
