@@ -77,7 +77,18 @@ ok packages/server
 ok packages/ui-tokens
 ok packages/web
 ok THIRD-PARTY-NOTICES.md
+
+$ pnpm lint
+$ eslint . && prettier --check .
+Checking formatting...
+All matched files use Prettier code style!
+
+$ pnpm change-record:check
+$ node scripts/check-change-record.mjs
+change-record  OK — 1 record(s) valid
 ```
+
+فحص مستند فقط؛ لا اختبارات ولا بناء لأنه لم تتغير شيفرة.
 
 ## المخاطر والرجوع
 مستند فقط. الخطر الوحيد تعارض نصي مع PR إعادة التسمية إن لمس README أيضًا؛ الحل أخذ هذه
