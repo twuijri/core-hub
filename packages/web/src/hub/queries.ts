@@ -94,6 +94,8 @@ export interface SessionFilters {
    * and each item names its own `profile`.
    */
   allProfiles?: boolean | undefined;
+  /** One profile other than the person's own (the chats list's filter), sent as the header. */
+  profile?: string | undefined;
   q?: string | undefined;
   archived?: 'true' | 'false' | 'all' | undefined;
   pinned?: boolean | undefined;
@@ -115,12 +117,15 @@ export function useSessions(filters: SessionFilters = {}) {
   if (filters.pinned !== undefined) query.pinned = filters.pinned;
   if (filters.agent_id) query.agent_id = filters.agent_id;
   if (filters.allProfiles) query.profiles = 'all';
+  const listed = filters.profile ?? profile;
   return useQuery({
     // A list across profiles is one list, whichever profile the person is in.
-    queryKey: keys.sessions(filters.allProfiles ? ALL_PROFILES_KEY : profile, { ...query }),
+    queryKey: keys.sessions(filters.allProfiles ? ALL_PROFILES_KEY : listed, { ...query }),
     // The contract types `Page.items` per operation through allOf; the generated union leaves
     // `items` open, so the page is narrowed once here (the CLI does the same).
-    queryFn: async () => (await client.request('get', '/sessions', { query })).data as SessionPage,
+    queryFn: async () =>
+      (await client.request('get', '/sessions', { query, ...inProfile(filters.profile) }))
+        .data as SessionPage,
     enabled: !!session,
   });
 }

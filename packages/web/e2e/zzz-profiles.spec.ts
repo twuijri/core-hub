@@ -3,9 +3,11 @@
  *
  * The owner's complaint, as a journey: with two profiles, the designer's chats only showed
  * after switching the top selector, and going back to the default's needed another switch.
- * Now the app opens on "All profiles": both chats are in one list, each with its profile's
- * badge; each opens and answers in its own profile without the selector moving; and search
- * finds both.
+ * Now the chats list has its own filter, on "All profiles" by default: both chats are in one
+ * list, each with its profile's badge; each opens and answers in its own profile; search
+ * finds both. The top selector is always the concrete profile the person is in (owner's
+ * correction: «المفروض ما فيه خيار الكل. خيار الكل كان لتصنيف المحادثات بس»): new chats are
+ * made there, and it and the list filter never move each other.
  *
  * It runs last on purpose (`zzz-`): it adds a profile to the shared hub, and every journey
  * before it photographs a sidebar that a second profile would change.
@@ -46,18 +48,18 @@ async function ensureDesigner(page: Page) {
   await page.getByTestId('back-to-chats').click();
 }
 
-/** A new chat in `profileName`, chosen on the new-chat screen itself; returns its id. */
+/** A new chat in the profile the top selector is on; returns its id. */
 async function chatIn(page: Page, profileName: string, slug: string, text: string) {
-  await page.getByRole('link', { name: 'محادثة جديدة' }).first().click();
-  await expect(page).toHaveURL(/\/new$/);
-  // Where the chat is made is said on the screen, and changed there (ADR 0016).
-  const where = page.getByTestId('new-chat-profile');
-  await expect(where).toBeVisible();
-  if (!(await where.textContent())?.includes(profileName)) {
-    await where.click();
+  const top = page.getByTestId('workspace-switcher').first();
+  if (!(await top.textContent())?.includes(profileName)) {
+    await top.click();
     await page.getByRole('option', { name: profileName, exact: true }).click();
   }
-  await expect(where).toContainText(profileName);
+  await expect(top).toContainText(profileName);
+  await page.getByRole('link', { name: 'محادثة جديدة' }).first().click();
+  await expect(page).toHaveURL(/\/new$/);
+  // Where the chat is made is said on the screen: the top profile, nothing else.
+  await expect(page.getByTestId('new-chat-profile')).toHaveAttribute('data-profile', slug);
   await expect(page.getByTestId('composer-input')).toBeEnabled();
   await page.getByTestId('composer-input').fill(text);
   await page.getByTestId('send').click();
@@ -75,24 +77,31 @@ const row = (page: Page, id: string) =>
   page.getByTestId('session-row').filter({ has: page.locator(`a[href^="/chat/${id}"]`) });
 
 test.describe('lists across profiles', () => {
-  test('two profiles, one list: both chats with badges, each opens and answers in its own profile, search finds both', async ({
+  test('two profiles, one list: the list filter opens on all, the top selector is one profile, each chat answers in its own, search finds both', async ({
     page,
   }) => {
     await login(page);
     await ensureDesigner(page);
-    // A fresh entry into the app: the lists are on every profile (owner: «كل البروفايلات
-    // افتراضيا»).
+    // A fresh entry into the app: the top selector is the profile the person is in, and
+    // offers no "All"; the list's own filter is on every profile.
     await page.goto('/chat');
-    const selector = page.getByTestId('workspace-switcher').first();
-    await expect(selector).toContainText('كل البروفايلات');
+    const top = page.getByTestId('workspace-switcher').first();
+    const filter = page.getByTestId('session-profile-filter');
+    await expect(top).toContainText('Default');
+    await expect(filter).toContainText('كل البروفايلات');
+    await top.click();
+    // Profiles only (an earlier journey may have made more): never "All".
+    await expect(page.getByRole('option', { name: 'Designer', exact: true })).toBeVisible();
+    await expect(page.getByRole('option', { name: 'كل البروفايلات' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
 
     const word = `بنفسج${Date.now().toString(36)}`;
     const inDefault = await chatIn(page, 'Default', 'default', `محادثة ${word} في الافتراضي`);
     const inDesigner = await chatIn(page, 'Designer', 'designer', `محادثة ${word} عند المصمم`);
 
-    // One list, both chats, each saying which profile it is from — and the selector never
-    // moved while the new chats were made.
-    await expect(selector).toContainText('كل البروفايلات');
+    // Changing the top selector to make the second chat did not narrow the list: both chats,
+    // each saying which profile it is from.
+    await expect(filter).toContainText('كل البروفايلات');
     await expect(row(page, inDefault).getByTestId('session-profile')).toHaveAttribute(
       'data-profile',
       'default',
@@ -106,7 +115,8 @@ test.describe('lists across profiles', () => {
       .getByRole('navigation', { name: /القائمة الرئيسية|Main menu/ })
       .screenshot({ path: path.join(shots, 'all-profiles-sidebar-ar-light.png') });
 
-    // Open each and send: it answers in its own profile, and the selector stays on all.
+    // Open each and send: it answers in its own profile; the top selector stays on Designer
+    // even while the default chat is open, and the list stays on all.
     for (const [id, slug] of [
       [inDefault, 'default'],
       [inDesigner, 'designer'],
@@ -122,25 +132,29 @@ test.describe('lists across profiles', () => {
         'data-status',
         'complete',
       );
-      await expect(selector).toContainText('كل البروفايلات');
+      await expect(top).toContainText('Designer');
+      await expect(filter).toContainText('كل البروفايلات');
       await expect(row(page, inDefault)).toBeVisible();
       await expect(row(page, inDesigner)).toBeVisible();
     }
-    await page.waitForTimeout(300);
-    await page.screenshot({ path: path.join(shots, 'all-profiles-chat-ar-light.png') });
 
-    // Narrowing is still there: one profile, one chat, no badges.
-    await selector.click();
-    await page.getByRole('option', { name: 'Designer', exact: true }).click();
-    await expect(row(page, inDefault)).toHaveCount(0);
-    await expect(row(page, inDesigner)).toBeVisible();
+    // The list's filter narrows the list only: one profile, one chat, no badges — and the
+    // top selector did not move.
+    await filter.click();
+    await page.getByRole('option', { name: 'Default', exact: true }).click();
+    await expect(row(page, inDesigner)).toHaveCount(0);
+    await expect(row(page, inDefault)).toBeVisible();
     await expect(page.getByTestId('session-profile')).toHaveCount(0);
+    await expect(top).toContainText('Designer');
+    await page.waitForTimeout(300);
+    await page
+      .getByRole('navigation', { name: /القائمة الرئيسية|Main menu/ })
+      .screenshot({ path: path.join(shots, 'all-profiles-filter-ar-light.png') });
 
-    // Search looks in every profile, whatever the selector says (owner: «نعم»).
+    // Search looks in every profile, whatever the list filter says (owner: «نعم»).
     await page.getByRole('link', { name: 'بحث' }).first().click();
     await page.getByRole('searchbox', { name: 'بحث' }).fill(word);
-    const results = page.getByTestId('search-result');
-    await expect(results).toHaveCount(2);
+    await expect(page.getByTestId('search-result')).toHaveCount(2);
     await expect(page.getByTestId('search-result-profile')).toHaveCount(2);
     await page.waitForTimeout(300);
     await page.screenshot({ path: path.join(shots, 'all-profiles-search-ar-light.png') });
@@ -148,9 +162,11 @@ test.describe('lists across profiles', () => {
     await expect(page.getByTestId('chat-profile')).toHaveAttribute('data-profile', 'default');
     await expect(page.getByTestId('message-user').first()).toContainText(word);
 
-    // Back to all, for whatever runs after.
-    await page.getByTestId('workspace-switcher').first().click();
+    // Back as it was, for whatever runs after: the list on all, the person in Default.
+    await filter.click();
     await page.getByRole('option', { name: 'كل البروفايلات', exact: true }).click();
-    await expect(page.getByTestId('workspace-switcher').first()).toContainText('كل البروفايلات');
+    await top.click();
+    await page.getByRole('option', { name: 'Default', exact: true }).click();
+    await expect(top).toContainText('Default');
   });
 });

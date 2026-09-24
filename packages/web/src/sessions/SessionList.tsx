@@ -22,14 +22,14 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useEffect, useMemo, useState } from 'react';
 import { NavLink, useNavigate, useParams, useSearchParams } from 'react-router';
-import { useDeleteSession, useUpdateSession } from '../hub/queries.js';
+import { useDeleteSession, useProfiles, useUpdateSession } from '../hub/queries.js';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import { routeOf } from '../navigation/manifest.js';
 import { chatHref } from '../chat/anchor.js';
 import { ProfileBadge } from '../shell/ProfileBadge.js';
-import { ALL_PROFILES, useManyProfiles, useProfileInLink } from '../shell/profileSelector.js';
+import { ALL_PROFILES, useManyProfiles, useProfileInLink } from '../shell/profiles.js';
 import type { Session } from '../types.js';
 import {
   IconArchive,
@@ -58,6 +58,7 @@ import {
   MenuSeparator,
   Notice,
   Segmented,
+  Select,
   Skeleton,
   SkeletonGroup,
   useConfirm,
@@ -102,13 +103,21 @@ export function archivedFor(scope: SessionScope): 'true' | 'false' | 'all' {
 
 export function SessionList({ onOpen }: { onOpen?: () => void }) {
   const { t } = useI18n();
-  // The list gathers every profile the person may enter unless the top selector narrowed
-  // it to one (ADR 0016); a badge says which profile a row is from once there are several.
-  const { homeProfile, allProfiles } = useAuth();
+  // The list gathers every profile the person may enter unless its own filter narrows it to
+  // one (ADR 0016). The filter is the list's, not the top selector's: neither moves the
+  // other. A badge says which profile a row is from once there are several on screen.
+  const { listFilter, setListFilter } = useAuth();
+  const profiles = useProfiles().data ?? [];
   const manyProfiles = useManyProfiles();
+  // A filter naming a profile the person can no longer enter falls back to all of them.
+  const narrowed =
+    manyProfiles && listFilter !== ALL_PROFILES && profiles.some((p) => p.slug === listFilter)
+      ? listFilter
+      : null;
+  const allProfiles = narrowed === null;
   const showProfile = allProfiles && manyProfiles;
   /** The manual order is kept per view: every profile together, or one profile. */
-  const orderScope = allProfiles ? ALL_PROFILES : homeProfile;
+  const orderScope = narrowed ?? ALL_PROFILES;
   const [filter, setFilter] = useState('');
   const [params, setParams] = useSearchParams();
   const { ask, dialog } = useConfirm();
@@ -116,7 +125,11 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
   const scope = scopeFromParams(params);
   // Live, not polled: a session that names itself after its first reply (contract
   // decision §26) changes this list with nothing on this screen having been clicked.
-  const sessions = useLiveSessions({ archived: archivedFor(scope), allProfiles });
+  const sessions = useLiveSessions({
+    archived: archivedFor(scope),
+    allProfiles,
+    ...(narrowed ? { profile: narrowed } : {}),
+  });
   const update = useUpdateSession();
   const remove = useDeleteSession();
   const navigate = useNavigate();
@@ -243,6 +256,20 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
 
   return (
     <div className="flex flex-col gap-2" data-testid="session-list">
+      {/* Which profiles the list shows — hidden for someone with one profile, where there
+          is nothing to choose between. */}
+      {manyProfiles && (
+        <Select
+          value={narrowed ?? ALL_PROFILES}
+          onValueChange={(next) => setListFilter(next ?? ALL_PROFILES)}
+          options={[
+            { value: ALL_PROFILES, label: t('sessions.all_profiles') },
+            ...profiles.map((p) => ({ value: p.slug, label: p.name })),
+          ]}
+          label={t('sessions.profile_filter')}
+          testId="session-profile-filter"
+        />
+      )}
       <Input
         type="search"
         inputSize="sm"

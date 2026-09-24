@@ -1,6 +1,7 @@
+import { useProfiles } from '../hub/queries.js';
+import { useAuth } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';
 import { Select } from '../ui/Select.js';
-import { useProfileSelector } from './profileSelector.js';
 
 /**
  * The profile chip, in the top bar only (owner, 2026-09-24): switches `X-Hub-Profile` and
@@ -8,15 +9,21 @@ import { useProfileSelector } from './profileSelector.js';
  */
 export function WorkspaceSwitcher() {
   const { t } = useI18n();
-  // "All profiles" on a list, the profile being edited elsewhere (ADR 0016).
-  const selector = useProfileSelector();
+  const { profile, setProfile } = useAuth();
+  const profiles = useProfiles();
+  const items = profiles.data ?? [];
+  // Until the hub answers, the slug we are scoped to is the only workspace we can name.
+  const options =
+    items.length === 0
+      ? [{ value: profile, label: profile }]
+      : items.map((p) => ({ value: p.slug, label: p.name }));
   return (
     <span className="inline-flex items-center gap-1 text-xs">
       <span className="text-muted">{t('shell.workspace')}</span>
       <Select
-        value={selector.value}
-        onValueChange={selector.onValueChange}
-        options={selector.options}
+        value={profile}
+        onValueChange={(next) => next && setProfile(next)}
+        options={options}
         label={t('shell.workspace')}
         testId="workspace-switcher"
       />

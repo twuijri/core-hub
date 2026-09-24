@@ -2,8 +2,10 @@
  * Lists across profiles (ADR 0016, owner 2026-09-24).
  *
  * «ايه» — the lists gather every profile the person may enter, each item with a badge of its
- * profile; the top selector is for creating and for filtering. «كل البروفايلات افتراضيا» —
- * "All profiles" is where the app opens. «نعم» — search always looks in every profile.
+ * profile. «كل البروفايلات افتراضيا» — the chats list opens on "All profiles». «نعم» — search
+ * always looks in every profile. And the owner's correction: «المفروض ما فيه خيار الكل. خيار
+ * الكل كان لتصنيف المحادثات بس» — the top selector is always one concrete profile; "All
+ * profiles" is the chats list's own filter, and neither moves the other.
  *
  * What is asserted is what a person sees and what goes on the wire: which profile each
  * request names, and that opening an item from another profile never moves the selector.
@@ -72,7 +74,7 @@ const { I18nProvider } = await import('../src/i18n/context.js');
 const { RealtimeProvider } = await import('../src/realtime/context.js');
 const { SessionList } = await import('../src/sessions/SessionList.js');
 const { WorkspaceSwitcher } = await import('../src/shell/WorkspaceSwitcher.js');
-const { ProfilePageContext } = await import('../src/shell/profileSelector.js');
+const { NewChatScreen } = await import('../src/screens/NewChatScreen.js');
 const { ChatScreen } = await import('../src/chat/ChatScreen.js');
 const { SearchScreen } = await import('../src/screens/SearchScreen.js');
 const { reduce, hydrate, initialChat } = await import('../src/chat/transcript.js');
@@ -232,16 +234,14 @@ function Providers({
   );
 }
 
-/** The chats list with the selector above it, as the chat page frames them. */
+/** The chats list with the top selector beside it, as the chat page frames them. */
 function renderList(profiles = TWO_PROFILES) {
   const hub = fakeHub(profiles);
   const store = signedIn();
   render(
     <Providers store={store} fetchImpl={hub.fetchImpl} path="/chat">
-      <ProfilePageContext.Provider value="lists">
-        <WorkspaceSwitcher />
-        <SessionList />
-      </ProfilePageContext.Provider>
+      <WorkspaceSwitcher />
+      <SessionList />
     </Providers>,
   );
   return { ...hub, store };
@@ -250,11 +250,33 @@ function renderList(profiles = TWO_PROFILES) {
 const listCalls = (seen: Seen[]) =>
   seen.filter((call) => call.path === '/sessions' && call.method === 'GET');
 
-describe('the lists open on every profile', () => {
+describe('the top selector is the profile the person is in', () => {
+  it('is always one concrete profile, and never offers "All"', async () => {
+    const user = userEvent.setup();
+    renderList();
+    const switcher = await screen.findByTestId('workspace-switcher');
+    await waitFor(() => expect(switcher).toHaveTextContent('Default'));
+    expect(await optionLabels(user, switcher)).toEqual(['Default', 'Designer']);
+    await closeControl(user);
+  });
+
+  it('does not move the list filter: the list stays on every profile', async () => {
+    const user = userEvent.setup();
+    const { store } = renderList();
+    const switcher = await screen.findByTestId('workspace-switcher');
+    await waitFor(() => expect(screen.getAllByTestId('session-row')).toHaveLength(2));
+    await chooseOption(user, switcher, 'Designer');
+    await waitFor(() => expect(store.read()?.profile).toBe('designer'));
+    expect(screen.getByTestId('session-profile-filter')).toHaveTextContent('All profiles');
+    await waitFor(() => expect(screen.getAllByTestId('session-row')).toHaveLength(2));
+  });
+});
+
+describe('the chats list has its own profile filter', () => {
   it('opens on "All profiles": both profiles listed, each row with its badge', async () => {
     const { seen } = renderList();
-    const switcher = await screen.findByTestId('workspace-switcher');
-    await waitFor(() => expect(switcher).toHaveTextContent('All profiles'));
+    const filter = await screen.findByTestId('session-profile-filter');
+    expect(filter).toHaveTextContent('All profiles');
     await waitFor(() => expect(screen.getAllByTestId('session-row')).toHaveLength(2));
     expect(listCalls(seen).at(-1)?.query.get('profiles')).toBe('all');
     const badges = screen.getAllByTestId('session-profile').map((b) => b.dataset.profile);
@@ -262,23 +284,24 @@ describe('the lists open on every profile', () => {
     expect(screen.getAllByTestId('session-profile')[0]).toHaveTextContent(/Default|Designer/);
   });
 
-  it('narrows to one profile when one is chosen, and back to all', async () => {
+  it('narrows to one profile without moving the top selector, and back to all', async () => {
     const user = userEvent.setup();
     const { seen, store } = renderList();
-    const switcher = await screen.findByTestId('workspace-switcher');
+    const filter = await screen.findByTestId('session-profile-filter');
     await waitFor(() => expect(screen.getAllByTestId('session-row')).toHaveLength(2));
 
-    await chooseOption(user, switcher, 'Designer');
+    await chooseOption(user, filter, 'Designer');
     await waitFor(() => expect(screen.getAllByTestId('session-row')).toHaveLength(1));
     const last = listCalls(seen).at(-1)!;
     expect(last.query.get('profiles')).toBeNull();
     expect(last.profile).toBe('designer');
     // One profile on screen: nothing for a badge to tell apart.
     expect(screen.queryByTestId('session-profile')).toBeNull();
-    // A profile chosen is also where new things are made.
-    expect(store.read()?.profile).toBe('designer');
+    // The filter is the list's: the person is still in their own profile.
+    expect(screen.getByTestId('workspace-switcher')).toHaveTextContent('Default');
+    expect(store.read()?.profile).toBe('default');
 
-    await chooseOption(user, switcher, 'All profiles');
+    await chooseOption(user, filter, 'All profiles');
     await waitFor(() => expect(screen.getAllByTestId('session-row')).toHaveLength(2));
   });
 
@@ -300,14 +323,14 @@ describe('the lists open on every profile', () => {
     expect(patch.profile).toBe('designer');
   });
 
-  it('with one profile there is nothing to gather: no "All", no badges', async () => {
+  it('with one profile there is nothing to gather: no filter, no badges, no profile in links', async () => {
     const user = userEvent.setup();
     renderList([TWO_PROFILES[0]!]);
     const switcher = await screen.findByTestId('workspace-switcher');
     await waitFor(() => expect(screen.getAllByTestId('session-row')).toHaveLength(1));
     expect(switcher).toHaveTextContent('Default');
+    expect(screen.queryByTestId('session-profile-filter')).toBeNull();
     expect(screen.queryByTestId('session-profile')).toBeNull();
-    // Nor a profile in the address: someone with one profile keeps the links they had.
     expect(within(screen.getByTestId('session-row')).getByRole('link').getAttribute('href')).toBe(
       `/chat/${IN_DEFAULT}`,
     );
@@ -325,19 +348,24 @@ describe('the lists open on every profile', () => {
   });
 });
 
-describe('a page that edits one profile', () => {
-  it('shows the profile being edited, never "All"', async () => {
+describe('a new chat is made in the top profile', () => {
+  it('says which, and follows the top selector — with no second control to disagree', async () => {
     const user = userEvent.setup();
     const hub = fakeHub();
     render(
-      <Providers store={signedIn()} fetchImpl={hub.fetchImpl} path="/settings">
-        <WorkspaceSwitcher />
+      <Providers store={signedIn()} fetchImpl={hub.fetchImpl} path="/new">
+        <Routes>
+          <Route path="/new" element={<NewChatScreen />} />
+        </Routes>
       </Providers>,
     );
-    const switcher = await screen.findByTestId('workspace-switcher');
-    await waitFor(() => expect(switcher).toHaveTextContent('Default'));
-    expect(await optionLabels(user, switcher)).toEqual(['Default', 'Designer']);
-    await closeControl(user);
+    const where = await screen.findByTestId('new-chat-profile');
+    await waitFor(() => expect(where).toHaveTextContent('New chat in Default'));
+    expect(within(where).queryByRole('combobox')).toBeNull();
+    await chooseOption(user, screen.getAllByTestId('workspace-switcher')[0]!, 'Designer');
+    await waitFor(() =>
+      expect(screen.getByTestId('new-chat-profile')).toHaveTextContent('New chat in Designer'),
+    );
   });
 });
 
@@ -360,14 +388,12 @@ describe('an item from another profile opens there, and the selector stays put',
     const store = signedIn();
     render(
       <Providers store={store} fetchImpl={hub.fetchImpl} path="/chat">
-        <ProfilePageContext.Provider value="lists">
-          <ProfileScope profile="designer">
-            <ChromeScope>
-              <WorkspaceSwitcher />
-            </ChromeScope>
-            <Probe />
-          </ProfileScope>
-        </ProfilePageContext.Provider>
+        <ProfileScope profile="designer">
+          <ChromeScope>
+            <WorkspaceSwitcher />
+          </ChromeScope>
+          <Probe />
+        </ProfileScope>
       </Providers>,
     );
     expect(screen.getByTestId('probe')).toHaveTextContent('designer|default');
@@ -375,7 +401,7 @@ describe('an item from another profile opens there, and the selector stays put',
     await waitFor(() => expect(hub.seen.some((c) => c.path === '/agents')).toBe(true));
     expect(hub.seen.find((c) => c.path === '/agents')?.profile).toBe('designer');
     await waitFor(() =>
-      expect(screen.getByTestId('workspace-switcher')).toHaveTextContent('All profiles'),
+      expect(screen.getByTestId('workspace-switcher')).toHaveTextContent('Default'),
     );
     expect(store.read()?.profile).toBe('default');
   });
@@ -406,32 +432,32 @@ describe('an item from another profile opens there, and the selector stays put',
     expect(
       hub.seen.filter((c) => c.path.startsWith(`/sessions/${IN_DESIGNER}`)),
     ).not.toContainEqual(expect.objectContaining({ profile: 'default' }));
-    // … while the selector and the list stayed on every profile, and the person's own
-    // profile did not change.
+    // … while the top selector stayed on the person's profile, the list on every profile,
+    // and the person's own profile did not change.
     await waitFor(() =>
-      expect(screen.getAllByTestId('workspace-switcher')[0]).toHaveTextContent('All profiles'),
+      expect(screen.getAllByTestId('workspace-switcher')[0]).toHaveTextContent('Default'),
     );
+    expect(screen.getAllByTestId('session-profile-filter')[0]).toHaveTextContent('All profiles');
     expect(listCalls(hub.seen).at(-1)?.query.get('profiles')).toBe('all');
     expect(store.read()?.profile).toBe('default');
   });
 });
 
 describe('search looks in every profile', () => {
-  it('asks every profile even when the lists are narrowed, and opens each hit in its profile', async () => {
+  it('asks every profile even when the list is narrowed, and opens each hit in its profile', async () => {
     const user = userEvent.setup();
     const hub = fakeHub();
     render(
-      <Providers store={signedIn('designer')} fetchImpl={hub.fetchImpl} path="/search">
+      <Providers store={signedIn()} fetchImpl={hub.fetchImpl} path="/search">
         <Routes>
           <Route path="/search" element={<SearchScreen />} />
         </Routes>
       </Providers>,
     );
-    // Narrow the lists to one profile: search must not follow.
-    const switcher = (await screen.findAllByTestId('workspace-switcher'))[0]!;
-    await waitFor(() => expect(switcher).toHaveTextContent('All profiles'));
-    await chooseOption(user, switcher, 'Designer');
-    await waitFor(() => expect(switcher).toHaveTextContent('Designer'));
+    // Narrow the chats list to one profile: search must not follow.
+    const filter = (await screen.findAllByTestId('session-profile-filter'))[0]!;
+    await chooseOption(user, filter, 'Designer');
+    await waitFor(() => expect(filter).toHaveTextContent('Designer'));
 
     await user.type(screen.getByRole('searchbox', { name: 'Search' }), 'o');
     await waitFor(() => expect(screen.getAllByTestId('search-result')).toHaveLength(2));

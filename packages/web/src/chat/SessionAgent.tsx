@@ -29,7 +29,7 @@ import { IconAgents, IconChevron } from '../ui/icons.js';
 import { Button, Menu, MenuItem, MenuNote, MenuSeparator } from '../ui/index.js';
 import { installedAgents } from './AgentChips.js';
 import { chatHref } from './anchor.js';
-import { useProfileInLink } from '../shell/profileSelector.js';
+import { useProfileInLink } from '../shell/profiles.js';
 
 export function SessionAgent({
   sessionId,
