@@ -36,7 +36,7 @@ export const SCHEDULE_KINDS = ['cron', 'interval', 'once'] as const;
 export const SCHEDULE_TARGETS = ['prompt', 'workflow'] as const;
 /**
  * The first overlap column's words (0000). Its CHECK cannot take `replace` without rebuilding
- * `schedules`, whose history cascades on delete, so `overlap` (0013) superseded it; it is
+ * `schedules`, whose history cascades on delete, so `overlap` (0014) superseded it; it is
  * no longer read or written.
  */
 export const OVERLAP_POLICIES = ['skip', 'queue', 'parallel'] as const;

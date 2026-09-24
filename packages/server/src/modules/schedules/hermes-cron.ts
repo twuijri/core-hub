@@ -140,7 +140,7 @@ export class HermesCron {
     }
     // Hermes decides both for its own jobs, per profile and not per job: a missed time runs
     // by its `cron.catch_up_missed` (on unless the profile's config says otherwise), and a
-    // job still running is always skipped (DECISIONS §39). A value here would not be kept.
+    // job still running is always skipped (DECISIONS §40). A value here would not be kept.
     for (const field of ['run_if_missed', 'overlap'] as const) {
       if (input[field] !== undefined && input[field] !== null) {
         throw conflict({ reason: 'hermes_run_options', field });

@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "0f513e8d-a64c-412a-b5b8-26ce0b504338",
-  "prevId": "b4775667-a677-4519-a64f-fb653c5b5969",
+  "id": "bc6a3731-973b-47c8-898f-b4cec6ae0e3a",
+  "prevId": "0f513e8d-a64c-412a-b5b8-26ce0b504338",
   "tables": {
     "app_tokens": {
       "name": "app_tokens",
@@ -4676,6 +4676,14 @@
           "autoincrement": false,
           "default": "'schedule'"
         },
+        "waiting": {
+          "name": "waiting",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
         "workflow_run_id": {
           "name": "workflow_run_id",
           "type": "text(26)",
@@ -4946,6 +4954,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'skip'"
+        },
+        "overlap": {
+          "name": "overlap",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'wait'"
         },
         "next_run_at": {
           "name": "next_run_at",

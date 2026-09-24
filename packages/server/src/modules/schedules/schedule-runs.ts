@@ -21,7 +21,7 @@
  * the engine's own ending (so a run that waits days at an approval still settles its line).
  * A hub that restarts settles, at boot, the lines it finds open (`settleStranded`).
  *
- * The schedule's `overlap` (DECISIONS §39) lives here too: a time held back while the
+ * The schedule's `overlap` (DECISIONS §40) lives here too: a time held back while the
  * previous run goes (`wait`) starts when that run's line settles (`release`), and `replace`
  * stops the previous run for real before the next starts (`stop`).
  *

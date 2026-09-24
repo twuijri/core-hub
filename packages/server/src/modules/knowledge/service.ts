@@ -9,8 +9,10 @@
  * - the name, sanitised before it is written down (`media.sanitiseFilename`);
  * - the media type, sniffed from the bytes (`media.sniffMime`) — the client's claim is
  *   recorded in the log when it was wrong, and otherwise ignored;
- * - de-duplication by `(workspace, sha256, size)`, so ten messages carrying the same
- *   screenshot hold one file.
+ * - de-duplication of the **bytes** by `(workspace, sha256)`, so ten messages carrying the
+ *   same screenshot hold one file. Each upload is still a row of its own (contract decision
+ *   §39): deleting one person's copy never takes another's, and the bytes go only when the
+ *   last live row that points at them is deleted.
  *
  * Nothing here reads a whole file into memory: uploads are streams into `BlobStore`,
  * downloads are streams out of it.
@@ -327,7 +329,7 @@ export class KnowledgeService {
   /**
    * Keep a finished profile export for `scope.userId` until `expiresAt`. Its bytes get a key
    * of their own (`BlobStore.keepCopy`), so an upload of the same archive later is a file
-   * of its own too.
+   * of its own too, and the export's expiry never removes it.
    */
   async keepExport(
     scope: AttachmentScope,
@@ -358,8 +360,7 @@ export class KnowledgeService {
 
   /**
    * Remove an uploaded profile archive once its import ended: the row as well as the bytes
-   * (when no other row shares them), because nothing refers to it and its storage key must
-   * be free for the next upload of the same file. Unknown ids are ignored.
+   * (when no other row shares them), because nothing refers to it. Unknown ids are ignored.
    */
   discardUpload(scope: AttachmentScope, id: string): void {
     const row = this.rows.get(scope.workspace, id);
@@ -391,7 +392,13 @@ export class KnowledgeService {
 
   // ------------------------------------------------- registering the bytes
 
-  /** Sniff, de-duplicate and write the row. Public so the routes can do it in two steps. */
+  /**
+   * Sniff and write the row. Public so the routes can do it in two steps.
+   *
+   * Always a new row, even for bytes this workspace already holds: an upload is one person's
+   * copy, and `remove` must be able to delete it without touching anyone else's. The bytes
+   * themselves are shared (`BlobStore` is content addressed).
+   */
   registerBlob(
     scope: AttachmentScope,
     input: {
@@ -414,18 +421,14 @@ export class KnowledgeService {
       );
     }
     const purpose = purposeFrom(input.purpose);
-    const existing = this.rows.findBySha(scope.workspace, input.blob.sha256, input.blob.sizeBytes);
-    if (
-      existing &&
-      existing.filename === input.filename &&
-      existing.mime === sniffed.mime &&
-      existing.sourceKind === input.sourceKind &&
-      (existing.meta?.purpose ?? 'message') === purpose &&
-      existing.expiresAt === null &&
-      input.expiresAt === null
-    ) {
-      // The very same file, uploaded again: one row, one copy of the bytes.
-      return existing;
+    if (!this.blobs.exists(input.blob.storageKey)) {
+      // The bytes were already stored when this upload arrived, and the last other row that
+      // used them was deleted before this one was written. Nothing is lost but the upload
+      // itself; the client sends it again.
+      throw new HubError('conflict', {
+        messageKey: 'knowledge.attachment_bytes_gone',
+        details: { reason: 'bytes_removed_during_upload' },
+      });
     }
     return this.rows.create({
       workspace: scope.workspace,

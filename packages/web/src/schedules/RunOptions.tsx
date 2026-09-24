@@ -1,5 +1,5 @@
 /**
- * A schedule's two run options (owner, 2026-09-24; DECISIONS §39), for the hub's own
+ * A schedule's two run options (owner, 2026-09-24; DECISIONS §40), for the hub's own
  * schedules — Hermes decides both for its own jobs, so its schedules do not show them:
  *
  * - «شغّله لو فات وقته (خلال ٢٤ ساعة)», off by default: a time missed while the hub was

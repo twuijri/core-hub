@@ -794,7 +794,29 @@ profile «manger», Hermes restarted, the number never answered).
   from Hermes's own pending file; the sender is not told. No realtime event: the page reads
   the list again every ten seconds while it is open.
 
-## 39. A schedule says whether a missed time runs, and what happens when its previous run is still going
+## 39. Every upload is an attachment of its own; the same bytes are stored once and removed with the last
+
+`sessions.uploadAttachment` and `sessions.completeUpload` answered `500` for the same file
+uploaded again after it was deleted, and for the same bytes under another name
+(`UNIQUE constraint failed: attachments.storage_key`): the store is content addressed, so every
+copy of the same bytes in a profile has the same storage key, and the key was unique. The web's
+skill import kept its uploaded packs for that reason alone (2026-09-24, agent tools PR).
+
+- **One row per upload, bytes once.** Each upload answers a new `Attachment` id, even when the
+  profile already holds the same bytes, under this name or another, live or deleted. The bytes
+  stay stored once per profile (`sha256`), and `sessions.deleteAttachment` removes them only with
+  the last live attachment that points at them. Until now the very same file with the same name
+  and purpose answered the **existing** id; it no longer does, so one person deleting their
+  upload never deletes someone else's copy. Proposed — owner to confirm.
+- **`409` on `sessions.uploadAttachment`** (new documented status): only when the shared bytes
+  were deleted while this upload was arriving — sending it again succeeds. Any other storage
+  conflict is a `409` too, never a `500`.
+- Migration `0013_attachments_shared_bytes`: the unique index on `attachments.storage_key` becomes
+  a plain `(workspace, storage_key)` index. No row changes.
+- The web deletes an imported skill pack's uploads once the import answered, whether it
+  succeeded or was refused.
+
+## 40. A schedule says whether a missed time runs, and what happens when its previous run is still going
 
 The owner turned the two fixed rules of §35 into options of each schedule (2026-09-24):
 

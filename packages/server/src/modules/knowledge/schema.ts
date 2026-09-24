@@ -121,7 +121,10 @@ export const attachments = sqliteTable(
     mime: text('mime', { length: 120 }).notNull(),
     sizeBytes: integer('size_bytes').notNull(),
     sha256: text('sha256', { length: 64 }).notNull(),
-    /** Path relative to `<data>/attachments`; never an absolute host path. */
+    /**
+     * Path relative to `<data>/attachments`; never an absolute host path. Shared by every row
+     * holding the same bytes in a workspace.
+     */
     storageKey: text('storage_key').notNull(),
     kind: text('kind', { enum: ATTACHMENT_KINDS }).notNull().default('file'),
     sourceKind: text('source_kind', { enum: ATTACHMENT_SOURCES }).notNull().default('upload'),
@@ -133,7 +136,10 @@ export const attachments = sqliteTable(
     deletedAt: timestampMs('deleted_at'),
   },
   (t) => [
-    uniqueIndex('attachments_storage_key_uq').on(t.storageKey),
+    // Not unique: content addressing means every upload of the same bytes in a workspace
+    // points at the same key, one row each (contract decision §39). A delete removes the bytes
+    // only when no live row still points at them (`AttachmentStore.referencesTo`).
+    index('attachments_workspace_storage_key_idx').on(t.workspace, t.storageKey),
     index('attachments_workspace_sha_idx').on(t.workspace, t.sha256),
     index('attachments_expires_idx').on(t.expiresAt),
     check('attachments_kind_check', inList(t.kind, ATTACHMENT_KINDS)),

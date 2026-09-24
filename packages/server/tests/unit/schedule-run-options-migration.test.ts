@@ -1,4 +1,4 @@
-// drizzle/0013_schedule_run_options.sql gives every schedule the owner's defaults for the two
+// drizzle/0014_schedule_run_options.sql gives every schedule the owner's defaults for the two
 // run options (2026-09-24): a missed time does not run late (`misfire_policy = skip`), and a
 // time that comes while the previous run goes waits for it (`overlap = wait`). It adds
 // columns only — no rebuild — so a schedule's history survives it untouched.
@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { migrationsFolder } from '../../src/app/db.js';
 import { newUlid } from '../../src/db/ids.js';
 
-const TAG = '0013_schedule_run_options';
+const TAG = '0014_schedule_run_options';
 
 function folderBefore(tag: string): string {
   const dir = mkdtempSync(path.join(tmpdir(), 'majlis-migration-'));

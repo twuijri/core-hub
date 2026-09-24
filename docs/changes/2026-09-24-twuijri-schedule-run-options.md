@@ -63,13 +63,13 @@
 - `schedules.create` و`schedules.update` يوثّقان `409` (كانت رفوض هرمز `409` بلا توثيق).
 - أحداث `/rt/schedules` (`schedule.created/updated/fired`، `schedule_run.*`) و`common.schema.json`: المخططات
   والأمثلة بالحقول الجديدة.
-- `docs/contracts/DECISIONS.md` **§39**.
+- `docs/contracts/DECISIONS.md` **§40**.
 
 ## الملفات والتأثير
 - العقد: `packages/contracts/openapi.yaml`، `packages/contracts/events/common.schema.json`،
   `packages/contracts/events/schedules/*.schema.json` (٦).
 - الخادم: `modules/schedules/{schema,service,scheduler,schedule-runs,index,hermes-cron}.ts`،
-  `modules/index.ts` (منفذ `cancel`)، هجرة `drizzle/0013_schedule_run_options.sql` واللقطة.
+  `modules/index.ts` (منفذ `cancel`)، هجرة `drizzle/0014_schedule_run_options.sql` واللقطة.
 - اختبارات الخادم: `scheduler.test.ts` (ساعة مزيّفة: الافتراض المطفأ، مهلة الدقيقتين، المُعلَّم ≤ ٢٤ ساعة،
   أقدم من ٢٤ ساعة، الاختيارات الأربعة، قاعدة المنتظر الواحد، الحفظ والتعديل؛ واختبارا الفوات والتخطّي القديمان
   صارا يقولان الخيار صراحة)؛ `tests/unit/schedule-runs.test.ts` (جلسات حقيقية: الانتظار ثم البدء عند
@@ -140,7 +140,7 @@ once…»، والاختبارات السابقة في الملفات نفسها
 - **سطر منتظر** لا يبدأ إلا بنهاية تشغيل في هذا الخادم أو عند إعادة التشغيل؛ خادمان على قاعدة واحدة: نهاية
   تشغيل في أحدهما تبدأ المنتظر فيه (compare-and-set يمنع التكرار).
 - **عمود `overlap_policy` القديم** باقٍ ميتًا؛ حذفه يحتاج إعادة بناء الجدول مع حفظ السجل — ليس الآن.
-- **تعارض محتمل**: هجرة `0013` — إن دُمجت قبلها هجرة أخرى بالرقم نفسه تُعاد توليد هذه برقم تالٍ.
+- **تعارض محتمل**: هجرة `0014` — #94 أخذ `0013` فأُعيد توليد هذه بعد دمج `main`؛ إن دُمجت قبلها هجرة أخرى تُعاد برقم تالٍ.
 - الرجوع: الفرع وحده؛ الرجوع بعد ترحيل القاعدة يترك عمودين لا تقرؤهما النسخة الأقدم (آمن).
 
 ## التسليم والخطوة التالية

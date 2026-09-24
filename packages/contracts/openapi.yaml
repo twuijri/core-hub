@@ -2977,7 +2977,12 @@ paths:
       operationId: sessions.uploadAttachment
       tags: [sessions]
       summary: Upload a file in one request (≤ 25 MB)
-      description: For larger files or flaky networks use the resumable `/attachment-uploads` flow.
+      description: >-
+        For larger files or flaky networks use the resumable `/attachment-uploads` flow. Every
+        upload is an attachment of its own, even when the profile already holds the same bytes
+        (under this name or another, live or deleted): the bytes are stored once and removed
+        with the last attachment that uses them. `409` only when those shared bytes were
+        deleted while this upload was arriving; sending it again succeeds.
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -3026,6 +3031,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
         '429':
@@ -16063,7 +16070,7 @@ components:
             run_if_missed:
               description: >-
                 Whether a time missed while the hub was not running still runs, once, when
-                the hub is back within 24 hours of it (DECISIONS §39). `false` skips it and
+                the hub is back within 24 hours of it (DECISIONS §40). `false` skips it and
                 records why in the history. A run up to two minutes late is on time and
                 runs either way. `null` for a schedule in an agent's own scheduler
                 (`external`), which decides this itself.
@@ -16071,7 +16078,7 @@ components:
             overlap:
               description: >-
                 What happens when this schedule's time comes and its previous run is still
-                going (DECISIONS §39): `skip` records the time as skipped; `wait` runs it as
+                going (DECISIONS §40): `skip` records the time as skipped; `wait` runs it as
                 soon as the previous run ends, with at most one time waiting (a further one
                 is skipped and recorded); `parallel` starts it alongside, in a session of its
                 own; `replace` stops the previous run, then starts. "Run now" always starts

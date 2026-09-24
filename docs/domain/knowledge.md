@@ -52,7 +52,7 @@ The single file registry (`DECISIONS.md` §15).
 | mime | text(120) | |
 | size_bytes | int | |
 | sha256 | text(64) | de-duplication within a workspace |
-| storage_key | text, unique | path relative to `<data>/attachments`; never absolute |
+| storage_key | text | path relative to `<data>/attachments`; never absolute. Content addressed: every row with the same bytes in a workspace shares it (`DECISIONS.md` §39) |
 | kind | enum(image, audio, video, file, diff, log) | |
 | source_kind | enum(upload, agent_output, tool_output, device, journal, export) | |
 | source_id | ulid? | the message, tool call, device command or journal entry |
@@ -60,7 +60,9 @@ The single file registry (`DECISIONS.md` §15).
 | expires_at | ms? | temporary files (tool output) |
 | deleted_at | ms? | bytes gone; row kept so references render "removed" |
 
-Indexes: `storage_key` unique; (workspace, sha256); `expires_at`.
+Indexes: (workspace, storage_key); (workspace, sha256); `expires_at`. The storage key is
+**not** unique: each upload is a row of its own over shared bytes, and a delete removes the
+bytes only when no live row still points at them (migration `0013`).
 
 `purpose` (the contract's `AttachmentPurpose`) lives in `meta` rather than in a
 column: it is a rendering hint the client sends and reads back, never something the

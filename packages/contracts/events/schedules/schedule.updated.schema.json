@@ -236,11 +236,11 @@
               "type": ["string", "null"]
             },
             "run_if_missed": {
-              "description": "Whether a time missed while the hub was not running still runs, once, when the hub is back within 24 hours of it (DECISIONS §39). `false` skips it and records why in the history. A run up to two minutes late is on time and runs either way. `null` for a schedule in an agent's own scheduler (`external`), which decides this itself.",
+              "description": "Whether a time missed while the hub was not running still runs, once, when the hub is back within 24 hours of it (DECISIONS §40). `false` skips it and records why in the history. A run up to two minutes late is on time and runs either way. `null` for a schedule in an agent's own scheduler (`external`), which decides this itself.",
               "type": ["boolean", "null"]
             },
             "overlap": {
-              "description": "What happens when this schedule's time comes and its previous run is still going (DECISIONS §39): `skip` records the time as skipped; `wait` runs it as soon as the previous run ends, with at most one time waiting (a further one is skipped and recorded); `parallel` starts it alongside, in a session of its own; `replace` stops the previous run, then starts. \"Run now\" always starts at once and stops nothing. `null` for a schedule in an agent's own scheduler (`external`), which decides this itself.",
+              "description": "What happens when this schedule's time comes and its previous run is still going (DECISIONS §40): `skip` records the time as skipped; `wait` runs it as soon as the previous run ends, with at most one time waiting (a further one is skipped and recorded); `parallel` starts it alongside, in a session of its own; `replace` stops the previous run, then starts. \"Run now\" always starts at once and stops nothing. `null` for a schedule in an agent's own scheduler (`external`), which decides this itself.",
               "oneOf": [
                 {
                   "$ref": "#/$defs/ScheduleOverlap"

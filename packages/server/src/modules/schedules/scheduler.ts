@@ -13,7 +13,7 @@
  * run, nothing after a one-off. A paused schedule has no next time and is never due; a
  * schedule whose repeat limit is reached has none either.
  *
- * Two options per schedule decide what else happens (owner, 2026-09-24; DECISIONS §39):
+ * Two options per schedule decide what else happens (owner, 2026-09-24; DECISIONS §40):
  *
  * - **Run if missed** (`misfire_policy`, the contract's `run_if_missed`, off by default). A
  *   tick up to `LATE_GRACE_MS` late is on time: the scheduler looks every `TICK_MS`, and a
