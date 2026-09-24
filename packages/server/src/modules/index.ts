@@ -322,7 +322,7 @@ registerWorkflowGate((app) => workflowGateFor(app));
 
 /**
  * The hub fires its own schedules: a prompt schedule's run is a `sessions` turn in a
- * session of its own (source `schedule`, origin the schedule), which the history can open.
+ * session of its own (source `schedule`, origin its history line), which the history opens.
  */
 registerScheduleRunner((app) => {
   const runs = sessionRunsFor(app);
@@ -334,7 +334,8 @@ registerScheduleRunner((app) => {
         prompt: input.prompt,
         title: input.title,
         source: 'schedule',
-        origin: { kind: 'schedule', id: input.scheduleId },
+        // The session serves one firing: its origin is the history line (`schedule_run`).
+        origin: { kind: 'schedule', id: input.scheduleRunId },
       }),
     outcome: (workspace, runId) => runs.outcome(workspace, runId),
   };

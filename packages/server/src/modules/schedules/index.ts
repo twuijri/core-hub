@@ -180,7 +180,7 @@ export function firerFor(app: FastifyInstance): ScheduleRuns {
     emit: (profile, event, payload) =>
       realtimeOf(app).emit(REALTIME_NAMESPACES.schedules, event, { profile }, payload),
     toSchedule: (row, profile) =>
-      toSchedule(row, profile, new SchedulesService(requireSqlite(app.hub.database)).nextFor(row)),
+      toSchedule(row, profile, new SchedulesService(requireSqlite(app.hub.database)).shownNext(row)),
     toRun: (row) => toScheduleRun(row, { full: false }),
     log: app.log,
   });
@@ -407,9 +407,21 @@ function toWorkflowRun(
     updated_at: row.updatedAt.toISOString(),
     workflow_id: row.workflowId,
     job_id: row.id,
-    status: row.status,
-    trigger: row.triggerKind === 'api' ? 'manual' : row.triggerKind,
-    input: null,
+    // The contract's six: a run paused at an approval (or paused at all) is `waiting`.
+    status:
+      row.status === 'waiting_approval' || row.status === 'paused'
+        ? 'waiting'
+        : row.status === 'timed_out'
+          ? 'failed'
+          : row.status,
+    // Who or what started it (`RunTrigger`): a person, a schedule, or the API.
+    trigger:
+      row.triggerKind === 'schedule'
+        ? { kind: 'schedule', id: row.scheduleId }
+        : row.triggerKind === 'manual'
+          ? { kind: 'user', id: row.ownerId }
+          : { kind: 'api', id: null },
+    input: (row.input as { input?: string | null } | null)?.input ?? null,
     steps: steps.map(stepOf),
     error: row.error,
     started_at: row.startedAt?.toISOString() ?? null,
@@ -613,7 +625,7 @@ export const schedulesModule = defineModule({
           limit: limit + 1,
         });
         return pageOf(rows, limit, (row) =>
-          toSchedule(row, slugOf.get(row.workspace) ?? '', service.nextFor(row)),
+          toSchedule(row, slugOf.get(row.workspace) ?? '', service.shownNext(row)),
         );
       },
     });
@@ -641,7 +653,7 @@ export const schedulesModule = defineModule({
             refusedByHermesCron(error);
           }
         }
-        const schedule = toSchedule(row, scope.profile, service.nextFor(row));
+        const schedule = toSchedule(row, scope.profile, service.shownNext(row));
         announce(request, 'schedule.created', { schedule });
         return schedule;
       },
@@ -653,7 +665,7 @@ export const schedulesModule = defineModule({
         const scope = scopeOf(request);
         const service = serviceOf(request);
         const row = service.get(scope, params.schedule_id as string);
-        return toSchedule(row, scope.profile, service.nextFor(row));
+        return toSchedule(row, scope.profile, service.shownNext(row));
       },
     });
 
@@ -682,7 +694,7 @@ export const schedulesModule = defineModule({
         } else {
           row = service.update(scope, id, patch);
         }
-        const schedule = toSchedule(row, scope.profile, service.nextFor(row));
+        const schedule = toSchedule(row, scope.profile, service.shownNext(row));
         announce(request, 'schedule.updated', { schedule });
         return schedule;
       },
@@ -722,7 +734,7 @@ export const schedulesModule = defineModule({
           await jobs.run(row.externalId).catch(refusedByHermesCron);
           const run = service.queueRun(scope, row.id);
           announce(request, 'schedule.fired', {
-            schedule: toSchedule(row, scope.profile, service.nextFor(row)),
+            schedule: toSchedule(row, scope.profile, service.shownNext(row)),
             schedule_run_id: run.id,
           });
           return {

@@ -4,8 +4,8 @@
  *
  * The run is the one a person would start by hand:
  *
- * - an `agent_prompt` target opens a session of source `schedule` (its origin the
- *   schedule) in the schedule's profile, as the schedule's owner, and queues one run whose
+ * - an `agent_prompt` target opens a session of source `schedule` (its origin the history
+ *   line, a `schedule_run`) in the schedule's profile, as the schedule's owner, and queues one run whose
  *   prompt is the schedule's — an ordinary conversation, in the ordinary per-session folder
  *   under `/data/workspaces/<profile>/`, that the history line can open;
  * - a `workflow` target starts the workflow, as `runWorkflow` would, with the schedule and
@@ -45,7 +45,14 @@ export interface ScheduleRunPorts {
   /** Open the schedule's session and queue its run; resolves once both exist. */
   start(
     scope: RunScope,
-    input: { scheduleId: string; agentId: string; prompt: string; title: string },
+    input: {
+      scheduleId: string;
+      /** The history line: the session's origin (`schedule_run`), so each run is traceable. */
+      scheduleRunId: string;
+      agentId: string;
+      prompt: string;
+      title: string;
+    },
   ): Promise<{ sessionId: string; runId: string; jobId: string; done: Promise<TurnOutcome> }>;
   /** A run by id, for settling after a restart; `null` when there is no such run. */
   outcome(workspace: string, runId: string): TurnOutcome | null;
@@ -142,6 +149,7 @@ export class ScheduleRuns {
       if (!ports) throw new Unrunnable('this hub cannot run an agent');
       const handle = await ports.start(scope, {
         scheduleId: schedule.id,
+        scheduleRunId: line.id,
         agentId: schedule.agentId,
         prompt,
         title: schedule.name,

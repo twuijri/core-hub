@@ -319,7 +319,10 @@ describe("schedules: Hermes's cron reflected", () => {
         method: 'POST',
         url: `/api/v1/schedules/${(created.json() as Json).id as string}/run`,
       });
-      expect(fired.statusCode).toBe(501);
+      // The hub fires its own: nothing is asked of Hermes. This hub installs no such agent,
+      // so the run fails saying so rather than pretending.
+      expect(fired.statusCode).toBe(409);
+      expect((fired.json() as Json).details).toMatchObject({ reason: 'target_unavailable' });
       expect(hermes.calls.filter((call) => !call.startsWith('GET'))).toEqual([]);
     } finally {
       await hub.close();

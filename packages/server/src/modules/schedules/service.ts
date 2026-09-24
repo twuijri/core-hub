@@ -145,6 +145,17 @@ export class SchedulesService {
     return nextRunAt(this.triggerOf(row), now, row.lastRunAt);
   }
 
+  /**
+   * The next time a person is shown: the stored tick — the one the scheduler will claim —
+   * so the page and the scheduler never disagree. `null` when paused or used up.
+   */
+  shownNext(row: ScheduleRow): Date | null {
+    if (row.externalSource) return row.nextRunAt;
+    if (!row.enabled) return null;
+    if (row.repeatLimit !== null && row.repeatCount >= row.repeatLimit) return null;
+    return row.nextRunAt;
+  }
+
   create(scope: Scope, input: Record<string, unknown>): ScheduleRow {
     const trigger = input.trigger as Record<string, unknown> | undefined;
     const target = input.target as Record<string, unknown> | undefined;
