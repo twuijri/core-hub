@@ -168,7 +168,7 @@ describe('the reference client against the hub', () => {
   it('signs in with a prompted password and stores the token 0600', async () => {
     const result = await cli(['login', '--server', baseUrl, '--username', 'admin'], [PASSWORD]);
     expect(result.code, result.stderr).toBe(0);
-    expect(result.stdout).toContain('Signed in as admin (owner). Workspace: default.');
+    expect(result.stdout).toContain('Signed in as admin (owner). Profile: default.');
     expect(result.stderr).toContain('Password: ');
     const file = path.join(env.XDG_CONFIG_HOME!, 'majlis', 'config.json');
     expect(statSync(file).mode & 0o777).toBe(0o600);

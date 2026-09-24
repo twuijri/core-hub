@@ -10,7 +10,9 @@
  * the Models screen, and inside the chat notice when a run failed for want of a
  * provider. One source, so the screen cannot disagree with the failure.
  */
+import { useState } from 'react';
 import { useI18n } from '../i18n/context.js';
+import { Badge, Button } from '../ui/index.js';
 import type { RuntimeCheck, RuntimeReport } from '../types.js';
 
 /** The order the steps actually happen in, which is the order to read them in. */
@@ -58,5 +60,56 @@ export function RuntimeChecks({
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * The Runtime card on the Models screen.
+ *
+ * When every check passes there is nothing to read, so it is one line — «كل شيء يعمل» /
+ * "Everything works" — with a toggle for whoever wants the list anyway (owner,
+ * 2026-09-24). The moment a check fails it opens by itself and stays open: a failure is
+ * the one thing this card exists to show, and it must not wait behind a click.
+ */
+export function RuntimeCard({ report }: { report: RuntimeReport }) {
+  const { t } = useI18n();
+  const checks = sortChecks(report.checks);
+  const allOk = checks.length > 0 && checks.every((check) => check.ok);
+  const [expanded, setExpanded] = useState(false);
+  const open = !allOk || expanded;
+  return (
+    <section
+      className="mb-4 rounded-md border border-line px-3 py-2"
+      data-testid="runtime-report"
+      data-collapsed={open ? undefined : 'true'}
+      aria-label={t('models.runtime.title')}
+    >
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-medium">{t('models.runtime.title')}</h2>
+        {allOk && (
+          <Badge tone="success" testId="runtime-all-ok">
+            {t('models.runtime.all_ok')}
+          </Badge>
+        )}
+        {allOk && (
+          <Button
+            className="ms-auto"
+            size="sm"
+            variant="ghost"
+            aria-expanded={open}
+            onClick={() => setExpanded((value) => !value)}
+            data-testid="runtime-toggle"
+          >
+            {t(open ? 'models.runtime.hide' : 'models.runtime.show')}
+          </Button>
+        )}
+      </div>
+      {open && (
+        <>
+          <p className="mb-2 mt-1 text-xs text-muted">{t('models.runtime.hint')}</p>
+          <RuntimeChecks report={report} />
+        </>
+      )}
+    </section>
   );
 }

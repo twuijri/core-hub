@@ -123,6 +123,8 @@ interface HubState {
   probe: Record<string, unknown>;
   /** Every request body the screen sent, for the "never echoed" assertions. */
   sent: { url: string; method: string; body: unknown }[];
+  /** What `models.getRuntime` answers; every check passing when absent. */
+  runtime?: Record<string, unknown>;
 }
 
 function hub(state: Partial<HubState> = {}) {
@@ -195,6 +197,7 @@ function hub(state: Partial<HubState> = {}) {
       return json(hubState.providers[0]);
     }
     if (url.includes('/models/runtime')) {
+      if (hubState.runtime) return json(hubState.runtime);
       // The self-check strip under the provider list (ADR 0010): a hub that took the
       // providers reports every step passing.
       return json({
@@ -588,6 +591,47 @@ describe('models screen', () => {
     expect(inheriting.textContent).toContain('Claude Code');
     expect(inheriting.textContent).toContain('anthropic/claude-sonnet-4-5');
     expect(inheriting.textContent).toContain('Not chosen');
+  });
+
+  it('folds the Runtime card to one line when every check passes', async () => {
+    const { fetchImpl } = hub();
+    const user = userEvent.setup();
+    renderScreen(fetchImpl);
+    const card = await screen.findByTestId('runtime-report');
+    expect(card.getAttribute('data-collapsed')).toBe('true');
+    expect(within(card).getByTestId('runtime-all-ok').textContent).toBe('Everything works');
+    // Nothing to read, so the list is not on the page until somebody asks for it.
+    expect(within(card).queryByTestId('runtime-checks')).toBeNull();
+    await user.click(within(card).getByTestId('runtime-toggle'));
+    expect(within(card).getByTestId('runtime-checks')).toBeTruthy();
+    expect(card.getAttribute('data-collapsed')).toBeNull();
+    await user.click(within(card).getByTestId('runtime-toggle'));
+    expect(within(card).queryByTestId('runtime-checks')).toBeNull();
+  });
+
+  it('opens the Runtime card by itself when a check fails', async () => {
+    const { fetchImpl } = hub({
+      runtime: {
+        agent: 'hermes',
+        mode: 'managed',
+        ready: false,
+        reloaded_at: null,
+        checks: [
+          { id: 'runtime_writable', ok: true, detail: 'managed' },
+          { id: 'provider_keys', ok: true, detail: '1' },
+          { id: 'model_selected', ok: false, detail: null },
+          { id: 'gateway_reloaded', ok: true, detail: null },
+        ],
+      },
+    });
+    renderScreen(fetchImpl);
+    const card = await screen.findByTestId('runtime-report');
+    expect(card.getAttribute('data-collapsed')).toBeNull();
+    expect(within(card).getByTestId('runtime-checks')).toBeTruthy();
+    expect(within(card).getByText(/No chat model is selected/)).toBeTruthy();
+    // A failure is not folded away behind a toggle, nor summed up as "everything works".
+    expect(within(card).queryByTestId('runtime-toggle')).toBeNull();
+    expect(within(card).queryByTestId('runtime-all-ok')).toBeNull();
   });
 
   it('renders in Arabic', async () => {
