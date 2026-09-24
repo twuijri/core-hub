@@ -404,6 +404,16 @@ export class SessionsStore {
     return pageOf(rows, limit, (row) => encodeCursor(row.createdAt.getTime(), row.id));
   }
 
+  /** Every run of a session, oldest first (the trajectory reads them all). */
+  allRuns(workspace: string, sessionId: string): RunRow[] {
+    return this.db
+      .select()
+      .from(runs)
+      .where(and(eq(runs.workspace, workspace), eq(runs.sessionId, sessionId)))
+      .orderBy(asc(runs.id))
+      .all();
+  }
+
   /** Active and queued runs of a session, in execution order (`SessionDetail.runs`). */
   liveRuns(workspace: string, sessionId: string): RunRow[] {
     return this.db

@@ -79,6 +79,8 @@ const KIT: Array<[component: string, file: string]> = [
   ['Table', 'Table.tsx'],
   ['Tabs', 'Tabs.tsx'],
   ['TabPanel', 'Tabs.tsx'],
+  ['TabsFrame', 'Tabs.tsx'],
+  ['TabList', 'Tabs.tsx'],
   ['ToastProvider', 'Toast.tsx'],
   ['useToast', 'Toast.tsx'],
   ['Tooltip', 'Tooltip.tsx'],

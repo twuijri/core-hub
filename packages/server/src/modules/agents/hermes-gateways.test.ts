@@ -5,7 +5,15 @@
  * stop reach every one of them.
  */
 import { EventEmitter } from 'node:events';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -186,6 +194,25 @@ describe('a messaging gateway per profile', () => {
     await gateways.stopAll();
   });
 
+  it("gives a WhatsApp profile its copy of the bridge on the image's dependencies before it starts", async () => {
+    const source = path.join(tempDir(), 'image-bridge');
+    mkdirSync(path.join(source, 'node_modules'), { recursive: true });
+    writeFileSync(path.join(source, 'package.json'), '{"type":"module"}');
+    writeFileSync(path.join(source, 'bridge.js'), '// bridge\n');
+    writeFileSync(path.join(source, 'node_modules', '.hermes-pkg-hash'), 'abc');
+    const root = hermesRoot({ manger: NOTHING, sales: TELEGRAM_ON });
+    pairWhatsApp(path.join(root, 'profiles', 'manger'));
+    const { gateways, spawned } = gatewaysOver(root, { whatsappBridge: source });
+    await gateways.reconcile();
+    expect(spawned).toHaveLength(2);
+    const bridge = path.join(root, 'profiles', 'manger', 'scripts', 'whatsapp-bridge');
+    expect(readFileSync(path.join(bridge, 'bridge.js'), 'utf8')).toBe('// bridge\n');
+    expect(readFileSync(path.join(bridge, 'node_modules', '.hermes-pkg-hash'), 'utf8')).toBe('abc');
+    // A profile without WhatsApp gets none.
+    expect(existsSync(path.join(root, 'profiles', 'sales', 'scripts'))).toBe(false);
+    await gateways.stopAll();
+  });
+
   it('prepares the profile (the hub providers and its model) before every start', async () => {
     const root = hermesRoot({ sales: TELEGRAM_ON });
     const prepared: string[] = [];
@@ -298,10 +325,14 @@ function binDirWithHermes(): string {
 }
 
 describe('the runtime runs them beside the default gateway', () => {
-  async function managed(profiles: Record<string, string>) {
+  async function managed(
+    profiles: Record<string, string>,
+    extra: { whatsappBridge?: string; before?: (root: string) => void } = {},
+  ) {
     const dataDir = tempDir();
     const root = path.join(dataDir, 'hermes');
     mkdirSync(root, { recursive: true });
+    extra.before?.(root);
     for (const [name, config] of Object.entries(profiles)) {
       mkdirSync(path.join(root, 'profiles', name), { recursive: true });
       writeFileSync(path.join(root, 'profiles', name, 'config.yaml'), config);
@@ -317,6 +348,7 @@ describe('the runtime runs them beside the default gateway', () => {
       spawnImpl: spawner.spawnImpl,
       healthIntervalMs: 0,
       prepareGateway: (profile) => prepared.push(profile),
+      ...(extra.whatsappBridge ? { whatsappBridge: extra.whatsappBridge } : {}),
     });
     await runtime.start();
     await vi.waitFor(() =>
@@ -338,6 +370,21 @@ describe('the runtime runs them beside the default gateway', () => {
     expect(runtime.gateways().map((entry) => entry.profile)).toEqual(['default', 'sales']);
     await runtime.stop();
     expect(of('sales')[0]?.child.killed).toEqual(['SIGTERM']);
+  });
+
+  it('gives the root home its bridge copy before the default gateway serves WhatsApp', async () => {
+    const source = path.join(tempDir(), 'image-bridge');
+    mkdirSync(path.join(source, 'node_modules'), { recursive: true });
+    writeFileSync(path.join(source, 'package.json'), '{"type":"module"}');
+    writeFileSync(path.join(source, 'bridge.js'), '// bridge\n');
+    const { runtime, root, of } = await managed(
+      {},
+      { whatsappBridge: source, before: (home) => pairWhatsApp(home) },
+    );
+    expect(of('default')).toHaveLength(1);
+    const bridge = path.join(root, 'scripts', 'whatsapp-bridge');
+    expect(readFileSync(path.join(bridge, 'bridge.js'), 'utf8')).toBe('// bridge\n');
+    await runtime.stop();
   });
 
   it('Restart restarts every messaging gateway, not only the default one', async () => {

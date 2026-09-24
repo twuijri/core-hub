@@ -2646,6 +2646,121 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /sessions/{session_id}/trajectory:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      operationId: sessions.getTrajectory
+      tags: [sessions]
+      summary: Read a conversation as a timed list of steps, or download it as the session log
+      description: |
+        The conversation's path (contract decision §43): every input of the person, every model
+        turn, the reasoning shown and every tool call, in order, each with the time it started
+        and ended when the hub recorded it, plus the metrics the hub actually has. A metric the
+        hub has no data for is `null`, never `0`. `timing` says whether the steps carry times:
+        runs from before the hub recorded model turns have no times for their turns, and a
+        client shows their steps without a timeline.
+
+        While a run is live the answer includes it as far as it has gone (`live: true`); a client
+        reads the document again as `/rt/sessions` events arrive. With `download=true` the same
+        document is sent as a file (`Content-Disposition: attachment`): the session log.
+      parameters:
+        - name: download
+          in: query
+          description: Send the document as a file named `session-<id>-log.json`.
+          schema:
+            type: boolean
+            default: false
+      x-rt-events: []
+      responses:
+        '200':
+          description: The trajectory of the conversation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trajectory'
+              example:
+                session_id: 01J8QK3ZR2W7M5N4P6T8V9X0YA
+                generated_at: '2026-09-21T10:16:00Z'
+                live: false
+                timing: full
+                started_at: '2026-09-21T10:15:00Z'
+                ended_at: '2026-09-21T10:15:40Z'
+                steps:
+                  - id: 01J8QK3ZR2W7M5N4P6T8V9X0MA
+                    kind: input
+                    lane: input
+                    exchange: 1
+                    run_id: 01J8QK3ZR2W7M5N4P6T8V9X0RN
+                    message_id: 01J8QK3ZR2W7M5N4P6T8V9X0MA
+                    status: succeeded
+                    started_at: '2026-09-21T10:15:00Z'
+                    ended_at: '2026-09-21T10:15:00Z'
+                    duration_ms: 0
+                    text: 'شغّل اختبارات الخادم وأخبرني بالنتيجة'
+                    tool_call_only: false
+                    first_token_ms: null
+                    tool_call: null
+                  - id: 01J8QK3ZR2W7M5N4P6T8V9X0RN.t1
+                    kind: turn
+                    lane: model
+                    exchange: 1
+                    run_id: 01J8QK3ZR2W7M5N4P6T8V9X0RN
+                    message_id: 01J8QK3ZR2W7M5N4P6T8V9X0MB
+                    status: succeeded
+                    started_at: '2026-09-21T10:15:01Z'
+                    ended_at: '2026-09-21T10:15:04Z'
+                    duration_ms: 3000
+                    text: 'سأشغّل الاختبارات الآن.'
+                    tool_call_only: false
+                    first_token_ms: 800
+                    tool_call: null
+                  - id: 01J8QK3ZR2W7M5N4P6T8V9X0TC
+                    kind: tool
+                    lane: tools
+                    exchange: 1
+                    run_id: 01J8QK3ZR2W7M5N4P6T8V9X0RN
+                    message_id: 01J8QK3ZR2W7M5N4P6T8V9X0MB
+                    status: failed
+                    started_at: '2026-09-21T10:15:04Z'
+                    ended_at: '2026-09-21T10:15:39Z'
+                    duration_ms: 35000
+                    text: null
+                    tool_call_only: false
+                    first_token_ms: null
+                    tool_call:
+                      id: 01J8QK3ZR2W7M5N4P6T8V9X0TC
+                      name: shell
+                      status: failed
+                      preview: 'pnpm test --filter server'
+                      arguments:
+                        command: 'pnpm test --filter server'
+                      output: '2 failed, 118 passed'
+                      output_truncated: false
+                      duration_ms: 35000
+                      subagent_id: null
+                      started_at: '2026-09-21T10:15:04Z'
+                      finished_at: '2026-09-21T10:15:39Z'
+                metrics:
+                  exchanges: 1
+                  turns: 1
+                  steps: 3
+                  tool_calls: 1
+                  failed_tool_calls: 1
+                  model_ms: 3000
+                  tool_ms: 35000
+                  avg_first_token_ms: 800
+                  output_tokens_per_second: 136.7
+                  cache_hit_pct: null
+                  input_tokens: 2300
+                  output_tokens: 410
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   # ---------------------------------------------------------------- approvals
   /approvals:
     get:
@@ -13999,6 +14114,191 @@ components:
         has_more:
           type: boolean
           description: Whether messages older than `items[0]` exist.
+    # ---------------------------------------------------------------- trajectory
+    TrajectoryStepKind:
+      type: string
+      enum: [input, turn, reasoning, tool]
+      description: |
+        `input` is something the person sent; `turn` is the model speaking once (before, between
+        or after tool calls); `reasoning` is what the model showed of its thinking in that turn;
+        `tool` is one tool call.
+    TrajectoryLane:
+      type: string
+      enum: [input, model, tools]
+      description: The row of the timeline a step is drawn in. `turn` and `reasoning` share `model`.
+    TrajectoryStepStatus:
+      type: string
+      enum: [running, succeeded, failed, cancelled]
+    TrajectoryTiming:
+      type: string
+      enum: [full, partial, none]
+      description: |
+        `full` — every turn and tool call carries its times; `partial` — some runs are from before
+        the hub recorded model turns, and their turns have no times; `none` — no step can be placed
+        on a time axis (an older conversation, or nothing has run yet).
+    TrajectoryStep:
+      type: object
+      required:
+        [
+          id,
+          kind,
+          lane,
+          exchange,
+          run_id,
+          message_id,
+          status,
+          started_at,
+          ended_at,
+          duration_ms,
+          text,
+          tool_call_only,
+          first_token_ms,
+          tool_call,
+        ]
+      properties:
+        id:
+          type: string
+          description: Stable across reads of the same conversation.
+        kind:
+          $ref: '#/components/schemas/TrajectoryStepKind'
+        lane:
+          $ref: '#/components/schemas/TrajectoryLane'
+        exchange:
+          type: integer
+          minimum: 1
+          description: 1-based count of the person's inputs up to and including this step's.
+        run_id:
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+        message_id:
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+        status:
+          $ref: '#/components/schemas/TrajectoryStepStatus'
+        started_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: '`null` when the hub did not record it (see `Trajectory.timing`).'
+        ended_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: '`null` while the step is still running, or when it was not recorded.'
+        duration_ms:
+          type: [integer, 'null']
+          minimum: 0
+        text:
+          type: [string, 'null']
+          description: What the person sent, what the model said in the turn, or its reasoning.
+        tool_call_only:
+          type: boolean
+          description: A turn in which the model said nothing and only called tools.
+        first_token_ms:
+          type: [integer, 'null']
+          minimum: 0
+          description: For a turn, how long the model took to send its first word or thought.
+        tool_call:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCall'
+            - type: 'null'
+          description: The whole call — arguments and result — for a `tool` step.
+    TrajectoryMetrics:
+      type: object
+      description: |
+        Only what the hub recorded. A metric it has no data for is `null` and a client does not
+        show it: `cache_hit_pct` needs a provider that reports cache reads, the token counts need
+        a provider that reports usage, and the times need runs recorded with their turns.
+      required:
+        [
+          exchanges,
+          turns,
+          steps,
+          tool_calls,
+          failed_tool_calls,
+          model_ms,
+          tool_ms,
+          avg_first_token_ms,
+          output_tokens_per_second,
+          cache_hit_pct,
+          input_tokens,
+          output_tokens,
+        ]
+      properties:
+        exchanges:
+          type: integer
+          minimum: 0
+        turns:
+          type: integer
+          minimum: 0
+          description: Model turns.
+        steps:
+          type: integer
+          minimum: 0
+        tool_calls:
+          type: integer
+          minimum: 0
+        failed_tool_calls:
+          type: integer
+          minimum: 0
+        model_ms:
+          type: [integer, 'null']
+          minimum: 0
+          description: Time the model spent in its timed turns.
+        tool_ms:
+          type: [integer, 'null']
+          minimum: 0
+          description: Wall-clock time at least one tool was running (parallel calls count once).
+        avg_first_token_ms:
+          type: [integer, 'null']
+          minimum: 0
+          description: Mean time from the start of a turn to the model's first word or thought.
+        output_tokens_per_second:
+          type: [number, 'null']
+          minimum: 0
+          description: Output tokens over the model time of the runs that report both.
+        cache_hit_pct:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 100
+          description: Prompt tokens read from the provider's cache, of all prompt tokens.
+        input_tokens:
+          type: [integer, 'null']
+          minimum: 0
+        output_tokens:
+          type: [integer, 'null']
+          minimum: 0
+    Trajectory:
+      type: object
+      required: [session_id, generated_at, live, timing, started_at, ended_at, steps, metrics]
+      properties:
+        session_id:
+          $ref: '#/components/schemas/Ulid'
+        generated_at:
+          $ref: '#/components/schemas/Timestamp'
+        live:
+          type: boolean
+          description: A run of the conversation is still going; its last steps may grow.
+        timing:
+          $ref: '#/components/schemas/TrajectoryTiming'
+        started_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: The earliest time of any timed step; the start of the time axis.
+        ended_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: The latest end of any timed step; `null` while a step is still running.
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrajectoryStep'
+        metrics:
+          $ref: '#/components/schemas/TrajectoryMetrics'
     # ---------------------------------------------------------------- runs
     RunStatus:
       type: string

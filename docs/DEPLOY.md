@@ -206,8 +206,14 @@ boot. The endpoint is the Hermes agent's `gateway.endpoint` setting
 | `/data/keys/hermes-dashboard.secret` | the session token of Hermes's dashboard API, which the hub starts on demand on the loopback (ADR 0015) |
 | `/data/hermes/` | Hermes's home: `.env`, `config.yaml`, memories, skills, sessions, cron |
 | `/data/agents/<id>/` | coding agents installed from the catalog |
-| `/data/hermes-packages/` | optional Python packages Hermes installs the first time a feature needs them (Edge voices, Bedrock, Vertex …) |
+| `/data/hermes-packages/` | optional Python packages Hermes installs the first time a feature needs them (Edge voices, Bedrock, Vertex …). Telegram's client is not among them: it ships in the image |
+| `/data/hermes/…/scripts/whatsapp-bridge/` | a profile's copy of Hermes's WhatsApp bridge (about 220 KB), made by the hub before the profile's gateway or the pairing screen starts it; its `node_modules` is a link to the dependencies the image ships, so linking a phone downloads nothing |
 | `/data/workspaces/<profile>/` | each chat's working folder |
+
+Linking Telegram or WhatsApp needs no download from PyPI or npm: both channels'
+dependencies are in the image (docs/changes/2026-09-25-twuijri-image-channel-deps.md). A
+profile that linked WhatsApp before keeps the bridge Hermes installed in it until a new image
+changes the bridge; then its copy is replaced by the link.
 
 Everything else in the image is **read-only** to the hub and to every agent it runs: the
 hub's code in `/app` and Hermes's in `/opt/hermes` belong to root. An agent cannot change

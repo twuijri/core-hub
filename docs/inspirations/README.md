@@ -20,6 +20,7 @@ Capability comparison: `FEATURE-MATRIX.md`.
 | shadcn/ui | MIT — **no code** (the way of working, not the files) | own the component files in your own repository, Radix for behaviour, one styling layer you control | `shadcn-ui.md` |
 | assistant-ui | MIT — **no code, not adopted** (2026-09-22) | the external-store runtime shape (`onNew` + `isRunning` + `onCancel`) as proof our server-owned run model is a normal one; the server-side approval gate vocabulary | `assistant-ui.md` |
 | Hubcode | AGPL-3.0 — **no code** (repo located 2026-09-21 at github.com/hubtool/hubcode; the earlier "repo not located" entry was wrong) | shared live sessions with voice; kanban per worktree; worker+verifier loops | `hubcode.md` |
+| DeepSeek harness (owner's description only, 2026-09-25) | unknown — **no code, no assets, no text** (nothing opened) | the idea of a per-conversation "Trajectory" tab: steps on a timeline with performance metrics | `trajectory.md` |
 
 ## ما نأخذه ومتى
 `ADOPTION-BACKLOG.md` يجمع كل فكرة قررنا أخذها، مرتَّبة بمرحلتها من

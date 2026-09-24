@@ -196,6 +196,30 @@ describe('Hermes dashboard API: starting', () => {
     await service.close();
   });
 
+  it("readies the root home's WhatsApp bridge before Hermes starts (its pairing runs there)", async () => {
+    const dataDir = tempDir();
+    const home = path.join(dataDir, 'hermes');
+    const spawner = fakeSpawner();
+    const events: string[] = [];
+    const { logger } = capturingLogger();
+    const service = new HermesDashboard({
+      host: { ...hostOf('managed', home), prepareWhatsAppBridge: () => events.push('bridge') },
+      dataDir,
+      log: logger,
+      spawnImpl: (command, args, options) => {
+        events.push('spawn');
+        return spawner.spawnImpl(command, args, options);
+      },
+      fetchImpl: fakeFetch().fetchImpl,
+      idleMs: 60_000,
+      startTimeoutMs: 5_000,
+      stopGraceMs: 200,
+    });
+    await service.request('GET', '/api/status');
+    expect(events).toEqual(['bridge', 'spawn']);
+    await service.close();
+  });
+
   it('sends JSON and reads JSON back', async () => {
     const fetcher = fakeFetch((call) =>
       json({ task: { id: 't_1', title: (call.body as { title: string }).title } }),

@@ -61,6 +61,6 @@ export {
 export { Skeleton, SkeletonGroup, SkeletonText } from './Skeleton.js';
 export { Switch } from './Switch.js';
 export { Table, type Column } from './Table.js';
-export { TabPanel, Tabs, type TabItem } from './Tabs.js';
+export { TabList, TabPanel, Tabs, TabsFrame, type TabItem } from './Tabs.js';
 export { ToastProvider, useToast, type ToastRequest, type ToastTone } from './Toast.js';
 export { Tooltip } from './Tooltip.js';

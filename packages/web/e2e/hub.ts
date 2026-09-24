@@ -207,6 +207,40 @@ function scriptFor(prompt: string): Step[] {
       { type: 'completed' },
     ];
   }
+  if (/ارسم المسار|trace this/i.test(prompt)) {
+    // The Trajectory tab (journey 31): a turn that reads a file, a command that fails, and
+    // an answer — with pauses, so every step has a duration on the timeline.
+    return [
+      { type: 'reasoning_delta', text: 'أبدأ بقراءة الملف ثم أشغّل الاختبارات.' },
+      { type: 'delay', ms: 200 },
+      { type: 'message_delta', text: 'سأقرأ الملف أولًا.' },
+      {
+        type: 'tool_started',
+        ref: 'r1',
+        name: 'read_file',
+        kind: 'file_read',
+        title: 'README.md',
+        input: { path: 'README.md' },
+      },
+      { type: 'delay', ms: 400 },
+      { type: 'tool_completed', ref: 'r1', output: '# Core Hub\n', exitCode: 0 },
+      { type: 'delay', ms: 150 },
+      {
+        type: 'tool_started',
+        ref: 's1',
+        name: 'shell',
+        kind: 'shell',
+        title: 'pnpm test',
+        input: { command: 'pnpm test' },
+      },
+      { type: 'delay', ms: 600 },
+      { type: 'tool_failed', ref: 's1', output: '2 failed, 118 passed', exitCode: 1 },
+      { type: 'delay', ms: 150 },
+      { type: 'message_delta', text: 'فشل اختباران من ١٢٠.' },
+      { type: 'usage', inputTokens: 1200, outputTokens: 60, cacheReadTokens: 800 },
+      { type: 'completed' },
+    ];
+  }
   if (/slow|بطيء/i.test(prompt)) {
     // The pause has to outlast creating the session, navigating and hydrating the screen,
     // or the journey would be racing the script instead of testing the resume.

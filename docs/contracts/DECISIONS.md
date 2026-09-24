@@ -912,3 +912,37 @@ The product is Core Hub (ADR 0017, owner 2026-09-24). What changes in the contra
   accepted, so the rename signs nobody out.
 - No endpoint, field or status is added or removed. The generated Swift package is
   `CoreHubClient`; the Kotlin artifact `corehub-client` (package `hub.core.client` unchanged).
+
+## 43. A conversation reads as its trajectory: timed steps and only the metrics the hub has
+
+The owner asked for a "Trajectory" view of every conversation (2026-09-25, `docs/inspirations/trajectory.md`).
+`sessions.getTrajectory` (`GET /sessions/{id}/trajectory`) answers a `Trajectory`: the person's
+inputs, the model's turns, the reasoning shown and every tool call, in order, each with
+`started_at` / `ended_at` / `duration_ms` (milliseconds kept) where the hub recorded them, and
+`TrajectoryMetrics`. The same document with `download=true` is the **session log** file
+(`Content-Disposition: attachment; filename="session-<id>-log.json"`); it is read with the same
+access as the transcript it describes.
+
+- **A model turn is inferred from the stream** (the hub cannot see an agent's own model calls):
+  it opens when the run starts and whenever the last running tool ends, and closes when a tool
+  starts, a person is asked something, or the run ends. Each run's turns are stored on the run
+  (`runs.timing`, migration `0015`) with offsets into its text and reasoning, so a turn's words
+  are cut from the finished message, and with how many tool calls had started before it, so
+  steps are ordered by what happened rather than by a clock two events can share; a live run
+  is read from the engine.
+- **Nothing is invented.** A metric with no data is `null` and clients leave it out: tokens only
+  when a provider reported usage, `cache_hit_pct` only when it reported cache reads, times only
+  for runs recorded with their turns. `timing` says `full`, `partial` (older runs sit next to
+  recorded ones) or `none`; untimed steps have `null` times and no place on a time axis.
+- **Tool time** is wall-clock time with at least one tool running (parallel calls count once).
+  **Tokens/s** is output tokens over the model time of the runs that report both.
+- **Input tokens exclude the cache.** Adapters report `inputTokens` as the prompt tokens not read
+  from or written to the cache (Anthropic's convention); the OpenAI-compatible and Google
+  adapters, whose prompt totals include the cached part, now subtract it — which also stops the
+  cost estimate charging a cached token twice. Hermes's TUI gateway reports its live session's
+  running totals; the adapter records each turn's difference.
+- No realtime event changed: a client reads the document again as `/rt/sessions` events arrive.
+
+Rejected: building the trajectory in each client from the transcript (every client would
+re-derive turns it cannot see, and the log would differ from the view), per-turn usage (no
+agent reports it), and showing `0` for a metric nobody measured.
