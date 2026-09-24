@@ -181,6 +181,7 @@ describe.skipIf(!image)('provider scopes in real Hermes profiles', () => {
     // Hermes makes the two profiles; the hub has a workspace of each name.
     const profiles = createHermesProfiles({ home, run: hermes });
     for (const name of ['design', 'finance']) {
+      hostOpen();
       await profiles.create(name, { kind: 'blank' });
       const made = await authed(hub, hub.token, {
         method: 'POST',
@@ -219,6 +220,7 @@ describe.skipIf(!image)('provider scopes in real Hermes profiles', () => {
     await drainJobs(hub.app);
 
     // A profile made from scratch after all of that.
+    hostOpen();
     await profiles.create('later', { kind: 'blank' });
     await openUp();
     hostOpen();
