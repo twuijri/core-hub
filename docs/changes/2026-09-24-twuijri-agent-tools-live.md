@@ -1,5 +1,5 @@
 # أدوات هرمز الحيّة: فحص خادم MCP، ربط القناة برمز QR، واستيراد حزمة مهارات
-المسؤول: twuijri · الفرع: feat/agent-tools-live · الحالة: in-progress
+المسؤول: twuijri · الفرع: feat/agent-tools-live · الحالة: review
 
 ## المشكلة والهدف
 ثلاث عمليات من صفحات أدوات هرمز بقيت ⁨501⁩ منذ PR أدوات الوكيل: `agents.testMcpServer`
@@ -74,13 +74,82 @@
 - `docs/contracts/DECISIONS.md` §30.
 
 ## الملفات والتأثير
-(تُكمَل عند التنفيذ)
+- العقد: `packages/contracts/openapi.yaml` (الأوصاف، `409`/`503`، `ServiceUnavailable`،
+  `JobKind.channel_login`)، و`events/common.schema.json` و`events/jobs/job.*.schema.json` (السبعة)،
+  و`docs/contracts/DECISIONS.md` §30.
+- الخادم (`packages/server/src/modules/agents/`):
+  - `hermes-tools.ts` (جديد): فحص MCP وربط واتساب عبر واجهة هرمز، وترجمة أخطاء هرمز.
+  - `skill-import.ts` و`zip.ts` (جديدان): قراءة الحزمة وقواعد هرمز والتثبيت الذرّي، وقارئ zip صغير.
+  - `profile-home.ts` (جديد): بيت البروفايل واسمه في هرمز.
+  - `index.ts`: المسارات الثلاث، والصفحات الأربع على بيت البروفايل، و`registerAgentAttachments`،
+    وبديلا الاختبار `hermesApi` و`pairingPollMs`.
+  - `hermes-dashboard.ts`: مهلة لكل طلب، و`timedOut` في `HermesDashboardUnavailable`.
+  - `testing/make-zip.ts` (أداة اختبار)، و`tests/fixtures/mcp-stdio-server.mjs` (خادم MCP صغير بلا تبعيات).
+- `modules/audit/{jobs,service}.ts`: `progress()` يقبل `result` أثناء التشغيل (إضافة اختيارية).
+- `modules/index.ts`: وصل ملفات `knowledge` بالاستيراد.
+- `packages/server/src/i18n/{ar,en}.json`: جمل المهمة ونتيجة الفحص.
+- الويب (`packages/web/src/agents/`): زر «اختبار» ونتيجته في MCP، و«ربط واتساب» ونافذة الرمز في
+  القنوات، و«استيراد» في المهارات، و`toolErrors.ts` لأسباب الرفض، و`skills.ts` (الخطافات)،
+  و`screens/DeviceConnectionsScreen.tsx` (تصدير `QrCode` فقط)، و`i18n/{ar,en}.json`.
+- `packages/web/e2e/hub.ts` (واجهة هرمز مكتوبة للرحلات) و`e2e/zz-agent-tools.spec.ts` (الرحلة 23)
+  وأربع لقطات جديدة.
+- `docs/STATUS.md`: صفّ `agents` والعدد (188 من 251).
 
 ## الفحوص
-(تُكمَل بالنواتج الفعلية)
+```
+$ mj-run pnpm lint                         → exit 0 (eslint + "All matched files use Prettier code style!")
+$ mj-run pnpm typecheck                    → exit 0
+$ mj-run pnpm contracts:lint               → "Your API description is valid" · "contracts:lint  OK" (90 event schemas)
+$ mj-run pnpm contracts:check-clients      → check-clients  OK — 226 client file(s) scanned, 166 contract path(s) known.
+$ pnpm --filter @majlis/contracts test     → Test Files 4 passed · Tests 15 passed
+$ mj-run pnpm i18n:check                   → web: 883 keys, ar/en in parity · OK
+$ mj-run pnpm nav:check                    → OK — 34 destinations
+$ mj-run pnpm --filter @majlis/server test -- --maxWorkers=2
+ Test Files  78 passed | 8 skipped (86)
+      Tests  827 passed | 23 skipped (850)
+$ mj-run pnpm contract:test -- --maxWorkers=2
+ Test Files  2 passed (2)
+      Tests  254 passed (254)
+$ mj-run pnpm --filter @majlis/web test -- --maxWorkers=2
+ Test Files  38 passed (38)
+      Tests  483 passed (483)
+$ mj-run pnpm build                        → exit 0
+$ PLAYWRIGHT_CHANNEL=chrome mj-run pnpm web:e2e
+  29 passed (2.0m)
+$ MAJLIS_HERMES_IMAGE=majlis:local MAJLIS_REAL_WHATSAPP=1 vitest run src/modules/agents/agent-tools.real.test.ts
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+```
+- هرمز الحقيقي (أول تشغيل، على صورة بنيتها من `main` — الاختبار يستعمل منها هرمز وحده): فحص MCP الأول مع بدء `hermes serve`
+  4516 مللي ثانية؛ خادم يخرج قبل أن يردّ: 5019 مللي ثانية و«The server did not answer within 5 s
+  (its connect_timeout).»؛ مهارة مثبّتة في بروفايل `work` أعادها `GET /api/skills?profile=work`
+  وأعاد `…/content` نصّها حرفيًا؛ ربط واتساب حقيقي وصل أول رمز QR بعد 9167 مللي ثانية ثم أُلغي (لم
+  يُربط شيء). الإعادة الثانية على `majlis:local` الحالي (بناه وكيل آخر بعد إعادة التشغيل، والإصدار
+  المثبّت لهرمز نفسه) نجحت كذلك. لا حاويات باقية.
+- الاختبارات الجديدة تفشل على الكود القديم: كانت المسارات الثلاث ⁨501⁩، وصفحات الأدوات كانت تقرأ
+  بيت هرمز الجذري لكل بروفايل (اختبار «the tool pages act on the selected profile»).
+- لقطات الرحلات الأخرى التي تغيّرت بالتشغيل أُرجعت؛ الأربع الجديدة لهذه الرحلة فقط.
 
 ## المخاطر والرجوع
-(تُكمَل)
+- **عيب قائم في `knowledge` (خارج النطاق، لم أصلحه)**: رفع الملف نفسه بعد حذفه، أو بالبايتات نفسها
+  واسم آخر، يعطي ⁨500⁩ (`UNIQUE constraint failed: attachments.storage_key` — الفهرس فريد على
+  مفتاح التخزين بينما إزالة التكرار تفترض عدّة صفوف). لذلك لا يحذف الويب ملف الحزمة بعد الاستيراد:
+  يبقى في ملفات البروفايل، ورفع الحزمة نفسها ثانية يعود بالمرفق نفسه فيُرفض بـ`skill_exists` كما يجب.
+  يحتاج إصلاحًا وهجرة في `knowledge`.
+- **الصفحات الأربع صارت على بيت البروفايل**: بروفايل لا مجلد له في هرمز (أُنشئ قبل المرآة أو بلا
+  هرمز) يرى الآن `409 hermes_profile_absent` بدل ملفات البروفايل الافتراضي. هذا هو الصحيح، لكنه
+  تغيّر مرئي.
+- **القائمة لا ترى المهارات المصنّفة في مجلدات** (`skills/<category>/<name>/`، شكل مهارات هرمز
+  المرفقة): قراءة الصفحة بعمق مستوى واحد — عيب قائم قبل هذا الـPR. الاستيراد يكتب مسطّحًا
+  (`skills/<name>/`) فيظهر في القائمة ويقرؤه هرمز.
+- رمز QR يمرّ في `result` المهمة، وأحداث `/rt/jobs` لكل من في البروفايل: من يمسحه يربط **جوّاله هو**
+  بالوكيل، لا يسرق شيئًا من المالك؛ والنتيجة النهائية لا تحمل الرمز.
+- بعد الربط يلزم إعادة تشغيل الوكيل ليبدأ الردّ على واتساب (كل تغييرات القنوات كذلك).
+- الرجوع: الفرع وحده. لا هجرة؛ `channel_login` قيمة مضافة للتعداد.
 
 ## التسليم والخطوة التالية
-(تُكمَل)
+الفرع `feat/agent-tools-live` فوق `main` (c62e3e8)، وطلب دمج إلى `main`.
+
+القرارات المقترحة للمالك: واتساب فقط لربط QR؛ `category` اختياري في `SkillImport`؛ عدم استدعاء
+`apply` في هرمز. الخطوة التالية: إصلاح عيب رفع الملف نفسه في `knowledge`، وقراءة المهارات المصنّفة
+في صفحة المهارات.
