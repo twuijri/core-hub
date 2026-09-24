@@ -1115,7 +1115,7 @@
     "title_of": "{name} memory",
     "persona": "read at every start",
     "content": "Text",
-    "note": "Three documents the agent reads. They are emptied by editing, never deleted.",
+    "note": "Three documents the agent reads when a conversation starts, so a change here reaches its next conversation. They are emptied by editing, never deleted.",
     "write": "Write",
     "doc_soul": "Persona",
     "doc_memory": "Memory",
@@ -1125,7 +1125,9 @@
     "about_user": "What it knows about you.",
     "empty_soul": "Not written yet — the agent has no particular character.",
     "empty_memory": "It has kept nothing yet.",
-    "empty_user": "It has written nothing about you yet."
+    "empty_user": "It has written nothing about you yet.",
+    "entries_hint": "A list of short entries, each separated by a line holding only §. It has a character limit: past it, the agent cannot add anything new.",
+    "too_long": "Too long for this memory: {length} characters, and the limit is {limit}. Shorten or merge entries."
   },
   "channels": {
     "title_of": "{name} channels",
