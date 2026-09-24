@@ -12,7 +12,7 @@ alone, its key `provider:<family>` in that profile). A profile sees both; where 
 slug, its own is the one it uses. A new profile has every shared provider at once; a copy of
 a profile gets its source's own providers with their keys. `model_default`, `ensemble` and
 `speech_settings` stay per profile: they are choices, and a profile that made none uses the
-default profile's (mapped onto the provider of the same slug it uses). Migration `0011`
+default profile's (mapped onto the provider of the same slug it uses). Migration `0012`
 (`provider_scope`) added the column: every row older than it is its profile's own.
 
 This module is **the hub's one credential store** (ADR 0010): a person adds a
