@@ -13,9 +13,9 @@ import { requireSqlite } from '../../lib/db.js';
 import { HubError } from '../../lib/errors.js';
 import { defineModule, REALTIME_NAMESPACES, type HubModule } from '../../lib/module.js';
 import { AuditService } from '../audit/index.js';
-import { attachSessionsRealtime, sessionsRealtimeFor } from './realtime.js';
+import { attachSessionsRealtime, sessionsRealtimeFor, type FollowCheck } from './realtime.js';
 import { registerSessionRoutes } from './routes.js';
-import { derivedScopeResolver, type ScopeResolver } from './scope.js';
+import { derivedScopeResolver, type ScopeCaller, type ScopeResolver } from './scope.js';
 import { SessionsService, type TurnHandle, type TurnInput, type TurnResult } from './service.js';
 import type { EngineScope } from './engine.js';
 import { SessionsStore } from './store.js';
@@ -98,7 +98,9 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
   return defineModule({
     name: 'sessions',
     registerRoutes(app: FastifyInstance) {
-      registerSessionRoutes(app, { service, scopes: scopesFor(app) });
+      const scopes = scopesFor(app);
+      registerSessionRoutes(app, { service, scopes });
+      sessionsRealtimeFor(app.hub.io)?.authorizeFollowWith(followCheck(app, scopes));
       turns.set(app, (scope, input) => serviceFor(app, app.log).oneTurn(scope, input));
       runs.set(app, {
         start: (scope, input) => serviceFor(app, app.log).startTurn(scope, input),
@@ -121,6 +123,32 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
       attachSessionsRealtime(io);
     },
   });
+}
+
+/**
+ * `subscribe` on `/rt/sessions` asks what `GET /sessions/{id}` asks: resolve the caller's
+ * scope for each workspace the socket was admitted to (the resolver applies `auth`'s
+ * rule, so a workspace the caller may no longer enter is skipped), then look the session
+ * up in that scope. Found in none of them — another workspace, or no such id — is a no.
+ */
+function followCheck(app: FastifyInstance, scopes: ScopeResolver): FollowCheck {
+  let store: SessionsStore | undefined;
+  return async (socket, sessionId) => {
+    // Set by `auth`'s handshake middleware (`modules/auth/sockets.ts`).
+    const { principal, workspaces = [] } = socket.data as {
+      principal?: ScopeCaller['principal'];
+      workspaces?: ReadonlyArray<{ slug: string }>;
+    };
+    if (!principal) return false;
+    store ??= new SessionsStore(requireSqlite(app.hub.database));
+    for (const workspace of workspaces) {
+      const scope = await scopes
+        .resolve(workspace.slug, { principal, authError: null })
+        .catch(() => null);
+      if (scope && store.getSession(scope.workspaceId, sessionId)) return true;
+    }
+    return false;
+  };
 }
 
 /** A turn run for something other than a person — a workflow step (`SessionsService.oneTurn`). */

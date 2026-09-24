@@ -45,6 +45,8 @@ export interface AuthValue {
   /** First run only (ADR 0011): trade the hub's setup token for the owner account. */
   completeSetup(input: SetupInput): Promise<StoredSession>;
   signOut(): Promise<void>;
+  /** A new access token now (single flight); true when one was stored. */
+  refresh(): Promise<boolean>;
 }
 
 export interface SetupInput {
@@ -197,6 +199,7 @@ export function AuthProvider({
       signIn,
       completeSetup,
       signOut,
+      refresh: bundle.refresh,
     }),
     [baseUrl, session, setProfile, listFilter, bundle, signIn, completeSetup, signOut],
   );

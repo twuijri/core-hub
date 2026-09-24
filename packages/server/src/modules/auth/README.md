@@ -21,6 +21,7 @@ model: `docs/domain/auth.md`.
 | `findUser`, `presentUser`                                                | existence check / contract `User` for a user id                                                                                                             |
 | `registerWorkspaceStatsProvider(fn)`                                     | `agents`/`sessions` fill `Profile.agent_count` / `session_count`                                                                                            |
 | `emitToUser(io, userId, namespace, event, payload, now)`, `userRoom(id)` | send a contract-shaped realtime envelope to one person's sockets                                                                                            |
+| `revalidateSockets(io, db, now)`                                         | disconnect every socket whose token, user, role or workspaces no longer admit it                                                                            |
 
 Typical route in another module:
 
@@ -31,10 +32,21 @@ app.get('/sessions', { preHandler: [requireUser, requireWorkspace] }, async (req
 });
 ```
 
-Realtime: every namespace accepts `auth: { token }` in the Socket.IO handshake (the same
-bearer as HTTP). An authenticated socket has `socket.data.principal` and is in the room
-`user:<id>`; a socket without a token connects but joins no room; an invalid token is refused
-with `connect_error` `unauthorized`.
+Realtime (`sockets.ts`): every namespace **requires** `auth: { token }` in the Socket.IO
+handshake (the same bearer as HTTP, resolved by `resolvePrincipal`). No token, or one the hub
+refuses, fails the handshake with the error code as `connect_error`'s message and `data.code`
+(`unauthorized`, `token_expired`, `rate_limited`). An admitted socket has
+`socket.data.principal` (`AuthSocketData`) and is in `user:<id>`; with `auth.profile` it is
+also in `profile:<slug>` — only when `resolveWorkspaceFor` lets the caller enter it
+(`profile_not_found` otherwise) — and `socket.data.workspaces` lists it. Entity rooms are the
+owning module's, joined only after it has found the entity in one of those workspaces.
+`app/sockets.ts` adds a last middleware that refuses any socket without a principal, so a
+composition without `auth` stays closed.
+
+Whatever takes access away calls `revalidateSockets(io, db, now)` (logout, token revoke,
+re-pair, user patch or delete, password change, workspace archive): every socket whose token,
+user, role or workspaces no longer admit it is disconnected, and the web client's reconnect
+is judged afresh.
 
 ## How it works
 
