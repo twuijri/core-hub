@@ -267,7 +267,28 @@ export interface SessionsNotifier {
     sessionId: string;
     agentName: string;
     what: string;
+    /** What the notice opens instead of the session — a workflow run waiting at a step. */
+    resource?: { kind: 'workflow_run'; id: string } | undefined;
   }): void;
+}
+
+/**
+ * Where a person's answer to a workflow step's gate goes (`kind: workflow_step`). The
+ * approval is this module's row; the paused run is `schedules`'s. The composition root
+ * joins them (`registerWorkflowGate`), so neither module imports the other.
+ */
+export interface WorkflowGate {
+  resolve(input: {
+    workspace: string;
+    profile: string;
+    approvalId: string;
+    workflowRunId: string;
+    nodeId: string;
+    approved: boolean;
+    /** The words given with the answer: the reason for a `deny`. */
+    answer: string | null;
+    respondedBy: { id: string; name: string };
+  }): Promise<void>;
 }
 
 export interface SessionsPorts {
@@ -279,4 +300,6 @@ export interface SessionsPorts {
   notifier: SessionsNotifier;
   /** No event for this long ends the run as `timed_out` (run state machine). */
   agentTimeoutMs: number;
+  /** Who continues a workflow when its gate is answered; `null` when nobody can. */
+  gate?: (() => WorkflowGate | null) | undefined;
 }

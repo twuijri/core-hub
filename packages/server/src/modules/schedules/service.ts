@@ -1,18 +1,15 @@
 /**
  * Schedules and workflows: **when** something should happen, and **what** should happen.
  *
- * This module owns both definitions and the history of what was tried. It does not own the
- * doing: firing a schedule means opening a session and queueing a run, and that worker is
- * not built (the same gap the Tasks board names). So the three operations that would
- * *start* something — `runNow`, `runWorkflow`, `rerunWorkflowFromNode` — answer `501` with
- * their operation ids, and everything that defines, lists, validates and remembers answers
- * properly. A schedule that silently never fires is the failure that makes people distrust
- * schedulers; one that says out loud "I cannot run this yet" does not.
+ * This module owns both definitions and the history of what was tried. Since 2026-09-24 it
+ * also fires the hub's own schedules (`scheduler.ts` claims a due tick, `runs.ts` starts
+ * it); a schedule for Hermes lives in Hermes's scheduler, which fires it (`hermes-cron.ts`).
  *
- * What it does compute for real is `next_run_at` (`cron.ts`), so a saved schedule can
- * always say when it *would* run.
+ * `next_run_at` is computed for real (`cron.ts`) and stored: the stored value is the tick
+ * the scheduler claims, with a compare-and-set on that very value, so two ticks — two
+ * processes, or one restarted — never fire the same moment twice.
  */
-import { and, asc, desc, eq, inArray, isNull, lt } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lt, lte } from 'drizzle-orm';
 import { newUlid } from '../../db/ids.js';
 import type { ModuleDb } from '../../lib/db.js';
 import { conflict, notFound } from '../../lib/errors.js';
@@ -29,6 +26,7 @@ import {
   type WorkflowDefinition,
   type WorkflowEdge,
   type WorkflowNode,
+  type WorkflowResumeState,
 } from './schema.js';
 
 export interface Scope {
@@ -432,6 +430,238 @@ export class SchedulesService {
     return this.run(scope, scheduleId, id);
   }
 
+  // ------------------------------------------------- firing the hub's own
+
+  /**
+   * The hub's own schedules whose stored tick has come: enabled, not archived, not living
+   * in another scheduler. Oldest tick first, a bounded batch per look.
+   */
+  dueAt(now: Date, limit = 50): ScheduleRow[] {
+    return this.db
+      .select()
+      .from(schedules)
+      .where(
+        and(
+          eq(schedules.enabled, true),
+          isNull(schedules.archivedAt),
+          isNull(schedules.externalSource),
+          lte(schedules.nextRunAt, now),
+        ),
+      )
+      .orderBy(asc(schedules.nextRunAt))
+      .limit(limit)
+      .all();
+  }
+
+  /**
+   * Claim one due tick, in one transaction: move `next_run_at` on **only if it still holds
+   * the tick that was read** (compare-and-set), and write the tick's history line, which
+   * is unique per (schedule, tick). Whoever loses either race gets `null` and does nothing
+   * — another process, or this one before a restart, already has it.
+   *
+   * `fire: false` claims a tick that is not run (missed too long ago, or the previous run
+   * is still going): the line is written `skipped`, with the reason.
+   */
+  claimTick(
+    row: ScheduleRow,
+    now: Date,
+    decision: { fire: true } | { fire: false; reason: string },
+  ): ScheduleRunRow | null {
+    const tick = row.nextRunAt;
+    if (!tick) return null;
+    const lastRunAt = decision.fire ? now : row.lastRunAt;
+    const next = this.nextFor({ ...row, lastRunAt }, now);
+    const id = newUlid(now.getTime());
+    let claimed = false;
+    try {
+      claimed = this.claimIn(row.id, tick, id, now, next, decision, row);
+    } catch (error) {
+      if (!(error instanceof AlreadyFired)) throw error;
+      claimed = false;
+    }
+    if (!claimed) return null;
+    return this.db.select().from(scheduleRuns).where(eq(scheduleRuns.id, id)).get() ?? null;
+  }
+
+  private claimIn(
+    scheduleId: string,
+    tick: Date,
+    id: string,
+    now: Date,
+    next: Date | null,
+    decision: { fire: true } | { fire: false; reason: string },
+    row: ScheduleRow,
+  ): boolean {
+    return this.db.transaction((tx) => {
+      const moved = tx
+        .update(schedules)
+        .set({
+          nextRunAt: next,
+          ...(decision.fire ? { lastRunAt: now, lastStatus: 'queued' as const, lastError: null } : {}),
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(schedules.id, scheduleId),
+            eq(schedules.enabled, true),
+            eq(schedules.nextRunAt, tick),
+          ),
+        )
+        .run();
+      if (moved.changes !== 1) return false;
+      const written = tx
+        .insert(scheduleRuns)
+        .values({
+          id,
+          ownerId: row.ownerId,
+          workspace: row.workspace,
+          scheduleId: row.id,
+          scheduledFor: tick,
+          trigger: 'schedule',
+          status: decision.fire ? 'queued' : 'skipped',
+          error: decision.fire ? null : decision.reason,
+          finishedAt: decision.fire ? null : now,
+        })
+        .onConflictDoNothing()
+        .run();
+      // The tick is already in the history: someone fired it. Throwing undoes the move.
+      if (written.changes !== 1) throw new AlreadyFired();
+      return true;
+    });
+  }
+
+  /** "Run now": a line of its own, now, that leaves the schedule's next time alone. */
+  manualRun(row: ScheduleRow, now: Date = new Date()): ScheduleRunRow {
+    // Two presses in the same millisecond are the only way to meet the unique tick; the
+    // second one takes the next millisecond rather than failing.
+    for (let offset = 0; ; offset += 1) {
+      const id = newUlid(now.getTime());
+      const written = this.db
+        .insert(scheduleRuns)
+        .values({
+          id,
+          ownerId: row.ownerId,
+          workspace: row.workspace,
+          scheduleId: row.id,
+          scheduledFor: new Date(now.getTime() + offset),
+          trigger: 'manual',
+          status: 'queued',
+        })
+        .onConflictDoNothing()
+        .run();
+      if (written.changes === 1) {
+        this.db
+          .update(schedules)
+          .set({ lastRunAt: now, lastStatus: 'queued', lastError: null, updatedAt: now })
+          .where(eq(schedules.id, row.id))
+          .run();
+        return this.db.select().from(scheduleRuns).where(eq(scheduleRuns.id, id)).get()!;
+      }
+    }
+  }
+
+  /** A run of this schedule that has not ended — the reason a due tick is skipped. */
+  openRunOf(scheduleId: string): ScheduleRunRow | undefined {
+    return this.db
+      .select()
+      .from(scheduleRuns)
+      .where(
+        and(
+          eq(scheduleRuns.scheduleId, scheduleId),
+          inArray(scheduleRuns.status, ['queued', 'running']),
+        ),
+      )
+      .get();
+  }
+
+  /** The run has started: what it started, so the history can open it. */
+  markRunStarted(
+    id: string,
+    started: { runId?: string | null; sessionId?: string | null; workflowRunId?: string | null },
+    now: Date = new Date(),
+  ): ScheduleRunRow {
+    this.db
+      .update(scheduleRuns)
+      .set({
+        status: 'running',
+        runId: started.runId ?? null,
+        sessionId: started.sessionId ?? null,
+        workflowRunId: started.workflowRunId ?? null,
+        startedAt: now,
+        updatedAt: now,
+      })
+      // Only a line still waiting to start: one already settled stays as it ended.
+      .where(and(eq(scheduleRuns.id, id), eq(scheduleRuns.status, 'queued')))
+      .run();
+    return this.scheduleRunById(id)!;
+  }
+
+  scheduleRunById(id: string): ScheduleRunRow | undefined {
+    return this.db.select().from(scheduleRuns).where(eq(scheduleRuns.id, id)).get();
+  }
+
+  scheduleById(id: string): ScheduleRow | undefined {
+    return this.db.select().from(schedules).where(eq(schedules.id, id)).get();
+  }
+
+  /**
+   * A run ended. Written once: a line already settled (by the follow-up, or by the restart
+   * sweep) is left alone and `null` comes back. The schedule remembers how its last run
+   * went; a success counts toward the repeat limit, and the limit reached ends the schedule.
+   */
+  settleRun(
+    id: string,
+    outcome: {
+      status: 'succeeded' | 'failed' | 'cancelled';
+      output?: string | null;
+      error?: string | null;
+    },
+    now: Date = new Date(),
+  ): { run: ScheduleRunRow; schedule: ScheduleRow } | null {
+    const done = this.db
+      .update(scheduleRuns)
+      .set({
+        status: outcome.status,
+        outputPreview: outcome.output ? outcome.output.slice(0, 500) : null,
+        error: outcome.error ?? null,
+        finishedAt: now,
+        updatedAt: now,
+      })
+      .where(and(eq(scheduleRuns.id, id), inArray(scheduleRuns.status, ['queued', 'running'])))
+      .run();
+    if (done.changes !== 1) return null;
+    const run = this.scheduleRunById(id)!;
+    const current = this.scheduleById(run.scheduleId);
+    if (!current) return null;
+    const repeatCount = current.repeatCount + (outcome.status === 'succeeded' ? 1 : 0);
+    const exhausted = current.repeatLimit !== null && repeatCount >= current.repeatLimit;
+    this.db
+      .update(schedules)
+      .set({
+        lastStatus: outcome.status,
+        lastError: outcome.status === 'succeeded' ? null : (outcome.error ?? null),
+        repeatCount,
+        ...(exhausted ? { nextRunAt: null } : {}),
+        updatedAt: now,
+      })
+      .where(eq(schedules.id, current.id))
+      .run();
+    return { run, schedule: this.scheduleById(current.id)! };
+  }
+
+  /** Lines of the hub's own schedules that had not ended — what a restart must settle. */
+  openRuns(): ScheduleRunRow[] {
+    return this.db
+      .select({ run: scheduleRuns })
+      .from(scheduleRuns)
+      .innerJoin(schedules, eq(schedules.id, scheduleRuns.scheduleId))
+      .where(
+        and(inArray(scheduleRuns.status, ['queued', 'running']), isNull(schedules.externalSource)),
+      )
+      .all()
+      .map((row) => row.run);
+  }
+
   // -------------------------------------------------------- schedule runs
 
   runsOf(scope: Scope, scheduleId: string, limit: number): ScheduleRunRow[] {
@@ -695,9 +925,11 @@ export class SchedulesService {
   }
 
   /**
-   * Runs a restart cut short. The engine keeps its place in memory, so a run that was
-   * going when the process stopped cannot continue — it is failed, with that reason,
-   * rather than left "running" forever.
+   * Runs a restart cut short. The engine keeps its place in memory while a step works, so
+   * a run that was going when the process stopped cannot continue — it is failed, with
+   * that reason, rather than left "running" forever. A run **waiting at an approval** is
+   * not cut short: its place is written down (`resume_state`), and it goes on when the
+   * approval is answered, restart or not.
    */
   failInterruptedRuns(): number {
     const now = new Date();
@@ -705,7 +937,7 @@ export class SchedulesService {
     const stale = this.db
       .select({ id: workflowRuns.id })
       .from(workflowRuns)
-      .where(inArray(workflowRuns.status, ['queued', 'running', 'waiting_approval', 'paused']))
+      .where(inArray(workflowRuns.status, ['queued', 'running', 'paused']))
       .all();
     for (const run of stale) {
       this.db
@@ -728,6 +960,98 @@ export class SchedulesService {
     return stale.length;
   }
 
+  /** A step now waits for a person: the step, and the run with its place written down. */
+  pauseAtGate(
+    workflowRunId: string,
+    stepId: string,
+    approvalId: string,
+    nodeId: string,
+    resume: WorkflowResumeState,
+  ): void {
+    const now = new Date();
+    this.db
+      .update(nodeRuns)
+      .set({ status: 'waiting_approval', approvalId, updatedAt: now })
+      .where(eq(nodeRuns.id, stepId))
+      .run();
+    this.updateWorkflowRun(workflowRunId, {
+      status: 'waiting_approval',
+      activeNodeKeys: [nodeId],
+      resumeState: resume,
+    });
+  }
+
+  /**
+   * Take a waiting run back, once: `waiting_approval` → `running` only if it is still
+   * waiting. The answer that loses a race (or comes after a cancel) gets `undefined`.
+   */
+  takeWaitingRun(workflowRunId: string): WorkflowRunRow | undefined {
+    const result = this.db
+      .update(workflowRuns)
+      .set({ status: 'running', updatedAt: new Date() })
+      .where(and(eq(workflowRuns.id, workflowRunId), eq(workflowRuns.status, 'waiting_approval')))
+      .run();
+    if (result.changes !== 1) return undefined;
+    return this.db.select().from(workflowRuns).where(eq(workflowRuns.id, workflowRunId)).get();
+  }
+
+  /** The step of a run that waits at a node's gate. */
+  waitingStep(workflowRunId: string, nodeId: string): NodeRunRow | undefined {
+    return this.db
+      .select()
+      .from(nodeRuns)
+      .where(
+        and(
+          eq(nodeRuns.workflowRunId, workflowRunId),
+          eq(nodeRuns.nodeKey, nodeId),
+          eq(nodeRuns.status, 'waiting_approval'),
+        ),
+      )
+      .orderBy(desc(nodeRuns.id))
+      .get();
+  }
+
+  /** A gated step that was approved goes on doing its own work. */
+  resumeStep(id: string): void {
+    this.db
+      .update(nodeRuns)
+      .set({ status: 'running', updatedAt: new Date() })
+      .where(eq(nodeRuns.id, id))
+      .run();
+  }
+
+  /** Runs of a workflow paused at a gate — closed before the workflow is deleted. */
+  waitingRunsOf(workflowId: string): WorkflowRunRow[] {
+    return this.db
+      .select()
+      .from(workflowRuns)
+      .where(and(eq(workflowRuns.workflowId, workflowId), eq(workflowRuns.status, 'waiting_approval')))
+      .all();
+  }
+
+  workflowRunById(id: string): WorkflowRunRow | undefined {
+    return this.db.select().from(workflowRuns).where(eq(workflowRuns.id, id)).get();
+  }
+
+  workflowById(id: string): WorkflowRow | undefined {
+    return this.db.select().from(workflows).where(eq(workflows.id, id)).get();
+  }
+
+  /** Steps a cancel left waiting at a gate end as cancelled. */
+  cancelWaitingSteps(workflowRunId: string): void {
+    const now = new Date();
+    this.db
+      .update(nodeRuns)
+      .set({ status: 'cancelled', finishedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(nodeRuns.workflowRunId, workflowRunId),
+          inArray(nodeRuns.status, ['pending', 'running', 'waiting_approval']),
+        ),
+      )
+      .run();
+  }
+
   cancelWorkflowRun(scope: Scope, id: string): WorkflowRunRow {
     const row = this.workflowRun(scope, id);
     if (['succeeded', 'failed', 'cancelled'].includes(row.status)) {
@@ -736,12 +1060,15 @@ export class SchedulesService {
     const now = new Date();
     this.db
       .update(workflowRuns)
-      .set({ status: 'cancelled', finishedAt: now, updatedAt: now })
+      .set({ status: 'cancelled', activeNodeKeys: [], resumeState: null, finishedAt: now, updatedAt: now })
       .where(eq(workflowRuns.id, id))
       .run();
     return this.workflowRun(scope, id);
   }
 }
+
+/** A tick another claim already wrote: the transaction is undone, nothing fires. */
+class AlreadyFired extends Error {}
 
 /** Hermes's `last_status` in the hub's words; `delivery_failed` still ran. */
 function runStatusOfHermes(status: string | null | undefined): ScheduleRow['lastStatus'] {

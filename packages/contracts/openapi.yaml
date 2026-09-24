@@ -2751,7 +2751,12 @@ paths:
       operationId: sessions.respondApproval
       tags: [sessions]
       summary: Approve, deny or answer
-      description: The same call resolves tool approvals, memory/skill writes, agent questions and workflow-step approvals.
+      description: >-
+        The same call resolves tool approvals, memory/skill writes, agent questions and
+        workflow-step approvals. A `workflow_step` approval (`workflow_run_id` and `node_id`
+        set, `session_id` and `run_id` null) is the gate of a paused workflow run: any
+        `approve_*` decision continues the run from that step, and `deny` fails the step with
+        `answer` as the reason (the run then follows the step's `failure` edges, or fails).
       requestBody:
         required: true
         content:
@@ -2761,7 +2766,7 @@ paths:
             example:
               decision: approve_session
               answer: null
-      x-rt-events: [approval.resolved, run.started, step.started]
+      x-rt-events: [approval.resolved, run.started, step.started, step.completed, step.failed]
       responses:
         '200':
           description: The resolved approval.
@@ -7850,6 +7855,17 @@ paths:
       operationId: schedules.runNow
       tags: [schedules]
       summary: Fire the schedule now (does not change the next scheduled time)
+      description: >-
+        Starts the same run the schedule's own time would. A schedule the hub fires itself (any
+        agent but Hermes, or a workflow) answers with the real ids at once: an `agent_prompt`
+        target opens a session of source `schedule` and queues its run (`session_id`, `run_id`;
+        `job_id` is that run's job), a `workflow` target starts a workflow run
+        (`workflow_run_id`, which is also the `job_id`). A schedule that lives in Hermes's own
+        scheduler is asked of Hermes, which runs it on its next tick: those ids are `null` and
+        the history entry stays `queued` until Hermes reports. A target that cannot start (an
+        agent that is not installed or cannot run, a workflow that is gone or empty) is recorded
+        in the history as a failed run and answered `409` with `details.reason =
+        target_unavailable`, `details.message` and `details.schedule_run_id`.
       x-rt-events:
         [
           schedule.fired,
@@ -7870,6 +7886,9 @@ paths:
               example:
                 job_id: 01J8QK3ZR2W7M5N4P6T8V9X0JX
                 schedule_run_id: 01J8QK3ZR2W7M5N4P6T8V9X0SR
+                session_id: 01J8QK3ZR2W7M5N4P6T8V9X0YA
+                run_id: 01J8QK3ZR2W7M5N4P6T8V9X0RN
+                workflow_run_id: null
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -15582,10 +15601,25 @@ components:
       allOf:
         - $ref: '#/components/schemas/JobAccepted'
         - type: object
-          required: [schedule_run_id]
+          required: [schedule_run_id, session_id, run_id, workflow_run_id]
           properties:
             schedule_run_id:
               $ref: '#/components/schemas/Ulid'
+            session_id:
+              description: The session an `agent_prompt` run talks in; `null` for a workflow or a Hermes schedule.
+              oneOf:
+                - $ref: '#/components/schemas/Ulid'
+                - type: 'null'
+            run_id:
+              description: The session run of an `agent_prompt` target; `null` otherwise.
+              oneOf:
+                - $ref: '#/components/schemas/Ulid'
+                - type: 'null'
+            workflow_run_id:
+              description: The workflow run of a `workflow` target; `null` otherwise.
+              oneOf:
+                - $ref: '#/components/schemas/Ulid'
+                - type: 'null'
     # ---------------------------------------------------------------- workflows
     WorkflowNode:
       type: object

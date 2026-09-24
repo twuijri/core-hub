@@ -14,7 +14,11 @@
  *   condition   one comparison (`expr.ts`) — "yes" follows `success` edges, "no" `failure`.
  *   delay       wait N seconds, up to an hour; longer waits are a schedule's job.
  *   notify      a notice in the inbox of whoever the run belongs to, in the step's words.
- *   approval    not built: it fails, saying so, rather than pretending to wait.
+ *   approval    waits for a person: an ordinary approval (kind `workflow_step`) is raised,
+ *               the run pauses (`waiting_approval`), and the answer continues it — approve
+ *               follows the `success` edges, deny fails the step with the reason given.
+ *               Any other step with `approval_required` waits the same way *before* it
+ *               does its work.
  *
  * Walking the graph: the nodes nothing points to start; after a step, each outgoing edge
  * fires if its route matches (`always`, `success` after a step that succeeded or a
@@ -23,13 +27,22 @@
  * error. Nothing here evaluates code — templates and conditions are `expr.ts`, which walks
  * paths and compares values.
  *
- * The engine keeps its place in memory. A restart fails the runs that were going
- * (`failInterruptedRuns`) instead of leaving them "running" forever.
+ * The engine keeps its place in memory while a step works. A restart fails the runs that
+ * were going (`failInterruptedRuns`) instead of leaving them "running" forever — except a
+ * run waiting at an approval: that one's place is written down (`resume_state`: the nodes
+ * still to visit, the nodes visited, every output so far), so an answer given after a
+ * restart continues it exactly where it stopped.
  */
 import type { FastifyBaseLogger } from 'fastify';
 import { ConditionError, evaluate, parseCondition, render, type Context } from './expr.js';
 import type { WorkflowDefinition, WorkflowEdge, WorkflowNode } from './schema.js';
-import type { SchedulesService, Scope, WorkflowRow, WorkflowRunRow } from './service.js';
+import type {
+  NodeRunRow,
+  SchedulesService,
+  Scope,
+  WorkflowRow,
+  WorkflowRunRow,
+} from './service.js';
 
 /** Who a run acts as. `userName` and `language` go to the agent's session. */
 export interface RunScope extends Scope {
@@ -56,7 +69,39 @@ export interface WorkflowPorts {
     | null;
   /** A notice in the run owner's inbox. */
   notice: ((scope: Scope, input: { title: string; body: string | null }) => void) | null;
+  /**
+   * A step's gate: an ordinary approval (`sessions`), raised when a step waits for a
+   * person and closed when its run is cancelled. Absent, a gated step fails saying so.
+   */
+  approvals?: {
+    raise(
+      scope: Scope,
+      input: {
+        workflowRunId: string;
+        workflowId: string;
+        workflowName: string;
+        nodeId: string;
+        title: string;
+        description: string | null;
+      },
+    ): string;
+    cancel(scope: Scope, workflowRunId: string): number;
+  } | null;
 }
+
+/** How a person answered a gate. */
+export interface GateAnswer {
+  nodeId: string;
+  approved: boolean;
+  answer: string | null;
+  by: string;
+}
+
+/** A run reached its end: succeeded, failed or cancelled. */
+export type RunFinished = (
+  run: WorkflowRunRow,
+  outcome: { status: 'succeeded' | 'failed' | 'cancelled'; error: string | null },
+) => void;
 
 /** Longest `delay` step. Anything longer is a schedule, not a pause. */
 export const MAX_DELAY_SECONDS = 3600;
@@ -72,6 +117,8 @@ interface StepResult {
   output: unknown;
   error: string | null;
   runId?: string | null;
+  /** The step waits for a person: the run pauses here. */
+  waiting?: { stepId: string; approvalId: string };
 }
 
 interface Live {
@@ -87,6 +134,7 @@ export class WorkflowEngine {
     private readonly ports: WorkflowPorts,
     private readonly emit: Emit,
     private readonly log: FastifyBaseLogger,
+    private readonly finished: RunFinished = () => undefined,
   ) {}
 
   /**
@@ -125,23 +173,55 @@ export class WorkflowEngine {
       steps: { ...(options.steps ?? {}) },
       input: options.input ?? '',
     };
-    const done = this.execute(service, scope, run, ctx, state, options.startNodeIds ?? null)
-      .catch((error: unknown) => {
-        // The engine's own bug, not a step's failure: still a run that ended, with a reason.
-        this.log.error({ err: error, workflowRunId: run.id }, 'workflow: run crashed');
-        service.updateWorkflowRun(run.id, {
-          status: 'failed',
-          error: error instanceof Error ? error.message : String(error),
-          activeNodeKeys: [],
-          finishedAt: new Date(),
-        });
-      })
-      .finally(() => {
-        this.live.delete(run.id);
-        this.running.delete(done);
-      });
-    this.running.add(done);
+    const definition = run.definitionSnapshot as WorkflowDefinition;
+    const reached = new Set(definition.edges.map((edge) => edge.to));
+    const queue = options.startNodeIds?.length
+      ? [...options.startNodeIds]
+      : definition.nodes.filter((node) => !reached.has(node.id)).map((node) => node.id);
+    this.follow(service, run, state, () =>
+      this.execute(service, scope, run, ctx, state, { queue, ran: new Set() }),
+    );
     return run;
+  }
+
+  /**
+   * A person answered the gate a run waits at: take the run back (once — a second answer
+   * finds it no longer waiting and gets `false`), settle the gated step, and walk on from
+   * the place written down when it paused. Works the same after a restart, because nothing
+   * about a waiting run lives in memory.
+   */
+  resume(service: SchedulesService, scope: RunScope, workflowRunId: string, answer: GateAnswer): boolean {
+    const run = service.takeWaitingRun(workflowRunId);
+    if (!run) return false;
+    const definition = run.definitionSnapshot as WorkflowDefinition;
+    const node = definition.nodes.find((candidate) => candidate.id === answer.nodeId);
+    const place = run.resumeState ?? { queue: [], ran: [], steps: {} };
+    const input = (run.input ?? {}) as { trigger?: unknown; input?: string | null };
+    const ctx: Context = {
+      trigger: input.trigger ?? null,
+      steps: { ...place.steps },
+      input: input.input ?? '',
+    };
+    const state: Live = { cancelled: false, wake: null };
+    this.live.set(run.id, state);
+    this.follow(service, run, state, async () => {
+      service.updateWorkflowRun(run.id, { resumeState: null, activeNodeKeys: node ? [node.id] : [] });
+      const row = service.waitingStep(run.id, answer.nodeId);
+      const first =
+        node && row
+          ? { node, result: await this.passGate(service, scope, run, node, row, ctx, state, answer) }
+          : null;
+      await this.execute(
+        service,
+        scope,
+        run,
+        ctx,
+        state,
+        { queue: [...place.queue], ran: new Set(place.ran) },
+        first,
+      );
+    });
+    return true;
   }
 
   /** Stop at the next step boundary; a `delay` in progress ends at once. */
@@ -150,6 +230,57 @@ export class WorkflowEngine {
     if (!state) return;
     state.cancelled = true;
     state.wake?.();
+  }
+
+  /**
+   * A cancelled run that was waiting at a gate: nothing is live to stop, but its step ends
+   * as cancelled and its approval is closed, so nobody is asked about a run that is over.
+   */
+  closeGates(service: SchedulesService, scope: Scope, workflowRunId: string): void {
+    service.cancelWaitingSteps(workflowRunId);
+    try {
+      this.ports.approvals?.cancel(scope, workflowRunId);
+    } catch (error) {
+      this.log.warn({ err: error, workflowRunId }, 'workflow: closing its approval failed');
+    }
+  }
+
+  /** Tell whoever cares that a run is over (a schedule's history line). */
+  announceFinished(
+    run: WorkflowRunRow,
+    outcome: { status: 'succeeded' | 'failed' | 'cancelled'; error: string | null },
+  ): void {
+    try {
+      this.finished(run, outcome);
+    } catch (error) {
+      this.log.warn({ err: error, workflowRunId: run.id }, 'workflow: after-run hook failed');
+    }
+  }
+
+  private follow(
+    service: SchedulesService,
+    run: WorkflowRunRow,
+    state: Live,
+    work: () => Promise<void>,
+  ): void {
+    const done = work()
+      .catch((error: unknown) => {
+        // The engine's own bug, not a step's failure: still a run that ended, with a reason.
+        this.log.error({ err: error, workflowRunId: run.id }, 'workflow: run crashed');
+        const message = error instanceof Error ? error.message : String(error);
+        service.updateWorkflowRun(run.id, {
+          status: 'failed',
+          error: message,
+          activeNodeKeys: [],
+          finishedAt: new Date(),
+        });
+        this.announceFinished(run, { status: 'failed', error: message });
+      })
+      .finally(() => {
+        if (this.live.get(run.id) === state) this.live.delete(run.id);
+        this.running.delete(done);
+      });
+    this.running.add(done);
   }
 
   /** Tests and shutdown: wait until nothing is running. */
@@ -163,7 +294,8 @@ export class WorkflowEngine {
     run: WorkflowRunRow,
     ctx: Context,
     state: Live,
-    startNodeIds: readonly string[] | null,
+    place: { queue: string[]; ran: Set<string> },
+    first: { node: WorkflowNode; result: StepResult } | null = null,
   ): Promise<void> {
     const definition = run.definitionSnapshot as WorkflowDefinition;
     const nodes = new Map(definition.nodes.map((node) => [node.id, node]));
@@ -171,15 +303,28 @@ export class WorkflowEngine {
     for (const edge of definition.edges) {
       outgoing.set(edge.from, [...(outgoing.get(edge.from) ?? []), edge]);
     }
-    const reached = new Set(definition.edges.map((edge) => edge.to));
-    const queue: string[] = startNodeIds?.length
-      ? [...startNodeIds]
-      : definition.nodes.filter((node) => !reached.has(node.id)).map((node) => node.id);
-
-    const ran = new Set<string>();
+    const { queue, ran } = place;
     let unhandled: string | null = null;
-    let steps = 0;
-    while (queue.length > 0 && !state.cancelled) {
+    let steps = ran.size;
+
+    /** After a step: its output is readable, its edges fire; `false` ends the run. */
+    const advance = (node: WorkflowNode, result: StepResult): boolean => {
+      ctx.steps[node.id] = { output: result.output };
+      const edges = outgoing.get(node.id) ?? [];
+      for (const edge of edges) {
+        if (edge.route === 'always' || edge.route === result.route) queue.push(edge.to);
+      }
+      // A condition's "no" is an answer, not a failure. A failed step that nothing
+      // handles ends the run with its own words.
+      if (!result.ok && !edges.some((edge) => edge.route !== 'success')) {
+        unhandled = `${node.title || node.id}: ${result.error ?? 'failed'}`;
+        return false;
+      }
+      return true;
+    };
+
+    let going = first ? advance(first.node, first.result) : true;
+    while (going && queue.length > 0 && !state.cancelled) {
       const id = queue.shift()!;
       const node = nodes.get(id);
       if (!node || ran.has(id)) continue;
@@ -191,17 +336,23 @@ export class WorkflowEngine {
       service.updateWorkflowRun(run.id, { activeNodeKeys: [id] });
       const result = await this.step(service, scope, run, node, ctx, state);
       if (state.cancelled) break;
-      ctx.steps[id] = { output: result.output };
-      const edges = outgoing.get(id) ?? [];
-      for (const edge of edges) {
-        if (edge.route === 'always' || edge.route === result.route) queue.push(edge.to);
+      if (result.waiting) {
+        // A person decides. Everything needed to go on is written down, so nothing about
+        // the wait lives in memory — a restart, or a day, changes nothing.
+        service.pauseAtGate(run.id, result.waiting.stepId, result.waiting.approvalId, id, {
+          queue: [...queue],
+          ran: [...ran],
+          steps: { ...ctx.steps },
+        });
+        const step = service.stepsOf(run.id).find((row) => row.id === result.waiting!.stepId);
+        this.emit(scope.profile, 'step.waiting', {
+          workflow_run_id: run.id,
+          workflow_id: run.workflowId,
+          step: step ? stepOf(step) : { node_id: id },
+        });
+        return;
       }
-      // A condition's "no" is an answer, not a failure. A failed step that nothing
-      // handles ends the run with its own words.
-      if (!result.ok && !edges.some((edge) => edge.route !== 'success')) {
-        unhandled = `${node.title || node.id}: ${result.error ?? 'failed'}`;
-        break;
-      }
+      going = advance(node, result);
     }
 
     const now = new Date();
@@ -210,18 +361,20 @@ export class WorkflowEngine {
       service.updateWorkflowRun(run.id, { activeNodeKeys: [] });
       return;
     }
+    const failed = unhandled as string | null;
     service.updateWorkflowRun(run.id, {
-      status: unhandled ? 'failed' : 'succeeded',
-      error: unhandled,
+      status: failed ? 'failed' : 'succeeded',
+      error: failed,
       activeNodeKeys: [],
       output: { steps: summarize(ctx.steps) },
       finishedAt: now,
     });
-    this.emit(scope.profile, unhandled ? 'workflow_run.failed' : 'workflow_run.completed', {
+    this.emit(scope.profile, failed ? 'workflow_run.failed' : 'workflow_run.completed', {
       workflow_run_id: run.id,
       workflow_id: run.workflowId,
-      error: unhandled,
+      error: failed,
     });
+    this.announceFinished(run, { status: failed ? 'failed' : 'succeeded', error: failed });
   }
 
   private async step(
@@ -240,11 +393,82 @@ export class WorkflowEngine {
       attempt: row.attempt,
     });
     let result: StepResult;
-    try {
-      result = await this.perform(scope, node, rendered, ctx, state);
-    } catch (error) {
-      result = fail(error instanceof Error ? error.message : String(error));
+    if (gated(node)) {
+      if (this.ports.approvals) {
+        try {
+          const approvalId = this.ports.approvals.raise(scope, {
+            workflowRunId: run.id,
+            workflowId: run.workflowId,
+            workflowName: service.workflowById(run.workflowId)?.name ?? '',
+            nodeId: node.id,
+            title: node.title || node.id,
+            description: node.kind === 'approval' ? rendered.trim() || null : null,
+          });
+          return { ...succeed(null), waiting: { stepId: row.id, approvalId } };
+        } catch (error) {
+          result = fail(error instanceof Error ? error.message : String(error));
+        }
+      } else {
+        result = fail('this hub cannot ask anyone for approval');
+      }
+    } else {
+      result = await this.attempt(scope, node, rendered, ctx, state);
     }
+    return this.finish(service, scope, run, node, row, result, state);
+  }
+
+  /**
+   * The answer to a gate, as the gated step's result: an `approval` step is the gate, so
+   * a yes is its success; any other step waited to be allowed, so a yes lets it do its
+   * work now. A no fails the step with the reason given.
+   */
+  private async passGate(
+    service: SchedulesService,
+    scope: RunScope,
+    run: WorkflowRunRow,
+    node: WorkflowNode,
+    row: NodeRunRow,
+    ctx: Context,
+    state: Live,
+    answer: GateAnswer,
+  ): Promise<StepResult> {
+    let result: StepResult;
+    if (!answer.approved) {
+      const why = answer.answer?.trim();
+      result = fail(why ? `denied by ${answer.by}: ${why}` : `denied by ${answer.by}`);
+    } else if (node.kind === 'approval') {
+      result = succeed(answer.answer?.trim() || 'approved');
+    } else {
+      service.resumeStep(row.id);
+      const rendered = (row.input as { input?: string }).input ?? '';
+      result = await this.attempt(scope, node, rendered, ctx, state);
+    }
+    return this.finish(service, scope, run, node, row, result, state);
+  }
+
+  private async attempt(
+    scope: RunScope,
+    node: WorkflowNode,
+    rendered: string,
+    ctx: Context,
+    state: Live,
+  ): Promise<StepResult> {
+    try {
+      return await this.perform(scope, node, rendered, ctx, state);
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  private finish(
+    service: SchedulesService,
+    scope: RunScope,
+    run: WorkflowRunRow,
+    node: WorkflowNode,
+    row: NodeRunRow,
+    result: StepResult,
+    state: Live,
+  ): StepResult {
     service.finishStep(row.id, {
       status: state.cancelled ? 'cancelled' : result.ok ? 'succeeded' : 'failed',
       output: result.ok || result.route === 'failure' ? { value: result.output } : null,
@@ -267,9 +491,6 @@ export class WorkflowEngine {
     ctx: Context,
     state: Live,
   ): Promise<StepResult> {
-    if (node.approval_required || node.kind === 'approval') {
-      return fail('approval steps are not built yet, so this step cannot wait for one');
-    }
     switch (node.kind) {
       case 'condition': {
         let answer: boolean;
@@ -326,6 +547,26 @@ export class WorkflowEngine {
         return fail(`a "${(node as { kind: string }).kind}" step is not something this hub runs`);
     }
   }
+}
+
+/** A step that waits for a person before it counts: an `approval`, or one that asks for it. */
+function gated(node: WorkflowNode): boolean {
+  return node.kind === 'approval' || node.approval_required === true;
+}
+
+/** A step as the contract's `WorkflowStep`. */
+export function stepOf(step: NodeRunRow): Record<string, unknown> {
+  return {
+    node_id: step.nodeKey,
+    attempt: step.attempt,
+    status: step.status,
+    session_id: null,
+    run_id: step.runId,
+    approval_id: step.approvalId,
+    error: step.error,
+    started_at: step.startedAt?.toISOString() ?? null,
+    finished_at: step.finishedAt?.toISOString() ?? null,
+  };
 }
 
 function succeed(output: unknown): StepResult {

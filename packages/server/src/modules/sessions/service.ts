@@ -820,7 +820,136 @@ export class SessionsService {
       });
     }
     const status = decision === 'deny' ? 'denied' : decision ? 'approved' : 'answered';
+    if (row.kind === 'workflow_step') return this.answerGate(scope, row, { decision, answer });
     const resolved = await this.engine.resolveApproval(scope, row, { status, decision, answer });
+    return this.approvalOf(scope, resolved);
+  }
+
+  // ------------------------------------------------- workflow step gates
+
+  /**
+   * A workflow run paused at a step that needs a person (`schedules`' engine asks, through
+   * the composition root). The gate is an ordinary approval — listed with the others, one
+   * `respondApproval` answers it — that belongs to a workflow run instead of a session run.
+   * Announced profile-wide and put in the inbox of whoever the run belongs to.
+   */
+  raiseWorkflowApproval(
+    scope: { workspace: string; profile: string; userId: string },
+    input: {
+      workflowRunId: string;
+      workflowId: string;
+      workflowName: string;
+      nodeId: string;
+      title: string;
+      description: string | null;
+    },
+  ): string {
+    const id = newUlid();
+    const now = new Date();
+    const row = this.store.upsertApproval(scope.workspace, scope.userId, null, {
+      id,
+      workflowRunId: input.workflowRunId,
+      nodeId: input.nodeId,
+      toolCallId: null,
+      kind: 'workflow_step',
+      status: 'pending',
+      title: input.title.slice(0, 200),
+      description: input.description,
+      payload: {
+        choices: [
+          { value: 'approve_once', label: 'Approve' },
+          { value: 'deny', label: 'Deny' },
+        ],
+        answer_mode: 'both',
+        workflow_id: input.workflowId,
+        workflow_name: input.workflowName,
+      },
+      response: null,
+      respondedByUserId: null,
+      remember: false,
+      requestedAt: now,
+      respondedAt: null,
+      expiresAt: null,
+    });
+    this.realtime.emitToProfile(scope.profile, 'approval.requested', {
+      approval: this.approvalOf(scope, row),
+    });
+    try {
+      this.ports.notifier.approvalRequested({
+        workspace: scope.workspace,
+        profile: scope.profile,
+        userId: scope.userId,
+        sessionId: '',
+        agentName: input.workflowName,
+        what: row.title,
+        resource: { kind: 'workflow_run', id: input.workflowRunId },
+      });
+    } catch (error) {
+      this.log.warn({ err: error }, 'notice not delivered');
+    }
+    return id;
+  }
+
+  /** A workflow run that stopped waiting (cancelled, deleted): its open gates close. */
+  cancelWorkflowApprovals(
+    scope: { workspace: string; profile: string },
+    workflowRunId: string,
+  ): number {
+    let closed = 0;
+    for (const row of this.store.pendingWorkflowApprovals(scope.workspace, workflowRunId)) {
+      const done = this.store.resolvePending(scope.workspace, row.id, {
+        status: 'cancelled',
+        response: null,
+        respondedByUserId: null,
+      });
+      if (!done) continue;
+      closed += 1;
+      this.realtime.emitToProfile(scope.profile, 'approval.resolved', {
+        approval: this.approvalOf(scope, done),
+      });
+    }
+    return closed;
+  }
+
+  /**
+   * An answer to a workflow step's gate: recorded first (exactly once — a second answer or
+   * one racing a cancel finds it no longer pending), then handed to the paused run.
+   */
+  private async answerGate(
+    scope: EngineScope,
+    row: ApprovalRow,
+    input: { decision: string | null; answer: string | null },
+  ): Promise<Record<string, unknown>> {
+    const gate = this.ports.gate?.() ?? null;
+    if (!gate || !row.workflowRunId || !row.nodeId) {
+      throw new HubError('state_invalid', {
+        details: { from: row.status, allowed: [], reason: 'workflow_gate_unavailable' },
+      });
+    }
+    // A gate is a yes or a no: words alone (no decision) are a yes with a note.
+    const approved = input.decision !== 'deny';
+    const resolved = this.store.resolvePending(scope.workspace, row.id, {
+      status: approved ? 'approved' : 'denied',
+      response: { decision: input.decision ?? 'approve_once', answer: input.answer },
+      respondedByUserId: scope.userId,
+    });
+    if (!resolved) {
+      const now = this.store.getApproval(scope.workspace, row.id);
+      throw new HubError('state_invalid', { details: { from: now?.status ?? 'gone', allowed: [] } });
+    }
+    this.realtime.emitToProfile(scope.profile, 'approval.resolved', {
+      approval: this.approvalOf(scope, resolved),
+    });
+    await gate.resolve({
+      workspace: scope.workspace,
+      profile: scope.profile,
+      approvalId: row.id,
+      workflowRunId: row.workflowRunId,
+      nodeId: row.nodeId,
+      approved,
+      answer: input.answer,
+      respondedBy: { id: scope.userId, name: scope.userName },
+    });
     return this.approvalOf(scope, resolved);
   }
 
@@ -930,7 +1059,26 @@ export class SessionsService {
     );
   }
 
-  private approvalOf(scope: EngineScope, row: ApprovalRow): Record<string, unknown> {
+  private approvalOf(
+    scope: { workspace: string; profile: string },
+    row: ApprovalRow,
+  ): Record<string, unknown> {
+    if (!row.runId) {
+      // A workflow step's gate: the one asking is the workflow, named as it was when it asked.
+      const payload = row.payload as { workflow_id?: unknown; workflow_name?: unknown };
+      return toApproval(
+        {
+          row,
+          sessionId: null,
+          messageId: null,
+          agent: {
+            id: typeof payload.workflow_id === 'string' ? payload.workflow_id : row.id,
+            name: typeof payload.workflow_name === 'string' ? payload.workflow_name : 'workflow',
+          },
+        },
+        scope.profile,
+      );
+    }
     const run = this.store.getRun(scope.workspace, row.runId);
     return toApproval(
       {
