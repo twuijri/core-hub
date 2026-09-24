@@ -6,8 +6,10 @@
  * one page for everything, that it **reflects** Hermes's board, and that **Hermes wins**
  * any disagreement, because Hermes is the one doing the work.
  *
- * So this file never touches that SQLite file. Every read and every write goes through
- * `hermes kanban … --json`, Hermes's own command:
+ * So this file never touches that SQLite file. Every read and every move goes through
+ * `hermes kanban … --json`, Hermes's own command (the writes the command has no verb for —
+ * a card's words, deletion, comments, reassignment — go through Hermes's own server instead,
+ * `hermes-api.ts`, never the file either):
  *
  * - the file's schema is Hermes's internal business and changes between releases; the
  *   command's JSON is what Hermes itself serialises, so it survives an upgrade;
@@ -156,6 +158,10 @@ export interface HermesKanban {
     /** Our id, so a retried create returns the card it already made. */
     idempotencyKey: string;
     triage?: boolean;
+    /** The Hermes profile that works the card (a workspace is a profile, ADR 0014). */
+    assignee?: string | null;
+    /** Hermes's integer priority (`0` is its default; higher is claimed first). */
+    priority?: number;
   }): Promise<HermesTask>;
   /** Archive finished cards, several in one call (`hermes kanban archive <ids…>`). */
   archive(ids: readonly string[]): Promise<void>;
@@ -178,6 +184,8 @@ export function createHermesKanban(run: KanbanRunner): HermesKanban {
       const argv = ['create', input.title];
       if (input.body) argv.push('--body', input.body);
       if (input.triage) argv.push('--triage');
+      if (input.assignee) argv.push('--assignee', input.assignee);
+      if (input.priority !== undefined) argv.push('--priority', String(input.priority));
       argv.push('--idempotency-key', input.idempotencyKey, '--json');
       return json<HermesTask>(await run(argv), 'create');
     },

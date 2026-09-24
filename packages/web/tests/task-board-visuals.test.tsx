@@ -136,6 +136,8 @@ function mount(children: ReactNode, fetchImpl: typeof fetch = hub([]).fetchImpl)
 const noActions = () => ({
   onMove: vi.fn(),
   onRename: vi.fn(),
+  onEdit: vi.fn(),
+  onHandOver: vi.fn(),
   onDelete: vi.fn(),
   onAssign: vi.fn(),
   onStop: vi.fn(),

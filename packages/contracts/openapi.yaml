@@ -6834,6 +6834,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
     delete:
       operationId: tasks.deleteTask
       tags: [tasks]
@@ -6846,6 +6848,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /tasks/{task_id}/move:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -7226,6 +7230,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /tasks/{task_id}/activity:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -15004,6 +15010,16 @@ components:
           type: boolean
           default: false
           description: Open the task session and queue its run now. Without it the task is only assigned, and `TaskAssigned` carries `null` ids.
+        profile:
+          oneOf:
+            - $ref: '#/components/schemas/ProfileSlug'
+            - type: 'null'
+          description: >-
+            Only for a card on Hermes's own kanban (`Task.external.source: hermes`): hand it to
+            this workspace's Hermes profile — a workspace is a Hermes profile — and the card
+            moves to that workspace. Hermes does the reassignment; a running card has its run
+            stopped by Hermes first, so a client asks the person before sending it. `agent_id`
+            is the Hermes agent. Ignored for any other card.
     TaskAssigned:
       type: object
       required: [job_id, run_id, session_id, task_id]

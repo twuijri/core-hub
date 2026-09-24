@@ -556,7 +556,7 @@ test.describe('web smoke journeys', () => {
     await shot(page, 'tasks-blocked-ar-light');
   });
 
-  test("17. Hermes's own cards: marked as Hermes's, and Hermes's refusal in its own words", async ({
+  test("17. Hermes's own cards: marked as Hermes's, edited on Hermes, and Hermes's refusal in its own words", async ({
     page,
   }) => {
     await login(page);
@@ -566,10 +566,10 @@ test.describe('web smoke journeys', () => {
     await expect(card.getByTestId('task-origin-hermes')).toBeVisible();
     await expect(page.locator('[data-column-body="done"]')).toContainText('راجعت سجل التغييرات');
 
-    // Its words and its life are Hermes's: the menu offers moves, never rename or delete.
+    // A mirror, not a picture of one: the menu edits and deletes it too — on Hermes first.
     await card.getByTestId('task-more').click();
-    await expect(page.getByRole('menuitem', { name: 'حذف' })).toHaveCount(0);
-    await expect(page.getByRole('menuitem', { name: 'إعادة التسمية' })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: 'حذف' })).toHaveCount(1);
+    await expect(page.getByRole('menuitem', { name: 'إعادة التسمية' })).toHaveCount(1);
     await page.keyboard.press('Escape');
 
     // Archiving is confirmed first, then asked of Hermes; Hermes says no, and the person
@@ -581,6 +581,22 @@ test.describe('web smoke journeys', () => {
     await expect(page.getByText('رفض هرمز: cannot archive t_e2e00001')).toBeVisible();
     await expect(page.locator('[data-column-body="done"]')).toContainText('راجعت سجل التغييرات');
     await shot(page, 'tasks-hermes-card-ar-light');
+
+    // Its words are edited from here, and the board shows what Hermes kept.
+    await card.getByTestId('task-more').click();
+    await page.getByRole('menuitem', { name: 'التفاصيل…' }).click();
+    const details = page.getByTestId('task-dialog');
+    await expect(details).toContainText('كل تعديل يُجرى على هرمز أولًا');
+    await details.getByTestId('task-dialog-title').fill('راجعت سجل التغييرات كاملًا');
+    await details.getByTestId('task-dialog-save').click();
+    await expect(details.getByTestId('task-dialog-title')).toHaveValue(
+      'راجعت سجل التغييرات كاملًا',
+    );
+    // Nothing left unsaved: the dialog now shows Hermes's copy of the card.
+    await expect(details.getByTestId('task-dialog-save')).toBeDisabled();
+    await shot(page, 'tasks-hermes-details-ar-light');
+    await page.keyboard.press('Escape');
+    await expect(card).toContainText('راجعت سجل التغييرات كاملًا');
   });
 
   test("19. the agent asks, the card above the composer answers: a choice, one's own words, or skip", async ({

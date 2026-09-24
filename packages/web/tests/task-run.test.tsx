@@ -133,6 +133,8 @@ function harness(children: ReactNode, agents: Agent[] = []) {
 const noActions = () => ({
   onMove: vi.fn(),
   onRename: vi.fn(),
+  onEdit: vi.fn(),
+  onHandOver: vi.fn(),
   onDelete: vi.fn(),
   onAssign: vi.fn(),
   onStop: vi.fn(),

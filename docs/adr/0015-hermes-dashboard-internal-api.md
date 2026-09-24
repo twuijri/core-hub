@@ -88,3 +88,13 @@ What was measured (2026-09-24, image `v2026.9.14` of Hermes):
   does not need them.
 - A Hermes upgrade is checked by the real-Hermes test (`hermes-dashboard.real.test.ts`) and
   the sealed-image check against the new image.
+- **First user: the Tasks board (2026-09-24).** A Hermes card's title, description and
+  priority (`PATCH …/tasks/{id}`), its deletion (`DELETE`), comments (`POST …/comments`, the
+  person's display name as `author`), handing it to another workspace's profile (`POST
+  …/reassign`, with `reclaim_first` when it is running) and stopping its run (`POST
+  …/runs/{run_id}/terminate`, or `…/reclaim` when there is no run) go through this server;
+  opening a card reads it and its comments with `GET …/tasks/{id}`. The hub's priorities map
+  to Hermes's integers as `low -1`, `normal 0`, `high 1`, `urgent 2` (read back: below zero is
+  low, two and up is urgent). Opening the board calls `warm()`, which starts the server in the
+  background and counts as a use, so the ten idle minutes run from the last time anyone looked.
+  `tasks/hermes-api.real.test.ts` runs those writes through the hub's routes against the image.
