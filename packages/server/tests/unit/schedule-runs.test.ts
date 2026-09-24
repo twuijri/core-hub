@@ -326,3 +326,262 @@ describe('schedules: a restart leaves no line open', () => {
     }
   });
 });
+
+/** A run that works until it is answered, then ends well. */
+const waitsThenAnswers: ScriptStep[] = [
+  { type: 'message_delta', text: 'أعمل…' },
+  { type: 'await_input' },
+  { type: 'message_delta', text: 'انتهيت.' },
+  { type: 'completed' },
+];
+
+/** An interval schedule due now: its stored next time is moved to `at`. */
+async function dueNow(hub: Hub, over: Json = {}) {
+  const schedule = await create(
+    hub,
+    promptSchedule({
+      trigger: {
+        kind: 'interval',
+        expression: null,
+        every_minutes: 5,
+        run_at: null,
+        timezone: 'UTC',
+      },
+      ...over,
+    }),
+  );
+  return schedule;
+}
+
+/** The schedule's stored next time, from the database (what the scheduler claims). */
+function nextOf(hub: Hub, id: string): Date {
+  const db = requireSqlite(hub.app.hub.database);
+  return db.select().from(schedules).where(eq(schedules.id, id)).get()!.nextRunAt!;
+}
+
+/** Look as the scheduler does, at the schedule's own next time. */
+async function lookAtNext(hub: Hub, id: string) {
+  return schedulerFor(hub.app).tick(nextOf(hub, id));
+}
+
+describe('schedules: if the previous run is still going', () => {
+  it('waits by default, starts the waiting time when the run ends, and holds only one', async () => {
+    const { hub, runner } = await hubWith(waitsThenAnswers);
+    try {
+      const schedule = await dueNow(hub);
+      expect(schedule).toMatchObject({ run_if_missed: false, overlap: 'wait' });
+      expect(await lookAtNext(hub, schedule.id)).toBe(1);
+      await until(() => runner.started.length === 1);
+
+      // The run is still going: this time waits, and the history says so.
+      expect(await lookAtNext(hub, schedule.id)).toBe(0);
+      let lines = await history(hub, schedule.id);
+      expect(lines[0]).toMatchObject({ status: 'queued', waiting: true, session_id: null });
+      // A third time finds one already waiting: skipped, with the reason.
+      expect(await lookAtNext(hub, schedule.id)).toBe(0);
+      lines = await history(hub, schedule.id);
+      expect(lines).toHaveLength(3);
+      expect(lines[0]).toMatchObject({
+        status: 'cancelled',
+        waiting: false,
+        error:
+          'skipped: the previous run was still going and another time was already waiting for it',
+      });
+      expect(runner.started).toHaveLength(1);
+
+      // The first run ends: the waiting time starts at once, in a session of its own.
+      runner.play(answers);
+      await runner.send(runner.started[0]!.runId, { kind: 'text', text: 'تابع' } as never);
+      await until(() => runner.started.length === 2);
+      await until(async () =>
+        (await history(hub, schedule.id)).every((line) => line.status !== 'queued'),
+      );
+      lines = await history(hub, schedule.id);
+      const waited = lines.find((line) => line.id === lines[1]!.id)!;
+      expect(waited).toMatchObject({ waiting: false });
+      expect(waited.session_id).toMatch(/^[0-9A-Z]{26}$/);
+      expect(waited.session_id).not.toBe(lines[2]!.session_id);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('skips when told to', async () => {
+    const { hub, runner } = await hubWith(waits);
+    try {
+      const schedule = await dueNow(hub, { overlap: 'skip' });
+      expect(await lookAtNext(hub, schedule.id)).toBe(1);
+      await until(() => runner.started.length === 1);
+      expect(await lookAtNext(hub, schedule.id)).toBe(0);
+      const [latest] = await history(hub, schedule.id);
+      expect(latest).toMatchObject({
+        status: 'cancelled',
+        error: 'skipped: the previous run was still going',
+      });
+      expect(runner.started).toHaveLength(1);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('runs alongside in a new session when told to', async () => {
+    const { hub, runner } = await hubWith(waits);
+    try {
+      const schedule = await dueNow(hub, { overlap: 'parallel' });
+      expect(await lookAtNext(hub, schedule.id)).toBe(1);
+      expect(await lookAtNext(hub, schedule.id)).toBe(1);
+      await until(() => runner.started.length === 2);
+      const lines = await history(hub, schedule.id);
+      expect(lines.map((line) => line.status)).toEqual(['running', 'running']);
+      expect(lines[0]!.session_id).not.toBe(lines[1]!.session_id);
+      expect(runner.interrupted).toHaveLength(0);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('stops the previous run for real, then starts, when told to replace', async () => {
+    const { hub, runner } = await hubWith(waits);
+    try {
+      const schedule = await dueNow(hub, { overlap: 'replace' });
+      expect(await lookAtNext(hub, schedule.id)).toBe(1);
+      await until(() => runner.started.length === 1);
+      const first = (await history(hub, schedule.id))[0]!;
+
+      expect(await lookAtNext(hub, schedule.id)).toBe(1);
+      // The agent was asked to stop the first run, and the second started after it.
+      expect(runner.interrupted).toEqual([runner.started[0]!.runId]);
+      await until(() => runner.started.length === 2);
+      const lines = await history(hub, schedule.id);
+      const stopped = lines.find((line) => line.id === first.id)!;
+      expect(stopped).toMatchObject({
+        status: 'cancelled',
+        error: 'stopped: the next run of this schedule replaced it',
+      });
+      // The session run itself ended as cancelled, not merely the line.
+      const db = requireSqlite(hub.app.hub.database);
+      await until(
+        () =>
+          db
+            .select()
+            .from(runs)
+            .where(eq(runs.id, first.run_id as string))
+            .get()?.status === 'cancelled',
+      );
+      expect(lines[0]).toMatchObject({ status: 'running' });
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('"Run now" starts at once whatever the choice, and stops nothing', async () => {
+    const { hub, runner } = await hubWith(waits);
+    try {
+      for (const overlap of ['skip', 'wait', 'replace']) {
+        const schedule = await dueNow(hub, { overlap, name: `now ${overlap}` });
+        const before = runner.started.length;
+        expect(await lookAtNext(hub, schedule.id)).toBe(1);
+        await until(() => runner.started.length === before + 1);
+        const response = await runNow(hub, schedule.id);
+        expect(response.statusCode).toBe(202);
+        await until(() => runner.started.length === before + 2);
+        const lines = await history(hub, schedule.id);
+        expect(
+          lines.map((line) => `${String(line.trigger)} ${String(line.status)}`).sort(),
+        ).toEqual(['manual running', 'schedule running']);
+      }
+      expect(runner.interrupted).toHaveLength(0);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('does not start a waiting time for a schedule paused meanwhile', async () => {
+    const { hub, runner } = await hubWith(waitsThenAnswers);
+    try {
+      const schedule = await dueNow(hub);
+      expect(await lookAtNext(hub, schedule.id)).toBe(1);
+      await until(() => runner.started.length === 1);
+      expect(await lookAtNext(hub, schedule.id)).toBe(0);
+      await authed(hub, hub.token, {
+        method: 'PATCH',
+        url: `/api/v1/schedules/${schedule.id}`,
+        payload: { enabled: false },
+      });
+      await runner.send(runner.started[0]!.runId, { kind: 'text', text: 'تابع' } as never);
+      await until(async () =>
+        (await history(hub, schedule.id)).every((line) => line.status !== 'queued'),
+      );
+      const [waited] = await history(hub, schedule.id);
+      expect(waited).toMatchObject({
+        status: 'cancelled',
+        error: 'skipped: the schedule was paused while this time was waiting',
+      });
+      expect(runner.started).toHaveLength(1);
+    } finally {
+      await hub.close();
+    }
+  });
+});
+
+describe('schedules: a time waiting when the hub restarts', () => {
+  /** A hub with one run going and one time waiting for it, closed mid-run. */
+  async function leaveOneWaiting(dir: string, over: Json) {
+    const first = await hubWith(waits, { DATA_DIR: dir });
+    const schedule = await dueNow(first.hub, over);
+    expect(await lookAtNext(first.hub, schedule.id)).toBe(1);
+    await until(() => first.runner.started.length === 1);
+    expect(await lookAtNext(first.hub, schedule.id)).toBe(0);
+    const db = requireSqlite(first.hub.app.hub.database);
+    const lines = db.select().from(scheduleRuns).where(eq(scheduleRuns.scheduleId, schedule.id));
+    const waiting = lines.all().find((line) => line.waiting)!;
+    // The waiting time was an hour ago: the hub was down when its wait ended.
+    db.update(scheduleRuns)
+      .set({ scheduledFor: new Date(Date.now() - 60 * 60_000) })
+      .where(eq(scheduleRuns.id, waiting.id))
+      .run();
+    const running = db
+      .select()
+      .from(scheduleRuns)
+      .all()
+      .find((line) => line.scheduleId === schedule.id && !line.waiting)!;
+    db.update(runs).set({ status: 'streaming' }).where(eq(runs.id, running.runId!)).run();
+    await first.hub.app.close();
+    return { schedule, waitingId: waiting.id };
+  }
+
+  it('records it as missed when the schedule does not run a missed time', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'majlis-sched-wait-off-'));
+    cleanup.push(dir);
+    const { schedule, waitingId } = await leaveOneWaiting(dir, {});
+    const second = await hubWith(answers, { DATA_DIR: dir });
+    try {
+      const lines = await history(second.hub, schedule.id);
+      expect(lines.find((line) => line.id === waitingId)).toMatchObject({
+        status: 'cancelled',
+        waiting: false,
+        error: 'missed: the hub restarted while this time was waiting',
+      });
+      expect(second.runner.started).toHaveLength(0);
+    } finally {
+      await second.hub.app.close();
+    }
+  });
+
+  it('starts it when the hub is back, when the schedule runs a missed time', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'majlis-sched-wait-on-'));
+    cleanup.push(dir);
+    const { schedule, waitingId } = await leaveOneWaiting(dir, { run_if_missed: true });
+    const second = await hubWith(answers, { DATA_DIR: dir });
+    try {
+      await until(() => second.runner.started.length === 1);
+      await until(
+        async () =>
+          (await history(second.hub, schedule.id)).find((line) => line.id === waitingId)?.status ===
+          'succeeded',
+      );
+    } finally {
+      await second.hub.app.close();
+    }
+  });
+});
