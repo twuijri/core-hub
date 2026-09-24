@@ -1,157 +1,201 @@
-# المزوّدون ومفاتيحهم ونماذجهم للمركز كله، واختيار النموذج لكل بروفايل
+# المزوّد لكل البروفايلات أو لبروفايل واحد، واختيار النموذج لكل بروفايل
 المسؤول: twuijri · الفرع: fix/providers-shared-across-profiles · الحالة: review
 
 ## المشكلة والهدف
-قاعدة المالك وADR 0010: يُضاف المزوّد **مرة واحدة** ويرثه كل وكيل وكل بروفايل، بلا إدخال مفتاح لكل
-بروفايل. وجد وكيل PR #83 (المحادثة في بروفايل هرمز الخاص بها) أن هذا ليس ما يحدث. تحققت من كل نقطة على
-`main` بكتابة اختبارات فشلت عليه:
+قاعدة ADR 0010: يُضاف المزوّد **مرة واحدة** ويرثه كل وكيل. وجد وكيل PR #83 أن هذا لا يحدث، وتحققت
+على `main` باختبارات فشلت عليه:
 
-1. **المزوّدون كانوا لكل بروفايل** (صفوف `providers` و`models` و`secrets` مقيّدة بالبروفايل). بروفايل
-   جديد بلا مزوّد ولا نموذج، فلا يسمّي الدور نموذجًا ويرفض هرمز. — صحيح (اختبار «lets a profile made
-   after the provider run a turn…» فشل: `expected null to be 'llama-3.3-70b-versatile'`).
-2. **الحفظ في أي بروفايل يكتب فوق بروفايل هرمز الافتراضي**: `propagate(scope)` كان يكتب حالة البروفايل
-   الذي يحفظ فيه الشخص في `.env` و`config.yaml` في منزل هرمز الجذري وفي بيئة العملية؛ فنموذج هرمز
-   الافتراضي صار نموذج آخر بروفايل حفظ، ومفاتيح البروفايلات الأخرى سقطت من بيئة العملية، وإعادة
-   المطابقة عند الإقلاع تمرّ على كل البروفايلات فيفوز آخرها. — صحيح (اختبار «keeps the default
-   profile's keys and model…» فشل).
-3. **ما فعله #83**: نقاط المزوّدين (`providers:`) تُكتب في `config.yaml` كل بروفايل، والمفاتيح تصل عبر
-   بيئة العملية. وجدت فوق ذلك عيبًا ثالثًا: هرمز يقرأ `.env` البروفايل **قبل** بيئة العملية
-   (`agent/secret_scope.py` §get_secret في v2026.9.14)، وبروفايل منسوخ من `default` (`--clone-from`، وهي
-   طريقة #83 لإنشاء البروفايل المفقود) يحمل نسخة من `.env` الجذري. فتغيير المفتاح في المركز لا يصل إليه،
-   والمفتاح المحذوف يبقى يعمل فيه، ونسخ المفاتيح قابعة في مجلد البروفايل. — أثبته اختبار هرمز الحقيقي
-   أدناه (البروفايل الضابط أرسل المفتاح القديم).
-4. **حذف مزوّد لم يكن يزيل مفتاحه من `.env` الجذري**: الأسماء «المملوكة» كانت أسماء المفاتيح الحالية
-   فقط. — صحيح.
+1. **المزوّدون كانوا لكل بروفايل فقط.** البروفايل الجديد يبدأ بلا مزوّد ولا نموذج، فيرفض هرمز أدواره.
+2. **الحفظ في أي بروفايل كان يكتب فوق بروفايل هرمز الافتراضي.** مفاتيح البروفايل الذي حفظ ونموذجه
+   كانت تُكتب في المنزل الجذري وفي بيئة العملية. وعند الإقلاع يفوز آخر بروفايل يمرّ عليه الكود.
+3. **هرمز يقرأ `.env` البروفايل قبل بيئة العملية** (`agent/secret_scope.py` في v2026.9.14).
+   بروفايل منسوخ من `default` يحمل نسخة من `.env` الجذري، فلا يصله تغيير المفتاح.
+4. **حذف المزوّد لم يكن يزيل مفتاحه من `.env` الجذري.**
+
+النسخة الأولى من هذا الـ PR جعلت القائمة واحدة للمركز كله. **رفضها المالك**: قد يكون لكل فريق اشتراكه
+في بروفايله، مثل بروفايل التصميم وبروفايل المالية وكلٌّ بمفتاح OpenAI خاص. وقال المالك عن القائمة
+الواحدة: «كذا بيدمجهم بحساب واحد وهي مشكله». وهرمز يدعم هذا بنفسه، فـ`.env` البروفايل يغلب بيئة
+العملية.
 
 ## القرار والموافقات
-- **المزوّدون والمفاتيح والنماذج للمركز** (DECISIONS §34، العقد عُدّل أولًا): قائمة واحدة، مخزّنة تحت
-  البروفايل الافتراضي — موجود دائمًا ولا يُعاد تسميته ولا يُؤرشف — وكل عمليات المزوّدين تعمل عليها أيًّا
-  كان `X-Hub-Profile`. إضافة المزوّد نفسه من بروفايل آخر `409 provider_exists`. `Provider.profile` دائمًا
-  `default`. المفاتيح تبقى `[stored]`.
-- **ما يبقى لكل بروفايل: الاختيارات.** النموذج الافتراضي والأدوار المساعدة واختيار مزوّد الكلام. ما لم
-  يختره البروفايل يأتي من البروفايل الافتراضي، و`ModelDefaults.inherited` (جديد، اختياري) يسمّي ما ورثه.
-  الحفظ في بروفايل يجعله اختياره؛ حفظ `null` يعيده إلى الوراثة. «أول نموذج افتراضي» الذي يضعه المركز
-  بنفسه صار للبروفايل الافتراضي. — **مقترح، ينتظر تأكيد المالك**: الوراثة من البروفايل الافتراضي بدل
-  أن يكون لكل بروفايل اختياره المستقل من الصفر.
-- **هرمز**: منزله الجذري = بروفايله `default` = بروفايل المجلس الافتراضي: مفاتيح المركز ونموذج البروفايل
-  الافتراضي، أيًّا كان من حفظ. البروفايل المسمّى: نقاط المزوّدين في `config.yaml` الخاص به، والمفاتيح من
-  بيئة العملية (طريقة #83 كما هي)، و**تُزال أسماء مفاتيح المركز من `.env` الخاص به** (بقية سطوره كما
-  هي) — فلا نسخ للمفاتيح في مجلدات البروفايلات، وتصدير #88 لا يجد فيها شيئًا منها. يحدث هذا مع كل حفظ،
-  وبعد أن ينشئ المركز بروفايلًا مباشرة، وقبل كل دور في بروفايل مسمّى (`prepareRuntimeProfile` في منفذ
-  `agents`)، فالبروفايل الذي يُنشأ لاحقًا — في المركز أو في هرمز أو عند أول استعمال — جاهز قبل أن يعمل.
-- **الحذف يصل كل مكان**: أسماء المتغيرات المملوكة صارت كل اسم كتبه المركز لمزوّد عنده أو كان عنده
-  (الصف المحذوف يبقى مؤرشفًا)، فالمفتاح المحذوف يُزال من `.env` الجذري. ونموذج افتراضي يشير إلى مزوّد
-  محذوف لم يعد اختيارًا.
-- **الترحيل** (`drizzle/0011_providers_shared.sql`، ترحيل بيانات مكتوب يدويًا): كل مزوّد حيّ في بروفايل
-  حيّ ينتقل إلى البروفايل الافتراضي بمعرّفه نفسه. المزوّد نفسه (الـ slug نفسه) في أكثر من بروفايل:
-  **يبقى صف البروفايل الافتراضي، وإلا صف أقدم بروفايل** (`created_at` ثم المعرّف)؛ الباقي يُؤرشف في
-  مكانه بمفتاحه، ويُكتب لكل اختيار صف تدقيق `provider.merged` يسمّي البروفايلين. مفتاح عائلة الاعتماد: مفتاح
-  أعلى بروفايل بالترتيب نفسه **عنده مفتاح**. النماذج التي ينقصها الصف الباقي تُنقل إليه؛ والنماذج
-  الافتراضية واختيار الكلام تُوجَّه إليه. لا يُحذف شيء؛ صف محذوف أو مفتاح ممسوح في البروفايل الافتراضي
-  يحمل الاسم نفسه يُعاد تسميته `<name>~<id>`. البروفايلات المؤرشفة لا تُمس. معرّف قديم (جلسة، تثبيت وكيل،
-  فِرقة) يُحل عند القراءة إلى الصف الباقي بالـ slug نفسه. — قاعدة الاختيار **مقترحة، تنتظر تأكيد المالك**.
-- رُفض: نسخة من كل مزوّد في كل بروفايل (هي إدخال المفتاح لكل بروفايل الذي رفضه ADR 0010)؛ عملية عامة
-  جديدة بجانب `listProviders`؛ معرّف مساحة «مركز» وهمي.
+قرارات المالك كما أقرّها واحدًا واحدًا (نقلها المنسّق في 2026-09-24):
+
+1. **نطاقان.** زر «إضافة مزوّد» يسأل «لمن هذا المزوّد؟ / Who is this provider for?»:
+   - «كل البروفايلات / All profiles»: الافتراضي، ويجعل المزوّد مشتركًا.
+   - «هذا البروفايل فقط / This profile only»: للبروفايل المختار في الأعلى.
+   - تحمل كل بطاقة في القائمة شارة «مشترك / Shared» أو «<البروفايل> فقط / <profile> only».
+   - التعديل لا ينقل مزوّدًا بين النطاقين، فلا حقل `scope` في `updateProvider`.
+2. **الحلّ.** إذا كان للبروفايل مزوّد خاص من النوع نفسه (الـ slug نفسه) غلب المشترك، وإلا استُعمل
+   المشترك. البروفايل الفارغ الجديد يأخذ كل المزوّدين المشتركين ويعمل فورًا.
+3. **المفاتيح.**
+   - المفاتيح المشتركة تصل هرمز عبر بيئة العملية كما في #83.
+   - مفاتيح البروفايل الخاصة تُكتب في `.env` بروفايله عند هرمز، فتغلب.
+   - تعريف المزوّدات المخصّصة (`majlis-*`) يُكتب في كل بروفايل يستعملها، والجذر منها.
+   - المفاتيح لا تعود للعميل (`[stored]`).
+4. **النموذج الافتراضي لكل بروفايل.** البروفايل الذي لم يختر نموذجًا يرث اختيار البروفايل
+   الافتراضي (المالك: «صح»). يسمّي `ModelDefaults.inherited` الأدوار الموروثة.
+5. **النسخ.** البروفايل المنسوخ من آخر يأخذ مزوّدات المصدر الخاصة **مع مفاتيحها** («علشان لو الكي
+   نسيته ما ابلش وينه»)، ويحذف المالك ما لا يريده.
+6. **التصدير يسأل «مع المزوّدين / بدون المزوّدين».**
+   - «بدون» هو الافتراضي، ولا مفاتيح في الملف كما كان.
+   - «مع» يضيف `<profile>/majlis-providers.json`، وفيه مزوّدات البروفايل الخاصة والمشتركة التي يستعملها
+     بمفاتيحها مكشوفة، ويحذّر الحوار من ذلك.
+   - الاستيراد يجعل هذه المزوّدات خاصة بالبروفايل المستورد، ولا يسلّم الملف لهرمز أبدًا.
+7. **الترحيل.** كل صف قديم يصبح مزوّدًا خاصًا لبروفايله في مكانه، بلا دمج. أُلغي ترحيل الدمج الذي كان
+   في النسخة الأولى.
+
+ما قرّرته أنا في التنفيذ (مقترح، ينتظر تأكيد المالك):
+- **المزوّد المشترك يُخزَّن تحت البروفايل الافتراضي** (`providers.shared = 1`)، ومفتاحه باسم
+  `shared-provider:<family>` حتى لا يصطدم بمفتاح خاص للبروفايل الافتراضي من العائلة نفسها.
+- **هرمز يحمّل `.env` الجذري في بيئة العملية عند الإقلاع** (`hermes_cli/env_loader.py`
+  §load_hermes_dotenv، مع `override=True`). لذلك لا يكتب المركز في `.env` البروفايل المسمّى إلا المتغيّر
+  الذي تختلف قيمته عن قيمة الجذر، وهي ثلاث حالات:
+  - مفتاح البروفايل الخاص.
+  - المفتاح المشترك، إذا كان للبروفايل الافتراضي مفتاح خاص في مكانه.
+  - قيمة فارغة تمنع البروفايل من مفتاح الافتراضي الخاص الذي لا يحقّ له.
+
+  أثبت اختبار هرمز الحقيقي أن بروفايل المالية لا يستعمل مفتاح الافتراضي الخاص.
+- **النموذج الموروث يُطابَق على المزوّد الذي يستعمله البروفايل.** يؤخذ النموذج نفسه عند المزوّد ذي
+  الـ slug نفسه، فإن لم يوجد عند البروفايل لم يُورَّث. وكذلك معرّف مزوّد مشترك محفوظ في جلسة أو
+  تثبيت يعمل على مزوّد البروفايل الخاص من الـ slug نفسه متى وُجد.
+- **النسخ لا ينسخ اختيارات النموذج.** يأخذ البروفايل المنسوخ المزوّدات ونماذجها فقط، ويرث النموذج
+  الافتراضي. لم يُطلب نسخ الاختيارات، ويمكن إضافته لاحقًا.
+- **الفِرَق (ensembles) وسجلات الاستخدام لم تتغيّر.**
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
-- `openapi.yaml`: وصف `models.listProviders` و`models.createProvider` و`models.getDefaults` و`Provider`
-  (للمركز لا للبروفايل، و`profile` دائمًا `default`)؛ حقل جديد اختياري `ModelDefaults.inherited`.
-- `docs/contracts/DECISIONS.md` §34.
+- **الأنواع:**
+  - `ProviderScope` (`all` | `profile`) جديد.
+  - `ProviderCreate.scope` اختياري، وقيمته الافتراضية `all`.
+  - `Provider.scope` مطلوب.
+  - `ModelDefaults.inherited` اختياري.
+  - `ProfileExport {providers}` جسم اختياري لـ`auth.exportProfile`.
+- **الأوصاف:** `models.listProviders` و`createProvider` و`getDefaults` و`auth.exportProfile` و
+  `importProfile`، مع `result.providers` في نتيجتي التصدير والاستيراد.
+- **القرار:** `docs/contracts/DECISIONS.md` §37.
 
 ## الملفات والتأثير
-- `packages/server/src/modules/models/service.ts`: `hub()` (البروفايل الافتراضي، مخزّن)،
-  `canonicalProvider` / `canonicalModel`، كل عمليات المزوّدين والنماذج والمفاتيح على القائمة الواحدة،
-  `effectiveDefault` والوراثة في `getDefaults` / `defaultRefFor` / النموذج الذي يُسمّى لهرمز، وراثة
-  اختيار الكلام، `propagate` بحالة البروفايل الافتراضي دائمًا، `ownedEnvNames`، `prepareProfile`.
-- `packages/server/src/modules/models/propagation.ts`: `PropagationState.ownedEnv`.
-- `packages/server/src/modules/models/index.ts`: `hubScope`، إعادة المطابقة عند الإقلاع مرة واحدة،
-  `prepareRuntimeProfile` في المنفذ.
-- `packages/server/src/modules/agents/ports.ts`، `agents/index.ts`: `prepareRuntimeProfile?` قبل دور
-  البروفايل المسمّى.
-- `packages/server/src/modules/index.ts`: تجهيز البروفايل بعد إنشائه في هرمز.
-- `packages/server/src/modules/models/schema.ts`: تعليق الرأس.
-- `packages/server/drizzle/0011_providers_shared.sql` + `meta/0011_snapshot.json` + `_journal.json`.
-- الويب: `packages/web/src/models/ModelsScreen.tsx` (علامة «من البروفايل الافتراضي» على ما ورثه
-  البروفايل)، `queries.ts` (الحفظ يُبطل بيانات النماذج في كل البروفايلات)، `i18n/ar.json` و`en.json`
-  (نص «مشتركون بين كل البروفايلات» وتلميح الافتراضيات والعلامة).
-- اختبارات: `models/providers-shared.test.ts` (6 جديدة)، `tests/unit/providers-shared-migration.test.ts`
-  (2)، `agents/adapters/providers-shared.real.test.ts` (هرمز الحقيقي، 2)،
-  `web/tests/models-screen.test.tsx` (+2)، `web/e2e/zzzzz-providers-shared.spec.ts` (رحلة جديدة) ولقطة
-  `providers-shared-studio-ar-light.png` ولقطتا `design-models-*` (تغيّر النص).
-- `docs/domain/models.md`، `docs/STATUS.md` (صف models).
+- **الخادم `models`:**
+  - `schema.ts`: عمود `shared`، وفهرس فريد جديد (`workspace`, `shared`, `slug`).
+  - `store.ts`: قراءات حسب النطاق.
+  - `service.ts`: النطاقان والحلّ، و`effectiveDefault`، و`prepareProfile`. وأيضًا نسخ المزوّدات الخاصة
+    وتصديرها واستيرادها.
+  - `catalogue.ts`: `secretNameOf(family, shared)`.
+  - `serialize.ts`: `scope`.
+  - `propagation.ts`: `ownedEnv`.
+  - `index.ts`: `hubScope` و`profileWorkspace` و`prepareRuntimeProfile`، ومطابقة مرة واحدة عند الإقلاع.
+- **الخادم `auth`:**
+  - `profiles.ts`: `onProfileCreated`.
+  - `routes.ts`: جسم التصدير، وإطلاق `onProfileCreated` بعد إنشاء البروفايل.
+  - `profile-transfer.ts`: الملف `majlis-providers.json`، يُلحق عند التصدير ويُلتقط عند الاستيراد.
+  - `profile-archive.ts`: قاعدتا `capture` و`append` في فلتر tar.
+- **الخادم `agents`:** `ports.ts` و`index.ts`: تجهيز البروفايل قبل كل دور.
+- **الخادم، الربط:** `modules/index.ts` يربط النسخ والتجهيز والاستيراد.
+- **الترحيل:** `drizzle/0012_provider_scope.sql` مع لقطته (رقم 0011 أخذه #92).
+- **الويب:**
+  - `AddProviderDialog.tsx`: سؤال «لمن هذا المزوّد؟».
+  - `ModelsScreen.tsx`: شارة النطاق، وعلامة «من البروفايل الافتراضي».
+  - `queries.ts`: الإبطال في كل البروفايلات.
+  - `people/ProfileTransfer.tsx` و`people/queries.ts`: «مع المزوّدين / بدون المزوّدين» والتحذير.
+  - `i18n/ar.json` و`en.json`.
+- **الاختبارات:**
+  - `models/providers-shared.test.ts`: 12 اختبارًا، منها 5 للنطاقين.
+  - `tests/unit/profile-transfer-providers.test.ts`: 3.
+  - `tests/unit/provider-scope-migration.test.ts`: 1.
+  - `agents/adapters/provider-scopes.real.test.ts`: هرمز الحقيقي، 3.
+  - الويب: `models-screen.test.tsx` (+4) و`profile-transfer.test.tsx` (+2).
+  - رحلة Playwright `e2e/zzzzz-providers-scopes.spec.ts`.
+  - لقطات: `providers-scopes-studio-ar-light.png` و`profile-export-providers-ar-light.png` و
+    `design-models-*`.
+- **الوثائق:** `docs/domain/models.md` و`docs/STATUS.md` (صف models).
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-الاختبارات الجديدة على كود `main` (ملفات `src` من `origin/main` مع ملفات الاختبار الجديدة):
+الاختبارات الجديدة على كود `main`، أي ملفات `src` من `origin/main` مع ملفات الاختبار الجديدة. نجح اختبار
+واحد على `main` أصلًا لأنه حارس: «does not show a profile's own provider to another profile».
 
 ```
-$ npx vitest run --project unit src/modules/models/providers-shared.test.ts   (src من main)
+$ npx vitest run --project unit src/modules/models/providers-shared.test.ts tests/unit/profile-transfer-providers.test.ts tests/unit/provider-scope-migration.test.ts
+     × carries no key and no providers file without being asked
+     × with providers carries the profile's own and the shared ones it uses, keys and all
+     × an import makes the providers the archive carried the new profile's own
+     × keeps every existing provider as its own profile's, key included
      × lists a provider added in one profile, with its key and models, in every other
      × lets a profile made after the provider run a turn on it, with no setup in that profile
-     × applies an edit or a removal made in one profile to every profile
-     × uses the default profile's chat model in a profile that chose none, and its own once it chooses
-     × keeps the default profile's keys and model when providers are saved in another profile
-     × keeps the hub's keys out of a named profile's own .env, so a changed key is the key used
-      Tests  6 failed (6)
-$ npx vitest run tests/models-screen.test.tsx   (packages/web/src من main)
-     × says the providers are shared by every profile, in both languages
+     × uses a profile's own key in that profile, and the shared key in every other
+     × runs a turn on a profile's own provider when the turn names the shared one
+     × does not let another profile fall back on the default profile's own key
+     × gives a profile made as a copy its source's own providers, keys included
+     … (14 failed | 1 passed)
+$ npx vitest run tests/models-screen.test.tsx tests/profile-transfer.test.tsx   (packages/web/src من main)
+     × asks with or without providers, sends none by default, and warns before sending keys
+     × sends providers: false when the person keeps the default
+     × says what shared and a profile's own mean, in both languages
      × marks a default this profile inherited from the default profile, and only that one
-      Tests  2 failed | 21 passed (23)
+     × badges each provider shared or the profile's own
+     × asks who a new provider is for, and offers a shared preset again as this profile's own
+      Tests  6 failed | 25 passed (31)
 ```
-اختبار الترحيل يفشل على `main` لأن الترحيل غير موجود فيه.
 
-هرمز الحقيقي (مرة واحدة، بعد التأكد أن لا حاوية `majlis`/`sealed-check` لوكيل آخر تعمل؛ الصورة
-`majlis:local` الموجودة، هرمز v2026.9.14): مزوّد يُضاف عبر واجهة المركز بمفتاح، ثم بروفايلان نسخة من
-`default`، ثم يتغيّر المفتاح في المركز، ثم بروفايل من الصفر. عملية TUI واحدة والمفتاح في بيئتها فقط؛
-النموذج المحلي يردّ بالمفتاح الذي وصله. النتيجة: البروفايل الجديد يجيب بالمفتاح الحالي بعد تجهيزه؛ البروفايل
-الضابط غير المجهّز أرسل **المفتاح القديم** (يثبت أن `.env` البروفايل يغلب البيئة)، وبعد تجهيزه المفتاح
-الحالي؛ والبروفايل الذي عرفه المركز عند الحفظ لم يعد فيه المفتاح وأرسل الحالي. (شُغّل من
-`models/providers-shared.real.test.ts` ثم نُقل الملف إلى `agents/adapters/` لقاعدة الاستيراد دون تغيير
-منطقه؛ لم يُعَد تشغيله بعد النقل، والـ typecheck يغطي الاستيرادات.)
+**اختبار هرمز الحقيقي.** شرط التشغيل: `docker ps` لا يُظهر حاوية لوكيل البوابة (الموجود
+`sanad-hermes` و`hermes-webui` و`dockhand` للمالك). الصورة المستعملة `majlis:local` (هرمز v2026.9.14).
+- **الإعداد:** مزوّدات تُضاف عبر واجهة المركز: LM Studio مشترك، ثم LM Studio خاص بـDesign، ثم LiteLLM
+  خاص بالافتراضي. تعمل عملية TUI واحدة ببيئة المركز، والنموذج المحلي يردّ بالمفتاح الذي وصله.
+- **النتائج:**
+  - Design يستعمل مفتاحه.
+  - Finance والافتراضي يستعملان المشترك.
+  - Finance لا يصل إلى مفتاح الافتراضي الخاص.
+  - بروفايل من الصفر أُنشئ بعد ذلك يعمل بالمشترك بعد تجهيزه.
+- **المحاولة الأولى** توقّفت في الإعداد قبل أي دور: `PermissionError` على `/hh/.env`، لأن المستخدم
+  داخل الحاوية غير المستخدم على الجهاز. أضفت فتح صلاحيات الملفات قبل كل أمر هرمز في الاختبار نفسه،
+  ثم نجحت المحاولة الثانية.
 
 ```
-$ MAJLIS_HERMES_IMAGE=majlis:local npx vitest run --maxWorkers=1 providers-shared.real
+$ MAJLIS_HERMES_IMAGE=majlis:local npx vitest run --maxWorkers=1 provider-scopes.real
  Test Files  1 passed (1)
-      Tests  2 passed (2)
-   Duration  22.11s
+      Tests  3 passed (3)
+   Duration  23.94s
 ```
 
-كل أمر ثقيل عبر `mj-run` (عاملان لـ vitest، حد 7 GB)، بعد دمج `origin/main` (1be8486، PR #87؛ تعارض في
-`DECISIONS.md` حُلّ بإبقاء §33 من `main` ثم §34):
+**بقية الفحوص.** كل أمر ثقيل عبر `mj-run` (عاملان لـ vitest، وحد 7 GB)، بعد دمج `origin/main` (398cf02،
+أي #88 و#89 و#91 و#92):
+- في `DECISIONS.md` و`STATUS.md` أُخذت نسخة `main`، ثم أُضيف §37 وصف models.
+- ترحيلي أُعيد توليده برقم `0012`.
 
 ```
-$ pnpm lint                      -> exit 0 (All matched files use Prettier code style!)
+$ pnpm lint                      -> All matched files use Prettier code style!
 $ pnpm typecheck                 -> exit 0
 $ pnpm contracts:lint            -> contracts:lint  OK
-$ pnpm contracts:check-clients   -> check-clients  OK — 243 client file(s) scanned, 167 contract path(s) known.
-$ pnpm contract:test             -> Tests  255 passed (255)
+$ pnpm contracts:check-clients   -> check-clients  OK — 255 client file(s) scanned, 167 contract path(s) known.
+$ pnpm contract:test             -> Tests  259 passed (259)
 $ pnpm i18n:check                -> i18n:check  OK
 $ pnpm nav:check                 -> nav:check  OK — 34 destinations, 2 pre-auth screens (login, setup), 39 terms, ar/en complete, routes for web
 $ pnpm --filter @majlis/server test
- Test Files  83 passed | 10 skipped (93)
-      Tests  874 passed | 28 skipped (902)
+ Test Files  92 passed | 13 skipped (105)
+      Tests  957 passed | 38 skipped (995)
 $ pnpm --filter @majlis/web test
- Test Files  43 passed (43)
-      Tests  542 passed (542)
+ Test Files  47 passed (47)
+      Tests  567 passed (567)
 $ pnpm build                     -> exit 0 (✓ built)
 $ PLAYWRIGHT_CHANNEL=chrome pnpm web:e2e
-  38 passed (2.5m)
-  ✓ 38 e2e/zzzzz-providers-shared.spec.ts › one provider list for every profile › a provider added in a second profile is on the default profile too, …
+  42 passed (2.7m)
+  ✓ 42 e2e/zzzzz-providers-scopes.spec.ts › providers for every profile, and a profile’s own › …
 ```
-لقطات الشاشة التي تغيّرت دون علاقة بهذه المهمة أُعيدت كما كانت.
+اللقطات التي تغيّرت دون علاقة بهذه المهمة أُعيدت كما كانت.
 
 ## المخاطر والرجوع
-- **تغيّر سلوك مرئي**: من كان عنده مزوّدات مختلفة في بروفايلات مختلفة يرى الآن قائمة واحدة، والعضو في
-  بروفايل آخر يرى مزوّدي المركز كلهم (المفاتيح مخفية). المكرّرات تُؤرشف بمفاتيحها ولا تُحذف.
-- **`.env` البروفايلات المسمّاة**: تُزال منها أسماء مفاتيح المركز. من وضع مفتاحًا بنفسه في `.env`
-  بروفايل تحت اسم يملكه المركز (مثل `ANTHROPIC_API_KEY`) يفقده هناك ويعمل بمفتاح المركز. من يشغّل
-  `hermes -p <profile>` في صدفة داخل الحاوية دون بيئة المركز لا يجد المفتاح في مجلد البروفايل.
-- **الترحيل لا يُعاد عكسه تلقائيًا**: الرجوع عن الـ PR يعيد الكود، لكن الصفوف تبقى تحت البروفايل الافتراضي؛
-  البروفايلات الأخرى تبدو فارغة حتى يُعاد إضافة مزوّداتها (الصفوف المؤرشفة وصفوف التدقيق `provider.merged`
-  تقول ما كان فيها).
-- لم يُغيَّر: الفِرَق (ensembles) تحفظ معرّف المزوّد كما هو، ويُحل المعرّف القديم عند القراءة فقط؛ سجلات
-  الاستخدام تبقى بمعرّفاتها.
+- **بعد الترحيل كل مزوّد قديم خاص ببروفايله.** المزوّد الذي أُضيف في البروفايل الافتراضي وحده لا يراه
+  بروفايل آخر، والمطلوب إضافته مرة واحدة «لكل البروفايلات». هذا مقصود بقرار المالك (بياناته تجريبية).
+- **`.env` البروفايلات المسمّاة يكتبه المركز للمتغيّرات التي يملكها** (أسماء مفاتيح مزوّدي المركز).
+  - مفتاح وضعه أحد يدويًا تحت أحد هذه الأسماء يُستبدل بما يقرّره المركز.
+  - القيمة الفارغة تمنع البروفايل من مفتاح الجذر، فالدور بلا مزوّد يفشل بكلمات هرمز («لا مفتاح») ولا
+    يستعمل مفتاح غيره.
+- **ملف التصدير «مع المزوّدين» فيه مفاتيح مكشوفة.** الحوار يحذّر، والافتراضي «بدون».
+- **الرجوع:**
+  - التراجع عن الـ PR يترك عمود `shared` في القاعدة ولا يستعمله أحد.
+  - المزوّدات المشتركة تبدو عندها مزوّدات البروفايل الافتراضي وحده.
 
 ## التسليم والخطوة التالية
-- PR إلى `main` للمراجعة (رابطه في رسالة التسليم). ينتظر تأكيد المالك على: الوراثة من البروفايل
-  الافتراضي، وقاعدة اختيار المكرّر في الترحيل.
-- PR #88 (تصدير البروفايل) يستعمل §33 أيضًا؛ من يُدمج ثانيًا يعيد الترقيم.
+- **PR:** https://github.com/twuijri/core-hub/pull/90 إلى `main` للمراجعة.
+- **ينتظر تأكيد المالك** على ما في «ما قرّرته أنا» أعلاه.
+- **التنسيق مع وكيل بوابة القنوات:** الكاتب الوحيد لتعريفات المزوّدين `writeHermesProviders`، وتستدعيه
+  `ModelsService.prepareProfile` لكل بروفايل. البوابة تحتاج `majlis-custom-…` في إعداد البروفايل الذي
+  تعمل فيه، فالأفضل أن تستدعي `prepareProfile` قبل تشغيلها في البروفايل بدل نسخ المنطق.

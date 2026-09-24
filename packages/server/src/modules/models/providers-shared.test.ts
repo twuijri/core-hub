@@ -520,9 +520,9 @@ describe("models: a profile's own providers and the shared ones (decision §37)"
       });
       expect(removed.statusCode).toBe(204);
       expect(claudeCodeEnv(hub, designId)).toEqual({ ANTHROPIC_API_KEY: 'sk-ant-shared-key' });
-      expect(parseEnv(readFileSync(path.join(design, '.env'), 'utf8')).has('ANTHROPIC_API_KEY')).toBe(
-        false,
-      );
+      expect(
+        parseEnv(readFileSync(path.join(design, '.env'), 'utf8')).has('ANTHROPIC_API_KEY'),
+      ).toBe(false);
     } finally {
       await hub.close();
     }
@@ -620,7 +620,7 @@ describe("models: a profile's own providers and the shared ones (decision §37)"
     }
   });
 
-  it('gives a profile made as a copy its source\'s own providers, keys included', async () => {
+  it("gives a profile made as a copy its source's own providers, keys included", async () => {
     const { fetchImpl } = twoProviders();
     const hub = await signedInHub({}, { models: { fetchImpl } });
     try {

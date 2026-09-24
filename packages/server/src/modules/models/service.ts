@@ -449,7 +449,9 @@ export class ModelsService {
 
   /** Where a new provider of this scope is stored: shared, or the profile's own. */
   private ownerFor(scope: Pick<WorkspaceScope, 'id'>, shared: boolean): ProviderOwner {
-    return shared ? { workspace: this.hub(scope).id, shared: true } : { workspace: scope.id, shared };
+    return shared
+      ? { workspace: this.hub(scope).id, shared: true }
+      : { workspace: scope.id, shared };
   }
 
   private ownerOf(row: ProviderRow): ProviderOwner {
@@ -485,7 +487,9 @@ export class ModelsService {
   private visibleRow(workspace: string, id: string): ProviderRow | undefined {
     const row = this.store.providerById(id);
     if (!row || row.archivedAt) return undefined;
-    if (row.shared ? row.workspace === this.hub({ id: workspace }).id : row.workspace === workspace) {
+    if (
+      row.shared ? row.workspace === this.hub({ id: workspace }).id : row.workspace === workspace
+    ) {
       return row;
     }
     return undefined;
@@ -1916,7 +1920,6 @@ export class ModelsService {
     return [...names].sort();
   }
 
-
   /**
    * The environment a coding agent starts with, derived from the shared providers. The
    * `agents` module calls this at `start()`; nobody enters a key per agent (ADR 0010).
@@ -2368,7 +2371,8 @@ export class ModelsService {
     if (!row || row.archivedAt) return null;
     const provider = this.effectiveFor(scope.id, row.providerId);
     if (!provider) return null;
-    const model = provider.id === row.providerId ? row : this.store.model(provider.id, row.modelKey);
+    const model =
+      provider.id === row.providerId ? row : this.store.model(provider.id, row.modelKey);
     if (!model || model.archivedAt) return null;
     return { provider_id: provider.id, model: model.modelKey };
   }

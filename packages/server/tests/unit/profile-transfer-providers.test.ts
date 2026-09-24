@@ -149,7 +149,7 @@ describe('profile export and providers (decision §37)', () => {
     }
   });
 
-  it('with providers carries the profile\'s own and the shared ones it uses, keys and all', async () => {
+  it("with providers carries the profile's own and the shared ones it uses, keys and all", async () => {
     withFakeHermes();
     const hub = await signedInHub({}, { models: { fetchImpl: providersFetch } });
     try {
@@ -177,7 +177,7 @@ describe('profile export and providers (decision §37)', () => {
     }
   });
 
-  it('an import makes the providers the archive carried the new profile\'s own', async () => {
+  it("an import makes the providers the archive carried the new profile's own", async () => {
     const fake = withFakeHermes();
     const hub = await signedInHub({}, { models: { fetchImpl: providersFetch } });
     try {
@@ -208,7 +208,10 @@ describe('profile export and providers (decision §37)', () => {
       });
       expect(started.status).toBe(202);
       const done = await job(hub, started.body.job_id as string);
-      expect(done).toMatchObject({ status: 'succeeded', result: { slug: 'restored', providers: 2 } });
+      expect(done).toMatchObject({
+        status: 'succeeded',
+        result: { slug: 'restored', providers: 2 },
+      });
 
       // Hermes got the profile without the file, and without a key.
       const handed = fake.imported[0]!.bytes;

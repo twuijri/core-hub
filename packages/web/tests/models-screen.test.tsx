@@ -594,7 +594,7 @@ describe('models screen', () => {
     expect(inheriting.textContent).toContain('Not chosen');
   });
 
-  it('says what shared and a profile\'s own mean, in both languages', async () => {
+  it("says what shared and a profile's own mean, in both languages", async () => {
     const { fetchImpl } = hub();
     renderScreen(fetchImpl);
     await waitFor(() => expect(screen.getByTestId('provider-list')).toBeTruthy());
