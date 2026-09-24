@@ -49,7 +49,11 @@ export function defaultWorkspace(db: ModuleDb): WorkspaceRow | null {
   );
 }
 
-/** Workspace ids a member is explicitly enrolled in (empty = every workspace, per the contract). */
+/**
+ * Workspace ids a member is explicitly enrolled in. The list is the whole answer: empty means
+ * the member enters **no** workspace. Nothing is ever granted implicitly — not by an empty
+ * list, not by a workspace being created later (owner, 2026-09-24).
+ */
 export function membershipIds(db: ModuleDb, userId: string): string[] {
   return db
     .select({ workspace: workspaceMembers.workspace })
@@ -72,7 +76,7 @@ export function listWorkspacesFor(
     .all();
   if (user.role !== 'member') return all;
   const allowed = new Set(membershipIds(db, user.id));
-  return allowed.size === 0 ? all : all.filter((row) => allowed.has(row.id));
+  return all.filter((row) => allowed.has(row.id));
 }
 
 export function canEnter(
@@ -81,8 +85,26 @@ export function canEnter(
   workspaceId: string,
 ): boolean {
   if (user.role !== 'member') return true;
-  const allowed = membershipIds(db, user.id);
-  return allowed.length === 0 || allowed.includes(workspaceId);
+  return membershipIds(db, user.id).includes(workspaceId);
+}
+
+/**
+ * The refusal for a workspace the caller may not enter. A member who has been given no
+ * workspace at all hears that, not "unknown profile": they can sign in, and the only thing
+ * that changes it is an admin granting them one (`details.reason = no_profile_granted`).
+ */
+export function workspaceRefusal(
+  db: ModuleDb,
+  user: Pick<PrincipalUser, 'id' | 'role'>,
+  slugOrId: string,
+): HubError {
+  if (user.role === 'member' && membershipIds(db, user.id).length === 0) {
+    return new HubError('profile_not_found', {
+      messageKey: 'auth.no_profile_granted',
+      details: { profile: slugOrId, reason: 'no_profile_granted' },
+    });
+  }
+  return new HubError('profile_not_found', { details: { profile: slugOrId } });
 }
 
 /** Resolves the header for the principal; 404 `profile_not_found` when unknown or not enterable. */
@@ -93,9 +115,7 @@ export function resolveWorkspaceFor(
 ): WorkspaceScope {
   if (!slugOrId) throw new HubError('profile_required');
   const row = findWorkspace(db, slugOrId);
-  if (!row || !canEnter(db, user, row.id)) {
-    throw new HubError('profile_not_found', { details: { profile: slugOrId } });
-  }
+  if (!row || !canEnter(db, user, row.id)) throw workspaceRefusal(db, user, slugOrId);
   return toScope(row);
 }
 

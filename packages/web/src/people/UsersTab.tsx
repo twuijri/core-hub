@@ -120,12 +120,10 @@ function UserTable({ users }: { users: HubUser[] }) {
     {
       key: 'workspaces',
       header: t('people.workspaces'),
-      // Owners and admins enter every workspace whatever the list says; a member enters
-      // the ones listed (the hub's rule, `auth/workspace.ts` canEnter).
-      cell: (user) =>
-        user.role !== 'member' || user.profiles.length === 0
-          ? t('people.all_workspaces')
-          : user.profiles.join('، '),
+      // Owners and admins enter every workspace; a member enters exactly the ones listed,
+      // and an empty list means none — never "every profile" (the hub's rule,
+      // `auth/workspace.ts` canEnter; owner, 2026-09-24).
+      cell: (user) => <WorkspacesCell user={user} />,
     },
     { key: 'menu', header: '', cell: (user) => <UserMenu user={user} /> },
   ];
@@ -140,6 +138,18 @@ function UserTable({ users }: { users: HubUser[] }) {
   );
 }
 
+function WorkspacesCell({ user }: { user: HubUser }) {
+  const { t } = useI18n();
+  if (user.role !== 'member') return <>{t('people.all_workspaces')}</>;
+  if (user.profiles.length === 0)
+    return (
+      <span className="text-warning-soft-text" data-testid="no-workspace">
+        {t('people.no_workspace')}
+      </span>
+    );
+  return <>{user.profiles.join('، ')}</>;
+}
+
 function UserMenu({ user }: { user: HubUser }) {
   const { t } = useI18n();
   const { session } = useAuth();
@@ -148,6 +158,7 @@ function UserMenu({ user }: { user: HubUser }) {
   const { ask, dialog } = useConfirm();
   const [resetting, setResetting] = useState(false);
   const [placing, setPlacing] = useState(false);
+  const [demoting, setDemoting] = useState(false);
   const owner = isOwner(user);
   const self = isSelf(user, session?.user.id);
 
@@ -231,12 +242,13 @@ function UserMenu({ user }: { user: HubUser }) {
               </Button>
             }
           >
+            {/* An admin holds no list, so becoming a member means choosing, right then, what
+                they may enter — a bare role change is refused by the hub. */}
             <MenuItem
               onSelect={() =>
-                update.mutate({
-                  id: user.id,
-                  patch: { role: user.role === 'admin' ? 'member' : 'admin' },
-                })
+                user.role === 'admin'
+                  ? setDemoting(true)
+                  : update.mutate({ id: user.id, patch: { role: 'admin' } })
               }
             >
               {t(user.role === 'admin' ? 'people.make_member' : 'people.make_admin')}
@@ -268,6 +280,7 @@ function UserMenu({ user }: { user: HubUser }) {
       {dialog}
       {resetting && <SetPassword user={user} onClose={() => setResetting(false)} />}
       {placing && <EditWorkspaces user={user} onClose={() => setPlacing(false)} />}
+      {demoting && <EditWorkspaces user={user} makeMember onClose={() => setDemoting(false)} />}
       {(update.isError || remove.isError) && (
         <Notice tone="danger">{describeError(update.error ?? remove.error, t)}</Notice>
       )}
@@ -372,8 +385,8 @@ function AddUser({ onClose }: { onClose: () => void }) {
   const [chosen, setChosen] = useState<string[]>([]);
   // The contract's pattern, checked here so the field says so before the hub does.
   const badName = username.length > 0 && !/^[a-z0-9._-]{2,40}$/.test(username);
-  // A member with no workspace would enter all of them (the hub reads an empty list as
-  // "unrestricted"), so a member is not added until at least one is chosen.
+  // A member enters only what is chosen here, and the hub refuses a member with nothing
+  // chosen, so a member is not added until at least one is.
   const placed = role === 'admin' || chosen.length > 0;
   const ready = !badName && username.length >= 2 && password.length >= 8 && placed;
   const shortPassword = password.length > 0 && password.length < 8;
@@ -527,22 +540,40 @@ function WorkspaceChoice({
         />
       ))}
       {chosen.length === 0 && (
-        <p className="text-xs text-danger-soft-text">{t('people.workspaces_required')}</p>
+        <p className="text-xs text-danger-soft-text" data-testid="workspaces-reason">
+          {t('people.workspaces_required')}
+        </p>
       )}
     </fieldset>
   );
 }
 
-function EditWorkspaces({ user, onClose }: { user: HubUser; onClose: () => void }) {
+/**
+ * A member's profiles, or — with `makeMember` — an admin's profiles as the member they are
+ * about to become. Saving is off until one is chosen, and the dialog says why: a member with
+ * no profile enters nothing, so it is never the result of this dialog.
+ */
+function EditWorkspaces({
+  user,
+  onClose,
+  makeMember = false,
+}: {
+  user: HubUser;
+  onClose: () => void;
+  makeMember?: boolean;
+}) {
   const { t } = useI18n();
   const update = useUpdateUser();
   const workspaces = useWorkspaces();
-  const [chosen, setChosen] = useState<string[]>(user.profiles);
+  // An admin's `profiles` is every profile (they enter all of them), not a choice anyone
+  // made: a member-to-be starts from nothing chosen.
+  const [chosen, setChosen] = useState<string[]>(makeMember ? [] : user.profiles);
+  const name = user.display_name || user.username;
   return (
     <Dialog
       open
       onOpenChange={(open) => !open && onClose()}
-      title={t('people.workspaces_for', { name: user.display_name || user.username })}
+      title={t(makeMember ? 'people.make_member_for' : 'people.workspaces_for', { name })}
       closeLabel={t('common.cancel')}
       testId="edit-workspaces"
       footer={
@@ -553,7 +584,13 @@ function EditWorkspaces({ user, onClose }: { user: HubUser; onClose: () => void 
           <Button
             disabled={chosen.length === 0 || update.isPending}
             onClick={() =>
-              update.mutate({ id: user.id, patch: { profiles: chosen } }, { onSuccess: onClose })
+              update.mutate(
+                {
+                  id: user.id,
+                  patch: makeMember ? { role: 'member', profiles: chosen } : { profiles: chosen },
+                },
+                { onSuccess: onClose },
+              )
             }
             data-testid="save-workspaces"
           >

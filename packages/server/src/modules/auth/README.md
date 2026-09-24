@@ -81,9 +81,14 @@ is judged afresh.
   inside 15 minutes lock for 15 minutes; `429 rate_limited` with `Retry-After`; admins list and
   clear them.
 - **Workspaces**: `X-Hub-Profile` carries the slug (or id). Owner and admin enter every
-  workspace; a member enters the ones in `workspace_members`, or every one when they have no
-  rows (the contract's "empty means every profile"). Deleting a workspace archives it and drops
-  memberships; the cross-module purge is the owner-only job in `docs/domain/README.md`.
+  workspace; a member enters exactly the ones in `workspace_members` — **none** when they have
+  no rows (owner, 2026-09-24; contract decision §29). Nothing enrolls anyone implicitly: a new
+  workspace is nobody's until an admin grants it. A member cannot be created, or an admin made
+  a member, without a list (`auth.member_needs_profile`); a member refused for having no
+  workspace at all hears `profile_not_found` with `details.reason = no_profile_granted`
+  (`workspaceRefusal`). Deleting a workspace archives it and drops memberships, so a member
+  whose only workspace it was is left with none; the cross-module purge is the owner-only job
+  in `docs/domain/README.md`. Hubs from before the rule: `drizzle/0010_member_profiles_explicit.sql`.
 - **Avatars** live under `<DATA_DIR>/avatars/{users,workspaces}/<id>` (PNG/JPEG ≤ 512 KB), not as
   knowledge attachments (those are workspace-scoped; users are global).
 - **Audit**: `auth.login`, `auth.login_failed`, `auth.logout`, `auth.pairing_created`,

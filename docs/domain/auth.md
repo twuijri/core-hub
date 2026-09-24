@@ -49,6 +49,18 @@ Indexes: `users_username_uq`.
 
 Which members may use which workspace. Owner and admin need no rows.
 
+The rows are the whole answer for a member (owner, 2026-09-24): **no rows means no
+workspace**, never "every workspace". Nothing adds a row implicitly — creating a workspace
+enrolls nobody, and archiving one deletes its rows, so a member whose last workspace is
+archived is left with none. A member is created with at least one row (`POST /auth/users`
+refuses an empty list for `role: member`), and turning an admin into a member names the
+list in the same request. An admin may still withdraw every row explicitly (`PATCH` with
+`profiles: []`): the member can sign in and enters nothing; every scoped request answers
+`profile_not_found` with `details.reason = no_profile_granted`, and the web shows "ask an
+admin". Hubs from before this rule were migrated by `drizzle/0010_member_profiles_explicit.sql`
+(contract decision §29): each member with no rows was enrolled in every workspace that
+existed and was not archived at upgrade time, and in nothing created afterwards.
+
 | column | type | meaning |
 |---|---|---|
 | user_id | ulid → user (FK, cascade) | |
@@ -111,8 +123,8 @@ Indexes: unique (subject_kind, subject, kind). Rows are deleted when unlocked.
 ## Queries the clients need
 
 - Login: `users` by username → verify hash → issue `app_token`.
-- Me: `users` by id + `workspace_members` for the member's workspaces (or all
-  workspaces for owner/admin), ordered by `is_default desc, name`.
+- Me: `users` by id + `workspace_members` for the member's workspaces (none when
+  they have no rows; all workspaces for owner/admin), ordered by `is_default desc, name`.
 - Users screen (admin): all users with `last_login_at`, plus each user's
   workspaces (one query on `workspace_members`).
 - Locked IPs screen (admin): `login_lockouts where locked_until > now`.
