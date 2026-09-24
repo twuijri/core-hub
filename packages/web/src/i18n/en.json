@@ -108,7 +108,10 @@
     },
     "theme_next": "Theme: {next}",
     "in_profile": "Profile: {name}",
-    "back_to_chats": "Back to chats"
+    "back_to_chats": "Back to chats",
+    "no_profile_title": "No profile yet",
+    "no_profile_body": "Your account has not been given a profile, so there is nothing to open yet. Ask an admin to give you one, then check again.",
+    "no_profile_retry": "Check again"
   },
   "pane": {
     "resize": "Resize the side pane (arrow keys resize, Home collapses, End expands)",
@@ -796,6 +799,8 @@
     "status_disabled": "Disabled",
     "workspaces": "Profiles",
     "all_workspaces": "Every profile",
+    "no_workspace": "No profile",
+    "make_member_for": "Make {name} a member",
     "owner_note": "The owner account is not edited here",
     "make_admin": "Make admin",
     "make_member": "Make member",
