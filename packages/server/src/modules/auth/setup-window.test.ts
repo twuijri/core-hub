@@ -53,7 +53,9 @@ describe('auth: first-run setup is open for a window after boot (ADR 0019)', () 
       });
       // The boot log says it is open, until when, and still carries the fallback token.
       const logged = String(lines.find((l) => String(l.msg).includes('first-run setup'))!.msg);
-      expect(logged).toContain('OPEN to whoever opens the hub first until 2026-09-25T10:00:00.000Z');
+      expect(logged).toContain(
+        'OPEN to whoever opens the hub first until 2026-09-25T10:00:00.000Z',
+      );
       expect(logged).toContain(tokenOf(hub.dataDir));
 
       vi.setSystemTime(T0.getTime() + 59 * MINUTE);
@@ -201,11 +203,14 @@ describe('auth: COREHUB_RESET_OWNER=1 (ADR 0019)', () => {
       expect(claimed.statusCode).toBe(200);
       newOwnerToken = claimed.json().access_token as string;
 
-      const users = await authed(reset, newOwnerToken, { method: 'GET', url: '/api/v1/auth/users' });
+      const users = await authed(reset, newOwnerToken, {
+        method: 'GET',
+        url: '/api/v1/auth/users',
+      });
       const byName = Object.fromEntries(
-        (users.json().items as { id: string; username: string; role: string; status: string }[]).map(
-          (u) => [u.username, u],
-        ),
+        (
+          users.json().items as { id: string; username: string; role: string; status: string }[]
+        ).map((u) => [u.username, u]),
       );
       expect(byName.tariq).toMatchObject({ role: 'admin', status: 'disabled' });
       expect(byName.noura).toMatchObject({ role: 'admin', status: 'active' });

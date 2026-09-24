@@ -17,11 +17,11 @@ what the hub and Hermes load at runtime; the prune lists in
 git clone https://github.com/twuijri/core-hub && cd core-hub
 cp .env.example .env            # nothing in it is required
 docker compose up -d            # pulls ghcr.io/twuijri/core-hub:latest, or `--build` to build here
-docker compose logs -f hub      # watch the first boot — the setup token is printed here
+docker compose logs -f hub      # optional: watch the first boot
 ```
 
-No password goes into `.env`: the owner account is created from the browser on first run
-(§2, ADR 0011).
+No password goes into `.env`, and no terminal is needed: open the hub in a browser within
+the hour after it starts and create the owner account there (§2, ADR 0019).
 
 `docker-compose.yml` in the repository root is the reference stack. What it
 sets:
@@ -32,8 +32,10 @@ sets:
 | `DATA_DIR` | `/data` in the container, the named volume `hub-data`. SQLite database, JWT and Hermes API keys, coding agents, and `hermes/` (Hermes's home) all live here. |
 | `PORT` / `HUB_PORT` | The hub listens on `8080` inside; `HUB_PORT` publishes it on the host. |
 | `DATABASE_URL` | Optional PostgreSQL instead of the SQLite file. |
+| `COREHUB_SETUP_OPEN_MINUTES` | Optional. Minutes after the hub starts, while it has no owner, in which setup is open without the token. Default `60`; `0` = token only (§2). |
+| `COREHUB_RESET_OWNER` | Optional, recovery only. `1` disables the owner on the next boot and reopens setup (§2). Remove it afterwards. |
 
-These four are the whole configuration (ARCHITECTURE invariant 5). There is
+These six are the whole configuration (ARCHITECTURE invariant 5). There is
 no variable for model provider keys either — they are added once on the Models
 screen and the hub carries them to every agent (§3).
 
@@ -72,54 +74,77 @@ prints (`docs/ROADMAP.md` §Sizes).
 
 ## 2. First run: creating the owner account
 
-A fresh hub has no account at all. It is reachable on a public domain, so it
-does not let whoever loads the page first create one: on boot it writes a random
-**setup token** to `/data/setup-token.txt` (mode 0600) and prints it once in its
-log, and only someone holding that token can create the owner (ADR 0011). This
-is the model Jenkins uses with `initialAdminPassword`.
+A fresh hub has no owner. For the **first hour after the hub starts** (ADR 0019) setup
+is open to whoever opens the site first — no token, no terminal:
+
+1. Open `http://<host>:8080` (or your domain) — the hub serves the web client from `/`.
+   It shows **إنشاء حساب المالك / Create the owner account** with a notice:
+   **التسجيل مفتوح لأول شخص يفتح هذه الصفحة — أكمله الآن** / *Setup is open to whoever
+   opens this page first — finish it now*, and the time left.
+2. Choose a username and a password (8 characters or more), optionally a display name
+   and a name for the first profile, and submit. You are signed in immediately, and setup
+   is closed for good — a second attempt answers `409 conflict`, even inside the hour.
+3. From a terminal instead of a browser, the reference client does the same (inside the
+   hour it asks for no token):
+
+   ```bash
+   corehub setup --server http://<host>:8080
+   ```
+
+Finish it as soon as the stack is up: until the owner exists, anyone who reaches the
+hub can create it. If somebody beats you to it, take the hub back (below).
+
+**Missed the hour?** Restart the container (`docker compose restart hub`, or restart
+it from your panel) — every start with no owner opens a fresh hour. Or use the setup
+token: after the hour the screen asks for it and says where it is. The hub writes it
+to `/data/setup-token.txt` (mode 0600) and prints it in its log on every start while
+there is no owner:
 
 ```bash
-docker compose logs hub                                 # the token, printed once at boot
+docker compose logs hub                                 # the token, printed at boot
 docker compose exec hub cat /data/setup-token.txt       # or read the file directly
 ```
 
-The log line looks like this:
-
 ```
 auth: first-run setup is required — no owner account exists yet.
-Open the hub in a browser and paste this setup token: 9f2c7a41…
+Setup is OPEN to whoever opens the hub first until 2026-09-25T10:00:00.000Z — finish it now.
+After that the setup token below is required; restarting the hub opens a fresh window.
+Setup token (when the window is closed): 9f2c7a41…
 It is also in the data directory: /data/setup-token.txt
-  docker compose logs hub          # this line again
-  docker compose exec hub cat /data/setup-token.txt
-A new token is generated on every restart until the owner account exists.
 ```
-
-1. Open `http://<host>:8080` — the hub serves the web client from `/`. It shows
-   **إنشاء حساب المالك / Create the owner account**, not the sign-in screen.
-2. Paste the token, choose a username and a password (8 characters or more),
-   optionally a display name and a name for the first workspace, and submit.
-   You are signed in immediately; the token file is deleted and the screen is
-   gone for good — a second attempt answers `409 conflict`.
-3. From a terminal instead of a browser, the reference client does the same:
-
-   ```bash
-   corehub setup --server http://<host>:8080      # asks for the token and the password
-   ```
-
-   Neither client accepts the token or the password as a command-line flag.
 
 Good to know:
 
-- A **new token on every restart** while setup is still pending, so a token that
-  leaked into an old log stops working.
-- Wrong tokens are throttled by the same per-IP lockout as wrong passwords: five
-  in fifteen minutes lock that IP for fifteen minutes (`GET /auth/lockouts`
-  lists them; the admin can clear them once signed in).
-- **Unattended installs** keep the old behaviour: set `HUB_ADMIN_PASSWORD` in
-  `.env` before the first boot and the hub creates `admin` itself, writes no
-  token and never shows the setup screen. The variable wins wherever it is set.
-- If the hub already has an owner, `GET /api/v1/auth/setup` answers
-  `{"required": false}` and the setup screen redirects to sign-in.
+- `COREHUB_SETUP_OPEN_MINUTES` sets the window (default `60`). **`0` is the strict
+  mode**: token only from the first second, as before ADR 0019.
+- A **new token on every restart** while there is no owner, so a token that leaked into
+  an old log stops working. Wrong tokens are throttled by the same per-IP lockout as
+  wrong passwords: five in fifteen minutes lock that IP for fifteen minutes.
+- Neither client accepts the token or the password as a command-line flag.
+- **Unattended installs** keep the old behaviour: set `HUB_ADMIN_PASSWORD` in `.env`
+  before the first boot and the hub creates `admin` itself, opens no window, writes no
+  token and never shows the setup screen.
+- `GET /api/v1/meta` says where first run stands: `setup_required` (no owner yet),
+  `setup_open` and `setup_open_until` (the window).
+
+### Somebody else created the owner first: take the hub back
+
+You control the server, so you can switch the stranger off without losing anything:
+
+1. Add `COREHUB_RESET_OWNER=1` to `.env` (the reference `docker-compose.yml` passes it
+   through) or to the container's environment in your panel, and restart the hub.
+2. On that boot the hub **disables the owner account** — it becomes a disabled admin, and
+   every token and session it held is revoked; nothing is deleted — and logs it loudly
+   (`*** auth: COREHUB_RESET_OWNER=1 — OWNER RESET ***`). Setup is open again for an hour.
+3. Open the site and create the new owner, as above.
+4. **Remove `COREHUB_RESET_OWNER`** and restart when convenient. Left in place it does not
+   reset again — the marker `/data/owner-reset.json` records that the reset ran, and the log
+   says the variable was ignored — but it should not stay set. A start without the
+   variable removes the marker, so a future reset works again.
+
+Other accounts (admins, members) are untouched; until the new owner exists nobody can
+sign in. In **Settings → Users** the new owner can re-enable the old owner's account
+(as an admin) or delete it.
 
 ## 2b. Pairing a phone
 

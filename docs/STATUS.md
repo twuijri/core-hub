@@ -100,10 +100,17 @@ archives with `majlis-providers.json` — proven by unit and integration tests, 
 owner's test stack.
 
 ## First run
-A hub with no account writes a claim token to `<DATA_DIR>/setup-token.txt`,
-logs it once, and the owner account is created from `/setup` in the browser or
-`corehub setup` in a terminal (ADR 0011). `HUB_ADMIN_PASSWORD` still creates the
-owner unattended and skips the screen.
+A hub with no owner is **open to the first comer for an hour** after the process
+starts (ADR 0019, `COREHUB_SETUP_OPEN_MINUTES`, `0` = token only): `/setup` in the
+browser or `corehub setup` in a terminal creates the owner from a name and a
+password, and the screen says it is open and shows the time left. After the hour
+the claim token the hub writes to `<DATA_DIR>/setup-token.txt` and logs is
+required (ADR 0011); restarting the hub opens a fresh hour. `meta.get` carries
+`setup_open` / `setup_open_until`. Somebody else got there first:
+`COREHUB_RESET_OWNER=1` and a restart disables that owner (stepped down to a
+disabled admin, tokens revoked, nothing deleted) and reopens setup — once, thanks
+to the marker `owner-reset.json`. `HUB_ADMIN_PASSWORD` still creates the owner
+unattended and skips the screen.
 
 ## Runtime
 A fresh install has **two** agents (ADOPTION-BACKLOG §2.15, owner's decision of

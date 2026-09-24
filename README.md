@@ -82,6 +82,8 @@ services:
       PORT: '8080'
       # Optional, unattended installs only: creates the owner `admin` on first boot.
       HUB_ADMIN_PASSWORD: ${HUB_ADMIN_PASSWORD:-}
+      # Optional: set 1 to take the hub back if someone else created the owner first.
+      COREHUB_RESET_OWNER: ${COREHUB_RESET_OWNER:-}
     volumes:
       - hub-data:/data
     # Lets the container reach a model server on the host (LM Studio, Ollama).
@@ -92,24 +94,27 @@ volumes:
   hub-data:
 ```
 
-Then start it and read the first-run setup token:
+Then start it:
 
 ```bash
 docker compose up -d
-docker compose logs hub                             # the setup token is printed once at boot
-docker compose exec hub cat /data/setup-token.txt   # or read it from the data volume
 ```
 
-1. Open `http://<host>:8080`. A fresh hub shows **Create the owner account**.
-2. Paste the setup token, choose a username and a password, and you are signed in. The token
-   is then deleted. Until the owner exists, every restart makes a new token
-   ([ADR 0011](docs/adr/0011-first-run-setup.md)).
+1. Within an hour, open `http://<host>:8080`. A fresh hub shows **Create the owner account**,
+   and says setup is open to whoever opens the page first — so finish it now.
+2. Choose a username and a password, and you are signed in. No token, no terminal
+   ([ADR 0019](docs/adr/0019-open-first-run-setup.md)).
 3. Go to **Models**, add a provider, and start chatting with Hermes.
 
-For unattended installs, set `HUB_ADMIN_PASSWORD` before the first boot instead. The hub then
-creates the owner `admin` with that password, writes no token and skips the setup screen.
+Missed the hour? Restart the container for a fresh hour, or paste the setup token the hub prints
+(`docker compose logs hub`, or `/data/setup-token.txt`). Somebody else created the owner first?
+Set `COREHUB_RESET_OWNER=1`, restart, create the owner again, then remove the variable
+([docs/DEPLOY.md](docs/DEPLOY.md) §2).
 
-**Configuration.** Four variables are the whole configuration:
+For unattended installs, set `HUB_ADMIN_PASSWORD` before the first boot instead. The hub then
+creates the owner `admin` with that password and skips the setup screen.
+
+**Configuration.** Six variables are the whole configuration, and none is required:
 
 | Variable | Meaning |
 | --- | --- |
@@ -117,6 +122,8 @@ creates the owner `admin` with that password, writes no token and skips the setu
 | `PORT` / `HUB_PORT` | The hub listens on `8080` inside; `HUB_PORT` publishes it on the host. |
 | `HUB_ADMIN_PASSWORD` | Optional. Creates the owner unattended on first boot; ignored afterwards. |
 | `DATABASE_URL` | Optional PostgreSQL instead of the SQLite file. |
+| `COREHUB_SETUP_OPEN_MINUTES` | Optional. How long first-run setup stays open without the token (default `60`; `0` = token only). |
+| `COREHUB_RESET_OWNER` | Optional, recovery only. `1` disables the owner on the next start and reopens setup, once. |
 
 **Where data lives.** Everything the hub writes is in the data volume:
 
@@ -178,8 +185,8 @@ pnpm dev        # the hub on :8080, SQLite under ./.data
 pnpm web:dev    # the web client on :5173, proxying /api and /rt to :8080
 ```
 
-The first boot prints a setup token; create the owner on `/setup`, or set
-`HUB_ADMIN_PASSWORD` to skip the screen. The terminal client works against any hub:
+On the first boot create the owner on `/setup` within the hour (after it, the setup token
+the hub prints), or set `HUB_ADMIN_PASSWORD` to skip the screen. The terminal client works against any hub:
 
 ```bash
 pnpm --filter ./packages/cli build

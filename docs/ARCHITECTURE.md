@@ -85,9 +85,10 @@ declared in the contract with their payload schema.
    job id immediately.
 5. The server starts with zero configuration beyond a data directory;
    everything else is set from the UI and stored. The owner account is created
-   on first run from a client, with the claim token the hub writes into that
-   directory (ADR 0011); `HUB_ADMIN_PASSWORD` stays as the optional unattended
-   path. Four environment variables exist and none of them is required.
+   on first run from a client — open to the first comer for an hour after boot,
+   then with the claim token the hub writes into that directory (ADR 0011,
+   0019); `HUB_ADMIN_PASSWORD` stays as the optional unattended path. Six
+   environment variables exist and none of them is required.
 
 ## Clean room
 This code base is written from `docs/` specifications. Contributors, human or

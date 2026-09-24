@@ -1,6 +1,6 @@
 # ADR 0011 — First-run setup in the browser, behind a claim token
 
-Status: accepted (2026-09-22)
+Status: accepted (2026-09-22). The token-only rule is superseded by ADR 0019 (2026-09-25): setup is open without the token for a window after boot.
 
 ## Context
 Until now the owner account came from one environment variable:

@@ -36,7 +36,9 @@ test.describe('web smoke journeys (a hub with no owner)', () => {
     await expect(page.getByRole('heading', { name: 'إنشاء حساب المالك' })).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
     // It says plainly that setup is open to whoever arrives first, and how long is left.
-    await expect(page.getByText('التسجيل مفتوح لأول شخص يفتح هذه الصفحة — أكمله الآن')).toBeVisible();
+    await expect(
+      page.getByText('التسجيل مفتوح لأول شخص يفتح هذه الصفحة — أكمله الآن'),
+    ).toBeVisible();
     await expect(page.getByTestId('setup-remaining')).toContainText(/\d{2}:\d{2}/);
     await expect(page.getByLabel('رمز التهيئة', { exact: true })).toHaveCount(0);
     await page.screenshot({ path: path.join(shots, 'setup-ar-light.png'), fullPage: true });

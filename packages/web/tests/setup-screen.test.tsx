@@ -99,7 +99,12 @@ describe('first-run setup screen', () => {
         return json({ required: true });
       if (url.endsWith('/auth/setup')) {
         calls.push(JSON.parse(String(init?.body)) as unknown);
-        return json({ access_token: 'access', refresh_token: 'hub_rt_x', expires_in: 900, user: USER });
+        return json({
+          access_token: 'access',
+          refresh_token: 'hub_rt_x',
+          expires_in: 900,
+          user: USER,
+        });
       }
       return json({ items: [] });
     };
