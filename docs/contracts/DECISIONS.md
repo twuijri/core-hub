@@ -450,3 +450,30 @@ naming back and the hub names it again, emitting `session.updated` on
 `/rt/sessions`. Rejected: a `title_source` enum on `Session`. Every client would
 have to render a state nobody displays, and the one question a client actually
 asks — "may I ask for a new title?" — is answered by sending `title: null`.
+
+## 28. A member's profile list is explicit; empty means none
+
+Owner report, 2026-09-24: «انا كنت فاتح يوزر fff لما فتحت بروفايل جديد اضافه لليوزر fff مع
+انه مهب ادمن؟ المفروض ما يضيفه له بدون ما ادخل انا واضيفه له؟». Until then
+`UserCreate.profiles` said "Empty means every profile": a member with no list entered every
+profile, including each one created afterwards, and the user view listed those as if they
+had been granted. That rule is withdrawn.
+
+- `User.profiles` for a member is exactly what an admin granted. Empty means the member
+  enters **no** profile: they can sign in, `GET /profiles` answers an empty list, and every
+  scoped request answers `404 profile_not_found` with `details.reason =
+  no_profile_granted`, so a client can say "ask an admin" instead of "unknown profile".
+  `default_profile` still reads `default` then; clients decide from `profiles`.
+- `POST /auth/users` with `role: member` requires at least one slug, and `PATCH
+  /auth/users/{id}` turning an admin into a member must carry the list in the same request
+  (`400 validation_failed`, `details.field = profiles`). The rule depends on `role`, so it
+  is stated in the descriptions rather than as `minItems`.
+- `PATCH` with `profiles: []` on a member is allowed and explicit: it withdraws every
+  profile. Archiving a member's last profile has the same result.
+- Owners and admins are unchanged: they enter every profile, created later or not.
+- Hubs upgraded from an earlier build keep what their members could enter on the day of the
+  upgrade, and nothing created afterwards: `drizzle/0010_member_profiles_explicit.sql`
+  enrolls each member with no list in every non-archived profile that exists then.
+
+Not changed: `Webhook.profiles` ("Empty means every workspace") scopes a webhook, not a
+person, and grants nobody access.

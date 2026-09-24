@@ -11246,7 +11246,11 @@ components:
       name: X-Hub-Profile
       in: header
       required: true
-      description: Workspace (profile) slug the request is scoped to. `default` always exists.
+      description: |
+        Workspace (profile) slug the request is scoped to. `default` always exists. Owners and
+        admins may name any profile; a member only one they were explicitly given. Anything
+        else is `404 profile_not_found`; for a member who has been given no profile at all,
+        `details.reason` is `no_profile_granted`.
       schema:
         $ref: '#/components/schemas/ProfileSlug'
       example: work
@@ -11889,7 +11893,14 @@ components:
           $ref: '#/components/schemas/Avatar'
         profiles:
           type: array
-          description: Slugs the user may enter. Owners and admins see every profile.
+          description: |
+            Slugs the user may enter. Owners and admins enter every profile, so theirs lists all
+            of them. A member's is exactly the list an admin gave them — nothing is added
+            implicitly, not by a profile created later — and empty means the member may enter no
+            profile at all (they can sign in, and every scoped request answers
+            `profile_not_found` with `details.reason = no_profile_granted`). With an empty
+            list `default_profile` still reads `default`, which that member cannot enter:
+            clients decide from `profiles`.
           items:
             $ref: '#/components/schemas/ProfileSlug'
         default_profile:
@@ -12020,7 +12031,12 @@ components:
           enum: [admin, member]
         profiles:
           type: array
-          description: Empty means every profile.
+          description: |
+            The profiles a member may enter — an explicit list, never "all". Required with at
+            least one slug when `role` is `member` (the server answers `400 validation_failed`
+            with `details.field = profiles` otherwise; the rule depends on `role`, so it is
+            stated here rather than as `minItems`). Ignored for an admin, who enters every
+            profile.
           items:
             $ref: '#/components/schemas/ProfileSlug'
         default_profile:
@@ -12040,6 +12056,12 @@ components:
           $ref: '#/components/schemas/UserStatus'
         profiles:
           type: array
+          description: |
+            Replaces the member's explicit list. An empty list withdraws every profile: the
+            member can still sign in and enters nothing. Changing `role` from `admin` to
+            `member` must carry at least one slug here in the same request (`400
+            validation_failed`, `details.field = profiles`, otherwise), because an admin holds
+            no list.
           items:
             $ref: '#/components/schemas/ProfileSlug'
         default_profile:

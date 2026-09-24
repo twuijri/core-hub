@@ -219,6 +219,62 @@ describe('People', () => {
     expect(sent.some((s) => s.method === 'PATCH')).toBe(false);
   });
 
+  it('names a member’s explicit profiles, or "No profile" — never "Every profile" (owner, 2026-09-24)', async () => {
+    const { fetchImpl } = hub({
+      users: [
+        person({ id: '01J8QK3ZR2W7M5N4P6T8V9X0A1', username: 'none', profiles: [] }),
+        person({
+          id: '01J8QK3ZR2W7M5N4P6T8V9X0A2',
+          username: 'worker',
+          profiles: ['work', 'labs'],
+        }),
+        person({ id: '01J8QK3ZR2W7M5N4P6T8V9X0A3', username: 'adm', role: 'admin' }),
+      ],
+    });
+    mount(<UsersTab />, fetchImpl);
+    const table = await screen.findByTestId('user-table');
+    const rowOf = (username: string) => within(table).getByText(username).closest('tr')!;
+    await waitFor(() => expect(within(rowOf('none')).getByText('No profile')).toBeTruthy());
+    expect(within(rowOf('none')).queryByText('Every profile')).toBeNull();
+    expect(within(rowOf('worker')).getByText('work، labs')).toBeTruthy();
+    expect(within(rowOf('adm')).getByText('Every profile')).toBeTruthy();
+  });
+
+  it('will not save a member’s profiles as an empty list, and says why', async () => {
+    const { fetchImpl, sent } = hub({ users: [person({ profiles: ['default'] })] });
+    mount(<UsersTab />, fetchImpl);
+    await waitFor(() => expect(screen.getByTestId('user-menu')).toBeTruthy());
+    await openControl(userEvent, screen.getByTestId('user-menu'));
+    await userEvent.click(await screen.findByText('Profiles…'));
+    const dialog = await screen.findByTestId('edit-workspaces');
+    expect(within(dialog).getByTestId('save-workspaces').hasAttribute('disabled')).toBe(false);
+    await userEvent.click(within(dialog).getByTestId('workspace-default'));
+    expect(within(dialog).getByTestId('save-workspaces').hasAttribute('disabled')).toBe(true);
+    expect(within(dialog).getByTestId('workspaces-reason').textContent).toBe(
+      'Choose at least one profile.',
+    );
+    expect(sent.some((s) => s.method === 'PATCH')).toBe(false);
+  });
+
+  it('makes an admin a member only together with the profiles they may enter', async () => {
+    const { fetchImpl, sent } = hub({ users: [person({ role: 'admin' })] });
+    mount(<UsersTab />, fetchImpl);
+    await waitFor(() => expect(screen.getByTestId('user-menu')).toBeTruthy());
+    await openControl(userEvent, screen.getByTestId('user-menu'));
+    await userEvent.click(await screen.findByText('Make member'));
+    // Not sent on the click: the hub refuses a member with no list, so the dialog asks first.
+    const dialog = await screen.findByTestId('edit-workspaces');
+    expect(sent.some((s) => s.method === 'PATCH')).toBe(false);
+    expect(within(dialog).getByTestId('save-workspaces').hasAttribute('disabled')).toBe(true);
+    expect(within(dialog).getByTestId('workspaces-reason')).toBeTruthy();
+    await userEvent.click(within(dialog).getByTestId('workspace-default'));
+    await userEvent.click(within(dialog).getByTestId('save-workspaces'));
+    await waitFor(() => {
+      const patch = sent.find((s) => s.method === 'PATCH');
+      expect(patch?.body).toEqual({ role: 'member', profiles: ['default'] });
+    });
+  });
+
   it('says an empty lockout list is an answer, not a missing table', async () => {
     const { fetchImpl } = hub({ users: [person()] });
     mount(<UsersTab />, fetchImpl);
