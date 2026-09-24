@@ -703,7 +703,11 @@ export class SessionsStore {
       .update(approvals)
       .set({ ...answer, respondedAt: now, updatedAt: now })
       .where(
-        and(eq(approvals.workspace, workspace), eq(approvals.id, id), eq(approvals.status, 'pending')),
+        and(
+          eq(approvals.workspace, workspace),
+          eq(approvals.id, id),
+          eq(approvals.status, 'pending'),
+        ),
       )
       .run();
     return result.changes === 1 ? this.getApproval(workspace, id) : undefined;

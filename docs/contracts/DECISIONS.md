@@ -622,3 +622,45 @@ three details of the contract had to be settled for that:
 The result shapes are written in the operations' descriptions rather than as components:
 `Job.result` is free-form for every kind, and a component nothing references is one the
 linter rightly calls unused.
+
+## 35. The hub fires its own schedules; a workflow step can wait for a person
+
+The hub now runs every schedule that does not live in Hermes's scheduler, and a workflow
+can pause at a step until someone answers. What that settles in the contract:
+
+- **`schedules.runNow` answers the ids of what it started.** `ScheduleRunAccepted` gains
+  `session_id`, `run_id` and `workflow_run_id` (required, nullable): an `agent_prompt`
+  target opens a session of source `schedule` whose `origin` is the history line
+  (`{kind: schedule_run, id}`), and `job_id` is that run's job; a `workflow` target starts a
+  workflow run, which is also the `job_id`. A schedule in Hermes's scheduler still answers
+  `null` for the three — Hermes runs it on its next tick. A target that cannot start is a
+  failed history line and `409 conflict` with `details.reason = target_unavailable`,
+  `details.message` and `details.schedule_run_id`, never a run that silently did not happen.
+- **The history carries what each line started.** `ScheduleRun.session_id` is filled for a
+  prompt run, so a client opens its conversation; `trigger` is `manual` for "Run now" and
+  `schedule` for the schedule's own time. A tick that was claimed and not run (missed too
+  long ago, or the previous run still going) is `status: cancelled` with the reason in
+  `error` — the contract has no `skipped`.
+- **`Schedule.next_run_at` is the stored tick** the scheduler will claim, so the page and
+  the scheduler never disagree; it is computed when a tick is claimed, from that moment, in
+  the schedule's timezone. `runNow` does not move it.
+- **A workflow step's gate is an ordinary `Approval`** of kind `workflow_step`, with
+  `workflow_run_id` and `node_id` set and `session_id`, `run_id`, `message_id` null; `agent`
+  names the workflow (its id and name), because nothing else is asking. It is listed by
+  `sessions.listApprovals`, read by `getApproval`, announced as `approval.requested` /
+  `approval.resolved` profile-wide (no session journal to keep it in), and put in the run
+  owner's inbox as an `approval_requested` notice whose `resource` is `{kind:
+  workflow_run}`. `respondApproval` answers it: any `approve_*` continues the run from that
+  step; `deny` fails the step with `answer` as the reason (the run follows the step's
+  `failure` edges, or fails with the step's words); a second answer, or one after the run
+  was cancelled, is `409 state_invalid`. The workflow emits `step.waiting` with the
+  contract's `WorkflowStep`.
+- **`WorkflowRun` is served in the contract's words**: a run paused at a gate is `waiting`
+  (stored as `waiting_approval`), `trigger` is a `RunTrigger` (`{kind: schedule, id}` for a
+  schedule's run, `{kind: user, id}` for a person's, `{kind: api, id: null}` otherwise), and
+  `input` is what the person typed. The server used to send the stored words (`manual`,
+  `waiting_approval`), which the schema never allowed.
+
+Rejected: a separate gate resource beside `Approval` (the contract already names
+`workflow_step` and the two fields; one inbox and one answer is the point), and answering
+`runNow` before the run exists (the ids would be promises the hub might break).

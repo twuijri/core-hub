@@ -53,6 +53,9 @@ interface ApprovalRow {
   description: string | null;
 }
 
+/** How often a run still going is asked about, besides the realtime events. */
+const LIVE_POLL_MS = 3_000;
+
 /** Every call goes to the item's own profile, whichever one the top selector shows. */
 const inProfile = (profile: string) => ({ headers: { 'X-Hub-Profile': profile } });
 
@@ -102,6 +105,13 @@ export function ScheduleHistory({
       });
       return (data as unknown as { items: ScheduleRunRow[] }).items;
     },
+    // The page hears every change on `/rt/schedules`; a socket that reconnects in between
+    // hears nothing of what happened while it was away, so a line still going is also
+    // asked about every few seconds until it ends.
+    refetchInterval: (query) =>
+      query.state.data?.some((run) => run.status === 'queued' || run.status === 'running')
+        ? LIVE_POLL_MS
+        : false,
   });
 
   if (runs.isPending) return <Skeleton height="2.5rem" radius="md" />;
@@ -118,7 +128,7 @@ export function ScheduleHistory({
       {runs.data.map((run) => (
         <li
           key={run.id}
-          className="flex flex-col gap-1 rounded-md border border-border p-2"
+          className="flex flex-col gap-1 rounded-md border border-line p-2"
           data-testid="schedule-run-line"
           data-status={run.status}
         >
@@ -194,6 +204,10 @@ export function WorkflowRunDialog({
           ...inProfile(profile),
         })
       ).data as unknown as WorkflowRunRow,
+    refetchInterval: (query) =>
+      query.state.data?.status === 'queued' || query.state.data?.status === 'running'
+        ? LIVE_POLL_MS
+        : false,
   });
   const waiting = run.data?.steps.find(
     (step) => step.status === 'waiting_approval' && step.approval_id,
@@ -213,7 +227,11 @@ export function WorkflowRunDialog({
       {run.isPending && <Skeleton height="4rem" radius="md" />}
       {run.isError && <Notice tone="danger">{describeError(run.error, t)}</Notice>}
       {run.data && (
-        <div className="flex flex-col gap-3" data-testid="workflow-run" data-status={run.data.status}>
+        <div
+          className="flex flex-col gap-3"
+          data-testid="workflow-run"
+          data-status={run.data.status}
+        >
           <span>
             <Badge tone={RUN_TONE[run.data.status] ?? 'neutral'} dot testId="workflow-run-status">
               {t(`schedules.run.status.${run.data.status}`)}
@@ -297,7 +315,7 @@ function ApprovalGate({
 
   return (
     <div
-      className="flex flex-col gap-2 rounded-md border border-warning-soft-border bg-warning-soft p-3"
+      className="flex flex-col gap-2 rounded-md bg-warning-soft p-3"
       data-testid="workflow-approval"
     >
       <p className="text-sm font-medium">{t('schedules.run.waiting')}</p>
@@ -318,6 +336,7 @@ function ApprovalGate({
       <span className="flex gap-2">
         <Button
           size="sm"
+          variant="primary"
           loading={answer.isPending && answer.variables === true}
           disabled={answer.isPending || answer.isSuccess}
           onClick={() => answer.mutate(true)}

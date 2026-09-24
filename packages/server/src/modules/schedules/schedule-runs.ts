@@ -121,7 +121,9 @@ export class ScheduleRuns {
       const scope = this.deps.scopeOf(schedule.workspace, schedule.ownerId);
       if (!scope) throw new Unrunnable("the schedule's owner or profile no longer exists");
       if (schedule.targetKind === 'workflow') {
-        const workflow = schedule.workflowId ? service.workflowById(schedule.workflowId) : undefined;
+        const workflow = schedule.workflowId
+          ? service.workflowById(schedule.workflowId)
+          : undefined;
         if (!workflow || workflow.workspace !== schedule.workspace || workflow.archivedAt) {
           throw new Unrunnable('the workflow this schedule runs no longer exists');
         }
@@ -228,7 +230,12 @@ export class ScheduleRuns {
         const run = service.workflowRunById(line.workflowRunId);
         if (run?.status === 'waiting_approval') continue;
         if (run && TERMINAL.has(run.status)) {
-          const status = run.status === 'succeeded' ? 'succeeded' : run.status === 'cancelled' ? 'cancelled' : 'failed';
+          const status =
+            run.status === 'succeeded'
+              ? 'succeeded'
+              : run.status === 'cancelled'
+                ? 'cancelled'
+                : 'failed';
           settled += this.settle(line.id, { status, error: run.error }) ? 1 : 0;
           continue;
         }

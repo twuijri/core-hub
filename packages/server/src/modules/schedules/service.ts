@@ -508,7 +508,9 @@ export class SchedulesService {
         .update(schedules)
         .set({
           nextRunAt: next,
-          ...(decision.fire ? { lastRunAt: now, lastStatus: 'queued' as const, lastError: null } : {}),
+          ...(decision.fire
+            ? { lastRunAt: now, lastStatus: 'queued' as const, lastError: null }
+            : {}),
           updatedAt: now,
         })
         .where(
@@ -1036,7 +1038,9 @@ export class SchedulesService {
     return this.db
       .select()
       .from(workflowRuns)
-      .where(and(eq(workflowRuns.workflowId, workflowId), eq(workflowRuns.status, 'waiting_approval')))
+      .where(
+        and(eq(workflowRuns.workflowId, workflowId), eq(workflowRuns.status, 'waiting_approval')),
+      )
       .all();
   }
 
@@ -1071,7 +1075,13 @@ export class SchedulesService {
     const now = new Date();
     this.db
       .update(workflowRuns)
-      .set({ status: 'cancelled', activeNodeKeys: [], resumeState: null, finishedAt: now, updatedAt: now })
+      .set({
+        status: 'cancelled',
+        activeNodeKeys: [],
+        resumeState: null,
+        finishedAt: now,
+        updatedAt: now,
+      })
       .where(eq(workflowRuns.id, id))
       .run();
     return this.workflowRun(scope, id);

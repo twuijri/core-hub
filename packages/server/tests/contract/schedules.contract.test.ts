@@ -163,7 +163,9 @@ describe.skipIf(!doc)('contract: schedules fire, and a workflow step waits for a
     const deadline = Date.now() + 5_000;
     let runs: Record<string, unknown>;
     do {
-      runs = await call('schedules.listRuns', 200, { params: { schedule_id: schedule.id as string } });
+      runs = await call('schedules.listRuns', 200, {
+        params: { schedule_id: schedule.id as string },
+      });
       if ((runs.items as { status: string }[])[0]?.status === 'succeeded') break;
       await new Promise((resolve) => setTimeout(resolve, 20));
     } while (Date.now() < deadline);
@@ -182,7 +184,12 @@ describe.skipIf(!doc)('contract: schedules fire, and a workflow step waits for a
     await call('schedules.runNow', 409, { params: { schedule_id: orphan.id as string } });
 
     const names = envelopes.map((entry) => entry.envelope.event);
-    for (const event of ['schedule.fired', 'schedule_run.started', 'schedule_run.completed', 'schedule_run.failed']) {
+    for (const event of [
+      'schedule.fired',
+      'schedule_run.started',
+      'schedule_run.completed',
+      'schedule_run.failed',
+    ]) {
       expect(names).toContain(event);
     }
     for (const entry of envelopes.filter((e) =>

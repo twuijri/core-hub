@@ -26,7 +26,13 @@ const target = {
 };
 const every = (minutes: number) => ({
   name: `every ${minutes}`,
-  trigger: { kind: 'interval', expression: null, every_minutes: minutes, run_at: null, timezone: 'UTC' },
+  trigger: {
+    kind: 'interval',
+    expression: null,
+    every_minutes: minutes,
+    run_at: null,
+    timezone: 'UTC',
+  },
   target,
 });
 
@@ -63,7 +69,8 @@ function harness(db: ModuleDatabase = memoryDb()): Harness {
 }
 
 /** A run that ends well, as the firing side would settle it. */
-const finish = (h: Harness, line: ScheduleRunRow) => h.service.settleRun(line.id, { status: 'succeeded' });
+const finish = (h: Harness, line: ScheduleRunRow) =>
+  h.service.settleRun(line.id, { status: 'succeeded' });
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
@@ -107,7 +114,13 @@ describe('scheduler: when a schedule is due', () => {
     // 09:00 in Riyadh is 06:00 UTC.
     const row = h.service.create(scope, {
       name: 'الصباح',
-      trigger: { kind: 'cron', expression: '0 9 * * *', every_minutes: null, run_at: null, timezone: 'Asia/Riyadh' },
+      trigger: {
+        kind: 'cron',
+        expression: '0 9 * * *',
+        every_minutes: null,
+        run_at: null,
+        timezone: 'Asia/Riyadh',
+      },
       target,
     });
     expect(row.nextRunAt?.toISOString()).toBe('2026-09-24T06:00:00.000Z');
@@ -130,7 +143,13 @@ describe('scheduler: when a schedule is due', () => {
     const h = harness();
     const row = h.service.create(scope, {
       name: 'مرة',
-      trigger: { kind: 'once', expression: null, every_minutes: null, run_at: '2026-09-24T06:00:00.000Z', timezone: 'UTC' },
+      trigger: {
+        kind: 'once',
+        expression: null,
+        every_minutes: null,
+        run_at: '2026-09-24T06:00:00.000Z',
+        timezone: 'UTC',
+      },
       target,
     });
     const scheduler = h.scheduler();
@@ -279,20 +298,28 @@ describe('scheduler: a tick fires once', () => {
     // The run has not ended when the next tick comes.
     expect(await scheduler.tick(new Date(T0.getTime() + 12 * MINUTE))).toBe(0);
     const [latest] = h.service.runsOf(scope, row.id, 10);
-    expect(latest).toMatchObject({ status: 'skipped', error: 'skipped: the previous run was still going' });
+    expect(latest).toMatchObject({
+      status: 'skipped',
+      error: 'skipped: the previous run was still going',
+    });
   });
 
   it("leaves Hermes's schedules to Hermes", async () => {
     const h = harness();
     const row = h.service.create(scope, every(5));
-    h.service.linkHermes(scope, row.id, {
-      id: 'job-1',
-      name: 'hermes',
-      prompt: 'x',
-      enabled: true,
-      schedule: { kind: 'interval', minutes: 5 },
-      next_run_at: '2026-09-24T06:00:00Z',
-    } as never, { agentId: null, timezone: 'UTC' });
+    h.service.linkHermes(
+      scope,
+      row.id,
+      {
+        id: 'job-1',
+        name: 'hermes',
+        prompt: 'x',
+        enabled: true,
+        schedule: { kind: 'interval', minutes: 5 },
+        next_run_at: '2026-09-24T06:00:00Z',
+      } as never,
+      { agentId: null, timezone: 'UTC' },
+    );
     expect(await h.scheduler().tick(new Date(T0.getTime() + 60 * MINUTE))).toBe(0);
   });
 });

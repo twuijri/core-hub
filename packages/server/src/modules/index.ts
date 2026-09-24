@@ -312,7 +312,8 @@ registerWorkflowPorts((app) => {
         if (!approvals) throw new Error('this hub composes no sessions module to ask anyone');
         return approvals.raise(scope, input);
       },
-      cancel: (scope, workflowRunId) => workflowApprovalsFor(app)?.cancel(scope, workflowRunId) ?? 0,
+      cancel: (scope, workflowRunId) =>
+        workflowApprovalsFor(app)?.cancel(scope, workflowRunId) ?? 0,
     },
   };
 });

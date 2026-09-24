@@ -49,6 +49,15 @@ export const E2E_PASSWORD = 'e2e-owner-password';
 type Step = AgentEvent | { type: 'delay'; ms: number } | { type: 'await_input' };
 
 function scriptFor(prompt: string): Step[] {
+  if (/ملخص الجدولة/.test(prompt)) {
+    // A schedule's own run (journey 28): a short answer the history previews and the
+    // conversation shows.
+    return [
+      { type: 'delay', ms: 600 },
+      { type: 'message_delta', text: 'ملخص الجدولة: أُنجزت ثلاث مهام، ولا شيء عالق.' },
+      { type: 'completed' },
+    ];
+  }
   if (/ملاحظات الإصدار/.test(prompt)) {
     // A task the board started (journey 22). Slow enough that the card is seen running,
     // and it ends the way the task prompt asks: with a short summary, which the card

@@ -92,9 +92,10 @@ describe(`migration ${TAG}`, () => {
       node_id: null,
       status: 'approved',
     });
-    const calls = sqlite
-      .prepare('SELECT id, approval_id FROM tool_calls ORDER BY seq')
-      .all() as { id: string; approval_id: string | null }[];
+    const calls = sqlite.prepare('SELECT id, approval_id FROM tool_calls ORDER BY seq').all() as {
+      id: string;
+      approval_id: string | null;
+    }[];
     expect(calls).toEqual([
       { id: ids.linked, approval_id: ids.approval },
       { id: ids.plain, approval_id: null },
@@ -109,11 +110,13 @@ describe(`migration ${TAG}`, () => {
     // The foreign keys are whole after the rebuild.
     expect(sqlite.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
     expect(
-      sqlite.prepare("SELECT name FROM sqlite_master WHERE name = '__keep_tool_call_approvals'").all(),
+      sqlite
+        .prepare("SELECT name FROM sqlite_master WHERE name = '__keep_tool_call_approvals'")
+        .all(),
     ).toEqual([]);
-    const columns = (sqlite.prepare('PRAGMA table_info(schedule_runs)').all() as { name: string }[]).map(
-      (column) => column.name,
-    );
+    const columns = (
+      sqlite.prepare('PRAGMA table_info(schedule_runs)').all() as { name: string }[]
+    ).map((column) => column.name);
     expect(columns).toEqual(expect.arrayContaining(['session_id', 'trigger']));
   });
 });

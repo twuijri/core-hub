@@ -163,7 +163,9 @@ function runScopeFor(app: FastifyInstance, workspace: string, userId: string): R
 
 function profileOf(app: FastifyInstance, workspace: string): string | null {
   const db = requireSqlite(app.hub.database);
-  return listWorkspacesFor(db, { id: '', role: 'owner' }).find((w) => w.id === workspace)?.slug ?? null;
+  return (
+    listWorkspacesFor(db, { id: '', role: 'owner' }).find((w) => w.id === workspace)?.slug ?? null
+  );
 }
 
 const firers = new WeakMap<SocketServer, ScheduleRuns>();
@@ -180,7 +182,11 @@ export function firerFor(app: FastifyInstance): ScheduleRuns {
     emit: (profile, event, payload) =>
       realtimeOf(app).emit(REALTIME_NAMESPACES.schedules, event, { profile }, payload),
     toSchedule: (row, profile) =>
-      toSchedule(row, profile, new SchedulesService(requireSqlite(app.hub.database)).shownNext(row)),
+      toSchedule(
+        row,
+        profile,
+        new SchedulesService(requireSqlite(app.hub.database)).shownNext(row),
+      ),
     toRun: (row) => toScheduleRun(row, { full: false }),
     log: app.log,
   });
@@ -229,7 +235,10 @@ export function workflowGateFor(app: FastifyInstance) {
         by: input.respondedBy.name,
       });
       if (!resumed) {
-        app.log.warn({ workflowRunId: run.id }, 'workflows: an answer came for a run no longer waiting');
+        app.log.warn(
+          { workflowRunId: run.id },
+          'workflows: an answer came for a run no longer waiting',
+        );
       }
     },
   };
@@ -561,7 +570,8 @@ export const schedulesModule = defineModule({
       try {
         workflowEngineFor(app);
         const settled = firerFor(app).settleStranded();
-        if (settled > 0) app.log.warn({ runs: settled }, 'schedules: settled runs a restart cut short');
+        if (settled > 0)
+          app.log.warn({ runs: settled }, 'schedules: settled runs a restart cut short');
       } catch (error) {
         app.log.warn({ err: error }, 'schedules: could not settle runs left open');
       }

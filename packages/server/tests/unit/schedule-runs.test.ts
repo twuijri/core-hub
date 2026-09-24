@@ -24,10 +24,7 @@ import {
   fakeHermes,
   type ScriptStep,
 } from '../../src/modules/sessions/testing/fake-runner.js';
-import {
-  schedulerFor,
-  workflowEngineFor,
-} from '../../src/modules/schedules/index.js';
+import { schedulerFor, workflowEngineFor } from '../../src/modules/schedules/index.js';
 import { scheduleRuns, schedules } from '../../src/modules/schedules/schema.js';
 import { authed, signedInHub } from './helpers.js';
 
@@ -83,7 +80,11 @@ const promptSchedule = (over: Json = {}) => ({
 });
 
 async function create(hub: Hub, payload: Json) {
-  const created = await authed(hub, hub.token, { method: 'POST', url: '/api/v1/schedules', payload });
+  const created = await authed(hub, hub.token, {
+    method: 'POST',
+    url: '/api/v1/schedules',
+    payload,
+  });
   expect(created.statusCode).toBe(201);
   return created.json() as Json & { id: string };
 }
@@ -98,7 +99,9 @@ async function history(hub: Hub, id: string) {
 }
 
 async function getSchedule(hub: Hub, id: string) {
-  return (await authed(hub, hub.token, { method: 'GET', url: `/api/v1/schedules/${id}` })).json() as Json;
+  return (
+    await authed(hub, hub.token, { method: 'GET', url: `/api/v1/schedules/${id}` })
+  ).json() as Json;
 }
 
 /** Wait for something that happens on the run's own time. */
@@ -268,7 +271,10 @@ describe("schedules: the schedule's own time", () => {
           url: `/api/v1/workflow-runs/${ids.workflow_run_id as string}`,
         })
       ).json() as Json;
-      expect(run).toMatchObject({ status: 'succeeded', trigger: { kind: 'schedule', id: schedule.id } });
+      expect(run).toMatchObject({
+        status: 'succeeded',
+        trigger: { kind: 'schedule', id: schedule.id },
+      });
       const [line] = await history(hub, schedule.id);
       expect(line).toMatchObject({ status: 'succeeded', workflow_run_id: ids.workflow_run_id });
     } finally {
@@ -299,7 +305,10 @@ describe('schedules: a restart leaves no line open', () => {
       })
       .run();
     // The run is still streaming when the process goes.
-    db.update(runs).set({ status: 'streaming' }).where(eq(runs.id, running.run_id as string)).run();
+    db.update(runs)
+      .set({ status: 'streaming' })
+      .where(eq(runs.id, running.run_id as string))
+      .run();
     await first.hub.app.close();
 
     const second = await hubWith(answers, { DATA_DIR: dir });

@@ -190,7 +190,12 @@ export class WorkflowEngine {
    * the place written down when it paused. Works the same after a restart, because nothing
    * about a waiting run lives in memory.
    */
-  resume(service: SchedulesService, scope: RunScope, workflowRunId: string, answer: GateAnswer): boolean {
+  resume(
+    service: SchedulesService,
+    scope: RunScope,
+    workflowRunId: string,
+    answer: GateAnswer,
+  ): boolean {
     const run = service.takeWaitingRun(workflowRunId);
     if (!run) return false;
     const definition = run.definitionSnapshot as WorkflowDefinition;
@@ -205,11 +210,17 @@ export class WorkflowEngine {
     const state: Live = { cancelled: false, wake: null };
     this.live.set(run.id, state);
     this.follow(service, run, state, async () => {
-      service.updateWorkflowRun(run.id, { resumeState: null, activeNodeKeys: node ? [node.id] : [] });
+      service.updateWorkflowRun(run.id, {
+        resumeState: null,
+        activeNodeKeys: node ? [node.id] : [],
+      });
       const row = service.waitingStep(run.id, answer.nodeId);
       const first =
         node && row
-          ? { node, result: await this.passGate(service, scope, run, node, row, ctx, state, answer) }
+          ? {
+              node,
+              result: await this.passGate(service, scope, run, node, row, ctx, state, answer),
+            }
           : null;
       await this.execute(
         service,

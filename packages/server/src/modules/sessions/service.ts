@@ -935,7 +935,9 @@ export class SessionsService {
     });
     if (!resolved) {
       const now = this.store.getApproval(scope.workspace, row.id);
-      throw new HubError('state_invalid', { details: { from: now?.status ?? 'gone', allowed: [] } });
+      throw new HubError('state_invalid', {
+        details: { from: now?.status ?? 'gone', allowed: [] },
+      });
     }
     this.realtime.emitToProfile(scope.profile, 'approval.resolved', {
       approval: this.approvalOf(scope, resolved),

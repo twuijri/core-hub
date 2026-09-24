@@ -113,10 +113,15 @@ function useScheduleEvents(): void {
       if (!isEnvelope(raw)) return;
       void queryClient.invalidateQueries({ queryKey: ['schedules'] });
     };
+    // What happened while the socket was away is not replayed on this namespace: a
+    // (re)connection asks again.
+    const reconnected = () => void queryClient.invalidateQueries({ queryKey: ['schedules'] });
     for (const name of SCHEDULE_EVENTS) socket.on(name, handler);
+    socket.on('connect', reconnected);
     if (!socket.connected) socket.connect();
     return () => {
       for (const name of SCHEDULE_EVENTS) socket.off(name, handler);
+      socket.off('connect', reconnected);
     };
   }, [queryClient, realtime.epoch]);
 }
@@ -568,7 +573,11 @@ export function SchedulesScreen() {
                     }
                     data-testid="schedule-history-toggle"
                   >
-                    {t(history.has(schedule.id) ? 'schedules.history.hide' : 'schedules.history.show')}
+                    {t(
+                      history.has(schedule.id)
+                        ? 'schedules.history.hide'
+                        : 'schedules.history.show',
+                    )}
                   </Button>
                   <Button
                     variant="ghost"
@@ -603,9 +612,7 @@ export function SchedulesScreen() {
           );
         })}
       </ul>
-      {openRun && (
-        <WorkflowRunDialog runId={openRun} profile={openRunProfile} onClose={closeRun} />
-      )}
+      {openRun && <WorkflowRunDialog runId={openRun} profile={openRunProfile} onClose={closeRun} />}
       {dialog}
     </AppShell>
   );

@@ -50,7 +50,13 @@ function schedule(id: string, name: string, profile = 'default') {
     enabled: true,
     state: 'scheduled',
     next_run_at: '2026-09-25T06:00:00Z',
-    trigger: { kind: 'cron', expression: '0 9 * * *', every_minutes: null, run_at: null, timezone: 'Asia/Riyadh' },
+    trigger: {
+      kind: 'cron',
+      expression: '0 9 * * *',
+      every_minutes: null,
+      run_at: null,
+      timezone: 'Asia/Riyadh',
+    },
     delivery: { kind: 'none', channel: null, address: null },
     last_error: null,
     external: null,
@@ -166,7 +172,12 @@ function fakeHub(options: { runStatus?: string } = {}) {
       });
     }
     if (path === `/approvals/${APPROVAL}`) {
-      return json({ id: APPROVAL, status: 'pending', title: 'publish', description: 'Publish v2.4?' });
+      return json({
+        id: APPROVAL,
+        status: 'pending',
+        title: 'publish',
+        description: 'Publish v2.4?',
+      });
     }
     if (path === `/approvals/${APPROVAL}/respond`) {
       answered = true;
@@ -202,7 +213,15 @@ function mount(children: ReactNode, fetchImpl: typeof fetch, at = '/schedules') 
             <RealtimeProvider>
               <MemoryRouter initialEntries={[at]}>
                 <Routes>
-                  <Route path="*" element={<>{children}<Where /></>} />
+                  <Route
+                    path="*"
+                    element={
+                      <>
+                        {children}
+                        <Where />
+                      </>
+                    }
+                  />
                 </Routes>
               </MemoryRouter>
             </RealtimeProvider>
@@ -230,7 +249,9 @@ describe('Schedules: run now, and what it started', () => {
       expect(seen.some((c) => c.path === `/schedules/${SCHEDULE}/run`)).toBe(true),
     );
     expect(seen.find((c) => c.path === `/schedules/${SCHEDULE}/run`)!.profile).toBe('designer');
-    expect(await screen.findByTestId('schedule-fired')).toHaveTextContent('“Morning brief” started.');
+    expect(await screen.findByTestId('schedule-fired')).toHaveTextContent(
+      '“Morning brief” started.',
+    );
     // In the schedule's own profile, from the address: the top selector does not move.
     await waitFor(() =>
       expect(screen.getByTestId('schedule-fired-session')).toHaveAttribute(
@@ -247,9 +268,7 @@ describe('Schedules: run now, and what it started', () => {
       'href',
       `/chat/${SESSION}?profile=designer`,
     );
-    expect(
-      seen.find((c) => c.path === `/schedules/${SCHEDULE}/runs`)!.profile,
-    ).toBe('designer');
+    expect(seen.find((c) => c.path === `/schedules/${SCHEDULE}/runs`)!.profile).toBe('designer');
   });
 });
 
@@ -320,7 +339,10 @@ describe('the inbox opens a waiting workflow run', () => {
       const body = path.endsWith('/notify/notices')
         ? { items: [notice], next_cursor: null, unread_count: 1 }
         : path.endsWith('/notify/preferences')
-          ? { events: {}, quiet_hours: { enabled: false, from: '22:00', to: '07:00', timezone: 'UTC' } }
+          ? {
+              events: {},
+              quiet_hours: { enabled: false, from: '22:00', to: '07:00', timezone: 'UTC' },
+            }
           : { updated: 1 };
       return Promise.resolve(
         new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } }),

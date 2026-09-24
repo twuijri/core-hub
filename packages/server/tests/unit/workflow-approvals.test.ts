@@ -31,7 +31,12 @@ const node = (id: string, kind: string, input: string | null, extra: Json = {}) 
   position: { x: 0, y: 0 },
   ...extra,
 });
-const edge = (from: string, to: string, route = 'success') => ({ id: `${from}-${to}`, from, to, route });
+const edge = (from: string, to: string, route = 'success') => ({
+  id: `${from}-${to}`,
+  from,
+  to,
+  route,
+});
 
 const cleanup: string[] = [];
 afterEach(() => {
@@ -132,7 +137,10 @@ describe('workflows: an approval step', () => {
         answer: null,
       });
       expect(answered.statusCode).toBe(200);
-      expect(answered.json()).toMatchObject({ status: 'approved', response: { decision: 'approve_once' } });
+      expect(answered.json()).toMatchObject({
+        status: 'approved',
+        response: { decision: 'approve_once' },
+      });
 
       const run = await getRun(hub, runId);
       expect(run.status).toBe('succeeded');
@@ -195,7 +203,11 @@ describe('workflows: an approval step', () => {
     try {
       const runId = await start(
         hub,
-        await workflow(hub, [node('tell', 'notify', 'تم {{input}}', { approval_required: true })], []),
+        await workflow(
+          hub,
+          [node('tell', 'notify', 'تم {{input}}', { approval_required: true })],
+          [],
+        ),
       );
       expect((await getRun(hub, runId)).status).toBe('waiting');
       const [approval] = await pending(hub);
