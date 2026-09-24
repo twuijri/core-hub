@@ -16,7 +16,7 @@
  * - a profile made from scratch after all of that, prepared as before each turn, uses the
  *   shared key at once.
  *
- *   MAJLIS_HERMES_IMAGE=majlis:local npx vitest run --maxWorkers=1 provider-scopes.real
+ *   COREHUB_HERMES_IMAGE=corehub:local npx vitest run --maxWorkers=1 provider-scopes.real
  */
 import { execFile } from 'node:child_process';
 import { chmodSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
@@ -31,7 +31,7 @@ import { HermesTuiSession, stdioTuiChannel, type TuiChannel } from './hermes-tui
 import type { AgentEvent } from './types.js';
 import { modelsServiceFor } from '../../models/index.js';
 
-const image = process.env.MAJLIS_HERMES_IMAGE;
+const image = process.env.COREHUB_HERMES_IMAGE;
 
 /** The model: lists one model, and answers every chat with the bearer token it was sent. */
 function keyReportingModel(): http.Server {
@@ -156,7 +156,7 @@ describe.skipIf(!image)('provider scopes in real Hermes profiles', () => {
     await new Promise<void>((resolve) => model.listen(0, '127.0.0.1', resolve));
     const port = (model.address() as AddressInfo).port;
     const url = `http://127.0.0.1:${port}/v1`;
-    home = mkdtempSync(path.join(tmpdir(), 'majlis-provider-scopes-'));
+    home = mkdtempSync(path.join(tmpdir(), 'corehub-provider-scopes-'));
     chmodSync(home, 0o777);
 
     hub = await signedInHub(
@@ -289,20 +289,20 @@ describe.skipIf(!image)('provider scopes in real Hermes profiles', () => {
   }
 
   it('Design uses its own key; Finance and the default profile the shared one', async () => {
-    expect(await ask('design', 'majlis-lmstudio')).toContain('key=key-design-000000');
-    expect(await ask('finance', 'majlis-lmstudio')).toContain('key=key-shared-000000');
-    expect(await ask(null, 'majlis-lmstudio')).toContain('key=key-shared-000000');
+    expect(await ask('design', 'corehub-lmstudio')).toContain('key=key-design-000000');
+    expect(await ask('finance', 'corehub-lmstudio')).toContain('key=key-shared-000000');
+    expect(await ask(null, 'corehub-lmstudio')).toContain('key=key-shared-000000');
   }, 300_000);
 
   it("Finance never falls back on the default profile's own key; the default profile uses it", async () => {
-    expect(await ask(null, 'majlis-litellm')).toContain('key=key-default-own-0000');
-    const finance = await ask('finance', 'majlis-litellm');
+    expect(await ask(null, 'corehub-litellm')).toContain('key=key-default-own-0000');
+    const finance = await ask('finance', 'corehub-litellm');
     expect(finance).not.toContain('key-default-own-0000');
   }, 300_000);
 
   it('a profile made later uses the shared provider as soon as it is prepared', async () => {
     modelsServiceFor(hub.app).prepareProfile(profileHome('later'));
     hostOpen();
-    expect(await ask('later', 'majlis-lmstudio')).toContain('key=key-shared-000000');
+    expect(await ask('later', 'corehub-lmstudio')).toContain('key=key-shared-000000');
   }, 240_000);
 });

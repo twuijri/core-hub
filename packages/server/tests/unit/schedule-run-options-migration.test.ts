@@ -15,7 +15,7 @@ import { newUlid } from '../../src/db/ids.js';
 const TAG = '0014_schedule_run_options';
 
 function folderBefore(tag: string): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'majlis-migration-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'corehub-migration-'));
   cpSync(migrationsFolder, dir, { recursive: true });
   const journalFile = path.join(dir, 'meta', '_journal.json');
   const journal = JSON.parse(readFileSync(journalFile, 'utf8')) as {

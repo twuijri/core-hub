@@ -16,11 +16,11 @@ export const direct: CatalogEntry = {
   name: 'Direct',
   nameAr: 'مباشر',
   // Not a third party: this is the hub's own code, under the repository's own terms
-  // (`LICENSE` — proprietary until the owner chooses one). `LicenseRef-Majlis` is the
+  // (`LICENSE` — proprietary until the owner chooses one). `LicenseRef-CoreHub` is the
   // SPDX way of saying "a licence that is not on the SPDX list", which is the honest
   // answer while that decision is open.
   vendor: null,
-  licence: 'LicenseRef-Majlis',
+  licence: 'LicenseRef-CoreHub',
   adapter: 'builtin',
   binary: '',
   protocolArgs: [],

@@ -7,9 +7,9 @@ import { defineConfig } from '@playwright/test';
 // no owner and no password at all, whose data directory the test reads the claim token from
 // (ADR 0011). The second is wiped and re-created every time it starts, so a retry is the same
 // journey as the first run.
-const port = Number(process.env.MAJLIS_E2E_PORT ?? 8791);
+const port = Number(process.env.COREHUB_E2E_PORT ?? 8791);
 const baseURL = `http://127.0.0.1:${port}`;
-export const setupPort = Number(process.env.MAJLIS_E2E_SETUP_PORT ?? 8792);
+export const setupPort = Number(process.env.COREHUB_E2E_SETUP_PORT ?? 8792);
 export const setupBaseURL = `http://127.0.0.1:${setupPort}`;
 export const setupDataDir = path.resolve('e2e/.setup-data');
 
@@ -34,7 +34,7 @@ export default defineConfig({
       url: `${baseURL}/api/v1/health`,
       reuseExistingServer: false,
       timeout: 60_000,
-      env: { MAJLIS_E2E_PORT: String(port) },
+      env: { COREHUB_E2E_PORT: String(port) },
     },
     {
       command: `node --import tsx e2e/hub.ts`,
@@ -42,9 +42,9 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 60_000,
       env: {
-        MAJLIS_E2E_PORT: String(setupPort),
-        MAJLIS_E2E_MODE: 'setup',
-        MAJLIS_E2E_DATA_DIR: setupDataDir,
+        COREHUB_E2E_PORT: String(setupPort),
+        COREHUB_E2E_MODE: 'setup',
+        COREHUB_E2E_DATA_DIR: setupDataDir,
       },
     },
   ],

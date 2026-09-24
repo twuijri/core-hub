@@ -207,7 +207,7 @@ function hub(options: { linked?: boolean; refuse?: boolean } = {}) {
       return json({
         items: [{ id: '01J8QK3ZR2W7M5N4P6T8V9X0P1', slug: 'manger', name: 'Manger' }],
       });
-    if (path.endsWith('/meta')) return json({ name: 'Majlis', server_version: '0.0.0' });
+    if (path.endsWith('/meta')) return json({ name: 'Core Hub', server_version: '0.0.0' });
     if (path.endsWith('/channels') && method === 'GET') {
       return json({
         items: linked ? [telegram()] : [],

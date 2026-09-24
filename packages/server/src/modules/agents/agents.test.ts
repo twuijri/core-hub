@@ -480,7 +480,7 @@ describe('agents: reconciling the table with the data volume (ADR 0006)', () => 
   };
 
   it('keeps an install across a restart, and notices when the volume was cleared', async () => {
-    const dataDir = mkdtempSync(path.join(tmpdir(), 'majlis-reconcile-'));
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'corehub-reconcile-'));
     const env = { DATA_DIR: dataDir, HUB_ADMIN_PASSWORD: TEST_ADMIN_PASSWORD };
     try {
       // First boot: nothing on the volume, so nothing claims to be installed.

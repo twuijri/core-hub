@@ -1,6 +1,6 @@
 // Structured JSON logging with secret redaction. Nothing secret is ever written to a log
 // (ARCHITECTURE §Data ownership); add new secret field names here, not at call sites.
-import { derived } from '@majlis/contracts';
+import { derived } from '@corehub/contracts';
 import pino, { type Logger, type LoggerOptions } from 'pino';
 
 export const REDACTED = '[redacted]';

@@ -32,7 +32,8 @@ import {
   sessionsNewCommand,
   sessionsShowCommand,
 } from './commands/sessions.js';
-import { ConfigStore, defaultConfigPath } from './config.js';
+import { ConfigStore, defaultConfigPath, legacyConfigPath } from './config.js';
+import { invokedByLegacyName, renamedEnv, withLegacyEnv } from './legacy.js';
 import type { CommandContext, Io } from './context.js';
 import { EXIT_OK, EXIT_USAGE, UsageError, describeError, exitCodeOf } from './errors.js';
 import { createTranslator, resolveLanguage } from './i18n/index.js';
@@ -90,10 +91,19 @@ export function readVersion(): string {
 }
 
 export function processIo(): Io {
-  return { stdin: process.stdin, stdout: process.stdout, stderr: process.stderr, env: process.env };
+  return {
+    stdin: process.stdin,
+    stdout: process.stdout,
+    stderr: process.stderr,
+    env: process.env,
+    ...(process.argv[1] ? { invokedAs: process.argv[1] } : {}),
+  };
 }
 
-export async function main(argv: readonly string[], io: Io = processIo()): Promise<number> {
+export async function main(argv: readonly string[], given: Io = processIo()): Promise<number> {
+  // Old names first (ADR 0017): everything below reads only the new ones.
+  const legacy = withLegacyEnv(given.env);
+  const io: Io = { ...given, env: legacy.env };
   let language = resolveLanguage(undefined, io.env);
   let t = createTranslator(language);
   let out = new Printer(io.stdout, io.stderr, { color: detectColor(io.env, io.stderr, false) });
@@ -105,6 +115,15 @@ export async function main(argv: readonly string[], io: Io = processIo()): Promi
     out = new Printer(io.stdout, io.stderr, {
       color: detectColor(io.env, io.stdout, invocation.globals.noColor),
     });
+    if (legacy.deprecated.length > 0) {
+      out.notice(
+        t('usage.legacy_env', {
+          names: legacy.deprecated.join(', '),
+          renamed: legacy.deprecated.map(renamedEnv).join(', '),
+        }),
+      );
+    }
+    if (invokedByLegacyName(io.invokedAs)) out.notice(t('usage.legacy_command'));
     const version = readVersion();
     if (invocation.globals.version) {
       out.line(version);
@@ -142,7 +161,9 @@ export async function main(argv: readonly string[], io: Io = processIo()): Promi
       t,
       io,
       out,
-      store: new ConfigStore(invocation.globals.config ?? defaultConfigPath(io.env)),
+      store: invocation.globals.config
+        ? new ConfigStore(invocation.globals.config)
+        : new ConfigStore(defaultConfigPath(io.env), legacyConfigPath(io.env)),
       prompter,
       version,
     };

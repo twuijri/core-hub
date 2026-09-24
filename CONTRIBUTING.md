@@ -1,4 +1,4 @@
-# Contributing to Majlis
+# Contributing to Core Hub
 
 Thank you for looking. This repository is owned by twuijri; the rules of work are in
 `docs/TEAM-RULES.md` (Arabic) and summarised in `AGENTS.md` (English). Read both before

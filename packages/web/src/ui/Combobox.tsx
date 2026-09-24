@@ -177,16 +177,16 @@ export function Combobox({
   const trigger = (
     <button
       type="button"
-      className="mj-combo-trigger"
+      className="ch-combo-trigger"
       disabled={disabled}
       aria-label={label}
       aria-haspopup="dialog"
       data-testid={testId}
     >
-      <span className="mj-combo-value">
-        <span className="mj-combo-name">{chosen?.label ?? placeholder ?? label}</span>
+      <span className="ch-combo-value">
+        <span className="ch-combo-name">{chosen?.label ?? placeholder ?? label}</span>
         {/* The provider, under the name: two models can share a name across providers. */}
-        {chosen?.group !== undefined && <span className="mj-combo-sub">{chosen.group}</span>}
+        {chosen?.group !== undefined && <span className="ch-combo-sub">{chosen.group}</span>}
       </span>
       <IconChevron size={12} />
     </button>
@@ -195,14 +195,14 @@ export function Combobox({
   const body = () => {
     if (status === 'loading') {
       return (
-        <p className="mj-combo-state" data-testid="combobox-loading" role="status">
+        <p className="ch-combo-state" data-testid="combobox-loading" role="status">
           {t('combobox.loading')}
         </p>
       );
     }
     if (status === 'error') {
       return (
-        <p className="mj-combo-state mj-combo-error" data-testid="combobox-error" role="alert">
+        <p className="ch-combo-state ch-combo-error" data-testid="combobox-error" role="alert">
           {/* The provider's own sentence; the hub already localised what it could. */}
           {errorMessage ?? t('combobox.error')}
         </p>
@@ -210,7 +210,7 @@ export function Combobox({
     }
     if (status === 'unfetched') {
       return (
-        <div className="mj-combo-state" data-testid="combobox-unfetched">
+        <div className="ch-combo-state" data-testid="combobox-unfetched">
           <p>{t('combobox.unfetched')}</p>
           {fetchAction && (
             <button
@@ -228,7 +228,7 @@ export function Combobox({
     }
     if (rows.length === 0) {
       return (
-        <p className="mj-combo-state" data-testid="combobox-empty" role="status">
+        <p className="ch-combo-state" data-testid="combobox-empty" role="status">
           {query.trim() === '' ? t('combobox.none') : t('combobox.no_match', { query })}
         </p>
       );
@@ -236,11 +236,11 @@ export function Combobox({
     return (
       <>
         {sticky !== null && (
-          <div className="mj-combo-sticky" aria-hidden data-testid="combobox-sticky">
+          <div className="ch-combo-sticky" aria-hidden data-testid="combobox-sticky">
             {sticky}
           </div>
         )}
-        <div className="mj-combo-list" ref={setListEl} data-testid="combobox-list">
+        <div className="ch-combo-list" ref={setListEl} data-testid="combobox-list">
           <div
             role="listbox"
             id={`${ids}-list`}
@@ -259,7 +259,7 @@ export function Combobox({
               };
               if (row.kind === 'group') {
                 return (
-                  <div key={row.key} className="mj-combo-group" style={style} role="presentation">
+                  <div key={row.key} className="ch-combo-group" style={style} role="presentation">
                     {row.label}
                   </div>
                 );
@@ -273,21 +273,21 @@ export function Combobox({
                   aria-disabled={row.option.disabled ?? false}
                   data-active={item.index === active ? 'true' : undefined}
                   data-testid="combobox-option"
-                  className="mj-combo-option"
+                  className="ch-combo-option"
                   style={style}
                   // Choosing with the mouse must not pull focus out of the field.
                   onMouseDown={(event) => event.preventDefault()}
                   onMouseEnter={() => setActive(item.index)}
                   onClick={() => pick(row)}
                 >
-                  <span className="mj-combo-name">
+                  <span className="ch-combo-name">
                     <Marked text={row.option.label} ranges={row.labelHits} />
                   </span>
                   {/* An id is Latin inside an Arabic page: isolated so its characters read
                       left to right, but not `dir="ltr"`, which would also drag the line to
                       the wrong edge and leave the two lines ragged. */}
                   {row.option.detail !== undefined && (
-                    <span className="mj-combo-sub">
+                    <span className="ch-combo-sub">
                       <Marked text={row.option.detail} ranges={row.detailHits} />
                     </span>
                   )}
@@ -309,9 +309,9 @@ export function Combobox({
       }}
       trigger={trigger}
       testId={testId ? `${testId}-popup` : 'combobox-popup'}
-      className="mj-combo-popup"
+      className="ch-combo-popup"
     >
-      <div className="mj-combo-field">
+      <div className="ch-combo-field">
         <IconSearch size={14} aria-hidden />
         <input
           ref={fieldRef}
@@ -332,7 +332,7 @@ export function Combobox({
       </div>
       {body()}
       {status === 'ready' && rows.length > 0 && (
-        <p className="mj-combo-count" role="status">
+        <p className="ch-combo-count" role="status">
           {t('combobox.count', {
             count: options.filter((o) =>
               rows.some((r) => r.kind === 'option' && r.option.value === o.value),
@@ -347,7 +347,7 @@ export function Combobox({
 function Marked({ text, ranges }: { text: string; ranges: readonly Range[] }): ReactNode {
   return highlightParts(text, ranges).map((part, index) =>
     part.hit ? (
-      <mark key={index} className="mj-combo-hit">
+      <mark key={index} className="ch-combo-hit">
         {part.text}
       </mark>
     ) : (

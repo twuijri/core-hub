@@ -1,6 +1,6 @@
 // TanStack Query over the generated client. Every key carries the workspace slug so switching
 // the workspace chip refetches everything (NAVIGATION rule 4) without touching the route.
-import { HubApiError } from '@majlis/contracts';
+import { HubApiError } from '@corehub/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/context.js';
 import type { ReasoningEffort } from '../types.js';

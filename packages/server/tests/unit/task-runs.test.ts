@@ -395,7 +395,7 @@ describe("tasks: Hermes's cards are Hermes's to run", () => {
     const { hub, runner } = await hubWith(finishes);
     try {
       // A hub card given to Hermes, and a card that lives on Hermes's board.
-      const plain = await newTask(hub, 'بطاقة المجلس');
+      const plain = await newTask(hub, 'بطاقة المركز');
       const onHermes = await newTask(hub, 'بطاقة هرمز', { assignee_agent_id: HERMES });
       expect(onHermes.external).toMatchObject({ source: 'hermes' });
       for (const id of [plain.id, onHermes.id]) {
@@ -422,7 +422,7 @@ describe("tasks: Hermes's cards are Hermes's to run", () => {
 
 describe('tasks: a restart leaves nothing running forever', () => {
   it('settles at boot every task it finds running, by what its run says', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'majlis-restart-'));
+    const dir = mkdtempSync(path.join(tmpdir(), 'corehub-restart-'));
     try {
       const first = await hubWith(finishes, { DATA_DIR: dir });
       const finished = await newTask(first.hub, 'انتهت قبل الانقطاع');
@@ -463,7 +463,7 @@ describe('tasks: a restart leaves nothing running forever', () => {
         for (const id of [cutShort.id, lost.id]) {
           const after = await getTask(second.hub, id);
           expect(after.status).toBe('blocked');
-          expect(after.blocked_reason).toMatch(/أُعيد تشغيل المجلس/);
+          expect(after.blocked_reason).toMatch(/أُعيد تشغيل المركز/);
         }
       } finally {
         await second.hub.app.close();

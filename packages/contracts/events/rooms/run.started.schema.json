@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/rooms/run.started.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/rooms/run.started.schema.json",
   "title": "/rt/rooms · run.started",
   "description": "Same payload as `/rt/sessions`; `message.room_id` / `run.room_id` and `seat_id` are set. Members of the room receive it without subscribing to seat sessions. Emitted by: sessions module, re-emitted to the room.",
   "type": "object",

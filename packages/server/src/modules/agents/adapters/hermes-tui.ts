@@ -25,6 +25,7 @@
  * looks the stored id up in that profile's store (adopting one left in the default store by
  * an older hub). No `profile` is the process's own home: Hermes's `default`.
  */
+import { derived } from '@corehub/contracts';
 import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { StringDecoder } from 'node:string_decoder';
@@ -433,7 +434,7 @@ export class HermesTuiSession implements AgentSession {
     }
     if (!result?.session_id) {
       result = await channel.request('session.create', {
-        source: 'majlis',
+        source: derived.serviceName,
         ...scope,
         ...(options.cwd ? { cwd: options.cwd } : {}),
         ...(options.model ? { model: options.model } : {}),

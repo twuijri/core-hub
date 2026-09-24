@@ -1,5 +1,5 @@
 /**
- * The Trajectory tab of a conversation (contract decision §42; owner, 2026-09-25): the
+ * The Trajectory tab of a conversation (contract decision §43; owner, 2026-09-25): the
  * conversation as a timeline of three lanes — the person's inputs, the model's turns and
  * the tools — over one shared time axis, the steps as a list that filters and searches,
  * and the metrics the hub actually has. Specified in `docs/inspirations/trajectory.md`.

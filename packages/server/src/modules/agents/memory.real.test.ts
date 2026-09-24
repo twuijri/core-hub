@@ -10,8 +10,8 @@
  * remember something — calls Hermes's `memory` tool the way a model does. No key, no network
  * beyond the loopback. Name the image to run it; without one it is skipped:
  *
- *   docker build -f packages/server/Dockerfile -t majlis:local .
- *   MAJLIS_HERMES_IMAGE=majlis:local pnpm --filter @majlis/server exec \
+ *   docker build -f packages/server/Dockerfile -t core-hub:local .
+ *   COREHUB_HERMES_IMAGE=corehub:local pnpm --filter @corehub/server exec \
  *     vitest run src/modules/agents/memory.real.test.ts
  */
 import { execFile } from 'node:child_process';
@@ -26,7 +26,7 @@ import { HermesTuiSession, stdioTuiChannel, type TuiChannel } from './adapters/h
 import type { AgentEvent } from './adapters/types.js';
 import { createHermesProfiles, type ProfileRunner } from './hermes-profiles.js';
 
-const image = process.env.MAJLIS_HERMES_IMAGE;
+const image = process.env.COREHUB_HERMES_IMAGE;
 
 const FACTS = {
   /** Written by a person on the Memory page, in profile b. */
@@ -120,19 +120,19 @@ function scriptedModel(): http.Server {
 function configFor(port: number): string {
   return [
     'providers:',
-    '  majlis-fake:',
-    '    name: majlis-fake',
+    '  corehub-fake:',
+    '    name: corehub-fake',
     `    base_url: http://127.0.0.1:${port}/v1`,
-    '    key_env: MAJLIS_FAKE_KEY',
+    '    key_env: COREHUB_FAKE_KEY',
     '    api_mode: chat_completions',
     'model:',
     '  default: fake-1',
-    '  provider: majlis-fake',
+    '  provider: corehub-fake',
     '',
   ].join('\n');
 }
 
-describe.skipIf(!image)('the Memory page and the real Hermes (set MAJLIS_HERMES_IMAGE)', () => {
+describe.skipIf(!image)('the Memory page and the real Hermes (set COREHUB_HERMES_IMAGE)', () => {
   let model: http.Server;
   let hub: TestHub & { token: string };
   let agent: string;
@@ -262,7 +262,7 @@ describe.skipIf(!image)('the Memory page and the real Hermes (set MAJLIS_HERMES_
         '-e',
         'HERMES_HOME=/hh',
         '-e',
-        'MAJLIS_FAKE_KEY=fake-key-000000000000',
+        'COREHUB_FAKE_KEY=fake-key-000000000000',
         '--entrypoint',
         '/opt/hermes/.venv/bin/python',
         image!,

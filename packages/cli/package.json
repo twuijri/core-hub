@@ -1,23 +1,24 @@
 {
-  "name": "@majlis/cli",
+  "name": "@corehub/cli",
   "version": "0.0.0",
   "private": true,
-  "description": "Majlis reference client: a terminal client generated from the contract (ADR 0007, Phase 0).",
+  "description": "Core Hub reference client: a terminal client generated from the contract (ADR 0007, Phase 0).",
   "type": "module",
   "bin": {
+    "corehub": "./dist/bin.js",
     "majlis": "./dist/bin.js"
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "typecheck": "pnpm --filter @majlis/contracts build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
-    "build": "pnpm --filter @majlis/contracts build && tsc -p tsconfig.json",
-    "test": "pnpm --filter @majlis/contracts build && vitest run",
+    "typecheck": "pnpm --filter @corehub/contracts build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "build": "pnpm --filter @corehub/contracts build && tsc -p tsconfig.json",
+    "test": "pnpm --filter @corehub/contracts build && vitest run",
     "start": "node dist/bin.js"
   },
   "dependencies": {
-    "@majlis/contracts": "workspace:*",
+    "@corehub/contracts": "workspace:*",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "qrcode-generator": "^2.0.4",

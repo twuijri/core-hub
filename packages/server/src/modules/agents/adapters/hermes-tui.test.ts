@@ -128,7 +128,7 @@ describe('Hermes over the TUI gateway', () => {
     });
     const channel = channelOver(gateway);
     expect((await HermesTuiSession.open(channel, 'stored-7')).id).toBe('stored-7');
-    expect((await HermesTuiSession.open(channel, 'majlis-gone')).id).toBe('stored-8');
+    expect((await HermesTuiSession.open(channel, 'corehub-gone')).id).toBe('stored-8');
   });
 
   it("opens a conversation in the workspace's own profile and working folder", async () => {
@@ -145,7 +145,7 @@ describe('Hermes over the TUI gateway', () => {
     expect(calls).toEqual([
       {
         method: 'session.create',
-        params: { source: 'majlis', profile: 'design', cwd: '/data/workspaces/design/s1' },
+        params: { source: 'corehub', profile: 'design', cwd: '/data/workspaces/design/s1' },
       },
     ]);
   });
@@ -194,7 +194,7 @@ describe('Hermes over the TUI gateway', () => {
     await HermesTuiSession.open(channel, null, { profile: null });
     expect(calls).toEqual([
       { method: 'session.resume', params: { session_id: 's', omit_messages: true } },
-      { method: 'session.create', params: { source: 'majlis' } },
+      { method: 'session.create', params: { source: 'corehub' } },
     ]);
   });
 
@@ -215,7 +215,7 @@ describe('Hermes over the TUI gateway', () => {
             tool_id: 't1',
             name: 'read_file',
             duration_s: 0.1,
-            result_text: '# Majlis',
+            result_text: '# Core Hub',
           });
           api.event('s', 'message.delta', { text: 'قرأته.' });
           api.event('s', 'reasoning.available', { text: 'قرأته.' });
@@ -247,7 +247,7 @@ describe('Hermes over the TUI gateway', () => {
       title: 'README.md',
       input: { path: 'README.md' },
     });
-    expect(events[2]).toMatchObject({ output: '# Majlis' });
+    expect(events[2]).toMatchObject({ output: '# Core Hub' });
     expect(events[4]).toMatchObject({ inputTokens: 12, outputTokens: 3 });
   });
 

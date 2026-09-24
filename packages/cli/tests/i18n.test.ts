@@ -36,9 +36,9 @@ describe('translate', () => {
 });
 
 describe('resolveLanguage', () => {
-  it('prefers the flag, then MAJLIS_LANG, then the locale variables', () => {
-    expect(resolveLanguage('ar', { MAJLIS_LANG: 'en' })).toBe('ar');
-    expect(resolveLanguage(undefined, { MAJLIS_LANG: 'ar', LANG: 'en_US.UTF-8' })).toBe('ar');
+  it('prefers the flag, then COREHUB_LANG, then the locale variables', () => {
+    expect(resolveLanguage('ar', { COREHUB_LANG: 'en' })).toBe('ar');
+    expect(resolveLanguage(undefined, { COREHUB_LANG: 'ar', LANG: 'en_US.UTF-8' })).toBe('ar');
     expect(resolveLanguage(undefined, { LANG: 'ar_SA.UTF-8' })).toBe('ar');
     expect(resolveLanguage(undefined, { LC_ALL: 'en_GB', LANG: 'ar_SA' })).toBe('en');
     expect(resolveLanguage(undefined, { LANG: 'fr_FR' })).toBe('en');

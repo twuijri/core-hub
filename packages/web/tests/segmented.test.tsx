@@ -126,7 +126,7 @@ describe('the segmented control: overflow and density', () => {
     Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
       configurable: true,
       get(this: HTMLElement) {
-        return this.classList.contains('mj-segmented') ? trackWidth : 0;
+        return this.classList.contains('ch-segmented') ? trackWidth : 0;
       },
     });
     Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
@@ -201,7 +201,7 @@ describe('the segmented control: overflow and density', () => {
     expect(alpha).toHaveAttribute('aria-checked', 'true');
     expect(alpha).toHaveTextContent('alpha');
     // The others are icon-only — and still have a name for the keyboard and the reader.
-    expect(beta).toHaveClass('mj-segment-icon-only');
+    expect(beta).toHaveClass('ch-segment-icon-only');
     expect(beta).toHaveAccessibleName('beta');
     expect(beta?.textContent).not.toContain('beta');
   });

@@ -1,5 +1,5 @@
 /**
- * 31. The Trajectory tab (owner, 2026-09-25; contract decision §42): a scripted run that
+ * 31. The Trajectory tab (owner, 2026-09-25; contract decision §43): a scripted run that
  *     reads a file, runs a command that fails and answers is followed live on the tab — three
  *     lanes on one time axis, the failed call in the danger state — a tool step opens to its
  *     arguments and result, the filters narrow the list, and the session log downloads.
@@ -11,7 +11,7 @@ import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 const PASSWORD = 'e2e-owner-password';
-const shots = process.env.MAJLIS_SHOTS ?? path.resolve('e2e/shots');
+const shots = process.env.COREHUB_SHOTS ?? path.resolve('e2e/shots');
 mkdirSync(shots, { recursive: true });
 
 async function login(page: Page) {

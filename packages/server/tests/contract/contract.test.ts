@@ -12,7 +12,7 @@ import {
   type ClientMethod,
   type ContractOperation,
   type HubClient,
-} from '@majlis/contracts';
+} from '@corehub/contracts';
 import { testHub, type TestHub } from '../unit/helpers.js';
 import { ajvFor } from './schema.js';
 

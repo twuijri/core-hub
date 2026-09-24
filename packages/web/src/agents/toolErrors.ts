@@ -2,7 +2,7 @@
  * The agent tool pages' refusals in the person's language — and Hermes's own sentence, unchanged,
  * wherever Hermes gave one. A pack that is refused says which skill and which file.
  */
-import { HubApiError } from '@majlis/contracts';
+import { HubApiError } from '@corehub/contracts';
 import { describeError } from '../auth/client.js';
 
 type T = (key: string, p?: Record<string, string | number>) => string;

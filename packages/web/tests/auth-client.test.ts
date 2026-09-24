@@ -1,4 +1,4 @@
-import { HubApiError } from '@majlis/contracts';
+import { HubApiError } from '@corehub/contracts';
 import { describe, expect, it } from 'vitest';
 import { createClientBundle } from '../src/auth/client.js';
 import { SessionStore, isSession } from '../src/auth/store.js';

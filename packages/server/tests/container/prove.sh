@@ -9,14 +9,14 @@
 # The upstream is `fake-provider.mjs` on the host: it inspects the Authorization header and
 # logs every request, so "the key reached the provider" is shown, not asserted.
 #
-#   docker build -f packages/server/Dockerfile -t majlis:prop-fix .
-#   packages/server/tests/container/prove.sh majlis:prop-fix
+#   docker build -f packages/server/Dockerfile -t core-hub:prop-fix .
+#   packages/server/tests/container/prove.sh corehub:prop-fix
 #
 # Nothing here touches the owner's machines: one throwaway container, one loopback port.
 set -euo pipefail
 
-IMAGE="${1:-majlis:prop-fix}"
-NAME="majlis-prove-$$"
+IMAGE="${1:-corehub:prop-fix}"
+NAME="corehub-prove-$$"
 ENDPOINT_PORT="${ENDPOINT_PORT:-19099}"
 HUB_PORT="${HUB_PORT:-18080}"
 GOOD_KEY='sk-lab-correct-key'
@@ -133,8 +133,8 @@ for d in /proc/[0-9]*; do
   case "$c" in
     */bin/hermes\ gateway\ run*)
       echo "pid=${d#/proc/} cmd=$c"
-      tr "\0" "\n" < $d/environ 2>/dev/null | grep -E "^(HERMES_HOME|MAJLIS_PROVIDER_|API_SERVER_PORT)" |
-        sed -E "s/^(MAJLIS_PROVIDER_[A-Z0-9_]+=.{8}).*/\1…/; s#^(HERMES_HOME=.{8}).*#\1…#" ;;
+      tr "\0" "\n" < $d/environ 2>/dev/null | grep -E "^(HERMES_HOME|COREHUB_PROVIDER_|API_SERVER_PORT)" |
+        sed -E "s/^(COREHUB_PROVIDER_[A-Z0-9_]+=.{8}).*/\1…/; s#^(HERMES_HOME=.{8}).*#\1…#" ;;
   esac
 done'
 

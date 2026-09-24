@@ -8,7 +8,7 @@
  * seen keeps its server position at the end, so installing one adds a chip instead of
  * shuffling the row.
  */
-import { derived } from '@majlis/contracts';
+import { derived } from '@corehub/contracts';
 import type { Agent } from '../types.js';
 
 export function agentOrderKey(profile: string): string {

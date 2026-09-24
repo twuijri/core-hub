@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "Majlis"
+    "name": "Core Hub"
   },
   "nav": {
     "new_chat": "New chat",
@@ -460,7 +460,7 @@
       "app": "App",
       "devices": "Devices"
     },
-    "pair_intro": "Pair a phone: scan the QR with the Majlis app, or type the code. The code expires in five minutes.",
+    "pair_intro": "Pair a phone: scan the QR with the Core Hub app, or type the code. The code expires in five minutes.",
     "pair": "Pair a device",
     "pair_again": "New pairing",
     "expires_in": "Expires in {seconds} s",

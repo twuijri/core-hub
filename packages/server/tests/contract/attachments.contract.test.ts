@@ -10,7 +10,7 @@ import {
   serverBasePath,
   type ClientMethod,
   type HubClient,
-} from '@majlis/contracts';
+} from '@corehub/contracts';
 import { testHub, type TestHub } from '../unit/helpers.js';
 import { ajvFor, operationsById, responseSchema } from './schema.js';
 
@@ -23,7 +23,7 @@ const PNG = Buffer.concat([
 
 /** A file as the browser's `FormData` sends it. */
 function form(name: string, body: Buffer) {
-  const boundary = '----majlisContractAttachments';
+  const boundary = '----corehubContractAttachments';
   return {
     payload: Buffer.concat([
       Buffer.from(

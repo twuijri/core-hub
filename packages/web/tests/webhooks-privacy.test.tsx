@@ -41,7 +41,7 @@ function webhook(over: Record<string, unknown> = {}) {
   return {
     id: HOOK_ID,
     name: 'n8n',
-    url: 'https://n8n.example/webhook/majlis',
+    url: 'https://n8n.example/webhook/corehub',
     events: ['run.completed'],
     profiles: [],
     enabled: true,

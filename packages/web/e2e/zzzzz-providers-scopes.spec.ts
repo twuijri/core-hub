@@ -18,7 +18,7 @@ import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 const PASSWORD = 'e2e-owner-password';
-const shots = process.env.MAJLIS_SHOTS ?? path.resolve('e2e/shots');
+const shots = process.env.COREHUB_SHOTS ?? path.resolve('e2e/shots');
 mkdirSync(shots, { recursive: true });
 
 test.use({ viewport: { width: 1440, height: 900 } });
@@ -84,7 +84,7 @@ test.describe('providers for every profile, and a profile’s own', () => {
   test('a shared provider is on every profile, a profile’s own stays in it, and an export with providers brings them to an imported profile', async ({
     page,
   }) => {
-    const scratch = mkdtempSync(path.join(tmpdir(), 'majlis-e2e-scopes-'));
+    const scratch = mkdtempSync(path.join(tmpdir(), 'corehub-e2e-scopes-'));
     try {
       await login(page);
       await ensureStudio(page);
@@ -135,10 +135,10 @@ test.describe('providers for every profile, and a profile’s own', () => {
       const entries = execFileSync('tar', ['-tzf', archive], { encoding: 'utf8' })
         .split('\n')
         .filter(Boolean);
-      expect(entries).toContain('studio/majlis-providers.json');
+      expect(entries).toContain('studio/corehub-providers.json');
       execFileSync('tar', ['-xzf', archive, '-C', scratch]);
       const bundle = JSON.parse(
-        readFileSync(path.join(scratch, 'studio', 'majlis-providers.json'), 'utf8'),
+        readFileSync(path.join(scratch, 'studio', 'corehub-providers.json'), 'utf8'),
       ) as { providers: { slug: string }[] };
       // What Studio uses: its own LM Studio, which wins over the shared one of that preset.
       expect(bundle.providers.map((p) => p.slug)).toEqual(['lmstudio']);

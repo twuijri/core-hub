@@ -10,7 +10,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { MANAGED_MARKER, mergeEnv, parseEnv, quoteValue } from './dotenv.js';
+import { LEGACY_MANAGED_MARKER, MANAGED_MARKER, mergeEnv, parseEnv, quoteValue } from './dotenv.js';
 import {
   agentEnvironment,
   hermesEnvPlan,
@@ -18,6 +18,7 @@ import {
   writeHermesEnv,
   writeHermesModel,
   writeHermesProviders,
+  writeHermesRoute,
   type HermesProviderRoute,
   type PropagationState,
   type ResolvedCredential,
@@ -27,7 +28,7 @@ const homes: string[] = [];
 
 /** A Hermes home with whatever files the test wants already in it. */
 function hermesHome(files: Record<string, string> = {}): string {
-  const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-'));
+  const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-'));
   homes.push(home);
   mkdirSync(home, { recursive: true });
   for (const [name, body] of Object.entries(files)) {
@@ -58,10 +59,10 @@ function state(over: Partial<PropagationState> = {}): PropagationState {
 }
 
 const route = (over: Partial<HermesProviderRoute> = {}): HermesProviderRoute => ({
-  name: 'majlis-lmstudio',
+  name: 'corehub-lmstudio',
   baseUrl: 'http://127.0.0.1:1234/v1',
   apiMode: 'chat_completions',
-  keyEnv: 'MAJLIS_PROVIDER_LMSTUDIO_API_KEY',
+  keyEnv: 'COREHUB_PROVIDER_LMSTUDIO_API_KEY',
   ...over,
 });
 
@@ -300,12 +301,12 @@ describe('models: OpenAI-compatible endpoints as Hermes providers', () => {
   it('writes a block Hermes understands, with only the keys it documents', () => {
     const home = hermesHome();
     const result = writeHermesProviders(home, [route()]);
-    expect(result.changed).toEqual(['providers.majlis-lmstudio']);
+    expect(result.changed).toEqual(['providers.corehub-lmstudio']);
     const text = readFileSync(path.join(home, 'config.yaml'), 'utf8');
-    expect(text).toContain('majlis-lmstudio:');
+    expect(text).toContain('corehub-lmstudio:');
     expect(text).toContain('base_url: http://127.0.0.1:1234/v1');
     expect(text).toContain('api_mode: chat_completions');
-    expect(text).toContain('key_env: MAJLIS_PROVIDER_LMSTUDIO_API_KEY');
+    expect(text).toContain('key_env: COREHUB_PROVIDER_LMSTUDIO_API_KEY');
     // `enabled` is honoured by Hermes but absent from its accepted-keys list, so writing
     // it makes the gateway log "unknown config keys ignored" about our own file.
     expect(text).not.toContain('enabled:');
@@ -324,7 +325,7 @@ describe('models: OpenAI-compatible endpoints as Hermes providers', () => {
         'providers:',
         '  my-own-proxy:',
         '    base_url: https://proxy.example/v1',
-        '  majlis-gone:',
+        '  corehub-gone:',
         '    base_url: https://gone.example/v1',
         'model:',
         '  default: keep-me',
@@ -332,13 +333,13 @@ describe('models: OpenAI-compatible endpoints as Hermes providers', () => {
       ].join('\n'),
     });
     const result = writeHermesProviders(home, [route()]);
-    expect(result.removed).toEqual(['providers.majlis-gone']);
+    expect(result.removed).toEqual(['providers.corehub-gone']);
     const text = readFileSync(path.join(home, 'config.yaml'), 'utf8');
     expect(text).toContain('# a comment the hub must not destroy');
     expect(text).toContain('my-own-proxy:');
     expect(text).toContain('default: keep-me');
-    expect(text).not.toContain('majlis-gone');
-    expect(text).toContain('majlis-lmstudio:');
+    expect(text).not.toContain('corehub-gone');
+    expect(text).toContain('corehub-lmstudio:');
   });
 
   it('rewrites nothing when the blocks already say what they should', () => {
@@ -354,8 +355,125 @@ describe('models: OpenAI-compatible endpoints as Hermes providers', () => {
     const home = hermesHome();
     writeHermesProviders(home, [route()]);
     const result = writeHermesProviders(home, []);
-    expect(result.removed).toEqual(['providers.majlis-lmstudio']);
+    expect(result.removed).toEqual(['providers.corehub-lmstudio']);
     expect(readFileSync(path.join(home, 'config.yaml'), 'utf8')).not.toContain('providers:');
+  });
+});
+
+// ------------------------------------------------ the rename (Majlis → Core Hub)
+
+describe('models: a Hermes home written before the rename (ADR 0017)', () => {
+  const custom = route({
+    name: 'corehub-custom-cli-proxy-api',
+    baseUrl: 'http://proxy.example:8317/v1',
+    keyEnv: 'COREHUB_PROVIDER_CUSTOM_CLI_PROXY_API_API_KEY',
+  });
+  const oldProfile = [
+    '# the owner wrote this',
+    'model:',
+    '  default: gpt-5.4',
+    '  provider: majlis-custom-cli-proxy-api',
+    'fallback_model:',
+    '  provider: majlis-custom-cli-proxy-api',
+    '  model: gpt-5.4-mini',
+    'providers:',
+    '  majlis-custom-cli-proxy-api:',
+    '    name: majlis-custom-cli-proxy-api',
+    '    base_url: http://proxy.example:8317/v1',
+    '    key_env: MAJLIS_PROVIDER_CUSTOM_CLI_PROXY_API_API_KEY',
+    '    api_mode: chat_completions',
+    '  my-own-proxy:',
+    '    base_url: https://proxy.example/v1',
+    'note: majlis-custom-cli-proxy-api is what I use',
+    '',
+  ].join('\n');
+
+  it('keeps a profile whose model names an old block working: the block and its references move together', () => {
+    const home = hermesHome({ 'config.yaml': oldProfile });
+    const result = writeHermesProviders(home, [custom]);
+    expect(result.dirty).toBe(true);
+    const text = readFileSync(path.join(home, 'config.yaml'), 'utf8');
+    // The block is the new name, pointing at the new variable…
+    expect(text).toContain('corehub-custom-cli-proxy-api:');
+    expect(text).toContain('key_env: COREHUB_PROVIDER_CUSTOM_CLI_PROXY_API_API_KEY');
+    // …what named the old block names the new one, so Hermes resolves it…
+    expect(text).toContain('  provider: corehub-custom-cli-proxy-api\n');
+    expect(text).not.toMatch(/provider: majlis-/);
+    // …and the old block is gone, while everything that was never the hub's stays.
+    expect(text).not.toContain('majlis-custom-cli-proxy-api:');
+    expect(text).toContain('# the owner wrote this');
+    expect(text).toContain('my-own-proxy:');
+    expect(text).toContain('note: majlis-custom-cli-proxy-api is what I use');
+    expect(result.removed).toContain('providers.majlis-custom-cli-proxy-api');
+    expect(result.changed).toEqual(
+      expect.arrayContaining(['model.provider', 'fallback_model.provider']),
+    );
+  });
+
+  it('is done once: the next write finds nothing to change', () => {
+    const home = hermesHome({ 'config.yaml': oldProfile });
+    writeHermesProviders(home, [custom]);
+    expect(writeHermesProviders(home, [custom]).dirty).toBe(false);
+  });
+
+  it('moves the reference of a messaging gateway too, where the model is written as well', () => {
+    const home = hermesHome({ 'config.yaml': oldProfile });
+    writeHermesRoute(
+      home,
+      state({
+        hermesProviders: [custom],
+        hermesModel: { provider: 'corehub-custom-cli-proxy-api', model: 'gpt-5.4' },
+      }),
+    );
+    const text = readFileSync(path.join(home, 'config.yaml'), 'utf8');
+    expect(text).not.toMatch(/majlis-custom-cli-proxy-api:|provider: majlis-/);
+    expect(text).toContain('provider: corehub-custom-cli-proxy-api');
+  });
+
+  it('removes an old block the profile no longer has, as it would its own', () => {
+    const home = hermesHome({
+      'config.yaml': 'providers:\n  majlis-gone:\n    base_url: https://gone.example/v1\n',
+    });
+    const result = writeHermesProviders(home, [route()]);
+    expect(result.removed).toEqual(['providers.majlis-gone']);
+    expect(readFileSync(path.join(home, 'config.yaml'), 'utf8')).not.toContain('majlis-gone');
+  });
+
+  it('replaces the old key line and marker in the .env with the new ones', () => {
+    const home = hermesHome({
+      '.env': [
+        'OWNER_THING=keep',
+        '',
+        LEGACY_MANAGED_MARKER,
+        'MAJLIS_PROVIDER_CUSTOM_CLI_PROXY_API_API_KEY=sk-proxy',
+        '',
+      ].join('\n'),
+    });
+    const result = writeHermesEnv(
+      hermesEnvPlan(
+        home,
+        state({
+          credentials: [
+            credential(
+              'custom-cli-proxy-api',
+              'COREHUB_PROVIDER_CUSTOM_CLI_PROXY_API_API_KEY',
+              'sk-proxy',
+            ),
+          ],
+          ownedEnv: [
+            'COREHUB_PROVIDER_CUSTOM_CLI_PROXY_API_API_KEY',
+            'MAJLIS_PROVIDER_CUSTOM_CLI_PROXY_API_API_KEY',
+          ],
+        }),
+      ),
+    );
+    const text = readFileSync(path.join(home, '.env'), 'utf8');
+    expect(result.removed).toEqual(['MAJLIS_PROVIDER_CUSTOM_CLI_PROXY_API_API_KEY']);
+    expect(text).toContain('OWNER_THING=keep');
+    expect(text).toContain('COREHUB_PROVIDER_CUSTOM_CLI_PROXY_API_API_KEY=sk-proxy');
+    expect(text).not.toContain('MAJLIS_');
+    expect(text).not.toContain(LEGACY_MANAGED_MARKER);
+    expect(text.split(MANAGED_MARKER).length - 1).toBe(1);
   });
 });
 

@@ -15,7 +15,7 @@ import {
   serverBasePath,
   type ClientMethod,
   type HubClient,
-} from '@majlis/contracts';
+} from '@corehub/contracts';
 import { modules as defaultModules } from '../../src/modules/index.js';
 import { principalScopeResolver } from '../../src/modules/auth/index.js';
 import { createSessionsModule } from '../../src/modules/sessions/index.js';

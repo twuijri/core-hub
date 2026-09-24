@@ -33,11 +33,11 @@ export function Tabs({
 }) {
   return (
     <RadixTabs.Root value={value} onValueChange={onValueChange} data-testid={testId}>
-      <RadixTabs.List className="mj-tabs" aria-label={label}>
+      <RadixTabs.List className="ch-tabs" aria-label={label}>
         {items.map((item) => (
           <RadixTabs.Trigger
             key={item.value}
-            className="mj-tab"
+            className="ch-tab"
             value={item.value}
             disabled={item.disabled ?? false}
           >
@@ -72,7 +72,7 @@ export function TabPanel({
 }) {
   return (
     <RadixTabs.Content
-      className={`mj-tab-panel${flow ? ' mj-tab-panel-flow' : ''}`}
+      className={`ch-tab-panel${flow ? ' ch-tab-panel-flow' : ''}`}
       value={value}
       {...(keepMounted ? { forceMount: true as const } : {})}
       data-testid={testId}
@@ -118,14 +118,14 @@ export function TabList({
 }) {
   return (
     <RadixTabs.List
-      className={`mj-tabs${compact ? ' mj-tabs-compact' : ''}`}
+      className={`ch-tabs${compact ? ' ch-tabs-compact' : ''}`}
       aria-label={label}
       data-testid={testId}
     >
       {items.map((item) => (
         <RadixTabs.Trigger
           key={item.value}
-          className="mj-tab"
+          className="ch-tab"
           value={item.value}
           disabled={item.disabled ?? false}
           data-testid={testId ? `${testId}-${item.value}` : undefined}

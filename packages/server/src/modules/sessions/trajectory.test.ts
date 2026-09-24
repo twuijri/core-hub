@@ -1,5 +1,5 @@
 /**
- * The trajectory (contract decision §42), built from a replayed run: the reducer records the
+ * The trajectory (contract decision §43), built from a replayed run: the reducer records the
  * model's turns as the events arrive, and `buildTrajectory` turns stored rows into steps and
  * metrics. Every clock value is chosen by the test, so durations are asserted exactly.
  */

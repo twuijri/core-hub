@@ -6,7 +6,7 @@
  * the way the running hub does: the CLI for reads and moves, `hermes serve` for the rest
  * (ADR 0015). Name the image to run it; without one it is skipped:
  *
- *   MAJLIS_HERMES_IMAGE=ghcr.io/twuijri/majlis:latest pnpm --filter @majlis/server exec \
+ *   COREHUB_HERMES_IMAGE=ghcr.io/twuijri/core-hub:latest pnpm --filter @corehub/server exec \
  *     vitest run src/modules/tasks/hermes-api.real.test.ts
  */
 import { execFile, execFileSync, spawn } from 'node:child_process';
@@ -28,7 +28,7 @@ import { HermesApiUnavailable, createHermesCardApi } from './hermes-api.js';
 import { HermesRefusal, createHermesKanban, type KanbanRunner } from './hermes-kanban.js';
 import { registerHermesBoard } from './index.js';
 
-const image = process.env.MAJLIS_HERMES_IMAGE;
+const image = process.env.COREHUB_HERMES_IMAGE;
 const HERMES = '/opt/hermes/.venv/bin/hermes';
 
 interface Shown {
@@ -39,10 +39,10 @@ interface Shown {
 type Json = Record<string, unknown>;
 
 describe.skipIf(!image)(
-  "Hermes's cards edited through Hermes's API (real Hermes; set MAJLIS_HERMES_IMAGE to run)",
+  "Hermes's cards edited through Hermes's API (real Hermes; set COREHUB_HERMES_IMAGE to run)",
   () => {
-    const home = mkdtempSync(path.join(tmpdir(), 'majlis-kanban-api-home-'));
-    const dataDir = mkdtempSync(path.join(tmpdir(), 'majlis-kanban-api-data-'));
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-kanban-api-home-'));
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'corehub-kanban-api-data-'));
     chmodSync(home, 0o777);
     const containers: string[] = [];
 
@@ -77,7 +77,7 @@ describe.skipIf(!image)(
     };
 
     const spawnImpl: DashboardSpawner = (_command, args, options) => {
-      const name = `majlis-kanban-api-real-${process.pid}-${containers.length}`;
+      const name = `corehub-kanban-api-real-${process.pid}-${containers.length}`;
       containers.push(name);
       const child = spawn(
         'docker',
@@ -229,16 +229,16 @@ describe.skipIf(!image)(
         const said = await authed(hub, hub.token, {
           method: 'POST',
           url: `/api/v1/tasks/${id}/comments`,
-          payload: { content: 'تعليق من المجلس' },
+          payload: { content: 'تعليق من المركز' },
         });
         expect(said.statusCode).toBe(201);
         shown = await show(created.id);
         expect(shown?.comments).toContainEqual(
-          expect.objectContaining({ author: 'Admin', body: 'تعليق من المجلس' }),
+          expect.objectContaining({ author: 'Admin', body: 'تعليق من المركز' }),
         );
         const opened = await authed(hub, hub.token, { method: 'GET', url: `/api/v1/tasks/${id}` });
         expect((opened.json() as { comments: Json[] }).comments.map((c) => c.content)).toContain(
-          'تعليق من المجلس',
+          'تعليق من المركز',
         );
 
         // A refusal, in Hermes's words, changes nothing.

@@ -33,13 +33,13 @@ export function Tooltip({
         <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
         <RadixTooltip.Portal>
           <RadixTooltip.Content
-            className="mj-tooltip"
+            className="ch-tooltip"
             side={side === 'inline-start' ? 'left' : side === 'inline-end' ? 'right' : side}
             sideOffset={6}
             collisionPadding={8}
           >
             {label}
-            <RadixTooltip.Arrow className="mj-tooltip-arrow" width={10} height={5} />
+            <RadixTooltip.Arrow className="ch-tooltip-arrow" width={10} height={5} />
           </RadixTooltip.Content>
         </RadixTooltip.Portal>
       </RadixTooltip.Root>

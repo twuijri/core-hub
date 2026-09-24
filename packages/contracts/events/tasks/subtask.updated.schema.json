@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/tasks/subtask.updated.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/tasks/subtask.updated.schema.json",
   "title": "/rt/tasks · subtask.updated",
   "description": "A subtask was created, changed or deleted (`deleted: true`). Emitted by: tasks module (create, patch, delete, assignee progress).",
   "type": "object",

@@ -2,7 +2,7 @@
 // document (with `#/components/...` refs resolved) and look up documented response schemas.
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import addFormatsModule, { type FormatsPlugin } from 'ajv-formats';
-import { listOperations, type ContractOperation, type OpenApiDocument } from '@majlis/contracts';
+import { listOperations, type ContractOperation, type OpenApiDocument } from '@corehub/contracts';
 
 export interface SchemaValidator {
   validate(schema: Record<string, unknown>, data: unknown): string[];

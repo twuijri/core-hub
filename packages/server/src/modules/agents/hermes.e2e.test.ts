@@ -6,7 +6,7 @@
  * them it is **skipped**, and says so — a skipped test is not a passed one. It spends real
  * model tokens on the owner's provider, which is why it never runs by accident.
  *
- * Run it:  HERMES_E2E=1 HERMES_API_KEY=… pnpm --filter @majlis/server exec vitest run --project unit src/modules/agents/hermes.e2e.test.ts
+ * Run it:  HERMES_E2E=1 HERMES_API_KEY=… pnpm --filter @corehub/server exec vitest run --project unit src/modules/agents/hermes.e2e.test.ts
  */
 import { io as connect, type Socket } from 'socket.io-client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';

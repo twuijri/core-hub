@@ -218,8 +218,8 @@ describe('the searchable picker', () => {
     expect(screen.getByTestId('combobox-field')).toHaveAttribute('placeholder', 'ابحث…');
     // A Latin id inside an Arabic page is isolated, not re-directed: its characters keep
     // their order while the line stays on the page's own edge, beside the name.
-    const id = (rows()[0] as HTMLElement).querySelector('.mj-combo-sub');
+    const id = (rows()[0] as HTMLElement).querySelector('.ch-combo-sub');
     expect(id).not.toHaveAttribute('dir');
-    expect(id).toHaveClass('mj-combo-sub');
+    expect(id).toHaveClass('ch-combo-sub');
   });
 });

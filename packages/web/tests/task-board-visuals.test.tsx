@@ -1,5 +1,5 @@
 /**
- * The board's visual language (owner's board decision of 2026-09-17, rebuilt in Majlis):
+ * The board's visual language (owner's board decision of 2026-09-17, rebuilt in Core Hub):
  * a card says its stage with a frame drawn for it *and* the word, a todo card offers the
  * promote button, the Waiting strip opens when it has something, and Done keeps the
  * archive behind a link — read-only — with archiving asked for before it happens.
@@ -160,11 +160,11 @@ afterEach(cleanup);
 
 describe('a card tells its stage by a frame and a word', () => {
   const cases: Array<[TaskStatus, string, string]> = [
-    ['running', 'Running', 'mj-badge-success'],
-    ['blocked', 'Blocked', 'mj-badge-danger'],
-    ['scheduled', 'Scheduled', 'mj-badge-warning'],
+    ['running', 'Running', 'ch-badge-success'],
+    ['blocked', 'Blocked', 'ch-badge-danger'],
+    ['scheduled', 'Scheduled', 'ch-badge-warning'],
     ['review', 'Review', 'task-status-review'],
-    ['ready', 'Ready', 'mj-badge-info'],
+    ['ready', 'Ready', 'ch-badge-info'],
   ];
   for (const [status, word, tone] of cases) {
     it(`${status}: its own frame, its word, its tone`, () => {

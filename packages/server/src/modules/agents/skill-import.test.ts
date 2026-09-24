@@ -28,7 +28,7 @@ import { ZipError, readZip, safeEntryPath } from './zip.js';
 
 const dirs: string[] = [];
 function home(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'majlis-import-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'corehub-import-'));
   dirs.push(dir);
   return dir;
 }

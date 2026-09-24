@@ -1,5 +1,5 @@
 // setup · login · logout · whoami
-import { HubApiError } from '@majlis/contracts';
+import { HubApiError } from '@corehub/contracts';
 import type { CommandSpec } from '../args.js';
 import { anonymousClient, expiresAt, normaliseServer } from '../client.js';
 import type { CommandContext } from '../context.js';

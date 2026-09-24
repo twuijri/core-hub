@@ -1,6 +1,6 @@
 // Exit codes and the errors the CLI raises itself. Server errors arrive as `HubApiError`
 // from the generated client and keep the contract's `{ error, code }` envelope.
-import { HubApiError } from '@majlis/contracts';
+import { HubApiError } from '@corehub/contracts';
 import type { Params, Translator } from './i18n/index.js';
 
 export const EXIT_OK = 0;

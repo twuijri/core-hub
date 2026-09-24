@@ -1,5 +1,5 @@
 /**
- * The Trajectory tab (contract decision §42; owner, 2026-09-25).
+ * The Trajectory tab (contract decision §43; owner, 2026-09-25).
  *
  * The pure rules first — filters, search, the shared time axis with idle time folded,
  * parallel calls on their own rows — then the view against a scripted hub: the lanes and

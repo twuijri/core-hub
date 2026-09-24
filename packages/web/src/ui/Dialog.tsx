@@ -42,10 +42,10 @@ export function Dialog({
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="mj-overlay" />
-        <RadixDialog.Content className={`mj-dialog mj-dialog-${size}`} data-testid={testId}>
-          <div className="mj-dialog-head">
-            <RadixDialog.Title className="mj-dialog-title">{title}</RadixDialog.Title>
+        <RadixDialog.Overlay className="ch-overlay" />
+        <RadixDialog.Content className={`ch-dialog ch-dialog-${size}`} data-testid={testId}>
+          <div className="ch-dialog-head">
+            <RadixDialog.Title className="ch-dialog-title">{title}</RadixDialog.Title>
             <RadixDialog.Close asChild>
               <Button
                 variant="ghost"
@@ -57,12 +57,12 @@ export function Dialog({
             </RadixDialog.Close>
           </div>
           {description !== undefined && (
-            <RadixDialog.Description className="mj-dialog-body">
+            <RadixDialog.Description className="ch-dialog-body">
               {description}
             </RadixDialog.Description>
           )}
-          {children !== undefined && <div className="mj-dialog-content">{children}</div>}
-          {footer !== undefined && <div className="mj-dialog-actions">{footer}</div>}
+          {children !== undefined && <div className="ch-dialog-content">{children}</div>}
+          {footer !== undefined && <div className="ch-dialog-actions">{footer}</div>}
         </RadixDialog.Content>
       </RadixDialog.Portal>
     </RadixDialog.Root>
@@ -92,10 +92,10 @@ export function Sheet({
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="mj-overlay" />
-        <RadixDialog.Content className="mj-sheet" data-side={side} data-testid={testId}>
-          <div className="mj-dialog-head">
-            <RadixDialog.Title className="mj-dialog-title">{title}</RadixDialog.Title>
+        <RadixDialog.Overlay className="ch-overlay" />
+        <RadixDialog.Content className="ch-sheet" data-side={side} data-testid={testId}>
+          <div className="ch-dialog-head">
+            <RadixDialog.Title className="ch-dialog-title">{title}</RadixDialog.Title>
             <RadixDialog.Close asChild>
               <Button
                 variant="ghost"
@@ -106,8 +106,8 @@ export function Sheet({
               />
             </RadixDialog.Close>
           </div>
-          <div className="mj-sheet-body">{children}</div>
-          {footer !== undefined && <div className="mj-dialog-actions">{footer}</div>}
+          <div className="ch-sheet-body">{children}</div>
+          {footer !== undefined && <div className="ch-dialog-actions">{footer}</div>}
         </RadixDialog.Content>
       </RadixDialog.Portal>
     </RadixDialog.Root>

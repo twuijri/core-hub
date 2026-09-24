@@ -1,4 +1,4 @@
-# Deploying Majlis
+# Deploying Core Hub
 
 One container, one data volume. The image holds the hub (Node) and the Hermes
 runtime (Python) — nothing else (ADR 0006, ADR 0008). Coding agents are
@@ -14,9 +14,9 @@ what the hub and Hermes load at runtime; the prune lists in
 ## 1. Run the image
 
 ```bash
-git clone https://github.com/twuijri/majlis && cd majlis
+git clone https://github.com/twuijri/core-hub && cd core-hub
 cp .env.example .env            # nothing in it is required
-docker compose up -d            # pulls ghcr.io/twuijri/majlis:latest, or `--build` to build here
+docker compose up -d            # pulls ghcr.io/twuijri/core-hub:latest, or `--build` to build here
 docker compose logs -f hub      # watch the first boot — the setup token is printed here
 ```
 
@@ -40,13 +40,31 @@ screen and the hub carries them to every agent (§3).
 Upgrading is `docker compose pull && docker compose up -d`; the volume is
 untouched.
 
+## 1a. Upgrading a stack from before the rename (Majlis → Core Hub)
+
+The product was called Majlis until 2026-09-24 (ADR 0017). An existing stack upgrades by
+replacing the image; `/data` is read as it is:
+
+- **Image**: `ghcr.io/twuijri/core-hub:<tag>` (the old `ghcr.io/twuijri/majlis` gets no new
+  tags). Change the `image:` line of the stack.
+- **Container name**: the reference Compose file now says `container_name: core-hub`. Renaming
+  it is optional; `docker compose up -d` recreates the container under the new name, and the
+  volume (`hub-data`) is the same.
+- **Environment**: nothing to change. A `MAJLIS_*` variable still works (the hub reads it when
+  the `COREHUB_*` name is unset) and the log says once which name to use instead.
+- **What the hub moves by itself** on its first boot: Hermes provider blocks `majlis-*` become
+  `corehub-*`, with every `model.provider` (and fallback) that named them, in the root home and
+  every profile; `MAJLIS_PROVIDER_*` keys in Hermes's `.env` become `COREHUB_PROVIDER_*`. The
+  web keeps you signed in and keeps your preferences; the terminal client moves
+  `~/.config/majlis/config.json` to `~/.config/corehub/` and still answers to `majlis`.
+
 ## 1b. Getting an image built
 
 - **A release**: push a tag `v*` on `main`. The Release workflow builds for
   amd64 and arm64 and publishes `:<version>`, `:<major>.<minor>` and `:latest`.
 - **A preview**: Actions → Release → *Run workflow*, pick the branch, give an
   image tag (`preview`, `test`, `0.1.0-rc.1` …) and the platforms. It
-  publishes `ghcr.io/twuijri/majlis:<that tag>` and refuses to touch `latest`,
+  publishes `ghcr.io/twuijri/core-hub:<that tag>` and refuses to touch `latest`,
   which belongs to release tags on `main` alone.
 
 The number to watch is the compressed pull size, not what `docker image ls`
@@ -85,7 +103,7 @@ A new token is generated on every restart until the owner account exists.
 3. From a terminal instead of a browser, the reference client does the same:
 
    ```bash
-   majlis setup --server http://<host>:8080      # asks for the token and the password
+   corehub setup --server http://<host>:8080      # asks for the token and the password
    ```
 
    Neither client accepts the token or the password as a command-line flag.
@@ -130,7 +148,7 @@ key encrypted under `/data/keys/data.key`, writes it into Hermes's own
 that declares the same credential family (ADR 0010). Nobody pastes a key twice,
 and `hermes config` keeps working for anything the hub does not own.
 
-`majlis providers presets` and `majlis providers add <preset>` do the same from
+`corehub providers presets` and `corehub providers add <preset>` do the same from
 a terminal.
 
 **Back up `/data/keys/data.key`.** It is the one file that cannot be
@@ -223,5 +241,5 @@ Then, signed in (`TOKEN` from `POST /auth/login`, `X-Hub-Profile: default`):
    Hermes home are all still there.
 
 The same checklist runs in the repository against a real gateway with
-`HERMES_E2E=1 HERMES_URL=http://127.0.0.1:8642 HERMES_API_KEY=… pnpm --filter @majlis/server exec vitest run --project unit src/modules/agents/hermes.e2e.test.ts`;
+`HERMES_E2E=1 HERMES_URL=http://127.0.0.1:8642 HERMES_API_KEY=… pnpm --filter @corehub/server exec vitest run --project unit src/modules/agents/hermes.e2e.test.ts`;
 without those variables the test is skipped and says so.

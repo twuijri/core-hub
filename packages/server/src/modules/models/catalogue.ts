@@ -4,7 +4,7 @@
  *
  * Nothing here is a provider the workspace *has*. A row in `providers` exists because
  * somebody added it (`models.createProvider`); this file is what the "Add provider"
- * dialog and `majlis providers presets` list (contract decision §26).
+ * dialog and `corehub providers presets` list (contract decision §26).
  *
  * Two things live on an entry and nowhere else:
  *
@@ -20,7 +20,7 @@
  * `models.refreshProvider` (`adapters/`), so the picker never offers a model that was
  * true when this file was written and is not true today.
  */
-import { STABLE } from '@majlis/contracts';
+import { LEGACY, derived } from '@corehub/contracts';
 import type {
   ApiMode,
   AuthKind,
@@ -466,8 +466,13 @@ export function secretNameOf(family: string, shared = false): string {
  * the run would fall through to OpenRouter. The prefix also tells a person reading the
  * file which blocks the hub rewrites and which are their own.
  */
-/** Frozen: it marks the hub's providers inside Hermes's own config (`STABLE`). */
-export const HERMES_PROVIDER_PREFIX = STABLE.hermesProviderPrefix;
+export const HERMES_PROVIDER_PREFIX = derived.hermesProviderPrefix;
+/**
+ * The prefix the same blocks had before the rename (`majlis-`). Still the hub's: every
+ * write replaces those blocks with the new names and rewrites what referred to them
+ * (`propagation.ts` §migrateLegacyProviders).
+ */
+export const LEGACY_HERMES_PROVIDER_PREFIX = LEGACY.hermesProviderPrefix;
 
 /**
  * The name Hermes knows one of our provider rows by: its own slug when Hermes ships the
@@ -511,7 +516,17 @@ export function hermesKeyEnvOf(slug: string, entry: ProviderCatalogueEntry | und
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
-  return `MAJLIS_PROVIDER_${sanitized || 'CUSTOM'}_API_KEY`;
+  return `${derived.providerKeyEnvPrefix}${sanitized || 'CUSTOM'}_API_KEY`;
+}
+
+/**
+ * The name the hub minted for the same key before the rename (`MAJLIS_PROVIDER_…`), or
+ * null for a name the world agrees on. The hub still owns it in Hermes's `.env`, which is
+ * what removes the old line once the new one is written.
+ */
+export function legacyHermesKeyEnvOf(name: string): string | null {
+  if (!name.startsWith(derived.providerKeyEnvPrefix)) return null;
+  return `${LEGACY.providerKeyEnvPrefix}${name.slice(derived.providerKeyEnvPrefix.length)}`;
 }
 
 /**

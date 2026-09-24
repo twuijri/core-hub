@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/devices/device.unlinked.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/devices/device.unlinked.schema.json",
   "title": "/rt/devices · device.unlinked",
   "description": "User-level. Emitted by: devices/auth modules (unlink, token revoked, user deleted).",
   "type": "object",

@@ -19,7 +19,7 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 import addFormatsModule, { type FormatsPlugin } from 'ajv-formats';
 import { io as connect, type Socket } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { contractsRoot } from '@majlis/contracts';
+import { contractsRoot } from '@corehub/contracts';
 import { modules as defaultModules } from '../index.js';
 import { signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
 import { createSessionsModule } from './index.js';

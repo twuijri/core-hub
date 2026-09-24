@@ -21,7 +21,7 @@ export function SidebarFrame({
   testId?: string;
 }) {
   return (
-    <nav className="mj-sidebar glass" aria-label={label} data-testid={testId}>
+    <nav className="ch-sidebar glass" aria-label={label} data-testid={testId}>
       {children}
     </nav>
   );
@@ -29,11 +29,11 @@ export function SidebarFrame({
 
 export function SidebarBrand({ mark, name }: { mark: ReactNode; name: ReactNode }) {
   return (
-    <div className="mj-sidebar-brand">
-      <span className="mj-sidebar-mark" aria-hidden>
+    <div className="ch-sidebar-brand">
+      <span className="ch-sidebar-mark" aria-hidden>
         {mark}
       </span>
-      <span className="mj-sidebar-name">{name}</span>
+      <span className="ch-sidebar-name">{name}</span>
     </div>
   );
 }
@@ -49,8 +49,8 @@ export function SidebarGroup({
   testId?: string;
 }) {
   return (
-    <div className="mj-sidebar-group" data-testid={testId}>
-      {label !== undefined && <p className="mj-sidebar-group-label">{label}</p>}
+    <div className="ch-sidebar-group" data-testid={testId}>
+      {label !== undefined && <p className="ch-sidebar-group-label">{label}</p>}
       {children}
     </div>
   );
@@ -58,12 +58,12 @@ export function SidebarGroup({
 
 /** The scrolling middle: the only part of the sidebar that grows. */
 export function SidebarBody({ children }: { children: ReactNode }) {
-  return <div className="mj-sidebar-body">{children}</div>;
+  return <div className="ch-sidebar-body">{children}</div>;
 }
 
 export function SidebarFooter({ children, testId }: { children: ReactNode; testId?: string }) {
   return (
-    <footer className="mj-sidebar-foot" data-testid={testId}>
+    <footer className="ch-sidebar-foot" data-testid={testId}>
       {children}
     </footer>
   );
@@ -91,9 +91,9 @@ export function SidebarRow({
   const children = (
     <>
       {icon}
-      <span className="mj-sidebar-row-label">{label}</span>
+      <span className="ch-sidebar-row-label">{label}</span>
       {trailing}
     </>
   );
-  return render({ className: `mj-sidebar-row mj-sidebar-row-${emphasis}`, children });
+  return render({ className: `ch-sidebar-row ch-sidebar-row-${emphasis}`, children });
 }

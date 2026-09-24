@@ -1,6 +1,6 @@
 /**
  * `GET /sessions/{id}/trajectory` over the real routes (contract `sessions.getTrajectory`,
- * decision §42): a scripted run with tool calls answers a document that matches the
+ * decision §43): a scripted run with tool calls answers a document that matches the
  * contract's `Trajectory`, `download=true` sends it as the session log file, and another
  * profile's conversation is not found.
  */
@@ -8,7 +8,7 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 import addFormatsModule, { type FormatsPlugin } from 'ajv-formats';
 import { describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { loadOpenApiDocument } from '@majlis/contracts';
+import { loadOpenApiDocument } from '@corehub/contracts';
 import { modules as defaultModules } from '../index.js';
 import { testHub, type TestHub } from '../../../tests/unit/helpers.js';
 import { createSessionsModule } from './index.js';

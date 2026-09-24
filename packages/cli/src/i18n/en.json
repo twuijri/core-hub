@@ -1,15 +1,17 @@
 {
   "app": {
-    "name": "Majlis",
-    "tagline": "Majlis reference client: a terminal client over the contract."
+    "name": "Core Hub",
+    "tagline": "Core Hub reference client: a terminal client over the contract."
   },
   "usage": {
-    "synopsis": "Usage: majlis [global options] <command> [options]",
+    "synopsis": "Usage: corehub [global options] <command> [options]",
     "commands": "Commands",
     "global_options": "Global options",
     "options": "Options",
     "arguments": "Arguments",
-    "see": "Run `majlis help <command>` for details.",
+    "see": "Run `corehub help <command>` for details.",
+    "legacy_env": "{names} is the old Majlis name; it still works, but rename it to {renamed}.",
+    "legacy_command": "`majlis` is the old name of this command; it still works, but use `corehub`.",
     "no_command": "No command given.",
     "unknown_command": "Unknown command: {command}",
     "missing_argument": "Missing argument: {name}",
@@ -24,8 +26,8 @@
     "profile": "Profile slug for this call",
     "json": "Print the contract's JSON instead of text",
     "strict": "Validate every realtime envelope against its schema; stop at the first mismatch",
-    "lang": "Output language: ar or en (default: MAJLIS_LANG, then LANG)",
-    "config": "Config file (default: $XDG_CONFIG_HOME/majlis/config.json)",
+    "lang": "Output language: ar or en (default: COREHUB_LANG, then LANG)",
+    "config": "Config file (default: $XDG_CONFIG_HOME/corehub/config.json)",
     "no_color": "Disable colours",
     "help": "Show help",
     "version": "Show the version",
@@ -33,7 +35,7 @@
     "ttl": "Pairing lifetime in seconds (60 to 900)",
     "connection": "How the device reaches the hub: lan or relay",
     "no_qr": "Do not draw the QR code",
-    "pairing_id": "Pairing id printed by `majlis pair` (when CODE is not the QR JSON)",
+    "pairing_id": "Pairing id printed by `corehub pair` (when CODE is not the QR JSON)",
     "device_name": "Name to register this computer under",
     "kind": "Filter by agent kind: hermes, acp, harness or builtin",
     "limit": "Page size",
@@ -104,10 +106,10 @@
     "attachment_id": "Attachment id"
   },
   "errors": {
-    "not_signed_in": "Not signed in. Run `majlis login --server URL` first.",
+    "not_signed_in": "Not signed in. Run `corehub login --server URL` first.",
     "server_required": "No hub is configured. Pass --server URL.",
     "server_invalid": "{server} is not an http(s) origin.",
-    "setup_required": "The hub has no owner account yet. Run `majlis setup --server URL` with the setup token from its log, or open the hub in a browser.",
+    "setup_required": "The hub has no owner account yet. Run `corehub setup --server URL` with the setup token from its log, or open the hub in a browser.",
     "connection": "Could not reach {server}: {reason}",
     "api": "{message} [{code}, HTTP {status}]",
     "not_implemented": "The hub declares {operation} in the contract but does not implement it yet [not_implemented, HTTP 501].",
@@ -115,11 +117,11 @@
     "socket": "Realtime connection refused: {reason}",
     "timeout": "Timed out after {seconds} s.",
     "pairing_id_required": "Pass the QR JSON, or the code together with --pairing-id.",
-    "pairing_json_invalid": "That JSON is not a Majlis pairing payload.",
+    "pairing_json_invalid": "That JSON is not a Core Hub pairing payload.",
     "config_invalid": "The config file {file} is not valid JSON.",
     "interrupted": "Interrupted.",
     "unexpected": "Unexpected error: {message}",
-    "setup_done": "This hub is already set up. Run `majlis login --server URL` instead.",
+    "setup_done": "This hub is already set up. Run `corehub login --server URL` instead.",
     "password_mismatch": "The two passwords are not the same; nothing was sent."
   },
   "setup": {
@@ -156,7 +158,7 @@
   },
   "pair": {
     "created": "Pairing {id} · code {code} · expires {expires}",
-    "scan": "Scan the QR with the Majlis app, or on the other device run:",
+    "scan": "Scan the QR with the Core Hub app, or on the other device run:",
     "waiting": "Waiting for the device …",
     "claimed": "Paired: {name} ({platform}, {kind}).",
     "claimed_unknown": "Paired: device {device_id}.",
@@ -184,7 +186,7 @@
   "sessions": {
     "empty": "No sessions.",
     "more": "More: --cursor {cursor}",
-    "created": "Session {id} created. Chat with: majlis chat {id}",
+    "created": "Session {id} created. Chat with: corehub chat {id}",
     "deleted": "Session {id} deleted.",
     "untitled": "(new chat)",
     "id": "ID",
@@ -245,7 +247,7 @@
     "model": "Model",
     "context": "Context",
     "empty": "No models yet. Add a provider key and the hub fetches its model list.",
-    "providers_empty": "No providers added yet. `majlis providers presets` lists what you can add.",
+    "providers_empty": "No providers added yet. `corehub providers presets` lists what you can add.",
     "key_stored": "stored",
     "key_missing": "missing",
     "key_not_needed": "optional",

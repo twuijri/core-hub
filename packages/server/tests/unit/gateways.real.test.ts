@@ -8,7 +8,7 @@
  *    its port) and profile «manger»'s (`hermes -p manger gateway run`, started by the hub because
  *    «manger» has a channel switched on) — each with its own pid, lock and state file, neither
  *    refusing the other.
- * 2. Both answer through the owner's custom OpenAI-compatible provider (`majlis-custom-…`), which
+ * 2. Both answer through the owner's custom OpenAI-compatible provider (`corehub-custom-…`), which
  *    their `config.yaml` named **without** its `providers:` block — Hermes's `Unknown provider` of
  *    2026-09-24 — because the hub writes the block and the model into each profile right before
  *    its gateway starts. A scripted provider on this host answers, and it sees the key the hub
@@ -20,7 +20,7 @@
  *
  * Name the image to run it; without one it is skipped:
  *
- *   MAJLIS_HERMES_IMAGE=ghcr.io/twuijri/majlis:latest pnpm --filter @majlis/server exec \
+ *   COREHUB_HERMES_IMAGE=ghcr.io/twuijri/core-hub:latest pnpm --filter @corehub/server exec \
  *     vitest run tests/unit/gateways.real.test.ts
  */
 import { execFileSync, spawn } from 'node:child_process';
@@ -57,24 +57,24 @@ import {
 } from '../../src/modules/agents/hermes-runtime.js';
 import type { HermesApiCall } from '../../src/modules/agents/hermes-tools.js';
 
-const image = process.env.MAJLIS_HERMES_IMAGE;
+const image = process.env.COREHUB_HERMES_IMAGE;
 const HERMES = '/opt/hermes/.venv/bin/hermes';
 const PYTHON = '/opt/hermes/.venv/bin/python';
-const PROVIDER = 'majlis-custom-cli-proxy-api';
-const KEY_ENV = 'MAJLIS_CUSTOM_CLI_PROXY_API_API_KEY';
+const PROVIDER = 'corehub-custom-cli-proxy-api';
+const KEY_ENV = 'COREHUB_CUSTOM_CLI_PROXY_API_API_KEY';
 const DEFAULT_PORT = 18642;
 const MANGER_PORT = 18643;
 const WEBHOOK_PORT = 18644;
 
 describe.skipIf(!image)(
-  'messaging gateways per profile (real Hermes; set MAJLIS_HERMES_IMAGE)',
+  'messaging gateways per profile (real Hermes; set COREHUB_HERMES_IMAGE)',
   () => {
-    const dataDir = mkdtempSync(path.join(tmpdir(), 'majlis-gw-real-data-'));
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'corehub-gw-real-data-'));
     // The runtime's own home, mounted at the same path in the container.
     const root = path.join(dataDir, 'hermes');
-    const bin = mkdtempSync(path.join(tmpdir(), 'majlis-gw-real-bin-'));
+    const bin = mkdtempSync(path.join(tmpdir(), 'corehub-gw-real-bin-'));
     const user = `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`;
-    const box = `majlis-gw-real-${process.pid}`;
+    const box = `corehub-gw-real-${process.pid}`;
     const seen: Array<{ authorization: string | undefined; model: unknown }> = [];
     let provider: Server;
     let runtime: HermesRuntime;

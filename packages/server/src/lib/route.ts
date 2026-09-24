@@ -11,7 +11,7 @@
  * module imports (ARCHITECTURE §Modules).
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastify';
-import { toRoutePattern } from '@majlis/contracts';
+import { toRoutePattern } from '@corehub/contracts';
 import type { ContractIndex } from './contract.js';
 
 /** The preHandlers `auth` exports, injected so `lib/` never imports a module. */

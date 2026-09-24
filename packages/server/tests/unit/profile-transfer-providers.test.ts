@@ -8,7 +8,7 @@
  * them the imported profile's own. Hermes never sees that file.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
@@ -20,7 +20,7 @@ import { authed, drainJobs, signedInHub, type TestHub } from './helpers.js';
 
 const SHARED_KEY = 'sk-ant-shared-key-0123456789';
 const OWN_KEY = 'gsk-design-own-key-0123456789';
-const scratch = mkdtempSync(path.join(tmpdir(), 'majlis-transfer-providers-'));
+const scratch = mkdtempSync(path.join(tmpdir(), 'corehub-transfer-providers-'));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 type Hub = TestHub & { token: string; userId: string };
@@ -157,14 +157,18 @@ describe('profile export and providers (decision §37)', () => {
       const { result, bytes } = await exportOf(hub, id, { providers: true });
       expect(result.providers).toBe(2);
       const archive = unpack(bytes);
-      expect(archive.entries).toEqual(['design', 'design/SOUL.md', 'design/majlis-providers.json']);
+      expect(archive.entries).toEqual([
+        'design',
+        'design/SOUL.md',
+        'design/corehub-providers.json',
+      ]);
       // Every other file is still checked: the key pasted into SOUL.md is overwritten.
       expect(archive.read('design/SOUL.md')).not.toContain(SHARED_KEY);
-      const bundle = JSON.parse(archive.read('design/majlis-providers.json')) as {
+      const bundle = JSON.parse(archive.read('design/corehub-providers.json')) as {
         format: string;
         providers: { slug: string; api_key: string; models: { model_key: string }[] }[];
       };
-      expect(bundle.format).toBe('majlis-providers');
+      expect(bundle.format).toBe('corehub-providers');
       expect(bundle.providers.map((p) => [p.slug, p.api_key])).toEqual([
         ['anthropic', SHARED_KEY],
         ['groq', OWN_KEY],
@@ -184,7 +188,7 @@ describe('profile export and providers (decision §37)', () => {
       const id = await designWithProviders(hub);
       const { bytes } = await exportOf(hub, id, { providers: true });
 
-      const boundary = '----majlisProvidersBoundary';
+      const boundary = '----corehubProvidersBoundary';
       const form = Buffer.concat([
         Buffer.from(
           `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="design.tar.gz"\r\n` +
@@ -230,6 +234,61 @@ describe('profile export and providers (decision §37)', () => {
       expect(
         modelsServiceFor(hub.app).environmentFor(restoredId, { groq: 'GROQ_API_KEY' }),
       ).toEqual({ GROQ_API_KEY: OWN_KEY });
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('imports an archive exported before the rename, with majlis-providers.json (ADR 0017)', async () => {
+    const fake = withFakeHermes();
+    const hub = await signedInHub({}, { models: { fetchImpl: providersFetch } });
+    try {
+      const id = await designWithProviders(hub);
+      const { bytes } = await exportOf(hub, id, { providers: true });
+      // The same archive, as a Majlis hub wrote it: the old file name and the old format.
+      const dir = mkdtempSync(path.join(scratch, 'old-'));
+      writeFileSync(path.join(dir, 'new.tar.gz'), bytes);
+      const tree = path.join(dir, 'tree');
+      mkdirSync(tree);
+      execFileSync('tar', ['-xzf', path.join(dir, 'new.tar.gz'), '-C', tree]);
+      const bundle = JSON.parse(
+        readFileSync(path.join(tree, 'design', 'corehub-providers.json'), 'utf8'),
+      ) as Json;
+      rmSync(path.join(tree, 'design', 'corehub-providers.json'));
+      writeFileSync(
+        path.join(tree, 'design', 'majlis-providers.json'),
+        JSON.stringify({ ...bundle, format: 'majlis-providers' }),
+      );
+      execFileSync('tar', ['-czf', path.join(dir, 'old.tar.gz'), '-C', tree, 'design']);
+      const old = readFileSync(path.join(dir, 'old.tar.gz'));
+
+      const boundary = '----corehubLegacyProvidersBoundary';
+      const form = Buffer.concat([
+        Buffer.from(
+          `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="design.tar.gz"\r\n` +
+            'Content-Type: application/gzip\r\n\r\n',
+        ),
+        old,
+        Buffer.from(
+          `\r\n--${boundary}\r\nContent-Disposition: form-data; name="purpose"\r\n\r\nimport\r\n--${boundary}--\r\n`,
+        ),
+      ]);
+      const uploaded = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/attachments',
+        payload: form,
+        headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      });
+      expect(uploaded.statusCode, uploaded.body).toBe(201);
+      const started = await call(hub, 'POST', '/api/v1/profile-imports', {
+        attachment_id: (uploaded.json() as { id: string }).id,
+        slug: 'older',
+      });
+      expect(started.status).toBe(202);
+      const done = await job(hub, started.body.job_id as string);
+      expect(done).toMatchObject({ status: 'succeeded', result: { slug: 'older', providers: 2 } });
+      // Hermes still never sees the file, whichever name it has.
+      expect(unpack(fake.imported[0]!.bytes).entries).toEqual(['design', 'design/SOUL.md']);
     } finally {
       await hub.close();
     }

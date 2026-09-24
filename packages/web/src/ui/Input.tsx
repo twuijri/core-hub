@@ -25,7 +25,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   const field = (
     <input
       ref={ref}
-      className={`mj-field mj-field-${inputSize} ${icon ? 'mj-field-with-icon' : ''} ${className}`}
+      className={`ch-field ch-field-${inputSize} ${icon ? 'ch-field-with-icon' : ''} ${className}`}
       aria-invalid={invalid || undefined}
       data-invalid={invalid ? 'true' : undefined}
       {...rest}
@@ -33,8 +33,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   );
   if (!icon) return field;
   return (
-    <span className="mj-field-shell">
-      <span className="mj-field-icon" aria-hidden>
+    <span className="ch-field-shell">
+      <span className="ch-field-icon" aria-hidden>
         {icon}
       </span>
       {field}
@@ -54,7 +54,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
     <textarea
       ref={ref}
       rows={rows}
-      className={`mj-field mj-textarea ${className}`}
+      className={`ch-field ch-textarea ${className}`}
       aria-invalid={invalid || undefined}
       data-invalid={invalid ? 'true' : undefined}
       {...rest}

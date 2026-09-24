@@ -128,7 +128,7 @@ export function TaskDialog({ task, onClose }: { task: Task | null; onClose(): vo
             />
           )}
         </Field>
-        <div className="mj-field-row">
+        <div className="ch-field-row">
           <Label>{t('tasks.details.priority')}</Label>
           <span>
             <Select

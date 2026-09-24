@@ -90,7 +90,7 @@ points at `main` (TEAM-RULES §6).
 
 ## CI on a private repository
 
-`twuijri/majlis` is private. GitHub Actions minutes for private repositories
+`twuijri/core-hub` was private when this was written (it is public now, so the quota\nbelow no longer applies to it). GitHub Actions minutes for private repositories
 come out of the account's monthly quota; when it is exhausted every job fails
 in about three seconds with no steps executed (the signature we saw on the
 founding commit: run 35627237198, three jobs, `steps: []`). Nothing is wrong

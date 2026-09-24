@@ -189,7 +189,7 @@ with a key"; `reason` is an i18n key, never a sentence in one language.
   (and after a copy or an import took its providers), and before each turn in a named profile
   (`ModelsService.prepareProfile`).
 - **Export and import** (decision §37): an export "with providers" adds
-  `<profile>/majlis-providers.json` — the providers the profile uses, keys in the clear; an
+  `<profile>/corehub-providers.json` — the providers the profile uses, keys in the clear; an
   import reads it before Hermes sees the archive and makes each one the imported profile's own.
 - **Hermes**: the hub writes the provider keys into `${HERMES_HOME}/.env` (a
   merge that touches only the variables it owns), **puts the same variables into
@@ -202,10 +202,10 @@ with a key"; `reason` is an i18n key, never a sentence in one language.
 - **Which providers reach it.** A provider Hermes ships itself is named by its
   own slug (`hermesProvider`). Every other chat provider — LM Studio, LiteLLM,
   Groq, Mistral, Ollama, somebody's own endpoint — is written as a block under
-  `providers:` keyed `majlis-<slug>`, carrying `base_url`, `api_mode` and
+  `providers:` keyed `corehub-<slug>`, carrying `base_url`, `api_mode` and
   `key_env`. The prefix is load-bearing: Hermes ignores a `providers:` entry
   named after one of its own canonical providers, and `lmstudio` is one.
-  `hermesKeyEnvOf` mints `MAJLIS_PROVIDER_<SLUG>_API_KEY` for a provider with no
+  `hermesKeyEnvOf` mints `COREHUB_PROVIDER_<SLUG>_API_KEY` for a provider with no
   world-wide variable name. A provider that still cannot be expressed cannot be
   the chat default: `models.setDefaults` refuses it by name.
 - **Model ids are opaque.** Whatever the provider answered is what is stored and

@@ -263,7 +263,7 @@ export const runs = sqliteTable(
     /**
      * The model's turns as the hub saw them (`run-reducer.ts` `ModelTurnState`), written when
      * the run ends. `null` for runs from before it was recorded: their trajectory has no
-     * times for its turns (contract decision §42).
+     * times for its turns (contract decision §43).
      */
     timing: json<RunTiming>('timing'),
   },

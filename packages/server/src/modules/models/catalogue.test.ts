@@ -1,5 +1,5 @@
 /**
- * The preset catalogue: the list the "Add provider" dialog and `majlis providers presets`
+ * The preset catalogue: the list the "Add provider" dialog and `corehub providers presets`
  * are drawn from. These are pure assertions on data — no hub, no HTTP.
  */
 import { describe, expect, it } from 'vitest';

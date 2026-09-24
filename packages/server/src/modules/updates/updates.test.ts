@@ -62,7 +62,7 @@ describe('updates: the three answers to "is there a new build?"', () => {
     const hub = await signedInHub();
     try {
       // The artefact arrives the way any file does.
-      const boundary = '----majlis';
+      const boundary = '----corehub';
       const body = Buffer.concat([
         Buffer.from(
           `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="app.apk"\r\n` +
@@ -149,7 +149,7 @@ describe('updates: the three answers to "is there a new build?"', () => {
   it('stops offering a release that was unpublished', async () => {
     const hub = await signedInHub();
     try {
-      const boundary = '----majlis';
+      const boundary = '----corehub';
       const upload = await authed(hub, hub.token, {
         method: 'POST',
         url: '/api/v1/attachments',
@@ -209,14 +209,14 @@ describe('updates: where builds come from', () => {
         url: '/api/v1/updates/settings',
         payload: {
           default_channel: 'test',
-          source: { kind: 'github_release', repo: 'twuijri/majlis-clients', token: 'ghp_secret' },
+          source: { kind: 'github_release', repo: 'twuijri/core-hub-clients', token: 'ghp_secret' },
           auto_publish: true,
         },
       });
       expect(saved.statusCode).toBe(200);
       expect(saved.json()).toEqual({
         default_channel: 'test',
-        source: { kind: 'github_release', repo: 'twuijri/majlis-clients', token: '[stored]' },
+        source: { kind: 'github_release', repo: 'twuijri/core-hub-clients', token: '[stored]' },
         auto_publish: true,
       });
       expect(saved.body).not.toContain('ghp_secret');
@@ -228,7 +228,7 @@ describe('updates: where builds come from', () => {
         payload: { source: { token: '[stored]' }, auto_publish: false },
       });
       expect(again.json()).toMatchObject({
-        source: { repo: 'twuijri/majlis-clients', token: '[stored]' },
+        source: { repo: 'twuijri/core-hub-clients', token: '[stored]' },
         auto_publish: false,
       });
 

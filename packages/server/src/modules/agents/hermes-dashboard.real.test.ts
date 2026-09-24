@@ -6,7 +6,7 @@
  * a stopped server starts again on the next call. Name the image to run it; without one it
  * is skipped:
  *
- *   MAJLIS_HERMES_IMAGE=ghcr.io/twuijri/majlis:latest pnpm --filter @majlis/server exec \
+ *   COREHUB_HERMES_IMAGE=ghcr.io/twuijri/core-hub:latest pnpm --filter @corehub/server exec \
  *     vitest run src/modules/agents/hermes-dashboard.real.test.ts
  */
 import { execFile, execFileSync, spawn } from 'node:child_process';
@@ -22,7 +22,7 @@ import {
 } from './hermes-dashboard.js';
 import type { SpawnedProcess } from './hermes-runtime.js';
 
-const image = process.env.MAJLIS_HERMES_IMAGE;
+const image = process.env.COREHUB_HERMES_IMAGE;
 
 interface KanbanTask {
   id: string;
@@ -32,10 +32,10 @@ interface KanbanTask {
 }
 
 describe.skipIf(!image)(
-  'Hermes dashboard API (real Hermes; set MAJLIS_HERMES_IMAGE to run)',
+  'Hermes dashboard API (real Hermes; set COREHUB_HERMES_IMAGE to run)',
   () => {
-    const home = mkdtempSync(path.join(tmpdir(), 'majlis-dash-home-'));
-    const dataDir = mkdtempSync(path.join(tmpdir(), 'majlis-dash-data-'));
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-dash-home-'));
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'corehub-dash-data-'));
     // The container's user is not ours; the throwaway home must be writable by it.
     chmodSync(home, 0o777);
     const containers: string[] = [];
@@ -45,7 +45,7 @@ describe.skipIf(!image)(
      * reachable here. The token goes by name (`-e NAME`), so it is in no command line.
      */
     const spawnImpl: DashboardSpawner = (_command, args, options) => {
-      const name = `majlis-dash-real-${process.pid}-${containers.length}`;
+      const name = `corehub-dash-real-${process.pid}-${containers.length}`;
       containers.push(name);
       const child = spawn(
         'docker',
@@ -164,8 +164,8 @@ describe.skipIf(!image)(
 
       await expect(
         dashboard.request('POST', `/api/plugins/kanban/tasks/${created.id}/comments`, {
-          body: 'تعليق من المجلس',
-          author: 'majlis',
+          body: 'تعليق من المركز',
+          author: 'corehub',
         }),
       ).resolves.toEqual({ ok: true });
 

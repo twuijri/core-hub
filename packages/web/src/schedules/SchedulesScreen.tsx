@@ -15,7 +15,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/context.js';
-import { HubApiError } from '@majlis/contracts';
+import { HubApiError } from '@corehub/contracts';
 import { describeError } from '../auth/client.js';
 import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';

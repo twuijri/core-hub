@@ -48,29 +48,29 @@ export function ToastProvider({
         {items.map((item) => (
           <RadixToast.Root
             key={item.id}
-            className="mj-toast"
+            className="ch-toast"
             data-tone={item.tone ?? 'info'}
             duration={item.durationMs ?? 4000}
             onOpenChange={(open) => {
               if (!open) setItems((current) => current.filter((c) => c.id !== item.id));
             }}
           >
-            <div className="mj-toast-text">
-              <RadixToast.Title className="mj-toast-title" dir="auto">
+            <div className="ch-toast-text">
+              <RadixToast.Title className="ch-toast-title" dir="auto">
                 {item.title}
               </RadixToast.Title>
               {item.body !== undefined && (
-                <RadixToast.Description className="mj-toast-body" dir="auto">
+                <RadixToast.Description className="ch-toast-body" dir="auto">
                   {item.body}
                 </RadixToast.Description>
               )}
             </div>
-            <RadixToast.Close className="mj-toast-close" aria-label={closeLabel}>
+            <RadixToast.Close className="ch-toast-close" aria-label={closeLabel}>
               <IconClose size={14} />
             </RadixToast.Close>
           </RadixToast.Root>
         ))}
-        <RadixToast.Viewport className="mj-toast-viewport" />
+        <RadixToast.Viewport className="ch-toast-viewport" />
       </RadixToast.Provider>
     </ToastContext.Provider>
   );

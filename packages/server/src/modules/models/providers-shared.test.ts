@@ -151,7 +151,7 @@ afterEach(() => {
 });
 
 function hermesHome(): string {
-  const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-shared-'));
+  const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-shared-'));
   homes.push(home);
   return home;
 }
@@ -210,7 +210,7 @@ describe('models: one provider list for every profile', () => {
       const turn = hermesTurn(hub, later);
       expect(turn.profile).toBe('later');
       expect(turn.model).toBe('llama-3.3-70b-versatile');
-      expect(turn.modelProvider).toBe('majlis-groq');
+      expect(turn.modelProvider).toBe('corehub-groq');
       expect(turn.modelProviderId).toBe(groq.id);
 
       // A coding agent there starts with the key, under the name it reads.

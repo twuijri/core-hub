@@ -9,7 +9,7 @@ describe('the built web client served from /', () => {
   let hub: TestHub;
   let webDir: string;
   beforeAll(async () => {
-    webDir = mkdtempSync(path.join(tmpdir(), 'majlis-web-'));
+    webDir = mkdtempSync(path.join(tmpdir(), 'corehub-web-'));
     mkdirSync(path.join(webDir, 'assets'));
     writeFileSync(path.join(webDir, 'index.html'), '<!doctype html><div id="root"></div>');
     writeFileSync(path.join(webDir, 'assets', 'app-abc123.js'), 'console.log(1)');
@@ -76,7 +76,7 @@ describe('the built web client served from /', () => {
 
 describe('a hub built without the web client', () => {
   it('keeps / as a JSON 404', async () => {
-    const hub = await testHub({}, { webDir: path.join(tmpdir(), 'majlis-no-web-here') });
+    const hub = await testHub({}, { webDir: path.join(tmpdir(), 'corehub-no-web-here') });
     try {
       const res = await hub.app.inject({
         method: 'GET',

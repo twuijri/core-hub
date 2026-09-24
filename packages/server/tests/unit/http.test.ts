@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { loadOpenApiDocument, type OpenApiDocument } from '@majlis/contracts';
+import { loadOpenApiDocument, type OpenApiDocument } from '@corehub/contracts';
 import { defineModule } from '../../src/lib/module.js';
 import { signedInHub, testHub, type TestHub } from './helpers.js';
 
@@ -93,7 +93,7 @@ describe('meta.get: who this server is', () => {
       const response = await hub.app.inject({ method: 'GET', url: '/api/v1/meta' });
       expect(response.statusCode).toBe(200);
       const body = response.json() as Record<string, unknown>;
-      expect(body.name).toBe('Majlis');
+      expect(body.name).toBe('Core Hub');
       // The contract it actually loaded, not a number written twice.
       expect(body.contract_version).toBe(
         (loadOpenApiDocument()?.info as { version: string }).version,

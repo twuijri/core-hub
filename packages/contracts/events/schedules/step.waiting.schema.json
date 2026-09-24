@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/schedules/step.waiting.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/schedules/step.waiting.schema.json",
   "title": "/rt/schedules · step.waiting",
   "description": "A node waits for an approval; `step.approval_id` resolves through `/approvals/{id}/respond`. Emitted by: schedules module (workflow engine).",
   "type": "object",

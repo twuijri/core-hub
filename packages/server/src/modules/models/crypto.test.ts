@@ -8,7 +8,7 @@ import { DataKeyRing, MASKED, SecretCryptoError, hintOf, isMask, maskSecret } fr
 
 const dirs: string[] = [];
 function dataDir(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'majlis-keys-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'corehub-keys-'));
   dirs.push(dir);
   return dir;
 }

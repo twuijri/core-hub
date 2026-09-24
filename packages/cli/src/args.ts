@@ -187,7 +187,7 @@ export function renderHelp(
     const args = (command.positionals ?? [])
       .map((p) => (p.required ? `<${p.name}>` : `[${p.name}]`))
       .join(' ');
-    lines.push(`majlis ${command.path.join(' ')}${args ? ` ${args}` : ''}`);
+    lines.push(`corehub ${command.path.join(' ')}${args ? ` ${args}` : ''}`);
     lines.push(`  ${t(command.description)}`);
     if (command.positionals?.length) {
       lines.push('', t('usage.arguments'));

@@ -170,7 +170,7 @@ export function AddProviderDialog({
     >
       <form className="flex flex-col gap-3" onSubmit={submit}>
         <fieldset className="flex flex-col gap-1">
-          <legend className="mj-label">{t('models.add.scope')}</legend>
+          <legend className="ch-label">{t('models.add.scope')}</legend>
           <Segmented
             className="self-start"
             label={t('models.add.scope')}
@@ -200,7 +200,7 @@ export function AddProviderDialog({
         </fieldset>
 
         <fieldset className="flex flex-col gap-1">
-          <legend className="mj-label">{t('models.add.type')}</legend>
+          <legend className="ch-label">{t('models.add.type')}</legend>
           <Segmented
             className="self-start"
             label={t('models.add.type')}
@@ -235,7 +235,7 @@ export function AddProviderDialog({
         </fieldset>
 
         {mode === 'preset' ? (
-          <div className="mj-field-row">
+          <div className="ch-field-row">
             <Label>{t('models.add.select_provider')}</Label>
             <Select
               value={presetId}
@@ -315,7 +315,7 @@ export function AddProviderDialog({
           )}
         </Field>
 
-        <div className="mj-field-row">
+        <div className="ch-field-row">
           <Label>{t('models.add.default_model')}</Label>
           <div className="flex items-center gap-2">
             {/* The list is empty until the provider is asked, so the picker says so and
@@ -362,13 +362,13 @@ export function AddProviderDialog({
             </Notice>
           )}
           {models.length > 0 && !probeError && (
-            <p className="mj-field-hint">{t('models.add.fetched', { count: models.length })}</p>
+            <p className="ch-field-hint">{t('models.add.fetched', { count: models.length })}</p>
           )}
         </div>
 
         {create.isError && <Notice tone="danger">{describeError(create.error, t)}</Notice>}
 
-        <div className="mj-dialog-actions">
+        <div className="ch-dialog-actions">
           <Button onClick={onClose}>{t('common.cancel')}</Button>
           <Button
             type="submit"

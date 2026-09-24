@@ -11,7 +11,7 @@
  */
 import { Link, useParams } from 'react-router';
 import { useState } from 'react';
-import { HubApiError } from '@majlis/contracts';
+import { HubApiError } from '@corehub/contracts';
 import { describeError } from '../auth/client.js';
 import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';

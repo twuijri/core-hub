@@ -14,8 +14,14 @@ function walk(dir: string): string[] {
 }
 
 describe('config', () => {
-  it('reads only DATA_DIR, PORT, DATABASE_URL and HUB_ADMIN_PASSWORD', () => {
-    expect([...ENV_KEYS]).toEqual(['DATA_DIR', 'PORT', 'DATABASE_URL', 'HUB_ADMIN_PASSWORD']);
+  it('reads only DATA_DIR, PORT, DATABASE_URL, HUB_ADMIN_PASSWORD and COREHUB_VERSION', () => {
+    expect([...ENV_KEYS]).toEqual([
+      'DATA_DIR',
+      'PORT',
+      'DATABASE_URL',
+      'HUB_ADMIN_PASSWORD',
+      'COREHUB_VERSION',
+    ]);
     const picked = pickEnv({
       DATA_DIR: '/x',
       PORT: '1',
@@ -23,6 +29,21 @@ describe('config', () => {
       PATH: '/bin',
     } as NodeJS.ProcessEnv);
     expect(Object.keys(picked)).toEqual(['DATA_DIR', 'PORT']);
+  });
+
+  it('reads the version the image stamps, under its new name or its old one (ADR 0017)', () => {
+    // Before the rename the image said MAJLIS_VERSION, and the hub never picked it up at all.
+    expect(loadConfig(pickEnv({ COREHUB_VERSION: '1.4.0' } as NodeJS.ProcessEnv)).version).toBe(
+      '1.4.0',
+    );
+    const old = pickEnv({ MAJLIS_VERSION: '1.3.0' } as NodeJS.ProcessEnv);
+    expect(old.COREHUB_VERSION).toBe('1.3.0');
+    expect(old.deprecated).toEqual(['MAJLIS_VERSION']);
+    expect(loadConfig(old).deprecatedEnv).toEqual(['MAJLIS_VERSION']);
+    const both = pickEnv({ MAJLIS_VERSION: 'old', COREHUB_VERSION: 'new' } as NodeJS.ProcessEnv);
+    expect(both.COREHUB_VERSION).toBe('new');
+    expect(both.deprecated).toBeUndefined();
+    expect(loadConfig({}).deprecatedEnv).toEqual([]);
   });
 
   it('defaults to SQLite under DATA_DIR and port 8080', () => {

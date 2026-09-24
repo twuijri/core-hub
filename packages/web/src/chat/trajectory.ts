@@ -1,5 +1,5 @@
 /**
- * The Trajectory tab's pure half (contract `Trajectory`, decision §42): which steps the
+ * The Trajectory tab's pure half (contract `Trajectory`, decision §43): which steps the
  * filters keep, and where each step sits on the shared time axis. No React, no clock of
  * its own — `now` is passed in — so every rule here is a unit test.
  *

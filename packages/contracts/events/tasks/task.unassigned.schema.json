@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/tasks/task.unassigned.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/tasks/task.unassigned.schema.json",
   "title": "/rt/tasks · task.unassigned",
   "description": "`task.assignee` is null. Emitted by: tasks module.",
   "type": "object",

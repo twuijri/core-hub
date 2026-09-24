@@ -23,7 +23,7 @@ import type { HermesRuntimeMode, SpawnedProcess } from './hermes-runtime.js';
 
 const dirs: string[] = [];
 function tempDir(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'majlis-dash-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'corehub-dash-'));
   dirs.push(dir);
   return dir;
 }

@@ -73,7 +73,7 @@ jobs:
           # The version the image reports and the footer prints. `meta.outputs.version` is
           # the tag without its leading v for a release, and the chosen tag for a manual run.
           build-args: |
-            MAJLIS_VERSION=${{ steps.meta.outputs.version }}
+            COREHUB_VERSION=${{ steps.meta.outputs.version }}
           platforms: ${{ github.event_name == 'workflow_dispatch' && inputs.platforms || 'linux/amd64,linux/arm64' }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}

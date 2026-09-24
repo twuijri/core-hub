@@ -27,7 +27,7 @@
  * the same headers the client does, and it refreshes once on a `401` the way the client
  * would, so nothing about auth is special-cased here.
  */
-import { HubApiError } from '@majlis/contracts';
+import { HubApiError } from '@corehub/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useAuth } from '../auth/context.js';

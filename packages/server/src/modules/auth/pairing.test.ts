@@ -170,7 +170,7 @@ describe('auth: pairing', () => {
     expect(created.statusCode).toBe(201);
     const pairing = created.json();
     expect(JSON.parse(pairing.qr_payload)).toMatchObject({
-      type: 'majlis.pairing',
+      type: 'corehub.pairing',
       code: pairing.code,
     });
 

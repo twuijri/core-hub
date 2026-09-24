@@ -1,5 +1,5 @@
 /**
- * A conversation's trajectory (contract `Trajectory`, decision §42), as a pure function.
+ * A conversation's trajectory (contract `Trajectory`, decision §43), as a pure function.
  *
  * It is built from what the hub stored — messages, runs with their recorded model turns,
  * tool calls and the usage ledger — plus, for a run that is still going, the engine's

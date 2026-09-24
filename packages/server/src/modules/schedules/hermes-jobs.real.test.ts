@@ -8,7 +8,7 @@
  * skipped and says why:
  *
  *   git clone --depth 1 --branch v2026.9.14 https://github.com/NousResearch/hermes-agent
- *   HERMES_SRC=$PWD/hermes-agent pnpm --filter @majlis/server test
+ *   HERMES_SRC=$PWD/hermes-agent pnpm --filter @corehub/server test
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -25,7 +25,7 @@ const shim = path.resolve(here, '../../../tests/fixtures/hermes-schedule.py');
 type Parsed = { ok: true; schedule: Record<string, unknown> } | { ok: false; error: string };
 
 function parse(...texts: string[]): Parsed[] {
-  const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-cron-'));
+  const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-cron-'));
   try {
     const out = execFileSync('python3', [shim, ...texts], {
       env: { PATH: process.env.PATH, PYTHONPATH: source, HERMES_HOME: home },

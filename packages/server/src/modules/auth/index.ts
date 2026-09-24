@@ -2,7 +2,7 @@
 // workspaces (profiles) and per-user preferences.
 // Public surface of the module: other modules and app/ import this file only. See README.md.
 import type { Server as SocketServer } from 'socket.io';
-import { loadOpenApiDocument } from '@majlis/contracts';
+import { loadOpenApiDocument } from '@corehub/contracts';
 import { requireSqlite } from '../../lib/db.js';
 import { defineModule } from '../../lib/module.js';
 import type { AuthContext } from './context.js';

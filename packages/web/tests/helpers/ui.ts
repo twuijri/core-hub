@@ -63,7 +63,7 @@ export function stubListViewport(height = 320, width = 400): () => void {
     Object.defineProperty(HTMLElement.prototype, name, {
       configurable: true,
       get(this: HTMLElement) {
-        return this.classList.contains('mj-combo-list') ? value : 0;
+        return this.classList.contains('ch-combo-list') ? value : 0;
       },
     });
     return () => {

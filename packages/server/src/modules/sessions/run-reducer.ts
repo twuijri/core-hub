@@ -91,7 +91,7 @@ export interface UsageState {
  * from the stream: a turn opens when the run starts and whenever the last running tool has
  * finished, and closes when a tool starts, a person is asked something, or the run ends.
  * Offsets point into `RunState.text` / `RunState.reasoning`, so a turn's words can be cut out
- * of the finished message later (the trajectory, contract decision §42).
+ * of the finished message later (the trajectory, contract decision §43).
  */
 export interface ModelTurnState {
   startedAt: number;

@@ -285,7 +285,7 @@ describe("schedules: the schedule's own time", () => {
 
 describe('schedules: a restart leaves no line open', () => {
   it('settles at boot by what the run says, or as cut short', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'majlis-sched-restart-'));
+    const dir = mkdtempSync(path.join(tmpdir(), 'corehub-sched-restart-'));
     cleanup.push(dir);
     const first = await hubWith(waits, { DATA_DIR: dir });
     const schedule = await create(first.hub, promptSchedule());
@@ -551,7 +551,7 @@ describe('schedules: a time waiting when the hub restarts', () => {
   }
 
   it('records it as missed when the schedule does not run a missed time', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'majlis-sched-wait-off-'));
+    const dir = mkdtempSync(path.join(tmpdir(), 'corehub-sched-wait-off-'));
     cleanup.push(dir);
     const { schedule, waitingId } = await leaveOneWaiting(dir, {});
     const second = await hubWith(answers, { DATA_DIR: dir });
@@ -569,7 +569,7 @@ describe('schedules: a time waiting when the hub restarts', () => {
   });
 
   it('starts it when the hub is back, when the schedule runs a missed time', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'majlis-sched-wait-on-'));
+    const dir = mkdtempSync(path.join(tmpdir(), 'corehub-sched-wait-on-'));
     cleanup.push(dir);
     const { schedule, waitingId } = await leaveOneWaiting(dir, { run_if_missed: true });
     const second = await hubWith(answers, { DATA_DIR: dir });

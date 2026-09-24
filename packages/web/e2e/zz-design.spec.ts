@@ -11,14 +11,14 @@
  * It runs last on purpose (`zz-`): it leaves extra sessions in the shared hub, and
  * smoke.spec.ts counts the rows in the session list.
  *
- * Everything lands in MAJLIS_SHOTS (or e2e/shots) at 1440×900.
+ * Everything lands in COREHUB_SHOTS (or e2e/shots) at 1440×900.
  */
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 const PASSWORD = 'e2e-owner-password';
-const shots = process.env.MAJLIS_SHOTS ?? path.resolve('e2e/shots');
+const shots = process.env.COREHUB_SHOTS ?? path.resolve('e2e/shots');
 mkdirSync(shots, { recursive: true });
 
 test.use({ viewport: { width: 1440, height: 900 } });
@@ -183,7 +183,7 @@ test.describe('the chat surface, designed', () => {
       const px = (value: string) => parseFloat(value) * (value.endsWith('rem') ? 16 : 1);
       return {
         mine: parseFloat(styles.marginBlockStart),
-        turn: px(root.getPropertyValue('--mj-layout-turn-gap').trim()),
+        turn: px(root.getPropertyValue('--ch-layout-turn-gap').trim()),
       };
     });
     expect(gaps.mine).toBeGreaterThan(0);
@@ -223,8 +223,8 @@ test.describe('the rebuilt screens', () => {
     // entry above Tasks since 2026-09-24.
     await page.getByTestId('rail').getByRole('link', { name: 'الوكلاء' }).click();
     await expect(page.getByTestId('agent-card').first()).toBeVisible();
-    await expect(page.getByTestId('agent-card').first().locator('.mj-avatar')).toBeVisible();
-    await expect(page.getByTestId('agent-card').first().locator('.mj-badge').first()).toBeVisible();
+    await expect(page.getByTestId('agent-card').first().locator('.ch-avatar')).toBeVisible();
+    await expect(page.getByTestId('agent-card').first().locator('.ch-badge').first()).toBeVisible();
     await shot(page, 'design-agents-ar-light');
 
     // Settings: the side list — its three groups — and the Display switch. The list is on

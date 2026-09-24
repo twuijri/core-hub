@@ -14,18 +14,18 @@ A real Hermes needs a provider key, which is the owner's to supply; with one, th
 `proof.mjs` runs unchanged against it.
 
 ```bash
-docker build -f packages/server/Dockerfile -t majlis:attachments .
+docker build -f packages/server/Dockerfile -t core-hub:attachments .
 
-docker run -d --name majlis-attach -p 127.0.0.1:18090:8080 \
+docker run -d --name corehub-attach -p 127.0.0.1:18090:8080 \
   -e HUB_ADMIN_PASSWORD=attachments-proof-pw \
-  -v majlis-attach-data:/data \
+  -v corehub-attach-data:/data \
   -v "$PWD/packages/server/proof/attachments:/opt/proof:ro" \
-  --entrypoint sh majlis:attachments \
+  --entrypoint sh core-hub:attachments \
   -c 'node /opt/proof/hermes-stub.mjs & exec node packages/server/dist/main.js'
 
 node packages/server/proof/attachments/proof.mjs http://127.0.0.1:18090 attachments-proof-pw
 
-docker rm -f majlis-attach && docker volume rm majlis-attach-data
+docker rm -f corehub-attach && docker volume rm corehub-attach-data
 ```
 
 The hub finds the stub on 8642 and reports `mode: external` (ADR 0008's first mode), so

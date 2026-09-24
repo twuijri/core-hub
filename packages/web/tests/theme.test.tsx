@@ -9,7 +9,7 @@ describe('display preferences', () => {
     expect(root.getAttribute('data-glass')).toBe('3');
     expect(root.getAttribute('dir')).toBe('rtl');
     expect(root.getAttribute('lang')).toBe('ar');
-    expect(root.style.getPropertyValue('--mj-text-scale')).toBe('1.1');
+    expect(root.style.getPropertyValue('--ch-text-scale')).toBe('1.1');
     applyPrefs({ theme: 'system', glass: '0', language: 'en', textScale: 1 }, root);
     expect(root.hasAttribute('data-theme')).toBe(false);
     expect(root.getAttribute('dir')).toBe('ltr');

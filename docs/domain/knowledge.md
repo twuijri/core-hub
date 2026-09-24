@@ -101,8 +101,8 @@ Implemented in `packages/server/src/modules/knowledge/` and exercised by
 session's working directory:
 
 ```
-<session.working_dir>/.majlis/runs/<run id>/in     the person's attachments, copied
-<session.working_dir>/.majlis/runs/<run id>/out    what the agent writes back
+<session.working_dir>/.corehub/runs/<run id>/in     the person's attachments, copied
+<session.working_dir>/.corehub/runs/<run id>/out    what the agent writes back
 ```
 
 The prompt names both, because Hermes's run surface takes one text `input` and no

@@ -7,14 +7,23 @@
 // ids and the `aria-describedby` are wired once instead of seven times.
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router';
-import { HubApiError } from '@majlis/contracts';
+import { HubApiError } from '@corehub/contracts';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useTheme } from '../design/theme.js';
 import { useSetupState } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { HOME_PATH, LOGIN_PATH } from '../navigation/routes.js';
-import { Button, Card, Field, Input, Notice, Separator, Spinner, MajlisMark } from '../ui/index.js';
+import {
+  Button,
+  Card,
+  Field,
+  Input,
+  Notice,
+  Separator,
+  Spinner,
+  CoreHubMark,
+} from '../ui/index.js';
 import { IconGlobe } from '../ui/icons.js';
 
 const MIN_PASSWORD = 8;
@@ -73,7 +82,7 @@ export function SetupScreen() {
       >
         <header className="gate-head">
           <span className="gate-mark" aria-hidden>
-            <MajlisMark size={36} />
+            <CoreHubMark size={36} />
           </span>
           <div className="gate-headings">
             <h1 id="setup-title" className="gate-title">

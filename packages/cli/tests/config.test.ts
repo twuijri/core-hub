@@ -7,7 +7,7 @@ import { CliError } from '../src/errors.js';
 
 const dirs: string[] = [];
 const temp = () => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'majlis-cli-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'corehub-cli-'));
   dirs.push(dir);
   return dir;
 };
@@ -31,20 +31,20 @@ const session: StoredSession = {
 };
 
 describe('defaultConfigPath', () => {
-  it('follows XDG_CONFIG_HOME, then ~/.config, and MAJLIS_CONFIG overrides both', () => {
-    expect(defaultConfigPath({ XDG_CONFIG_HOME: '/x' }, '/home/u')).toBe('/x/majlis/config.json');
+  it('follows XDG_CONFIG_HOME, then ~/.config, and COREHUB_CONFIG overrides both', () => {
+    expect(defaultConfigPath({ XDG_CONFIG_HOME: '/x' }, '/home/u')).toBe('/x/corehub/config.json');
     expect(defaultConfigPath({ XDG_CONFIG_HOME: 'relative' }, '/home/u')).toBe(
-      '/home/u/.config/majlis/config.json',
+      '/home/u/.config/corehub/config.json',
     );
-    expect(defaultConfigPath({}, '/home/u')).toBe('/home/u/.config/majlis/config.json');
-    expect(defaultConfigPath({ MAJLIS_CONFIG: '/etc/m.json' }, '/home/u')).toBe('/etc/m.json');
+    expect(defaultConfigPath({}, '/home/u')).toBe('/home/u/.config/corehub/config.json');
+    expect(defaultConfigPath({ COREHUB_CONFIG: '/etc/m.json' }, '/home/u')).toBe('/etc/m.json');
   });
 });
 
 describe('ConfigStore', () => {
   it('writes the file 0600 in a 0700 directory and reads it back', () => {
     const dir = temp();
-    const store = new ConfigStore(path.join(dir, 'majlis', 'config.json'));
+    const store = new ConfigStore(path.join(dir, 'corehub', 'config.json'));
     expect(store.session()).toBeNull();
     store.saveSession(session);
     expect(statSync(store.file).mode & 0o777).toBe(0o600);

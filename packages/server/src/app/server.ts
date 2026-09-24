@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
-import { loadOpenApiDocument, type OpenApiDocument } from '@majlis/contracts';
+import { LEGACY, derived, loadOpenApiDocument, type OpenApiDocument } from '@corehub/contracts';
 import { createLogger, type Logger } from '../lib/logger.js';
 import type { HubModule } from '../lib/module.js';
 import { modules as allModules } from '../modules/index.js';
@@ -51,7 +51,7 @@ export interface BuildOptions {
  *
  * The workspace's `package.json` files stay at `0.0.0` on purpose — a release is a git tag,
  * not a commit that bumps five files — so the number a person sees has to come from the
- * build. `MAJLIS_VERSION` is stamped into the image by `packages/server/Dockerfile` from
+ * build. `COREHUB_VERSION` is stamped into the image by `packages/server/Dockerfile` from
  * the tag being released, and is what `/api/v1/health` and `/api/v1/meta` then report.
  * Outside an image there is no release, and `0.0.0` is the honest answer for a working
  * tree (owner decision, 2026-09-22: the footer must say which version is running).
@@ -71,6 +71,20 @@ export function readVersion(stamped?: string | undefined): string {
 export async function buildServer(options: BuildOptions = {}): Promise<FastifyInstance> {
   const config = options.config ?? loadConfig();
   const logger = options.logger ?? createLogger({ pretty: process.stdout.isTTY });
+  if (config.deprecatedEnv && config.deprecatedEnv.length > 0) {
+    // Said once, at boot: the value is used, and the stack should be told the new name.
+    logger.warn(
+      {
+        variables: config.deprecatedEnv,
+        rename: config.deprecatedEnv.map((name) =>
+          name.startsWith(LEGACY.envPrefix)
+            ? `${derived.envPrefix}${name.slice(LEGACY.envPrefix.length)}`
+            : name,
+        ),
+      },
+      `config: read under the old ${LEGACY.name} name; rename these variables (ADR 0017)`,
+    );
+  }
   const database = createDatabase(config.database, logger);
   if (options.migrate ?? true) await database.migrate();
 

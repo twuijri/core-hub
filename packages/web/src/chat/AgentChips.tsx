@@ -207,7 +207,7 @@ function AgentOption({
       icon={
         // An agent we ship wears its own mark; one we do not know keeps its initial, so
         // compact mode never shows a blank either way (owner decision, 2026-09-22).
-        <span className="mj-segment-mark" aria-hidden>
+        <span className="ch-segment-mark" aria-hidden>
           {agentMark(agent.slug, 14) ?? agent.name.slice(0, 1)}
         </span>
       }
