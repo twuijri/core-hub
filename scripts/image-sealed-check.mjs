@@ -3,7 +3,10 @@
 // /app and Hermes's in /opt/hermes are read-only to the user the hub runs as, and Hermes still
 // works — its commands run, and a feature that needs an optional package still gets it, in
 // /data, where it survives the container being recreated. Hermes's dashboard API, which the hub
-// starts on demand (ADR 0015), starts against the sealed code and keeps its token.
+// starts on demand (ADR 0015), starts against the sealed code and keeps its token. The two
+// channels the hub links itself need no download (docs/changes/2026-09-25-twuijri-image-channel-deps.md):
+// Hermes's Telegram client imports with no network at all, and a profile's WhatsApp bridge,
+// prepared the way the hub prepares it, resolves Baileys from the image through its link.
 //
 //   node scripts/image-sealed-check.mjs <image>        (CI: core-hub:ci)
 //
@@ -140,6 +143,74 @@ try {
     'an optional package Hermes needs lands in /data/hermes-packages',
     Boolean(installed?.startsWith('/data/hermes-packages/')),
     installed ?? 'install failed',
+  );
+
+  // Telegram ships in the image: Hermes's own ensure() finds it, in a container with no network
+  // at all, in Hermes's venv and not in /data/hermes-packages.
+  const telegram = docker(
+    [
+      'run',
+      '--rm',
+      '--network',
+      'none',
+      image,
+      'python',
+      '-c',
+      "from tools import lazy_deps; lazy_deps.ensure('platform.telegram', prompt=False); import telegram, telegram.ext; print(telegram.__file__)",
+    ],
+    { allowFail: true },
+  );
+  check(
+    "Hermes's Telegram client is in the image (no network, nothing installed)",
+    Boolean(telegram?.startsWith('/opt/hermes/.venv/')),
+    telegram ?? 'import failed',
+  );
+
+  // WhatsApp ships in the image: a profile's bridge, prepared the way the hub prepares it before
+  // the profile's gateway starts (modules/agents/whatsapp-bridge.ts), is the bridge's own files
+  // plus a link to the image's node_modules, and Node resolves Baileys through that link.
+  const home = '/data/hermes/profiles/sealed-check';
+  const prepared = docker(
+    [
+      'exec',
+      first,
+      'node',
+      '--input-type=module',
+      '-e',
+      `const m = await import('/app/packages/server/dist/modules/agents/whatsapp-bridge.js'); console.log(m.prepareWhatsAppBridge(${JSON.stringify(home)}));`,
+    ],
+    { allowFail: true },
+  );
+  check("a profile's WhatsApp bridge is prepared", prepared === 'created', prepared ?? '');
+  const bridge = `${home}/scripts/whatsapp-bridge`;
+  const linked = run(
+    first,
+    `readlink ${bridge}/node_modules && du -sk ${bridge} | cut -f1 && cat ${bridge}/node_modules/.hermes-pkg-hash`,
+    { allowFail: true },
+  );
+  const [target, sizeKb, stamp] = (linked ?? '').split('\n');
+  check(
+    "its node_modules is a link to the image's, not a copy",
+    target === '/opt/hermes/src/scripts/whatsapp-bridge/node_modules' && Number(sizeKb) < 1024,
+    linked ? `${target}, ${sizeKb} KB, stamp ${stamp}` : 'no bridge',
+  );
+  const baileys = docker(
+    [
+      'exec',
+      '-w',
+      bridge,
+      first,
+      'node',
+      '--input-type=module',
+      '-e',
+      "const m = await import('@whiskeysockets/baileys'); await Promise.all(['express', 'pino', 'qrcode-terminal', '@hapi/boom'].map((x) => import(x))); console.log(typeof m.makeWASocket);",
+    ],
+    { allowFail: true },
+  );
+  check(
+    'the bridge resolves Baileys and its imports through the link',
+    baileys === 'function',
+    baileys ?? 'import failed',
   );
 
   // Hermes's dashboard API (ADR 0015): the hub runs `hermes serve` on demand, as the hub's

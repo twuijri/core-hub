@@ -104,6 +104,12 @@ A fresh install has **two** agents (ADOPTION-BACKLOG §2.15, owner's decision of
 2026-09-22):
 
 - **Hermes** runs inside the image, supervised by the hub (ADR 0008). Since
+  2026-09-25 the image also carries the dependencies of the two channels the hub
+  links itself — Hermes's Telegram client (the exact pin of Hermes's
+  `platform.telegram`) and the WhatsApp bridge's `node_modules` — so linking either
+  downloads nothing; each profile's bridge copy links to the image's
+  (`modules/agents/whatsapp-bridge.ts`). The image grew from 259.2 MB to 284.3 MB
+  compressed. Since
   2026-09-23 a conversation reaches it over its **TUI gateway** (ADR 0013), the
   surface Hermes's own apps use: the model's reasoning, each tool's arguments and
   result, and the questions Hermes asks (`clarify`) reach the screen, a question
