@@ -59,6 +59,8 @@
     "pairing_claimed": "This pairing was already claimed.",
     "pairing_user_disabled": "The account that started the pairing is disabled.",
     "profile_runtime_refused": "Hermes refused to create the profile.",
+    "profile_rename_refused": "Hermes refused the profile's new name.",
+    "profile_slug_fixed": "A profile's id is its Hermes folder, which channels, schedules and chats use: only its name can change.",
     "no_profile_granted": "No profile has been given to you yet. Ask an admin to give you one.",
     "member_needs_profile": "A member must be given at least one profile.",
     "profile_transfer_unmanaged": "Exporting and importing a profile needs the Hermes this hub runs itself; this hub reaches Hermes elsewhere or has none.",

@@ -77,6 +77,7 @@ import {
   type PairingState,
 } from './skills.js';
 import { TelegramSettingsPanel } from './TelegramSettingsPanel.js';
+import { useProfileName } from '../shell/profiles.js';
 import { describeToolError } from './toolErrors.js';
 import { useJobs } from './useJobs.js';
 
@@ -483,6 +484,7 @@ function TelegramLinkDialog({
   onClose: () => void;
 }) {
   const { t } = useI18n();
+  const nameOf = useProfileName();
   const link = useLinkChannel(agentId);
   const [token, setToken] = useState('');
   const [allowed, setAllowed] = useState('');
@@ -582,7 +584,7 @@ function TelegramLinkDialog({
           {link.isError && (
             <Notice tone="danger">
               <span data-testid="telegram-link-error" dir="auto">
-                {describeToolError(link.error, t)}
+                {describeToolError(link.error, t, nameOf)}
               </span>
             </Notice>
           )}

@@ -41,7 +41,15 @@ export const IMPORT_REASONS = [
   'skill_exists',
 ] as const;
 
-export function describeToolError(error: unknown, t: T): string {
+/**
+ * `nameOf` turns a Hermes profile id in a refusal into the name people gave that profile
+ * (contract decision §44); without it the id is shown.
+ */
+export function describeToolError(
+  error: unknown,
+  t: T,
+  nameOf: (profile: string) => string = (profile) => profile,
+): string {
   if (error instanceof HubApiError) {
     const details = (error.body as { details?: Details } | undefined)?.details;
     const reason = details?.reason;
@@ -75,7 +83,9 @@ export function describeToolError(error: unknown, t: T): string {
       case 'telegram_unreachable':
         return t('channels.telegram.unreachable');
       case 'token_in_use':
-        return t('channels.telegram.token_in_use', { profile: details?.profile ?? '' });
+        return t('channels.telegram.token_in_use', {
+          profile: details?.profile ? nameOf(details.profile) : '',
+        });
       case 'skill_bundled':
         return t('skills.bundled_refused');
       case 'plugin_bundled':

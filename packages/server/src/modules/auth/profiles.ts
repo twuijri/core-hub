@@ -11,6 +11,7 @@ import {
   type ModelRef,
   type WorkspaceHubSettings,
 } from './schema.js';
+import { mirrorDisplayName } from './profile-mirror.js';
 import { hubSettingsOf, type ProfileStats, type WorkspaceRow } from './serialize.js';
 import { findWorkspace } from './workspace.js';
 
@@ -60,6 +61,8 @@ export async function profileCreated(
   app: FastifyInstance,
   event: ProfileCreatedEvent,
 ): Promise<void> {
+  // The runtime shows the name the hub gave it (created or imported under a name).
+  await mirrorDisplayName(app, event.profile);
   for (const listener of createdListeners) {
     try {
       await listener(app, event);
@@ -122,6 +125,9 @@ export function slugTaken(db: ModuleDb, slug: string): boolean {
     undefined
   );
 }
+
+/** A profile's name, as the runtime can carry it too (Hermes's display-name limit). */
+export const PROFILE_NAME_MAX = 64;
 
 export interface ProfilePatchInput {
   slug?: string;

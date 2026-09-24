@@ -1083,6 +1083,8 @@
     "origin_blank_what": "A fresh Hermes profile with its default settings and bundled skills.",
     "clone_pick": "Choose the profile",
     "refused": "Hermes refused: {message}",
+    "rename_title": "Rename {name}",
+    "rename_hint": "Any name, in any language. It is shown wherever this profile appears, and Hermes shows it too. The id {slug} does not change, so chats, channels and schedules keep working.",
     "export": "Export",
     "export_title": "Export {name}",
     "export_what": "Hermes writes this profile as its own archive (.tar.gz): its personality (SOUL.md), memory, skills, settings and chats. The file can be imported here, into Ekko, or with hermes profile import.",

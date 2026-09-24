@@ -40,6 +40,7 @@ import {
   ProfileMirrorError,
   adoptProfiles,
   profileMirrorFor,
+  runtimeDisplayName,
   runtimeProfileName,
   type ProfileOrigin,
 } from './profile-mirror.js';
@@ -49,6 +50,7 @@ import {
   createProfile,
   deleteProfile,
   patchProfileSettings,
+  PROFILE_NAME_MAX,
   profileCreated,
   slugTaken,
   statsOf,
@@ -220,14 +222,16 @@ const PairingClaim = z.object({
   }),
 });
 const ModelRef = z.object({ provider_id: Ulid, model: z.string().min(1).max(200) });
+/** A profile's name: what Hermes shows as its display name too, so within Hermes's limit. */
+const ProfileName = z.string().trim().min(1).max(PROFILE_NAME_MAX);
 const ProfileCreate = z.object({
   slug: ProfileSlug,
-  name: z.string().min(1).max(80),
+  name: ProfileName,
   clone_from: ProfileSlug.nullable().optional(),
 });
 const ProfilePatch = z.object({
   slug: ProfileSlug.optional(),
-  name: z.string().min(1).max(80).optional(),
+  name: ProfileName.optional(),
   avatar: AvatarInput.optional(),
   default_model: ModelRef.nullable().optional(),
 });
@@ -266,7 +270,7 @@ const ProfileExport = z.object({ providers: z.boolean().optional() });
 const ProfileImport = z.object({
   attachment_id: Ulid,
   slug: ProfileSlug,
-  name: z.string().trim().min(1).max(80).optional(),
+  name: ProfileName.optional(),
 });
 
 // ---------------------------------------------------------------- helpers
@@ -1022,6 +1026,42 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
   route('PATCH', '/profiles/:profile_id', admin, async (request) => {
     const body = parse(ProfilePatch, request.body);
     const row = workspaceFor(request);
+    // A workspace is a Hermes profile (ADR 0014), found by its id everywhere — the folder,
+    // channels, schedules, chats. Renaming changes its name on both sides; the id stays.
+    const mirror = profileMirrorFor(app);
+    if (body.slug !== undefined && body.slug !== row.slug) {
+      // Refused before anything is written, Hermes included.
+      if (row.isDefault)
+        throw new HubError('conflict', { messageKey: 'auth.default_profile_immutable' });
+      if (mirror) {
+        throw new HubError('conflict', {
+          messageKey: 'auth.profile_slug_fixed',
+          details: { reason: 'profile_id_fixed' },
+        });
+      }
+    }
+    // Decoded before Hermes hears anything: a bad image is refused with nothing written.
+    const avatar =
+      body.avatar === undefined || body.avatar === null
+        ? null
+        : body.avatar.kind === 'image'
+          ? { kind: 'image' as const, avatar: decodeAvatarDataUrl(body.avatar.data_url) }
+          : { kind: 'generated' as const };
+    if (mirror && body.name !== undefined) {
+      // Hermes first, as when creating: a name Hermes refused is not the hub's either.
+      try {
+        await mirror.setDisplayName(
+          runtimeProfileName(row),
+          runtimeDisplayName({ ...row, name: body.name }),
+        );
+      } catch (error) {
+        if (!(error instanceof ProfileMirrorError)) throw error;
+        throw new HubError('conflict', {
+          messageKey: 'auth.profile_rename_refused',
+          details: { reason: 'hermes_refused', message: error.message },
+        });
+      }
+    }
     const updated = updateProfile(db, ctx.dataDir, row, {
       ...(body.slug !== undefined ? { slug: body.slug } : {}),
       ...(body.name !== undefined ? { name: body.name } : {}),
@@ -1032,16 +1072,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
               : null,
           }
         : {}),
-      ...(body.avatar !== undefined
-        ? {
-            avatar:
-              body.avatar === null
-                ? null
-                : body.avatar.kind === 'image'
-                  ? { kind: 'image' as const, avatar: decodeAvatarDataUrl(body.avatar.data_url) }
-                  : { kind: 'generated' as const },
-          }
-        : {}),
+      ...(body.avatar !== undefined ? { avatar } : {}),
     });
     audit(
       request,

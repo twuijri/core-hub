@@ -16,7 +16,9 @@ type Hub = Awaited<ReturnType<typeof signedInHub>>;
 
 function fakeMirror(profiles: string[] = []) {
   const created: Array<{ name: string; origin: ProfileOrigin }> = [];
+  const named: Array<{ name: string; displayName: string }> = [];
   let refuse: string | null = null;
+  let refuseName: string | null = null;
   const mirror: ProfileMirror = {
     list: async () => [...profiles],
     async create(name, origin) {
@@ -24,8 +26,18 @@ function fakeMirror(profiles: string[] = []) {
       created.push({ name, origin });
       profiles.push(name);
     },
+    async setDisplayName(name, displayName) {
+      if (refuseName) throw new ProfileMirrorError(refuseName);
+      named.push({ name, displayName });
+    },
   };
-  return { mirror, created, refuseWith: (message: string) => (refuse = message) };
+  return {
+    mirror,
+    created,
+    named,
+    refuseWith: (message: string) => (refuse = message),
+    refuseNamesWith: (message: string) => (refuseName = message),
+  };
 }
 
 let previous: ReturnType<typeof registerProfileMirror> = null;
@@ -49,6 +61,16 @@ const slugs = async (h: Hub) =>
 
 const create = (h: Hub, payload: Record<string, unknown>) =>
   authed(h, h.token, { method: 'POST', url: '/api/v1/profiles', payload });
+
+const listed = async (h: Hub) =>
+  (
+    (await authed(h, h.token, { method: 'GET', url: '/api/v1/profiles' })).json() as {
+      items: Array<{ id: string; slug: string; name: string }>;
+    }
+  ).items;
+
+const patch = (h: Hub, id: string, payload: Record<string, unknown>) =>
+  authed(h, h.token, { method: 'PATCH', url: `/api/v1/profiles/${id}`, payload });
 
 describe('a workspace is a Hermes profile', () => {
   it('is created in Hermes first: from scratch, or as a copy of the one chosen', async () => {
@@ -127,5 +149,115 @@ describe('a workspace is a Hermes profile', () => {
     hub = await signedInHub();
     expect((await create(hub, { slug: 'labs', name: 'Labs' })).statusCode).toBe(201);
     expect(await slugs(hub)).toContain('labs');
+  });
+});
+
+describe("a profile's name is Hermes's display name; its id never changes", () => {
+  it('renames the default profile: Hermes is told the name, the id stays `default`', async () => {
+    const fake = fakeMirror();
+    registerProfileMirror(() => fake.mirror);
+    hub = await signedInHub();
+    const main = (await listed(hub)).find((item) => item.slug === 'default')!;
+
+    const renamed = await patch(hub, main.id, { name: '  الرئيسي ' });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json()).toMatchObject({ id: main.id, slug: 'default', name: 'الرئيسي' });
+    // `hermes profile rename default <name>`: Hermes's id for it stays `default`.
+    expect(fake.named).toEqual([{ name: 'default', displayName: 'الرئيسي' }]);
+    expect((await listed(hub)).find((item) => item.id === main.id)).toMatchObject({
+      slug: 'default',
+      name: 'الرئيسي',
+    });
+  });
+
+  it('renames a named profile without moving it: same slug, same Hermes folder', async () => {
+    const fake = fakeMirror();
+    registerProfileMirror(() => fake.mirror);
+    hub = await signedInHub();
+    const made = (await create(hub, { slug: 'design', name: 'Design' })).json() as { id: string };
+    fake.named.length = 0;
+
+    const renamed = await patch(hub, made.id, { name: 'فريق التصميم' });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json()).toMatchObject({ slug: 'design', name: 'فريق التصميم' });
+    // Named back to its id, Hermes shows the bare id: the display name is cleared.
+    expect((await patch(hub, made.id, { name: 'design' })).statusCode).toBe(200);
+    expect(fake.named).toEqual([
+      { name: 'design', displayName: 'فريق التصميم' },
+      { name: 'design', displayName: '' },
+    ]);
+    // Nothing asked Hermes to make or move a profile.
+    expect(fake.created.map((entry) => entry.name)).toEqual(['design']);
+    expect(await slugs(hub)).toContain('design');
+  });
+
+  it('refuses a new slug for a Hermes profile, before Hermes is told anything', async () => {
+    const fake = fakeMirror();
+    registerProfileMirror(() => fake.mirror);
+    hub = await signedInHub();
+    const made = (await create(hub, { slug: 'design', name: 'Design' })).json() as { id: string };
+    fake.named.length = 0;
+
+    const moved = await patch(hub, made.id, { slug: 'studio', name: 'Studio' });
+    expect(moved.statusCode).toBe(409);
+    expect(moved.json()).toMatchObject({
+      code: 'conflict',
+      details: { reason: 'profile_id_fixed' },
+    });
+    expect(fake.named).toEqual([]);
+    expect((await listed(hub)).find((item) => item.id === made.id)).toMatchObject({
+      slug: 'design',
+      name: 'Design',
+    });
+    // The default profile's slug is refused the way it always was, Hermes untouched.
+    const main = (await listed(hub)).find((item) => item.slug === 'default')!;
+    const fixed = await patch(hub, main.id, { slug: 'home', name: 'Home' });
+    expect(fixed.statusCode).toBe(409);
+    expect(fake.named).toEqual([]);
+  });
+
+  it("keeps the old name when Hermes refuses the new one, and says Hermes's words", async () => {
+    const fake = fakeMirror();
+    registerProfileMirror(() => fake.mirror);
+    hub = await signedInHub();
+    const main = (await listed(hub)).find((item) => item.slug === 'default')!;
+    fake.refuseNamesWith('Error: Display name too long (70 chars, max 64).');
+
+    const refused = await patch(hub, main.id, { name: 'X' });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json()).toMatchObject({
+      details: {
+        reason: 'hermes_refused',
+        message: 'Error: Display name too long (70 chars, max 64).',
+      },
+    });
+    expect((await listed(hub)).find((item) => item.id === main.id)?.name).toBe(main.name);
+  });
+
+  it("takes a name only as long as Hermes's display name (64)", async () => {
+    const fake = fakeMirror();
+    registerProfileMirror(() => fake.mirror);
+    hub = await signedInHub();
+    const main = (await listed(hub)).find((item) => item.slug === 'default')!;
+    expect((await patch(hub, main.id, { name: 'ن'.repeat(65) })).statusCode).toBe(400);
+    expect((await patch(hub, main.id, { name: '   ' })).statusCode).toBe(400);
+    expect((await patch(hub, main.id, { name: 'ن'.repeat(64) })).statusCode).toBe(200);
+    expect((await create(hub, { slug: 'long', name: 'a'.repeat(65) })).statusCode).toBe(400);
+  });
+
+  it('tells Hermes the name a new profile was given', async () => {
+    const fake = fakeMirror();
+    registerProfileMirror(() => fake.mirror);
+    hub = await signedInHub();
+    expect((await create(hub, { slug: 'design', name: 'التصميم' })).statusCode).toBe(201);
+    expect(fake.named).toEqual([{ name: 'design', displayName: 'التصميم' }]);
+  });
+
+  it('renames and moves a slug freely where there is no Hermes to mirror', async () => {
+    hub = await signedInHub();
+    const made = (await create(hub, { slug: 'labs', name: 'Labs' })).json() as { id: string };
+    const moved = await patch(hub, made.id, { slug: 'lab', name: 'المختبر' });
+    expect(moved.statusCode).toBe(200);
+    expect(moved.json()).toMatchObject({ slug: 'lab', name: 'المختبر' });
   });
 });

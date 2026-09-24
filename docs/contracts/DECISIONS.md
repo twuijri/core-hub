@@ -947,6 +947,34 @@ Rejected: building the trajectory in each client from the transcript (every clie
 re-derive turns it cannot see, and the log would differ from the view), per-turn usage (no
 agent reports it), and showing `0` for a metric nobody measured.
 
+## 44. A profile's name is Hermes's display name; its id never changes where Hermes runs it
+
+The owner asked whether Hermes lets the default profile be called anything (2026-09-25). Hermes
+(`hermes_cli/profiles.py`, v2026.9.14) keeps a presentation-only `display_name` in a profile's
+`profile.yaml`, at most 64 characters, shown beside the id and never used to find the profile.
+`hermes profile rename default <name>` sets exactly that — `default` is reserved and stays the
+id. For any other profile, `rename` moves the folder, stops its gateway and rewrites its alias
+and Honcho host.
+
+- **`name` is the display name, on both sides.** `auth.updateProfile` with `name` works for every
+  profile, `default` included. Where the hub mirrors Hermes profiles (ADR 0014) it writes the
+  name to Hermes first: `hermes profile rename default <name>` for `default`, `display_name` in
+  `profiles/<slug>/profile.yaml` for a named profile (other keys kept, an empty name removes the
+  key, as Hermes does). A name equal to the slug clears it. Hermes refusing leaves both sides
+  unchanged: `409`, `details.reason = hermes_refused`, Hermes's words in `details.message`.
+  `auth.createProfile` and `auth.importProfile` write the new profile's name the same way, best
+  effort (the profile exists by then; a refusal is logged and the next rename writes it again).
+- **The id stays.** Where the hub mirrors Hermes, a slug change is refused before anything is
+  written (`409`, `details.reason = profile_id_fixed`): the slug is the Hermes folder that
+  channels, schedules and chats find the profile by, and moving it is not safe while any of
+  them is running. `default`'s slug never changes, as before. Without Hermes a named profile's
+  slug may still change.
+- **`ProfileName`**: trimmed, 1–64 characters (was 1–80), for `ProfileCreate`, `ProfilePatch`
+  and `ProfileImport`. `Profile.name` in answers keeps 80, for rows written before.
+- **An export's file** is named `<profile name>-<YYYYMMDD-HHMMSS>.tar.gz` (was `<slug>-…`): the
+  name without path separators, `:*?"<>|`, control and direction marks, or the slug when nothing
+  is left.
+
 ## 45. First-run setup says whether it is open without the token, and until when
 
 ADR 0019 (owner, 2026-09-25) opens first-run setup to whoever arrives first for
