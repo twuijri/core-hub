@@ -45,6 +45,7 @@ import {
   type GatewayStatus,
 } from './hermes-gateways.js';
 import { hermesProfileRunner, type ProfileRunner } from './hermes-profiles.js';
+import { IMAGE_WHATSAPP_BRIDGE, prepareWhatsAppBridge } from './whatsapp-bridge.js';
 import { HubError } from '../../lib/errors.js';
 
 export type HermesRuntimeMode = 'undecided' | 'external' | 'managed' | 'absent';
@@ -117,6 +118,8 @@ export interface HermesRuntimeOptions {
   gatewayBackoffMs?: readonly number[];
   /** How often the profiles needing a gateway are checked again (tests turn it off with 0). */
   gatewayRescanMs?: number;
+  /** The installed WhatsApp bridge each home's copy links to (`whatsapp-bridge.ts`). */
+  whatsappBridge?: string;
 }
 
 /** Hermes's profile id rule (`_PROFILE_ID_RE`); a hub slug always satisfies it. */
@@ -216,6 +219,7 @@ export class HermesRuntime {
       prepare: (profile, home) => this.options.prepareGateway?.(profile, home),
       ...(options.gatewayBackoffMs ? { backoffMs: options.gatewayBackoffMs } : {}),
       ...(options.gatewayRescanMs !== undefined ? { rescanMs: options.gatewayRescanMs } : {}),
+      ...(options.whatsappBridge ? { whatsappBridge: options.whatsappBridge } : {}),
     });
   }
 
@@ -575,6 +579,26 @@ export class HermesRuntime {
     if (this.mode === 'managed') this.setState('stopped', null);
   }
 
+  /**
+   * Gives the root home its copy of the WhatsApp bridge on the image's dependencies
+   * (`whatsapp-bridge.ts`) — before the default gateway serves WhatsApp, and before Hermes's
+   * pairing screen, which runs the bridge from the root home whatever the profile. Never throws:
+   * a copy the hub could not make is logged, and Hermes falls back to its own.
+   */
+  prepareWhatsAppBridge(): void {
+    try {
+      const bridge = prepareWhatsAppBridge(
+        this.home,
+        this.options.whatsappBridge ?? IMAGE_WHATSAPP_BRIDGE,
+      );
+      if (bridge !== 'current' && bridge !== 'no-image-bridge') {
+        this.log.info({ profile: 'default', bridge }, 'hermes: WhatsApp bridge prepared');
+      }
+    } catch (error) {
+      this.log.warn({ err: error }, 'hermes: could not prepare the WhatsApp bridge');
+    }
+  }
+
   // -------------------------------------------------------------- internals
 
   private launch(binary: string): void {
@@ -584,6 +608,7 @@ export class HermesRuntime {
     } catch (error) {
       this.log.warn({ err: error }, 'hermes: could not prepare the gateway configuration');
     }
+    if (activeChannels(this.home).includes('whatsapp')) this.prepareWhatsAppBridge();
     const url = new URL(this.endpoint);
     const env: NodeJS.ProcessEnv = {
       ...(this.options.host.inherited ?? {}),

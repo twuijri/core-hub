@@ -252,6 +252,26 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
       .send(file.body);
   });
 
+  app.get('/sessions/:session_id/trajectory', async (request, reply: FastifyReply) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const { download } = parse(
+      z.object({
+        download: z
+          .enum(['true', 'false'])
+          .default('false')
+          .transform((value) => value === 'true'),
+      }),
+      request.query,
+      'query',
+    );
+    const trajectory = deps.service(request).trajectory(scope, session_id);
+    if (download) {
+      reply.header('content-disposition', `attachment; filename="session-${session_id}-log.json"`);
+    }
+    return trajectory;
+  });
+
   // ------------------------------------------------------------- messages
 
   app.get('/sessions/:session_id/messages', async (request) => {

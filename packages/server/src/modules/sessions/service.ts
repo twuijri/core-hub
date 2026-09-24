@@ -28,6 +28,8 @@ import type { SessionsRealtime } from './realtime.js';
 import type { SessionsStore } from './store.js';
 import { excerpt, type SessionFilters } from './store.js';
 import type { MessagePart } from './schema.js';
+import type { RunState } from './run-reducer.js';
+import { buildTrajectory, type Trajectory } from './trajectory.js';
 
 /** `undefined` is spelled out everywhere: `exactOptionalPropertyTypes` is on. */
 export interface ContentBlockInput {
@@ -493,6 +495,32 @@ export class SessionsService {
       contentType: 'application/json; charset=utf-8',
       filename: `${filenameBase}.json`,
     };
+  }
+
+  /**
+   * The conversation as a timed list of steps with its metrics (contract
+   * `sessions.getTrajectory`, decision §43). The same document is the session log the
+   * person downloads. A live run is read from the engine, which holds what it has not
+   * written yet.
+   */
+  trajectory(scope: EngineScope, sessionId: string, now = Date.now()): Trajectory {
+    const row = this.requireSession(scope, sessionId);
+    const runs = this.store.allRuns(scope.workspace, row.id);
+    const ids = runs.map((run) => run.id);
+    const live = new Map<string, RunState>();
+    for (const id of ids) {
+      const state = this.engine.liveState(id);
+      if (state) live.set(id, state);
+    }
+    return buildTrajectory({
+      sessionId: row.id,
+      messages: this.store.allMessages(scope.workspace, row.id),
+      runs,
+      toolCalls: this.store.toolCallsForRuns(scope.workspace, ids),
+      usage: this.audit.totalsForRuns(scope.workspace, ids),
+      live,
+      now,
+    });
   }
 
   // ------------------------------------------------------------- messages
