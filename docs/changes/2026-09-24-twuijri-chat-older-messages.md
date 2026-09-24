@@ -129,6 +129,17 @@ $ PLAYWRIGHT_CHANNEL=chrome mj-run pnpm web:e2e
 ```
 اللقطات التي أعاد التشغيل رسمها أُعيدت إلى `main`؛ المضاف لقطتان فقط.
 
+بعد دمج `origin/main` (#79، `061dd3e`) في الفرع بلا تعارض، أُعيدت كلها تحت `mj-run`:
+```
+lint / typecheck / contracts:lint / i18n:check / nav:check / change-record:check -> exit 0
+check-clients  OK — 232 client file(s) scanned, 167 contract path(s) known.
+server:        Test Files  77 passed | 7 skipped (84) · Tests  800 passed | 19 skipped (819)
+contract:test: Tests  255 passed (255)
+web:           Test Files  40 passed (40) · Tests  515 passed (515)
+build:         ✓ built
+web:e2e (MAJLIS_E2E_PORT=8891, لأن 8791 كان مشغولًا بوكيل آخر):  33 passed (2.3m)
+```
+
 ## المخاطر والرجوع
 - `update` صار ينتظر المقاطعة (`requestInterrupt`) قبل أن يجيب: أرشفة محادثة تعمل أبطأ قليلًا
   بقدر ما يأخذ المحوِّل ليقبل المقاطعة (محوِّل يرفضها يُسجَّل تحذيرًا ولا يُفشل الأرشفة).
