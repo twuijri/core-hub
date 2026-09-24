@@ -47,11 +47,7 @@
   inline-size: 2.25rem;
   block-size: 2.25rem;
   flex: 0 0 auto;
-  border-radius: var(--mj-radius-md);
-  background: var(--mj-color-accent);
-  color: var(--mj-color-accent-text);
-  font-size: var(--mj-font-size-lg);
-  font-weight: 600;
+  color: var(--mj-color-accent);
 }
 .gate-headings {
   display: flex;

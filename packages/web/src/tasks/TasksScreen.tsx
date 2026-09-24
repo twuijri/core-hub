@@ -33,16 +33,18 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { describeError } from '../auth/client.js';
 import { agentMark } from '../ui/brand/marks.js';
 import { Tooltip } from '../ui/Tooltip.js';
-import { useAuth } from '../auth/context.js';
+import { ProfileScope, useAuth } from '../auth/context.js';
+import { chatHref } from '../chat/anchor.js';
 import { useI18n } from '../i18n/context.js';
-import { useAgents, useProfiles } from '../hub/queries.js';
-import { routeOf, termKey } from '../navigation/manifest.js';
+import { termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
+import { ProfileBadge } from '../shell/ProfileBadge.js';
+import { useManyProfiles, useProfileInLink, useProfileName } from '../shell/profiles.js';
 import {
   Badge,
   Button,
@@ -111,16 +113,19 @@ export function TasksScreen() {
   const { t } = useI18n();
   const title = t(termKey('tasks'));
   const projects = useProjects();
-  const workspaces = useProfiles().data ?? [];
   const projectItems = projects.data?.items ?? [];
-  // Filters, not prerequisites. The board opens on everything — every workspace, every
-  // agent — and these narrow it (owner decision, 2026-09-23).
-  const [profile, setProfile] = useState<string>('');
+  // Every profile, always, with no profile filter (ADR 0016, owner 2026-09-24: «الكرون جوب
+  // والمهام المفروض تطلع كل البروفايلات بدون تصنيف»). The project filter narrows; it is not a
+  // prerequisite (owner decision, 2026-09-23).
   const [projectId, setProjectId] = useState<string>('');
-  const filter = {
-    ...(profile ? { profile } : {}),
-    ...(projectId ? { projectId } : {}),
-  };
+  const filter = projectId ? { projectId } : {};
+  // Where a new task is made: the profile the person is in, named when there are several.
+  const { homeProfile } = useAuth();
+  const many = useManyProfiles();
+  const profileName = useProfileName();
+  const newTaskLabel = many
+    ? t('tasks.new_task_in', { name: profileName(homeProfile) })
+    : t('tasks.new_task');
   const board = useBoard(filter);
   // The archive behind Done, read-only: counted for its link, shown when asked for.
   const archive = useArchive(filter);
@@ -290,21 +295,8 @@ export function TasksScreen() {
     <AppShell title={title}>
       <h1 className="sr-only">{title}</h1>
       <header className="mb-3 flex flex-wrap items-center gap-2">
-        {/* Filters, and only when there is something to filter: a picker with one option
-            is a control that costs a glance and answers nothing. */}
-        {workspaces.length > 1 && (
-          <Select
-            value={profile}
-            placeholder={t('tasks.all_workspaces')}
-            onValueChange={(value) => setProfile(value ?? '')}
-            options={workspaces.map((workspace) => ({
-              value: workspace.slug,
-              label: workspace.name,
-            }))}
-            label={t('tasks.workspace')}
-            testId="profile-filter"
-          />
-        )}
+        {/* A filter only when there is something to filter: a picker with one option is a
+            control that costs a glance and answers nothing. Never a profile filter. */}
         {projectItems.length > 1 && (
           <Select
             value={projectId}
@@ -327,9 +319,10 @@ export function TasksScreen() {
                 setDraft('');
               }
             }}
-            placeholder={t('tasks.new_task')}
-            aria-label={t('tasks.new_task')}
+            placeholder={newTaskLabel}
+            aria-label={newTaskLabel}
             data-testid="new-task-input"
+            data-profile={homeProfile}
           />
           <Button
             size="sm"
@@ -445,13 +438,26 @@ export function TasksScreen() {
           ))}
         </div>
       </Dialog>
-      <AssignDialog task={assigning} onClose={() => setAssigning(null)} />
-      <TaskDialog task={editing} onClose={() => setEditing(null)} />
-      <HandOverDialog task={handing} onClose={() => setHanding(null)} />
+      {/* Each dialog works in the card's own profile: its agents, its header — not the
+          profile the person is in (ADR 0016). */}
+      <InProfile profile={assigning?.profile}>
+        <AssignDialog task={assigning} onClose={() => setAssigning(null)} />
+      </InProfile>
+      <InProfile profile={editing?.profile}>
+        <TaskDialog task={editing} onClose={() => setEditing(null)} />
+      </InProfile>
+      <InProfile profile={handing?.profile}>
+        <HandOverDialog task={handing} onClose={() => setHanding(null)} />
+      </InProfile>
       {dialog}
       {textDialog}
     </AppShell>
   );
+}
+
+/** Everything inside speaks for `profile` when there is one (a card's), else for the person. */
+function InProfile({ profile, children }: { profile: string | undefined; children: ReactNode }) {
+  return profile ? <ProfileScope profile={profile}>{children}</ProfileScope> : <>{children}</>;
 }
 
 function BoardColumn({
@@ -549,7 +555,8 @@ function BoardColumn({
 
 export function TaskCard({ task, actions }: { task: Task; actions: CardActions }) {
   const { t } = useI18n();
-  const { profile, setProfile } = useAuth();
+  const many = useManyProfiles();
+  const inLink = useProfileInLink();
   const {
     attributes,
     listeners,
@@ -575,18 +582,14 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
   const assignable = !fromHermes && open;
   const handable = fromHermes && open;
   const agent = task.assignee?.kind === 'agent' ? task.assignee : null;
-  // The registry knows the agent's name; the task row carries only what it was given.
-  const agents = useAgents();
-  const agentName = agent
-    ? (agents.data?.find((candidate) => candidate.id === agent.id)?.name ?? agent.name)
-    : null;
+  // The hub names the agent (DECISIONS §32): the card may be from a profile whose agents
+  // this page never asked for, so the client does not guess.
+  const agentName = agent?.name ?? null;
+  // The conversation opens in the task's own profile, from the address (`?profile=`), the
+  // way the chats list opens one — the top selector does not move (ADR 0016).
   const sessionHref = task.session_id
-    ? routeOf('chat').replace(':sessionId?', task.session_id)
+    ? chatHref(task.session_id, null, undefined, task.profile ? inLink(task.profile) : null)
     : null;
-  // The board holds every workspace; the conversation opens in the task's own.
-  const openSession = () => {
-    if (task.profile && task.profile !== profile) setProfile(task.profile);
-  };
 
   return (
     <li
@@ -627,6 +630,8 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
             </Tooltip>
           )}
           {showsStatus && <StatusBadge status={task.status} />}
+          {/* Which profile the card is from, whenever the board can hold more than one. */}
+          {many && task.profile && <ProfileBadge profile={task.profile} testId="task-profile" />}
           {agent && (
             <span className="truncate text-xs text-muted" dir="auto" data-testid="task-agent">
               {agentName}
@@ -663,12 +668,7 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
           </p>
         )}
         {sessionHref && (
-          <Link
-            to={sessionHref}
-            onClick={openSession}
-            className="task-card-session"
-            data-testid="task-session"
-          >
+          <Link to={sessionHref} className="task-card-session" data-testid="task-session">
             {t('tasks.open_session')}
           </Link>
         )}
@@ -779,6 +779,7 @@ const STATUS_TONE: Partial<Record<TaskStatus, 'success' | 'danger' | 'warning' |
  */
 function ArchivedCard({ task }: { task: Task }) {
   const { t } = useI18n();
+  const many = useManyProfiles();
   const fromHermes = task.external?.source === 'hermes';
   return (
     <li
@@ -798,6 +799,7 @@ function ArchivedCard({ task }: { task: Task }) {
             </span>
           )}
           <StatusBadge status={task.status} />
+          {many && task.profile && <ProfileBadge profile={task.profile} testId="task-profile" />}
         </span>
       </div>
     </li>

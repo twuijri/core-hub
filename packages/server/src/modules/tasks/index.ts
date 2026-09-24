@@ -35,8 +35,9 @@ import {
   type HubPriority,
 } from './hermes-api.js';
 import { ARCHIVE_AFTER_MS, HermesMirror, type HermesBoardPort } from './hermes-mirror.js';
-import { jobRunnerFor, serializeJob } from '../audit/index.js';
+import { jobRunnerFor } from '../audit/index.js';
 import {
+  defaultWorkspace,
   findUser,
   listWorkspacesFor,
   requireRole,
@@ -69,16 +70,33 @@ export {
 } from './hermes-api.js';
 export { HermesRefusal } from './hermes-kanban.js';
 
-/** How a name is found for an assignee. Injected so this module never reads another's tables. */
-export interface TasksOverrides {
-  nameOf?: NameOf;
+/**
+ * How a name is found for an assignee or a comment's author: the agents registry for an
+ * agent, `auth` for a person. Injected by the composition root so this module never reads
+ * another's tables — and resolved here, on the hub, so a card from another profile carries
+ * its agent's name instead of leaving each client to guess it from the agents of whatever
+ * profile it happens to be in (DECISIONS §32). Without one (tests that compose no names),
+ * an assignee's name is its id, never an invention.
+ */
+let taskNamesFactory: ((app: FastifyInstance) => NameOf) | null = null;
+export function registerTaskNames(
+  factory: ((app: FastifyInstance) => NameOf) | null,
+): ((app: FastifyInstance) => NameOf) | null {
+  const previous = taskNamesFactory;
+  taskNamesFactory = factory;
+  return previous;
 }
-let overrides: TasksOverrides = {};
-export function overrideTasks(next: TasksOverrides): void {
-  overrides = next;
+function namesOf(app: FastifyInstance): NameOf {
+  const resolve = taskNamesFactory?.(app);
+  return (kind, id) => {
+    try {
+      return resolve?.(kind, id) ?? null;
+    } catch {
+      // A name that cannot be found must not fail the board: the id stands in for it.
+      return null;
+    }
+  };
 }
-
-const nameOf: NameOf = (kind, id) => overrides.nameOf?.(kind, id) ?? null;
 
 function scopeOf(request: FastifyRequest): Scope {
   const workspace = request.workspace;
@@ -194,14 +212,20 @@ export function taskRunsFor(app: FastifyInstance): TaskRuns {
     () => requireSqlite(app.hub.database),
     (profile, event, payload) =>
       realtimeOf(app).emit(REALTIME_NAMESPACES.tasks, event, { profile }, payload),
-    (scope, id) => renderTask(new TasksService(requireSqlite(app.hub.database)), scope, id),
+    (scope, id) =>
+      renderTask(new TasksService(requireSqlite(app.hub.database)), scope, id, namesOf(app)),
     app.log,
   );
   workers.set(app.hub.io, created);
   return created;
 }
 
-function renderTask(service: TasksService, scope: Scope, id: string): Record<string, unknown> {
+function renderTask(
+  service: TasksService,
+  scope: Scope,
+  id: string,
+  nameOf: NameOf,
+): Record<string, unknown> {
   const row = service.task(scope, id);
   return toTask(row, scope.profile, {
     nameOf,
@@ -258,8 +282,8 @@ export const tasksModule = defineModule({
       );
     };
 
-    const task = (_request: FastifyRequest, service: TasksService, scope: Scope, id: string) =>
-      renderTask(service, scope, id);
+    const task = (request: FastifyRequest, service: TasksService, scope: Scope, id: string) =>
+      renderTask(service, scope, id, namesOf(request.server));
 
     /**
      * A task the hub started and nobody moved is still `running` after a restart, and no
@@ -376,7 +400,7 @@ export const tasksModule = defineModule({
         workspace: fresh.workspace,
         profile: hermes.mirror.target(fresh.workspace)?.slug ?? scope.profile,
       };
-      const rendered = renderTask(service, own, fresh.id);
+      const rendered = renderTask(service, own, fresh.id, namesOf(request.server));
       for (const profile of new Set([scope.profile, own.profile])) {
         realtimeOf(request.server).emit(
           REALTIME_NAMESPACES.tasks,
@@ -601,6 +625,13 @@ export const tasksModule = defineModule({
         if (!principal) throw new HubError('internal', { message: 'route has no principal' });
 
         const asked = query.profile as string | undefined;
+        // `profiles=all` is what the board is anyway (DECISIONS §32); with `profile` it says
+        // two things at once, and the hub does not pick one.
+        if (asked && query.profiles === 'all') {
+          throw new HubError('validation_failed', {
+            details: { field: 'profiles', reason: 'conflicts_with_profile' },
+          });
+        }
         const enterable = listWorkspacesFor(db, principal.user);
         const chosen = asked
           ? enterable.filter((row) => row.slug === asked || row.id === asked)
@@ -610,16 +641,20 @@ export const tasksModule = defineModule({
         const slugOf = new Map(chosen.map((row) => [row.id, row.slug]));
         const ids = chosen.map((row) => row.id);
 
-        // Hermes's board lands in the default workspace: Hermes keeps one board per home,
-        // and the hub has one Hermes home. Read before answering, so what the person sees
-        // is what Hermes has — throttled, and never able to fail the board.
+        // Hermes keeps one board per home, and the hub has one Hermes home: each card is
+        // reflected into the workspace of the Hermes profile it is given to (ADR 0014), and
+        // a card given to none into the default workspace. Read before answering, so what
+        // the person sees is what Hermes has — throttled, and never able to fail the board.
         const mirror = mirrorOf(request.server);
         // A person who opened the board is about to edit, comment or reassign: start
         // Hermes's server now, in the background, so that call does not wait for it (owner,
         // 2026-09-24). Each opening counts as a use, so it stays up ten minutes after the last.
         mirror?.warm();
-        const home = chosen.find((row) => row.isDefault);
-        if (mirror && home) {
+        // The default workspace whether or not this person may enter it: a member of the
+        // designer profile alone still sees the designer's cards as Hermes has them now.
+        // Syncing writes reflections only; what is *shown* is still `chosen`.
+        const home = defaultWorkspace(db);
+        if (mirror && home && chosen.length > 0) {
           const report = await mirror
             .sync(service, { workspace: home.id, profile: home.slug, userId: principal.user.id })
             .catch((error: unknown) => ({ error: String(error) }));
@@ -634,6 +669,7 @@ export const tasksModule = defineModule({
         const agentId = (query.agent_id as string | undefined) ?? undefined;
         const includeArchived = (query.include_archived as boolean | undefined) ?? false;
 
+        const nameOf = namesOf(request.server);
         const columns = TASK_STATUSES.map((status) => {
           const rows = service.columnAcross(ids, { projectId, agentId }, status, includeArchived);
           return {
@@ -723,7 +759,9 @@ export const tasksModule = defineModule({
             return { assignments, started };
           },
         );
-        return serializeJob(job, scope.profile);
+        // The contract's `JobAccepted`: the job's id; its result (the assignments) is read
+        // from `jobs.get` or `/rt/jobs` once it ends.
+        return { job_id: job.id };
       },
     });
 
@@ -735,7 +773,20 @@ export const tasksModule = defineModule({
         const scope = scopeOf(request);
         const service = serviceOf(request);
         const limit = clampLimit(query.limit as number | undefined);
-        const rows = service.listTasks(scope, {
+        // `profiles=all` (ADR 0016, DECISIONS §32): every workspace this person may enter —
+        // `auth`'s rule, asked here, never a list the client sends. The header was already
+        // checked by `requireWorkspace`, so "all" opens no door the header could not.
+        const slugOf = new Map<string, string>([[scope.workspace, scope.profile]]);
+        if (query.profiles === 'all' && request.principal) {
+          for (const row of listWorkspacesFor(
+            requireSqlite(request.server.hub.database),
+            request.principal.user,
+          )) {
+            slugOf.set(row.id, row.slug);
+          }
+        }
+        const nameOf = namesOf(request.server);
+        const rows = service.listTasksAcross([...slugOf.keys()], {
           projectId: query.project_id as string | undefined,
           status: query.status as TaskStatus | undefined,
           assigneeId: query.assignee_agent_id as string | undefined,
@@ -747,7 +798,7 @@ export const tasksModule = defineModule({
         const page = rows.slice(0, limit);
         return {
           items: page.map((row) =>
-            toTask(row, scope.profile, {
+            toTask(row, slugOf.get(row.workspace) ?? scope.profile, {
               nameOf,
               subtaskCounts: service.subtaskCounts(row.id),
               dependsOn: service.dependenciesOf(row.id),
@@ -906,13 +957,13 @@ export const tasksModule = defineModule({
         }
         return {
           ...toTask(row, scope.profile, {
-            nameOf,
+            nameOf: namesOf(request.server),
             subtaskCounts: service.subtaskCounts(id),
             dependsOn: service.dependenciesOf(id),
             worktree: service.worktreeOf(id),
           }),
           subtasks: service.subtasksOf(id).map(toSubtask),
-          comments: service.commentsOf(id).map((row) => toComment(row, nameOf)),
+          comments: service.commentsOf(id).map((row) => toComment(row, namesOf(request.server))),
           // The runs of a task live in the session it works in; `sessions` owns that table.
           runs: [],
         };
@@ -1203,11 +1254,11 @@ export const tasksModule = defineModule({
             });
           }
           announce(request, 'task.commented', { task_id: params.task_id });
-          return toComment(row, nameOf);
+          return toComment(row, namesOf(request.server));
         }
         const row = service.comment(scope, actorOf(request), current.id, content);
         announce(request, 'task.commented', { task_id: params.task_id });
-        return toComment(row, nameOf);
+        return toComment(row, namesOf(request.server));
       },
     });
 
@@ -1262,7 +1313,7 @@ export const tasksModule = defineModule({
             return Promise.resolve({ worktree_id: row.id, status: row.status });
           },
         );
-        return serializeJob(job, scope.profile);
+        return { job_id: job.id };
       },
     });
 
@@ -1287,7 +1338,7 @@ export const tasksModule = defineModule({
             return Promise.resolve({ removed: true });
           },
         );
-        return serializeJob(job, scope.profile);
+        return { job_id: job.id };
       },
     });
   },

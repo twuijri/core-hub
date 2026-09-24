@@ -6446,8 +6446,23 @@ paths:
         Global, so one board shows every workspace a person may enter (owner decision,
         2026-09-23: "صفحه واحده فيها كل المهام لكل البروفايلات وكل الاجنتات"). Narrow it
         with `profile`, `project_id` or `agent_id`; omit all three and it is everything.
+        Which profiles "every" covers is the server's rule — owners and admins every
+        profile, a member the ones they are enrolled in — never a list the client sends,
+        and each card names its own `profile`. `profiles=all` says the same thing
+        explicitly, in the words every list across profiles uses (`sessions.list`,
+        `tasks.listTasks`, `schedules.list`; DECISIONS §32); it cannot be combined with
+        `profile`. The Tasks board of the clients (ADR 0016) always shows every profile and
+        offers no profile filter; `profile` stays for other callers.
       x-scope: global
       parameters:
+        - name: profiles
+          in: query
+          description: >-
+            `all`: every profile the caller may enter — what the board shows anyway, said
+            explicitly. `400 validation_failed` together with `profile`.
+          schema:
+            type: string
+            enum: [all]
         - name: profile
           in: query
           description: One workspace instead of every workspace the caller may enter.
@@ -6566,8 +6581,24 @@ paths:
       operationId: tasks.listTasks
       tags: [tasks]
       summary: List tasks with filters (search, status, assignee, tag)
+      description: >-
+        Newest first (`id desc`). Without `profiles`, the tasks of the profile in
+        `X-Hub-Profile`, as before. With `profiles=all` the page holds every profile the
+        caller may enter (ADR 0016, DECISIONS §32) — owners and admins every profile, a
+        member the ones they are enrolled in, decided by the server — each task naming its
+        own `profile`; the header must still name one of them. The cursor is one order over
+        all of them, so pages neither repeat nor skip. Acting on a task is then an ordinary
+        scoped call with that task's `profile` in `X-Hub-Profile`.
       parameters:
         - $ref: '#/components/parameters/Profile'
+        - name: profiles
+          in: query
+          description: >-
+            `all` lists every profile the caller may enter instead of the one in the header.
+            Absent, the list is the header's profile alone, as before.
+          schema:
+            type: string
+            enum: [all]
         - name: project_id
           in: query
           schema:
@@ -7488,9 +7519,24 @@ paths:
         enter, each schedule carrying its own `profile` (owner decision, 2026-09-23 — a
         workspace for design, another for content). Narrow it with `profile`, `agent_id`,
         `workflow_id` or `enabled`. Every other schedule operation is scoped to the
-        schedule's own workspace.
+        schedule's own workspace, so a client acts on a schedule with that schedule's
+        `profile` in `X-Hub-Profile`. Which profiles "every" covers is the server's rule
+        (owners and admins every profile, a member the ones they are enrolled in), never a
+        list the client sends. Newest first (`id desc`); the cursor is one order over every
+        profile, so pages neither repeat nor skip. `profiles=all` says "every profile"
+        explicitly, in the words every list across profiles uses (DECISIONS §32); it cannot
+        be combined with `profile`. The Schedules page of the clients (ADR 0016) always
+        shows every profile and offers no profile filter; `profile` stays for other callers.
       x-scope: global
       parameters:
+        - name: profiles
+          in: query
+          description: >-
+            `all`: every profile the caller may enter — what the list is anyway, said
+            explicitly. `400 validation_failed` together with `profile`.
+          schema:
+            type: string
+            enum: [all]
         - name: profile
           in: query
           description: One workspace instead of every workspace the caller may enter.
@@ -7513,7 +7559,7 @@ paths:
       x-rt-events: []
       responses:
         '200':
-          description: A page of schedules, next run first.
+          description: A page of schedules, newest first.
           content:
             application/json:
               schema:

@@ -28,6 +28,7 @@ import {
 } from '../ui/icons.js';
 import {
   Badge,
+  MajlisMark,
   Button,
   Segmented,
   SidebarBody,
@@ -125,7 +126,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <SidebarFrame label={t('shell.sidebar')}>
-      <SidebarBrand mark="م" name={t('app.name')} />
+      <SidebarBrand mark={<MajlisMark size={28} />} name={t('app.name')} />
 
       {/* Slim by design (NAVIGATION §1, 2026-09-22): starting a chat, finding one, and the
           list. Everything configured once lives on a page inside Settings. */}

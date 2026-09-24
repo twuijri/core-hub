@@ -52,6 +52,17 @@ export const TASK_EVENTS = [
   'task.commented',
 ] as const;
 
+/** `/rt/schedules`: the Schedules page only listens, and refreshes on any of these. */
+export const SCHEDULE_EVENTS = [
+  'schedule.created',
+  'schedule.updated',
+  'schedule.deleted',
+  'schedule.fired',
+  'schedule_run.started',
+  'schedule_run.completed',
+  'schedule_run.failed',
+] as const;
+
 export const JOB_EVENTS = [
   'job.queued',
   'job.started',

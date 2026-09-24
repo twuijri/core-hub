@@ -10,6 +10,7 @@ import {
   ProfileMirrorError,
   RUNTIME_DEFAULT_PROFILE,
   authModule,
+  findUser,
   listWorkspacesFor,
   principalScopeResolver,
   registerProfileMirror,
@@ -45,6 +46,7 @@ import {
   HermesRefusal,
   createHermesCardApi,
   registerHermesBoard,
+  registerTaskNames,
   registerTaskRunner,
   tasksModule,
   type HermesCardApi,
@@ -318,6 +320,18 @@ registerTaskRunner((app) => {
     cancel: (scope, sessionId, runId) => runs.cancel(scope, sessionId, runId),
     outcome: (workspace, runId) => runs.outcome(workspace, runId),
   };
+});
+
+/**
+ * The names a card shows: an agent's from the registry (`agents`), a person's from `auth`.
+ * Resolved on the hub, so a card from any profile carries its agent's name — the board
+ * gathers every profile, and a client guessing from the agents of the profile it is in
+ * would show an id for the rest (DECISIONS §32).
+ */
+registerTaskNames((app) => (kind, id) => {
+  if (kind === 'agent') return agentsServiceFor(app).loadAgent(id).name;
+  const user = findUser(requireSqlite(app.hub.database), id);
+  return user ? user.displayName?.trim() || user.username : null;
 });
 
 export const modules: readonly HubModule[] = [
