@@ -927,7 +927,9 @@ access as the transcript it describes.
   it opens when the run starts and whenever the last running tool ends, and closes when a tool
   starts, a person is asked something, or the run ends. Each run's turns are stored on the run
   (`runs.timing`, migration `0015`) with offsets into its text and reasoning, so a turn's words
-  are cut from the finished message; a live run is read from the engine.
+  are cut from the finished message, and with how many tool calls had started before it, so
+  steps are ordered by what happened rather than by a clock two events can share; a live run
+  is read from the engine.
 - **Nothing is invented.** A metric with no data is `null` and clients leave it out: tokens only
   when a provider reported usage, `cache_hit_pct` only when it reported cache reads, times only
   for runs recorded with their turns. `timing` says `full`, `partial` (older runs sit next to

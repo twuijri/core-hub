@@ -19,7 +19,11 @@
  */
 import type { UsageTotals } from '../audit/index.js';
 import { toToolCall, type MessageRow, type RunRow, type ToolCallRow } from './mappers.js';
-import type { ModelTurnState, RunState } from './run-reducer.js';
+import type { RunState } from './run-reducer.js';
+import type { RunTiming } from './schema.js';
+
+/** A recorded turn, as stored on the run or held by the engine for a live one. */
+type TurnRecord = RunTiming['turns'][number];
 
 export type TrajectoryStepKind = 'input' | 'turn' | 'reasoning' | 'tool';
 export type TrajectoryLane = 'input' | 'model' | 'tools';
@@ -93,11 +97,16 @@ const TERMINAL: ReadonlySet<RunRow['status']> = new Set([
   'timed_out',
 ]);
 
-/** One run's timed pieces before they become steps. */
+/** One run's pieces before they become steps. */
 interface Piece {
   step: TrajectoryStep;
-  /** Sort key within the run; `null` sorts by insertion. */
+  /** When it started, for runs recorded before turns knew their place among the tools. */
   at: number | null;
+  /**
+   * Its place in what happened: tool `n` is `2n`, a turn opened after `k` tools is `2k + 1`.
+   * Two events can share a millisecond, so order is taken from the events, not the clock.
+   */
+  place: number | null;
   order: number;
 }
 
@@ -197,7 +206,7 @@ function runSteps(
   const live = source.live.get(run.id);
   const text = live ? live.text : message.content;
   const reasoning = live ? live.reasoning : (message.reasoning ?? '');
-  const turns: readonly ModelTurnState[] | null = live ? live.turns : (run.timing?.turns ?? null);
+  const turns: readonly TurnRecord[] | null = live ? live.turns : (run.timing?.turns ?? null);
   const finished = TERMINAL.has(run.status) && !live;
   const endStatus: TrajectoryStepStatus =
     run.status === 'failed' || run.status === 'timed_out'
@@ -217,12 +226,18 @@ function runSteps(
 
   if (turns === null) {
     if (reasoning) {
-      pieces.push({ step: untimedReasoning(message, run, exchange, reasoning), at: null, order });
+      pieces.push({
+        step: untimedReasoning(message, run, exchange, reasoning),
+        at: null,
+        place: null,
+        order,
+      });
       order += 1;
     }
     pieces.push({
       step: untimedTurn(message, run, exchange, text, finished ? endStatus : 'running'),
       at: null,
+      place: null,
       order,
     });
     order += 1;
@@ -233,6 +248,7 @@ function runSteps(
       const status: TrajectoryStepStatus =
         ended === null ? 'running' : last && finished ? endStatus : 'succeeded';
       const said = text.slice(turn.textStart, turn.textEnd ?? text.length);
+      const place = turn.toolsBefore === undefined ? null : turn.toolsBefore * 2 + 1;
       const thought = reasoning.slice(turn.reasoningStart, turn.reasoningEnd ?? reasoning.length);
       if (thought.trim() !== '') {
         const rStart = turn.reasoningStartedAt ?? turn.startedAt;
@@ -255,6 +271,7 @@ function runSteps(
             tool_call: null,
           },
           at: turn.startedAt,
+          place,
           order: order++,
         });
       }
@@ -282,6 +299,7 @@ function runSteps(
           tool_call: null,
         },
         at: turn.startedAt,
+        place,
         order: order++,
       });
     });
@@ -315,12 +333,16 @@ function runSteps(
       },
       // An untimed run lists its tools after its one turn, as the transcript shows them.
       at: turns === null ? null : start,
+      place: turns === null ? null : call.seq * 2,
       order: order++,
     });
   }
 
-  if (turns !== null) {
-    // In time order; at the same instant a turn comes before the tool it handed over to.
+  if (turns !== null && pieces.every((piece) => piece.place !== null)) {
+    // In the order things happened: each turn after the tools that started before it.
+    pieces.sort((a, b) => (a.place as number) - (b.place as number) || a.order - b.order);
+  } else if (turns !== null) {
+    // Turns recorded without their place: by time, a turn first at the same instant.
     const rank: Record<TrajectoryStepKind, number> = { input: 0, reasoning: 1, turn: 2, tool: 3 };
     pieces.sort(
       (a, b) =>

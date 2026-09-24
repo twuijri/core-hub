@@ -120,6 +120,8 @@ export interface RunTiming {
   turns: Array<{
     startedAt: number;
     endedAt: number | null;
+    /** Tool calls started before the turn opened (absent in nothing written so far). */
+    toolsBefore?: number;
     firstTokenAt: number | null;
     textStart: number;
     textEnd: number | null;

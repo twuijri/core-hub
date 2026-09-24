@@ -128,6 +128,7 @@ describe('the run reducer records the model turns', () => {
       {
         startedAt: T0,
         endedAt: T0 + 300,
+        toolsBefore: 0,
         firstTokenAt: T0 + 100,
         textStart: 0,
         textEnd: 'Let me check.'.length,
@@ -139,6 +140,7 @@ describe('the run reducer records the model turns', () => {
       {
         startedAt: T0 + 1300,
         endedAt: T0 + 2000,
+        toolsBefore: 1,
         firstTokenAt: T0 + 1500,
         textStart: 'Let me check.'.length,
         textEnd: 'Let me check. Two tests fail.'.length,
@@ -272,6 +274,36 @@ describe('buildTrajectory', () => {
     expect(trajectory.metrics.input_tokens).toBeNull();
     expect(trajectory.metrics.output_tokens).toBeNull();
     expect(trajectory.metrics.output_tokens_per_second).toBeNull();
+  });
+
+  it('orders by what happened when events share a millisecond', () => {
+    // A fast agent: everything at the same instant. The clock cannot order it; the turns
+    // know how many tools had started before them.
+    const state = replay([
+      [0, { type: 'accepted' }],
+      [0, { type: 'message_delta', text: 'Reading.' }],
+      [0, { type: 'tool_started', ref: 't1', name: 'read_file' }],
+      [0, { type: 'tool_completed', ref: 't1', output: 'ok' }],
+      [0, { type: 'message_delta', text: 'Running.' }],
+      [0, { type: 'tool_started', ref: 't2', name: 'shell' }],
+      [0, { type: 'tool_failed', ref: 't2', output: 'exit 1' }],
+      [0, { type: 'message_delta', text: 'It failed.' }],
+      [0, { type: 'completed' }],
+    ]);
+    const trajectory = buildTrajectory(
+      source({
+        messages: [messageRow('msg-a', 1, 'assistant', state.text, 'run-1', 0)],
+        runs: [runRow('run-1', 'succeeded', state)],
+        toolCalls: new Map([['run-1', toolRows(state)]]),
+      }),
+    );
+    expect(trajectory.steps.map((s) => s.text ?? s.tool_call?.name)).toEqual([
+      'Reading.',
+      'read_file',
+      'Running.',
+      'shell',
+      'It failed.',
+    ]);
   });
 
   it('counts parallel tool calls once in the tool time', () => {

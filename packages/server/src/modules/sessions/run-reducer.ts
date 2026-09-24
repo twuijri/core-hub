@@ -96,6 +96,11 @@ export interface UsageState {
 export interface ModelTurnState {
   startedAt: number;
   endedAt: number | null;
+  /**
+   * How many tool calls had started before this turn opened: where the turn sits among
+   * them, by what happened rather than by clock (two events can share a millisecond).
+   */
+  toolsBefore: number;
   /** The first word or thought of the turn. */
   firstTokenAt: number | null;
   textStart: number;
@@ -221,6 +226,7 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
     const turn: ModelTurnState = {
       startedAt: ctx.now,
       endedAt: null,
+      toolsBefore: next.toolCalls.length,
       firstTokenAt: null,
       textStart: next.text.length,
       textEnd: null,

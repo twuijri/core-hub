@@ -39,7 +39,8 @@
 ## الملفات والتأثير
 الخادم (`packages/server`):
 - `modules/sessions/run-reducer.ts`: `ModelTurnState` — يبدأ دور عند بدء التشغيل وبعد انتهاء آخر
-  أداة، وينتهي عند بدء أداة أو سؤال الشخص أو النهاية؛ مع أول كلمة ومواضع النص والتفكير.
+  أداة، وينتهي عند بدء أداة أو سؤال الشخص أو النهاية؛ مع أول كلمة ومواضع النص والتفكير، وعدد
+  الأدوات التي بدأت قبله (ترتيب الخطوات من الأحداث لا من الساعة).
 - `modules/sessions/schema.ts` + `drizzle/0015_run_timing.sql`: عمود `runs.timing` (JSON).
 - `modules/sessions/engine.ts`: يكتب الأدوار عند نهاية التشغيل، و`liveState()` للتشغيل الجاري.
 - `modules/sessions/trajectory.ts` (جديد): `buildTrajectory` دالة صافية — الخطوات والمدد والمقاييس.
@@ -65,58 +66,55 @@
 
 الوثائق: `docs/inspirations/trajectory.md` (جديد)، `inspirations/README.md`,
 `inspirations/ADOPTION-BACKLOG.md` (2.18)، `contracts/DECISIONS.md` §43، `contracts/COVERAGE.md`،
-`STATUS.md` (202 من 260).
+`STATUS.md` (عدد العمليات بعد الدمج: 205 من 263).
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-محليًا، ما يمسّه التغيير فقط (قاعدة السرعة)؛ الحزم الكاملة يشغّلها CI.
+محليًا، ما يمسّه التغيير فقط (قاعدة السرعة)؛ الحزم الكاملة يشغّلها CI. النواتج بعد دمج `main`
+(إعادة التسمية #99 وتيليجرام #97):
 ```
 $ pnpm lint
 $ eslint . && prettier --check .
 All matched files use Prettier code style!
-
 $ pnpm typecheck        # exit=0 (كل الحزم)
-
 $ pnpm contracts:lint
-Woohoo! Your API description is valid. 🎉
 contracts:lint  validating 90 event schema file(s)
 contracts:lint  OK
 $ pnpm contracts:check-clients
-check-clients  OK — 265 client file(s) scanned, 173 contract path(s) known.
+check-clients  OK — 273 client file(s) scanned, 175 contract path(s) known.
 $ pnpm contract:test
  Test Files  4 passed (4)
-      Tests  269 passed (269)
-
+      Tests  272 passed (272)
 $ pnpm i18n:check
-i18n:check  web: 1177 keys, ar/en in parity
 i18n:check  OK
 $ pnpm nav:check
 nav:check  OK — 34 destinations, 2 pre-auth screens (login, setup), 39 terms, ar/en complete, routes for web
+$ pnpm change-record:check
+change-record  OK — 1 record(s) valid
 
-$ vitest run --project unit src/modules/sessions/trajectory.test.ts src/modules/sessions/run-reducer.test.ts \
+$ (server) vitest run --project unit tests/unit/status.test.ts src/modules/sessions/trajectory.test.ts \
+    src/modules/sessions/trajectory-api.test.ts src/modules/sessions/run-reducer.test.ts \
     src/modules/agents/adapters/hermes-tui.test.ts src/modules/models/adapters/chat.test.ts
- Test Files  4 passed (4)
-      Tests  61 passed (61)
-$ vitest run --project unit src/modules/sessions/trajectory-api.test.ts
- Test Files  1 passed (1)
-      Tests  2 passed (2)
-$ vitest run --project unit tests/unit/status.test.ts
- Test Files  1 passed (1)
-      Tests  1 passed (1)
-
+ Test Files  6 passed (6)
+      Tests  65 passed (65)
 $ (web) vitest run tests/trajectory.test.tsx tests/tool-calls.test.tsx tests/ui-layer.test.ts tests/logical-css.test.ts
  Test Files  4 passed (4)
-      Tests  185 passed (185)
+      Tests  187 passed (187)
 
-$ pnpm build            # ✓ built
-$ PLAYWRIGHT_CHANNEL=chrome pnpm --filter @majlis/web exec playwright test e2e/zzzzzz-chat-trajectory.spec.ts
-  ✓  1 [chromium] › e2e/zzzzzz-chat-trajectory.spec.ts:26:1 › 31. the Trajectory tab follows a run, opens a step, filters, and downloads the log (4.3s)
-  1 passed (12.0s)
+$ pnpm build            # ✓ built in 834ms
+$ PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwright test e2e/zzzzzz-chat-trajectory.spec.ts
+  ✓  1 [chromium] › e2e/zzzzzz-chat-trajectory.spec.ts:26:1 › 31. the Trajectory tab follows a run, opens a step, filters, and downloads the log (3.6s)
+  1 passed (9.8s)
 ```
 الاختبارات الجديدة تفشل على الكود القديم: `trajectory*.test.ts` و`trajectory.test.tsx` تستورد
 ما لم يكن موجودًا؛ اختبار Hermes (فرق الدور) كان سيسجّل ١٢ ثم ٣٠ ثم ٤؛ واختبار OpenAI كان يتوقع
 ١١ رمز إدخال مع ٤ مخزّنة.
 
-CI: يُملأ بعد الدفع.
+**CI على #100**: الدفعة الأولى — كل الفحوص خضراء (Playwright كاملًا ٥:١٧، ترحيل SQLite وPostgreSQL،
+صورة Docker) إلا `pnpm test` في `trajectory-api.test.ts`: على جهاز CI الأبطأ أخذ النموذج بضع
+ملّي ثوانٍ بين الأداتين فظهر دور صامت حقيقي، والاختبار كان يفترض غيابه. ثم ظهر بعد الدمج أن
+حدثين في الملّي ثانية نفسها كانا يُرتَّبان بالساعة فتسبق الأداةَ دورٌ جاء بعدها. الإصلاح: كل دور
+يحفظ عدد الأدوات التي بدأت قبله (`toolsBefore`)، والترتيب من الأحداث لا من الساعة، مع اختبار
+«أحداث في الملّي ثانية نفسها». نتيجة CI الأخيرة في طلب الدمج.
 
 ## المخاطر والرجوع
 - **الأدوار مستنتَجة** من البث لا من نداءات النموذج الفعلية؛ وكيل يبث نصًّا أثناء عمل أدواته
