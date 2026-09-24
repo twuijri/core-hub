@@ -12,6 +12,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Agent } from '../src/types.js';
+import ar from '../src/i18n/ar.json' with { type: 'json' };
+import en from '../src/i18n/en.json' with { type: 'json' };
+import { TELEGRAM_OPTIONS } from '../../server/src/modules/agents/telegram-settings.js';
 
 class FakeSocket {
   connected = false;
@@ -113,6 +116,37 @@ const AGENT = {
   },
 } as unknown as Agent;
 
+const option = (
+  key: string,
+  section: string,
+  kind: string,
+  fallback: unknown,
+  extra: Record<string, unknown> = {},
+) => ({
+  key,
+  section,
+  kind,
+  value: null as unknown,
+  default: fallback,
+  choices: null,
+  min: null,
+  max: null,
+  shared: false,
+  source: null,
+  ...extra,
+});
+const SETTINGS = [
+  option('allowed_users', 'access', 'list', []),
+  option('show_reasoning', 'replies', 'toggle', false),
+  option('tool_progress', 'replies', 'select', 'off', {
+    choices: ['off', 'new', 'all', 'verbose'],
+  }),
+  option('require_mention', 'groups', 'toggle', false),
+  option('allowed_chats', 'groups', 'list', []),
+  option('stt_enabled', 'media', 'toggle', true, { shared: true }),
+  option('command_menu_max', 'advanced', 'number', 60, { min: 1, max: 100 }),
+];
+
 interface Sent {
   path: string;
   method: string;
@@ -123,6 +157,7 @@ interface Sent {
 function hub(options: { linked?: boolean; refuse?: boolean } = {}) {
   const sent: Sent[] = [];
   let linked = options.linked ?? false;
+  let settings = SETTINGS.map((option) => ({ ...option }));
   const telegram = () => ({
     platform: 'telegram',
     label: 'telegram',
@@ -196,6 +231,16 @@ function hub(options: { linked?: boolean; refuse?: boolean } = {}) {
     if (path.endsWith('/channels/telegram/unlink')) {
       linked = false;
       return json(telegram());
+    }
+    if (path.endsWith('/channels/telegram/settings')) {
+      if (method === 'PATCH') {
+        const values = (JSON.parse(String(init.body)) as { values: Record<string, unknown> })
+          .values;
+        settings = settings.map((option) =>
+          option.key in values ? { ...option, value: values[option.key] } : option,
+        );
+      }
+      return json({ platform: 'telegram', options: settings });
     }
     if (path.endsWith('/pairing') && method === 'GET') {
       return json({
@@ -305,5 +350,60 @@ describe('Link Telegram', () => {
       method: 'POST',
       profile: 'manger',
     });
+  });
+});
+
+describe('Telegram settings', () => {
+  it('has words for every option the hub knows, in both languages', () => {
+    for (const spec of TELEGRAM_OPTIONS) {
+      for (const dictionary of [en, ar] as Array<Record<string, any>>) {
+        const words = dictionary.channels.settings.option[spec.key];
+        expect(words?.label, spec.key).toBeTruthy();
+        expect(words?.help, spec.key).toBeTruthy();
+        for (const value of spec.choices ?? []) {
+          expect(
+            dictionary.channels.settings.choice[spec.key]?.[value],
+            `${spec.key}.${value}`,
+          ).toBeTruthy();
+        }
+      }
+    }
+  });
+
+  it('opens on the linked row, in sections, and saves several changes at once', async () => {
+    const { fetchImpl, sent } = hub({ linked: true });
+    mount(`/agents/${HERMES}/channels`, fetchImpl);
+    fireEvent.click(await screen.findByTestId('channel-settings-telegram'));
+    await screen.findByTestId('telegram-settings-replies');
+    expect(screen.getByTestId('telegram-settings-groups')).toBeTruthy();
+    expect(screen.getByTestId('telegram-settings-media').textContent).toMatch(/WhatsApp|واتساب/);
+    // A profile-wide option says it is not Telegram's alone.
+    expect(screen.getByTestId('telegram-setting-shared-stt_enabled')).toBeTruthy();
+    expect(screen.queryByTestId('telegram-setting-shared-show_reasoning')).toBeNull();
+    const save = screen.getByTestId('telegram-settings-save') as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+
+    fireEvent.click(screen.getByTestId('telegram-setting-show_reasoning'));
+    fireEvent.click(screen.getByTestId('telegram-setting-require_mention'));
+    fireEvent.change(screen.getByTestId('telegram-setting-allowed_chats'), {
+      target: { value: '-1001234567890, -42' },
+    });
+    fireEvent.click(screen.getByTestId('telegram-settings-save'));
+    await screen.findByTestId('telegram-settings-saved');
+    const patch = sent.filter((entry) => entry.method === 'PATCH');
+    expect(patch).toHaveLength(1);
+    expect(patch[0]).toMatchObject({
+      path: expect.stringContaining('/channels/telegram/settings'),
+      profile: 'manger',
+      body: {
+        values: {
+          show_reasoning: true,
+          require_mention: true,
+          allowed_chats: ['-1001234567890', '-42'],
+        },
+      },
+    });
+    // Set now, so it can go back to Hermes's default.
+    expect(screen.getByTestId('telegram-setting-reset-show_reasoning')).toBeTruthy();
   });
 });

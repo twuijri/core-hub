@@ -428,6 +428,57 @@ export function useLinkChannel(agentId: string | undefined) {
   });
 }
 
+/** One of a channel's own settings (`agents.getChannelSettings`). */
+export interface ChannelSetting {
+  key: string;
+  section: 'access' | 'replies' | 'groups' | 'media' | 'advanced';
+  kind: 'toggle' | 'select' | 'number' | 'text' | 'list';
+  value: unknown;
+  default: unknown;
+  choices: string[] | null;
+  min: number | null;
+  max: number | null;
+  /** Kept once for the profile: it changes every channel there, not only this one. */
+  shared: boolean;
+  source: 'config' | 'env' | null;
+}
+
+const settingsKey = (profile: string, agentId: string, platform: string) =>
+  ['agent-channel-settings', profile, agentId, platform] as const;
+
+export function useChannelSettings(agentId: string | undefined, platform: string, open: boolean) {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: settingsKey(profile, agentId ?? '', platform),
+    queryFn: async () =>
+      (
+        await client.request('get', '/agents/{agent_id}/channels/{platform}/settings', {
+          params: { agent_id: agentId ?? '', platform },
+        })
+      ).data as unknown as { platform: string; options: ChannelSetting[] },
+    enabled: !!session && !!agentId && open,
+  });
+}
+
+export function useUpdateChannelSettings(agentId: string | undefined, platform: string) {
+  const { client, profile } = useAuth();
+  const queryClient = useQueryClient();
+  const invalidate = useChannelInvalidation(agentId);
+  return useMutation({
+    mutationFn: async (values: Record<string, unknown>) =>
+      (
+        await client.request('patch', '/agents/{agent_id}/channels/{platform}/settings', {
+          params: { agent_id: agentId ?? '', platform },
+          body: { values } as never,
+        })
+      ).data as unknown as { platform: string; options: ChannelSetting[] },
+    onSuccess: (data) => {
+      queryClient.setQueryData(settingsKey(profile, agentId ?? '', platform), data);
+      invalidate();
+    },
+  });
+}
+
 // ------------------------------------------------------------ pairing approvals
 
 export interface PairingRequest {

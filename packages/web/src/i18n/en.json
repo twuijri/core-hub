@@ -1361,6 +1361,171 @@
       "how_approve": "3) Approve the request below under “Waiting for approval”; from then on the agent answers.",
       "unlink_body": "The token is removed from this profile and the agent stops answering on the bot. The bot itself stays in Telegram (delete it with @BotFather if you want). The people you allowed stay listed.",
       "unlinked_note": "Unlinked. The bot no longer answers from this profile."
+    },
+    "settings": {
+      "open": "Settings",
+      "title": "Telegram settings",
+      "applies_now": "Saving restarts this profile's gateway, so changes apply at once.",
+      "applies_restart": "In the default profile, changes apply after Hermes restarts.",
+      "section": {
+        "access": "Who may message the bot",
+        "replies": "Replies",
+        "groups": "Groups",
+        "media": "Media & voice",
+        "advanced": "Advanced"
+      },
+      "media_note": "These are the profile's own settings: they change WhatsApp and every other channel of this profile too.",
+      "shared": "Also changes WhatsApp and other channels",
+      "default_is": "Default: {value}",
+      "default_none": "Default: none",
+      "on": "on",
+      "off": "off",
+      "reset": "Back to default",
+      "discard": "Discard changes",
+      "list_placeholder": "123456789, 987654321",
+      "invalid": "This value is not accepted. Check the format.",
+      "saved_now": "Saved. The gateway restarts with the new settings.",
+      "saved_restart": "Saved. Restart Hermes from its card for them to apply.",
+      "option": {
+        "allowed_users": {
+          "label": "People who skip approval",
+          "help": "Telegram user IDs that may message the bot without a pairing code. Find yours by messaging @userinfobot."
+        },
+        "unauthorized_dm_behavior": {
+          "label": "When a stranger messages the bot",
+          "help": "Send them a pairing code to approve here, or ignore them silently."
+        },
+        "show_reasoning": {
+          "label": "Show the model's thinking",
+          "help": "Before each answer, add the model's reasoning as a separate block."
+        },
+        "reasoning_style": {
+          "label": "How the thinking looks",
+          "help": "The format of the thinking block."
+        },
+        "tool_progress": {
+          "label": "Show what the agent is doing",
+          "help": "Messages about the tools the agent uses while it works."
+        },
+        "cleanup_progress": {
+          "label": "Remove progress messages when done",
+          "help": "Delete the “working…” and tool messages after a successful answer."
+        },
+        "streaming": {
+          "label": "Write the answer as it comes",
+          "help": "Show the answer while it is being written, by editing one message, instead of sending it at the end."
+        },
+        "reply_to_mode": {
+          "label": "Reply as a quote",
+          "help": "Whether answers quote the message they answer."
+        },
+        "reactions": {
+          "label": "Reactions",
+          "help": "React with 👀 while working and ✅ or ❌ when done."
+        },
+        "typing_indicator": {
+          "label": "“Typing…” indicator",
+          "help": "Show “typing…” while the agent works."
+        },
+        "disable_link_previews": {
+          "label": "No link previews",
+          "help": "Send links without Telegram's preview card."
+        },
+        "notifications": {
+          "label": "Notification sound",
+          "help": "Which bot messages make the phone ring."
+        },
+        "require_mention": {
+          "label": "Answer in groups only when mentioned",
+          "help": "In a group, the bot answers only messages that @mention it or reply to it. Private chats are not affected."
+        },
+        "allowed_chats": {
+          "label": "Only these groups",
+          "help": "Group chat IDs the bot answers in (IDs of groups start with -100). Empty: any group it is added to."
+        },
+        "free_response_chats": {
+          "label": "Groups where no mention is needed",
+          "help": "Group chat IDs where the bot answers every message even when mentions are required."
+        },
+        "group_allowed_users": {
+          "label": "People allowed in groups",
+          "help": "Telegram user IDs whose group messages the bot answers. This does not let them message it privately."
+        },
+        "observe_unmentioned_group_messages": {
+          "label": "Read group messages it does not answer",
+          "help": "Keep unmentioned group messages as context for the next answer."
+        },
+        "guest_mode": {
+          "label": "Answer a mention in any group",
+          "help": "Answer an @mention even in groups not in the list above."
+        },
+        "exclusive_bot_mentions": {
+          "label": "Ignore messages for other bots",
+          "help": "Skip a group message that mentions another bot."
+        },
+        "allow_bots": {
+          "label": "Messages from other bots",
+          "help": "Whether messages sent by other bots are answered."
+        },
+        "stt_enabled": {
+          "label": "Transcribe voice notes",
+          "help": "Voice notes people send are turned into text for the agent."
+        },
+        "stt_echo_transcripts": {
+          "label": "Show the transcript",
+          "help": "Send the transcribed text back so the person sees what was understood."
+        },
+        "voice_auto_tts": {
+          "label": "Answer with voice notes",
+          "help": "Answers are also sent as voice. In a chat, /voice changes this for that chat."
+        },
+        "home_channel": {
+          "label": "Home chat",
+          "help": "The chat ID where scheduled tasks and notices are delivered. In Telegram, /sethome in a chat sets it too."
+        },
+        "gateway_restart_notification": {
+          "label": "Say when back online",
+          "help": "Send a message to the home chat when the agent restarts."
+        },
+        "command_menu_max": {
+          "label": "Commands in the menu",
+          "help": "How many commands the bot's “/” menu lists (1–100)."
+        },
+        "proxy_url": {
+          "label": "Proxy",
+          "help": "Reach Telegram through a proxy, e.g. socks5://host:1080. Leave empty for a direct connection."
+        }
+      },
+      "choice": {
+        "unauthorized_dm_behavior": {
+          "pair": "Send a pairing code",
+          "ignore": "Ignore"
+        },
+        "reasoning_style": {
+          "code": "Code block",
+          "blockquote": "Quote",
+          "subtext": "Small text"
+        },
+        "tool_progress": {
+          "off": "Off",
+          "new": "New tools only",
+          "all": "Every tool",
+          "verbose": "Every tool, in detail"
+        },
+        "reply_to_mode": {
+          "off": "Never",
+          "first": "First message of an answer",
+          "all": "Every message"
+        },
+        "notifications": {
+          "important": "Final answers and approvals only",
+          "all": "Every message"
+        },
+        "allow_bots": {
+          "none": "Ignore them",
+          "all": "Answer them"
+        }
+      }
     }
   },
   "question": {

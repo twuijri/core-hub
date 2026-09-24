@@ -5242,6 +5242,118 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  /agents/{agent_id}/channels/{platform}/settings:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/Platform'
+    get:
+      operationId: agents.getChannelSettings
+      tags: [agents]
+      summary: A channel's own settings, as Hermes reads them in the selected profile (admin)
+      description: >-
+        Today `telegram`: every user-facing option Hermes has for it, each with the value set in
+        the profile (null while unset), the value that applies while it is unset (`default` —
+        Hermes's own, or the profile's global display setting it falls back to), and where the
+        value is kept (`source`: `config` for the profile's `config.yaml`, `env` for its `.env`,
+        null while unset). A `shared` option is not Telegram's alone: it is kept once for the
+        profile (speech-to-text, voice replies) and changes WhatsApp and every other channel
+        there too. Labels and help text are the client's, keyed by `key`. Any other platform
+        answers `409 state_invalid` with `details.reason = settings_not_supported`.
+      x-roles: [owner, admin]
+      responses:
+        '200':
+          description: The options.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelSettings'
+              example:
+                platform: telegram
+                options:
+                  - key: show_reasoning
+                    section: replies
+                    kind: toggle
+                    value: true
+                    default: false
+                    choices: null
+                    min: null
+                    max: null
+                    shared: false
+                    source: config
+                  - key: tool_progress
+                    section: replies
+                    kind: select
+                    value: null
+                    default: 'off'
+                    choices: ['off', new, all, verbose]
+                    min: null
+                    max: null
+                    shared: false
+                    source: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    patch:
+      operationId: agents.updateChannelSettings
+      tags: [agents]
+      summary: Change some of a channel's settings in the selected profile (admin)
+      description: >-
+        Writes each value where Hermes reads it — the profile's `config.yaml` (edited in place,
+        comments kept) or its `.env` when the option is kept there — and answers the options as
+        they now read. `null` removes the value, so Hermes's default applies again. An unknown
+        key, or a value of the wrong kind, answers `400 validation_failed` with `details.field =
+        values.<key>` and nothing is written. The gateway serving the profile follows as
+        `agents.listChannels` says in `gateway.applies`: a named profile's restarts now, the
+        default profile's at Hermes's Restart.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelSettingsWrite'
+            example:
+              values:
+                show_reasoning: true
+                require_mention: true
+                allowed_chats: ['-1001234567890']
+      responses:
+        '200':
+          description: Saved; the options as they now read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelSettings'
+              example:
+                platform: telegram
+                options:
+                  - key: show_reasoning
+                    section: replies
+                    kind: toggle
+                    value: true
+                    default: false
+                    choices: null
+                    min: null
+                    max: null
+                    shared: false
+                    source: config
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   # ---------------------------------------------------------------- pairing (who may message the agent)
   /agents/{agent_id}/pairing:
     parameters:
@@ -14965,6 +15077,63 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PairedSender'
+    ChannelSettings:
+      type: object
+      required: [platform, options]
+      properties:
+        platform:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChannelSetting'
+    ChannelSetting:
+      type: object
+      required: [key, section, kind, value, default, choices, min, max, shared, source]
+      properties:
+        key:
+          type: string
+          description: Stable name of the option; clients key their label and help text on it.
+        section:
+          type: string
+          enum: [access, replies, groups, media, advanced]
+        kind:
+          type: string
+          enum: [toggle, select, number, text, list]
+          description: >-
+            `toggle` a boolean, `select` one of `choices`, `number` an integer between `min`
+            and `max`, `text` a string, `list` an array of strings.
+        value:
+          description: What the profile sets; null while unset.
+        default:
+          description: What applies while `value` is null; null when nothing does.
+        choices:
+          type: [array, 'null']
+          items:
+            type: string
+        min:
+          type: [integer, 'null']
+        max:
+          type: [integer, 'null']
+        shared:
+          type: boolean
+          description: >-
+            Kept once for the profile rather than for this channel: changing it changes
+            WhatsApp and every other channel of the profile too.
+        source:
+          type: [string, 'null']
+          enum: [config, env, null]
+    ChannelSettingsWrite:
+      type: object
+      required: [values]
+      additionalProperties: false
+      properties:
+        values:
+          type: object
+          minProperties: 1
+          maxProperties: 50
+          description: Option key → new value; null removes it so the default applies.
+          additionalProperties: {}
     ChannelTokenLink:
       type: object
       required: [token]

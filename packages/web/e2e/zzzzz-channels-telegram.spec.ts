@@ -7,6 +7,8 @@
  * - the right token links the bot, named with its @username, and the page says how to start —
  *   open t.me/<bot>, send a message, approve the request below;
  * - the Telegram stranger waiting for approval is approved in the same list as WhatsApp's;
+ * - Telegram's settings: «إظهار تفكير النموذج» and «الرد عند الإشارة فقط» in groups are switched
+ *   on, saved together, and read back after a reload;
  * - Unlink, behind a confirm, forgets the bot and brings «ربط تيليجرام» back.
  */
 import { mkdirSync } from 'node:fs';
@@ -77,6 +79,34 @@ test('31. Telegram linked by a bot token: the steps, the bot named, approvals, a
   await page.getByTestId('pairing-approve-5d1e2f3a4b5c6d7e').click();
   await expect(noura).toHaveCount(0);
   await expect(page.getByTestId('pairing-sender-555666777')).toContainText('telegram');
+
+  // ---- Telegram's own settings: show the model's thinking, and answer in groups only when
+  // mentioned — saved together, read back from the profile's files.
+  await page.getByTestId('channel-settings-telegram').click();
+  const settings = page.getByTestId('telegram-settings');
+  await expect(settings.getByTestId('telegram-settings-replies')).toContainText(
+    'إظهار تفكير النموذج',
+  );
+  await expect(page.getByTestId('telegram-setting-shared-voice_auto_tts')).toBeVisible();
+  const thinking = page.getByTestId('telegram-setting-show_reasoning');
+  const mention = page.getByTestId('telegram-setting-require_mention');
+  await expect(thinking).toHaveAttribute('aria-checked', 'false');
+  await thinking.click();
+  await mention.click();
+  await page.getByTestId('telegram-settings-save').click();
+  await expect(page.getByTestId('telegram-settings-saved')).toBeVisible();
+  await shot(page, 'agent-channels-telegram-settings-ar-light');
+  await page.reload();
+  await page.getByTestId('channel-settings-telegram').click();
+  await expect(page.getByTestId('telegram-setting-show_reasoning')).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await expect(page.getByTestId('telegram-setting-require_mention')).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await expect(page.getByTestId('telegram-setting-reset-show_reasoning')).toBeVisible();
 
   // ---- Unlink, behind a confirm.
   await page.getByTestId('channel-unlink-telegram').click();

@@ -59,6 +59,7 @@ import { HermesDashboard, type DashboardSpawner } from './hermes-dashboard.js';
 import { QR_PLATFORMS, pairWhatsApp, testMcpServer, type HermesApiCall } from './hermes-tools.js';
 import { namedHermesProfiles } from './hermes-profiles.js';
 import { telegramGetMe } from './telegram-api.js';
+import { SettingError, readTelegramSettings, writeTelegramSettings } from './telegram-settings.js';
 import {
   hermesCliRunner,
   installPlugin,
@@ -1346,6 +1347,56 @@ export const agentsModule = defineModule({
         request.log.info({ profile, bot: bot.username }, 'agents: Telegram linked');
         followChannels(request, profile);
         return toChannel(channel, channelStatus(request, profile, channel));
+      },
+    });
+
+    /**
+     * A channel's own settings (Telegram's today): read and written where Hermes reads each one
+     * (`telegram-settings.ts`), the gateway following a change like any other channel change.
+     */
+    const settingsTarget = (request: FastifyRequest, agentId: string, platform: string) => {
+      const target = toolHome(request, agentId);
+      if (platform !== 'telegram') {
+        throw new HubError('state_invalid', {
+          details: { agent_id: agentId, platform, reason: 'settings_not_supported' },
+        });
+      }
+      return target;
+    };
+
+    defineRoute(app, deps, {
+      operationId: 'agents.getChannelSettings',
+      handler: (request, { params }) => {
+        const platform = params.platform as string;
+        const { home } = settingsTarget(request, params.agent_id as string, platform);
+        try {
+          return { platform, options: readTelegramSettings(home) };
+        } catch (error) {
+          return channelFault(error);
+        }
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.updateChannelSettings',
+      handler: (request, { params, body }) => {
+        const platform = params.platform as string;
+        const { home, profile } = settingsTarget(request, params.agent_id as string, platform);
+        const values = (body as { values: Record<string, unknown> }).values;
+        let options;
+        try {
+          options = writeTelegramSettings(home, values);
+        } catch (error) {
+          if (error instanceof SettingError) {
+            throw new HubError('validation_failed', {
+              details: { field: `values.${error.key}`, reason: error.reason },
+            });
+          }
+          return channelFault(error);
+        }
+        request.log.info({ profile, keys: Object.keys(values) }, 'agents: channel settings saved');
+        followChannels(request, profile);
+        return { platform, options };
       },
     });
 

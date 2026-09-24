@@ -368,3 +368,64 @@ describe('Unlink Telegram', () => {
     expect(again.json()).toMatchObject({ details: { reason: 'not_linked' } });
   });
 });
+
+describe('Telegram settings', () => {
+  const settingsUrl = (agent: string, platform = 'telegram') =>
+    `/api/v1/agents/${agent}/channels/${platform}/settings`;
+
+  it('reads the options, writes some, and restarts the profile’s gateway', async () => {
+    const { hub: h, agent, root, of } = await boot();
+    await makeProfile(h, 'manger');
+    expect((await link(h, agent, 'manger', { token: GOOD })).statusCode).toBe(200);
+    await vi.waitFor(() => expect(of('manger')).toHaveLength(1));
+
+    const read = await authed(h, h.token, { url: settingsUrl(agent), profile: 'manger' });
+    expect(read.statusCode, read.body).toBe(200);
+    const body = read.json() as { platform: string; options: Array<Record<string, unknown>> };
+    expect(body.platform).toBe('telegram');
+    expect(body.options.find((entry) => entry.key === 'show_reasoning')).toMatchObject({
+      section: 'replies',
+      kind: 'toggle',
+      value: null,
+      default: false,
+    });
+    // Linking said how strangers are treated; the panel reads it back.
+    expect(body.options.find((entry) => entry.key === 'unauthorized_dm_behavior')).toMatchObject({
+      value: 'pair',
+      source: 'config',
+    });
+
+    const saved = await authed(h, h.token, {
+      method: 'PATCH',
+      url: settingsUrl(agent),
+      profile: 'manger',
+      payload: { values: { show_reasoning: true, require_mention: true } },
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    const options = (saved.json() as { options: Array<Record<string, unknown>> }).options;
+    expect(options.find((entry) => entry.key === 'show_reasoning')).toMatchObject({
+      value: true,
+    });
+    const config = readFileSync(path.join(root, 'profiles', 'manger', 'config.yaml'), 'utf8');
+    expect(config).toMatch(/display:\n\s+platforms:\n\s+telegram:\n\s+show_reasoning: true/);
+    expect(config).toContain('require_mention: true');
+    // The profile's gateway reads its settings when it starts: it is restarted.
+    await vi.waitFor(() => expect(of('manger')).toHaveLength(2));
+  });
+
+  it('refuses a wrong value by name, and any platform but Telegram', async () => {
+    const { hub: h, agent } = await boot();
+    const wrong = await authed(h, h.token, {
+      method: 'PATCH',
+      url: settingsUrl(agent),
+      payload: { values: { tool_progress: 'loud' } },
+    });
+    expect(wrong.statusCode).toBe(400);
+    expect(wrong.json()).toMatchObject({
+      details: { field: 'values.tool_progress', reason: 'choice_invalid' },
+    });
+    const slack = await authed(h, h.token, { url: settingsUrl(agent, 'slack') });
+    expect(slack.statusCode).toBe(409);
+    expect(slack.json()).toMatchObject({ details: { reason: 'settings_not_supported' } });
+  });
+});

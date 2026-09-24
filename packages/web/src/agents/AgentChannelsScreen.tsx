@@ -76,6 +76,7 @@ import {
   type ChannelLink,
   type PairingState,
 } from './skills.js';
+import { TelegramSettingsPanel } from './TelegramSettingsPanel.js';
 import { describeToolError } from './toolErrors.js';
 import { useJobs } from './useJobs.js';
 
@@ -150,6 +151,7 @@ export function AgentChannelsScreen() {
                   <ChannelRow
                     agentId={agentId}
                     channel={channel}
+                    gateway={gateway}
                     onEdit={() => setEditing(channel)}
                     onPair={() =>
                       channel.login === 'token'
@@ -183,15 +185,19 @@ export function AgentChannelsScreen() {
 function ChannelRow({
   agentId,
   channel,
+  gateway,
   onEdit,
   onPair,
 }: {
   agentId: string | undefined;
   channel: Channel;
+  gateway: ChannelGateway | null;
   onEdit: () => void;
   onPair: () => void;
 }) {
   const { t } = useI18n();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const hasSettings = channel.platform === 'telegram' && channel.link?.linked === true;
   const update = useUpdateChannel(agentId);
   const clear = useClearChannel(agentId);
   const unlink = useUnlinkChannel(agentId);
@@ -252,6 +258,17 @@ function ChannelRow({
             {t('channels.telegram.link_button')}
           </Button>
         )}
+        {hasSettings && (
+          <Button
+            size="sm"
+            variant={settingsOpen ? 'primary' : 'ghost'}
+            aria-expanded={settingsOpen}
+            data-testid={`channel-settings-${channel.platform}`}
+            onClick={() => setSettingsOpen(!settingsOpen)}
+          >
+            {t('channels.settings.open')}
+          </Button>
+        )}
         {link?.linked && (
           <Button
             size="sm"
@@ -297,6 +314,7 @@ function ChannelRow({
         )}
         {dialog}
       </div>
+      {hasSettings && settingsOpen && <TelegramSettingsPanel agentId={agentId} gateway={gateway} />}
       {channel.status === 'error' && channel.error && (
         <Notice tone="danger">
           <span dir="auto">{channel.error}</span>
