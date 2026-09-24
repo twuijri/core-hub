@@ -9,6 +9,11 @@
  * `agents.restart` restarts the Hermes runtime when this hub supervises it (ADR 0008,
  * `hermes-runtime.ts`); an external or absent runtime answers `409 state_invalid`.
  *
+ * The three tool operations that need Hermes to act — `agents.testMcpServer`,
+ * `agents.loginChannel` (WhatsApp by QR) — go through Hermes's own API in the selected
+ * profile (`hermes-tools.ts`, ADR 0015); `agents.importSkills` installs an uploaded pack into
+ * the profile's `skills/` (`skill-import.ts`), because Hermes has no importer.
+ *
  * Still documented 501 stubs, with the reason:
  * - `agents.getAvatar` — every agent is a `generated` avatar drawn from its slug until
  *   the `knowledge` module stores attachments.
@@ -20,6 +25,9 @@
  * test process, so the service is kept per Socket.IO server (one per app), the same way
  * `auth` keeps its context.
  */
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
 import { loadOpenApiDocument } from '@majlis/contracts';
@@ -29,6 +37,7 @@ import { createContractIndex } from '../../lib/contract.js';
 import { defineModule } from '../../lib/module.js';
 import { createRealtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
+import { t } from '../../i18n/index.js';
 import {
   ownerUser,
   registerWorkspaceStatsProvider,
@@ -43,6 +52,14 @@ import type { AdapterKind } from './adapters/types.js';
 import { HERMES_ENTRY } from './catalog/index.js';
 import { HermesRuntime, type HermesRuntimeStatus, type Spawner } from './hermes-runtime.js';
 import { HermesDashboard, type DashboardSpawner } from './hermes-dashboard.js';
+import {
+  QR_PLATFORMS,
+  pairWhatsApp,
+  testMcpServer,
+  type HermesApiCall,
+} from './hermes-tools.js';
+import { hermesProfileName, profileHome } from './profile-home.js';
+import { SkillImportError, installPack, planImport, type UploadedFile } from './skill-import.js';
 import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './installer.js';
 import type { AgentDirectoryPort, AgentInfo, AgentModelsPort, AgentRunnerPort } from './ports.js';
 import { AgentRunner } from './runner.js';
@@ -121,6 +138,7 @@ export function agentModelsPort(io: SocketServer): AgentModelsPort | null {
   return modelsPorts.get(io) ?? null;
 }
 export { AgentRunner, toRunnerEvent, toolKindOf, mintSessionRef } from './runner.js';
+export type { HermesApiCall } from './hermes-tools.js';
 export { HermesRuntime, loadOrCreateHermesApiKey } from './hermes-runtime.js';
 export {
   HermesProfileError,
@@ -153,6 +171,13 @@ export interface AgentsOverrides {
   runtime?: { spawnImpl?: Spawner; healthIntervalMs?: number };
   /** Hermes's dashboard API's seams (a fake spawner and `fetch`, a short idle). */
   dashboard?: { spawnImpl?: DashboardSpawner; fetchImpl?: typeof fetch; idleMs?: number };
+  /**
+   * Hermes's API as the agent tools call it (MCP test, WhatsApp pairing), in place of the
+   * dashboard — for a hub that does not supervise a real Hermes (the tests, the e2e hub).
+   */
+  hermesApi?: HermesApiCall;
+  /** Between two questions to Hermes while a pairing runs. Default 1 s. */
+  pairingPollMs?: number;
 }
 
 let pendingOverrides: AgentsOverrides | null = null;
@@ -172,6 +197,30 @@ interface AgentsContext {
   runner: AgentRunner;
   runtime: HermesRuntime;
   dashboard: HermesDashboard;
+  /** Hermes's API for the agent tools, or `null` where the hub does not supervise Hermes. */
+  hermesApi(): HermesApiCall | null;
+  pairingPollMs: number;
+}
+
+/**
+ * The uploaded files a skill import reads, lent by `knowledge` (which owns the bytes) through
+ * the composition root. Without it there is nothing to import from.
+ */
+export interface AgentAttachmentsPort {
+  materialise(
+    workspace: string,
+    ids: readonly string[],
+    directory: string,
+  ): Array<{ id: string; name: string; path: string; mime: string; sizeBytes: number }>;
+}
+
+let attachmentsFactory: ((app: FastifyInstance) => AgentAttachmentsPort) | null = null;
+
+/** Called once from `src/modules/index.ts`; `knowledge` provides the implementation. */
+export function registerAgentAttachments(
+  factory: (app: FastifyInstance) => AgentAttachmentsPort,
+): void {
+  attachmentsFactory = factory;
 }
 
 const contexts = new WeakMap<SocketServer, AgentsContext>();
@@ -261,7 +310,19 @@ function contextOf(app: FastifyInstance): AgentsContext {
     ...(own.dashboard?.fetchImpl ? { fetchImpl: own.dashboard.fetchImpl } : {}),
     ...(own.dashboard?.idleMs !== undefined ? { idleMs: own.dashboard.idleMs } : {}),
   });
-  const created: AgentsContext = { service, adapters, runner, runtime, dashboard };
+  const created: AgentsContext = {
+    service,
+    adapters,
+    runner,
+    runtime,
+    dashboard,
+    hermesApi: () =>
+      own.hermesApi ??
+      (dashboard.available()
+        ? (method, route, body, options) => dashboard.request(method, route, body, options)
+        : null),
+    pairingPollMs: own.pairingPollMs ?? 1000,
+  };
   contexts.set(hub.io, created);
   return created;
 }
@@ -451,23 +512,51 @@ export const agentsModule = defineModule({
      * know where that home is — which it only does for the runtime it supervises. An
      * external Hermes keeps its skills somewhere this process cannot see, and saying so
      * is better than listing an empty folder as if the agent had no skills.
+     *
+     * The home is **the selected profile's** (ADR 0014): Hermes's root home for the default
+     * profile, `profiles/<slug>` for any other. A profile Hermes does not have is said to be
+     * missing rather than shown the default profile's files as if they were its own.
      */
-    const skillHome = (request: FastifyRequest, agentId: string): string => {
+    const toolHome = (
+      request: FastifyRequest,
+      agentId: string,
+    ): { home: string; profile: string } => {
       const context = contextOf(request.server);
-      const row = context.service.get(scopeOf(request), agentId, request.language);
+      const scope = scopeOf(request);
+      const row = context.service.get(scope, agentId, request.language);
       if (row.kind !== 'hermes') {
         throw new HubError('state_invalid', {
           details: { agent_id: agentId, reason: 'skills_are_hermes_only' },
         });
       }
-      const home = context.runtime.status().home;
-      if (!home) {
+      const root = context.runtime.status().home;
+      if (!root) {
         // No Hermes at all: no folder to read, and no folder to invent.
         throw new HubError('state_invalid', {
           details: { agent_id: agentId, reason: 'runtime_absent' },
         });
       }
-      return home;
+      const profile = hermesProfileName(scope);
+      const home = profileHome(root, scope);
+      if (!home) {
+        throw new HubError('state_invalid', {
+          details: { agent_id: agentId, reason: 'hermes_profile_absent', profile },
+        });
+      }
+      return { home, profile };
+    };
+    const skillHome = (request: FastifyRequest, agentId: string): string =>
+      toolHome(request, agentId).home;
+
+    /** Hermes's API for the tools that need Hermes to act, or the reason there is none. */
+    const hermesApiOf = (request: FastifyRequest, agentId: string): HermesApiCall => {
+      const api = contextOf(request.server).hermesApi();
+      if (!api) {
+        throw new HubError('state_invalid', {
+          details: { agent_id: agentId, reason: 'hermes_not_supervised' },
+        });
+      }
+      return api;
     };
 
     const skillFault = (error: unknown): never => {
@@ -572,12 +661,65 @@ export const agentsModule = defineModule({
     });
 
     /**
+     * Importing a skill pack: the uploaded files, read from `knowledge`, checked as Hermes
+     * reads a skill, and installed all together or not at all (`skill-import.ts`).
+     */
+    defineRoute(app, deps, {
+      operationId: 'agents.importSkills',
+      status: 201,
+      handler: (request, { params, body }) => {
+        const agentId = params.agent_id as string;
+        const { home } = toolHome(request, agentId);
+        const scope = scopeOf(request);
+        const ids = [...new Set((body as { attachment_ids: string[] }).attachment_ids)];
+        const port = attachmentsFactory?.(request.server);
+        if (!port) {
+          throw new HubError('service_unavailable', {
+            details: { reason: 'attachments_unavailable' },
+          });
+        }
+        const scratch = mkdtempSync(path.join(tmpdir(), 'majlis-skill-import-'));
+        try {
+          const landed = port.materialise(scope.id, ids, scratch);
+          const missing = ids.filter((id) => !landed.some((file) => file.id === id));
+          if (missing.length > 0) throw notFound({ resource: 'attachment', id: missing[0] });
+          const uploads: UploadedFile[] = ids.map((id) => {
+            const file = landed.find((entry) => entry.id === id)!;
+            return { name: file.name, data: readFileSync(file.path) };
+          });
+          const keys = installPack(home, planImport(home, uploads));
+          const pinned = contextOf(request.server).service.pinnedSkills(scope, agentId);
+          return {
+            items: keys
+              .map((key) => getSkill(home, key))
+              .filter((skill): skill is Skill => skill !== null)
+              .map((skill) => toSkill({ ...skill, content: null }, pinned)),
+          };
+        } catch (error) {
+          if (error instanceof SkillImportError) {
+            throw new HubError(error.kind === 'conflict' ? 'conflict' : 'bad_request', {
+              message: error.message,
+              details: {
+                reason: error.reason,
+                skill: error.where.skill ?? null,
+                file: error.where.file ?? null,
+                message: error.message,
+              },
+            });
+          }
+          throw error;
+        } finally {
+          rmSync(scratch, { recursive: true, force: true });
+        }
+      },
+    });
+
+    /**
      * MCP servers. One block of `config.yaml`, edited in place (`mcp.ts`).
      *
-     * `agents.testMcpServer` is **not** here and stays a documented 501: testing means
-     * spawning the command or opening the socket and running the handshake, and until
-     * something does that, a green tick would be a guess. What this hub does is write the
-     * file; Hermes connects when it starts, which is why the screen says to restart.
+     * `agents.testMcpServer` asks Hermes to connect (`hermes-tools.ts`): the hub writes the
+     * file, and Hermes — the one that will run the server — is the one that tries it. The
+     * rows themselves still claim nothing: `connected` stays false until Hermes starts.
      */
     const mcpFault = (error: unknown): never => {
       if (error instanceof McpError) {
@@ -672,6 +814,28 @@ export const agentsModule = defineModule({
       },
     });
 
+    defineRoute(app, deps, {
+      operationId: 'agents.testMcpServer',
+      handler: async (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const name = params.server_name as string;
+        const { home, profile } = toolHome(request, agentId);
+        let server: McpServer | null;
+        try {
+          server = getMcpServer(home, name);
+        } catch (error) {
+          return mcpFault(error);
+        }
+        if (!server) throw notFound({ resource: 'mcp_server', id: name });
+        return testMcpServer(hermesApiOf(request, agentId), {
+          profile,
+          name,
+          config: server.config,
+          language: request.language,
+        });
+      },
+    });
+
     /**
      * Memory: the three documents Hermes reads (`memory.ts`) — `soul`, `memory`, `user`.
      * Three and not a folder, because that is what the contract's `item_id` says and what
@@ -751,8 +915,8 @@ export const agentsModule = defineModule({
     /**
      * Channels: the other block of `config.yaml` (`channels.ts`).
      *
-     * `agents.loginChannel` is **not** here and stays a documented 501: pairing by QR is
-     * a conversation with the running gateway, not an edit to a file.
+     * `agents.loginChannel` pairs WhatsApp by QR through Hermes's own onboarding, as a job
+     * whose progress carries the code (`hermes-tools.ts` §pairWhatsApp).
      *
      * `status` is `unknown`, deliberately. The hub writes the file; whether Telegram is
      * actually answering is something only the gateway knows, and `online` would be a
@@ -776,7 +940,7 @@ export const agentsModule = defineModule({
       exclusive: channel.exclusive,
       status: 'unknown',
       error: null,
-      login: null,
+      login: (QR_PLATFORMS as readonly string[]).includes(channel.platform) ? 'qr' : null,
       fields: channel.fields.map((field) => ({
         key: field.key,
         label: { ar: field.key, en: field.key },
@@ -832,6 +996,38 @@ export const agentsModule = defineModule({
         } catch (error) {
           return channelFault(error);
         }
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.loginChannel',
+      status: 202,
+      handler: (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const platform = params.platform as string;
+        const { profile } = toolHome(request, agentId);
+        if (!(QR_PLATFORMS as readonly string[]).includes(platform)) {
+          throw new HubError('state_invalid', {
+            details: { agent_id: agentId, platform, reason: 'login_not_supported' },
+          });
+        }
+        const api = hermesApiOf(request, agentId);
+        const scope = scopeOf(request);
+        const language = request.language;
+        const pollMs = contextOf(request.server).pairingPollMs;
+        const job = jobRunnerFor(request.server).start(
+          {
+            kind: 'agents.channel_login',
+            workspace: scope.id,
+            ownerId: actorOf(request).userId,
+            entityKind: 'agent',
+            entityId: agentId,
+            input: { platform, profile },
+            message: t('jobs.channel_login.started', language),
+          },
+          (handle) => pairWhatsApp(api, handle, { profile, language, pollMs }),
+        );
+        return { job_id: job.id };
       },
     });
 

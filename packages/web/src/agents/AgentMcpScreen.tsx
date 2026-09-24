@@ -13,6 +13,10 @@
  * **A key that went in does not come back.** A credential reads as `[stored]`, and saving
  * it unchanged keeps the one already in the file — so editing a command never costs the
  * person a key they cannot see.
+ *
+ * **Test asks Hermes.** The button has Hermes connect to the server as configured in this
+ * profile, list its tools and disconnect; what Hermes says is shown under the row, its words
+ * unchanged. The row itself still claims nothing about a connection nobody holds open.
  */
 import { useState } from 'react';
 import { useParams } from 'react-router';
@@ -32,6 +36,7 @@ import {
   SkeletonGroup,
   Switch,
   Textarea,
+  Tooltip,
   useConfirm,
 } from '../ui/index.js';
 import { IconTool, IconTrash } from '../ui/icons.js';
@@ -39,9 +44,12 @@ import {
   useCreateMcpServer,
   useDeleteMcpServer,
   useMcpServers,
+  useTestMcpServer,
   useUpdateMcpServer,
   type McpServer,
+  type McpTestResult,
 } from './skills.js';
+import { describeToolError } from './toolErrors.js';
 
 const TEMPLATE = `{
   "command": "npx",
@@ -81,7 +89,7 @@ export function AgentMcpScreen() {
             <Skeleton height="4rem" radius="md" />
           </SkeletonGroup>
         )}
-        {servers.isError && <Notice tone="danger">{describeError(servers.error, t)}</Notice>}
+        {servers.isError && <Notice tone="danger">{describeToolError(servers.error, t)}</Notice>}
         {servers.data &&
           (items.length === 0 ? (
             <EmptyState
@@ -118,46 +126,106 @@ function ServerRow({
   const { t } = useI18n();
   const update = useUpdateMcpServer(agentId);
   const remove = useDeleteMcpServer(agentId);
+  const probe = useTestMcpServer(agentId);
   const { ask, dialog } = useConfirm();
 
   return (
-    <div className="skill-row" data-enabled={server.enabled || undefined}>
-      <Switch
-        checked={server.enabled}
-        label={t('mcp.enabled')}
-        labelHidden
-        testId={`mcp-toggle-${server.name}`}
-        onChange={(next) => update.mutate({ name: server.name, enabled: next })}
-      />
-      <button type="button" className="skill-open" onClick={onEdit}>
-        <span className="flex items-center gap-2">
-          <span className="font-medium" dir="ltr">
-            {server.name}
+    <div className="flex flex-col gap-2">
+      <div className="skill-row" data-enabled={server.enabled || undefined}>
+        <Switch
+          checked={server.enabled}
+          label={t('mcp.enabled')}
+          labelHidden
+          testId={`mcp-toggle-${server.name}`}
+          onChange={(next) => update.mutate({ name: server.name, enabled: next })}
+        />
+        <button type="button" className="skill-open" onClick={onEdit}>
+          <span className="flex items-center gap-2">
+            <span className="font-medium" dir="ltr">
+              {server.name}
+            </span>
+            <Badge>{server.transport}</Badge>
           </span>
-          <Badge>{server.transport}</Badge>
+          <span className="skill-description" dir="ltr">
+            {summarise(server)}
+          </span>
+        </button>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={probe.isPending}
+          data-testid={`mcp-test-${server.name}`}
+          onClick={() => probe.mutate(server.name)}
+        >
+          {probe.isPending ? t('mcp.test.running') : t('mcp.test.button')}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-label={t('common.delete')}
+          data-testid={`mcp-delete-${server.name}`}
+          onClick={() => {
+            void ask({
+              title: t('mcp.delete_title', { name: server.name }),
+              body: t('mcp.delete_body'),
+              confirmLabel: t('common.delete'),
+            }).then((yes) => {
+              if (yes) remove.mutate(server.name);
+            });
+          }}
+        >
+          <IconTrash size={14} />
+        </Button>
+        {dialog}
+      </div>
+      {probe.isError && (
+        <div data-testid={`mcp-test-result-${server.name}`} data-ok="false">
+          <Notice tone="danger">{describeToolError(probe.error, t)}</Notice>
+        </div>
+      )}
+      {probe.data && <TestResult name={server.name} result={probe.data} />}
+    </div>
+  );
+}
+
+/** What Hermes found: the tools it listed, or why it could not connect, in its words. */
+function TestResult({ name, result }: { name: string; result: McpTestResult }) {
+  const { t } = useI18n();
+  if (!result.ok) {
+    return (
+      <div data-testid={`mcp-test-result-${name}`} data-ok="false">
+        <Notice tone="danger">
+          <span className="font-medium">{t('mcp.test.failed')}</span>{' '}
+          <span dir="auto">{result.error}</span>
+        </Notice>
+      </div>
+    );
+  }
+  return (
+    <div data-testid={`mcp-test-result-${name}`} data-ok="true">
+      <Notice tone="success">
+        <span className="font-medium">
+          {t('mcp.test.ok', {
+            count: String(result.tools.length),
+            seconds: (result.duration_ms / 1000).toFixed(1),
+          })}
         </span>
-        <span className="skill-description" dir="ltr">
-          {summarise(server)}
-        </span>
-      </button>
-      <Button
-        size="sm"
-        variant="ghost"
-        aria-label={t('common.delete')}
-        data-testid={`mcp-delete-${server.name}`}
-        onClick={() => {
-          void ask({
-            title: t('mcp.delete_title', { name: server.name }),
-            body: t('mcp.delete_body'),
-            confirmLabel: t('common.delete'),
-          }).then((yes) => {
-            if (yes) remove.mutate(server.name);
-          });
-        }}
-      >
-        <IconTrash size={14} />
-      </Button>
-      {dialog}
+        {result.tools.length === 0 ? (
+          <span> {t('mcp.test.no_tools')}</span>
+        ) : (
+          <ul className="mt-1 flex flex-wrap gap-1" dir="ltr">
+            {result.tools.map((tool) => (
+              <li key={tool.name}>
+                <Tooltip label={tool.description ?? ''}>
+                  <span>
+                    <Badge>{tool.name}</Badge>
+                  </span>
+                </Tooltip>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Notice>
     </div>
   );
 }

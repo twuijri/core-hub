@@ -89,7 +89,19 @@
     "restart_started": "Restarting the Hermes runtime…",
     "restart_done": "Hermes runtime restarted.",
     "refresh_started": "Asking the provider for its models…",
-    "refresh_done": "Model list updated."
+    "refresh_done": "Model list updated.",
+    "channel_login": {
+      "started": "Starting the pairing in Hermes…",
+      "preparing": "Hermes is preparing the pairing code…",
+      "scan": "Scan the code with WhatsApp on your phone: Settings → Linked devices → Link a device.",
+      "saving": "Paired. Turning the channel on in this profile…",
+      "done": "WhatsApp is linked. The agent answers on it after its next restart.",
+      "no_id": "Hermes started no pairing session.",
+      "failed": "Hermes reported that the pairing failed, without saying why.",
+      "ended": "The pairing ended before a phone was linked.",
+      "expired": "The pairing code expired before a phone was linked. Start again.",
+      "not_saved": "The phone was linked, but Hermes did not turn the channel on:"
+    }
   },
   "models": {
     "test": {
@@ -131,5 +143,11 @@
   },
   "knowledge": {
     "attachment_in_use": "A message already points at this file, so it cannot be deleted."
+  },
+  "agents": {
+    "mcp_test": {
+      "no_answer": "The server did not answer within {seconds} s (its connect_timeout).",
+      "hermes_silent": "Hermes did not report back within {seconds} s."
+    }
   }
 }

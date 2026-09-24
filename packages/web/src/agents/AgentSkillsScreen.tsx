@@ -12,8 +12,12 @@
  *
  * **Off is not gone.** Turning a skill off takes it out of the agent's reach and leaves
  * every byte where it was, which is why it is a switch and deleting is a menu item.
+ *
+ * **Import takes a pack as it is.** A `SKILL.md`, or a zip of one skill or several, lands in
+ * this profile's folder byte for byte; a pack Hermes could not read is refused whole, with
+ * the skill and the file named, and nothing half-installed.
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useParams } from 'react-router';
 import { describeError } from '../auth/client.js';
 import { useAgents } from '../hub/queries.js';
@@ -36,12 +40,14 @@ import {
 import { IconPin, IconSearch, IconSpark, IconTrash } from '../ui/icons.js';
 import {
   useDeleteSkill,
+  useImportSkills,
   usePatchSkill,
   useSaveSkill,
   useSkill,
   useSkills,
   type Skill,
 } from './skills.js';
+import { describeToolError } from './toolErrors.js';
 
 export function AgentSkillsScreen() {
   const { t } = useI18n();
@@ -50,6 +56,8 @@ export function AgentSkillsScreen() {
   const skills = useSkills(agentId);
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
+  const importer = useImportSkills(agentId);
+  const picker = useRef<HTMLInputElement>(null);
 
   const agent = agents.data?.find((entry) => entry.id === agentId);
   const title = agent ? t('skills.title_of', { name: agent.name }) : t('nav.agent_skills');
@@ -86,10 +94,47 @@ export function AgentSkillsScreen() {
             onChange={(event) => setSearch(event.target.value)}
             data-testid="skill-search"
           />
+          <input
+            ref={picker}
+            type="file"
+            multiple
+            hidden
+            accept=".md,.markdown,.zip,.skill"
+            data-testid="import-skills-file"
+            onChange={(event) => {
+              const files = event.target.files ? [...event.target.files] : [];
+              event.target.value = '';
+              if (files.length > 0) importer.mutate(files);
+            }}
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={importer.isPending}
+            onClick={() => picker.current?.click()}
+            data-testid="import-skills"
+          >
+            {importer.isPending ? t('skills.import.running') : t('skills.import.button')}
+          </Button>
           <Button size="sm" onClick={() => setEditing('')} data-testid="new-skill">
             {t('skills.new')}
           </Button>
         </div>
+        {importer.isError && (
+          <div data-testid="import-skills-result" data-ok="false">
+            <Notice tone="danger">{describeToolError(importer.error, t)}</Notice>
+          </div>
+        )}
+        {importer.data && (
+          <div data-testid="import-skills-result" data-ok="true">
+            <Notice tone="success">
+              {t('skills.import.done', {
+                count: String(importer.data.items.length),
+                names: importer.data.items.map((skill) => skill.name).join(', '),
+              })}
+            </Notice>
+          </div>
+        )}
 
         {skills.isPending && (
           <SkeletonGroup label={t('common.loading')}>
@@ -97,7 +142,9 @@ export function AgentSkillsScreen() {
             <Skeleton height="4rem" radius="md" />
           </SkeletonGroup>
         )}
-        {skills.isError && <Notice tone="danger">{describeError(skills.error, t)}</Notice>}
+        {skills.isError && (
+          <Notice tone="danger">{describeToolError(skills.error, t)}</Notice>
+        )}
         {skills.data &&
           (total === 0 ? (
             <EmptyState

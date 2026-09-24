@@ -18,7 +18,11 @@ import type { AuditService, JobRow } from './service.js';
 /** Handed to a job's worker so it can report progress and notice cancellation. */
 export interface JobHandle {
   readonly id: string;
-  progress(percent: number | null, message: string | null): void;
+  /**
+   * `result` is for work whose state a client must see while it runs (a pairing's QR code);
+   * the outcome the worker returns replaces it when the job finishes.
+   */
+  progress(percent: number | null, message: string | null, result?: Record<string, unknown>): void;
   /** True once `jobs.cancel` was called; long workers check it between steps. */
   cancelRequested(): boolean;
 }
@@ -73,7 +77,7 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
 
       const handle: JobHandle = {
         id,
-        progress: (percent, message) => audit.progressJob(id, percent, message),
+        progress: (percent, message, result) => audit.progressJob(id, percent, message, result),
         cancelRequested: () => cancelling.has(id),
       };
 
