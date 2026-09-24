@@ -22,17 +22,26 @@ import { isEnvelope, type Envelope } from '../realtime/envelope.js';
 import { keys, useSessions, type SessionFilters, type SessionPage } from '../hub/queries.js';
 import type { Session } from '../types.js';
 
-/** `useSessions`, plus the three profile-wide events that change what it returned. */
+/**
+ * `useSessions`, plus the three profile-wide events that change what it returned.
+ *
+ * The sessions socket hears every profile the person may enter (`profiles: 'all'`,
+ * ADR 0016), so an event is applied by what it names: an updated row is replaced wherever
+ * that id is cached (an id is one session in whichever list it sits), and a row that
+ * appeared or went away refreshes the lists — except, when the list is one profile, an
+ * event from another, which that list does not show.
+ */
 export function useLiveSessions(filters: SessionFilters = {}) {
   const query = useSessions(filters);
   const queryClient = useQueryClient();
   const { profile, session } = useAuth();
   const realtime = useRealtime();
+  const all = filters.allProfiles === true;
 
   useEffect(() => {
     if (!session) return;
     const socket = realtime.socket('sessions');
-    const pages = { queryKey: ['sessions', profile] } as const;
+    const pages = { queryKey: ['sessions'] } as const;
 
     const replace = (updated: Session) =>
       queryClient.setQueriesData<SessionPage>(
@@ -49,11 +58,14 @@ export function useLiveSessions(filters: SessionFilters = {}) {
       const updated = (raw as Envelope<{ session?: Session }>).payload.session;
       if (!updated) return;
       replace(updated);
-      queryClient.setQueryData(keys.session(profile, updated.id), updated);
+      queryClient.setQueryData(keys.session(raw.profile ?? updated.profile, updated.id), updated);
     };
     // A new session and a deleted one change *which* rows exist, and where: the order the
     // hub returns is the hub's, so the list is refetched rather than spliced here.
-    const onList = () => void queryClient.invalidateQueries(pages);
+    const onList = (raw: unknown) => {
+      if (!all && isEnvelope(raw) && raw.profile && raw.profile !== profile) return;
+      void queryClient.invalidateQueries(pages);
+    };
 
     socket.on('session.updated', onUpdated);
     socket.on('session.created', onList);
@@ -64,7 +76,7 @@ export function useLiveSessions(filters: SessionFilters = {}) {
       socket.off('session.created', onList);
       socket.off('session.deleted', onList);
     };
-  }, [queryClient, profile, session, realtime]);
+  }, [queryClient, profile, session, realtime, all]);
 
   return query;
 }

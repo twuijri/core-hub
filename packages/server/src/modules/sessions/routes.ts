@@ -83,6 +83,7 @@ const approvalResponse = z.object({
 });
 
 const listQuery = z.object({
+  profiles: z.enum(['all']).optional(),
   agent_id: ulid.optional(),
   source: z
     .enum(['chat', 'global_agent', 'room', 'task', 'schedule', 'workflow', 'channel', 'cli', 'api'])
@@ -130,21 +131,32 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
   // ------------------------------------------------------------- sessions
 
   app.get('/sessions', async (request) => {
+    // The header is checked even for a list across profiles: it must still name a
+    // workspace the caller may enter, so `profiles=all` never answers a request that
+    // would otherwise have been refused.
     const scope = await scopeOf(request);
     const query = parse(listQuery, request.query, 'query');
-    return deps.service(request).list(
-      scope,
-      {
-        agentId: query.agent_id,
-        source: query.source,
-        categoryId: query.category_id,
-        pinned: query.pinned,
-        archived: query.archived,
-        q: query.q,
-      },
-      query.cursor,
-      query.limit,
-    );
+    const filters = {
+      agentId: query.agent_id,
+      source: query.source,
+      categoryId: query.category_id,
+      pinned: query.pinned,
+      archived: query.archived,
+      q: query.q,
+    };
+    if (query.profiles === 'all') {
+      // Which profiles "all" means is `auth`'s rule (ADR 0016), asked here, never a list
+      // the client sends. A resolver that cannot say lists the header's profile alone.
+      const enterable = deps.scopes.enterable
+        ? (await deps.scopes.enterable(request)).map((entry): EngineScope => ({
+            ...entry,
+            workspace: entry.workspaceId,
+            language: request.language,
+          }))
+        : [scope];
+      return deps.service(request).listAcross(enterable, filters, query.cursor, query.limit);
+    }
+    return deps.service(request).list(scope, filters, query.cursor, query.limit);
   });
 
   app.post('/sessions', async (request, reply) => {

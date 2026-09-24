@@ -19,15 +19,17 @@
  * gesture that silently duplicates a conversation is a gesture nobody would risk twice.
  */
 import { useNavigate } from 'react-router';
+import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useAgents, useForkSession } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
-import { routeOf } from '../navigation/manifest.js';
 import type { Agent } from '../types.js';
 import { agentMark } from '../ui/brand/marks.js';
 import { IconAgents, IconChevron } from '../ui/icons.js';
 import { Button, Menu, MenuItem, MenuNote, MenuSeparator } from '../ui/index.js';
 import { installedAgents } from './AgentChips.js';
+import { chatHref } from './anchor.js';
+import { useProfileInLink } from '../shell/profileSelector.js';
 
 export function SessionAgent({
   sessionId,
@@ -39,6 +41,8 @@ export function SessionAgent({
 }) {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const { profile } = useAuth();
+  const inLink = useProfileInLink();
   const agents = useAgents();
   const fork = useForkSession(sessionId);
 
@@ -53,8 +57,9 @@ export function SessionAgent({
       { agent_id: agent.id },
       {
         // The fork is the conversation now; the original is one click back in the list.
+        // A fork is made in the conversation's own profile, and opens there.
         onSuccess: (session) =>
-          navigate(routeOf('chat').replace(':sessionId?', (session as { id: string }).id)),
+          navigate(chatHref((session as { id: string }).id, null, undefined, inLink(profile))),
       },
     );
   };

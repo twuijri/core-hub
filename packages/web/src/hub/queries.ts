@@ -89,6 +89,11 @@ export function useSavePreferences() {
 }
 
 export interface SessionFilters {
+  /**
+   * Every profile the person may enter (`profiles=all`, ADR 0016): the hub decides which,
+   * and each item names its own `profile`.
+   */
+  allProfiles?: boolean | undefined;
   q?: string | undefined;
   archived?: 'true' | 'false' | 'all' | undefined;
   pinned?: boolean | undefined;
@@ -109,14 +114,26 @@ export function useSessions(filters: SessionFilters = {}) {
   if (filters.q) query.q = filters.q;
   if (filters.pinned !== undefined) query.pinned = filters.pinned;
   if (filters.agent_id) query.agent_id = filters.agent_id;
+  if (filters.allProfiles) query.profiles = 'all';
   return useQuery({
-    queryKey: keys.sessions(profile, { ...query }),
+    // A list across profiles is one list, whichever profile the person is in.
+    queryKey: keys.sessions(filters.allProfiles ? ALL_PROFILES_KEY : profile, { ...query }),
     // The contract types `Page.items` per operation through allOf; the generated union leaves
     // `items` open, so the page is narrowed once here (the CLI does the same).
     queryFn: async () => (await client.request('get', '/sessions', { query })).data as SessionPage,
     enabled: !!session,
   });
 }
+
+/** The key segment of a list across every profile; never a slug (`^[a-z0-9]`). */
+export const ALL_PROFILES_KEY = '*';
+
+/**
+ * A call about one session, sent to the session's own profile: a row of a list across
+ * profiles is acted on where it lives, and the person's own profile does not change.
+ */
+const inProfile = (profile: string | undefined) =>
+  profile ? { headers: { 'X-Hub-Profile': profile } } : {};
 
 export function useAgents() {
   const { client, profile, session } = useAuth();
@@ -128,45 +145,55 @@ export function useAgents() {
   });
 }
 
-/** Optimistically patch one session in every cached list. */
+/**
+ * Optimistically patch one session in every cached list. `profile` is the session's own —
+ * a row of a list across profiles (ADR 0016); absent, the person's profile.
+ */
 export function useUpdateSession() {
-  const { client, profile } = useAuth();
+  const { client } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
       id,
       patch,
+      profile,
     }: {
       id: string;
       patch: Partial<Pick<Session, 'title' | 'pinned' | 'archived'>>;
+      profile?: string | undefined;
     }) =>
       (
         await client.request('patch', '/sessions/{session_id}', {
           params: { session_id: id },
           body: patch,
+          ...inProfile(profile),
         })
       ).data,
     onSuccess: (updated) => {
+      // Every list, the one across profiles included: an id is one session wherever it is.
       queryClient.setQueriesData<SessionPage>(
-        { queryKey: ['sessions', profile] },
+        { queryKey: ['sessions'] },
         (page) =>
           page && { ...page, items: page.items.map((s) => (s.id === updated.id ? updated : s)) },
       );
-      void queryClient.invalidateQueries({ queryKey: ['sessions', profile] });
-      void queryClient.invalidateQueries({ queryKey: keys.session(profile, updated.id) });
+      void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      void queryClient.invalidateQueries({ queryKey: keys.session(updated.profile, updated.id) });
     },
   });
 }
 
 export function useDeleteSession() {
-  const { client, profile } = useAuth();
+  const { client } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      await client.request('delete', '/sessions/{session_id}', { params: { session_id: id } });
+    mutationFn: async ({ id, profile }: { id: string; profile?: string | undefined }) => {
+      await client.request('delete', '/sessions/{session_id}', {
+        params: { session_id: id },
+        ...inProfile(profile),
+      });
       return id;
     },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['sessions', profile] }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['sessions'] }),
   });
 }
 
@@ -181,7 +208,7 @@ export function useCreateSession() {
       working_dir?: string | null;
     }) => (await client.request('post', '/sessions', { body })).data,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['sessions', profile] });
+      void queryClient.invalidateQueries({ queryKey: ['sessions'] });
       // The hub may have created the folder this session works in.
       void queryClient.invalidateQueries({ queryKey: keys.workingDirs(profile) });
     },
@@ -220,7 +247,7 @@ export function usePatchSession(sessionId: string) {
       ).data,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: keys.session(profile, sessionId) });
-      void queryClient.invalidateQueries({ queryKey: ['sessions', profile] });
+      void queryClient.invalidateQueries({ queryKey: ['sessions'] });
       void queryClient.invalidateQueries({ queryKey: keys.workingDirs(profile) });
     },
   });
@@ -235,7 +262,7 @@ export function usePatchSession(sessionId: string) {
  * original is left exactly as it was. Changing the **model** is still `sessions.update`.
  */
 export function useForkSession(sessionId: string) {
-  const { client, profile } = useAuth();
+  const { client } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (body: {
@@ -249,7 +276,7 @@ export function useForkSession(sessionId: string) {
           body,
         })
       ).data,
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['sessions', profile] }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['sessions'] }),
   });
 }
 

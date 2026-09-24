@@ -17,6 +17,11 @@ export interface ConnectOptions {
   namespace: (typeof NAMESPACES)[NamespaceName];
   token: () => string | undefined;
   profile: () => string | undefined;
+  /**
+   * `all` also hears every other profile the person may enter (ADR 0016): the chats list
+   * gathers them, and a conversation opened from another profile gets its approvals.
+   */
+  profiles?: 'all';
 }
 
 /** Reconnects with backoff capped at 30 s, as events/README.md §Reconnection asks. */
@@ -27,7 +32,11 @@ export function connectNamespace(options: ConnectOptions): Socket {
     auth: (cb) => {
       const token = options.token();
       const profile = options.profile();
-      cb({ ...(token ? { token } : {}), ...(profile ? { profile } : {}) });
+      cb({
+        ...(token ? { token } : {}),
+        ...(profile ? { profile } : {}),
+        ...(options.profiles ? { profiles: options.profiles } : {}),
+      });
     },
     reconnection: true,
     reconnectionDelay: 1_000,

@@ -583,6 +583,12 @@
       }
     }
   },
+  "profileScope": {
+    "$comment": "What the profile selector means on each page (ADR 0016, owner 2026-09-24). Not destinations. `lists` gather every profile the person may enter (the hub decides which), each item with a badge of its profile once more than one profile can be on screen; there the selector offers `All profiles` — the default on every entry into the app — or one profile, which filters the lists and is where new chats are made. `alwaysAll` ignores the filter: search always looks in every profile. Opening an item works in that item's own profile (its models, providers and settings) and never moves the selector. Every other scoped page edits one profile's configuration: the selector there shows a concrete profile, never `All`, and says which profile is being edited. `stage2` pages keep their own profile filter until stage 2.",
+    "lists": ["new_chat", "chat", "search"],
+    "alwaysAll": ["search"],
+    "stage2": ["tasks", "schedules"]
+  },
   "surfaceRoutes": {
     "$comment": "Per-surface URL (web) or screen id of every destination that exists on that surface. A destination whose `surfaces` exclude the surface must be absent here; every other destination must be present. The web parity test (packages/web/tests/navigation.parity.test.ts) builds its router from this map.",
     "web": {

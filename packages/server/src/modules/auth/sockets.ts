@@ -1,14 +1,15 @@
 // Realtime side of auth: every namespace accepts `auth.token` (the same bearer as HTTP); an
 // authenticated socket joins `user:<id>` so user-level events (`pairing.claimed`,
 // `device.linked`) reach only that person's clients. A socket without a token connects but
-// joins no room; a socket with an invalid token is refused.
+// joins no room; a socket with an invalid token is refused. `profiles: 'all'` in the handshake
+// joins every profile room the person may enter (ADR 0016).
 import type { Server as SocketServer, Socket } from 'socket.io';
 import { HubError } from '../../lib/errors.js';
 import { REALTIME_NAMESPACES } from '../../lib/module.js';
 import { profileRoom } from '../../lib/realtime.js';
 import type { AuthContext } from './context.js';
 import { resolvePrincipal, type Principal } from './principal.js';
-import { resolveWorkspaceFor } from './workspace.js';
+import { listWorkspacesFor, resolveWorkspaceFor } from './workspace.js';
 
 declare module 'socket.io' {
   interface SocketData {
@@ -40,6 +41,14 @@ export function registerSocketAuth(io: SocketServer, ctx: () => AuthContext | nu
               void socket.join(profileRoom(scope.slug));
             } catch (error) {
               return next(new Error(error instanceof HubError ? error.code : 'profile_not_found'));
+            }
+          }
+          // A list across profiles (ADR 0016) hears every profile it shows: `profiles: 'all'`
+          // joins the room of each workspace this person may enter — the same rule as
+          // `X-Hub-Profile` and `sessions.list?profiles=all`, decided here, not by the client.
+          if (socket.handshake.auth?.profiles === 'all') {
+            for (const row of listWorkspacesFor(context.db, principal.user)) {
+              void socket.join(profileRoom(row.slug));
             }
           }
           next();
