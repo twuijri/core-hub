@@ -5,7 +5,9 @@ import { requireSqlite } from '../lib/db.js';
 import type { SessionsNotifier } from './sessions/ports.js';
 import {
   ProfileMirrorError,
+  RUNTIME_DEFAULT_PROFILE,
   authModule,
+  listWorkspacesFor,
   principalScopeResolver,
   registerProfileMirror,
 } from './auth/index.js';
@@ -15,7 +17,10 @@ import {
   agentRunner,
   agentsModule,
   agentsServiceFor,
+  HermesDashboardRefusal,
+  HermesDashboardUnavailable,
   createHermesProfiles,
+  hermesDashboardFor,
   hermesProfileRunner,
   hermesRuntimeFor,
 } from './agents/index.js';
@@ -26,7 +31,15 @@ import {
   sessionTurnsFor,
 } from './sessions/index.js';
 import { roomsModule } from './rooms/index.js';
-import { registerHermesBoard, registerTaskRunner, tasksModule } from './tasks/index.js';
+import {
+  HermesApiUnavailable,
+  HermesRefusal,
+  createHermesCardApi,
+  registerHermesBoard,
+  registerTaskRunner,
+  tasksModule,
+  type HermesCardApi,
+} from './tasks/index.js';
 import { createHermesKanban, processRunner } from './tasks/hermes-kanban.js';
 import { createHermesJobs } from './schedules/hermes-jobs.js';
 import { registerHermesCron, registerWorkflowPorts, schedulesModule } from './schedules/index.js';
@@ -96,6 +109,12 @@ registerAttachmentReferences(attachmentReferences);
  *
  * There is a kanban only while both exist: no executable on this host, or no home to
  * point it at, and every card is simply the hub's own.
+ *
+ * The writes Hermes's CLI cannot make — a card's words, priority, deletion, comments,
+ * reassignment, stopping its run — go through Hermes's own server (ADR 0015), which exists
+ * only where the hub supervises Hermes. Its errors are translated here into the tasks
+ * module's own, so neither module imports the other: Hermes's refusal stays Hermes's
+ * sentence, and a server that is not there says so.
  */
 registerHermesBoard((app) => ({
   kanban() {
@@ -106,7 +125,37 @@ registerHermesBoard((app) => ({
     return createHermesKanban(processRunner({ command, home, env: runtime.cliEnv() }));
   },
   agentId: (workspace) => hermesAgentId(app, workspace),
+  api: () => hermesCardApi(app),
+  profiles: () =>
+    // Every workspace, not the ones one person may enter: this maps Hermes's profiles, and
+    // the routes check who may do what.
+    listWorkspacesFor(requireSqlite(app.hub.database), { id: '', role: 'owner' }).map((row) => ({
+      workspace: row.id,
+      slug: row.slug,
+      profile: row.isDefault ? RUNTIME_DEFAULT_PROFILE : row.slug,
+    })),
 }));
+
+function hermesCardApi(app: FastifyInstance): HermesCardApi | null {
+  const dashboard = hermesDashboardFor(app);
+  if (!dashboard) return null;
+  return createHermesCardApi({
+    warm: () => dashboard.warm(),
+    request: async <T>(method: string, path: string, body?: unknown): Promise<T> => {
+      try {
+        return await dashboard.request<T>(method, path, body);
+      } catch (error) {
+        if (error instanceof HermesDashboardRefusal) {
+          throw new HermesRefusal(error.verb, error.message);
+        }
+        if (error instanceof HermesDashboardUnavailable) {
+          throw new HermesApiUnavailable(error.message);
+        }
+        throw error;
+      }
+    },
+  });
+}
 
 /** The registry id of the Hermes agent. Agents are hub-wide rows; the scope only shapes settings. */
 function hermesAgentId(app: FastifyInstance, workspace: string): string | null {

@@ -668,8 +668,11 @@
     "hermes": {
       "origin": "On Hermes's board",
       "refused": "Hermes said no: {message}",
-      "owns_text": "This card is on Hermes's board, so its title and description are Hermes's to change.",
-      "owns_card": "This card is on Hermes's board; Hermes decides when it goes away."
+      "owns_text": "This card is on Hermes's board, and this hub does not run Hermes here, so its title and description are Hermes's to change.",
+      "owns_card": "This card is on Hermes's board, and this hub does not run Hermes here, so Hermes decides what happens to it.",
+      "writes_through": "This card is on Hermes's board: changes are made on Hermes first.",
+      "api_unavailable": "Hermes's API is not available right now, so nothing was changed: {message}",
+      "confirm_delete_body": "It is deleted from Hermes's board too. This cannot be undone."
     },
     "assign": {
       "open": "Assign to an agent…",
@@ -687,7 +690,27 @@
     "unassign": "Unassign",
     "open_session": "Open the conversation",
     "show_archived": "Show archived ({count})",
-    "hide_archived": "Hide archived ({count})"
+    "hide_archived": "Hide archived ({count})",
+    "details": {
+      "open": "Details…",
+      "title": "Task details",
+      "description": "Description",
+      "priority": "Priority",
+      "comments": "Comments",
+      "no_comments": "No comments yet.",
+      "add_comment": "Add a comment",
+      "send_comment": "Comment"
+    },
+    "handover": {
+      "open": "Hand to another profile…",
+      "title": "Hand to another profile",
+      "workspace": "Profile",
+      "submit": "Hand over",
+      "hint": "Hermes gives the card to that profile's Hermes, and the card moves to that profile.",
+      "no_workspaces": "There is no other profile to hand it to.",
+      "confirm_running": "Hand over “{title}” while it runs?",
+      "confirm_running_body": "Hermes stops its current run first, then hands the card over."
+    }
   },
   "schedules": {
     "new": "New schedule",

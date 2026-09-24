@@ -128,11 +128,17 @@ export {
   hermesProfileRunner,
   type HermesProfiles,
 } from './hermes-profiles.js';
-export type { HermesRuntimeMode, HermesRuntimeStatus, Spawner } from './hermes-runtime.js';
+export type {
+  HermesRuntimeMode,
+  HermesRuntimeStatus,
+  SpawnedProcess,
+  Spawner,
+} from './hermes-runtime.js';
 export {
   HermesDashboard,
   HermesDashboardRefusal,
   HermesDashboardUnavailable,
+  type DashboardSpawner,
   type HermesDashboardStatus,
 } from './hermes-dashboard.js';
 
