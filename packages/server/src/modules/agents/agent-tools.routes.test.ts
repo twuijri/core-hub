@@ -143,6 +143,40 @@ describe('importing a skill pack', () => {
     });
   });
 
+  it('lets the web delete the pack once imported, and still refuses it uploaded again', async () => {
+    const { hub: h, agent, root } = await boot();
+    const pack = makeZip([{ path: 'pdf-notes/SKILL.md', data: SKILL }]);
+    const id = await upload(h, 'pack.zip', pack);
+    const first = await authed(h, h.token, {
+      method: 'POST',
+      url: `/api/v1/agents/${agent}/skills`,
+      payload: { attachment_ids: [id] },
+    });
+    expect(first.statusCode, first.body).toBe(201);
+    // The web removes the uploaded pack after the import (useImportSkills).
+    const removed = await authed(h, h.token, {
+      method: 'DELETE',
+      url: `/api/v1/attachments/${id}`,
+    });
+    expect(removed.statusCode).toBe(204);
+    // The installed skill does not depend on it.
+    expect(readFileSync(path.join(root, 'skills', 'pdf-notes', 'SKILL.md'), 'utf8')).toBe(SKILL);
+
+    // The very same pack uploads again (it used to 500) and is refused as a skill that exists.
+    const again = await upload(h, 'pack.zip', pack);
+    expect(again).not.toBe(id);
+    const refused = await authed(h, h.token, {
+      method: 'POST',
+      url: `/api/v1/agents/${agent}/skills`,
+      payload: { attachment_ids: [again] },
+    });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json()).toMatchObject({
+      code: 'conflict',
+      details: { reason: 'skill_exists', skill: 'pdf-notes' },
+    });
+  });
+
   it('refuses a broken pack with the reason and the file, and writes nothing', async () => {
     const { hub: h, agent, root } = await boot();
     const id = await upload(

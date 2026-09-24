@@ -13,10 +13,12 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { createLogger } from '../../lib/logger.js';
 import { HubError } from '../../lib/errors.js';
 import { newUlid } from '../../db/ids.js';
@@ -26,6 +28,9 @@ import { contentDispositionOf, sanitiseFilename, sniffMime, storedKindOf } from 
 import { KnowledgeService, type AttachmentScope } from './service.js';
 import { toAttachment } from './serialize.js';
 import { UploadRegistry } from './uploads.js';
+
+/** `packages/server/drizzle`: a module may not import `app/`, so the path is spelt out. */
+const migrationsFolder = fileURLToPath(new URL('../../../drizzle', import.meta.url));
 
 const png = Buffer.concat([
   Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
@@ -37,18 +42,12 @@ function scratch(): { dir: string; done(): void } {
   return { dir, done: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
-/** The `attachments` table on a throwaway SQLite file, with the service over it. */
+/** The hub's schema on a throwaway SQLite file, with the service over it. */
 function service(dir: string): { service: KnowledgeService; scope: AttachmentScope } {
   const sqlite = new Database(path.join(dir, 'hub.sqlite'));
-  sqlite.exec(`
-    CREATE TABLE attachments (
-      id text(26) PRIMARY KEY NOT NULL, owner_id text(26) NOT NULL,
-      created_at integer NOT NULL, updated_at integer NOT NULL, workspace text(26) NOT NULL,
-      filename text(255) NOT NULL, mime text(120) NOT NULL, size_bytes integer NOT NULL,
-      sha256 text(64) NOT NULL, storage_key text NOT NULL, kind text DEFAULT 'file' NOT NULL,
-      source_kind text DEFAULT 'upload' NOT NULL, source_id text(26),
-      meta text DEFAULT '{}' NOT NULL, expires_at integer, deleted_at integer);
-  `);
+  // The real migrations, so the table carries the indexes the hub runs with: a constraint
+  // this file declared by hand once hid a 500 on re-uploading the same bytes.
+  migrate(drizzle(sqlite), { migrationsFolder });
   return {
     service: new KnowledgeService({
       db: drizzle(sqlite),
@@ -186,7 +185,7 @@ describe('attachments: storing, refusing, de-duplicating', () => {
     }
   });
 
-  it('stores identical bytes once', async () => {
+  it('stores identical bytes once, one row per upload', async () => {
     const { dir, done } = scratch();
     try {
       const { service: knowledge, scope } = service(dir);
@@ -202,7 +201,102 @@ describe('attachments: storing, refusing, de-duplicating', () => {
         purpose: 'message',
         body: Readable.from([png]),
       });
-      expect(second.id).toBe(first.id);
+      expect(second.id).not.toBe(first.id);
+      expect(second.storageKey).toBe(first.storageKey);
+      const blobDir = path.dirname(knowledge.blobs.pathOf(first.storageKey));
+      expect(readdirSync(blobDir)).toEqual([first.sha256]);
+    } finally {
+      done();
+    }
+  });
+
+  it('takes the same bytes again after a delete, and under another name', async () => {
+    const { dir, done } = scratch();
+    try {
+      const { service: knowledge, scope } = service(dir);
+      const put = (filename: string) =>
+        knowledge.upload(scope, {
+          filename,
+          declaredMime: 'image/png',
+          purpose: 'message',
+          body: Readable.from([png]),
+        });
+      const first = await put('shot.png');
+      knowledge.remove(scope, first.id, false);
+      expect(knowledge.blobs.exists(first.storageKey)).toBe(false);
+
+      const again = await put('shot.png');
+      expect(again.id).not.toBe(first.id);
+      expect(readFileSync(knowledge.blobs.pathOf(again.storageKey))).toEqual(png);
+
+      const renamed = await put('another name.png');
+      expect(renamed.filename).toBe('another name.png');
+      expect(renamed.storageKey).toBe(again.storageKey);
+    } finally {
+      done();
+    }
+  });
+
+  it('keeps the bytes while another row still uses them, and removes them with the last', async () => {
+    const { dir, done } = scratch();
+    try {
+      const { service: knowledge, scope } = service(dir);
+      const put = (filename: string) =>
+        knowledge.upload(scope, {
+          filename,
+          declaredMime: 'image/png',
+          purpose: 'message',
+          body: Readable.from([png]),
+        });
+      const a = await put('a.png');
+      const b = await put('b.png');
+      knowledge.remove(scope, a.id, false);
+      expect(knowledge.blobs.exists(b.storageKey)).toBe(true);
+      expect(knowledge.require(scope, b.id).id).toBe(b.id);
+      knowledge.remove(scope, b.id, false);
+      expect(knowledge.blobs.exists(b.storageKey)).toBe(false);
+    } finally {
+      done();
+    }
+  });
+
+  it('answers 409, not 500, when the shared bytes vanished before the row was written', async () => {
+    const { dir, done } = scratch();
+    try {
+      const { service: knowledge, scope } = service(dir);
+      const kept = await put();
+      async function put() {
+        return knowledge.upload(scope, {
+          filename: 'a.png',
+          declaredMime: 'image/png',
+          purpose: 'message',
+          body: Readable.from([png]),
+        });
+      }
+      // The second upload finds the bytes already there…
+      const blob = await knowledge.storeStream(scope, Readable.from([png]));
+      // …and the only other row is deleted before it registers.
+      knowledge.remove(scope, kept.id, false);
+      const error = (() => {
+        try {
+          knowledge.registerBlob(scope, {
+            filename: 'a.png',
+            declaredMime: 'image/png',
+            purpose: 'message',
+            blob,
+            sourceKind: 'upload',
+            sourceId: null,
+            expiresAt: null,
+            meta: {},
+          });
+          return null;
+        } catch (caught) {
+          return caught;
+        }
+      })();
+      expect(error).toBeInstanceOf(HubError);
+      expect((error as HubError).status).toBe(409);
+      expect((error as HubError).details).toEqual({ reason: 'bytes_removed_during_upload' });
     } finally {
       done();
     }

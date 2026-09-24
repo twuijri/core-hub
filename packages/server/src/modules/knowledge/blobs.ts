@@ -5,7 +5,8 @@
  *
  * 1. **Content addressed.** A stored file lives at `<workspace>/<aa>/<sha256>` where
  *    `aa` is the first two hex characters. Two uploads of the same bytes in the same
- *    workspace share one file; the two `attachments` rows differ only in metadata. The
+ *    workspace share one file; each has its own `attachments` row pointing at the same
+ *    key, and the file is removed only with the last live row (`service.remove`). The
  *    key never contains anything the client chose, so a filename can never steer a write.
  * 2. **Never in memory.** Writing consumes a stream through a hash and a file handle at
  *    once; reading answers a `ReadStream` (with a byte range when the client asked for
@@ -112,8 +113,8 @@ export class BlobStore {
 
   /**
    * Copy a file into the store under a key of its own rather than its hash: for a file kept
-   * for a limited time (a profile export), whose bytes must not be shared with — or collide
-   * with — an upload of the very same bytes (`attachments.storage_key` is unique).
+   * for a limited time (a profile export), whose bytes must not be shared with an upload of
+   * the very same bytes — its expiry removes them whoever else holds that content.
    */
   async keepCopy(workspace: string, filePath: string, options: WriteOptions): Promise<StoredBlob> {
     const temp = this.openTemp(workspace);

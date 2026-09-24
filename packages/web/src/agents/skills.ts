@@ -538,9 +538,11 @@ export function useTestMcpServer(agentId: string | undefined) {
 }
 
 /**
- * Upload the files as skill packs (`purpose: skill`) and install them. The uploads stay in
- * the profile's files as the record of what was imported; the same pack uploaded again is the
- * same attachment, and the hub refuses it as a skill that already exists.
+ * Upload the files as skill packs (`purpose: skill`), install them, and delete the uploads:
+ * the installed skill lives in the agent's folder and does not need them, so they would only
+ * pile up in the profile's files. They are deleted whether the import succeeded or not (a
+ * refused pack is sent again as a new upload), and a failed delete never hides the import's
+ * own answer. The same pack uploaded again is refused by the hub as a skill that exists.
  */
 export function useImportSkills(agentId: string | undefined) {
   const { client } = useAuth();
@@ -549,13 +551,23 @@ export function useImportSkills(agentId: string | undefined) {
   return useMutation({
     mutationFn: async (files: readonly File[]) => {
       const ids: string[] = [];
-      for (const file of files) ids.push((await upload({ file, purpose: 'skill' })).id);
-      return (
-        await client.request('post', '/agents/{agent_id}/skills', {
-          params: { agent_id: agentId ?? '' },
-          body: { attachment_ids: ids } as never,
-        })
-      ).data as unknown as { items: Skill[] };
+      try {
+        for (const file of files) ids.push((await upload({ file, purpose: 'skill' })).id);
+        return (
+          await client.request('post', '/agents/{agent_id}/skills', {
+            params: { agent_id: agentId ?? '' },
+            body: { attachment_ids: ids } as never,
+          })
+        ).data as unknown as { items: Skill[] };
+      } finally {
+        await Promise.allSettled(
+          ids.map((id) =>
+            client.request('delete', '/attachments/{attachment_id}', {
+              params: { attachment_id: id },
+            }),
+          ),
+        );
+      }
     },
     onSuccess: invalidate,
   });
