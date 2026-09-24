@@ -151,7 +151,7 @@ export class RunEngine {
 
   /**
    * What a live run has done so far — its text, reasoning and model turns, which are only
-   * written when it ends. The trajectory reads it (contract decision §41); `undefined` once
+   * written when it ends. The trajectory reads it (contract decision §42); `undefined` once
    * the run is no longer active.
    */
   liveState(runId: string): RunState | undefined {

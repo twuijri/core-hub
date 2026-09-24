@@ -493,7 +493,7 @@
    They stay in the reading column, centred, so typing never stretches across a wide
    screen — only the transcript uses the width (owner decision, 2026-09-23). */
 .chat-flow > [data-testid='chat-header'],
-.chat-flow > .chat-lede,
+.chat-flow .chat-lede,
 .chat-flow .composer-dock {
   inline-size: 100%;
   max-inline-size: var(--mj-layout-composer-max);

@@ -2644,7 +2644,7 @@ paths:
       tags: [sessions]
       summary: Read a conversation as a timed list of steps, or download it as the session log
       description: |
-        The conversation's path (contract decision §41): every input of the person, every model
+        The conversation's path (contract decision §42): every input of the person, every model
         turn, the reasoning shown and every tool call, in order, each with the time it started
         and ended when the hub recorded it, plus the metrics the hub actually has. A metric the
         hub has no data for is `null`, never `0`. `timing` says whether the steps carry times:

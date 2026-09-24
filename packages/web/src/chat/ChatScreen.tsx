@@ -17,7 +17,16 @@ import { routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import { sessionTitle } from '../sessions/SessionList.js';
 import type { ContentBlock, Message, ReasoningEffort } from '../types.js';
-import { Button, buttonClass, EmptyState, Notice, SkeletonText } from '../ui/index.js';
+import {
+  Button,
+  buttonClass,
+  EmptyState,
+  Notice,
+  SkeletonText,
+  TabList,
+  TabPanel,
+  TabsFrame,
+} from '../ui/index.js';
 import { IconClose, IconSpark } from '../ui/icons.js';
 import { AgentChips } from './AgentChips.js';
 import {
@@ -48,6 +57,8 @@ import { useApprovalMode, useComposerModels } from './useComposerControls.js';
 import { useFollowBottom } from './followBottom.js';
 import { useLoadOlderOnScroll } from './olderMessages.js';
 import { useSessionStream } from './useSessionStream.js';
+import { revisionOf } from './trajectory.js';
+import { TrajectoryView } from './TrajectoryView.js';
 import { WorkingDirPicker } from './WorkingDirPicker.js';
 import { ProfileBadge } from '../shell/ProfileBadge.js';
 import { useManyProfiles, useProfileInLink } from '../shell/profiles.js';
@@ -193,6 +204,30 @@ function OpenSession({ sessionId }: { sessionId: string }) {
       { replace: true },
     );
   }, [anchorPhase, anchorId, stream.status, follow, setPhase, setParams]);
+
+  /**
+   * «المحادثة» / «المسار» (owner, 2026-09-25): the conversation, or its trajectory. Kept in
+   * the address (`?view=trajectory`) so a reload or a shared link opens the same view. The
+   * chat stays mounted underneath, so its scroll position and draft survive the switch.
+   */
+  const view = params.get(VIEW_PARAM) === 'trajectory' ? 'trajectory' : 'chat';
+  const setView = useCallback(
+    (next: string) =>
+      setParams(
+        (current) => {
+          const out = new URLSearchParams(current);
+          if (next === 'trajectory') out.set(VIEW_PARAM, 'trajectory');
+          else out.delete(VIEW_PARAM);
+          return out;
+        },
+        { replace: true },
+      ),
+    [setParams],
+  );
+  const revision = useMemo(
+    () => revisionOf(state.messages, state.runs),
+    [state.messages, state.runs],
+  );
 
   const agentId = state.session?.agent_id ?? null;
   const agents = useAgents();
@@ -346,198 +381,225 @@ function OpenSession({ sessionId }: { sessionId: string }) {
     // The whole width (owner decision, 2026-09-23): the agent's replies reach the left
     // edge and the person's the right, while the composer keeps its reading column.
     <AppShell title={title}>
-      <div
-        className="chat-flow"
-        data-empty={messageCount === 0 ? 'true' : 'false'}
-        data-testid="chat-screen"
-        data-session-id={sessionId}
-      >
-        <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="chat-header">
-          {/* Who this conversation is with, stated quietly now that the chip row is gone
+      <TabsFrame value={messageCount === 0 ? 'chat' : view} onValueChange={setView}>
+        <div
+          className="chat-flow"
+          data-empty={messageCount === 0 ? 'true' : 'false'}
+          data-view={messageCount === 0 ? 'chat' : view}
+          data-testid="chat-screen"
+          data-session-id={sessionId}
+        >
+          <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="chat-header">
+            {/* Who this conversation is with, stated quietly now that the chip row is gone
               (owner decision, 2026-09-22). Changing it here forks the session. */}
-          <SessionAgent sessionId={sessionId} agentId={agentId} />
-          {/* Which profile this conversation is in, once there is more than one: its
+            <SessionAgent sessionId={sessionId} agentId={agentId} />
+            {/* Which profile this conversation is in, once there is more than one: its
               models and settings are that profile's (ADR 0016). */}
-          {manyProfiles && <ProfileBadge profile={profile} testId="chat-profile" />}
-          <WorkingDirPicker
-            value={state.session?.working_dir ?? null}
-            onChange={(next) => patch.mutate({ working_dir: next })}
-            lockedReason={hasRun ? t('working_dir.locked') : null}
-          />
-          {patch.isError && (
-            <span className="text-xs text-danger-soft-text">{describeError(patch.error, t)}</span>
-          )}
-        </div>
-        {stream.status === 'loading' && (
-          <div className="flex flex-col gap-6 py-4">
-            <SkeletonText lines={2} label={t('common.loading')} />
-            <SkeletonText lines={4} label={t('common.loading')} />
-          </div>
-        )}
-        {stream.status === 'error' && (
-          <Notice tone="danger">
-            {describeError(stream.error, t)}{' '}
-            <button type="button" className="link underline" onClick={stream.reload}>
-              {t('common.retry')}
-            </button>
-          </Notice>
-        )}
-        {stream.lastResume && (
-          <Notice
-            tone={stream.lastResume.truncated ? 'warning' : 'info'}
-            className="mb-2"
-            role="status"
-          >
-            {stream.lastResume.truncated
-              ? t('chat.resynced')
-              : t('chat.resumed', { replayed: stream.lastResume.replayed })}
-          </Notice>
-        )}
-        {state.deleted && <Notice tone="warning">{t('chat.session_deleted')}</Notice>}
-        {anchor?.phase === 'missing' && (
-          <Notice tone="info" className="mb-2">
-            {t('chat.anchor_missing')}
-          </Notice>
-        )}
-        {firstError !== null && <Notice tone="danger">{describeError(firstError, t)}</Notice>}
-        {/* A held-back message that failed on its way out says so: it is no longer in the
-            queue, so silence here would lose it without a word. */}
-        {queueError !== null && <Notice tone="danger">{describeError(queueError, t)}</Notice>}
-        <div className="chat-pad" aria-hidden />
-        {/* An empty chat is an invitation, centred with the composer; the first message
-            docks the composer and hands the column to the transcript. */}
-        <div className="chat-lede">
-          <h2 className="text-xl font-semibold">{t('chat.empty_title')}</h2>
-          <p className="max-w-prose text-sm text-muted">{t('chat.empty')}</p>
-        </div>
-        <div className="chat-stream chat-turns" ref={transcript}>
-          {messageCount > 0 && (state.hasOlder || state.pagedBack) && (
-            <OlderRow
-              edgeRef={olderEdge}
-              hasOlder={state.hasOlder}
-              failed={stream.olderStatus === 'error'}
-              onRetry={loadOlderNow}
+            {manyProfiles && <ProfileBadge profile={profile} testId="chat-profile" />}
+            <WorkingDirPicker
+              value={state.session?.working_dir ?? null}
+              onChange={(next) => patch.mutate({ working_dir: next })}
+              lockedReason={hasRun ? t('working_dir.locked') : null}
             />
-          )}
-          <Transcript
-            turns={turns}
-            showReasoning={showReasoning}
-            showCost={preferences.data?.show_cost ?? false}
-            runs={state.runs}
-            slugOf={(id) => (agents.data ?? []).find((agent) => agent.id === id)?.slug}
-            anchor={anchor && anchor.phase !== 'missing' ? anchor : null}
-            onReply={setReplyTo}
-            onFork={forkFrom}
-          />
-          {/* Questions wait above the composer (QuestionCard); decisions stay in the thread. */}
-          {Object.values(state.approvals)
-            .filter((approval) => approval.kind !== 'question')
-            .map((approval) => (
-              <ApprovalCard key={approval.id} approval={approval} />
-            ))}
-          {failedRun?.error &&
-            // A failed run often leaves an empty assistant message; the badge alone would
-            // hide the reason, so the notice is only suppressed when that message has text
-            // — except for the one failure whose way out the hub knows, which is never
-            // suppressed: the agent's own text does not say where to go.
-            (failedRun.error.code === 'provider_not_configured' ||
-              !state.messages.some(
-                (m) =>
-                  m.run_id === failedRun.id &&
-                  m.status === 'failed' &&
-                  m.content.some((part) => part.type === 'text' && part.text.trim() !== ''),
-              )) && <RunFailureNotice failure={failedRun.error} runtime={runtime.data} />}
+            {patch.isError && (
+              <span className="text-xs text-danger-soft-text">{describeError(patch.error, t)}</span>
+            )}
+            {/* Only once there is something to trace: an empty chat is an invitation. */}
+            {messageCount > 0 && (
+              <div className="chat-header-tabs">
+                <TabList
+                  compact
+                  label={t('trajectory.tabs_label')}
+                  testId="chat-tabs"
+                  items={[
+                    { value: 'chat', label: t('trajectory.chat_tab') },
+                    { value: 'trajectory', label: t('trajectory.tab') },
+                  ]}
+                />
+              </div>
+            )}
+          </div>
+          <TabPanel value="trajectory" testId="trajectory-panel">
+            {view === 'trajectory' && messageCount > 0 && (
+              <TrajectoryView sessionId={sessionId} revision={revision} />
+            )}
+          </TabPanel>
+          <TabPanel value="chat" keepMounted flow>
+            {stream.status === 'loading' && (
+              <div className="flex flex-col gap-6 py-4">
+                <SkeletonText lines={2} label={t('common.loading')} />
+                <SkeletonText lines={4} label={t('common.loading')} />
+              </div>
+            )}
+            {stream.status === 'error' && (
+              <Notice tone="danger">
+                {describeError(stream.error, t)}{' '}
+                <button type="button" className="link underline" onClick={stream.reload}>
+                  {t('common.retry')}
+                </button>
+              </Notice>
+            )}
+            {stream.lastResume && (
+              <Notice
+                tone={stream.lastResume.truncated ? 'warning' : 'info'}
+                className="mb-2"
+                role="status"
+              >
+                {stream.lastResume.truncated
+                  ? t('chat.resynced')
+                  : t('chat.resumed', { replayed: stream.lastResume.replayed })}
+              </Notice>
+            )}
+            {state.deleted && <Notice tone="warning">{t('chat.session_deleted')}</Notice>}
+            {anchor?.phase === 'missing' && (
+              <Notice tone="info" className="mb-2">
+                {t('chat.anchor_missing')}
+              </Notice>
+            )}
+            {firstError !== null && <Notice tone="danger">{describeError(firstError, t)}</Notice>}
+            {/* A held-back message that failed on its way out says so: it is no longer in the
+            queue, so silence here would lose it without a word. */}
+            {queueError !== null && <Notice tone="danger">{describeError(queueError, t)}</Notice>}
+            <div className="chat-pad" aria-hidden />
+            {/* An empty chat is an invitation, centred with the composer; the first message
+            docks the composer and hands the column to the transcript. */}
+            <div className="chat-lede">
+              <h2 className="text-xl font-semibold">{t('chat.empty_title')}</h2>
+              <p className="max-w-prose text-sm text-muted">{t('chat.empty')}</p>
+            </div>
+            <div className="chat-stream chat-turns" ref={transcript}>
+              {messageCount > 0 && (state.hasOlder || state.pagedBack) && (
+                <OlderRow
+                  edgeRef={olderEdge}
+                  hasOlder={state.hasOlder}
+                  failed={stream.olderStatus === 'error'}
+                  onRetry={loadOlderNow}
+                />
+              )}
+              <Transcript
+                turns={turns}
+                showReasoning={showReasoning}
+                showCost={preferences.data?.show_cost ?? false}
+                runs={state.runs}
+                slugOf={(id) => (agents.data ?? []).find((agent) => agent.id === id)?.slug}
+                anchor={anchor && anchor.phase !== 'missing' ? anchor : null}
+                onReply={setReplyTo}
+                onFork={forkFrom}
+              />
+              {/* Questions wait above the composer (QuestionCard); decisions stay in the thread. */}
+              {Object.values(state.approvals)
+                .filter((approval) => approval.kind !== 'question')
+                .map((approval) => (
+                  <ApprovalCard key={approval.id} approval={approval} />
+                ))}
+              {failedRun?.error &&
+                // A failed run often leaves an empty assistant message; the badge alone would
+                // hide the reason, so the notice is only suppressed when that message has text
+                // — except for the one failure whose way out the hub knows, which is never
+                // suppressed: the agent's own text does not say where to go.
+                (failedRun.error.code === 'provider_not_configured' ||
+                  !state.messages.some(
+                    (m) =>
+                      m.run_id === failedRun.id &&
+                      m.status === 'failed' &&
+                      m.content.some((part) => part.type === 'text' && part.text.trim() !== ''),
+                  )) && <RunFailureNotice failure={failedRun.error} runtime={runtime.data} />}
+            </div>
+            <Composer
+              busy={busy}
+              disabled={disabledReason !== null}
+              disabledReason={disabledReason}
+              onSend={send}
+              onCancel={cancel}
+              // While a run is alive the composer carries the live indicator: something moving,
+              // the word, and the seconds counting up (owner decision, 2026-09-22).
+              // Not while a question is open: the agent is not thinking, it is waiting on the
+              // person, and the card above says so.
+              {...(progress && !question ? { status: <RunStatus progress={progress} /> } : {})}
+              {...(question
+                ? { question: <QuestionCard key={question.id} approval={question} /> }
+                : {})}
+              {...(outbox.length > 0
+                ? {
+                    queue: (
+                      <MessageQueue
+                        items={outbox}
+                        onSendNow={(item) => release(item, 'next')}
+                        onSteer={(item) => release(item, 'interrupt')}
+                        onRemove={(item) =>
+                          setOutbox((current) => current.filter((q) => q.key !== item.key))
+                        }
+                      />
+                    ),
+                  }
+                : {})}
+              {...(contextRing ? { context: <ContextRing use={contextRing} /> } : {})}
+              {...(replyTo
+                ? {
+                    reply: (
+                      <div className="composer-reply" data-testid="composer-reply">
+                        <span className="truncate" dir="auto">
+                          {t('chat.replying_to', { text: previewOf(replyTo) })}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          iconOnly
+                          aria-label={t('common.cancel')}
+                          tooltip={t('common.cancel')}
+                          icon={<IconClose size={14} />}
+                          onClick={() => setReplyTo(null)}
+                          data-testid="composer-reply-clear"
+                        />
+                      </div>
+                    ),
+                  }
+                : {})}
+              // The row belongs to an empty chat only (owner decision, 2026-09-22): once the
+              // conversation has turns, its agent is in the header and changing it is a fork.
+              {...(messageCount === 0
+                ? {
+                    chips: (
+                      <AgentChips
+                        selectedId={agentId}
+                        mode="current"
+                        // Before the first message nothing has been said yet, so another agent
+                        // simply means another (still empty) chat.
+                        onSelect={(agent) => {
+                          if (agent.id !== agentId)
+                            navigate(`${routeOf('new_chat')}?agent=${agent.id}`);
+                        }}
+                      />
+                    ),
+                  }
+                : {})}
+              model={state.session?.model ?? null}
+              models={models}
+              recentModels={recent}
+              onModel={(value) => {
+                remember(value);
+                patch.mutate({ model: value });
+              }}
+              reasoningEffort={state.session?.reasoning_effort ?? null}
+              onReasoningEffort={(value) =>
+                patch.mutate({ reasoning_effort: value as ReasoningEffort | null })
+              }
+              approvalMode={approval.mode}
+              approvalOptions={approval.options}
+              onApprovalMode={approval.set}
+              approvalDisabledReason={approval.disabledReason}
+              starters={messageCount === 0 ? starterSuggestions(language) : []}
+            />
+            <div className="chat-pad" aria-hidden />
+          </TabPanel>
         </div>
-        <Composer
-          busy={busy}
-          disabled={disabledReason !== null}
-          disabledReason={disabledReason}
-          onSend={send}
-          onCancel={cancel}
-          // While a run is alive the composer carries the live indicator: something moving,
-          // the word, and the seconds counting up (owner decision, 2026-09-22).
-          // Not while a question is open: the agent is not thinking, it is waiting on the
-          // person, and the card above says so.
-          {...(progress && !question ? { status: <RunStatus progress={progress} /> } : {})}
-          {...(question
-            ? { question: <QuestionCard key={question.id} approval={question} /> }
-            : {})}
-          {...(outbox.length > 0
-            ? {
-                queue: (
-                  <MessageQueue
-                    items={outbox}
-                    onSendNow={(item) => release(item, 'next')}
-                    onSteer={(item) => release(item, 'interrupt')}
-                    onRemove={(item) =>
-                      setOutbox((current) => current.filter((q) => q.key !== item.key))
-                    }
-                  />
-                ),
-              }
-            : {})}
-          {...(contextRing ? { context: <ContextRing use={contextRing} /> } : {})}
-          {...(replyTo
-            ? {
-                reply: (
-                  <div className="composer-reply" data-testid="composer-reply">
-                    <span className="truncate" dir="auto">
-                      {t('chat.replying_to', { text: previewOf(replyTo) })}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      iconOnly
-                      aria-label={t('common.cancel')}
-                      tooltip={t('common.cancel')}
-                      icon={<IconClose size={14} />}
-                      onClick={() => setReplyTo(null)}
-                      data-testid="composer-reply-clear"
-                    />
-                  </div>
-                ),
-              }
-            : {})}
-          // The row belongs to an empty chat only (owner decision, 2026-09-22): once the
-          // conversation has turns, its agent is in the header and changing it is a fork.
-          {...(messageCount === 0
-            ? {
-                chips: (
-                  <AgentChips
-                    selectedId={agentId}
-                    mode="current"
-                    // Before the first message nothing has been said yet, so another agent
-                    // simply means another (still empty) chat.
-                    onSelect={(agent) => {
-                      if (agent.id !== agentId)
-                        navigate(`${routeOf('new_chat')}?agent=${agent.id}`);
-                    }}
-                  />
-                ),
-              }
-            : {})}
-          model={state.session?.model ?? null}
-          models={models}
-          recentModels={recent}
-          onModel={(value) => {
-            remember(value);
-            patch.mutate({ model: value });
-          }}
-          reasoningEffort={state.session?.reasoning_effort ?? null}
-          onReasoningEffort={(value) =>
-            patch.mutate({ reasoning_effort: value as ReasoningEffort | null })
-          }
-          approvalMode={approval.mode}
-          approvalOptions={approval.options}
-          onApprovalMode={approval.set}
-          approvalDisabledReason={approval.disabledReason}
-          starters={messageCount === 0 ? starterSuggestions(language) : []}
-        />
-        <div className="chat-pad" aria-hidden />
-      </div>
+      </TabsFrame>
     </AppShell>
   );
 }
+
+/** The address parameter that opens a conversation on its Trajectory tab. */
+const VIEW_PARAM = 'view';
 
 /**
  * The top of a transcript that pages back: "loading older messages…" while there is more

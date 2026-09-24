@@ -478,6 +478,19 @@
 .mj-tab-panel {
   min-inline-size: 0;
 }
+/* A row of tabs among other controls (the chat header): no rule, no gap below. */
+.mj-tabs-compact {
+  border-block-end: 0;
+  margin-block-end: 0;
+}
+/* A panel whose box steps out of layout: its children belong to the page around it. */
+.mj-tab-panel-flow {
+  display: contents;
+}
+/* A kept panel that is not shown (TabPanel `keepMounted`). */
+.mj-tab-panel[data-state='inactive'] {
+  display: none;
+}
 
 /* ------------------------------------------------------------------ the card */
 .mj-card {

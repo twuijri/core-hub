@@ -498,7 +498,7 @@ export class SessionsService {
 
   /**
    * The conversation as a timed list of steps with its metrics (contract
-   * `sessions.getTrajectory`, decision §41). The same document is the session log the
+   * `sessions.getTrajectory`, decision §42). The same document is the session log the
    * person downloads. A live run is read from the engine, which holds what it has not
    * written yet.
    */
