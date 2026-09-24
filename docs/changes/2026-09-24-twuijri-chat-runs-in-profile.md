@@ -139,6 +139,7 @@ $ MAJLIS_HERMES_IMAGE=majlis:local npx vitest run --maxWorkers=1 hermes-profile.
   بروفايل تبقى هناك (لا يعيدها هرمز إلى `default` تلقائيًا)، والبروفايلات التي أُنشئت عند الطلب تبقى.
 
 ## التسليم والخطوة التالية
+- PR: https://github.com/twuijri/majlis/pull/83
 - PR إلى `main` للمراجعة؛ القرار 4 (إنشاء البروفايل المفقود نسخةً من `default`) ينتظر تأكيد المالك.
 - ملاحظة للمتابعة (مهمة مستقلة): صفحة الذاكرة تكتب `MEMORY.md` و`USER.md` في جذر منزل البروفايل،
   بينما يقرأ هرمز `memories/MEMORY.md` و`memories/USER.md` (`tools/memory_tool.py` §get_memory_dir؛
