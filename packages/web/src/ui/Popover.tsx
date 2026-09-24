@@ -43,7 +43,7 @@ export function Popover({
       </Tooltip>
       <RadixPopover.Portal>
         <RadixPopover.Content
-          className={`mj-popover glass ${className}`}
+          className={`ch-popover glass ${className}`}
           align={align}
           side={side}
           sideOffset={8}

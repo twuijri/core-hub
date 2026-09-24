@@ -183,7 +183,7 @@ test.describe('the chat surface, designed', () => {
       const px = (value: string) => parseFloat(value) * (value.endsWith('rem') ? 16 : 1);
       return {
         mine: parseFloat(styles.marginBlockStart),
-        turn: px(root.getPropertyValue('--mj-layout-turn-gap').trim()),
+        turn: px(root.getPropertyValue('--ch-layout-turn-gap').trim()),
       };
     });
     expect(gaps.mine).toBeGreaterThan(0);
@@ -223,8 +223,8 @@ test.describe('the rebuilt screens', () => {
     // entry above Tasks since 2026-09-24.
     await page.getByTestId('rail').getByRole('link', { name: 'الوكلاء' }).click();
     await expect(page.getByTestId('agent-card').first()).toBeVisible();
-    await expect(page.getByTestId('agent-card').first().locator('.mj-avatar')).toBeVisible();
-    await expect(page.getByTestId('agent-card').first().locator('.mj-badge').first()).toBeVisible();
+    await expect(page.getByTestId('agent-card').first().locator('.ch-avatar')).toBeVisible();
+    await expect(page.getByTestId('agent-card').first().locator('.ch-badge').first()).toBeVisible();
     await shot(page, 'design-agents-ar-light');
 
     // Settings: the side list — its three groups — and the Display switch. The list is on

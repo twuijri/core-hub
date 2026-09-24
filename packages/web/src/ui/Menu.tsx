@@ -35,7 +35,7 @@ export function Menu({
       </Tooltip>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
-          className="mj-menu glass"
+          className="ch-menu glass"
           align={align}
           side="top"
           sideOffset={8}
@@ -62,7 +62,7 @@ export function MenuItem({
   children: ReactNode;
 }) {
   return (
-    <DropdownMenu.Item className="mj-menu-item" data-tone={tone} onSelect={() => onSelect()}>
+    <DropdownMenu.Item className="ch-menu-item" data-tone={tone} onSelect={() => onSelect()}>
       {icon}
       <span>{children}</span>
     </DropdownMenu.Item>
@@ -71,12 +71,12 @@ export function MenuItem({
 
 /** The hairline between two groups of items; decorative, skipped by the keyboard. */
 export function MenuSeparator() {
-  return <DropdownMenu.Separator className="mj-menu-sep" />;
+  return <DropdownMenu.Separator className="ch-menu-sep" />;
 }
 
 /** A line of explanation inside a menu; not an item, so it is skipped by the keyboard. */
 export function MenuNote({ children }: { children: ReactNode }) {
-  return <p className="mj-menu-note">{children}</p>;
+  return <p className="ch-menu-note">{children}</p>;
 }
 
 /**
@@ -99,14 +99,14 @@ export function MenuChoice({
 }) {
   return (
     <DropdownMenu.CheckboxItem
-      className="mj-menu-item mj-menu-choice"
+      className="ch-menu-item ch-menu-choice"
       checked={checked}
       disabled={disabled ?? false}
       onSelect={() => onSelect()}
     >
       {icon}
-      <span className="mj-menu-choice-label">{children}</span>
-      <DropdownMenu.ItemIndicator className="mj-menu-check">
+      <span className="ch-menu-choice-label">{children}</span>
+      <DropdownMenu.ItemIndicator className="ch-menu-check">
         <IconCheck size={14} />
       </DropdownMenu.ItemIndicator>
     </DropdownMenu.CheckboxItem>

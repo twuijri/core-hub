@@ -192,8 +192,8 @@ Adding a control means adding it here, once, with its tokens — never inline in
 ### One of everything
 
 One focus ring (`:focus-visible` in `@layer base`; no control draws its own). One shadow
-scale (`--mj-shadow-sm|md|lg`). Concentric radii — a control's inner radius is the track's
-radius minus its padding. Controls come in three heights (`--mj-control-height-sm|md|lg`)
+scale (`--ch-shadow-sm|md|lg`). Concentric radii — a control's inner radius is the track's
+radius minus its padding. Controls come in three heights (`--ch-control-height-sm|md|lg`)
 and nothing invents a fourth. A disabled control always says why, in its tooltip, hung off
 a focusable wrapper — a disabled button takes no pointer events, so without one the reason
 could never be read.

@@ -10,64 +10,64 @@
 @import './screens.css';
 
 @theme inline {
-  --color-bg: var(--mj-color-bg);
-  --color-raised: var(--mj-color-bg-raised);
-  --color-surface: var(--mj-color-surface);
-  --color-surface-2: var(--mj-color-surface-2);
-  --color-surface-3: var(--mj-color-surface-3);
-  --color-control-track: var(--mj-color-control-track);
-  --color-control-raised: var(--mj-color-control-raised);
-  --color-ink: var(--mj-color-text);
-  --color-muted: var(--mj-color-text-muted);
-  --color-faint: var(--mj-color-text-faint);
-  --color-line: var(--mj-color-border);
-  --color-line-strong: var(--mj-color-border-strong);
-  --color-accent: var(--mj-color-accent);
-  --color-accent-strong: var(--mj-color-accent-strong);
-  --color-accent-text: var(--mj-color-accent-text);
-  --color-accent-soft: var(--mj-color-accent-soft);
-  --color-accent-soft-text: var(--mj-color-accent-soft-text);
-  --color-danger: var(--mj-color-danger);
-  --color-danger-text: var(--mj-color-danger-text);
-  --color-danger-soft: var(--mj-color-danger-soft);
-  --color-danger-soft-text: var(--mj-color-danger-soft-text);
-  --color-warning-soft: var(--mj-color-warning-soft);
-  --color-warning-soft-text: var(--mj-color-warning-soft-text);
-  --color-success-soft: var(--mj-color-success-soft);
-  --color-success-soft-text: var(--mj-color-success-soft-text);
-  --color-info-soft: var(--mj-color-info-soft);
-  --color-info-soft-text: var(--mj-color-info-soft-text);
-  --color-link: var(--mj-color-link);
-  --color-focus: var(--mj-color-focus);
-  --color-bubble: var(--mj-color-user-bubble);
-  --color-bubble-text: var(--mj-color-user-bubble-text);
-  --color-code-bg: var(--mj-color-code-bg);
-  --color-code-text: var(--mj-color-code-text);
-  --color-scrim: var(--mj-color-scrim);
-  --radius-sm: var(--mj-radius-sm);
-  --radius-md: var(--mj-radius-md);
-  --radius-lg: var(--mj-radius-lg);
-  --radius-xl: var(--mj-radius-xl);
-  --shadow-sm: var(--mj-shadow-sm);
-  --shadow-md: var(--mj-shadow-md);
-  --shadow-lg: var(--mj-shadow-lg);
-  --font-sans: var(--mj-font-sans);
-  --font-mono: var(--mj-font-mono);
-  --text-xs: var(--mj-font-size-xs);
-  --text-sm: var(--mj-font-size-sm);
-  --text-base: var(--mj-font-size-md);
-  --text-lg: var(--mj-font-size-lg);
-  --text-xl: var(--mj-font-size-xl);
-  --text-2xl: var(--mj-font-size-2xl);
+  --color-bg: var(--ch-color-bg);
+  --color-raised: var(--ch-color-bg-raised);
+  --color-surface: var(--ch-color-surface);
+  --color-surface-2: var(--ch-color-surface-2);
+  --color-surface-3: var(--ch-color-surface-3);
+  --color-control-track: var(--ch-color-control-track);
+  --color-control-raised: var(--ch-color-control-raised);
+  --color-ink: var(--ch-color-text);
+  --color-muted: var(--ch-color-text-muted);
+  --color-faint: var(--ch-color-text-faint);
+  --color-line: var(--ch-color-border);
+  --color-line-strong: var(--ch-color-border-strong);
+  --color-accent: var(--ch-color-accent);
+  --color-accent-strong: var(--ch-color-accent-strong);
+  --color-accent-text: var(--ch-color-accent-text);
+  --color-accent-soft: var(--ch-color-accent-soft);
+  --color-accent-soft-text: var(--ch-color-accent-soft-text);
+  --color-danger: var(--ch-color-danger);
+  --color-danger-text: var(--ch-color-danger-text);
+  --color-danger-soft: var(--ch-color-danger-soft);
+  --color-danger-soft-text: var(--ch-color-danger-soft-text);
+  --color-warning-soft: var(--ch-color-warning-soft);
+  --color-warning-soft-text: var(--ch-color-warning-soft-text);
+  --color-success-soft: var(--ch-color-success-soft);
+  --color-success-soft-text: var(--ch-color-success-soft-text);
+  --color-info-soft: var(--ch-color-info-soft);
+  --color-info-soft-text: var(--ch-color-info-soft-text);
+  --color-link: var(--ch-color-link);
+  --color-focus: var(--ch-color-focus);
+  --color-bubble: var(--ch-color-user-bubble);
+  --color-bubble-text: var(--ch-color-user-bubble-text);
+  --color-code-bg: var(--ch-color-code-bg);
+  --color-code-text: var(--ch-color-code-text);
+  --color-scrim: var(--ch-color-scrim);
+  --radius-sm: var(--ch-radius-sm);
+  --radius-md: var(--ch-radius-md);
+  --radius-lg: var(--ch-radius-lg);
+  --radius-xl: var(--ch-radius-xl);
+  --shadow-sm: var(--ch-shadow-sm);
+  --shadow-md: var(--ch-shadow-md);
+  --shadow-lg: var(--ch-shadow-lg);
+  --font-sans: var(--ch-font-sans);
+  --font-mono: var(--ch-font-mono);
+  --text-xs: var(--ch-font-size-xs);
+  --text-sm: var(--ch-font-size-sm);
+  --text-base: var(--ch-font-size-md);
+  --text-lg: var(--ch-font-size-lg);
+  --text-xl: var(--ch-font-size-xl);
+  --text-2xl: var(--ch-font-size-2xl);
 }
 
 @layer base {
   html {
-    font-family: var(--mj-font-sans);
-    font-size: calc(100% * var(--mj-text-scale, 1));
-    line-height: var(--mj-font-leading-normal);
-    background: var(--mj-color-bg);
-    color: var(--mj-color-text);
+    font-family: var(--ch-font-sans);
+    font-size: calc(100% * var(--ch-text-scale, 1));
+    line-height: var(--ch-font-leading-normal);
+    background: var(--ch-color-bg);
+    color: var(--ch-color-text);
     -webkit-font-smoothing: antialiased;
   }
   body {
@@ -75,7 +75,7 @@
     min-block-size: 100dvh;
   }
   :focus-visible {
-    outline: 2px solid var(--mj-color-focus);
+    outline: 2px solid var(--ch-color-focus);
     outline-offset: 2px;
   }
   /* Navigation links inherit; only prose links and .link carry the link colour. */
@@ -84,7 +84,7 @@
   }
   .link,
   .prose-chat a {
-    color: var(--mj-color-link);
+    color: var(--ch-color-link);
   }
   button,
   input,
@@ -100,76 +100,76 @@
 
 /* A transition that follows the motion tokens (0 ms under prefers-reduced-motion). */
 @utility transition-ui {
-  transition-duration: var(--mj-motion-normal);
-  transition-timing-function: var(--mj-motion-ease);
+  transition-duration: var(--ch-motion-normal);
+  transition-timing-function: var(--ch-motion-ease);
 }
 
 @layer components {
   /* The one glass surface. Chrome only: sidebar, top bar, composer, popovers, toolbars. */
   .glass {
-    background: var(--mj-glass-bg);
-    -webkit-backdrop-filter: var(--mj-glass-filter);
-    backdrop-filter: var(--mj-glass-filter);
-    border: 1px solid var(--mj-glass-border);
-    box-shadow: var(--mj-glass-shadow);
+    background: var(--ch-glass-bg);
+    -webkit-backdrop-filter: var(--ch-glass-filter);
+    backdrop-filter: var(--ch-glass-filter);
+    border: 1px solid var(--ch-glass-border);
+    box-shadow: var(--ch-glass-shadow);
   }
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .glass {
-      background: var(--mj-color-surface);
+      background: var(--ch-color-surface);
     }
   }
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-ui;
-    border: 1px solid var(--mj-color-border);
-    background: var(--mj-color-surface);
-    color: var(--mj-color-text);
+    border: 1px solid var(--ch-color-border);
+    background: var(--ch-color-surface);
+    color: var(--ch-color-text);
   }
   .btn:hover {
-    background: var(--mj-color-surface-2);
+    background: var(--ch-color-surface-2);
   }
   .btn:disabled {
     opacity: 0.55;
     cursor: not-allowed;
   }
   .btn-primary {
-    background: var(--mj-color-accent);
-    border-color: var(--mj-color-accent);
-    color: var(--mj-color-accent-text);
+    background: var(--ch-color-accent);
+    border-color: var(--ch-color-accent);
+    color: var(--ch-color-accent-text);
   }
   .btn-primary:hover {
-    background: var(--mj-color-accent-strong);
-    border-color: var(--mj-color-accent-strong);
+    background: var(--ch-color-accent-strong);
+    border-color: var(--ch-color-accent-strong);
   }
   .btn-danger {
-    background: var(--mj-color-danger);
-    border-color: var(--mj-color-danger);
-    color: var(--mj-color-danger-text);
+    background: var(--ch-color-danger);
+    border-color: var(--ch-color-danger);
+    color: var(--ch-color-danger-text);
   }
   .btn-ghost {
     background: transparent;
     border-color: transparent;
   }
   .btn-ghost:hover {
-    background: var(--mj-color-surface-2);
+    background: var(--ch-color-surface-2);
   }
   .field {
     @apply w-full rounded-md px-3 py-2 text-base;
-    border: 1px solid var(--mj-color-border);
-    background: var(--mj-color-surface);
-    color: var(--mj-color-text);
+    border: 1px solid var(--ch-color-border);
+    background: var(--ch-color-surface);
+    color: var(--ch-color-text);
   }
   .field::placeholder {
-    color: var(--mj-color-text-faint);
+    color: var(--ch-color-text-faint);
   }
   .card {
     @apply rounded-lg p-4;
-    background: var(--mj-color-surface);
-    border: 1px solid var(--mj-color-border);
+    background: var(--ch-color-surface);
+    border: 1px solid var(--ch-color-border);
   }
   .chip {
     @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs;
-    background: var(--mj-color-surface-2);
-    color: var(--mj-color-text-muted);
+    background: var(--ch-color-surface-2);
+    color: var(--ch-color-text-muted);
   }
 }
 
@@ -177,198 +177,198 @@
    src/ui/Segmented.tsx. One track, one lifted pill, three sizes — every value a
    `control.*` or `shadow.*` token so the control is designed in one place and used
    everywhere. Logical properties only, so the track reads correctly in both directions. */
-.mj-segmented {
+.ch-segmented {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: var(--mj-control-gap);
-  padding: var(--mj-control-track-pad);
-  border-radius: var(--mj-control-track-radius);
-  background: var(--mj-color-control-track);
+  gap: var(--ch-control-gap);
+  padding: var(--ch-control-track-pad);
+  border-radius: var(--ch-control-track-radius);
+  background: var(--ch-color-control-track);
   max-inline-size: 100%;
   overflow-x: auto;
   scrollbar-width: none;
 }
-.mj-segmented::-webkit-scrollbar {
+.ch-segmented::-webkit-scrollbar {
   display: none;
 }
-.mj-segmented[data-wrap='true'] {
+.ch-segmented[data-wrap='true'] {
   flex-wrap: wrap;
   overflow-x: visible;
 }
-.mj-segmented[data-overflowing='true'],
-.mj-segmented[data-density='compact'] {
+.ch-segmented[data-overflowing='true'],
+.ch-segmented[data-density='compact'] {
   overflow-x: visible;
   flex-wrap: nowrap;
 }
-.mj-segmented[data-stretch='true'] {
+.ch-segmented[data-stretch='true'] {
   display: flex;
   inline-size: 100%;
 }
-.mj-segmented[data-stretch='true'] > .mj-segment {
+.ch-segmented[data-stretch='true'] > .ch-segment {
   flex: 1 1 0;
   min-inline-size: 0;
 }
 
-.mj-segment {
+.ch-segment {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--mj-space-2);
+  gap: var(--ch-space-2);
   flex: 0 0 auto;
   min-inline-size: 0;
-  block-size: var(--mj-control-height-md);
-  padding-inline: var(--mj-control-pad-md);
-  font-size: var(--mj-control-font-md);
+  block-size: var(--ch-control-height-md);
+  padding-inline: var(--ch-control-pad-md);
+  font-size: var(--ch-control-font-md);
   border: 0;
-  border-radius: var(--mj-control-item-radius);
+  border-radius: var(--ch-control-item-radius);
   background: transparent;
-  color: var(--mj-color-text-muted);
+  color: var(--ch-color-text-muted);
   white-space: nowrap;
   cursor: pointer;
   /* The lift and the colour move together, on the motion tokens — 0 ms when the person
      asked the OS for less motion. */
-  transition-duration: var(--mj-motion-normal);
-  transition-timing-function: var(--mj-motion-ease);
+  transition-duration: var(--ch-motion-normal);
+  transition-timing-function: var(--ch-motion-ease);
   transition-property: background-color, color, box-shadow, opacity;
 }
-.mj-segment:hover:not([disabled]):not([aria-checked='true']) {
-  color: var(--mj-color-text);
-  background: color-mix(in srgb, var(--mj-color-control-raised) 45%, transparent);
+.ch-segment:hover:not([disabled]):not([aria-checked='true']) {
+  color: var(--ch-color-text);
+  background: color-mix(in srgb, var(--ch-color-control-raised) 45%, transparent);
 }
-.mj-segment[aria-checked='true'] {
-  background: var(--mj-color-control-raised);
-  color: var(--mj-color-text);
+.ch-segment[aria-checked='true'] {
+  background: var(--ch-color-control-raised);
+  color: var(--ch-color-text);
   font-weight: 500;
-  box-shadow: var(--mj-shadow-sm);
+  box-shadow: var(--ch-shadow-sm);
 }
-.mj-segment[disabled] {
+.ch-segment[disabled] {
   opacity: 0.45;
   cursor: not-allowed;
 }
-.mj-segment-label {
+.ch-segment-label {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.mj-segmented[data-size='sm'] > .mj-segment {
-  block-size: var(--mj-control-height-sm);
-  padding-inline: var(--mj-control-pad-sm);
-  font-size: var(--mj-control-font-sm);
-  gap: var(--mj-space-1);
+.ch-segmented[data-size='sm'] > .ch-segment {
+  block-size: var(--ch-control-height-sm);
+  padding-inline: var(--ch-control-pad-sm);
+  font-size: var(--ch-control-font-sm);
+  gap: var(--ch-space-1);
 }
-.mj-segmented[data-size='lg'] > .mj-segment {
-  block-size: var(--mj-control-height-lg);
-  padding-inline: var(--mj-control-pad-lg);
-  font-size: var(--mj-control-font-lg);
+.ch-segmented[data-size='lg'] > .ch-segment {
+  block-size: var(--ch-control-height-lg);
+  padding-inline: var(--ch-control-pad-lg);
+  font-size: var(--ch-control-font-lg);
 }
 
 /* ---- compact density: only the chosen option keeps its label ------------------
    The rest collapse to their icon, separated by a hairline. The hairline is drawn
    with a pseudo-element so it is decorative by construction — nothing to announce —
    and it never appears beside the raised surface, where it would fight the shadow. */
-.mj-segmented[data-density='compact'] .mj-segment-icon-only,
-.mj-segment-icon-only {
-  padding-inline: var(--mj-space-2);
+.ch-segmented[data-density='compact'] .ch-segment-icon-only,
+.ch-segment-icon-only {
+  padding-inline: var(--ch-space-2);
   gap: 0;
   position: relative;
 }
-.mj-segmented[data-density='compact'] > .mj-segment-icon-only + .mj-segment-icon-only::before {
+.ch-segmented[data-density='compact'] > .ch-segment-icon-only + .ch-segment-icon-only::before {
   content: '';
   position: absolute;
-  inset-inline-start: calc(var(--mj-control-gap) / -2 - 0.5px);
+  inset-inline-start: calc(var(--ch-control-gap) / -2 - 0.5px);
   inset-block: 22%;
   inline-size: 1px;
-  background: var(--mj-color-border);
+  background: var(--ch-color-border);
 }
 /* No hairline next to the raised surface. */
-.mj-segmented[data-density='compact'] > [aria-checked='true'] + .mj-segment-icon-only::before {
+.ch-segmented[data-density='compact'] > [aria-checked='true'] + .ch-segment-icon-only::before {
   content: none;
 }
 
 /* ---- the overflow control and the trailing action ---------------------------- */
-.mj-segment-more {
-  color: var(--mj-color-text-muted);
-  gap: var(--mj-space-1);
+.ch-segment-more {
+  color: var(--ch-color-text-muted);
+  gap: var(--ch-space-1);
 }
-.mj-segment-action {
+.ch-segment-action {
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
-  inline-size: var(--mj-control-height-md);
-  block-size: var(--mj-control-height-md);
-  margin-inline-start: var(--mj-space-2);
-  border: 1px dashed var(--mj-color-border-strong);
-  border-radius: var(--mj-control-item-radius);
+  inline-size: var(--ch-control-height-md);
+  block-size: var(--ch-control-height-md);
+  margin-inline-start: var(--ch-space-2);
+  border: 1px dashed var(--ch-color-border-strong);
+  border-radius: var(--ch-control-item-radius);
   background: transparent;
-  color: var(--mj-color-text-muted);
+  color: var(--ch-color-text-muted);
   cursor: pointer;
-  transition-duration: var(--mj-motion-fast);
-  transition-timing-function: var(--mj-motion-ease);
+  transition-duration: var(--ch-motion-fast);
+  transition-timing-function: var(--ch-motion-ease);
   transition-property: background-color, color, border-color;
 }
-.mj-segment-action:hover {
-  background: var(--mj-color-surface-2);
-  color: var(--mj-color-text);
-  border-color: var(--mj-color-accent);
+.ch-segment-action:hover {
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text);
+  border-color: var(--ch-color-accent);
 }
-.mj-segmented[data-size='sm'] .mj-segment-action {
-  inline-size: var(--mj-control-height-sm);
-  block-size: var(--mj-control-height-sm);
+.ch-segmented[data-size='sm'] .ch-segment-action {
+  inline-size: var(--ch-control-height-sm);
+  block-size: var(--ch-control-height-sm);
 }
 
 /* The measuring row: real type and real padding, off the screen, never read aloud. */
-.mj-segmented-measure {
+.ch-segmented-measure {
   position: absolute;
   inset-block-start: 0;
   inset-inline-start: 0;
   visibility: hidden;
   pointer-events: none;
   display: flex;
-  gap: var(--mj-control-gap);
+  gap: var(--ch-control-gap);
   white-space: nowrap;
 }
 
-.mj-menu-choice {
+.ch-menu-choice {
   justify-content: space-between;
 }
-.mj-menu-choice-label {
+.ch-menu-choice-label {
   flex: 1;
   min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.mj-menu-check {
+.ch-menu-check {
   display: grid;
   place-items: center;
-  color: var(--mj-color-accent);
+  color: var(--ch-color-accent);
 }
 
 /* An option that is being dragged (the agent row) keeps its place in the track. */
-.mj-segment.sortable-dragging {
+.ch-segment.sortable-dragging {
   opacity: 0.5;
 }
-.mj-segment[data-drag='true'] {
+.ch-segment[data-drag='true'] {
   cursor: grab;
 }
-.mj-segment[data-drag='true']:active {
+.ch-segment[data-drag='true']:active {
   cursor: grabbing;
 }
 /* The agent's initial, inside its option. */
-.mj-segment-mark {
+.ch-segment-mark {
   display: inline-grid;
   place-items: center;
   inline-size: 1.375rem;
   block-size: 1.375rem;
-  border-radius: var(--mj-radius-full);
-  background: var(--mj-color-surface-3);
-  color: var(--mj-color-text);
-  font-size: var(--mj-font-size-xs);
+  border-radius: var(--ch-radius-full);
+  background: var(--ch-color-surface-3);
+  color: var(--ch-color-text);
+  font-size: var(--ch-font-size-xs);
   font-weight: 500;
 }
-.mj-segment[aria-checked='true'] .mj-segment-mark {
-  background: var(--mj-color-accent);
-  color: var(--mj-color-accent-text);
+.ch-segment[aria-checked='true'] .ch-segment-mark {
+  background: var(--ch-color-accent);
+  color: var(--ch-color-accent-text);
 }
 
 /* Markdown rendering (solid content surface). */
@@ -382,13 +382,13 @@
 .prose-chat h2,
 .prose-chat h3 {
   font-weight: 600;
-  line-height: var(--mj-font-leading-tight);
+  line-height: var(--ch-font-leading-tight);
 }
 .prose-chat h1 {
-  font-size: var(--mj-font-size-xl);
+  font-size: var(--ch-font-size-xl);
 }
 .prose-chat h2 {
-  font-size: var(--mj-font-size-lg);
+  font-size: var(--ch-font-size-lg);
 }
 .prose-chat ul,
 .prose-chat ol {
@@ -401,9 +401,9 @@
   list-style: decimal;
 }
 .prose-chat blockquote {
-  border-inline-start: 3px solid var(--mj-color-border-strong);
+  border-inline-start: 3px solid var(--ch-color-border-strong);
   padding-inline-start: 0.75em;
-  color: var(--mj-color-text-muted);
+  color: var(--ch-color-text-muted);
 }
 .prose-chat table {
   border-collapse: collapse;
@@ -413,23 +413,23 @@
 }
 .prose-chat th,
 .prose-chat td {
-  border: 1px solid var(--mj-color-border);
+  border: 1px solid var(--ch-color-border);
   padding: 0.25em 0.6em;
   text-align: start;
 }
 .prose-chat code {
-  font-family: var(--mj-font-mono);
+  font-family: var(--ch-font-mono);
   font-size: 0.9em;
-  background: var(--mj-color-code-bg);
-  color: var(--mj-color-code-text);
-  border-radius: var(--mj-radius-sm);
+  background: var(--ch-color-code-bg);
+  color: var(--ch-color-code-text);
+  border-radius: var(--ch-radius-sm);
   padding: 0.1em 0.35em;
 }
 .prose-chat pre {
-  background: var(--mj-color-code-bg);
-  color: var(--mj-color-code-text);
-  border: 1px solid var(--mj-color-border);
-  border-radius: var(--mj-radius-md);
+  background: var(--ch-color-code-bg);
+  color: var(--ch-color-code-text);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
   padding: 0.75em 1em;
   overflow-x: auto;
   direction: ltr;
@@ -438,25 +438,25 @@
 .prose-chat pre code {
   background: transparent;
   padding: 0;
-  font-size: var(--mj-font-size-sm);
+  font-size: var(--ch-font-size-sm);
 }
 /* highlight.js classes (rehype-highlight) painted with the token colours only. */
 .hljs-keyword,
 .hljs-selector-tag,
 .hljs-built_in,
 .hljs-tag {
-  color: var(--mj-color-code-keyword);
+  color: var(--ch-color-code-keyword);
 }
 .hljs-string,
 .hljs-attr,
 .hljs-regexp,
 .hljs-addition {
-  color: var(--mj-color-code-string);
+  color: var(--ch-color-code-string);
 }
 .hljs-comment,
 .hljs-quote,
 .hljs-meta {
-  color: var(--mj-color-code-comment);
+  color: var(--ch-color-code-comment);
   font-style: italic;
 }
 .hljs-number,
@@ -464,14 +464,14 @@
 .hljs-title,
 .hljs-section,
 .hljs-deletion {
-  color: var(--mj-color-code-number);
+  color: var(--ch-color-code-number);
 }
 
 /* Drag and drop affordances. */
 .drop-target {
-  outline: 2px dashed var(--mj-color-accent);
+  outline: 2px dashed var(--ch-color-accent);
   outline-offset: -4px;
-  background: var(--mj-color-accent-soft);
+  background: var(--ch-color-accent-soft);
 }
 .sortable-dragging {
   opacity: 0.5;
@@ -481,7 +481,7 @@
    An empty chat is a centred invitation; a chat with a transcript is a column with the
    composer docked at the bottom. It is the same column either way, and the move between
    the two is a transition, not a jump: the two flexible pads around the composer lose
-   their growth while the transcript gains it, all on `--mj-motion-slow`, which is 0 ms
+   their growth while the transcript gains it, all on `--ch-motion-slow`, which is 0 ms
    when the person asked the OS for less motion. */
 .chat-flow {
   display: flex;
@@ -496,14 +496,14 @@
 .chat-flow > .chat-lede,
 .chat-flow .composer-dock {
   inline-size: 100%;
-  max-inline-size: var(--mj-layout-composer-max);
+  max-inline-size: var(--ch-layout-composer-max);
   margin-inline: auto;
 }
 .chat-pad,
 .chat-stream {
   flex-basis: 0;
-  transition-duration: var(--mj-motion-slow);
-  transition-timing-function: var(--mj-motion-ease);
+  transition-duration: var(--ch-motion-slow);
+  transition-timing-function: var(--ch-motion-ease);
   transition-property: flex-grow;
 }
 .chat-pad {
@@ -523,11 +523,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--mj-space-3);
+  gap: var(--ch-space-3);
   text-align: center;
-  padding-block-end: var(--mj-space-6);
-  transition-duration: var(--mj-motion-normal);
-  transition-timing-function: var(--mj-motion-ease);
+  padding-block-end: var(--ch-space-6);
+  transition-duration: var(--ch-motion-normal);
+  transition-timing-function: var(--ch-motion-ease);
   transition-property: opacity;
 }
 .chat-flow:not([data-empty='true']) .chat-lede {
@@ -537,8 +537,8 @@
 .composer-dock {
   position: sticky;
   inset-block-end: 0;
-  z-index: var(--mj-z-sticky);
-  padding-block: var(--mj-space-2) var(--mj-space-3);
+  z-index: var(--ch-z-sticky);
+  padding-block: var(--ch-space-2) var(--ch-space-3);
 }
 .chat-flow[data-empty='true'] .composer-dock {
   position: static;
@@ -550,33 +550,33 @@
    allowed because the composer is floating chrome; `prefers-reduced-transparency`
    flattens it through the same token scale as the sidebar. */
 .composer {
-  border-radius: var(--mj-radius-xl);
-  padding: var(--mj-space-2) var(--mj-space-3) var(--mj-space-2);
+  border-radius: var(--ch-radius-xl);
+  padding: var(--ch-space-2) var(--ch-space-3) var(--ch-space-2);
   display: flex;
   flex-direction: column;
-  gap: var(--mj-space-1);
-  transition-duration: var(--mj-motion-normal);
-  transition-timing-function: var(--mj-motion-ease);
+  gap: var(--ch-space-1);
+  transition-duration: var(--ch-motion-normal);
+  transition-timing-function: var(--ch-motion-ease);
   transition-property: border-color, box-shadow, background-color;
 }
 .composer:focus-within {
-  border-color: var(--mj-color-accent);
+  border-color: var(--ch-color-accent);
 }
 .composer[data-state='dragging'] {
-  border-color: var(--mj-color-accent);
+  border-color: var(--ch-color-accent);
   border-style: dashed;
-  background: var(--mj-color-accent-soft);
+  background: var(--ch-color-accent-soft);
 }
 .composer[data-state='disabled'] {
   opacity: 0.7;
 }
 .composer[data-state='error'] {
-  border-color: var(--mj-color-danger);
+  border-color: var(--ch-color-danger);
 }
 .composer-drop {
-  color: var(--mj-color-accent-soft-text);
-  font-size: var(--mj-font-size-xs);
-  padding-block-end: var(--mj-space-1);
+  color: var(--ch-color-accent-soft-text);
+  font-size: var(--ch-font-size-xs);
+  padding-block-end: var(--ch-space-1);
 }
 
 /* The textarea grows by itself: an invisible twin carries the same text, so the
@@ -597,11 +597,11 @@
 .composer-grow::after {
   grid-area: 1 / 1;
   font: inherit;
-  line-height: var(--mj-font-leading-normal);
-  padding: var(--mj-space-2) var(--mj-space-1);
+  line-height: var(--ch-font-leading-normal);
+  padding: var(--ch-space-2) var(--ch-space-1);
   border: 0;
   background: transparent;
-  color: var(--mj-color-text);
+  color: var(--ch-color-text);
   resize: none;
   overflow: hidden;
   min-block-size: 2.5rem;
@@ -610,13 +610,13 @@
   outline: none; /* the surface shows the focus; one ring, not two */
 }
 .composer-grow > textarea::placeholder {
-  color: var(--mj-color-text-faint);
+  color: var(--ch-color-text-faint);
 }
 
 .composer-tools {
   display: flex;
   align-items: center;
-  gap: var(--mj-space-1);
+  gap: var(--ch-space-1);
   flex-wrap: wrap;
 }
 .composer-spacer {
@@ -627,17 +627,17 @@
   place-items: center;
   inline-size: 2rem;
   block-size: 2rem;
-  border-radius: var(--mj-radius-full);
+  border-radius: var(--ch-radius-full);
   border: 1px solid transparent;
   background: transparent;
-  color: var(--mj-color-text-muted);
-  transition-duration: var(--mj-motion-fast);
-  transition-timing-function: var(--mj-motion-ease);
+  color: var(--ch-color-text-muted);
+  transition-duration: var(--ch-motion-fast);
+  transition-timing-function: var(--ch-motion-ease);
   transition-property: background-color, color, transform;
 }
 .composer-btn:hover:not(:disabled) {
-  background: var(--mj-color-surface-2);
-  color: var(--mj-color-text);
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text);
 }
 .composer-btn:active:not(:disabled) {
   transform: scale(0.94);
@@ -647,21 +647,21 @@
   cursor: not-allowed;
 }
 .composer-btn-send {
-  background: var(--mj-color-accent);
-  color: var(--mj-color-accent-text);
+  background: var(--ch-color-accent);
+  color: var(--ch-color-accent-text);
 }
 .composer-btn-send:hover:not(:disabled) {
-  background: var(--mj-color-accent-strong);
-  color: var(--mj-color-accent-text);
+  background: var(--ch-color-accent-strong);
+  color: var(--ch-color-accent-text);
 }
 .composer-btn-send[data-busy='true'] {
-  animation: mj-pulse 1s var(--mj-motion-ease) infinite;
+  animation: ch-pulse 1s var(--ch-motion-ease) infinite;
 }
 .composer-btn-stop {
-  background: var(--mj-color-danger);
-  color: var(--mj-color-danger-text);
+  background: var(--ch-color-danger);
+  color: var(--ch-color-danger-text);
 }
-@keyframes mj-pulse {
+@keyframes ch-pulse {
   50% {
     opacity: 0.55;
   }
@@ -674,188 +674,188 @@
 
 /* The one dropdown shape (src/ui/Select.tsx over Radix Select): a chip that opens a
    token-painted listbox. Radix owns the behaviour and the RTL arrows; this owns the look. */
-.mj-select {
+.ch-select {
   display: inline-flex;
   align-items: center;
-  gap: var(--mj-space-1);
-  padding-inline: var(--mj-space-2);
+  gap: var(--ch-space-1);
+  padding-inline: var(--ch-space-2);
   block-size: 2rem;
-  border-radius: var(--mj-radius-full);
+  border-radius: var(--ch-radius-full);
   border: 1px solid transparent;
-  background: var(--mj-color-surface-2);
-  color: var(--mj-color-text-muted);
-  font-size: var(--mj-font-size-xs);
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text-muted);
+  font-size: var(--ch-font-size-xs);
   max-inline-size: 14rem;
-  transition-duration: var(--mj-motion-fast);
-  transition-timing-function: var(--mj-motion-ease);
+  transition-duration: var(--ch-motion-fast);
+  transition-timing-function: var(--ch-motion-ease);
   transition-property: background-color, color;
 }
 /* The chevron sits at the end of the trigger, not against the label: on a trigger wider than
    its text (a form field) it belongs at the far edge (owner, 2026-09-24). Logical, so it is the
    left edge in Arabic and the right edge in English. */
-.mj-select-chevron {
+.ch-select-chevron {
   margin-inline-start: auto;
   flex-shrink: 0;
   display: inline-flex;
 }
-.mj-select:hover:not(:disabled) {
-  background: var(--mj-color-surface-3);
-  color: var(--mj-color-text);
+.ch-select:hover:not(:disabled) {
+  background: var(--ch-color-surface-3);
+  color: var(--ch-color-text);
 }
-.mj-select:disabled {
+.ch-select:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
-.mj-select[aria-expanded='true'] {
-  border-color: var(--mj-color-accent);
-  color: var(--mj-color-text);
+.ch-select[aria-expanded='true'] {
+  border-color: var(--ch-color-accent);
+  color: var(--ch-color-text);
 }
-.mj-select-menu {
-  z-index: var(--mj-z-popover);
+.ch-select-menu {
+  z-index: var(--ch-z-popover);
   min-inline-size: var(--radix-select-trigger-width);
   max-block-size: var(--radix-select-content-available-height);
   overflow-y: auto;
-  padding: var(--mj-space-1);
-  border-radius: var(--mj-radius-md);
+  padding: var(--ch-space-1);
+  border-radius: var(--ch-radius-md);
 }
-.mj-select-item {
+.ch-select-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--mj-space-3);
-  padding: var(--mj-space-2);
-  border-radius: var(--mj-radius-sm);
-  font-size: var(--mj-font-size-sm);
+  gap: var(--ch-space-3);
+  padding: var(--ch-space-2);
+  border-radius: var(--ch-radius-sm);
+  font-size: var(--ch-font-size-sm);
   cursor: pointer;
 }
-.mj-select-item[data-highlighted] {
-  background: var(--mj-color-surface-2);
+.ch-select-item[data-highlighted] {
+  background: var(--ch-color-surface-2);
   outline: none;
 }
-.mj-select-item[data-state='checked'] {
-  color: var(--mj-color-accent-soft-text);
+.ch-select-item[data-state='checked'] {
+  color: var(--ch-color-accent-soft-text);
   font-weight: 500;
 }
 /* An option that explains itself: icon, then label over one line of consequence, then the
    tick. Wider than a bare list, because the sentence is the point of it. */
-.mj-select-item[data-described='true'] {
+.ch-select-item[data-described='true'] {
   align-items: start;
   max-inline-size: 26rem;
 }
-.mj-select-item-icon {
+.ch-select-item-icon {
   display: inline-grid;
   place-items: center;
   padding-block-start: 2px;
-  color: var(--mj-color-text-muted);
+  color: var(--ch-color-text-muted);
 }
-.mj-select-item-body {
+.ch-select-item-body {
   display: flex;
   min-inline-size: 0;
   flex: 1;
   flex-direction: column;
   gap: 1px;
 }
-.mj-select-item-hint {
-  font-size: var(--mj-font-size-xs);
+.ch-select-item-hint {
+  font-size: var(--ch-font-size-xs);
   font-weight: 400;
-  color: var(--mj-color-text-muted);
+  color: var(--ch-color-text-muted);
 }
-.mj-select-item-check {
+.ch-select-item-check {
   padding-block-start: 2px;
 }
 /* A choice that gives something up says so in its colour, in the list and on the trigger. */
-.mj-select-item[data-tone='danger'],
-.mj-select-item[data-tone='danger'] .mj-select-item-icon,
-.mj-select[data-tone='danger'] {
-  color: var(--mj-color-danger-soft-text);
+.ch-select-item[data-tone='danger'],
+.ch-select-item[data-tone='danger'] .ch-select-item-icon,
+.ch-select[data-tone='danger'] {
+  color: var(--ch-color-danger-soft-text);
 }
-.mj-select-item[data-tone='warning'],
-.mj-select-item[data-tone='warning'] .mj-select-item-icon,
-.mj-select[data-tone='warning'] {
-  color: var(--mj-color-warning-soft-text);
+.ch-select-item[data-tone='warning'],
+.ch-select-item[data-tone='warning'] .ch-select-item-icon,
+.ch-select[data-tone='warning'] {
+  color: var(--ch-color-warning-soft-text);
 }
 /* The trigger's border follows its own colour rather than adding two more tokens. */
-.mj-select[data-tone='danger'],
-.mj-select[data-tone='warning'] {
+.ch-select[data-tone='danger'],
+.ch-select[data-tone='warning'] {
   border-color: color-mix(in oklab, currentColor 45%, transparent);
 }
 
 /* The one menu shape (src/ui/Menu.tsx over Radix DropdownMenu). */
-.mj-menu {
-  z-index: var(--mj-z-popover);
+.ch-menu {
+  z-index: var(--ch-z-popover);
   min-inline-size: 14rem;
-  padding: var(--mj-space-1);
-  border-radius: var(--mj-radius-md);
+  padding: var(--ch-space-1);
+  border-radius: var(--ch-radius-md);
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
-.mj-menu-item {
+.ch-menu-item {
   display: flex;
   align-items: center;
-  gap: var(--mj-space-2);
-  padding: var(--mj-space-2);
-  border-radius: var(--mj-radius-sm);
+  gap: var(--ch-space-2);
+  padding: var(--ch-space-2);
+  border-radius: var(--ch-radius-sm);
   text-align: start;
-  font-size: var(--mj-font-size-sm);
+  font-size: var(--ch-font-size-sm);
   cursor: pointer;
 }
-.mj-menu-item[data-highlighted] {
-  background: var(--mj-color-surface-2);
+.ch-menu-item[data-highlighted] {
+  background: var(--ch-color-surface-2);
   outline: none;
 }
-.mj-menu-item[data-tone='danger'] {
-  color: var(--mj-color-danger-soft-text);
+.ch-menu-item[data-tone='danger'] {
+  color: var(--ch-color-danger-soft-text);
 }
-.mj-menu-note {
-  padding: var(--mj-space-1) var(--mj-space-2);
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-faint);
+.ch-menu-note {
+  padding: var(--ch-space-1) var(--ch-space-2);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-faint);
 }
 
 /* The one anchored sheet (src/ui/Popover.tsx over Radix Popover). */
-.mj-popover {
-  z-index: var(--mj-z-popover);
+.ch-popover {
+  z-index: var(--ch-z-popover);
   min-inline-size: 20rem;
   max-inline-size: min(28rem, 90vw);
-  padding: var(--mj-space-3);
-  border-radius: var(--mj-radius-md);
+  padding: var(--ch-space-3);
+  border-radius: var(--ch-radius-md);
   display: flex;
   flex-direction: column;
-  gap: var(--mj-space-2);
+  gap: var(--ch-space-2);
 }
 
 .composer-reason {
-  padding: var(--mj-space-1) var(--mj-space-3) 0;
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-muted);
+  padding: var(--ch-space-1) var(--ch-space-3) 0;
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
 }
 
 .composer-starters {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
-  gap: var(--mj-space-2);
-  padding: var(--mj-space-3) var(--mj-space-1) 0;
+  gap: var(--ch-space-2);
+  padding: var(--ch-space-3) var(--ch-space-1) 0;
 }
 .starter {
   display: block;
   inline-size: 100%;
   block-size: 100%;
-  padding: var(--mj-space-2) var(--mj-space-3);
-  border-radius: var(--mj-radius-md);
-  border: 1px solid var(--mj-color-border);
-  background: var(--mj-color-surface);
-  color: var(--mj-color-text-muted);
-  font-size: var(--mj-font-size-sm);
+  padding: var(--ch-space-2) var(--ch-space-3);
+  border-radius: var(--ch-radius-md);
+  border: 1px solid var(--ch-color-border);
+  background: var(--ch-color-surface);
+  color: var(--ch-color-text-muted);
+  font-size: var(--ch-font-size-sm);
   text-align: start;
-  transition-duration: var(--mj-motion-fast);
-  transition-timing-function: var(--mj-motion-ease);
+  transition-duration: var(--ch-motion-fast);
+  transition-timing-function: var(--ch-motion-ease);
   transition-property: background-color, color, border-color;
 }
 .starter:hover {
-  background: var(--mj-color-surface-2);
-  color: var(--mj-color-text);
-  border-color: var(--mj-color-border-strong);
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text);
+  border-color: var(--ch-color-border-strong);
 }
 
 /* -------------------------------------------------- the session's folder */
@@ -863,7 +863,7 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: var(--mj-space-2);
+  gap: var(--ch-space-2);
   min-inline-size: 0;
 }
 .working-dir-chip {
@@ -871,13 +871,13 @@
   cursor: pointer;
 }
 .working-dir-chip:hover:not(:disabled) {
-  background: var(--mj-color-surface-3);
-  color: var(--mj-color-text);
+  background: var(--ch-color-surface-3);
+  color: var(--ch-color-text);
 }
 .working-dir-root {
-  font-family: var(--mj-font-mono);
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-faint);
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-faint);
   overflow-wrap: anywhere;
 }
 .working-dir-list {
@@ -892,142 +892,142 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--mj-space-2);
-  padding: var(--mj-space-2);
-  border-radius: var(--mj-radius-sm);
+  gap: var(--ch-space-2);
+  padding: var(--ch-space-2);
+  border-radius: var(--ch-radius-sm);
   text-align: start;
-  font-size: var(--mj-font-size-sm);
+  font-size: var(--ch-font-size-sm);
 }
 .working-dir-list button:hover {
-  background: var(--mj-color-surface-2);
+  background: var(--ch-color-surface-2);
 }
 .working-dir-list button[aria-pressed='true'] {
-  background: var(--mj-color-accent-soft);
-  color: var(--mj-color-accent-soft-text);
+  background: var(--ch-color-accent-soft);
+  color: var(--ch-color-accent-soft-text);
 }
 .working-dir-note {
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-faint);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-faint);
 }
 .working-dir-new {
   display: flex;
-  gap: var(--mj-space-2);
-  border-block-start: 1px solid var(--mj-color-border);
-  padding-block-start: var(--mj-space-2);
+  gap: var(--ch-space-2);
+  border-block-start: 1px solid var(--ch-color-border);
+  padding-block-start: var(--ch-space-2);
 }
 
 /* --------------------------------------------------- tooltip, checkbox, dialog
    The three surfaces that used to be the browser's own (`title=`, a native
    checkbox, `confirm()`). All three are ours now, on the same tokens, the same
    radii and the one shadow scale. */
-.mj-tooltip {
-  z-index: var(--mj-z-popover);
+.ch-tooltip {
+  z-index: var(--ch-z-popover);
   max-inline-size: 18rem;
-  padding: var(--mj-space-1) var(--mj-space-2);
-  border-radius: var(--mj-radius-sm);
-  background: var(--mj-color-text);
-  color: var(--mj-color-bg);
-  font-size: var(--mj-font-size-xs);
-  line-height: var(--mj-font-leading-normal);
-  box-shadow: var(--mj-shadow-md);
+  padding: var(--ch-space-1) var(--ch-space-2);
+  border-radius: var(--ch-radius-sm);
+  background: var(--ch-color-text);
+  color: var(--ch-color-bg);
+  font-size: var(--ch-font-size-xs);
+  line-height: var(--ch-font-leading-normal);
+  box-shadow: var(--ch-shadow-md);
   text-align: start;
 }
-.mj-tooltip-arrow {
-  fill: var(--mj-color-text);
+.ch-tooltip-arrow {
+  fill: var(--ch-color-text);
 }
 
-.mj-check-row {
+.ch-check-row {
   display: flex;
   align-items: flex-start;
-  gap: var(--mj-space-2);
+  gap: var(--ch-space-2);
 }
-.mj-check {
+.ch-check {
   display: inline-grid;
   place-items: center;
   inline-size: 1.125rem;
   block-size: 1.125rem;
   flex: 0 0 auto;
   margin-block-start: 0.125rem;
-  border: 1px solid var(--mj-color-border-strong);
-  border-radius: var(--mj-radius-sm);
-  background: var(--mj-color-surface);
-  color: var(--mj-color-accent-text);
-  transition-duration: var(--mj-motion-fast);
-  transition-timing-function: var(--mj-motion-ease);
+  border: 1px solid var(--ch-color-border-strong);
+  border-radius: var(--ch-radius-sm);
+  background: var(--ch-color-surface);
+  color: var(--ch-color-accent-text);
+  transition-duration: var(--ch-motion-fast);
+  transition-timing-function: var(--ch-motion-ease);
   transition-property: background-color, border-color;
 }
-.mj-check:hover:not([disabled]) {
-  border-color: var(--mj-color-accent);
+.ch-check:hover:not([disabled]) {
+  border-color: var(--ch-color-accent);
 }
-.mj-check[data-state='checked'] {
-  background: var(--mj-color-accent);
-  border-color: var(--mj-color-accent);
+.ch-check[data-state='checked'] {
+  background: var(--ch-color-accent);
+  border-color: var(--ch-color-accent);
 }
-.mj-check[disabled] {
+.ch-check[disabled] {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.mj-check-mark {
+.ch-check-mark {
   display: grid;
   place-items: center;
 }
-.mj-check-label {
+.ch-check-label {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font-size: var(--mj-font-size-sm);
+  font-size: var(--ch-font-size-sm);
   cursor: pointer;
 }
-.mj-check-hint {
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-muted);
+.ch-check-hint {
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
 }
 
-.mj-overlay {
+.ch-overlay {
   position: fixed;
   inset: 0;
-  z-index: var(--mj-z-overlay);
-  background: var(--mj-color-scrim);
+  z-index: var(--ch-z-overlay);
+  background: var(--ch-color-scrim);
 }
-.mj-dialog {
+.ch-dialog {
   position: fixed;
-  z-index: var(--mj-z-overlay);
+  z-index: var(--ch-z-overlay);
   inset-block-start: 50%;
   inset-inline-start: 50%;
   transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
-  gap: var(--mj-space-3);
-  padding: var(--mj-space-5);
-  border-radius: var(--mj-radius-lg);
-  border: 1px solid var(--mj-color-border);
-  background: var(--mj-color-surface);
-  color: var(--mj-color-text);
-  box-shadow: var(--mj-shadow-lg);
+  gap: var(--ch-space-3);
+  padding: var(--ch-space-5);
+  border-radius: var(--ch-radius-lg);
+  border: 1px solid var(--ch-color-border);
+  background: var(--ch-color-surface);
+  color: var(--ch-color-text);
+  box-shadow: var(--ch-shadow-lg);
 }
 /* `translate(-50%, …)` is physical by nature; in RTL the inline start is the right edge,
    so the sign flips with the direction rather than with a hard-coded side. */
-:root[dir='rtl'] .mj-dialog {
+:root[dir='rtl'] .ch-dialog {
   transform: translate(50%, -50%);
 }
-.mj-dialog-title {
-  font-size: var(--mj-font-size-lg);
+.ch-dialog-title {
+  font-size: var(--ch-font-size-lg);
   font-weight: 600;
 }
-.mj-dialog-body {
-  font-size: var(--mj-font-size-sm);
-  color: var(--mj-color-text-muted);
+.ch-dialog-body {
+  font-size: var(--ch-font-size-sm);
+  color: var(--ch-color-text-muted);
 }
-.mj-dialog-actions {
+.ch-dialog-actions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--mj-space-2);
+  gap: var(--ch-space-2);
 }
 
-.mj-select-group {
-  padding: var(--mj-space-2) var(--mj-space-2) var(--mj-space-1);
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-faint);
+.ch-select-group {
+  padding: var(--ch-space-2) var(--ch-space-2) var(--ch-space-1);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-faint);
 }
 
 /* ------------------------------------------------------- the searchable picker
@@ -1035,58 +1035,58 @@
    popup, and a virtualized list under it. Every size is a token; the rows are
    absolutely positioned by the virtualizer, so their height is fixed here and in
    the component (ROW / GROUP_ROW) and must stay in step. */
-/* The same soft pill as `.mj-select`, and the same height: the model and the approval
+/* The same soft pill as `.ch-select`, and the same height: the model and the approval
    mode sit side by side in the composer, and two shapes there read as two kinds of
    control (owner, 2026-09-22: «نفس نموذج الابروفل ناعم ونفس الحجم»). */
-.mj-combo-trigger {
+.ch-combo-trigger {
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--mj-space-1);
+  gap: var(--ch-space-1);
   max-inline-size: 14rem;
-  padding-inline: var(--mj-space-2);
+  padding-inline: var(--ch-space-2);
   block-size: 2rem;
   border: 1px solid transparent;
-  border-radius: var(--mj-radius-full);
-  background: var(--mj-color-surface-2);
-  color: var(--mj-color-text-muted);
-  font-size: var(--mj-font-size-xs);
+  border-radius: var(--ch-radius-full);
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text-muted);
+  font-size: var(--ch-font-size-xs);
   text-align: start;
   cursor: pointer;
-  transition-duration: var(--mj-motion-fast);
-  transition-timing-function: var(--mj-motion-ease);
+  transition-duration: var(--ch-motion-fast);
+  transition-timing-function: var(--ch-motion-ease);
   transition-property: background-color, color, border-color;
 }
-.mj-combo-trigger:hover:not(:disabled) {
-  background: var(--mj-color-surface-3);
-  color: var(--mj-color-text);
+.ch-combo-trigger:hover:not(:disabled) {
+  background: var(--ch-color-surface-3);
+  color: var(--ch-color-text);
 }
-.mj-combo-trigger[data-state='open'] {
-  border-color: var(--mj-color-accent);
+.ch-combo-trigger[data-state='open'] {
+  border-color: var(--ch-color-accent);
 }
-.mj-combo-trigger:disabled {
+.ch-combo-trigger:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
-.mj-combo-trigger .mj-combo-sub {
+.ch-combo-trigger .ch-combo-sub {
   display: none;
 }
-.mj-combo-value {
+.ch-combo-value {
   display: flex;
   flex-direction: column;
   min-inline-size: 0;
 }
 /* Inside the composer's pill the name is the pill's own size; the provider line below it
    would make the control two lines tall, so the trigger keeps the name alone. */
-.mj-combo-name {
+.ch-combo-name {
   font-size: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mj-combo-sub {
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-muted);
+.ch-combo-sub {
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1095,95 +1095,95 @@
   unicode-bidi: isolate;
 }
 
-.mj-combo-popup {
+.ch-combo-popup {
   inline-size: min(26rem, calc(100vw - 2rem));
   padding: 0;
   gap: 0;
   overflow: hidden;
 }
-.mj-combo-field {
+.ch-combo-field {
   display: flex;
   align-items: center;
-  gap: var(--mj-space-2);
-  padding: var(--mj-space-2) var(--mj-space-3);
-  border-block-end: 1px solid var(--mj-color-border);
-  color: var(--mj-color-text-muted);
+  gap: var(--ch-space-2);
+  padding: var(--ch-space-2) var(--ch-space-3);
+  border-block-end: 1px solid var(--ch-color-border);
+  color: var(--ch-color-text-muted);
 }
-.mj-combo-field > input {
+.ch-combo-field > input {
   flex: 1;
   min-inline-size: 0;
   border: 0;
   background: transparent;
-  color: var(--mj-color-text);
-  font-size: var(--mj-font-size-sm);
+  color: var(--ch-color-text);
+  font-size: var(--ch-font-size-sm);
   outline: none; /* the popup carries the focus; one ring, not two */
 }
-.mj-combo-field > input::placeholder {
-  color: var(--mj-color-text-faint);
+.ch-combo-field > input::placeholder {
+  color: var(--ch-color-text-faint);
 }
 
-.mj-combo-list {
+.ch-combo-list {
   max-block-size: 18rem;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.mj-combo-option {
+.ch-combo-option {
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 1px;
-  padding: var(--mj-space-1) var(--mj-space-3);
+  padding: var(--ch-space-1) var(--ch-space-3);
   cursor: pointer;
 }
-.mj-combo-option[data-active='true'] {
-  background: var(--mj-color-surface-2);
+.ch-combo-option[data-active='true'] {
+  background: var(--ch-color-surface-2);
 }
-.mj-combo-option[aria-selected='true'] .mj-combo-name {
-  color: var(--mj-color-accent-soft-text);
+.ch-combo-option[aria-selected='true'] .ch-combo-name {
+  color: var(--ch-color-accent-soft-text);
   font-weight: 500;
 }
-.mj-combo-option[aria-disabled='true'] {
+.ch-combo-option[aria-disabled='true'] {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.mj-combo-group,
-.mj-combo-sticky {
+.ch-combo-group,
+.ch-combo-sticky {
   display: flex;
   align-items: center;
-  padding: var(--mj-space-1) var(--mj-space-3);
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-faint);
-  background: var(--mj-color-bg-raised);
+  padding: var(--ch-space-1) var(--ch-space-3);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-faint);
+  background: var(--ch-color-bg-raised);
 }
 /* The header of the group being scrolled through, held above its rows. */
-.mj-combo-sticky {
+.ch-combo-sticky {
   position: sticky;
   inset-block-start: 0;
   z-index: 1;
   block-size: 26px;
-  border-block-end: 1px solid var(--mj-color-border);
+  border-block-end: 1px solid var(--ch-color-border);
 }
-.mj-combo-hit {
-  background: var(--mj-color-accent-soft);
-  color: var(--mj-color-accent-soft-text);
+.ch-combo-hit {
+  background: var(--ch-color-accent-soft);
+  color: var(--ch-color-accent-soft-text);
   border-radius: 2px;
   padding: 0 1px;
 }
-.mj-combo-state {
+.ch-combo-state {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--mj-space-2);
-  padding: var(--mj-space-4) var(--mj-space-3);
-  font-size: var(--mj-font-size-sm);
-  color: var(--mj-color-text-muted);
+  gap: var(--ch-space-2);
+  padding: var(--ch-space-4) var(--ch-space-3);
+  font-size: var(--ch-font-size-sm);
+  color: var(--ch-color-text-muted);
 }
-.mj-combo-error {
-  color: var(--mj-color-danger-soft-text);
+.ch-combo-error {
+  color: var(--ch-color-danger-soft-text);
 }
-.mj-combo-count {
-  padding: var(--mj-space-1) var(--mj-space-3);
-  border-block-start: 1px solid var(--mj-color-border);
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-faint);
+.ch-combo-count {
+  padding: var(--ch-space-1) var(--ch-space-3);
+  border-block-start: 1px solid var(--ch-color-border);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-faint);
 }

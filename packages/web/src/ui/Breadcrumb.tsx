@@ -26,20 +26,20 @@ export function Breadcrumb({
   testId?: string;
 }) {
   return (
-    <nav className="mj-crumbs" aria-label={label} data-testid={testId}>
+    <nav className="ch-crumbs" aria-label={label} data-testid={testId}>
       <ol>
         {items.map((item, index) => {
           const last = index === items.length - 1;
           return (
-            <li key={index} className="mj-crumb" data-current={last ? 'true' : undefined}>
+            <li key={index} className="ch-crumb" data-current={last ? 'true' : undefined}>
               {last || !item.href ? (
                 <span aria-current={last ? 'page' : undefined} dir="auto">
                   {item.label}
                 </span>
               ) : item.render ? (
-                item.render({ href: item.href, children: item.label, className: 'mj-crumb-link' })
+                item.render({ href: item.href, children: item.label, className: 'ch-crumb-link' })
               ) : (
-                <a className="mj-crumb-link" href={item.href} dir="auto">
+                <a className="ch-crumb-link" href={item.href} dir="auto">
                   {item.label}
                 </a>
               )}

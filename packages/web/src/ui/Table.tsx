@@ -40,8 +40,8 @@ export function Table<Row>({
 }) {
   if (rows.length === 0 && empty !== undefined) return <>{empty}</>;
   return (
-    <div className="mj-table-scroll">
-      <table className="mj-table" data-testid={testId}>
+    <div className="ch-table-scroll">
+      <table className="ch-table" data-testid={testId}>
         <caption className="sr-only">{caption}</caption>
         <thead>
           <tr>

@@ -34,32 +34,32 @@ export function AlertDialog({
   return (
     <RadixAlertDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixAlertDialog.Portal>
-        <RadixAlertDialog.Overlay className="mj-overlay" />
-        <RadixAlertDialog.Content className="mj-dialog mj-dialog-sm" data-testid={testId}>
-          <RadixAlertDialog.Title className="mj-dialog-title">{title}</RadixAlertDialog.Title>
+        <RadixAlertDialog.Overlay className="ch-overlay" />
+        <RadixAlertDialog.Content className="ch-dialog ch-dialog-sm" data-testid={testId}>
+          <RadixAlertDialog.Title className="ch-dialog-title">{title}</RadixAlertDialog.Title>
           {body !== undefined && (
-            <RadixAlertDialog.Description className="mj-dialog-body">
+            <RadixAlertDialog.Description className="ch-dialog-body">
               {body}
             </RadixAlertDialog.Description>
           )}
-          <div className="mj-dialog-actions">
+          <div className="ch-dialog-actions">
             <RadixAlertDialog.Cancel asChild>
               <button
                 type="button"
-                className="mj-btn mj-btn-secondary mj-btn-md"
+                className="ch-btn ch-btn-secondary ch-btn-md"
                 data-testid="confirm-no"
               >
-                <span className="mj-btn-label">{cancelLabel}</span>
+                <span className="ch-btn-label">{cancelLabel}</span>
               </button>
             </RadixAlertDialog.Cancel>
             <RadixAlertDialog.Action asChild>
               <button
                 type="button"
-                className={`mj-btn mj-btn-${tone === 'default' ? 'primary' : 'danger'} mj-btn-md`}
+                className={`ch-btn ch-btn-${tone === 'default' ? 'primary' : 'danger'} ch-btn-md`}
                 onClick={onConfirm}
                 data-testid="confirm-yes"
               >
-                <span className="mj-btn-label">{confirmLabel}</span>
+                <span className="ch-btn-label">{confirmLabel}</span>
               </button>
             </RadixAlertDialog.Action>
           </div>

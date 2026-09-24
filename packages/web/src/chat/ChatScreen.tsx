@@ -68,7 +68,7 @@ export function ChatScreen() {
             body={t('chat.pick_one_body')}
             action={
               <Link to={routeOf('new_chat')} className={buttonClass('primary', 'md')}>
-                <span className="mj-btn-label">{t('nav.new_chat')}</span>
+                <span className="ch-btn-label">{t('nav.new_chat')}</span>
               </Link>
             }
             testId="chat-none"

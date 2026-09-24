@@ -25,7 +25,7 @@ export function Label({
 }) {
   return (
     <RadixLabel.Root
-      className={`mj-label ${className}`}
+      className={`ch-label ${className}`}
       {...(htmlFor === undefined ? {} : { htmlFor })}
     >
       {children}
@@ -52,15 +52,15 @@ export function Field({
   const errorId = `${id}-error`;
   const describedBy = error ? errorId : hint ? hintId : undefined;
   return (
-    <div className={`mj-field-row ${className}`} data-invalid={error ? 'true' : undefined}>
+    <div className={`ch-field-row ${className}`} data-invalid={error ? 'true' : undefined}>
       <Label htmlFor={id}>{label}</Label>
       {children({ id, 'aria-describedby': describedBy })}
       {error ? (
-        <p id={errorId} className="mj-field-error" role="alert">
+        <p id={errorId} className="ch-field-error" role="alert">
           {error}
         </p>
       ) : hint ? (
-        <p id={hintId} className="mj-field-hint">
+        <p id={hintId} className="ch-field-hint">
           {hint}
         </p>
       ) : null}

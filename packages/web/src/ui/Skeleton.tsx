@@ -23,7 +23,7 @@ export function Skeleton({
 }) {
   return (
     <span
-      className={`mj-skeleton mj-skeleton-${radius} ${className}`}
+      className={`ch-skeleton ch-skeleton-${radius} ${className}`}
       style={{
         ...(width === undefined ? {} : { inlineSize: width }),
         ...(height === undefined ? {} : { blockSize: height }),
@@ -36,7 +36,7 @@ export function Skeleton({
 /** Several skeletons that mean one thing, announced once. */
 export function SkeletonGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="mj-skeleton-group" role="status" aria-label={label} data-testid="skeleton">
+    <div className="ch-skeleton-group" role="status" aria-label={label} data-testid="skeleton">
       {children}
     </div>
   );

@@ -228,7 +228,7 @@ test.describe('web smoke journeys', () => {
     const chips = page.getByTestId('agent-chip');
     await expect(chips.first()).toHaveAttribute('aria-checked', 'true');
     await expect(chips.first()).toContainText('Hermes');
-    await expect(chips.nth(1)).toHaveClass(/mj-segment-icon-only/);
+    await expect(chips.nth(1)).toHaveClass(/ch-segment-icon-only/);
     // An icon is not a mystery: the name is still the accessible name. Chip 1 is the
     // direct agent, which sits second in every list (`agents/service.ts` §order).
     await expect(chips.nth(1)).toHaveAttribute('aria-label', /مباشر/);

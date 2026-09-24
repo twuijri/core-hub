@@ -271,7 +271,7 @@ export function SegmentedTrack({
 
   return (
     <div
-      className={`mj-segmented ${className}`}
+      className={`ch-segmented ${className}`}
       role="radiogroup"
       aria-label={label}
       dir={rtl ? 'rtl' : 'ltr'}
@@ -294,13 +294,13 @@ export function SegmentedTrack({
             trigger={
               <button
                 type="button"
-                className="mj-segment mj-segment-more"
+                className="ch-segment ch-segment-more"
                 data-segment-item="more"
                 data-testid={testId ? `${testId}-more` : 'segmented-more'}
                 tabIndex={-1}
                 aria-haspopup="menu"
               >
-                <span className="mj-segment-label">{t('common.more')}</span>
+                <span className="ch-segment-label">{t('common.more')}</span>
                 <IconChevron size={12} />
               </button>
             }
@@ -323,7 +323,7 @@ export function SegmentedTrack({
           <Tooltip label={action.label}>
             <button
               type="button"
-              className="mj-segment-action"
+              className="ch-segment-action"
               aria-label={action.label}
               onClick={action.onSelect}
               data-testid={action.testId ?? (testId ? `${testId}-action` : undefined)}
@@ -335,28 +335,28 @@ export function SegmentedTrack({
         {overflow && (
           // The measuring row: every option at both densities, off the screen and out of
           // the accessibility tree. It is the only honest way to know what fits.
-          <div className="mj-segmented-measure" aria-hidden ref={measureRef}>
+          <div className="ch-segmented-measure" aria-hidden ref={measureRef}>
             {entries.map((entry) => (
-              <span key={entry.value} className="mj-segment" data-measure="comfortable">
+              <span key={entry.value} className="ch-segment" data-measure="comfortable">
                 {entry.icon}
-                <span className="mj-segment-label">{entry.label}</span>
+                <span className="ch-segment-label">{entry.label}</span>
               </span>
             ))}
             {entries.map((entry) => (
               <span
                 key={`${entry.value}-icon`}
-                className="mj-segment mj-segment-icon-only"
+                className="ch-segment ch-segment-icon-only"
                 data-measure="compact"
               >
                 {entry.icon}
               </span>
             ))}
-            <span className="mj-segment mj-segment-more" data-measure="more">
-              <span className="mj-segment-label">{t('common.more')}</span>
+            <span className="ch-segment ch-segment-more" data-measure="more">
+              <span className="ch-segment-label">{t('common.more')}</span>
               <IconChevron size={12} />
             </span>
             {action && (
-              <span className="mj-segment-action" data-measure="action">
+              <span className="ch-segment-action" data-measure="action">
                 {action.icon}
               </span>
             )}
@@ -408,7 +408,7 @@ export const SegmentedItem = forwardRef<HTMLButtonElement, SegmentedItemProps>(
           data-segment-item={value}
           // The caller's classes are added to ours, never instead of them: the density
           // class has to survive whatever a drag library wants on the same element.
-          className={`mj-segment ${iconOnly ? 'mj-segment-icon-only' : ''} ${extraClass ?? ''}`}
+          className={`ch-segment ${iconOnly ? 'ch-segment-icon-only' : ''} ${extraClass ?? ''}`}
           onClick={() => !disabled && track.choose(value)}
           {...extra}
           {...(iconOnly && extra['aria-label'] === undefined && name !== undefined
@@ -416,7 +416,7 @@ export const SegmentedItem = forwardRef<HTMLButtonElement, SegmentedItemProps>(
             : {})}
         >
           {icon}
-          {!iconOnly && <span className="mj-segment-label">{label}</span>}
+          {!iconOnly && <span className="ch-segment-label">{label}</span>}
         </button>
       </Tooltip>
     );

@@ -10,8 +10,8 @@ export function TopBar({ title, onMenu }: { title: string; onMenu: () => void })
   const meta = useMeta();
   return (
     <header
-      className="glass sticky top-0 z-[var(--mj-z-chrome)] flex items-center gap-2 border-b px-3"
-      style={{ blockSize: 'var(--mj-layout-topbar-height)' }}
+      className="glass sticky top-0 z-[var(--ch-z-chrome)] flex items-center gap-2 border-b px-3"
+      style={{ blockSize: 'var(--ch-layout-topbar-height)' }}
     >
       <button
         type="button"

@@ -23,7 +23,7 @@ export function cardClass(
   interactive = false,
   extra = '',
 ): string {
-  return `mj-card mj-card-${tone} mj-card-pad-${padding} ${interactive ? 'mj-card-interactive' : ''} ${extra}`
+  return `ch-card ch-card-${tone} ch-card-pad-${padding} ${interactive ? 'ch-card-interactive' : ''} ${extra}`
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -66,23 +66,23 @@ export function CardHeader({
   actions?: ReactNode;
 }) {
   return (
-    <header className="mj-card-head">
+    <header className="ch-card-head">
       {media}
-      <div className="mj-card-headings">
-        <h3 className="mj-card-title" dir="auto">
+      <div className="ch-card-headings">
+        <h3 className="ch-card-title" dir="auto">
           {title}
         </h3>
         {subtitle !== undefined && (
-          <p className="mj-card-subtitle" dir="auto">
+          <p className="ch-card-subtitle" dir="auto">
             {subtitle}
           </p>
         )}
       </div>
-      {actions !== undefined && <div className="mj-card-actions">{actions}</div>}
+      {actions !== undefined && <div className="ch-card-actions">{actions}</div>}
     </header>
   );
 }
 
 export function CardFooter({ children }: { children: ReactNode }) {
-  return <footer className="mj-card-foot">{children}</footer>;
+  return <footer className="ch-card-foot">{children}</footer>;
 }

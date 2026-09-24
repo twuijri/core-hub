@@ -1,7 +1,7 @@
 // The person's display preferences — theme, glass intensity, UI language, text scale — kept
 // locally (they must apply before sign-in) and mirrored to `auth.setPreferences` once signed
 // in (theme, locale, text_scale exist in the contract; the glass level does not, so it stays
-// local). Writes land on <html> as data-theme / data-glass / dir / lang / --mj-text-scale;
+// local). Writes land on <html> as data-theme / data-glass / dir / lang / --ch-text-scale;
 // the generated tokens.css reacts to those.
 import { derived } from '@corehub/contracts';
 import {
@@ -90,7 +90,7 @@ export function applyPrefs(
   root.setAttribute('data-glass', prefs.glass);
   root.setAttribute('lang', prefs.language);
   root.setAttribute('dir', directionOf(prefs.language));
-  root.style.setProperty('--mj-text-scale', String(prefs.textScale));
+  root.style.setProperty('--ch-text-scale', String(prefs.textScale));
 }
 
 interface ThemeValue {

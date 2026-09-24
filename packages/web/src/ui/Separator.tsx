@@ -23,16 +23,16 @@ export function Separator({
 }) {
   if (label !== undefined) {
     return (
-      <div className={`mj-sep-labelled ${className}`}>
-        <RadixSeparator.Root className="mj-sep" decorative />
-        <span className="mj-sep-label">{label}</span>
-        <RadixSeparator.Root className="mj-sep" decorative />
+      <div className={`ch-sep-labelled ${className}`}>
+        <RadixSeparator.Root className="ch-sep" decorative />
+        <span className="ch-sep-label">{label}</span>
+        <RadixSeparator.Root className="ch-sep" decorative />
       </div>
     );
   }
   return (
     <RadixSeparator.Root
-      className={`mj-sep mj-sep-${orientation} ${className}`}
+      className={`ch-sep ch-sep-${orientation} ${className}`}
       orientation={orientation}
       decorative={decorative}
     />

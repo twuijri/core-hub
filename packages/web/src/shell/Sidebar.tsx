@@ -242,7 +242,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 to={routeOf(d.id)}
                 onClick={onNavigate}
                 data-nav-id={d.id}
-                className="mj-btn mj-btn-ghost mj-btn-sm"
+                className="ch-btn ch-btn-ghost ch-btn-sm"
                 data-icon-only="true"
                 aria-label={t(termKey(d.id))}
               >

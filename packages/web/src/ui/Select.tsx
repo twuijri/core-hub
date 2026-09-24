@@ -65,7 +65,7 @@ export function Select({
   const chosen = shown.find((option) => option.value === value);
   const triggerNode = (
     <RadixSelect.Trigger
-      className="mj-select"
+      className="ch-select"
       aria-label={label}
       data-tone={chosen?.tone}
       data-testid={testId}
@@ -74,7 +74,7 @@ export function Select({
       <RadixSelect.Value>
         <span className="truncate">{chosen?.label ?? placeholder ?? label}</span>
       </RadixSelect.Value>
-      <RadixSelect.Icon className="mj-select-chevron">
+      <RadixSelect.Icon className="ch-select-chevron">
         <IconChevron size={12} />
       </RadixSelect.Icon>
     </RadixSelect.Trigger>
@@ -90,7 +90,7 @@ export function Select({
         {/* A disabled trigger receives no pointer events, so when it is disabled the
             tooltip — which is where the reason lives — hangs off a focusable wrapper. */}
         {disabled ? (
-          <span tabIndex={0} className="mj-select-wrap" data-testid={`${testId ?? 'select'}-wrap`}>
+          <span tabIndex={0} className="ch-select-wrap" data-testid={`${testId ?? 'select'}-wrap`}>
             {triggerNode}
           </span>
         ) : (
@@ -98,7 +98,7 @@ export function Select({
         )}
       </Tooltip>
       <RadixSelect.Portal>
-        <RadixSelect.Content className="mj-select-menu glass" position="popper" sideOffset={6}>
+        <RadixSelect.Content className="ch-select-menu glass" position="popper" sideOffset={6}>
           <RadixSelect.Viewport>
             {placeholder !== undefined && <Item option={{ value: EMPTY, label: placeholder }} />}
             {groupsOf(shown).map(([group, items]) => (
@@ -107,7 +107,7 @@ export function Select({
                   items.map((option) => <Item key={option.value} option={option} />)
                 ) : (
                   <RadixSelect.Group>
-                    <RadixSelect.Label className="mj-select-group">{group}</RadixSelect.Label>
+                    <RadixSelect.Label className="ch-select-group">{group}</RadixSelect.Label>
                     {items.map((option) => (
                       <Item key={option.value} option={option} />
                     ))}
@@ -139,26 +139,26 @@ function groupsOf(
 function Item({ option }: { option: SelectOption }) {
   return (
     <RadixSelect.Item
-      className="mj-select-item"
+      className="ch-select-item"
       data-tone={option.tone}
       data-described={option.description ? 'true' : undefined}
       value={option.value}
       {...(option.disabled === undefined ? {} : { disabled: option.disabled })}
     >
       {option.icon !== undefined && (
-        <span className="mj-select-item-icon" aria-hidden>
+        <span className="ch-select-item-icon" aria-hidden>
           {option.icon}
         </span>
       )}
-      <span className="mj-select-item-body">
+      <span className="ch-select-item-body">
         <RadixSelect.ItemText>{option.label}</RadixSelect.ItemText>
         {/* Outside `ItemText`, so the trigger keeps the label alone (Radix renders
             `ItemText` there) and the explanation stays in the list where it belongs. */}
         {option.description !== undefined && (
-          <span className="mj-select-item-hint">{option.description}</span>
+          <span className="ch-select-item-hint">{option.description}</span>
         )}
       </span>
-      <RadixSelect.ItemIndicator className="mj-select-item-check">
+      <RadixSelect.ItemIndicator className="ch-select-item-check">
         <IconCheck size={14} />
       </RadixSelect.ItemIndicator>
     </RadixSelect.Item>

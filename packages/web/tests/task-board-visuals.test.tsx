@@ -160,11 +160,11 @@ afterEach(cleanup);
 
 describe('a card tells its stage by a frame and a word', () => {
   const cases: Array<[TaskStatus, string, string]> = [
-    ['running', 'Running', 'mj-badge-success'],
-    ['blocked', 'Blocked', 'mj-badge-danger'],
-    ['scheduled', 'Scheduled', 'mj-badge-warning'],
+    ['running', 'Running', 'ch-badge-success'],
+    ['blocked', 'Blocked', 'ch-badge-danger'],
+    ['scheduled', 'Scheduled', 'ch-badge-warning'],
     ['review', 'Review', 'task-status-review'],
-    ['ready', 'Ready', 'mj-badge-info'],
+    ['ready', 'Ready', 'ch-badge-info'],
   ];
   for (const [status, word, tone] of cases) {
     it(`${status}: its own frame, its word, its tone`, () => {

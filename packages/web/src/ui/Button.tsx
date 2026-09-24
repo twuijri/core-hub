@@ -1,8 +1,8 @@
 /**
  * The one button.
  *
- * Five intents and three heights, every value a token (`--mj-control-height-*`,
- * `--mj-control-pad-*`, the one shadow scale, the one focus ring from `@layer base`).
+ * Five intents and three heights, every value a token (`--ch-control-height-*`,
+ * `--ch-control-pad-*`, the one shadow scale, the one focus ring from `@layer base`).
  * Nothing else in the client draws a button: a screen that wants one imports this, and a
  * link that should look like one takes `buttonClass()` — same paint, same heights, one
  * definition (docs/clients/DESIGN.md §UI policy).
@@ -22,7 +22,7 @@ export function buttonClass(
   size: ButtonSize = 'md',
   extra = '',
 ): string {
-  return `mj-btn mj-btn-${variant} mj-btn-${size} ${extra}`.trim();
+  return `ch-btn ch-btn-${variant} ch-btn-${size} ${extra}`.trim();
 }
 
 export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'> {
@@ -69,8 +69,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       disabled={isDisabled}
       {...rest}
     >
-      {loading ? <span className="mj-btn-spin" aria-hidden /> : icon}
-      {!iconOnly && children !== undefined && <span className="mj-btn-label">{children}</span>}
+      {loading ? <span className="ch-btn-spin" aria-hidden /> : icon}
+      {!iconOnly && children !== undefined && <span className="ch-btn-label">{children}</span>}
     </button>
   );
   const label = disabledReason ?? tooltip;
@@ -80,7 +80,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   return (
     <Tooltip label={label}>
       {isDisabled ? (
-        <span tabIndex={0} className="mj-btn-wrap">
+        <span tabIndex={0} className="ch-btn-wrap">
           {node}
         </span>
       ) : (

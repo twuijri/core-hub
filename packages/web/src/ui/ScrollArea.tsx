@@ -22,18 +22,18 @@ export function ScrollArea({
   testId?: string;
 }) {
   return (
-    <RadixScrollArea.Root className={`mj-scroll ${className}`} type="hover" data-testid={testId}>
+    <RadixScrollArea.Root className={`ch-scroll ${className}`} type="hover" data-testid={testId}>
       <RadixScrollArea.Viewport
-        className="mj-scroll-view"
+        className="ch-scroll-view"
         style={maxHeight === undefined ? undefined : { maxBlockSize: maxHeight }}
       >
         {children}
       </RadixScrollArea.Viewport>
-      <RadixScrollArea.Scrollbar className="mj-scroll-bar" orientation="vertical">
-        <RadixScrollArea.Thumb className="mj-scroll-thumb" />
+      <RadixScrollArea.Scrollbar className="ch-scroll-bar" orientation="vertical">
+        <RadixScrollArea.Thumb className="ch-scroll-thumb" />
       </RadixScrollArea.Scrollbar>
-      <RadixScrollArea.Scrollbar className="mj-scroll-bar" orientation="horizontal">
-        <RadixScrollArea.Thumb className="mj-scroll-thumb" />
+      <RadixScrollArea.Scrollbar className="ch-scroll-bar" orientation="horizontal">
+        <RadixScrollArea.Thumb className="ch-scroll-thumb" />
       </RadixScrollArea.Scrollbar>
       <RadixScrollArea.Corner />
     </RadixScrollArea.Root>
