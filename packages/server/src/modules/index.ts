@@ -379,6 +379,8 @@ registerScheduleRunner((app) => {
         origin: { kind: 'schedule', id: input.scheduleRunId },
       }),
     outcome: (workspace, runId) => runs.outcome(workspace, runId),
+    // `overlap: replace` stops the previous run the way the chat's Stop does.
+    cancel: (scope, sessionId, runId) => runs.cancel(scope, sessionId, runId),
   };
 });
 

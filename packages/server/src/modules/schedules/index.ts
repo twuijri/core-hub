@@ -37,6 +37,7 @@ import {
   warningsFor,
   type ScheduleRow,
   type Scope,
+  type WorkflowRunRow,
 } from './service.js';
 import type { WorkflowDefinition } from './schema.js';
 import { HermesCron, refusedByHermesCron, type HermesCronPort } from './hermes-cron.js';
@@ -181,6 +182,14 @@ export function firerFor(app: FastifyInstance): ScheduleRuns {
     profileOf: (workspace) => profileOf(app, workspace),
     emit: (profile, event, payload) =>
       realtimeOf(app).emit(REALTIME_NAMESPACES.schedules, event, { profile }, payload),
+    cancelWorkflow: (scope, workflowRunId) => {
+      cancelWorkflowRunNow(
+        app,
+        new SchedulesService(requireSqlite(app.hub.database)),
+        scope,
+        workflowRunId,
+      );
+    },
     toSchedule: (row, profile) =>
       toSchedule(
         row,
@@ -203,6 +212,8 @@ export function schedulerFor(app: FastifyInstance): HubScheduler {
     service: () => new SchedulesService(requireSqlite(app.hub.database)),
     fire: (schedule, line) => firerFor(app).fire(schedule, line),
     skipped: (schedule) => firerFor(app).skipped(schedule),
+    waiting: (schedule) => firerFor(app).waiting(schedule),
+    stop: (schedule, lines) => firerFor(app).stop(schedule, lines),
     log: app.log,
   });
   schedulers.set(app.hub.io, created);
@@ -275,6 +286,31 @@ function realtimeOf(app: FastifyInstance): Realtime {
   return created;
 }
 
+/**
+ * Cancel a workflow run as its Cancel does: the row, the live walk, a gate it waits at, the
+ * ending (which settles a schedule's line) and the event. The row as cancelled.
+ */
+function cancelWorkflowRunNow(
+  app: FastifyInstance,
+  service: SchedulesService,
+  scope: Scope,
+  workflowRunId: string,
+): WorkflowRunRow {
+  const row = service.cancelWorkflowRun(scope, workflowRunId);
+  const engine = workflowEngineFor(app);
+  engine.cancel(row.id);
+  // A run waiting at a gate has nothing live to stop: its step and approval close here.
+  engine.closeGates(service, scope, row.id);
+  engine.announceFinished(row, { status: 'cancelled', error: null });
+  realtimeOf(app).emit(
+    REALTIME_NAMESPACES.schedules,
+    'workflow_run.cancelled',
+    { profile: scope.profile },
+    { workflow_run_id: row.id, workflow_id: row.workflowId },
+  );
+  return row;
+}
+
 /** The contract's `Schedule`, from the row. */
 function toSchedule(
   row: ReturnType<SchedulesService['get']>,
@@ -339,6 +375,10 @@ function toSchedule(
         : (row.lastStatus ?? null),
     last_error: row.lastError,
     last_delivery_error: row.lastDeliveryError,
+    // Hermes's scheduler decides both for its own jobs, and per profile, not per job
+    // (`cron.catch_up_missed`, and a job still running is always skipped): nothing to set.
+    run_if_missed: row.externalSource ? null : row.misfirePolicy === 'run_once',
+    overlap: row.externalSource ? null : row.overlap,
     external:
       row.externalSource && row.externalId
         ? { source: row.externalSource, id: row.externalId }
@@ -367,6 +407,7 @@ function toScheduleRun(
     // `error` says why.
     status: row.status === 'skipped' ? 'cancelled' : row.status,
     trigger: row.trigger,
+    waiting: row.waiting,
     output_preview: row.outputPreview,
     // The full text belongs to the single-run read only, as the contract says.
     output: options.full ? row.outputPreview : null,
@@ -997,17 +1038,11 @@ export const schedulesModule = defineModule({
       handler: (request, { params }) => {
         const scope = scopeOf(request);
         const service = serviceOf(request);
-        const row = service.cancelWorkflowRun(scope, params.workflow_run_id as string);
-        const engine = workflowEngineFor(request.server);
-        engine.cancel(row.id);
-        // A run waiting at a gate has nothing live to stop: its step and approval close here.
-        engine.closeGates(service, scope, row.id);
-        engine.announceFinished(row, { status: 'cancelled', error: null });
-        realtimeOf(request.server).emit(
-          REALTIME_NAMESPACES.schedules,
-          'workflow_run.cancelled',
-          { profile: scope.profile },
-          { workflow_run_id: row.id, workflow_id: row.workflowId },
+        const row = cancelWorkflowRunNow(
+          request.server,
+          service,
+          scope,
+          params.workflow_run_id as string,
         );
         return toWorkflowRun(row, scope.profile, service.stepsOf(row.id));
       },

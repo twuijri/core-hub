@@ -23,6 +23,8 @@ import {
   schedules,
   workflowRuns,
   workflows,
+  SCHEDULE_OVERLAPS,
+  type ScheduleOverlap,
   type WorkflowDefinition,
   type WorkflowEdge,
   type WorkflowNode,
@@ -185,6 +187,10 @@ export class SchedulesService {
         skills: (target?.skills as string[] | undefined) ?? [],
         delivery: deliveryOf(input.delivery as Record<string, unknown> | undefined),
         repeatLimit: (input.repeat as { limit?: number | null } | undefined)?.limit ?? null,
+        // The owner's defaults (2026-09-24): a missed time does not run late, and a time that
+        // comes while the previous run is going waits for it.
+        misfirePolicy: input.run_if_missed === true ? 'run_once' : 'skip',
+        overlap: overlapOf(input.overlap) ?? 'wait',
       })
       .run();
     const row = this.get(scope, id);
@@ -218,6 +224,10 @@ export class SchedulesService {
       values.repeatLimit = (patch.repeat as { limit?: number | null }).limit ?? null;
     if (patch.delivery !== undefined)
       values.delivery = deliveryOf(patch.delivery as Record<string, unknown>);
+    if (patch.run_if_missed !== undefined && patch.run_if_missed !== null)
+      values.misfirePolicy = patch.run_if_missed === true ? 'run_once' : 'skip';
+    const overlap = overlapOf(patch.overlap);
+    if (overlap) values.overlap = overlap;
     if (trigger) {
       values.kind = (trigger.kind as ScheduleRow['kind']) ?? current.kind;
       values.cronExpr = (trigger.expression as string | null) ?? null;
@@ -470,17 +480,17 @@ export class SchedulesService {
    * is unique per (schedule, tick). Whoever loses either race gets `null` and does nothing
    * — another process, or this one before a restart, already has it.
    *
-   * `fire: false` claims a tick that is not run (missed too long ago, or the previous run
-   * is still going): the line is written `skipped`, with the reason.
+   * `fire: false` claims a tick that is not run (missed, or the previous run is still
+   * going): the line is written `skipped`, with the reason. `fire: 'wait'` claims a tick
+   * held back until the previous run ends (`overlap: wait`): the line is `queued` and
+   * `waiting`, and `ScheduleRuns.release` starts it.
    */
-  claimTick(
-    row: ScheduleRow,
-    now: Date,
-    decision: { fire: true } | { fire: false; reason: string },
-  ): ScheduleRunRow | null {
+  claimTick(row: ScheduleRow, now: Date, decision: ClaimDecision): ScheduleRunRow | null {
     const tick = row.nextRunAt;
     if (!tick) return null;
-    const lastRunAt = decision.fire ? now : row.lastRunAt;
+    // A time that will run — now or once the previous run ends — is this schedule's last
+    // run: an interval counts from it, and a one-off is used up.
+    const lastRunAt = decision.fire === false ? row.lastRunAt : now;
     const next = this.nextFor({ ...row, lastRunAt }, now);
     const id = newUlid(now.getTime());
     try {
@@ -498,7 +508,7 @@ export class SchedulesService {
     id: string,
     now: Date,
     next: Date | null,
-    decision: { fire: true } | { fire: false; reason: string },
+    decision: ClaimDecision,
     row: ScheduleRow,
   ): boolean {
     return this.db.transaction((tx) => {
@@ -506,9 +516,11 @@ export class SchedulesService {
         .update(schedules)
         .set({
           nextRunAt: next,
-          ...(decision.fire
+          ...(decision.fire === true
             ? { lastRunAt: now, lastStatus: 'queued' as const, lastError: null }
-            : {}),
+            : decision.fire === 'wait'
+              ? { lastRunAt: now }
+              : {}),
           updatedAt: now,
         })
         .where(
@@ -529,9 +541,10 @@ export class SchedulesService {
           scheduleId: row.id,
           scheduledFor: tick,
           trigger: 'schedule',
-          status: decision.fire ? 'queued' : 'skipped',
-          error: decision.fire ? null : decision.reason,
-          finishedAt: decision.fire ? null : now,
+          status: decision.fire === false ? 'skipped' : 'queued',
+          waiting: decision.fire === 'wait',
+          error: decision.fire === false ? decision.reason : null,
+          finishedAt: decision.fire === false ? now : null,
         })
         .onConflictDoNothing()
         .run();
@@ -571,8 +584,11 @@ export class SchedulesService {
     }
   }
 
-  /** A run of this schedule that has not ended — the reason a due tick is skipped. */
-  openRunOf(scheduleId: string): ScheduleRunRow | undefined {
+  /**
+   * This schedule's runs that have started and not ended — "the previous run is still
+   * going". A time waiting for them is not one of them (`waitingRunOf`).
+   */
+  openRunsOf(scheduleId: string): ScheduleRunRow[] {
     return this.db
       .select()
       .from(scheduleRuns)
@@ -580,9 +596,65 @@ export class SchedulesService {
         and(
           eq(scheduleRuns.scheduleId, scheduleId),
           inArray(scheduleRuns.status, ['queued', 'running']),
+          eq(scheduleRuns.waiting, false),
+        ),
+      )
+      .orderBy(asc(scheduleRuns.createdAt))
+      .all();
+  }
+
+  /** The one time of this schedule waiting for its previous run to end, if any. */
+  waitingRunOf(scheduleId: string): ScheduleRunRow | undefined {
+    return this.db
+      .select()
+      .from(scheduleRuns)
+      .where(
+        and(
+          eq(scheduleRuns.scheduleId, scheduleId),
+          eq(scheduleRuns.status, 'queued'),
+          eq(scheduleRuns.waiting, true),
         ),
       )
       .get();
+  }
+
+  /**
+   * The previous run ended: the waiting time is now an ordinary line about to start. A
+   * compare-and-set on `waiting`, so it is taken once; `null` when someone already took it.
+   */
+  takeWaiting(id: string, now: Date = new Date()): ScheduleRunRow | null {
+    const taken = this.db
+      .update(scheduleRuns)
+      .set({ waiting: false, updatedAt: now })
+      .where(
+        and(
+          eq(scheduleRuns.id, id),
+          eq(scheduleRuns.status, 'queued'),
+          eq(scheduleRuns.waiting, true),
+        ),
+      )
+      .run();
+    if (taken.changes !== 1) return null;
+    const line = this.scheduleRunById(id)!;
+    this.db
+      .update(schedules)
+      .set({ lastRunAt: now, lastStatus: 'queued', lastError: null, updatedAt: now })
+      .where(eq(schedules.id, line.scheduleId))
+      .run();
+    return line;
+  }
+
+  /**
+   * A line that will not run after all — a waiting time whose wait could not end well — is
+   * recorded as skipped with the reason. `null` when it had already moved on.
+   */
+  skipLine(id: string, reason: string, now: Date = new Date()): ScheduleRunRow | null {
+    const done = this.db
+      .update(scheduleRuns)
+      .set({ status: 'skipped', waiting: false, error: reason, finishedAt: now, updatedAt: now })
+      .where(and(eq(scheduleRuns.id, id), eq(scheduleRuns.status, 'queued')))
+      .run();
+    return done.changes === 1 ? this.scheduleRunById(id)! : null;
   }
 
   /** The run has started: what it started, so the history can open it. */
@@ -667,7 +739,28 @@ export class SchedulesService {
       .from(scheduleRuns)
       .innerJoin(schedules, eq(schedules.id, scheduleRuns.scheduleId))
       .where(
-        and(inArray(scheduleRuns.status, ['queued', 'running']), isNull(schedules.externalSource)),
+        and(
+          inArray(scheduleRuns.status, ['queued', 'running']),
+          eq(scheduleRuns.waiting, false),
+          isNull(schedules.externalSource),
+        ),
+      )
+      .all()
+      .map((row) => row.run);
+  }
+
+  /** Times of the hub's own schedules still waiting for a previous run — for a restart. */
+  waitingRuns(): ScheduleRunRow[] {
+    return this.db
+      .select({ run: scheduleRuns })
+      .from(scheduleRuns)
+      .innerJoin(schedules, eq(schedules.id, scheduleRuns.scheduleId))
+      .where(
+        and(
+          eq(scheduleRuns.status, 'queued'),
+          eq(scheduleRuns.waiting, true),
+          isNull(schedules.externalSource),
+        ),
       )
       .all()
       .map((row) => row.run);
@@ -1088,6 +1181,19 @@ export class SchedulesService {
 
 /** A tick another claim already wrote: the transaction is undone, nothing fires. */
 class AlreadyFired extends Error {}
+
+/**
+ * How a claimed tick goes on: it runs now, it waits for the previous run (`overlap: wait`),
+ * or it does not run and the history says why.
+ */
+export type ClaimDecision = { fire: true } | { fire: 'wait' } | { fire: false; reason: string };
+
+/** The contract's `overlap`, when a write says one; a word it does not know is refused. */
+function overlapOf(value: unknown): ScheduleOverlap | null {
+  if (value === undefined || value === null) return null;
+  if ((SCHEDULE_OVERLAPS as readonly unknown[]).includes(value)) return value as ScheduleOverlap;
+  throw conflict({ reason: 'overlap_unknown', field: 'overlap' });
+}
 
 /** Hermes's `last_status` in the hub's words; `delivery_failed` still ran. */
 function runStatusOfHermes(status: string | null | undefined): ScheduleRow['lastStatus'] {

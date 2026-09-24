@@ -21,6 +21,10 @@
  * the engine's own ending (so a run that waits days at an approval still settles its line).
  * A hub that restarts settles, at boot, the lines it finds open (`settleStranded`).
  *
+ * The schedule's `overlap` (DECISIONS §39) lives here too: a time held back while the
+ * previous run goes (`wait`) starts when that run's line settles (`release`), and `replace`
+ * stops the previous run for real before the next starts (`stop`).
+ *
  * The session run belongs to `sessions`: this file reaches it only through
  * `ScheduleRunPorts`, filled in the composition root (`modules/index.ts`).
  */
@@ -28,6 +32,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import { HubError } from '../../lib/errors.js';
 import type { ScheduleRow, ScheduleRunRow, SchedulesService, WorkflowRunRow } from './service.js';
 import type { WorkflowDefinition } from './schema.js';
+import { missedReason } from './scheduler.js';
 import type { RunScope, WorkflowEngine } from './workflow-engine.js';
 
 /** How a session run stands, as `sessions` reports it. */
@@ -56,6 +61,8 @@ export interface ScheduleRunPorts {
   ): Promise<{ sessionId: string; runId: string; jobId: string; done: Promise<TurnOutcome> }>;
   /** A run by id, for settling after a restart; `null` when there is no such run. */
   outcome(workspace: string, runId: string): TurnOutcome | null;
+  /** Stop a run the way the chat's Stop does; a run already over is nothing to stop. */
+  cancel(scope: RunScope, sessionId: string, runId: string): Promise<void>;
 }
 
 /** What a firing started — the ids `runNow` answers with. */
@@ -78,6 +85,10 @@ export interface ScheduleRunsDeps {
   /** A workspace's profile slug, for the realtime room. */
   profileOf: (workspace: string) => string | null;
   emit: (profile: string, event: string, payload: Record<string, unknown>) => void;
+  /** Cancel a workflow run the way its Cancel does (`schedules.cancelWorkflowRun`). */
+  cancelWorkflow: (scope: RunScope, workflowRunId: string) => void;
+  /** How long `stop` waits for a stopped run to end before the next one starts. */
+  stopWaitMs?: number;
   /** The contract's `Schedule` and `ScheduleRun`, as the routes render them. */
   toSchedule: (row: ScheduleRow, profile: string) => Record<string, unknown>;
   toRun: (row: ScheduleRunRow) => Record<string, unknown>;
@@ -86,6 +97,15 @@ export interface ScheduleRunsDeps {
 
 /** Said when a restart cut a run short; the same words as a workflow run's. */
 export const RESTARTED = 'the hub restarted while this run was going';
+/** Said on a run `overlap: replace` stopped. */
+export const REPLACED = 'stopped: the next run of this schedule replaced it';
+/** Said on a waiting time a restart ended, when the schedule does not run a missed time. */
+export const WAIT_CUT = 'missed: the hub restarted while this time was waiting';
+/** Said on a waiting time whose schedule was paused, archived or replaced meanwhile. */
+export const WAIT_PAUSED = 'skipped: the schedule was paused while this time was waiting';
+const WAIT_REPLACED = 'skipped: a newer run of this schedule replaced the waiting time';
+/** How long `stop` waits for a stopped run to end. */
+const STOP_WAIT_MS = 30_000;
 
 const TERMINAL = new Set(['succeeded', 'failed', 'cancelled', 'timed_out']);
 
@@ -93,6 +113,9 @@ const TERMINAL = new Set(['succeeded', 'failed', 'cancelled', 'timed_out']);
 class Unrunnable extends Error {}
 
 export class ScheduleRuns {
+  /** The follow-up of each prompt run started in this process, by history line. */
+  private readonly live = new Map<string, Promise<unknown>>();
+
   constructor(private readonly deps: ScheduleRunsDeps) {}
 
   /**
@@ -157,10 +180,15 @@ export class ScheduleRuns {
         title: schedule.name,
       });
       this.started(line.id, { runId: handle.runId, sessionId: handle.sessionId });
-      void handle.done.then(
-        (outcome) => this.settleTurn(line.id, outcome),
-        (error: unknown) => this.settle(line.id, { status: 'failed', error: String(error) }),
-      );
+      const followed = handle.done
+        .then(
+          (outcome) => this.settleTurn(line.id, outcome),
+          (error: unknown) => {
+            this.settle(line.id, { status: 'failed', error: String(error) });
+          },
+        )
+        .finally(() => this.live.delete(line.id));
+      this.live.set(line.id, followed);
       return {
         ...fired,
         jobId: handle.jobId,
@@ -186,24 +214,97 @@ export class ScheduleRuns {
     }
   }
 
+  /**
+   * A tick claimed to wait for the previous run (`overlap: wait`). The page hears of it;
+   * and if that run ended between the look and the claim, the wait is over at once.
+   */
+  async waiting(schedule: ScheduleRow): Promise<void> {
+    this.skipped(schedule);
+    await this.release(schedule.id);
+  }
+
+  /**
+   * The schedule's previous runs have ended: start the time waiting for them, if one is and
+   * none is still going. Taken with a compare-and-set, so it starts once. A schedule paused
+   * or archived meanwhile does not start it: the line says why.
+   */
+  async release(scheduleId: string, now: Date = new Date()): Promise<Fired | null> {
+    const service = this.deps.service();
+    const waiting = service.waitingRunOf(scheduleId);
+    if (!waiting || service.openRunsOf(scheduleId).length > 0) return null;
+    const schedule = service.scheduleById(scheduleId);
+    if (!schedule || !schedule.enabled || schedule.archivedAt || schedule.externalSource) {
+      if (service.skipLine(waiting.id, WAIT_PAUSED, now) && schedule) this.skipped(schedule);
+      return null;
+    }
+    const line = service.takeWaiting(waiting.id, now);
+    if (!line) return null;
+    return this.fire(schedule, line);
+  }
+
+  /**
+   * `overlap: replace`: stop the schedule's runs still going, for real, before its next one
+   * starts. Each line is settled `cancelled` with the reason first (so nothing it ends with
+   * later overwrites that), then its session run or workflow run is cancelled, and the stop
+   * waits — up to `stopWaitMs` — for the prompt runs to end. A time waiting (left from an
+   * earlier `wait`) is skipped: the new run is the one that goes.
+   */
+  async stop(schedule: ScheduleRow, lines: ScheduleRunRow[]): Promise<void> {
+    const service = this.deps.service();
+    const scope = this.deps.scopeOf(schedule.workspace, schedule.ownerId);
+    const endings: Promise<unknown>[] = [];
+    for (const line of lines) {
+      this.settle(line.id, { status: 'cancelled', error: REPLACED }, { release: false });
+      if (!scope) continue;
+      try {
+        if (line.workflowRunId) {
+          this.deps.cancelWorkflow(scope, line.workflowRunId);
+        } else if (line.runId && line.sessionId) {
+          await this.deps.ports()?.cancel(scope, line.sessionId, line.runId);
+          const ending = this.live.get(line.id);
+          if (ending) endings.push(ending);
+        }
+      } catch (error) {
+        this.deps.log.warn(
+          { err: error, scheduleId: schedule.id, scheduleRunId: line.id },
+          'schedules: could not stop the previous run',
+        );
+      }
+    }
+    const waiting = service.waitingRunOf(schedule.id);
+    if (waiting && service.skipLine(waiting.id, WAIT_REPLACED)) this.skipped(schedule);
+    if (endings.length === 0) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const limit = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, this.deps.stopWaitMs ?? STOP_WAIT_MS);
+      timer.unref?.();
+    });
+    await Promise.race([Promise.allSettled(endings), limit]);
+    if (timer) clearTimeout(timer);
+  }
+
   /** A prompt run ended. */
-  settleTurn(lineId: string, outcome: TurnOutcome): void {
+  settleTurn(lineId: string, outcome: TurnOutcome, options: SettleOptions = {}): void {
     const status =
       outcome.status === 'succeeded'
         ? 'succeeded'
         : outcome.status === 'cancelled'
           ? 'cancelled'
           : 'failed';
-    this.settle(lineId, {
-      status,
-      output: outcome.output || null,
-      error:
-        status === 'succeeded'
-          ? null
-          : outcome.errorCode === 'stale'
-            ? RESTARTED
-            : (outcome.error ?? `the run ended ${outcome.status}`),
-    });
+    this.settle(
+      lineId,
+      {
+        status,
+        output: outcome.output || null,
+        error:
+          status === 'succeeded'
+            ? null
+            : outcome.errorCode === 'stale'
+              ? RESTARTED
+              : (outcome.error ?? `the run ended ${outcome.status}`),
+      },
+      options,
+    );
   }
 
   /** A workflow run a schedule started reached its end (the engine's hook). */
@@ -221,7 +322,7 @@ export class ScheduleRuns {
    * workflow run by its own state — one waiting at an approval stays open, because it
    * still goes on; anything that never started failed with the restart.
    */
-  settleStranded(): number {
+  settleStranded(now: Date = new Date()): number {
     const service = this.deps.service();
     const ports = this.deps.ports();
     let settled = 0;
@@ -236,19 +337,47 @@ export class ScheduleRuns {
               : run.status === 'cancelled'
                 ? 'cancelled'
                 : 'failed';
-          settled += this.settle(line.id, { status, error: run.error }) ? 1 : 0;
+          settled += this.settle(line.id, { status, error: run.error }, HOLD) ? 1 : 0;
           continue;
         }
-        settled += this.settle(line.id, { status: 'failed', error: RESTARTED }) ? 1 : 0;
+        settled += this.settle(line.id, { status: 'failed', error: RESTARTED }, HOLD) ? 1 : 0;
         continue;
       }
       const outcome = line.runId && ports ? ports.outcome(line.workspace, line.runId) : null;
       if (outcome && TERMINAL.has(outcome.status)) {
-        this.settleTurn(line.id, outcome);
+        this.settleTurn(line.id, outcome, HOLD);
         settled += 1;
         continue;
       }
-      settled += this.settle(line.id, { status: 'failed', error: RESTARTED }) ? 1 : 0;
+      settled += this.settle(line.id, { status: 'failed', error: RESTARTED }, HOLD) ? 1 : 0;
+    }
+    settled += this.settleWaiting(now);
+    return settled;
+  }
+
+  /**
+   * At boot, after the open lines: a time that was waiting for a run the restart ended. The
+   * hub was not running when that wait ended, so the schedule's "run if missed" decides — the
+   * same rule as a missed tick (`missedReason`): on time, or the option on and within 24
+   * hours, it starts now; otherwise it is recorded as missed. One still waiting for a run
+   * that goes on (a workflow at an approval) keeps waiting.
+   */
+  private settleWaiting(now: Date): number {
+    const service = this.deps.service();
+    let settled = 0;
+    for (const line of service.waitingRuns()) {
+      if (service.openRunsOf(line.scheduleId).length > 0) continue;
+      const schedule = service.scheduleById(line.scheduleId);
+      if (schedule && !missedReason(schedule, line.scheduledFor, now)) {
+        void this.release(line.scheduleId, now).catch((error: unknown) =>
+          this.deps.log.warn({ err: error, scheduleRunId: line.id }, 'schedules: could not start'),
+        );
+        continue;
+      }
+      if (service.skipLine(line.id, WAIT_CUT, now)) {
+        settled += 1;
+        if (schedule) this.skipped(schedule);
+      }
     }
     return settled;
   }
@@ -265,7 +394,10 @@ export class ScheduleRuns {
     }
   }
 
-  /** Write the ending once and tell the page; `false` when the line had already ended. */
+  /**
+   * Write the ending once and tell the page; `false` when the line had already ended. Then,
+   * unless told to hold, a time waiting for this run starts (`release`).
+   */
   private settle(
     lineId: string,
     outcome: {
@@ -273,23 +405,39 @@ export class ScheduleRuns {
       output?: string | null;
       error?: string | null;
     },
+    options: SettleOptions = {},
   ): boolean {
     const service = this.deps.service();
     const result = service.settleRun(lineId, outcome);
     if (!result) return false;
     const profile = this.deps.profileOf(result.run.workspace);
-    if (!profile) return true;
-    this.deps.emit(
-      profile,
-      outcome.status === 'succeeded' ? 'schedule_run.completed' : 'schedule_run.failed',
-      { schedule_run: this.deps.toRun(result.run) },
-    );
-    this.deps.emit(profile, 'schedule.updated', {
-      schedule: this.deps.toSchedule(result.schedule, profile),
-    });
+    if (profile) {
+      this.deps.emit(
+        profile,
+        outcome.status === 'succeeded' ? 'schedule_run.completed' : 'schedule_run.failed',
+        { schedule_run: this.deps.toRun(result.run) },
+      );
+      this.deps.emit(profile, 'schedule.updated', {
+        schedule: this.deps.toSchedule(result.schedule, profile),
+      });
+    }
+    if (options.release !== false) {
+      void this.release(result.run.scheduleId).catch((error: unknown) =>
+        this.deps.log.warn(
+          { err: error, scheduleId: result.run.scheduleId },
+          'schedules: could not start the waiting time',
+        ),
+      );
+    }
     return true;
   }
 }
+
+interface SettleOptions {
+  /** `false`: do not start a time waiting for this run (a stop, or the boot sweep). */
+  release?: boolean;
+}
+const HOLD: SettleOptions = { release: false };
 
 /** Why a start failed, in words — a registry refusal named by what it means. */
 function reasonOf(error: unknown): string {
