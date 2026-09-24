@@ -795,9 +795,38 @@
       "use_zone": "Use {zone}",
       "delivery": "Hermes posts to messaging platforms itself — ask for it in the prompt.",
       "prompt_required": "A schedule for Hermes needs a prompt.",
-      "fired": "Hermes will run it on its next tick."
+      "fired": "Hermes will run it on its next tick.",
+      "run_options": "Hermes decides these two for its own jobs, so they are not set here."
     },
     "in_profile": "New schedules are made in {name}. To make one in another profile, switch the profile at the top of the page.",
+    "options": {
+      "show": "Run options",
+      "hide": "Hide options",
+      "title": "Run options",
+      "missed": "Run if missed (within 24 hours)",
+      "missed_hint": "If the hub was not running at its time, it runs once when the hub is back within 24 hours. Unchecked, it never runs late, and the history says so. Up to two minutes late still counts as on time.",
+      "overlap": "If the previous run is still going",
+      "overlap_hint": "\"Run now\" always starts at once and stops nothing.",
+      "overlaps": {
+        "skip": {
+          "label": "Skip",
+          "hint": "This time does not run, and the history says so."
+        },
+        "wait": {
+          "label": "Wait, then run",
+          "hint": "Runs as soon as the previous run ends. Only one time waits; any later one is skipped and recorded."
+        },
+        "parallel": {
+          "label": "Run alongside",
+          "hint": "Runs in a new conversation next to the previous one."
+        },
+        "replace": {
+          "label": "Stop the previous",
+          "hint": "Stops the previous run for real, then starts."
+        }
+      },
+      "saved": "Saved the options of \"{name}\"."
+    },
     "fired": "“{name}” started.",
     "target_unavailable": "It could not start: {message}",
     "history": {
@@ -806,6 +835,7 @@
       "empty": "It has not run yet.",
       "open_session": "Open the conversation",
       "open_run": "Open the run",
+      "waiting": "Waiting for the previous run to end",
       "trigger": {
         "schedule": "On its time",
         "manual": "Run now"

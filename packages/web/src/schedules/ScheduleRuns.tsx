@@ -23,6 +23,8 @@ interface ScheduleRunRow {
   id: string;
   status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
   trigger: 'schedule' | 'manual';
+  /** Held back until the schedule's previous run ends (`overlap: wait`). */
+  waiting?: boolean;
   session_id: string | null;
   workflow_run_id: string | null;
   output_preview: string | null;
@@ -131,10 +133,13 @@ export function ScheduleHistory({
           className="flex flex-col gap-1 rounded-md border border-line p-2"
           data-testid="schedule-run-line"
           data-status={run.status}
+          data-waiting={run.waiting ? 'true' : undefined}
         >
           <span className="flex flex-wrap items-center gap-2 text-xs">
-            <Badge tone={RUN_TONE[run.status] ?? 'neutral'} dot>
-              {t(`schedules.history.status.${run.status}`)}
+            <Badge tone={run.waiting ? 'warning' : (RUN_TONE[run.status] ?? 'neutral')} dot>
+              {run.waiting
+                ? t('schedules.history.waiting')
+                : t(`schedules.history.status.${run.status}`)}
             </Badge>
             <span className="text-muted">
               {t(`schedules.history.trigger.${run.trigger}`)}
