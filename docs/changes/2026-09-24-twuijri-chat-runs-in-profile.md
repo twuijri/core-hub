@@ -127,6 +127,19 @@ $ MAJLIS_HERMES_IMAGE=majlis:local npx vitest run --maxWorkers=1 hermes-profile.
 ```
 لم يُشغَّل `web:e2e`: لم يتغيّر شيء في `packages/web`.
 
+بعد دمج `origin/main` مرة ثانية (e646bb1، PR #82؛ تعارض في `docs/STATUS.md` حُلّ بصفّ auth من هذا
+الفرع وصفّ sessions من `main`):
+
+```
+$ pnpm lint / typecheck / contracts:lint / contracts:check-clients / i18n:check / nav:check / change-record:check -> exit 0 كلها
+$ pnpm --filter @majlis/server test
+ Test Files  80 passed | 9 skipped (89)
+      Tests  848 passed | 26 skipped (874)
+$ pnpm contract:test
+      Tests  255 passed (255)
+```
+CI على PR #83 قبل هذا الدمج: الفحوص الستة ناجحة.
+
 ## المخاطر والرجوع
 - **مجلد العمل تغيّر لجلسات هرمز**: كانت أدوات هرمز تعمل في منزل هرمز الجذري، والآن في مجلد الجلسة.
   هذا هو المقصود (ملفات الجلسة والمهام هناك)، لكنه تغيير سلوك مرئي.
