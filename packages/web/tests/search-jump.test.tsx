@@ -12,6 +12,7 @@ import { PaneProvider } from '../src/shell/pane.js';
 import { Transcript } from '../src/chat/MessageView.js';
 import { turnsOf } from '../src/chat/turns.js';
 import {
+  AROUND,
   MAX_OLDER_PAGES,
   chatHref,
   pageBackUntil,
@@ -59,7 +60,7 @@ describe('an old message is paged in before the chat is shown', () => {
 
   it('asks for the page before the oldest one it holds until the anchor is there', async () => {
     const older = vi.fn(olderThan(200));
-    const items = await pageBackUntil(first, 'm0650', older);
+    const { items, has_more, pages } = await pageBackUntil(first, 'm0650', older);
     expect(older).toHaveBeenCalledTimes(2);
     expect(older).toHaveBeenNthCalledWith(1, 'm0900');
     expect(older).toHaveBeenNthCalledWith(2, 'm0700');
@@ -67,6 +68,7 @@ describe('an old message is paged in before the chat is shown', () => {
     expect(items.at(-1)?.id).toBe('m0999');
     // Oldest first, no gaps, no repeats.
     expect(items.map((m) => m.id)).toEqual(all.slice(500).map((m) => m.id));
+    expect({ has_more, pages }).toEqual({ has_more: true, pages: 2 });
   });
 
   it('asks for nothing when the anchor is already in the newest page', async () => {
@@ -77,13 +79,26 @@ describe('an old message is paged in before the chat is shown', () => {
 
   it('stops where the conversation begins, and after a bounded number of pages', async () => {
     const gone = vi.fn(olderThan(200));
-    const items = await pageBackUntil(first, 'deleted', gone);
+    const back = await pageBackUntil(first, 'deleted', gone);
     expect(gone).toHaveBeenCalledTimes(5);
-    expect(items).toHaveLength(1000);
+    expect(back.items).toHaveLength(1000);
+    expect(back.has_more).toBe(false);
 
     const tiny = vi.fn(olderThan(1));
     await pageBackUntil(first, 'deleted', tiny);
     expect(tiny).toHaveBeenCalledTimes(MAX_OLDER_PAGES);
+  });
+
+  it('opens with history on both sides: one page more when the anchor is near the top', async () => {
+    const older = vi.fn(olderThan(200));
+    // m0705 lands 5 messages from the top of the page that brings it in.
+    const near = await pageBackUntil(first, 'm0705', older, { around: AROUND });
+    expect(older).toHaveBeenCalledTimes(2);
+    expect(near.items[0]?.id).toBe('m0500');
+
+    const far = vi.fn(olderThan(200));
+    await pageBackUntil(first, 'm0800', far, { around: AROUND });
+    expect(far).toHaveBeenCalledTimes(1);
   });
 });
 
