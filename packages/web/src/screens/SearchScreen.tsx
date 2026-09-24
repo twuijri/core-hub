@@ -12,7 +12,7 @@ import { IconSearch } from '../ui/icons.js';
 import { highlightParts, matchRanges } from '../ui/combobox-filter.js';
 import { chatHref, HIT_CLASS } from '../chat/anchor.js';
 import { ProfileBadge } from '../shell/ProfileBadge.js';
-import { useManyProfiles, useProfileInLink } from '../shell/profileSelector.js';
+import { useManyProfiles, useProfileInLink } from '../shell/profiles.js';
 
 /** The snippet with the searched words marked, as they will be inside the conversation. */
 function markedSnippet(text: string, q: string): ReactNode {
@@ -55,7 +55,7 @@ export function SearchScreen() {
   const inLink = useProfileInLink();
   const title = t(termKey('search'));
   return (
-    <AppShell title={title} profiles="lists">
+    <AppShell title={title}>
       <h1 className="sr-only">{title}</h1>
       <Input
         ref={input}

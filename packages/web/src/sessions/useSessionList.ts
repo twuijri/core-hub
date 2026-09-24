@@ -37,6 +37,8 @@ export function useLiveSessions(filters: SessionFilters = {}) {
   const { profile, session } = useAuth();
   const realtime = useRealtime();
   const all = filters.allProfiles === true;
+  /** The one profile the list shows when it is not every profile. */
+  const shown = filters.profile ?? profile;
 
   useEffect(() => {
     if (!session) return;
@@ -63,7 +65,7 @@ export function useLiveSessions(filters: SessionFilters = {}) {
     // A new session and a deleted one change *which* rows exist, and where: the order the
     // hub returns is the hub's, so the list is refetched rather than spliced here.
     const onList = (raw: unknown) => {
-      if (!all && isEnvelope(raw) && raw.profile && raw.profile !== profile) return;
+      if (!all && isEnvelope(raw) && raw.profile && raw.profile !== shown) return;
       void queryClient.invalidateQueries(pages);
     };
 
@@ -76,7 +78,7 @@ export function useLiveSessions(filters: SessionFilters = {}) {
       socket.off('session.created', onList);
       socket.off('session.deleted', onList);
     };
-  }, [queryClient, profile, session, realtime, all]);
+  }, [queryClient, profile, shown, session, realtime, all]);
 
   return query;
 }

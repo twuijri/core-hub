@@ -41,7 +41,7 @@ import { useFollowBottom } from './followBottom.js';
 import { useSessionStream } from './useSessionStream.js';
 import { WorkingDirPicker } from './WorkingDirPicker.js';
 import { ProfileBadge } from '../shell/ProfileBadge.js';
-import { useManyProfiles, useProfileInLink } from '../shell/profileSelector.js';
+import { useManyProfiles, useProfileInLink } from '../shell/profiles.js';
 
 export function ChatScreen() {
   const { t } = useI18n();
@@ -51,7 +51,7 @@ export function ChatScreen() {
   const title = t(termKey('chat'));
   if (!sessionId) {
     return (
-      <AppShell title={title} profiles="lists">
+      <AppShell title={title}>
         <div className="flex flex-1 items-center justify-center">
           <EmptyState
             icon={<IconSpark size={20} />}
@@ -316,7 +316,7 @@ function OpenSession({ sessionId }: { sessionId: string }) {
   return (
     // The whole width (owner decision, 2026-09-23): the agent's replies reach the left
     // edge and the person's the right, while the composer keeps its reading column.
-    <AppShell title={title} profiles="lists">
+    <AppShell title={title}>
       <div
         className="chat-flow"
         data-empty={messageCount === 0 ? 'true' : 'false'}
