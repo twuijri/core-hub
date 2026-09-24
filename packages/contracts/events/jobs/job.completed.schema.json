@@ -221,7 +221,8 @@
         "device_request",
         "export",
         "schedule_run",
-        "workflow_run"
+        "workflow_run",
+        "channel_login"
       ]
     },
     "JobProgress": {

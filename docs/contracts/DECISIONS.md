@@ -495,3 +495,27 @@ had been granted. That rule is withdrawn.
 
 Not changed: `Webhook.profiles` ("Empty means every workspace") scopes a webhook, not a
 person, and grants nobody access.
+
+## 30. A job may show its state while it runs; the agent tools that need Hermes to act
+
+2026-09-24, with `agents.testMcpServer`, `agents.loginChannel` and `agents.importSkills`.
+
+- **`channel_login` is a `JobKind`.** A QR pairing is long work with a state a screen must
+  draw while it runs, so it is a job (invariant 4). `progress.message` stays a line for a
+  person; the code itself travels in the job's `result` while the job runs —
+  `{status, qr, expires_at}` — and the outcome replaces it when the job ends
+  (`{status: connected, account_name, account_phone}`). Putting the QR payload in
+  `progress.message` (the earlier wording) would have made a machine value out of a line
+  every client shows as text.
+- **Only `whatsapp` pairs by QR today**; any other platform is `409 state_invalid` with
+  `details.reason = login_not_supported`. Telegram's onboarding in Hermes creates a bot
+  through an outside service and asks for allowed user ids — a different product, not a pairing.
+- **Where the hub does not supervise Hermes** the two tools that ask Hermes to act answer
+  `409 state_invalid`, `details.reason = hermes_not_supervised`; Hermes refusing is `409
+  conflict`, `hermes_refused`, with Hermes's `details.message`; Hermes's API not starting is
+  `503 service_unavailable`, `hermes_api_unavailable`.
+- **`SkillImport.category` is optional and not used for placement.** An imported skill is
+  installed beside the others and lists under the category its own front matter names, like
+  every other skill; a required field nobody used would have been a promise the hub did not
+  keep. A refused pack names `details.reason`, `details.skill`, `details.file` and
+  `details.message`; a skill that already exists is `409`, anything else `400`.

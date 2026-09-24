@@ -12,7 +12,7 @@ import { modules as defaultModules, notifierPort } from '../../server/src/module
 import { principalScopeResolver } from '../../server/src/modules/auth/index.js';
 import { overrideAgents } from '../../server/src/modules/agents/index.js';
 import { overrideModels } from '../../server/src/modules/models/index.js';
-import type { AgentInstaller } from '../../server/src/modules/agents/index.js';
+import type { AgentInstaller, HermesApiCall } from '../../server/src/modules/agents/index.js';
 import { createSessionsModule } from '../../server/src/modules/sessions/index.js';
 import { createHermesCardApi, registerHermesBoard } from '../../server/src/modules/tasks/index.js';
 import { registerHermesCron } from '../../server/src/modules/schedules/index.js';
@@ -351,10 +351,67 @@ const scriptedGateway: typeof fetch = async (input) => {
   }
   return new Response('not found', { status: 404 });
 };
+/**
+ * Hermes's own API for the agent tools (ADR 0015), scripted: an MCP server called `broken`
+ * fails in Hermes's words and any other lists two tools; a WhatsApp pairing hands out one
+ * code, then a second, and is linked on the next question — so journey 23 sees a code drawn,
+ * replaced, and the channel linked, without a phone or a network.
+ */
+let pairingPolls = 0;
+const scriptedHermesApi: HermesApiCall = async <T>(method: string, route: string): Promise<T> => {
+  const answer = (value: unknown) => value as T;
+  const mcp = /^\/api\/mcp\/servers\/([^/]+)\/test/.exec(route);
+  if (mcp) {
+    return mcp[1] === 'broken'
+      ? answer({
+          ok: false,
+          error: "[Errno 2] No such file or directory: 'not-a-command'",
+          tools: [],
+        })
+      : answer({
+          ok: true,
+          tools: [
+            { name: 'read_file', description: 'Read a file from the allowed folders.' },
+            { name: 'list_directory', description: 'List a folder.' },
+          ],
+        });
+  }
+  const expires = new Date(Date.now() + 10 * 60_000).toISOString();
+  if (route.endsWith('/whatsapp/onboarding/start')) {
+    pairingPolls = 0;
+    return answer({ pairing_id: 'e2e-pairing', status: 'installing', expires_at: expires });
+  }
+  if (method === 'GET' && route.includes('/whatsapp/onboarding/')) {
+    pairingPolls += 1;
+    if (pairingPolls < 4) {
+      return answer({
+        status: 'waiting',
+        qr_payload: 'https://wa.me/e2e#first-code',
+        expires_at: expires,
+      });
+    }
+    if (pairingPolls < 8) {
+      return answer({
+        status: 'waiting',
+        qr_payload: 'https://wa.me/e2e#second-code',
+        expires_at: expires,
+      });
+    }
+    return answer({
+      status: 'connected',
+      account_name: 'مكتب المجلس',
+      account_phone: '966500000000',
+    });
+  }
+  return answer({ ok: true });
+};
+
 overrideAgents({
   pathValue: path.join(dataDir, 'no-such-bin'),
   installer: e2eInstaller,
   adapterOptions: { hermes: { fetchImpl: scriptedGateway } },
+  hermesApi: scriptedHermesApi,
+  pairingPollMs: 700,
 });
 
 /**

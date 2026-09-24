@@ -23,6 +23,7 @@ import {
   hermesDashboardFor,
   hermesProfileRunner,
   hermesRuntimeFor,
+  registerAgentAttachments,
 } from './agents/index.js';
 import {
   attachmentReferences,
@@ -101,6 +102,13 @@ export const sessionsModule = createSessionsModule({
 // The other direction of the same pair: `knowledge` refuses to delete a file a message
 // still points at, and only `sessions` knows that (contract `409` on deleteAttachment).
 registerAttachmentReferences(attachmentReferences);
+
+// A skill pack is an uploaded file (`purpose: skill`); `agents` installs it and `knowledge`
+// owns the bytes. Only the copy-out is lent, the same one a chat turn uses.
+registerAgentAttachments((app) => ({
+  materialise: (workspace, ids, directory) =>
+    attachmentsPort(app).materialise(workspace, ids, directory),
+}));
 
 /**
  * The Tasks board reflects Hermes's own kanban (owner decision, 2026-09-23). `agents`
