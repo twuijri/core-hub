@@ -4582,7 +4582,9 @@ paths:
         (`external`), each with Hermes's own `status`. Hermes's dashboard plugin routes act on
         the dashboard's own home only (they take no profile, unlike its MCP, skills and cron
         routes), so the hub runs Hermes's command instead. A plugin Hermes's catalog has
-        withdrawn is listed with Hermes's reason in `warnings`. Only where the hub supervises
+        withdrawn is listed with Hermes's reason in `warnings`; so is a name Hermes lists twice (it
+        ships a few under one name in two categories, and its commands take the name to mean the
+        first — the one listed). Only where the hub supervises
         Hermes: otherwise `409 state_invalid` with `details.reason = hermes_not_supervised`;
         an agent that is not Hermes is `409 state_invalid`, `plugins_are_hermes_only`.
       x-rt-events: []
@@ -4605,13 +4607,13 @@ paths:
                       type: string
               example:
                 items:
-                  - key: kanban
-                    name: kanban
+                  - key: disk-cleanup
+                    name: disk-cleanup
                     kind: bundled
                     source: bundled
                     status: not_enabled
-                    version: 1.0.0
-                    description: 'Multi-agent kanban board'
+                    version: 2.0.0
+                    description: 'Auto-track and clean up ephemeral files created during Hermes sessions.'
                     author: null
                     configured: true
                     enabled: false
@@ -4723,13 +4725,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/AgentPlugin'
               example:
-                key: kanban
-                name: kanban
+                key: disk-cleanup
+                name: disk-cleanup
                 kind: bundled
                 source: bundled
                 status: enabled
-                version: 1.0.0
-                description: 'Multi-agent kanban board'
+                version: 2.0.0
+                description: 'Auto-track and clean up ephemeral files created during Hermes sessions.'
                 author: null
                 configured: true
                 enabled: true

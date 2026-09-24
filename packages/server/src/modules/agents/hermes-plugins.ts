@@ -150,7 +150,10 @@ function sourceOf(value: unknown): AgentPlugin['source'] {
 }
 
 /** Parse `hermes plugins list --json`. Anything printed before the array is not data. */
-export function parsePluginList(stdout: string): { items: AgentPlugin[]; warnings: string[] } {
+export function parsePluginList(
+  stdout: string,
+  language: Language = 'en',
+): { items: AgentPlugin[]; warnings: string[] } {
   const trimmed = stdout.trim();
   // "No plugins installed." is Hermes's answer for an empty list, not a failure.
   if (!trimmed.includes('[')) return { items: [], warnings: [] };
@@ -167,9 +170,18 @@ export function parsePluginList(stdout: string): { items: AgentPlugin[]; warning
   if (!Array.isArray(rows)) return { items: [], warnings: [] };
   const items: AgentPlugin[] = [];
   const warnings: string[] = [];
+  const seen = new Set<string>();
   for (const row of rows as HermesPluginRow[]) {
     const name = text(row?.name);
     if (!name) continue;
+    // Hermes ships some plugins under one name in two categories (`image_gen/xai`,
+    // `video_gen/xai`); its list names both the same, and its commands take the name to mean
+    // the first. So the first is the one listed, and the page says the rest exist.
+    if (seen.has(name)) {
+      warnings.push(`${name}: ${t('agents.plugins.duplicate', language)}`);
+      continue;
+    }
+    seen.add(name);
     const source = sourceOf(row.source);
     const status = statusOf(row.status);
     const removed = text(row.removed);
@@ -200,10 +212,11 @@ export function parsePluginList(stdout: string): { items: AgentPlugin[]; warning
 export async function listPlugins(
   cli: HermesCli,
   home: string,
+  language: Language = 'en',
 ): Promise<{ items: AgentPlugin[]; warnings: string[] }> {
   const result = await cli(home, ['plugins', 'list', '--json']);
   if (result.code !== 0) throw refusal(sentenceOf(result));
-  return parsePluginList(result.stdout);
+  return parsePluginList(result.stdout, language);
 }
 
 async function findPlugin(cli: HermesCli, home: string, key: string): Promise<AgentPlugin> {

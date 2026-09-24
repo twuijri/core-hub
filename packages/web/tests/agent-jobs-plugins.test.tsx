@@ -195,7 +195,7 @@ function hub(options: { pluginsRefused?: boolean } = {}) {
       }
       return json({
         items: [
-          plugin('kanban', 'bundled', 'not_enabled'),
+          plugin('security-guidance', 'bundled', 'not_enabled'),
           plugin('disk-cleanup', 'bundled', 'disabled'),
           ...(installed ? [plugin('chrome-profiles', 'user', 'not_enabled', true)] : []),
         ],
@@ -207,7 +207,7 @@ function hub(options: { pluginsRefused?: boolean } = {}) {
       return json({ job_id: '01J8QK3ZR2W7M5N4P6T8V9X0JH' }, 202);
     }
     if (path.includes('/plugins/') && method === 'PATCH') {
-      return json(plugin('kanban', 'bundled', body?.enabled ? 'enabled' : 'disabled'));
+      return json(plugin('security-guidance', 'bundled', body?.enabled ? 'enabled' : 'disabled'));
     }
     if (path.includes('/plugins/') && method === 'DELETE') return json(null, 204);
     if (path.includes('/jobs/')) {
@@ -345,18 +345,20 @@ describe("an agent's Plugins page", () => {
     expect(
       rows.map((row) => [row.getAttribute('data-plugin'), row.getAttribute('data-status')]),
     ).toEqual([
-      ['kanban', 'not_enabled'],
+      ['security-guidance', 'not_enabled'],
       ['disk-cleanup', 'disabled'],
     ]);
     expect(within(rows[0]!).getByText('Not enabled')).toBeTruthy();
     expect(within(rows[0]!).getByText('Ships with Hermes')).toBeTruthy();
     // Nothing Hermes ships can be removed.
-    expect(screen.queryByTestId('agent-plugin-remove-kanban')).toBeNull();
+    expect(screen.queryByTestId('agent-plugin-remove-security-guidance')).toBeNull();
 
-    fireEvent.click(screen.getByTestId('agent-plugin-toggle-kanban'));
+    fireEvent.click(screen.getByTestId('agent-plugin-toggle-security-guidance'));
     await waitFor(() =>
       expect(
-        sent.find((call) => call.method === 'PATCH' && call.url.endsWith('/plugins/kanban'))?.body,
+        sent.find(
+          (call) => call.method === 'PATCH' && call.url.endsWith('/plugins/security-guidance'),
+        )?.body,
       ).toEqual({ enabled: true }),
     );
   });

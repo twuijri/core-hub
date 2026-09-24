@@ -80,6 +80,7 @@ test("28. Hermes's Jobs and Plugins: its scheduler's jobs run and paused, a plug
   await job.getByRole('switch').click();
   await expect(job).toContainText('موقوف');
   await expect(job).not.toHaveAttribute('data-enabled', 'true');
+  await page.waitForTimeout(300);
   await shot(page, 'agent-jobs-ar-light');
 
   // The page leads to Schedules, where the same job is paused too.
@@ -98,16 +99,16 @@ test("28. Hermes's Jobs and Plugins: its scheduler's jobs run and paused, a plug
 
   // ---- Plugins: Hermes's list in this profile, in Hermes's words.
   await openHermesPage(page, 'الإضافات', /\/plugins$/);
-  const kanban = page.locator('[data-testid="agent-plugin"][data-plugin="kanban"]');
-  await expect(kanban).toHaveAttribute('data-status', 'not_enabled');
-  await expect(kanban).toContainText('غير مفعّلة');
-  await expect(kanban).toContainText('تأتي مع هرمز');
+  const guidance = page.locator('[data-testid="agent-plugin"][data-plugin="security-guidance"]');
+  await expect(guidance).toHaveAttribute('data-status', 'not_enabled');
+  await expect(guidance).toContainText('غير مفعّلة');
+  await expect(guidance).toContainText('تأتي مع هرمز');
   // What Hermes ships is switched off, never removed.
-  await expect(page.getByTestId('agent-plugin-remove-kanban')).toHaveCount(0);
+  await expect(page.getByTestId('agent-plugin-remove-security-guidance')).toHaveCount(0);
 
-  await page.getByTestId('agent-plugin-toggle-kanban').click();
-  await expect(kanban).toHaveAttribute('data-status', 'enabled');
-  await expect(kanban).toContainText('مفعّلة');
+  await page.getByTestId('agent-plugin-toggle-security-guidance').click();
+  await expect(guidance).toHaveAttribute('data-status', 'enabled');
+  await expect(guidance).toContainText('مفعّلة');
 
   // Install from Hermes's catalog: a job, and the plugin arrives switched off.
   await page.getByTestId('agent-plugin-identifier').fill('chrome-profiles');

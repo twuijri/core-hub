@@ -2,7 +2,8 @@
  * The Plugins page and the category skills against **the real Hermes** from the image:
  *
  * - `hermes plugins …`, run the way the hub runs it (`hermes-plugins.ts`) against a profile's
- *   home, lists what Hermes ships (its `kanban` among them) with Hermes's own status; switching
+ *   home, lists what Hermes ships (`disk-cleanup` among them; its kanban is a dashboard page,
+ *   not an agent plugin) with Hermes's own status; switching
  *   one on in a named profile leaves the default profile's lists alone; a plugin installed from a
  *   local Git repository arrives switched off, `user`, removable, and is removed again; what
  *   Hermes ships is never removed.
@@ -181,19 +182,24 @@ describe.skipIf(!image)(
       console.log(
         `plugins: ${root.items.map((p) => `${p.name}(${p.source},${p.status})`).join(', ')}`,
       );
-      const kanban = root.items.find((item) => item.key === 'kanban');
-      expect(kanban).toMatchObject({ source: 'bundled', removable: false });
-      expect(kanban?.status).not.toBe('enabled');
+      // Hermes's kanban is a dashboard page, not an agent plugin: its list does not name it.
+      expect(root.items.some((item) => item.key === 'kanban')).toBe(false);
+      // A few names Hermes ships twice, in two categories: listed once, and said so.
+      expect(new Set(root.items.map((item) => item.key)).size).toBe(root.items.length);
+      console.log(`warnings: ${root.warnings.join(' | ')}`);
+      const cleanup = root.items.find((item) => item.key === 'disk-cleanup');
+      expect(cleanup).toMatchObject({ source: 'bundled', removable: false });
+      expect(cleanup?.status).not.toBe('enabled');
 
-      const on = await setPluginEnabled(cli, work, 'kanban', true);
-      expect(on).toMatchObject({ key: 'kanban', status: 'enabled', enabled: true });
-      expect((await listPlugins(cli, home)).items.find((i) => i.key === 'kanban')?.status).toBe(
-        kanban?.status,
-      );
-      const off = await setPluginEnabled(cli, work, 'kanban', false);
+      const on = await setPluginEnabled(cli, work, 'disk-cleanup', true);
+      expect(on).toMatchObject({ key: 'disk-cleanup', status: 'enabled', enabled: true });
+      expect(
+        (await listPlugins(cli, home)).items.find((i) => i.key === 'disk-cleanup')?.status,
+      ).toBe(cleanup?.status);
+      const off = await setPluginEnabled(cli, work, 'disk-cleanup', false);
       expect(off.status).toBe('disabled');
 
-      await expect(removePlugin(cli, work, 'kanban')).rejects.toMatchObject({
+      await expect(removePlugin(cli, work, 'disk-cleanup')).rejects.toMatchObject({
         code: 'conflict',
         details: { reason: 'plugin_bundled' },
       });

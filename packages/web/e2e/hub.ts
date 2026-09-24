@@ -427,8 +427,8 @@ const scriptedHermesApi: HermesApiCall = async <T>(method: string, route: string
 };
 
 /**
- * Hermes's own `hermes plugins` command, played in memory (journey 28): Hermes ships `kanban` and
- * `disk-cleanup`, its catalog has `chrome-profiles`, and an install takes long enough that the
+ * Hermes's own `hermes plugins` command, played in memory (journey 28): Hermes ships `disk-cleanup` and
+ * `security-guidance`, its catalog has `chrome-profiles`, and an install takes long enough that the
  * page is seen waiting on it.
  */
 const scriptedPlugins = fakeHermesPlugins({ installDelayMs: 1500 });

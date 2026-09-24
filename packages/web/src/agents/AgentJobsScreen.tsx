@@ -144,8 +144,13 @@ export function AgentJobsScreen() {
                       </Badge>
                       {fromHermes && <Badge>{t('agent_jobs.in_hermes')}</Badge>}
                     </span>
-                    <span className="skill-description" dir="auto">
-                      {scheduleOf(job)} · {t('schedules.next', { at: when(job.next_run_at) })}
+                    <span className="skill-description">
+                      {/* A cron expression and a zone read left to right in any language. */}
+                      <bdi dir={job.trigger.kind === 'cron' ? 'ltr' : 'auto'}>
+                        {scheduleOf(job)}
+                      </bdi>
+                      {' · '}
+                      {t('schedules.next', { at: when(job.next_run_at) })}
                     </span>
                     {job.target.prompt && (
                       <span className="skill-description" dir="auto">

@@ -58,7 +58,7 @@ describe("Hermes's list, read", () => {
       [
         'Warning: something Hermes logs on stdout',
         '[',
-        '  {"name": "kanban", "status": "not enabled", "version": "1.0.0", "description": "Board", "source": "bundled", "removed": null},',
+        '  {"name": "security-guidance", "status": "not enabled", "version": "1.0.0", "description": "Board", "source": "bundled", "removed": null},',
         '  {"name": "langfuse", "status": "disabled", "version": "", "description": "", "source": "entrypoint", "removed": null},',
         '  {"name": "old-thing", "status": "enabled", "version": "0.1", "description": "x", "source": "catalog:community@1a2b3c4d", "removed": "withdrawn: unsafe"}',
         ']',
@@ -67,12 +67,22 @@ describe("Hermes's list, read", () => {
     expect(
       parsed.items.map((item) => [item.key, item.source, item.status, item.removable]),
     ).toEqual([
-      ['kanban', 'bundled', 'not_enabled', false],
       ['langfuse', 'external', 'disabled', false],
       ['old-thing', 'user', 'enabled', true],
+      ['security-guidance', 'bundled', 'not_enabled', false],
     ]);
-    expect(parsed.items[1]?.version).toBeNull();
+    expect(parsed.items[0]?.version).toBeNull();
     expect(parsed.warnings).toEqual(['old-thing: withdrawn: unsafe']);
+  });
+
+  it('lists a name Hermes gives twice once — the one its commands act on — and says so', () => {
+    const row = (source: string) =>
+      `{"name": "xai", "status": "not enabled", "version": "1", "description": "${source}", "source": "bundled", "removed": null}`;
+    const parsed = parsePluginList(`[${row('image')}, ${row('video')}]`, 'ar');
+    expect(parsed.items.map((item) => [item.key, item.description])).toEqual([['xai', 'image']]);
+    expect(parsed.warnings).toEqual([
+      'xai: يذكر هرمز أكثر من إضافة بهذا الاسم؛ المعروضة هي التي تنفّذ عليها أوامره.',
+    ]);
   });
 
   it('reads "No plugins installed." as an empty list', () => {
@@ -104,7 +114,7 @@ describe('the Plugins page through the routes', () => {
     const body = res.json() as Listed;
     expect(body.items.map((item) => [item.key, item.source, item.status])).toEqual([
       ['disk-cleanup', 'bundled', 'not_enabled'],
-      ['kanban', 'bundled', 'not_enabled'],
+      ['security-guidance', 'bundled', 'not_enabled'],
     ]);
     // Against the default profile's home: Hermes's root.
     expect(fake.calls).toEqual([`${root} plugins list --json`]);
@@ -123,14 +133,14 @@ describe('the Plugins page through the routes', () => {
 
     const on = await authed(h, h.token, {
       method: 'PATCH',
-      url: `/api/v1/agents/${agent}/plugins/kanban`,
+      url: `/api/v1/agents/${agent}/plugins/security-guidance`,
       payload: { enabled: true },
       profile: 'work',
     });
     expect(on.statusCode, on.body).toBe(200);
-    expect(on.json()).toMatchObject({ key: 'kanban', status: 'enabled', enabled: true });
+    expect(on.json()).toMatchObject({ key: 'security-guidance', status: 'enabled', enabled: true });
     expect(fake.calls).toContain(
-      `${path.join(root, 'profiles', 'work')} plugins enable kanban --no-allow-tool-override`,
+      `${path.join(root, 'profiles', 'work')} plugins enable security-guidance --no-allow-tool-override`,
     );
 
     const statusIn = async (profile: string) =>
@@ -142,13 +152,13 @@ describe('the Plugins page through the routes', () => {
             profile,
           })
         ).json() as Listed
-      ).items.find((item) => item.key === 'kanban')?.status;
+      ).items.find((item) => item.key === 'security-guidance')?.status;
     expect(await statusIn('work')).toBe('enabled');
     expect(await statusIn('default')).toBe('not_enabled');
 
     const off = await authed(h, h.token, {
       method: 'PATCH',
-      url: `/api/v1/agents/${agent}/plugins/kanban`,
+      url: `/api/v1/agents/${agent}/plugins/security-guidance`,
       payload: { enabled: false },
       profile: 'work',
     });
@@ -199,7 +209,7 @@ describe('the Plugins page through the routes', () => {
 
     const shipped = await authed(h, h.token, {
       method: 'DELETE',
-      url: `/api/v1/agents/${agent}/plugins/kanban`,
+      url: `/api/v1/agents/${agent}/plugins/security-guidance`,
     });
     expect(shipped.statusCode).toBe(409);
     expect(shipped.json()).toMatchObject({ details: { reason: 'plugin_bundled' } });
@@ -250,7 +260,7 @@ describe('the Plugins page through the routes', () => {
       { method: 'GET' as const, url: `/api/v1/agents/${agent}/plugins` },
       {
         method: 'PATCH' as const,
-        url: `/api/v1/agents/${agent}/plugins/kanban`,
+        url: `/api/v1/agents/${agent}/plugins/security-guidance`,
         payload: { enabled: true },
       },
       {
@@ -258,7 +268,7 @@ describe('the Plugins page through the routes', () => {
         url: `/api/v1/agents/${agent}/plugins`,
         payload: { identifier: 'chrome-profiles' },
       },
-      { method: 'DELETE' as const, url: `/api/v1/agents/${agent}/plugins/kanban` },
+      { method: 'DELETE' as const, url: `/api/v1/agents/${agent}/plugins/security-guidance` },
     ]) {
       const res = await authed(h, h.token, request);
       expect(res.statusCode, `${request.method} ${res.body}`).toBe(409);

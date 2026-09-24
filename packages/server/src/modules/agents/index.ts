@@ -1109,7 +1109,7 @@ export const agentsModule = defineModule({
       operationId: 'agents.listPlugins',
       handler: async (request, { params }) => {
         const { home, cli } = pluginTarget(request, params.agent_id as string);
-        return listPlugins(cli, home);
+        return listPlugins(cli, home, request.language);
       },
     });
 

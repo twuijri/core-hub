@@ -17,11 +17,16 @@ interface FakePlugin {
 
 /** What Hermes ships, in every profile. */
 export const FAKE_BUNDLED: readonly FakePlugin[] = [
-  { name: 'kanban', version: '1.0.0', description: 'Multi-agent kanban board', source: 'bundled' },
+  {
+    name: 'security-guidance',
+    version: '0.1.0',
+    description: 'Append security warnings to file-write tool results',
+    source: 'bundled',
+  },
   {
     name: 'disk-cleanup',
-    version: '0.3.0',
-    description: 'Tidy temporary files after a run',
+    version: '2.0.0',
+    description: 'Clean up ephemeral files created during Hermes sessions',
     source: 'bundled',
   },
 ];
