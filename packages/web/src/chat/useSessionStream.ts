@@ -6,10 +6,13 @@ import { useAuth } from '../auth/context.js';
 import { useRealtime } from '../realtime/context.js';
 import { SESSION_EVENTS, isEnvelope, type Envelope } from '../realtime/envelope.js';
 import { subscribeSession, unsubscribeSession } from '../realtime/socket.js';
-import { hydrate, initialChat, reduce, type ChatState } from './transcript.js';
-import { OLDER_PAGE, pageBackUntil } from './anchor.js';
+import { hydrate, initialChat, prependOlder, reduce, type ChatState } from './transcript.js';
+import { AROUND, OLDER_PAGE, pageBackUntil } from './anchor.js';
+import { SCROLL_PAGE, type LoadOlder } from './olderMessages.js';
 
 export type StreamStatus = 'loading' | 'ready' | 'error';
+/** Paging back (olderMessages.ts): nothing in flight, a page on its way, or the last one failed. */
+export type OlderStatus = 'idle' | 'loading' | 'error';
 
 export interface StreamInfo {
   state: ChatState;
@@ -18,6 +21,9 @@ export interface StreamInfo {
   /** Set after a reconnect: how many envelopes the hub replayed, or that it resynced. */
   lastResume: { replayed: number; truncated: boolean } | null;
   reload(): void;
+  olderStatus: OlderStatus;
+  /** Fetch the page before the oldest message held; `true` when one joined the transcript. */
+  loadOlder: LoadOlder;
 }
 
 /** How long opening a chat waits for its subscription before showing what it has. */
@@ -40,8 +46,13 @@ export function useSessionStream(
   const [error, setError] = useState<unknown>(null);
   const [lastResume, setLastResume] = useState<StreamInfo['lastResume']>(null);
   const [generation, setGeneration] = useState(0);
+  const [olderStatus, setOlderStatus] = useState<OlderStatus>('idle');
   const stateRef = useRef(state);
   stateRef.current = state;
+  // Which opening of the conversation a page of older messages was asked for: a page that
+  // arrives after the chat was reopened (another session, a reload) belongs to nothing.
+  const opening = useRef(0);
+  const olderBusy = useRef(false);
   // Read when the base document is fetched, not a reason to fetch it again; it belongs
   // to the session it was given for, so another conversation never pages back for it.
   const anchorRef = useRef<{ sessionId: string; messageId: string } | null>(null);
@@ -54,6 +65,9 @@ export function useSessionStream(
     let disposed = false;
     let hydrated = false;
     const buffer: Envelope[] = [];
+    opening.current += 1;
+    olderBusy.current = false;
+    setOlderStatus('idle');
     setState(initialChat());
     setStatus('loading');
     setError(null);
@@ -73,7 +87,12 @@ export function useSessionStream(
       else apply(raw);
     };
 
-    const fetchBase = async () => {
+    /**
+     * The newest page, and further back when something must stay in view: the message the
+     * chat was opened at, or — on a resync — the oldest one the person already scrolled
+     * back to, so a reconnect does not take history away from under them.
+     */
+    const fetchBase = async (keepFrom: string | null) => {
       const [detail, page] = await Promise.all([
         client.request('get', '/sessions/{session_id}', { params: { session_id: sessionId } }),
         client.request('get', '/sessions/{session_id}/messages', {
@@ -83,23 +102,36 @@ export function useSessionStream(
       ]);
       const anchor =
         anchorRef.current?.sessionId === sessionId ? anchorRef.current.messageId : null;
-      const messages = anchor
-        ? await pageBackUntil(page.data, anchor, async (before) => {
-            const older = await client.request('get', '/sessions/{session_id}/messages', {
-              params: { session_id: sessionId },
-              query: { before, limit: OLDER_PAGE },
-            });
-            return older.data;
-          })
-        : page.data.items;
-      return { detail: detail.data, messages };
+      const target = keepFrom ?? anchor;
+      const back = target
+        ? await pageBackUntil(
+            page.data,
+            target,
+            async (before) => {
+              const older = await client.request('get', '/sessions/{session_id}/messages', {
+                params: { session_id: sessionId },
+                query: { before, limit: OLDER_PAGE },
+              });
+              return older.data;
+            },
+            { around: keepFrom ? 0 : AROUND },
+          )
+        : { ...page.data, pages: 0 };
+      return {
+        detail: detail.data,
+        messages: back.items,
+        page: { hasOlder: back.has_more, pagedBack: back.pages > 0 },
+      };
     };
 
     const resync = async () => {
-      const { detail, messages } = await fetchBase();
+      const held = stateRef.current;
+      const { detail, messages, page } = await fetchBase(
+        held.pagedBack ? (held.messages[0]?.id ?? null) : null,
+      );
       if (disposed) return;
       setState((current) => {
-        const next = hydrate(current, detail, messages);
+        const next = hydrate(current, detail, messages, page);
         stateRef.current = next;
         return next;
       });
@@ -150,10 +182,10 @@ export function useSessionStream(
             new Promise<void>((resolve) => setTimeout(resolve, SUBSCRIBE_GRACE_MS)),
           ]);
         }
-        const { detail, messages } = await fetchBase();
+        const { detail, messages, page } = await fetchBase(null);
         if (disposed) return;
         setState((current) => {
-          let next = hydrate(current, detail, messages);
+          let next = hydrate(current, detail, messages, page);
           for (const envelope of buffer) next = reduce(next, envelope, sessionId);
           buffer.length = 0;
           stateRef.current = next;
@@ -179,5 +211,38 @@ export function useSessionStream(
     // until every socket is dropped, which `epoch` counts.
   }, [sessionId, profile, client, generation, realtime.epoch]);
 
-  return { state, status, error, lastResume, reload };
+  const loadOlder = useCallback<LoadOlder>(
+    async (wrap) => {
+      const held = stateRef.current;
+      const oldest = held.messages[0];
+      if (!sessionId || !oldest || !held.hasOlder || olderBusy.current) return false;
+      const mine = opening.current;
+      olderBusy.current = true;
+      setOlderStatus('loading');
+      try {
+        const page = await client.request('get', '/sessions/{session_id}/messages', {
+          params: { session_id: sessionId },
+          query: { before: oldest.id, limit: SCROLL_PAGE },
+        });
+        if (mine !== opening.current) return false;
+        wrap(() =>
+          setState((current) => {
+            const next = prependOlder(current, page.data);
+            stateRef.current = next;
+            return next;
+          }),
+        );
+        setOlderStatus('idle');
+        return true;
+      } catch {
+        if (mine === opening.current) setOlderStatus('error');
+        return false;
+      } finally {
+        if (mine === opening.current) olderBusy.current = false;
+      }
+    },
+    [client, sessionId],
+  );
+
+  return { state, status, error, lastResume, reload, olderStatus, loadOlder };
 }

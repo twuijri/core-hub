@@ -778,3 +778,20 @@ summary.tool-head:hover {
 .answered-answer {
   font-weight: 600;
 }
+
+/* ------------------------------------------------------------ paging back (olderMessages.ts)
+   The top of a transcript that pages back: one quiet line, the same height whatever it
+   says, so switching between "loading older…", the start and a failure moves nothing. */
+.chat-older {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--mj-space-1);
+  min-block-size: 2.5rem;
+  margin-block-end: var(--mj-layout-turn-gap);
+  font-size: var(--mj-font-size-xs);
+  color: var(--mj-color-text-muted);
+}
+.chat-turns > .chat-older + .msg {
+  margin-block-start: 0;
+}

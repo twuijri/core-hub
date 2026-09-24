@@ -17,7 +17,8 @@ import { useCallback, useEffect, useRef, type RefObject } from 'react';
 /** How close to the bottom still counts as "at the bottom", in pixels. */
 const NEAR = 80;
 
-function scrollParent(node: HTMLElement | null): HTMLElement | null {
+/** The element that scrolls the transcript: its nearest scrolling ancestor, or the page. */
+export function scrollParent(node: HTMLElement | null): HTMLElement | null {
   for (let at = node?.parentElement ?? null; at; at = at.parentElement) {
     const { overflowY } = getComputedStyle(at);
     if (overflowY === 'auto' || overflowY === 'scroll') return at;

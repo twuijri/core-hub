@@ -14,6 +14,13 @@ export interface ChatState {
   approvals: Record<string, Approval>;
   context: Session['context'];
   deleted: boolean;
+  /**
+   * Whether messages older than `messages[0]` exist on the hub (`MessagePage.has_more`).
+   * The transcript holds the newest page and whatever the person paged back through.
+   */
+  hasOlder: boolean;
+  /** Whether this view has loaded any page before the newest one. */
+  pagedBack: boolean;
 }
 
 export function initialChat(): ChatState {
@@ -25,11 +32,22 @@ export function initialChat(): ChatState {
     approvals: {},
     context: null,
     deleted: false,
+    hasOlder: false,
+    pagedBack: false,
   };
 }
 
-/** Replace the base state with what HTTP returned, keeping the realtime cursor. */
-export function hydrate(state: ChatState, detail: SessionDetail, messages: Message[]): ChatState {
+/**
+ * Replace the base state with what HTTP returned, keeping the realtime cursor.
+ * `page.hasOlder`: whether the hub has messages before the first of `messages`;
+ * `page.pagedBack`: whether `messages` reaches further back than the newest page.
+ */
+export function hydrate(
+  state: ChatState,
+  detail: SessionDetail,
+  messages: Message[],
+  page: { hasOlder: boolean; pagedBack: boolean } = { hasOlder: false, pagedBack: false },
+): ChatState {
   const { runs: runList, pending_approvals, ...session } = detail;
   const runs: Record<string, Run> = {};
   for (const run of runList) runs[run.id] = run;
@@ -43,6 +61,31 @@ export function hydrate(state: ChatState, detail: SessionDetail, messages: Messa
     runs,
     approvals,
     context: detail.context,
+    hasOlder: page.hasOlder,
+    pagedBack: state.pagedBack || page.pagedBack,
+  };
+}
+
+/**
+ * A page of older messages, fetched with `before` = the oldest message held, joins the
+ * transcript at its top. Messages already held (a resync in between) are not repeated,
+ * and `hasOlder` is taken from the page only when it really reaches past what is held.
+ */
+export function prependOlder(
+  state: ChatState,
+  page: { items: Message[]; has_more: boolean },
+): ChatState {
+  const held = new Set(state.messages.map((m) => m.id));
+  const fresh = page.items.filter((m) => !held.has(m.id));
+  const oldestHeld = state.messages[0]?.seq ?? Number.POSITIVE_INFINITY;
+  const reaches = page.items.length === 0 || (page.items[0]?.seq ?? 0) <= oldestHeld;
+  return {
+    ...state,
+    messages: fresh.length
+      ? [...fresh, ...state.messages].sort((a, b) => a.seq - b.seq)
+      : state.messages,
+    hasOlder: reaches ? page.has_more : state.hasOlder,
+    pagedBack: true,
   };
 }
 
