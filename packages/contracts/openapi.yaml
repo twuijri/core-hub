@@ -5120,15 +5120,19 @@ paths:
     post:
       operationId: agents.unlinkChannel
       tags: [agents]
-      summary: Unlink a device-paired channel (WhatsApp) from the selected profile (admin)
+      summary: Unlink a linked channel (WhatsApp, Telegram) from the selected profile (admin)
       description: >-
         Stops the messaging gateway that serves the profile, stops a bridge it left behind,
         deletes the profile's WhatsApp session folder and switches the channel off
         (`platforms.whatsapp.enabled: false`, `WHATSAPP_ENABLED` removed from `.env`); the
         gateway starts again when another channel still needs it. Hermes and its bridge have no
         logout, so the phone keeps listing the device under WhatsApp → Linked devices until it is
-        removed there. The bridge port and the approved senders stay. Only `whatsapp` pairs a
-        device: any other platform answers `409 state_invalid` with `details.reason =
+        removed there. The bridge port and the approved senders stay. For `telegram` the bot
+        token is removed from the profile's `.env` (and from `platforms.telegram.token` if it was
+        written there by hand), the hub's note of the bot is deleted and the channel is switched
+        off (`platforms.telegram.enabled: false`); the allowed users and the settings stay, and
+        the bot itself keeps existing in Telegram (@BotFather deletes it). Only `whatsapp` and
+        `telegram` link: any other platform answers `409 state_invalid` with `details.reason =
         unlink_not_supported`; a profile with nothing linked answers `409` with
         `details.reason = not_linked`.
       x-roles: [owner, admin]
@@ -5154,6 +5158,7 @@ paths:
                   account_id: null
                   account_name: null
                   account_phone: null
+                  account_username: null
                 fields: []
         '401':
           $ref: '#/components/responses/Unauthorized'
@@ -5163,6 +5168,80 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /agents/{agent_id}/channels/{platform}/link:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/Platform'
+    post:
+      operationId: agents.linkChannel
+      tags: [agents]
+      summary: Link a channel that signs in with a bot token (Telegram) in the selected profile (admin)
+      description: >-
+        Today one platform links by token: `telegram` (a bot the person made with @BotFather;
+        the hub never uses Hermes's outside bot-creation service). The hub checks the token's
+        shape (`<digits>:<30+ letters, digits, _ or ->`, `400 validation_failed`, `details.reason
+        = token_invalid`), then asks Telegram who the bot is (`getMe`): a token Telegram refuses
+        is `400 validation_failed` with `details.reason = token_rejected` and Telegram's own
+        words in `details.message`; Telegram not answering is `503 service_unavailable`,
+        `details.reason = telegram_unreachable`. A bot already linked in another profile is
+        `409 conflict`, `details.reason = token_in_use`, `details.profile` — Telegram lets one
+        process poll a bot. Accepted, the token is written to the profile's own Hermes `.env`
+        (`TELEGRAM_BOT_TOKEN`, mode 0600, never returned — `[stored]`), `allowed_users` (when
+        sent) to `TELEGRAM_ALLOWED_USERS`, and the channel is switched on with pairing for
+        unknown senders (`platforms.telegram.enabled: true`, `unauthorized_dm_behavior: pair`),
+        so a stranger who messages the bot gets a pairing code to approve in
+        `agents.listPairing`. The gateway serving the profile follows as `gateway.applies` says:
+        a named profile's starts or restarts now, the default profile's at Hermes's Restart.
+        Linking again replaces the token. Only `telegram`: any other platform answers `409
+        state_invalid`, `details.reason = link_not_supported`; a hub that does not supervise
+        Hermes answers `409` with `details.reason = hermes_not_supervised`.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelTokenLink'
+            example:
+              token: '123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw'
+              allowed_users: ['111222333']
+      responses:
+        '200':
+          description: Linked; the channel as it now reads.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Channel'
+              example:
+                platform: telegram
+                label: telegram
+                enabled: true
+                configured: true
+                exclusive: true
+                status: unknown
+                error: null
+                login: token
+                link:
+                  linked: true
+                  account_id: '123456789'
+                  account_name: Office bot
+                  account_phone: null
+                  account_username: office_helper_bot
+                fields: []
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   # ---------------------------------------------------------------- pairing (who may message the agent)
   /agents/{agent_id}/pairing:
     parameters:
@@ -14762,13 +14841,16 @@ components:
           type: [string, 'null']
         login:
           type: [string, 'null']
-          enum: [qr, null]
-          description: Set when the platform pairs interactively via `/login` instead of fields.
+          enum: [qr, token, null]
+          description: >-
+            How the platform is linked instead of by fields: `qr` pairs interactively via
+            `/login` (WhatsApp), `token` takes a bot token via `/link` (Telegram).
         link:
           description: >-
-            For a platform that pairs a device (WhatsApp): whether this profile holds a session
-            and whose, read from the profile's session folder. Null for every other platform.
-            For WhatsApp `configured` is `link.linked`.
+            For a platform that is linked rather than filled in: WhatsApp (whether this profile
+            holds a session and whose, read from the profile's session folder) and Telegram
+            (whether the profile has a bot token, and which bot). Null for every other platform.
+            For both `configured` is `link.linked`.
           oneOf:
             - $ref: '#/components/schemas/ChannelLink'
             - type: 'null'
@@ -14778,7 +14860,7 @@ components:
             $ref: '#/components/schemas/ChannelField'
     ChannelLink:
       type: object
-      required: [linked, account_id, account_name, account_phone]
+      required: [linked, account_id, account_name, account_phone, account_username]
       properties:
         linked:
           type: boolean
@@ -14788,7 +14870,12 @@ components:
           type: [string, 'null']
         account_phone:
           type: [string, 'null']
-          description: Digits only, as WhatsApp names the account.
+          description: Digits only, as WhatsApp names the account. Null for Telegram.
+        account_username:
+          type: [string, 'null']
+          description: >-
+            The bot's @username without the @ (Telegram), as Telegram answered when it was
+            linked; people open it at `https://t.me/<account_username>`. Null for WhatsApp.
     ChannelGateway:
       type: object
       required: [profile, state, applies, error]
@@ -14878,6 +14965,26 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PairedSender'
+    ChannelTokenLink:
+      type: object
+      required: [token]
+      additionalProperties: false
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 200
+          writeOnly: true
+          description: The bot token @BotFather gave. Stored, never returned.
+        allowed_users:
+          type: array
+          maxItems: 100
+          description: >-
+            Telegram user ids (digits) who may message the bot without pairing
+            (`TELEGRAM_ALLOWED_USERS`). Absent leaves what is set; empty clears it.
+          items:
+            type: string
+            pattern: '^[0-9]{1,20}$'
     ChannelWrite:
       type: object
       properties:

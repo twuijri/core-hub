@@ -22,6 +22,12 @@
  * the request waits in "Waiting for approval" until someone approves or turns it down here.
  * The list is read again every ten seconds while the page is open.
  *
+ * **Telegram links by a bot token.** "Link Telegram" explains @BotFather in plain words, takes the
+ * token, and the hub asks Telegram who the bot is before storing it (in the profile's own `.env`,
+ * never shown again). Linked, the row names the bot (@username) and the page says how to start:
+ * open the bot, send a message, approve the request below. Hermes's outside bot-creation service
+ * is not used.
+ *
  * **When a change takes effect** is said by the gateway that serves the profile: at once in a
  * named profile (the hub restarts that profile's messaging gateway), after Hermes's Restart in
  * the default one.
@@ -58,6 +64,7 @@ import {
   useClearChannel,
   useDenyPairing,
   useJob,
+  useLinkChannel,
   useLoginChannel,
   usePairing,
   useRevokePairing,
@@ -79,6 +86,7 @@ export function AgentChannelsScreen() {
   const channels = useChannels(agentId);
   const [editing, setEditing] = useState<Channel | null>(null);
   const [pairing, setPairing] = useState<string | null>(null);
+  const [linkingTelegram, setLinkingTelegram] = useState(false);
 
   const agent = agents.data?.find((entry) => entry.id === agentId);
   const title = agent ? t('channels.title_of', { name: agent.name }) : t('nav.agent_channels');
@@ -86,25 +94,41 @@ export function AgentChannelsScreen() {
   const gateway = channels.data?.gateway ?? null;
   const whatsapp = items.find((channel) => channel.platform === 'whatsapp');
   const linked = whatsapp?.link?.linked === true;
+  const telegram = items.find((channel) => channel.platform === 'telegram');
+  const telegramLinked = telegram?.link?.linked === true;
 
   return (
     <AppShell title={title}>
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-lg font-semibold">{title}</h1>
-          {!linked && (
-            <Button
-              className="ms-auto"
-              size="sm"
-              onClick={() => setPairing('whatsapp')}
-              data-testid="channel-pair-whatsapp"
-            >
-              {t('channels.login.whatsapp')}
-            </Button>
-          )}
+          <span className="ms-auto flex flex-wrap gap-2">
+            {channels.data && !telegramLinked && (
+              <Button
+                size="sm"
+                variant={linked ? 'primary' : 'ghost'}
+                onClick={() => setLinkingTelegram(true)}
+                data-testid="telegram-link-open"
+              >
+                {t('channels.telegram.link')}
+              </Button>
+            )}
+            {!linked && (
+              <Button
+                size="sm"
+                onClick={() => setPairing('whatsapp')}
+                data-testid="channel-pair-whatsapp"
+              >
+                {t('channels.login.whatsapp')}
+              </Button>
+            )}
+          </span>
         </div>
         <GatewayNote gateway={gateway} />
         {linked && whatsapp?.link && <HowToUse link={whatsapp.link} gateway={gateway} />}
+        {telegramLinked && telegram?.link && (
+          <TelegramHowTo link={telegram.link} gateway={gateway} />
+        )}
 
         {channels.isPending && (
           <SkeletonGroup label={t('common.loading')}>
@@ -127,7 +151,11 @@ export function AgentChannelsScreen() {
                     agentId={agentId}
                     channel={channel}
                     onEdit={() => setEditing(channel)}
-                    onPair={() => setPairing(channel.platform)}
+                    onPair={() =>
+                      channel.login === 'token'
+                        ? setLinkingTelegram(true)
+                        : setPairing(channel.platform)
+                    }
                   />
                 </li>
               ))}
@@ -140,6 +168,13 @@ export function AgentChannelsScreen() {
       )}
       {pairing && (
         <PairDialog agentId={agentId} platform={pairing} onClose={() => setPairing(null)} />
+      )}
+      {linkingTelegram && (
+        <TelegramLinkDialog
+          agentId={agentId}
+          gateway={gateway}
+          onClose={() => setLinkingTelegram(false)}
+        />
       )}
     </AppShell>
   );
@@ -212,6 +247,11 @@ function ChannelRow({
             {t('channels.login.button')}
           </Button>
         )}
+        {channel.login === 'token' && !link?.linked && (
+          <Button size="sm" data-testid={`channel-login-${channel.platform}`} onClick={onPair}>
+            {t('channels.telegram.link_button')}
+          </Button>
+        )}
         {link?.linked && (
           <Button
             size="sm"
@@ -221,7 +261,11 @@ function ChannelRow({
             onClick={() => {
               void ask({
                 title: t('channels.unlink_title', { name: channel.label }),
-                body: t('channels.unlink_body'),
+                body: t(
+                  channel.platform === 'telegram'
+                    ? 'channels.telegram.unlink_body'
+                    : 'channels.unlink_body',
+                ),
                 confirmLabel: t('channels.unlink'),
               }).then((yes) => {
                 if (yes) unlink.mutate(channel.platform);
@@ -261,7 +305,13 @@ function ChannelRow({
       {unlink.isError && <Notice tone="danger">{describeToolError(unlink.error, t)}</Notice>}
       {unlink.isSuccess && (
         <Notice>
-          <span data-testid="channel-unlinked">{t('channels.unlinked_note')}</span>
+          <span data-testid="channel-unlinked">
+            {t(
+              channel.platform === 'telegram'
+                ? 'channels.telegram.unlinked_note'
+                : 'channels.unlinked_note',
+            )}
+          </span>
         </Notice>
       )}
     </div>
@@ -276,11 +326,16 @@ const STATUS_TONE: Record<Channel['status'], 'success' | 'danger' | 'neutral'> =
 };
 
 /**
- * "Office · +966500000000", whichever of the two Hermes knows. The number is isolated left to
- * right (U+2066 … U+2069), or an Arabic sentence moves its plus sign to the other end.
+ * "Office · +966500000000" (WhatsApp) or "Office · @office_bot" (Telegram), whichever Hermes or
+ * Telegram named. The number and the handle are isolated left to right (U+2066 … U+2069), or an
+ * Arabic sentence moves the plus sign or the @ to the other end.
  */
 function accountOf(link: ChannelLink): string {
-  return [link.account_name, link.account_phone ? `\u2066+${link.account_phone}\u2069` : null]
+  return [
+    link.account_name,
+    link.account_username ? `\u2066@${link.account_username}\u2069` : null,
+    link.account_phone ? `\u2066+${link.account_phone}\u2069` : null,
+  ]
     .filter(Boolean)
     .join(' · ');
 }
@@ -345,6 +400,177 @@ function HowToUse({ link, gateway }: { link: ChannelLink; gateway: ChannelGatewa
         </span>
       </span>
     </Notice>
+  );
+}
+
+/**
+ * What to do once Telegram is linked: open the bot, send it anything, approve the request here.
+ * The bot's address is a link, so the step is one click.
+ */
+function TelegramHowTo({ link, gateway }: { link: ChannelLink; gateway: ChannelGateway | null }) {
+  const { t } = useI18n();
+  const username = link.account_username;
+  const url = username ? `https://t.me/${username}` : null;
+  return (
+    <Notice tone="info">
+      <span className="flex flex-col gap-1" data-testid="telegram-how-to-use">
+        <strong>{t('channels.telegram.how_title')}</strong>
+        {gateway?.applies === 'on_restart' && <span>{t('channels.how.step_restart')}</span>}
+        <span>
+          {url ? (
+            <>
+              {t('channels.telegram.how_open')}{' '}
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                dir="ltr"
+                className="underline"
+                data-testid="telegram-bot-link"
+              >
+                {`t.me/${username}`}
+              </a>
+            </>
+          ) : (
+            t('channels.telegram.how_open_unnamed')
+          )}
+        </span>
+        <span>{t('channels.telegram.how_message')}</span>
+        <span>{t('channels.telegram.how_approve')}</span>
+      </span>
+    </Notice>
+  );
+}
+
+/** Telegram user ids typed as the person likes (commas, spaces, new lines): digits only. */
+function idsOf(text: string): string[] {
+  return text
+    .split(/[\s,،]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+/**
+ * «ربط تيليجرام»: the steps with @BotFather in plain words, the token, and the optional people
+ * who may skip pairing. The hub asks Telegram before it stores anything, so a wrong token is
+ * said here in Telegram's words.
+ */
+function TelegramLinkDialog({
+  agentId,
+  gateway,
+  onClose,
+}: {
+  agentId: string | undefined;
+  gateway: ChannelGateway | null;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const link = useLinkChannel(agentId);
+  const [token, setToken] = useState('');
+  const [allowed, setAllowed] = useState('');
+  const ids = idsOf(allowed);
+  const badIds = ids.filter((id) => !/^[0-9]{1,20}$/.test(id));
+  const done = link.data?.link?.linked ? link.data.link : null;
+  const account = done ? accountOf(done) : '';
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={t('channels.telegram.title')}
+      description={t('channels.telegram.intro')}
+      closeLabel={t('common.cancel')}
+      testId="telegram-link"
+      footer={
+        done ? (
+          <Button onClick={onClose} data-testid="telegram-link-close">
+            {t('channels.login.close')}
+          </Button>
+        ) : (
+          <>
+            <Button variant="ghost" onClick={onClose}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              disabled={link.isPending || token.trim() === '' || badIds.length > 0}
+              data-testid="telegram-link-submit"
+              onClick={() =>
+                link.mutate({
+                  platform: 'telegram',
+                  token: token.trim(),
+                  ...(ids.length > 0 ? { allowed_users: ids } : {}),
+                })
+              }
+            >
+              {link.isPending ? t('channels.telegram.checking') : t('channels.telegram.submit')}
+            </Button>
+          </>
+        )
+      }
+    >
+      {done ? (
+        <Notice tone="success">
+          <span className="flex flex-col gap-1" data-testid="telegram-link-done">
+            <span dir="auto">{t('channels.telegram.done_as', { account })}</span>
+            <span>
+              {gateway?.applies === 'on_restart'
+                ? t('channels.telegram.done_restart')
+                : t('channels.telegram.done_now')}
+            </span>
+          </span>
+        </Notice>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <ol
+            className="flex list-decimal flex-col gap-1 ps-5 text-sm"
+            data-testid="telegram-steps"
+          >
+            <li>{t('channels.telegram.step_open')}</li>
+            <li>{t('channels.telegram.step_newbot')}</li>
+            <li>{t('channels.telegram.step_copy')}</li>
+          </ol>
+          <Field label={t('channels.telegram.token')} hint={t('channels.telegram.token_hint')}>
+            {(props) => (
+              <Input
+                {...props}
+                dir="ltr"
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="123456789:AA…"
+                value={token}
+                data-testid="telegram-token"
+                onChange={(event) => setToken(event.target.value)}
+              />
+            )}
+          </Field>
+          <Field
+            label={t('channels.telegram.allowed')}
+            hint={t('channels.telegram.allowed_hint')}
+            {...(badIds.length > 0 ? { error: t('channels.telegram.allowed_invalid') } : {})}
+          >
+            {(props) => (
+              <Input
+                {...props}
+                dir="ltr"
+                autoComplete="off"
+                placeholder="111222333, 444555666"
+                value={allowed}
+                data-testid="telegram-allowed"
+                onChange={(event) => setAllowed(event.target.value)}
+              />
+            )}
+          </Field>
+          {link.isError && (
+            <Notice tone="danger">
+              <span data-testid="telegram-link-error" dir="auto">
+                {describeToolError(link.error, t)}
+              </span>
+            </Notice>
+          )}
+        </div>
+      )}
+    </Dialog>
   );
 }
 

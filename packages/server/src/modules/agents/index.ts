@@ -58,6 +58,7 @@ import { HermesRuntime, type HermesRuntimeStatus, type Spawner } from './hermes-
 import { HermesDashboard, type DashboardSpawner } from './hermes-dashboard.js';
 import { QR_PLATFORMS, pairWhatsApp, testMcpServer, type HermesApiCall } from './hermes-tools.js';
 import { namedHermesProfiles } from './hermes-profiles.js';
+import { telegramGetMe } from './telegram-api.js';
 import {
   hermesCliRunner,
   installPlugin,
@@ -78,6 +79,10 @@ import {
   listChannels,
   putChannel,
   unlinkWhatsApp,
+  linkTelegram,
+  unlinkTelegram,
+  telegramToken,
+  TELEGRAM_TOKEN,
   whatsappLink,
   whatsappSessionDir,
   type Channel,
@@ -220,6 +225,31 @@ export interface AgentsOverrides {
   hermesCli?: HermesCli;
   /** Between two questions to Hermes while a pairing runs. Default 1 s. */
   pairingPollMs?: number;
+  /** Telegram's Bot API as linking asks it (`getMe`), scripted — for the tests and the e2e hub. */
+  telegramFetch?: typeof fetch;
+}
+
+/** Platforms linked by pasting a bot token (`agents.linkChannel`). */
+const TOKEN_PLATFORMS = ['telegram'] as const;
+
+/**
+ * The profile other than `home`'s that already holds `token`, if any. Telegram lets one process
+ * poll a bot, and Hermes refuses a second holder in its own words at start; saying which profile
+ * has it, before anything is written, is the kinder answer.
+ */
+function telegramTokenOwner(root: string, home: string, token: string): string | null {
+  const homes: Array<[string, string]> = [
+    ['default', root],
+    ...namedHermesProfiles(root).map((name): [string, string] => [
+      name,
+      path.join(root, 'profiles', name),
+    ]),
+  ];
+  for (const [name, other] of homes) {
+    if (path.resolve(other) === path.resolve(home)) continue;
+    if (telegramToken(other) === token) return name;
+  }
+  return null;
 }
 
 let pendingOverrides: AgentsOverrides | null = null;
@@ -244,6 +274,8 @@ interface AgentsContext {
   /** Hermes's own command, or `null` where the hub does not supervise Hermes. */
   hermesCli(): HermesCli | null;
   pairingPollMs: number;
+  /** How linking asks Telegram who a bot is. */
+  telegramFetch: typeof fetch;
 }
 
 /**
@@ -437,6 +469,7 @@ function contextOf(app: FastifyInstance): AgentsContext {
       return hermesCliRunner({ command, env: () => runtime.cliEnv() });
     },
     pairingPollMs: own.pairingPollMs ?? 1000,
+    telegramFetch: own.telegramFetch ?? fetch,
   };
   contexts.set(hub.io, created);
   return created;
@@ -1111,13 +1144,18 @@ export const agentsModule = defineModule({
       exclusive: channel.exclusive,
       status: health.status,
       error: health.error,
-      login: (QR_PLATFORMS as readonly string[]).includes(channel.platform) ? 'qr' : null,
+      login: (QR_PLATFORMS as readonly string[]).includes(channel.platform)
+        ? 'qr'
+        : (TOKEN_PLATFORMS as readonly string[]).includes(channel.platform)
+          ? 'token'
+          : null,
       link: channel.link
         ? {
             linked: channel.link.linked,
             account_id: channel.link.accountId,
             account_name: channel.link.accountName,
             account_phone: channel.link.accountPhone,
+            account_username: channel.link.accountUsername,
           }
         : null,
       fields: channel.fields.map((field) => ({
@@ -1223,6 +1261,20 @@ export const agentsModule = defineModule({
         const agentId = params.agent_id as string;
         const platform = params.platform as string;
         const { home, profile } = toolHome(request, agentId);
+        if (platform === 'telegram') {
+          if (!telegramToken(home)) {
+            throw new HubError('state_invalid', {
+              details: { agent_id: agentId, platform, reason: 'not_linked' },
+            });
+          }
+          // Held down while the token goes, so the bot stops answering now in every profile —
+          // the default one's gateway included, as Unlink WhatsApp does.
+          const channel = await contextOf(request.server).runtime.withGatewayStopped(profile, () =>
+            unlinkTelegram(home),
+          );
+          request.log.info({ profile }, 'agents: Telegram unlinked');
+          return toChannel(channel, channelStatus(request, profile, channel));
+        }
         if (platform !== 'whatsapp') {
           throw new HubError('state_invalid', {
             details: { agent_id: agentId, platform, reason: 'unlink_not_supported' },
@@ -1241,6 +1293,58 @@ export const agentsModule = defineModule({
           return unlinkWhatsApp(home);
         });
         request.log.info({ profile }, 'agents: WhatsApp unlinked');
+        return toChannel(channel, channelStatus(request, profile, channel));
+      },
+    });
+
+    /**
+     * Link Telegram by a bot token: shape checked, Telegram asked who the bot is, the token
+     * into the profile's own `.env`, the channel on with pairing, the gateway following.
+     */
+    defineRoute(app, deps, {
+      operationId: 'agents.linkChannel',
+      handler: async (request, { params, body }) => {
+        const agentId = params.agent_id as string;
+        const platform = params.platform as string;
+        const { home, profile } = toolHome(request, agentId);
+        if (!(TOKEN_PLATFORMS as readonly string[]).includes(platform)) {
+          throw new HubError('state_invalid', {
+            details: { agent_id: agentId, platform, reason: 'link_not_supported' },
+          });
+        }
+        // The same rule as WhatsApp's pairing: only a Hermes this hub runs has a gateway to
+        // answer on the bot.
+        hermesApiOf(request, agentId);
+        const input = body as { token: string; allowed_users?: string[] };
+        const token = String(input.token ?? '').trim();
+        if (!TELEGRAM_TOKEN.test(token)) {
+          throw new HubError('validation_failed', {
+            details: { field: 'token', reason: 'token_invalid' },
+          });
+        }
+        const context = contextOf(request.server);
+        const root = context.runtime.status().home;
+        if (root) {
+          const owner = telegramTokenOwner(root, home, token);
+          if (owner) {
+            throw new HubError('conflict', {
+              details: { agent_id: agentId, platform, reason: 'token_in_use', profile: owner },
+            });
+          }
+        }
+        const bot = await telegramGetMe(token, { fetchImpl: context.telegramFetch });
+        const allowed =
+          input.allowed_users === undefined
+            ? undefined
+            : [...new Set(input.allowed_users.map((id) => id.trim()).filter(Boolean))];
+        let channel: Channel;
+        try {
+          channel = linkTelegram(home, { token, bot, allowedUsers: allowed });
+        } catch (error) {
+          return channelFault(error);
+        }
+        request.log.info({ profile, bot: bot.username }, 'agents: Telegram linked');
+        followChannels(request, profile);
         return toChannel(channel, channelStatus(request, profile, channel));
       },
     });

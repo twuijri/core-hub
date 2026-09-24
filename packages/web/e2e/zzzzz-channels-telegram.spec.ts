@@ -1,0 +1,88 @@
+/**
+ * Journey 31: Telegram linked from the web (the owner, 2026-09-24: «ابي تربط التليجرام … لانه ما
+ * سويت الا واتساب وانا احتاج تليجرام») — against the real hub, with Telegram's `getMe` and
+ * Hermes's pairing scripted (`e2e/hub.ts`):
+ *
+ * - «ربط تيليجرام» explains @BotFather in plain steps; a token Telegram refuses is said in words;
+ * - the right token links the bot, named with its @username, and the page says how to start —
+ *   open t.me/<bot>, send a message, approve the request below;
+ * - the Telegram stranger waiting for approval is approved in the same list as WhatsApp's;
+ * - Unlink, behind a confirm, forgets the bot and brings «ربط تيليجرام» back.
+ */
+import { mkdirSync } from 'node:fs';
+import path from 'node:path';
+import { expect, test, type Page } from '@playwright/test';
+
+const PASSWORD = 'e2e-owner-password';
+const TOKEN = '7012345678:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsawQ';
+const shots = process.env.MAJLIS_SHOTS ?? path.resolve('e2e/shots');
+mkdirSync(shots, { recursive: true });
+
+const shot = (page: Page, name: string) =>
+  page.screenshot({ path: path.join(shots, `${name}.png`), fullPage: true });
+
+async function login(page: Page) {
+  await page.goto('/');
+  await expect(page).toHaveURL(/\/login$/);
+  await page.getByLabel('اسم المستخدم').fill('admin');
+  await page.getByLabel('كلمة المرور').fill(PASSWORD);
+  await page.getByRole('button', { name: 'دخول' }).click();
+  await expect(page).toHaveURL(/\/chat$/);
+}
+
+async function openChannels(page: Page) {
+  await page.getByTestId('rail').getByRole('link', { name: 'الوكلاء' }).click();
+  await page.getByTestId('agent-menu').getByRole('link', { name: 'القنوات' }).first().click();
+  await expect(page).toHaveURL(/\/channels$/);
+}
+
+test('31. Telegram linked by a bot token: the steps, the bot named, approvals, and Unlink', async ({
+  page,
+}) => {
+  await login(page);
+  await openChannels(page);
+  await expect(page.getByTestId('pairing-section')).toBeVisible();
+
+  // ---- The steps, in plain words; a refused token is said in words.
+  await page.getByTestId('telegram-link-open').click();
+  const dialog = page.getByTestId('telegram-link');
+  await expect(dialog).toContainText('@BotFather');
+  await expect(dialog).toContainText('/newbot');
+  await page.getByTestId('telegram-token').fill('7000000000:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx');
+  await page.getByTestId('telegram-link-submit').click();
+  await expect(page.getByTestId('telegram-link-error')).toContainText('Unauthorized');
+  await shot(page, 'agent-channels-telegram-link-ar-light');
+
+  // ---- The right token: the bot is named, and the page says how to start.
+  await page.getByTestId('telegram-token').fill(TOKEN);
+  await page.getByTestId('telegram-link-submit').click();
+  await expect(page.getByTestId('telegram-link-done')).toContainText('@majlis_e2e_bot');
+  await page.getByTestId('telegram-link-close').click();
+
+  await expect(page.getByTestId('channel-link-telegram')).toHaveText('مربوط');
+  await expect(page.getByTestId('channel-account-telegram')).toContainText('@majlis_e2e_bot');
+  await expect(page.getByTestId('channel-account-telegram')).toContainText('مساعد المجلس');
+  await expect(page.getByTestId('telegram-bot-link')).toHaveAttribute(
+    'href',
+    'https://t.me/majlis_e2e_bot',
+  );
+  await expect(page.getByTestId('telegram-how-to-use')).toContainText('رمز اقتران');
+  await expect(page.getByTestId('telegram-link-open')).toHaveCount(0);
+
+  // ---- The stranger who messaged the bot waits here, and is approved.
+  const noura = page.getByTestId('pairing-request-5d1e2f3a4b5c6d7e');
+  await expect(noura).toContainText('telegram', { timeout: 15_000 });
+  await expect(noura).toContainText('Noura');
+  await shot(page, 'agent-channels-telegram-linked-ar-light');
+  await page.getByTestId('pairing-approve-5d1e2f3a4b5c6d7e').click();
+  await expect(noura).toHaveCount(0);
+  await expect(page.getByTestId('pairing-sender-555666777')).toContainText('telegram');
+
+  // ---- Unlink, behind a confirm.
+  await page.getByTestId('channel-unlink-telegram').click();
+  await expect(page.getByTestId('confirm-dialog')).toContainText('BotFather');
+  await page.getByTestId('confirm-yes').click();
+  await expect(page.getByTestId('channel-link-telegram')).toHaveText('غير مربوط');
+  await expect(page.getByTestId('telegram-link-open')).toBeVisible();
+  await expect(page.getByTestId('telegram-how-to-use')).toHaveCount(0);
+});
