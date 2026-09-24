@@ -79,8 +79,7 @@ const LIMIT_KEYS: Record<ListKey, string> = {
 };
 
 /** What a hub-written entry carries when it joins entries Hermes already kept (migration). */
-export const LEGACY_MARKER =
-  "Written on the hub's Memory page (moved here from the profile root):";
+export const LEGACY_MARKER = "Written on the hub's Memory page (moved here from the profile root):";
 
 export interface MemoryDocument {
   id: DocumentKey;

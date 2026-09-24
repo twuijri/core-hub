@@ -300,7 +300,9 @@ describe.skipIf(!image)('the Memory page and the real Hermes (set MAJLIS_HERMES_
     expect(b.memory).toContain(FACTS.keptB);
     // Hermes added to the list the page wrote — the page's entry round-tripped, not refused.
     expect(b.memory).toContain(FACTS.pageB);
-    expect(b.memory).toBe(`The release word is ${FACTS.pageB}.\n§\nThe backup host is ${FACTS.keptB}.`);
+    expect(b.memory).toBe(
+      `The release word is ${FACTS.pageB}.\n§\nThe backup host is ${FACTS.keptB}.`,
+    );
     expect((await memoryOf('default')).memory).not.toContain(FACTS.keptB);
 
     // And the next conversation in b has it.
