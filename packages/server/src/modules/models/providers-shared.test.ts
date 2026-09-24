@@ -1,5 +1,5 @@
 /**
- * Two provider scopes (contract decision §37, ADR 0010).
+ * Two provider scopes (contract decision §38, ADR 0010).
  *
  * A **shared** provider is added once and every profile uses it — a profile made a minute
  * later included. A profile may also have providers of its **own** (a team with its own
@@ -444,7 +444,7 @@ describe("models: Hermes's default profile is not the last saver's", () => {
   });
 });
 
-describe("models: a profile's own providers and the shared ones (decision §37)", () => {
+describe("models: a profile's own providers and the shared ones (decision §38)", () => {
   it("uses a profile's own key in that profile, and the shared key in every other", async () => {
     const { fetchImpl } = twoProviders();
     const home = hermesHome();

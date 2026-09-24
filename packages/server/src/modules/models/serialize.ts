@@ -46,7 +46,7 @@ export interface ContractProvider {
   slug: string;
   label: string;
   kind: string;
-  /** `all`: every profile's; `profile`: only `profile`'s own (contract decision §37). */
+  /** `all`: every profile's; `profile`: only `profile`'s own (contract decision §38). */
   scope: 'all' | 'profile';
   builtin: boolean;
   enabled: boolean;

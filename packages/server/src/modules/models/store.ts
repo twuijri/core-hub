@@ -67,7 +67,7 @@ export class ModelsStore {
   }
 
   /**
-   * The live rows of one provider scope (contract decision §37): the shared rows (stored
+   * The live rows of one provider scope (contract decision §38): the shared rows (stored
    * under the default profile, `shared = true`) or one profile's own (`shared = false`).
    */
   scopeRows(workspace: string, shared: boolean, kind?: string): ProviderRow[] {

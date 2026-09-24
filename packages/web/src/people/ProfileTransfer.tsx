@@ -101,7 +101,7 @@ export function ExportDialog({
   const { save } = useDownloadAttachment();
   const [jobId, setJobId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<unknown>(null);
-  // «مع المزوّدين / بدون المزوّدين» (decision §37): without, the default, holds no key.
+  // «مع المزوّدين / بدون المزوّدين» (decision §38): without, the default, holds no key.
   const [withProviders, setWithProviders] = useState(false);
   const job = useFollowedJob(jobId);
   const result =

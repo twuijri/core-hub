@@ -336,7 +336,7 @@ function ProviderCard({
       />
       <ul className="flex flex-wrap gap-1">
         <li data-scope={provider.scope}>
-          {/* Who it is for (decision §37): every profile, or this one alone. */}
+          {/* Who it is for (decision §38): every profile, or this one alone. */}
           <Badge tone={provider.scope === 'profile' ? 'accent' : 'neutral'} testId="provider-scope">
             {provider.scope === 'profile'
               ? t('models.provider.scope_only', { profile: profileName(provider.profile) })

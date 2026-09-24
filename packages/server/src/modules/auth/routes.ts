@@ -251,7 +251,7 @@ const ProfileSettingsPatch = z.object({
     })
     .optional(),
 });
-/** `auth.exportProfile`'s optional body (contract decision §37). */
+/** `auth.exportProfile`'s optional body (contract decision §38). */
 const ProfileExport = z.object({ providers: z.boolean().optional() });
 
 const ProfileImport = z.object({
@@ -972,7 +972,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
       name: body.name,
       cloneFrom: body.clone_from ?? null,
     });
-    // What other modules keep per profile follows: a copy's own providers and keys (§37).
+    // What other modules keep per profile follows: a copy's own providers and keys (§38).
     await profileCreated(app, {
       profile: row,
       source: body.clone_from ? findWorkspace(db, body.clone_from) : null,
@@ -1128,7 +1128,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
 
   route('POST', '/profiles/:profile_id/export', admin, async (request, reply) => {
     const row = workspaceFor(request);
-    // With the profile's providers and their keys, only when asked (§37).
+    // With the profile's providers and their keys, only when asked (§38).
     const body = parse(ProfileExport, request.body ?? {});
     const withProviders = body.providers === true;
     const context = transferContext(request);

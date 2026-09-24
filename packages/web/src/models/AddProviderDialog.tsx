@@ -6,7 +6,7 @@
  * show/hide eye, marked optional wherever it is), and a default-model select with a
  * Fetch button that asks the endpoint itself.
  *
- * First question (contract decision §37, owner 2026-09-24): who is it for — every profile
+ * First question (contract decision §38, owner 2026-09-24): who is it for — every profile
  * (shared, the default) or only the profile selected at the top, whose own key then wins
  * there over a shared one. A provider never changes scope afterwards.
  *

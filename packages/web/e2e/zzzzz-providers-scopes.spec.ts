@@ -1,5 +1,5 @@
 /**
- * Two provider scopes, against the real hub (contract decision §37, owner 2026-09-24).
+ * Two provider scopes, against the real hub (contract decision §38, owner 2026-09-24).
  *
  * The owner's design as a journey: in a second profile, «إضافة مزوّد» asks «لمن هذا
  * المزوّد؟». A provider for every profile is badged «مشترك» and is on the default profile's

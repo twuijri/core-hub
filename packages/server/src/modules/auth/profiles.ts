@@ -36,7 +36,7 @@ export function registerWorkspaceStatsProvider(provider: WorkspaceStatsProvider)
 /**
  * A profile just came into existence — made here, or made as a copy of `source`. Other
  * modules copy what they keep per profile (`models`: a copy carries its source's own
- * providers and keys, contract decision §37) and prepare the runtime's profile. `auth`
+ * providers and keys, contract decision §38) and prepare the runtime's profile. `auth`
  * knows nothing of what they do; a listener that throws is logged and skipped.
  */
 export interface ProfileCreatedEvent {

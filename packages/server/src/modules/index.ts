@@ -242,7 +242,7 @@ export function profileTransferPorts(
       const apiKey = hermes.apiKey();
       return apiKey ? [...values, apiKey] : values;
     },
-    // An export "with providers" carries them; an import makes them the profile's own (§37).
+    // An export "with providers" carries them; an import makes them the profile's own (§38).
     providers: {
       exportOf: (workspaceId) => modelsServiceFor(app).exportProviders(workspaceId),
       importInto: (workspaceId, actorId, bundle) =>
@@ -253,7 +253,7 @@ export function profileTransferPorts(
 }
 
 /**
- * A profile just made — here, as a copy, or by an import (contract decision §37): a copy
+ * A profile just made — here, as a copy, or by an import (contract decision §38): a copy
  * takes its source's own providers with their keys, and the Hermes profile gets the
  * providers it uses (endpoints in its config, its own keys in its `.env`) before its first
  * turn rather than on it.

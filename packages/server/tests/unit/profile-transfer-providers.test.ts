@@ -1,5 +1,5 @@
 /**
- * A profile's providers in an export and an import (contract decision §37), with Hermes
+ * A profile's providers in an export and an import (contract decision §38), with Hermes
  * scripted (`auth/testing/fake-profile-runtime.ts`) and everything else real.
  *
  * The owner's choice: an export asks «مع المزوّدين / بدون المزوّدين». Without (the default)
@@ -133,7 +133,7 @@ async function exportOf(hub: Hub, id: string, payload?: Json) {
   return { result, bytes: download.rawPayload };
 }
 
-describe('profile export and providers (decision §37)', () => {
+describe('profile export and providers (decision §38)', () => {
   it('carries no key and no providers file without being asked', async () => {
     withFakeHermes();
     const hub = await signedInHub({}, { models: { fetchImpl: providersFetch } });

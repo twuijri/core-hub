@@ -451,7 +451,7 @@ export function envVarOf(family: string): string | null {
 /** The name the `secrets` row gets: one per family, so the key is stored exactly once. */
 export function secretNameOf(family: string, shared = false): string {
   // A shared key and the default profile's own key of the same family live in one
-  // profile's `secrets`, so their names differ (contract decision §37).
+  // profile's `secrets`, so their names differ (contract decision §38).
   return shared ? `shared-provider:${family}` : `provider:${family}`;
 }
 

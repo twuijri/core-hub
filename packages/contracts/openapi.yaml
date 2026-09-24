@@ -1598,7 +1598,7 @@ paths:
         `expires_at` (24 hours). `removed` lists the paths inside the archive the hub left
         out, `masked` the paths where a stored key was overwritten.
 
-        **With providers** (`providers: true`, decision §37): the archive also carries
+        **With providers** (`providers: true`, decision §38): the archive also carries
         `<profile>/majlis-providers.json` — the profile's own providers and the shared ones it
         uses, each with its models and its key **in the clear**, written as providers of that
         profile alone. Every other file is still checked and masked as above. `result.providers`
@@ -1654,7 +1654,7 @@ paths:
         files, gzip-compressed tar) or Hermes refuses it. The job's `result` is
         `{profile_id, slug, name, providers}`.
 
-        An archive exported **with providers** (decision §37) carries
+        An archive exported **with providers** (decision §38) carries
         `<profile>/majlis-providers.json`: the hub reads it before Hermes sees the archive,
         never hands it to Hermes, and adds every provider in it to the new profile as that
         profile's own (`scope: profile`), with its models and its key. `providers` is how many
@@ -8788,7 +8788,7 @@ paths:
       summary: List the providers this profile can use (the General Models tab)
       description: >-
         Only configured providers: a fresh hub answers with an empty list and the client
-        offers "Add provider" (`models.listProviderPresets`). Two scopes (decision §37):
+        offers "Add provider" (`models.listProviderPresets`). Two scopes (decision §38):
         the **shared** providers (`scope: all`, every profile's, stored under the `default`
         profile) and this profile's **own** (`scope: profile`). Both are listed, each saying
         which it is; where both have the same slug, the profile's own is the one its agents
@@ -8868,7 +8868,7 @@ paths:
         The one way a provider row comes into existence: `models.listProviders` returns
         what was added here, not the bundled catalogue. With `preset` the hub also creates
         the sibling rows of the same credential family (OpenAI chat, dictation and speech
-        are three rows and one key, ADR 0010). `scope` says who it is for (decision §37):
+        are three rows and one key, ADR 0010). `scope` says who it is for (decision §38):
         `all` (the default) makes it every profile's, `profile` makes it this profile's
         own — its key then goes into this profile's Hermes `.env`, where it wins over a
         shared key of the same name. The same preset twice in one scope is `409 conflict`
@@ -9481,7 +9481,7 @@ paths:
         The choices in effect for the profile in `X-Hub-Profile`. A role the profile chose
         is its own; a role it left alone is the `default` profile's — the same model on the
         provider of the same slug this profile uses — and `inherited` names it (decision
-        §37). Saving a role in a profile makes it that profile's own; saving `null` goes
+        §38). Saving a role in a profile makes it that profile's own; saving `null` goes
         back to inheriting.
       parameters:
         - $ref: '#/components/parameters/Profile'
@@ -12872,7 +12872,7 @@ components:
             - type: 'null'
     ProfileExport:
       type: object
-      description: What an export carries besides the profile itself (decision §37).
+      description: What an export carries besides the profile itself (decision §38).
       properties:
         providers:
           type: boolean
@@ -16168,7 +16168,7 @@ components:
       description: >-
         A provider the hub added, shared (`scope: all`, `profile` is then `default`, where it
         is stored) or one profile's own (`scope: profile`, `profile` is that profile) —
-        decision §37.
+        decision §38.
       allOf:
         - $ref: '#/components/schemas/Scoped'
         - type: object
@@ -16362,7 +16362,7 @@ components:
       enum: [all, profile]
       default: all
       description: >-
-        Who a provider is for (decision §37): `all` — every profile (shared, stored under the
+        Who a provider is for (decision §38): `all` — every profile (shared, stored under the
         `default` profile); `profile` — only the profile in `X-Hub-Profile`, where it wins over
         a shared provider of the same slug.
     ProviderPatch:
@@ -16451,7 +16451,7 @@ components:
           type: array
           description: >-
             The roles whose value is the `default` profile's, because this profile chose
-            none (decision §37): `default` for the chat model (with its fallbacks), else an
+            none (decision §38): `default` for the chat model (with its fallbacks), else an
             auxiliary task key. Always empty in the `default` profile.
           items:
             type: string

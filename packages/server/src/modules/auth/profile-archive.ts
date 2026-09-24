@@ -58,13 +58,13 @@ export interface ArchiveRules {
   maxUnpackedBytes?: number;
   /**
    * Entries (also left out, like `drop`) whose bytes the report hands back in `captured`:
-   * how an import reads the providers file before Hermes sees the archive (§37). Each is
+   * how an import reads the providers file before Hermes sees the archive (§38). Each is
    * capped at `MAX_CAPTURE_BYTES`.
    */
   capture?: (path: string) => boolean;
   /**
    * Regular files added at the end of the archive, never masked: how an export that carries
-   * the profile's providers writes them (contract decision §37).
+   * the profile's providers writes them (contract decision §38).
    */
   append?: readonly { path: string; data: Buffer }[];
 }

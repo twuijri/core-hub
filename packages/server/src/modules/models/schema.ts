@@ -5,7 +5,7 @@
  * (`propagation.ts`): into Hermes's own home through its `.env`, and into a coding
  * agent's process environment at start. Nobody configures a provider per agent.
  *
- * All tables are workspace-scoped, with one exception in meaning (contract decision §37): a
+ * All tables are workspace-scoped, with one exception in meaning (contract decision §38): a
  * provider row with `shared = true` is **every** profile's. It is stored under the default
  * profile, and so are its models and its key (`shared-provider:<family>`). A row with
  * `shared = false` is its profile's own, and in that profile it wins over a shared row of the
@@ -155,7 +155,7 @@ export const providers = sqliteTable(
     slug: text('slug', { length: 64 }).notNull(),
     /**
      * Every profile's provider (stored under the default profile), or — false — only the
-     * profile in `workspace`, where it wins over a shared one of the same slug (decision §37).
+     * profile in `workspace`, where it wins over a shared one of the same slug (decision §38).
      */
     shared: bool('shared').notNull().default(false),
     label: text('label', { length: 80 }).notNull(),

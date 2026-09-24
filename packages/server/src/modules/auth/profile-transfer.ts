@@ -90,7 +90,7 @@ export interface ProfileTransferPorts {
   secrets(): readonly string[];
   /**
    * A profile's providers and their keys, for an export that carries them, and back into
-   * an imported profile as its own (contract decision §37). Absent in a hub composed
+   * an imported profile as its own (contract decision §38). Absent in a hub composed
    * without `models`: such an export carries none, and such an import adds none.
    */
   providers?: {
@@ -102,7 +102,7 @@ export interface ProfileTransferPorts {
 }
 
 /**
- * The file an export "with providers" adds at the top of the profile folder (§37). An
+ * The file an export "with providers" adds at the top of the profile folder (§38). An
  * import reads it before Hermes sees the archive and never hands it on.
  */
 export const PROVIDERS_FILE = 'majlis-providers.json';
@@ -238,7 +238,7 @@ export async function runExport(
     const at = now();
     const fileName = `${profile.slug}-${stampOf(at)}.tar.gz`;
     const checked = path.join(staging, fileName);
-    // With providers (§37): this profile's own and the shared ones it uses, keys in the
+    // With providers (§38): this profile's own and the shared ones it uses, keys in the
     // clear, in one file of its own. Every other file is still checked as before — the keys
     // are masked everywhere else — and the file itself is added after that check.
     const bundle =
@@ -325,7 +325,7 @@ export async function runImport(
     handle.progress(10, t('auth.profile_import_checking', language));
     const archive = path.join(staging, `${input.slug}.tar.gz`);
     // Checked — and the hub's providers file, when an export "with providers" wrote one, is
-    // read here (§37): its keys go to the hub's store, never into the profile's folder.
+    // read here (§38): its keys go to the hub's store, never into the profile's folder.
     let report;
     try {
       report = await rewriteArchive(upload.path, null, {
@@ -388,7 +388,7 @@ export async function runImport(
           .returning()
           .get()
       : createProfile(db, scope.userId, { slug: input.slug, name: input.name, cloneFrom: null });
-    // The providers the archive carried become this profile's own (§37).
+    // The providers the archive carried become this profile's own (§38).
     let providers = 0;
     if (bundle !== null && ports.providers) {
       try {

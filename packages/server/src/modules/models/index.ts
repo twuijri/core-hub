@@ -198,7 +198,7 @@ function contextOf(app: FastifyInstance): ModelsService {
     jobs: jobRunnerFor(app),
     hermes,
     // Shared providers, their models and keys are stored under the default profile
-    // (contract decision §37).
+    // (contract decision §38).
     hubScope: () => {
       const row = defaultWorkspace(db);
       return row ? { id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault } : null;
@@ -282,7 +282,7 @@ export const modelsModule = defineModule({
         return contextOf(app).chat(workspace, request);
       },
       // A named Hermes profile, just before one of its turns: the endpoints it uses in its
-      // config, and in its own `.env` exactly the keys that differ from the root's (§37).
+      // config, and in its own `.env` exactly the keys that differ from the root's (§38).
       prepareRuntimeProfile(profileHome) {
         contextOf(app).prepareProfile(profileHome);
       },
@@ -308,7 +308,7 @@ export const modelsModule = defineModule({
       const owner = ownerUser(db);
       if (!owner) return;
       const service = contextOf(app);
-      // Once: the root is the default profile's, whoever saved (decision §37). Reconciling per
+      // Once: the root is the default profile's, whoever saved (decision §38). Reconciling per
       // profile used to leave Hermes with whichever profile came last.
       const row = defaultWorkspace(db);
       if (!row) return;

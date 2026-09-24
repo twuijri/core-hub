@@ -177,7 +177,7 @@ export interface ModelsServiceOptions {
   now?: () => Date;
   /**
    * The profile the **shared** providers are stored under: the default profile, which
-   * always exists and can never be renamed or archived (contract decision §37). Null only
+   * always exists and can never be renamed or archived (contract decision §38). Null only
    * before the owner exists; the caller's own profile stands in then.
    */
   hubScope?: () => WorkspaceScope | null;
@@ -188,7 +188,7 @@ export interface ModelsServiceOptions {
   profileWorkspace?: (profile: string) => string | null;
 }
 
-/** Where a provider row is stored: the shared scope, or one profile's own (decision §37). */
+/** Where a provider row is stored: the shared scope, or one profile's own (decision §38). */
 interface ProviderOwner {
   workspace: string;
   shared: boolean;
@@ -198,7 +198,7 @@ export const PROVIDER_BUNDLE_FORMAT = 'majlis-providers';
 
 /**
  * A profile's providers with their keys, as an export that carries them writes them into
- * the archive (`majlis-providers.json`, decision §37). Keys are in the clear: the dialog
+ * the archive (`majlis-providers.json`, decision §38). Keys are in the clear: the dialog
  * that asks for this says so.
  */
 export interface ProviderBundle {
@@ -281,7 +281,7 @@ export interface ProviderCreateInput {
   base_url?: string | null;
   api_key?: string | null;
   api_mode?: 'chat_completions' | 'responses';
-  /** Who it is for: every profile (the default), or only the one in `X-Hub-Profile` (§37). */
+  /** Who it is for: every profile (the default), or only the one in `X-Hub-Profile` (§38). */
   scope?: 'all' | 'profile';
 }
 
@@ -429,7 +429,7 @@ export class ModelsService {
 
   /**
    * The default profile: where the **shared** providers, their models and their keys are
-   * stored (contract decision §37). Cached — that profile's id never changes. `fallback` is
+   * stored (contract decision §38). Cached — that profile's id never changes. `fallback` is
    * the caller's own profile, used only on a hub that has no default profile yet.
    */
   private hub(fallback?: Pick<WorkspaceScope, 'id'> & Partial<WorkspaceScope>): WorkspaceScope {
@@ -472,7 +472,7 @@ export class ModelsService {
 
   /**
    * The providers a profile actually uses: its own, and every shared one whose slug it has
-   * no own row for — a profile's own provider of the same preset wins (decision §37).
+   * no own row for — a profile's own provider of the same preset wins (decision §38).
    */
   private effectiveRows(workspace: string, kind?: string): ProviderRow[] {
     const own = this.store.scopeRows(workspace, false, kind);
@@ -521,7 +521,7 @@ export class ModelsService {
 
   /**
    * The providers a profile uses, with their keys in the clear, for an export that carries
-   * them (decision §37): its own, and the shared ones it has no own row of the same slug for
+   * them (decision §38): its own, and the shared ones it has no own row of the same slug for
    * — every one written as a provider of that profile alone, because that is what it
    * becomes where the archive is imported.
    */
@@ -529,7 +529,7 @@ export class ModelsService {
     return this.providerBundle(workspace, { ownOnly: false });
   }
 
-  /** An imported archive's providers become the imported profile's own (decision §37). */
+  /** An imported archive's providers become the imported profile's own (decision §38). */
   importProviders(workspace: string, actor: Actor, bundle: unknown): number {
     return this.restoreProviderBundle(workspace, actor, parseProviderBundle(bundle));
   }
@@ -685,7 +685,7 @@ export class ModelsService {
     return { items, host: hostInfo() };
   }
 
-  /** The shared providers and this profile's own, each saying which (decision §37). */
+  /** The shared providers and this profile's own, each saying which (decision §38). */
   listProviders(scope: WorkspaceScope, filter: { kind?: string } = {}): ContractProvider[] {
     return this.visibleRows(scope.id, filter.kind).map((row) => this.present(scope, row));
   }
@@ -755,7 +755,7 @@ export class ModelsService {
     // person names each instance, and each instance owns its own key.
     const repeatable = !preset || preset.repeatable === true;
     const at = this.now();
-    // Who it is for (decision §37): every profile (the default), or only this one.
+    // Who it is for (decision §38): every profile (the default), or only this one.
     const owner = this.ownerFor(scope, (input.scope ?? 'all') === 'all');
     const primarySlug = repeatable ? this.freeSlug(scope.id, owner, label) : preset.slug;
     const family = repeatable ? `custom:${primarySlug}` : preset.family;
@@ -1247,7 +1247,7 @@ export class ModelsService {
     },
   ): { items: ContractModel[]; next_cursor: string | null } {
     // The models of the providers this profile uses: its own, and the shared ones it has no
-    // own row of the same slug for (decision §37) — so a `Model.key` names one model.
+    // own row of the same slug for (decision §38) — so a `Model.key` names one model.
     const asked = query.provider_id ? this.visibleRow(scope.id, query.provider_id) : undefined;
     const rows = query.provider_id ? (asked ? [asked] : []) : this.effectiveRows(scope.id);
     const bySlug = new Map(rows.map((row) => [row.id, row]));
@@ -1361,7 +1361,7 @@ export class ModelsService {
    * The profile's model choices, as they are in effect. A role this profile chose is its
    * own; a role it left alone is the default profile's, and `inherited` names it (`default`
    * for the chat model, else the auxiliary key) so a client can say where it came from
-   * (contract decision §37). In the default profile nothing is inherited.
+   * (contract decision §38). In the default profile nothing is inherited.
    */
   getDefaults(scope: WorkspaceScope): {
     default: ModelRefInput | null;
@@ -1573,7 +1573,7 @@ export class ModelsService {
 
   /**
    * Which speech providers a profile speaks with: its own choice, else the default
-   * profile's — the same rule as the model defaults (contract decision §37).
+   * profile's — the same rule as the model defaults (contract decision §38).
    */
   private speechChoice(
     scope: WorkspaceScope,
@@ -1706,7 +1706,7 @@ export class ModelsService {
   ensureChatDefault(scope: WorkspaceScope, actor: Actor, providerId: string): ContractModel | null {
     // A shared provider gives the default profile its first model — and every profile that
     // has not chosen its own uses that. A profile's own provider gives that profile its own,
-    // when it has no model in effect yet (decision §37).
+    // when it has no model in effect yet (decision §38).
     const row = this.store.providerById(providerId);
     if (!row || row.archivedAt || !row.enabled || row.kind !== 'llm') return null;
     const target = row.shared ? this.hub(scope).id : row.workspace;
@@ -1763,7 +1763,7 @@ export class ModelsService {
 
     // 2. The keys, read back from the file the runtime reads — not from what we meant to
     //    write. A workspace whose providers all take no key passes with none. The root
-    //    `.env` is the default profile's (decision §37); a named profile's own keys are
+    //    `.env` is the default profile's (decision §38); a named profile's own keys are
     //    checked in its own `.env` before each of its turns (`prepareProfile`).
     const rootState = home ? this.state(this.hub({ id: workspace }).id) : null;
     const wanted = rootState ? hermesEnvPlan(home as string, rootState) : null;
@@ -1846,7 +1846,7 @@ export class ModelsService {
     const seen = new Set<string>();
     const named = new Set<string>();
     // The providers this profile uses: its own first, then the shared ones it has no own row
-    // of the same slug for — so its own key wins wherever both name one variable (§37).
+    // of the same slug for — so its own key wins wherever both name one variable (§38).
     const effective = this.effectiveRows(workspace);
     const ordered = [
       ...effective.filter((row) => !row.shared),
@@ -1974,7 +1974,7 @@ export class ModelsService {
     const trimmed = key.trim();
     if (!trimmed) return null;
     const slash = trimmed.indexOf('/');
-    // The providers this profile uses: a slug names its own row over a shared one (§37).
+    // The providers this profile uses: a slug names its own row over a shared one (§38).
     const effective = this.effectiveRows(workspace);
     if (slash > 0) {
       const slug = trimmed.slice(0, slash);
@@ -2147,7 +2147,7 @@ export class ModelsService {
 
   /**
    * Makes one named Hermes profile ready for a turn with the providers **it** uses
-   * (contract decision §37): its own, and the shared ones it has no own row of the same
+   * (contract decision §38): its own, and the shared ones it has no own row of the same
    * slug for.
    *
    * - `config.yaml`: the endpoints (`providers:` blocks) of those providers — a turn that
@@ -2273,7 +2273,7 @@ export class ModelsService {
     });
   }
 
-  /** A live provider this profile can see — its own, or a shared one (decision §37). */
+  /** A live provider this profile can see — its own, or a shared one (decision §38). */
   private loadProvider(scope: WorkspaceScope, id: string): ProviderRow {
     const row = this.visibleRow(scope.id, id);
     if (!row) throw notFound({ resource: 'provider', id });
@@ -2323,7 +2323,7 @@ export class ModelsService {
    * Stores one key for a whole credential family **of one scope** and points every row of
    * that family in that scope at it. This is the line that makes the OpenAI key entered on
    * the chat tab the same key the dictation tab uses (ADR 0010 §One key, many rows) — and
-   * that keeps a profile's own OpenAI key apart from the shared one (decision §37).
+   * that keeps a profile's own OpenAI key apart from the shared one (decision §38).
    */
   private storeKey(owner: ProviderOwner, actor: Actor, family: string, plaintext: string): void {
     const secretId = this.options.secrets.put(
@@ -2363,7 +2363,7 @@ export class ModelsService {
 
   /**
    * A stored model id, as this profile can run it: the model of that name on the provider of
-   * that slug the profile uses — its own over a shared one (decision §37). Null when the
+   * that slug the profile uses — its own over a shared one (decision §38). Null when the
    * profile has no such provider or model, or the provider was removed.
    */
   private refOf(scope: Pick<WorkspaceScope, 'id'>, modelId: string): ModelRefInput | null {
@@ -2413,7 +2413,7 @@ export class ModelsService {
    * run surface takes `provider` and `model` on every `POST /v1/runs`).
    */
   hermesProviderName(workspace: string, providerId: string): string | null {
-    // The provider of that slug this profile uses: its own over a shared one (§37).
+    // The provider of that slug this profile uses: its own over a shared one (§38).
     const row = this.effectiveFor(workspace, providerId);
     if (!row || row.archivedAt) return null;
     return this.hermesNameOfProvider(row);

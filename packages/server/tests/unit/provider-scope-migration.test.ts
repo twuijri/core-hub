@@ -1,4 +1,4 @@
-// drizzle/0012_provider_scope.sql (contract decision §37): providers gain a scope. Every row
+// drizzle/0012_provider_scope.sql (contract decision §38): providers gain a scope. Every row
 // older than it — each profile had its own until then — stays its profile's own, where it
 // was, with its key: nothing merged, nothing lost. The same preset may now be a profile's
 // own and shared at once.

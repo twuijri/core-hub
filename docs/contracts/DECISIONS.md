@@ -701,7 +701,7 @@ Rejected: a separate gate resource beside `Approval` (the contract already names
   pinning, the hub's own order, still works. `putSkill` and `updateSkill` gain the `409` they
   can now answer.
 
-## 37. A provider is every profile's or one profile's own; the model choice is the profile's
+## 38. A provider is every profile's or one profile's own; the model choice is the profile's
 
 ADR 0010 says a provider is added **once** and every agent inherits it. The contract read "the
 providers this workspace has added" and the server kept them per profile, so a profile made

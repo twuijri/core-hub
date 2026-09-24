@@ -83,7 +83,7 @@ export interface PropagationState {
   /**
    * Every variable name the hub writes a key under, including those of providers it had and
    * removed. The hub owns these names in Hermes's `.env`: one with no key any more is removed
-   * from the file (contract decision §37 — removing a provider applies everywhere). Absent,
+   * from the file (contract decision §38 — removing a provider applies everywhere). Absent,
    * only the names of the current credentials are owned, as before.
    */
   ownedEnv?: string[];

@@ -4,7 +4,7 @@ Owns: `secret`, `provider`, `model`, `model_default`, `ensemble`,
 `speech_settings`. Schema: `packages/server/src/modules/models/schema.ts`. Base
 columns omitted.
 
-**Two provider scopes, per-profile choices** (contract decision §37, owner 2026-09-24). A
+**Two provider scopes, per-profile choices** (contract decision §38, owner 2026-09-24). A
 `provider` row is **shared** (`shared = true`: every profile's; stored, with its models and
 its key `shared-provider:<family>`, under the default profile — which always exists and can
 be neither renamed nor archived) or a profile's **own** (`shared = false`: that profile's
@@ -177,7 +177,7 @@ with a key"; `reason` is an i18n key, never a sentence in one language.
 
 ## Propagation (ADR 0010)
 
-- **Every profile** (decision §37): Hermes's root home is its `default` profile: the keys and
+- **Every profile** (decision §38): Hermes's root home is its `default` profile: the keys and
   endpoints the default profile uses (its own over the shared ones) and its chat model,
   whichever profile saved; the gateway's process environment gets the same keys. A named
   profile gets the endpoints **it** uses in its own `config.yaml`, and in its own `.env` every
@@ -188,7 +188,7 @@ with a key"; `reason` is an i18n key, never a sentence in one language.
   is the root's is left out. This is done on every save, right after the hub makes a profile
   (and after a copy or an import took its providers), and before each turn in a named profile
   (`ModelsService.prepareProfile`).
-- **Export and import** (decision §37): an export "with providers" adds
+- **Export and import** (decision §38): an export "with providers" adds
   `<profile>/majlis-providers.json` — the providers the profile uses, keys in the clear; an
   import reads it before Hermes sees the archive and makes each one the imported profile's own.
 - **Hermes**: the hub writes the provider keys into `${HERMES_HOME}/.env` (a

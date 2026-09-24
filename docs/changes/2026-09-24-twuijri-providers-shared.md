@@ -71,7 +71,7 @@
   - `ProfileExport {providers}` جسم اختياري لـ`auth.exportProfile`.
 - **الأوصاف:** `models.listProviders` و`createProvider` و`getDefaults` و`auth.exportProfile` و
   `importProfile`، مع `result.providers` في نتيجتي التصدير والاستيراد.
-- **القرار:** `docs/contracts/DECISIONS.md` §37.
+- **القرار:** `docs/contracts/DECISIONS.md` §38.
 
 ## الملفات والتأثير
 - **الخادم `models`:**
@@ -157,7 +157,7 @@ $ MAJLIS_HERMES_IMAGE=majlis:local npx vitest run --maxWorkers=1 provider-scopes
 
 **بقية الفحوص.** كل أمر ثقيل عبر `mj-run` (عاملان لـ vitest، وحد 7 GB)، بعد دمج `origin/main` (398cf02،
 أي #88 و#89 و#91 و#92):
-- في `DECISIONS.md` و`STATUS.md` أُخذت نسخة `main`، ثم أُضيف §37 وصف models.
+- في `DECISIONS.md` و`STATUS.md` أُخذت نسخة `main`، ثم أُضيف §38 وصف models.
 - ترحيلي أُعيد توليده برقم `0012`.
 
 ```

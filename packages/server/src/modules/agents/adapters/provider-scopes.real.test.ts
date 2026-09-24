@@ -1,5 +1,5 @@
 /**
- * The two provider scopes in real Hermes profiles (contract decision §37, ADR 0010, ADR 0014
+ * The two provider scopes in real Hermes profiles (contract decision §38, ADR 0010, ADR 0014
  * stage 3).
  *
  * Providers are added through the hub's own API, as a person adds them: LM Studio **shared**
