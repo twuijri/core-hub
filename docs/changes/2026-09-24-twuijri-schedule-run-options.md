@@ -51,7 +51,7 @@
   `run_once` = مُعلَّم)؛ والتداخل عمود **جديد** `overlap` (افتراضه `wait`) لأن `CHECK` العمود القديم
   `overlap_policy` لا يعرف `replace`، وتغيير `CHECK` في SQLite يعني إعادة بناء `schedules`، وهذا داخل معاملة
   المُرحِّل يحذف سجلّ كل جدول (`ON DELETE CASCADE`) — الخطر نفسه الذي عالجه #92. العمود القديم باقٍ غير
-  مقروء (موثّق في `schema.ts`). و`schedule_runs.waiting` جديد.
+  مقروء (موثّق في `schema.ts`). و`schedule_runs.waiting` جديد. الهجرة `0014_schedule_run_options`.
 - الخريطة (Graphify) لم تُستعمل: الوحدة معروفة من #92 وقُرئت مباشرة.
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
@@ -128,6 +128,24 @@ $ vitest tests/schedule-run-options.test.tsx      (web)
       Tests  4 failed (4)
 $ playwright test zzzzz-hub-schedules.spec.ts -g "30\."
   ✘ 30. a schedule's run options: set when it is made, changed from its card, none for Hermes
+```
+**بعد دمج `origin/main` (#94، الذي أخذ §39 والهجرة `0013_attachments_shared_bytes`)**: صار القرار §40،
+وأُعيد توليد الهجرة `0014_schedule_run_options` بـ drizzle-kit فوق لقطة `0013` الجديدة (الدفتر واللقطة
+متسقان)، ثم أُعيدت كل الفحوص:
+```
+$ pnpm lint · typecheck · contracts:lint · contracts:check-clients · i18n:check · nav:check · change-record:check
+                                  # كلها exit 0 (check-clients: 260 client file(s), 172 contract path(s))
+$ pnpm contract:test
+      Tests  268 passed (268)
+$ pnpm --filter @majlis/server test
+ Test Files  98 passed | 14 skipped (112)
+      Tests  1023 passed | 41 skipped (1064)
+$ pnpm --filter @majlis/web test
+ Test Files  50 passed (50)
+      Tests  581 passed (581)
+$ pnpm build                      # exit 0
+$ MAJLIS_E2E_PORT=8893 MAJLIS_E2E_SETUP_PORT=8894 PLAYWRIGHT_CHANNEL=chrome pnpm web:e2e
+  44 passed (2.7m)
 ```
 الناجحة على القديم هي ما كان سلوكه أصلًا: «skips when told to» (كان التخطّي للجميع) و«"Run now" starts at
 once…»، والاختبارات السابقة في الملفات نفسها.
