@@ -117,7 +117,17 @@ session-history.test.ts       Tests  1 failed | 2 passed (3)
 # الرحلة ٢٥ بويب main:    Expected: 1 · Received: 0 (الرسائل قبل المرساة لم تُحمَّل)
 ```
 أول تشغيل لاختبارات الويب كاملة سقط بمهلات (`Test timed out in 5000ms`، `Timeout waiting for worker`)
-والجهاز تحت حمل ١٦٦ من وكلاء آخرين؛ أُعيد فنجح كله (أعلاه). نتيجة Playwright الكاملة في قسم التسليم.
+والجهاز تحت حمل ١٦٦ من وكلاء آخرين؛ أُعيد فنجح كله (أعلاه).
+
+الحزمة الكاملة بعد إعادة تشغيل الجهاز، تحت غلاف الذاكرة (`mj-run`، عامل Playwright واحد):
+```
+$ PLAYWRIGHT_CHANNEL=chrome mj-run pnpm web:e2e
+  ✓  27 … 24. scrolling up pages back through history and keeps the reader’s place (10.5s)
+  ✓  28 … 25. a search result deep in history opens there, with history on both sides (3.0s)
+  ✓  29 … 26. archiving several conversations at once stops a running chat and a running task (4.0s)
+  31 passed (2.1m)
+```
+اللقطات التي أعاد التشغيل رسمها أُعيدت إلى `main`؛ المضاف لقطتان فقط.
 
 ## المخاطر والرجوع
 - `update` صار ينتظر المقاطعة (`requestInterrupt`) قبل أن يجيب: أرشفة محادثة تعمل أبطأ قليلًا
