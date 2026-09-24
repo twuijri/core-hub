@@ -11,6 +11,8 @@ import { Input } from '../ui/index.js';
 import { IconSearch } from '../ui/icons.js';
 import { highlightParts, matchRanges } from '../ui/combobox-filter.js';
 import { chatHref, HIT_CLASS } from '../chat/anchor.js';
+import { ProfileBadge } from '../shell/ProfileBadge.js';
+import { useManyProfiles, useProfileInLink } from '../shell/profileSelector.js';
 
 /** The snippet with the searched words marked, as they will be inside the conversation. */
 function markedSnippet(text: string, q: string): ReactNode {
@@ -31,6 +33,10 @@ function markedSnippet(text: string, q: string): ReactNode {
  * The search sheet over sessions, field focused at once; a result opens Chat (secondary
  * entry) at the message that matched, when the hub names one (`match.message_id`,
  * chat/anchor.ts).
+ *
+ * Search always looks in every profile the person may enter, whatever the top selector
+ * says (owner, 2026-09-24: «نعم», ADR 0016); each result names its profile once there is
+ * more than one, and opens there.
  */
 export function SearchScreen() {
   const { t } = useI18n();
@@ -42,10 +48,14 @@ export function SearchScreen() {
     const timer = setTimeout(() => setQ(text.trim()), 250);
     return () => clearTimeout(timer);
   }, [text]);
-  const results = useSessions(q ? { q, archived: 'all' } : { archived: 'all' });
+  const results = useSessions(
+    q ? { q, archived: 'all', allProfiles: true } : { archived: 'all', allProfiles: true },
+  );
+  const manyProfiles = useManyProfiles();
+  const inLink = useProfileInLink();
   const title = t(termKey('search'));
   return (
-    <AppShell title={title}>
+    <AppShell title={title} profiles="lists">
       <h1 className="sr-only">{title}</h1>
       <Input
         ref={input}
@@ -83,13 +93,20 @@ export function SearchScreen() {
               to={
                 session.source === 'global_agent'
                   ? routeOf('global_agent')
-                  : chatHref(session.id, session.match?.message_id, q)
+                  : chatHref(session.id, session.match?.message_id, q, inLink(session.profile))
               }
               className={cardClass('flat', 'sm', true)}
               data-testid="search-result"
             >
               <CardHeader
                 title={sessionTitle(session, t)}
+                {...(manyProfiles
+                  ? {
+                      actions: (
+                        <ProfileBadge profile={session.profile} testId="search-result-profile" />
+                      ),
+                    }
+                  : {})}
                 subtitle={
                   session.match ? markedSnippet(session.match.snippet, q) : (session.preview ?? '')
                 }

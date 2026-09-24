@@ -140,7 +140,15 @@ function upsertTool(message: Message, call: ToolCall): Message {
 }
 
 export function reduce(state: ChatState, envelope: Envelope, sessionId: string): ChatState {
-  const next: ChatState = { ...state, lastSeq: Math.max(state.lastSeq, envelope.seq) };
+  // `seq` counts per profile, and the socket hears every profile the lists gather
+  // (ADR 0016): only this session's profile moves the cursor it resumes from, or another
+  // profile's higher count would skip what this one missed.
+  const sameProfile =
+    !state.session || !envelope.profile || envelope.profile === state.session.profile;
+  const next: ChatState = {
+    ...state,
+    lastSeq: sameProfile ? Math.max(state.lastSeq, envelope.seq) : state.lastSeq,
+  };
   if (!belongsToSession(envelope, sessionId)) return next;
   const p = envelope.payload as Record<string, unknown>;
   const ensure = (messageId: string, runId: string): Message[] =>

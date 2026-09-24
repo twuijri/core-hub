@@ -244,7 +244,7 @@ global and admin-only.
 `ARCHITECTURE.md` lists); `workspace_members` says which workspaces a member
 may use. Owner and admin see every workspace. A member's rows are explicit: none means
 no workspace, and a workspace created later is nobody's until granted (owner, 2026-09-24;
-contract decision §28).
+contract decision §29).
 
 **Rejected: per-workspace roles.** Not in the architecture; can be added as
 a column on `workspace_members` without a migration of `users`.

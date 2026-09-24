@@ -56,7 +56,7 @@ contract»؛ `listWorkspacesFor` يعيد الكل؛ `canEnter` يقبل عند 
   `role: member`.
 - `UserAdminPatch.profiles`: الفارغة تسحب الكل؛ تحويل مشرف إلى عضو يحمل القائمة.
 - معامل `X-Hub-Profile`: الرفض و`details.reason = no_profile_granted`.
-- `docs/contracts/DECISIONS.md` §28.
+- `docs/contracts/DECISIONS.md` §29.
 
 `pnpm contracts:generate` لم يترك فرقًا ملتزمًا (العملاء المولَّدون غير ملتزمين؛ Kotlin/Swift
 لم تُولَّد محليًا لغياب Java).
@@ -78,7 +78,7 @@ contract»؛ `listWorkspacesFor` يعيد الكل؛ `canEnter` يقبل عند 
   `shell/ProfileGate.tsx` (جديد)، `app.tsx`، `i18n/{ar,en}.json`
   (`people.no_workspace`، `people.make_member_for`، `shell.no_profile_*`).
 - الوثائق: `docs/domain/auth.md`، `docs/domain/DECISIONS.md` §19،
-  `packages/server/src/modules/auth/README.md`، `docs/STATUS.md`، `docs/contracts/DECISIONS.md` §28.
+  `packages/server/src/modules/auth/README.md`، `docs/STATUS.md`، `docs/contracts/DECISIONS.md` §29.
 - الاختبارات: `modules/auth/members.test.ts` (جديد)، `modules/auth/roles.test.ts`،
   `tests/unit/member-profiles-migration.test.ts` (جديد)، `web/tests/people.test.tsx`،
   `web/tests/profile-gate.test.tsx` (جديد)، `web/e2e/smoke.spec.ts` (الرحلة ١٣)، ولقطة
