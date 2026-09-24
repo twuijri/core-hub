@@ -50,6 +50,12 @@ export interface ScopeResolver {
    * resolver ignores it.
    */
   resolve(profile: string, caller: ScopeCaller): Promise<RequestScope | null>;
+  /**
+   * Every workspace the asker may enter, for a list across profiles (`profiles=all`,
+   * ADR 0016). The rule is `auth`'s, never the client's. A resolver that does not know who
+   * is asking leaves it out, and such a list is the header's workspace alone.
+   */
+  enterable?(caller: ScopeCaller): Promise<RequestScope[]>;
 }
 
 /**

@@ -107,6 +107,8 @@
       "offline": "Offline"
     },
     "theme_next": "Theme: {next}",
+    "all_profiles": "All profiles",
+    "in_profile": "Profile: {name}",
     "back_to_chats": "Back to chats"
   },
   "pane": {
@@ -180,6 +182,7 @@
     "no_agents": "No agent is enabled on this hub. Install or enable one in Agent Manager.",
     "greeting": "What shall we start with?",
     "lede": "Pick an installed agent from the chips, choose a working folder if you like, then type.",
+    "in_profile": "New chat in",
     "none_installed": "No agent is installed on this hub yet. Hermes ships with it; if it reads \"not installed\", check that it is running, or install one from the catalog in"
   },
   "chat": {

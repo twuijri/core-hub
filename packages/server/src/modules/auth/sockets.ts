@@ -7,7 +7,8 @@
 // Rooms are decided here, from the principal, never from what the client claims:
 // - `user:<id>` — the caller's own user-level events (`pairing.claimed`, `device.linked`);
 // - `profile:<slug>` — only for the workspace the handshake names, and only when the
-//   caller may enter it (`resolveWorkspaceFor`, the same rule as `X-Hub-Profile`).
+//   caller may enter it (`resolveWorkspaceFor`, the same rule as `X-Hub-Profile`); with
+//   `profiles: 'all'` (ADR 0016) also every other workspace `listWorkspacesFor` allows.
 // Entity rooms (`session:<id>`, …) are joined by the module that owns the entity, after
 // it has checked the entity belongs to one of `socket.data.workspaces`.
 //
@@ -24,7 +25,14 @@ import type { AuthContext } from './context.js';
 import { resolvePrincipal, type Principal } from './principal.js';
 import { appTokens } from './schema.js';
 import { findUser } from './users.js';
-import { canEnter, findWorkspace, resolveWorkspaceFor, type WorkspaceScope } from './workspace.js';
+import {
+  canEnter,
+  findWorkspace,
+  listWorkspacesFor,
+  resolveWorkspaceFor,
+  toScope,
+  type WorkspaceScope,
+} from './workspace.js';
 
 /** What the handshake leaves in `socket.data` for the modules that own entity rooms. */
 export interface AuthSocketData {
@@ -67,6 +75,14 @@ export function registerSocketAuth(io: SocketServer, ctx: () => AuthContext | nu
               return next(
                 socketRefusal(error instanceof HubError ? error.code : 'profile_not_found'),
               );
+            }
+          }
+          // A list across profiles (ADR 0016) hears every profile it shows: `profiles: 'all'`
+          // adds each workspace this person may enter — the same rule as `X-Hub-Profile` and
+          // `sessions.list?profiles=all`, decided here, not by the client.
+          if (socket.handshake.auth?.profiles === 'all') {
+            for (const row of listWorkspacesFor(context.db, principal.user)) {
+              if (!workspaces.some((known) => known.id === row.id)) workspaces.push(toScope(row));
             }
           }
           dataOf(socket).principal = principal;

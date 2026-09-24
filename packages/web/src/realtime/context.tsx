@@ -87,6 +87,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           namespace: NAMESPACES[name],
           token: () => tokenRef.current,
           profile: () => profileRef.current,
+          // The sessions socket hears every profile the lists gather (ADR 0016); the
+          // others stay with the profile the person is in.
+          ...(name === 'sessions' ? { profiles: 'all' as const } : {}),
           // The hub refuses a handshake whose token expired (every namespace needs a valid
           // one). A newer token may be here already — the HTTP client refreshes on its
           // own — then just come back; otherwise ask for one, once per token: the effect

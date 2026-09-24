@@ -1642,8 +1642,25 @@ paths:
       description: |
         Sorted by `last_message_at desc`. Without `archived` only live sessions are returned.
         With `q`, titles and message text are searched and each item carries `match`.
+
+        With `profiles=all` the page holds every profile the caller may enter, not only the
+        one in `X-Hub-Profile` (ADR 0016: lists gather every profile, each item says which
+        with `profile`). The server decides which profiles those are — owners and admins
+        every profile, a member the ones they are enrolled in — and the header must still
+        name one of them. The cursor keeps its meaning across profiles: one order
+        (`last_message_at desc`, then `id`) over all of them, so pages neither repeat nor
+        skip. Opening an item is then an ordinary scoped call with that item's `profile` in
+        `X-Hub-Profile`.
       parameters:
         - $ref: '#/components/parameters/Profile'
+        - name: profiles
+          in: query
+          description: >-
+            `all` lists every profile the caller may enter instead of the one in the header.
+            Absent, the list is the header's profile alone, as before.
+          schema:
+            type: string
+            enum: [all]
         - name: agent_id
           in: query
           schema:

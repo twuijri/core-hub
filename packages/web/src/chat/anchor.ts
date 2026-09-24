@@ -27,14 +27,42 @@ export interface Anchor {
   query: string;
 }
 
-/** The chat's address for a session, opened at `messageId` when there is one. */
-export function chatHref(sessionId: string, messageId?: string | null, query?: string): string {
+/**
+ * The profile a conversation lives in (ADR 0016). It stays in the address — unlike the
+ * anchor — because it is part of *which* conversation this is: a list across profiles
+ * opens a chat from another profile, and a reload must open it there again, without the
+ * person's own profile or the top selector changing.
+ */
+export const PROFILE_PARAM = 'profile';
+
+const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
+
+/** The profile named in the address, if it is a well-formed slug. */
+export function readProfileParam(params: URLSearchParams): string | null {
+  const value = params.get(PROFILE_PARAM);
+  return value && SLUG.test(value) ? value : null;
+}
+
+/**
+ * The chat's address for a session, opened at `messageId` when there is one, in
+ * `profile` when it is given.
+ */
+export function chatHref(
+  sessionId: string,
+  messageId?: string | null,
+  query?: string,
+  profile?: string | null,
+): string {
   const base = routeOf('chat').replace(':sessionId?', sessionId);
-  if (!messageId) return base;
-  const params = new URLSearchParams({ [ANCHOR_PARAM]: messageId });
-  const q = query?.trim();
-  if (q) params.set(QUERY_PARAM, q);
-  return `${base}?${params.toString()}`;
+  const params = new URLSearchParams();
+  if (profile) params.set(PROFILE_PARAM, profile);
+  if (messageId) {
+    params.set(ANCHOR_PARAM, messageId);
+    const q = query?.trim();
+    if (q) params.set(QUERY_PARAM, q);
+  }
+  const search = params.toString();
+  return search ? `${base}?${search}` : base;
 }
 
 export function readAnchor(params: URLSearchParams): Anchor | null {

@@ -18,6 +18,11 @@ export interface ConnectOptions {
   token: () => string | undefined;
   profile: () => string | undefined;
   /**
+   * `all` also hears every other profile the person may enter (ADR 0016): the chats list
+   * gathers them, and a conversation opened from another profile gets its approvals.
+   */
+  profiles?: 'all';
+  /**
    * The hub refused the handshake's token (`unauthorized`, `token_expired`). socket.io does
    * not retry a refused handshake on its own; the caller gets a fresh token and reconnects.
    * `used` is the token the refused handshake carried.
@@ -38,7 +43,11 @@ export function connectNamespace(options: ConnectOptions): Socket {
       const token = options.token();
       const profile = options.profile();
       used = token;
-      cb({ ...(token ? { token } : {}), ...(profile ? { profile } : {}) });
+      cb({
+        ...(token ? { token } : {}),
+        ...(profile ? { profile } : {}),
+        ...(options.profiles ? { profiles: options.profiles } : {}),
+      });
     },
     reconnection: true,
     reconnectionDelay: 1_000,

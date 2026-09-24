@@ -16,7 +16,7 @@ import { requireSqlite } from '../../lib/db.js';
 import { HubError } from '../../lib/errors.js';
 import { auditFor } from '../audit/index.js';
 import { findUser } from './users.js';
-import { resolveWorkspaceFor } from './workspace.js';
+import { listWorkspacesFor, resolveWorkspaceFor } from './workspace.js';
 
 export interface PrincipalScope {
   workspaceId: string;
@@ -30,6 +30,7 @@ export type PrincipalScopeCaller = Pick<FastifyRequest, 'principal' | 'authError
 
 export interface PrincipalScopeResolver {
   resolve(profile: string, caller: PrincipalScopeCaller): Promise<PrincipalScope | null>;
+  enterable(caller: PrincipalScopeCaller): Promise<PrincipalScope[]>;
 }
 
 export function principalScopeResolver(app: FastifyInstance): PrincipalScopeResolver {
@@ -48,6 +49,22 @@ export function principalScopeResolver(app: FastifyInstance): PrincipalScopeReso
         userId: principal.user.id,
         userName: user?.displayName || principal.user.username,
       };
+    },
+    /**
+     * The profiles a list across profiles covers (ADR 0016): the same membership rule the
+     * header is checked with (`listWorkspacesFor` — owners and admins every workspace, a
+     * member the ones they are enrolled in), so "all" can never reach further than a
+     * header could.
+     */
+    async enterable(caller) {
+      const principal = caller.principal;
+      if (!principal) throw caller.authError ?? new HubError('unauthorized');
+      const user = findUser(db, principal.user.id);
+      const userName = user?.displayName || principal.user.username;
+      return listWorkspacesFor(db, principal.user).map((row) => {
+        auditFor(app).rememberWorkspace(row.id, row.slug);
+        return { workspaceId: row.id, profile: row.slug, userId: principal.user.id, userName };
+      });
     },
   };
 }
