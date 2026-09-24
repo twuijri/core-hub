@@ -192,3 +192,63 @@ test('29. a workflow step waits for a person: the inbox opens the run, and appro
     'succeeded',
   );
 });
+
+test("30. a schedule's run options: set when it is made, changed from its card, none for Hermes", async ({
+  page,
+  request,
+}) => {
+  await login(page);
+  await inDefault(page);
+  await page.getByRole('link', { name: 'الجدولة', exact: true }).click();
+  await expect(page).toHaveURL(/\/schedules$/);
+
+  // Hermes is the form's first agent, and Hermes's scheduler decides both itself.
+  await page.getByTestId('schedule-agent').click();
+  await page.getByRole('option', { name: 'Hermes', exact: true }).click();
+  await expect(page.getByTestId('schedule-new-options')).toHaveCount(0);
+
+  // The hub's own agent: the options appear with the owner's defaults.
+  await page.getByTestId('schedule-agent').click();
+  await page.getByRole('option', { name: /Direct|مباشر/ }).click();
+  const options = page.getByTestId('schedule-new-options');
+  await expect(options).toBeVisible();
+  const missed = options.getByRole('checkbox', { name: /^شغّله لو فات وقته \(خلال ٢٤ ساعة\)/ });
+  await expect(missed).not.toBeChecked();
+  await expect(options.getByRole('radio', { name: /^انتظر ثم شغّل/ })).toBeChecked();
+
+  await page.getByTestId('schedule-name').fill('تذكير بالموعد');
+  await page.getByTestId('schedule-value').fill('30 7 * * *');
+  await page.getByTestId('schedule-prompt').fill('ذكّرني بموعد اليوم');
+  await missed.click();
+  await options.getByRole('radio', { name: /^أوقف السابق/ }).click();
+  await shot(page, 'schedule-run-options-ar-light');
+  await page.getByTestId('schedule-save').click();
+
+  const card = page.getByTestId('schedule-card').filter({ hasText: 'تذكير بالموعد' });
+  await expect(card).toBeVisible();
+  await card.getByTestId('schedule-options-toggle').click();
+  const panel = card.getByTestId('schedule-options');
+  await expect(panel.getByRole('checkbox', { name: /^شغّله لو فات وقته/ })).toBeChecked();
+  await expect(panel.getByRole('radio', { name: /^أوقف السابق/ })).toBeChecked();
+
+  // Changed from the card, saved at once.
+  await panel.getByRole('radio', { name: /^شغّل معه/ }).click();
+  await expect(panel.getByRole('radio', { name: /^شغّل معه/ })).toBeChecked();
+
+  // What the hub now holds.
+  const owner = await request.post('/api/v1/auth/login', {
+    data: { username: 'admin', password: PASSWORD },
+  });
+  const headers = {
+    authorization: `Bearer ${(await owner.json()).access_token}`,
+    'X-Hub-Profile': 'default',
+  };
+  await expect
+    .poll(async () => {
+      const list = await request.get('/api/v1/schedules?profiles=all', { headers });
+      const items = (await list.json()).items as Array<Record<string, unknown>>;
+      const saved = items.find((item) => item.name === 'تذكير بالموعد');
+      return saved ? [saved.run_if_missed, saved.overlap] : null;
+    })
+    .toEqual([true, 'parallel']);
+});
