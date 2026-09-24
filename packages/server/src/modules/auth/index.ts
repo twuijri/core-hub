@@ -95,5 +95,11 @@ export {
   type PrincipalScopeResolver,
 } from './scopes.js';
 export { findUser, ownerUser, presentUser } from './users.js';
-export { emitToUser, userRoom } from './sockets.js';
+export {
+  emitToUser,
+  revalidateSockets,
+  socketRefusal,
+  userRoom,
+  type AuthSocketData,
+} from './sockets.js';
 export type { UserRole, UserStatus, AppTokenScope, Locale } from './schema.js';

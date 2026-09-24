@@ -92,7 +92,7 @@ import {
   updateUserAsAdmin,
 } from './users.js';
 import { canEnter, defaultWorkspace, findWorkspace, listWorkspacesFor } from './workspace.js';
-import { emitToUser } from './sockets.js';
+import { emitToUser, revalidateSockets } from './sockets.js';
 
 // ---------------------------------------------------------------- request schemas
 
@@ -353,8 +353,12 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     return row;
   };
 
+  /** Access was taken away: the sockets it no longer admits go too (sockets.ts). */
+  const dropStaleSockets = () => revalidateSockets(ctx.io(), db, now());
+
   const revokeAppTokenRow = (request: FastifyRequest, tokenId: string, action: string) => {
     revokeToken(db, tokenId, now());
+    dropStaleSockets();
     const device = revokeDeviceByToken(db, tokenId, now());
     if (device) {
       // Logout keeps the device row (revoked, visible in the list); revoking a token unlinks it.
@@ -570,6 +574,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
       principalOf(request).tokenId,
       now(),
     );
+    dropStaleSockets();
     audit(request, 'auth.password_changed', { kind: 'user', id: user.id }, 'password changed');
     return noContent(reply);
   });
@@ -637,6 +642,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
       now(),
       principalOf(request).tokenId,
     );
+    dropStaleSockets();
     audit(
       request,
       'auth.user_updated',
@@ -665,6 +671,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
       .all();
     for (const token of deviceTokens) revokeDeviceByToken(db, token.id, now());
     deleteUser(db, principalOf(request).user.id, target);
+    dropStaleSockets();
     deleteAvatar(ctx.dataDir, 'users', target.id);
     audit(
       request,
@@ -832,6 +839,8 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
       },
       now(),
     );
+    // A re-pair revokes the device's previous token: its sockets go with it.
+    dropStaleSockets();
     const device = serializeDevice(result.device, { online: false, thisDevice: false });
     emitToUser(
       ctx.io(),
@@ -1002,6 +1011,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
   route('DELETE', '/profiles/:profile_id', admin, async (request, reply) => {
     const row = workspaceFor(request);
     deleteProfile(db, row, now());
+    dropStaleSockets();
     audit(
       request,
       'auth.profile_deleted',

@@ -30,6 +30,21 @@ where `profile` is optional. Acks are always `{ ok: true }` or
 `{ ok: false, error, code }` with a code from the fixed list in
 `docs/contracts/README.md` §4.
 
+The token is the same bearer as HTTP and is **required on every namespace** —
+there is no anonymous realtime. A handshake without one, or with one the hub
+refuses, fails: the client's `connect_error` carries the error code as its
+message and as `data.code` (`unauthorized`, `token_expired`, `rate_limited`),
+and `profile_not_found` when `profile` names a workspace the caller may not
+enter. Socket.IO does not retry a refused handshake; a client refreshes its
+token and connects again. The rooms a socket hears are decided by the server
+from the verified token: its own user-level events, and the profile-wide events
+of the workspace it was admitted to — never another's. A `subscribe` to an
+entity that is not in that workspace (another workspace's session, an unknown
+id) is refused with `not_found`, as `GET` of it would be. When access is taken
+away — sign-out, a revoked token, a disabled or deleted user, a changed role or
+membership, an archived workspace — the server disconnects the socket, and the
+same token cannot bring it back.
+
 | Namespace | Command | Payload | What it does |
 |---|---|---|---|
 | `/rt/sessions` | `subscribe` | `{ session_id, after_seq? }` | receive the session's message/run/tool events (profile-wide events need no subscription); with `after_seq`, resume — see below |

@@ -30,10 +30,14 @@ interface RealtimeValue {
 const RealtimeContext = createContext<RealtimeValue | null>(null);
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
-  const { baseUrl, session, profile } = useAuth();
+  const { baseUrl, session, profile, refresh } = useAuth();
   const token = session?.token;
   const tokenRef = useRef(token);
   tokenRef.current = token;
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+  /** The token a refresh was already asked for, so a refusal cannot loop. */
+  const refreshedFor = useRef<string | undefined>(undefined);
   const profileRef = useRef(profile);
   const [state, setState] = useState<ConnectionState>('offline');
   const [epoch, setEpoch] = useState(0);
@@ -83,6 +87,16 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           namespace: NAMESPACES[name],
           token: () => tokenRef.current,
           profile: () => profileRef.current,
+          // The hub refuses a handshake whose token expired (every namespace needs a valid
+          // one). A newer token may be here already — the HTTP client refreshes on its
+          // own — then just come back; otherwise ask for one, once per token: the effect
+          // below reconnects when it arrives, and a refused refresh signs out.
+          onAuthRefused(refused, used) {
+            if (used !== tokenRef.current) return void refused.connect();
+            if (!used || refreshedFor.current === used) return;
+            refreshedFor.current = used;
+            void refreshRef.current();
+          },
         });
         if (name === 'sessions') {
           setState('connecting');
@@ -111,6 +125,15 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     if (!userId) return;
     valueRef.current?.socket('sessions');
   }, [userId, epoch]);
+
+  // A new access token brings back every socket the hub refused with the old one. A socket
+  // that is connected, or still retrying on its own (`active`), picks the token up by itself.
+  useEffect(() => {
+    if (!token) return;
+    for (const socket of sockets.current.values()) {
+      if (!socket.connected && !socket.active) socket.connect();
+    }
+  }, [token]);
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>;
 }
 

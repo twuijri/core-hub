@@ -8,15 +8,30 @@
  * And a page that asks for no socket at all — any Settings page, where the sidebar is the
  * settings list — still has the footer (owner, 2026-09-23: «اذا دخلت الاعدادات وحدثت الصفحة
  * يعطيني اوفلاين»): the provider opens the socket the footer reports on its own.
+ *
+ * Every namespace needs a valid token (2026-09-24, realtime auth scope): a handshake the hub
+ * refuses for its token is not retried by socket.io, so the provider gets a new token and
+ * brings the socket back with it.
  */
 import { act, cleanup, render } from '@testing-library/react';
 import { useEffect } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+interface Options {
+  onAuthRefused?: (socket: FakeSocket, used: string | undefined) => void;
+}
 const sockets: FakeSocket[] = [];
+const options: Options[] = [];
 class FakeSocket {
   connected = false;
   disconnected = false;
+  /** False once the hub refused the handshake: socket.io will not retry on its own. */
+  active = true;
+  connects = 0;
+  connect() {
+    this.connects += 1;
+    this.active = true;
+  }
   private handlers = new Map<string, Array<() => void>>();
   io = { on: () => undefined };
   on(event: string, handler: () => void) {
@@ -36,14 +51,22 @@ class FakeSocket {
 
 vi.mock('../src/realtime/socket.js', () => ({
   NAMESPACES: { sessions: '/sessions', jobs: '/jobs', devices: '/devices', notify: '/notify' },
-  connectNamespace: () => {
+  connectNamespace: (given: Options) => {
     const socket = new FakeSocket();
     sockets.push(socket);
+    options.push(given);
     return socket;
   },
 }));
 
-let auth = { baseUrl: '', session: { token: 't', user: { id: 'u1' } }, profile: 'default' };
+const refresh = vi.fn(async () => true);
+const signedIn = (token = 't') => ({
+  baseUrl: '',
+  session: { token, user: { id: 'u1' } },
+  profile: 'default',
+  refresh,
+});
+let auth = signedIn();
 vi.mock('../src/auth/context.js', () => ({ useAuth: () => auth }));
 
 const { RealtimeProvider, useRealtime } = await import('../src/realtime/context.js');
@@ -67,7 +90,9 @@ function Footer({ onState }: { onState: (state: string) => void }) {
 afterEach(() => {
   cleanup();
   sockets.length = 0;
-  auth = { baseUrl: '', session: { token: 't', user: { id: 'u1' } }, profile: 'default' };
+  options.length = 0;
+  refresh.mockClear();
+  auth = signedIn();
 });
 
 describe('the realtime connection', () => {
@@ -142,5 +167,63 @@ describe('the realtime connection', () => {
     expect(sockets).toHaveLength(2);
     expect(sockets[0]!.disconnected).toBe(true);
     expect(sockets[1]!.disconnected).toBe(false);
+  });
+
+  it('asks for a new token once when the hub refuses the old one, and comes back with it', () => {
+    let state = '';
+    const view = render(
+      <RealtimeProvider>
+        <Footer onState={(next) => (state = next)} />
+      </RealtimeProvider>,
+    );
+    const socket = sockets[0]!;
+    socket.active = false;
+    act(() => {
+      socket.emit('connect_error');
+      options[0]!.onAuthRefused!(socket, 't');
+      options[0]!.onAuthRefused!(socket, 't');
+    });
+    expect(state).toBe('offline');
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(socket.connects).toBe(0);
+
+    auth = signedIn('t2');
+    view.rerender(
+      <RealtimeProvider>
+        <Footer onState={(next) => (state = next)} />
+      </RealtimeProvider>,
+    );
+    expect(socket.connects).toBe(1);
+    expect(sockets).toHaveLength(1);
+    act(() => socket.emit('connect'));
+    expect(state).toBe('connected');
+  });
+
+  it('comes back at once when a newer token is already there', () => {
+    render(
+      <RealtimeProvider>
+        <Footer onState={() => undefined} />
+      </RealtimeProvider>,
+    );
+    const socket = sockets[0]!;
+    socket.active = false;
+    act(() => options[0]!.onAuthRefused!(socket, 'an-older-token'));
+    expect(refresh).not.toHaveBeenCalled();
+    expect(socket.connects).toBe(1);
+  });
+
+  it('leaves alone a socket that is connected, or still retrying on its own', () => {
+    const view = render(
+      <RealtimeProvider>
+        <Footer onState={() => undefined} />
+      </RealtimeProvider>,
+    );
+    auth = signedIn('t2');
+    view.rerender(
+      <RealtimeProvider>
+        <Footer onState={() => undefined} />
+      </RealtimeProvider>,
+    );
+    expect(sockets[0]!.connects).toBe(0);
   });
 });
