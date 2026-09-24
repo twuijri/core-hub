@@ -47,6 +47,11 @@ export interface HermesDashboardHost {
   status(): { mode: HermesRuntimeMode; home: string | null };
   executable(): string | null;
   cliEnv(): NodeJS.ProcessEnv;
+  /**
+   * Readies the root home's WhatsApp bridge: Hermes's pairing screen runs the bridge from the
+   * root home, whatever the profile being paired (`whatsapp-bridge.ts`).
+   */
+  prepareWhatsAppBridge?(): void;
 }
 
 export type DashboardSpawner = (
@@ -328,6 +333,7 @@ export class HermesDashboard {
     // every job twice. Never inherited, whatever the host says.
     delete env.HERMES_DESKTOP;
     delete env.HERMES_DESKTOP_READY_FILE;
+    host.prepareWhatsAppBridge?.();
 
     const began = Date.now();
     const tail: string[] = [];

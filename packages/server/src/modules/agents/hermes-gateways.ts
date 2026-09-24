@@ -60,6 +60,7 @@ import type { RuntimeState } from './adapters/types.js';
 import { activeChannels, ensureWhatsAppBridgePort } from './channels.js';
 import { namedHermesProfiles } from './hermes-profiles.js';
 import type { SpawnedProcess, Spawner } from './hermes-runtime.js';
+import { IMAGE_WHATSAPP_BRIDGE, prepareWhatsAppBridge } from './whatsapp-bridge.js';
 
 export interface GatewayStatus {
   /** Hermes's profile name; `default` is the root home's gateway. */
@@ -98,6 +99,8 @@ export interface ProfileGatewaysOptions {
   stopGraceMs?: number;
   /** How often the set of profiles needing a gateway is checked again. 0 turns it off. */
   rescanMs?: number;
+  /** The installed WhatsApp bridge a profile's copy links to (`whatsapp-bridge.ts`). */
+  whatsappBridge?: string;
 }
 
 const BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 30_000, 60_000] as const;
@@ -517,7 +520,10 @@ export class ProfileGateways {
     });
   }
 
-  /** Makes a profile's files ready for its gateway: its own bridge port, the hub's providers. */
+  /**
+   * Makes a profile's files ready for its gateway: its own bridge port and its copy of the
+   * bridge on the image's dependencies (so Hermes installs nothing), the hub's providers.
+   */
   prepareHome(profile: string, home: string, channels: readonly string[]): void {
     const root = this.options.root();
     if (root && channels.includes('whatsapp')) {
@@ -528,6 +534,16 @@ export class ProfileGateways {
           .map((name) => path.join(root, 'profiles', name)),
       ];
       ensureWhatsAppBridgePort(home, others);
+      const bridge = prepareWhatsAppBridge(
+        home,
+        this.options.whatsappBridge ?? IMAGE_WHATSAPP_BRIDGE,
+      );
+      if (bridge !== 'current' && bridge !== 'no-image-bridge') {
+        this.options.log.info(
+          { profile, bridge },
+          'hermes: WhatsApp bridge prepared for a profile',
+        );
+      }
     }
     this.options.prepare?.(profile, home);
   }
