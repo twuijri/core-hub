@@ -1,16 +1,19 @@
 /**
  * Messaging gateways per profile, and pairing approvals, with **the real Hermes** from the image.
  *
+ * Every Hermes process runs in one container, as in production — one process table, one `/tmp`,
+ * one machine-wide lock folder — each a `docker exec` in it.
+ *
  * 1. Two gateways side by side — the default profile's (`hermes gateway run`, the API server on
  *    its port) and profile «manger»'s (`hermes -p manger gateway run`, started by the hub because
  *    «manger» has a channel switched on) — each with its own pid, lock and state file, neither
  *    refusing the other.
  * 2. Both answer through the owner's custom OpenAI-compatible provider (`majlis-custom-…`), which
- *    their `config.yaml` named **without** its `providers:` block — Hermes's
- *    `Unknown provider` of 2026-09-24 — because the hub writes the block and the model into each
- *    profile right before its gateway starts. A scripted provider on this host answers, and it
- *    sees the key the hub hands every gateway. (To ask «manger»'s gateway at all, this test gives
- *    it an API server on a port of its own; the hub never does.)
+ *    their `config.yaml` named **without** its `providers:` block — Hermes's `Unknown provider` of
+ *    2026-09-24 — because the hub writes the block and the model into each profile right before
+ *    its gateway starts. A scripted provider on this host answers, and it sees the key the hub
+ *    hands every gateway. (To ask «manger»'s gateway at all, this test gives it an API server on
+ *    a port of its own; the hub never does.)
  * 3. Hermes's pairing API, in «manger»: two requests Hermes's own `PairingStore` made are listed,
  *    one is approved and revoked through Hermes, the other is denied by the hub's edit of Hermes's
  *    pending file — and the default profile's list stays empty.
@@ -56,6 +59,7 @@ import type { HermesApiCall } from '../../src/modules/agents/hermes-tools.js';
 
 const image = process.env.MAJLIS_HERMES_IMAGE;
 const HERMES = '/opt/hermes/.venv/bin/hermes';
+const PYTHON = '/opt/hermes/.venv/bin/python';
 const PROVIDER = 'majlis-custom-cli-proxy-api';
 const KEY_ENV = 'MAJLIS_CUSTOM_CLI_PROXY_API_API_KEY';
 const DEFAULT_PORT = 18642;
@@ -66,87 +70,76 @@ describe.skipIf(!image)(
   'messaging gateways per profile (real Hermes; set MAJLIS_HERMES_IMAGE)',
   () => {
     const dataDir = mkdtempSync(path.join(tmpdir(), 'majlis-gw-real-data-'));
-    // The runtime's own home, mounted at the same path in every container.
+    // The runtime's own home, mounted at the same path in the container.
     const root = path.join(dataDir, 'hermes');
     const bin = mkdtempSync(path.join(tmpdir(), 'majlis-gw-real-bin-'));
     const user = `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`;
-    const containers: string[] = [];
+    const box = `majlis-gw-real-${process.pid}`;
     const seen: Array<{ authorization: string | undefined; model: unknown }> = [];
     let provider: Server;
-    let providerPort = 0;
     let runtime: HermesRuntime;
     let dashboard: HermesDashboard;
 
-    /** `docker run` of Hermes as this user, on the host network, the home at the same path. */
-    const dockerArgs = (name: string, cwd: string, names: string[]) => [
-      'run',
-      '--rm',
-      '--name',
-      name,
-      '--network',
-      'host',
-      '--user',
-      user,
-      '-e',
-      'HOME=/tmp',
-      '-v',
-      `${root}:${root}`,
-      '-w',
-      cwd,
-      ...names.flatMap((variable) => ['-e', variable]),
-      '--entrypoint',
-      HERMES,
-      image!,
-    ];
+    /** `hermes <args>` in the container; stopping it signals that very process inside. */
+    const inBox = (
+      cwd: string,
+      args: string[],
+      env: Record<string, string | undefined>,
+    ): SpawnedProcess => {
+      const names = Object.keys(env).filter((name) => env[name] !== undefined);
+      const child = spawn(
+        'docker',
+        ['exec', ...names.flatMap((name) => ['-e', name]), '-w', cwd, box, HERMES, ...args],
+        { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } },
+      );
+      const tail = `bin/hermes ${args.join(' ')}`;
+      return {
+        pid: child.pid,
+        stdout: child.stdout,
+        stderr: child.stderr,
+        on: (event, listener) => child.on(event, listener),
+        kill(signal: NodeJS.Signals = 'SIGTERM') {
+          const code = [
+            'import os',
+            'for p in os.listdir("/proc"):',
+            '    if not p.isdigit(): continue',
+            '    try: c = open(f"/proc/{p}/cmdline", "rb").read().replace(bytes(1), b" ").decode().strip()',
+            '    except Exception: continue',
+            `    if c.endswith(${JSON.stringify(tail)}): os.kill(int(p), ${signal === 'SIGKILL' ? 9 : 15})`,
+          ].join('\n');
+          try {
+            execFileSync('docker', ['exec', box, PYTHON, '-c', code]);
+          } catch {
+            // Gone already.
+          }
+          return true;
+        },
+      };
+    };
 
     const hermesOnce = (args: string[]) =>
-      execFileSync(
-        'docker',
-        [...dockerArgs(`majlis-gw-once-${process.pid}`, root, ['HERMES_HOME']), ...args],
-        {
-          env: { ...process.env, HERMES_HOME: root },
-          encoding: 'utf8',
-          timeout: 180_000,
-        },
-      );
+      execFileSync('docker', ['exec', '-e', `HERMES_HOME=${root}`, box, HERMES, ...args], {
+        encoding: 'utf8',
+        timeout: 180_000,
+      });
 
     const python = (code: string) =>
       execFileSync(
         'docker',
-        [
-          'run',
-          '--rm',
-          '--user',
-          user,
-          '-e',
-          'HOME=/tmp',
-          '-e',
-          `HERMES_HOME=${root}`,
-          '-v',
-          `${root}:${root}`,
-          '-w',
-          '/opt/hermes/src',
-          '--entrypoint',
-          '/opt/hermes/.venv/bin/python',
-          image!,
-          '-c',
-          code,
-        ],
+        ['exec', '-e', `HERMES_HOME=${root}`, '-w', '/opt/hermes/src', box, PYTHON, '-c', code],
         { encoding: 'utf8', timeout: 120_000 },
       ).trim();
 
-    /** The hub's gateways, run in the image. «manger» also gets an API server, for this test only. */
+    /** The hub's gateways. «manger» also gets an API server, for this test only, to be asked. */
     const gatewaySpawn: Spawner = (_command, args, options) => {
       const profile = args[0] === '-p' ? args[1]! : 'default';
-      const name = `majlis-gw-real-${process.pid}-${profile}-${containers.length}`;
-      containers.push(name);
       const env: NodeJS.ProcessEnv = { ...options.env };
       if (profile !== 'default') {
         env.API_SERVER_KEY = 'm'.repeat(48);
         env.API_SERVER_HOST = '127.0.0.1';
         env.API_SERVER_PORT = String(MANGER_PORT);
       }
-      const names = [
+      const pick = [
         'HERMES_HOME',
         'HERMES_DASHBOARD',
         'PYTHONUNBUFFERED',
@@ -155,31 +148,15 @@ describe.skipIf(!image)(
         'API_SERVER_KEY',
         'API_SERVER_HOST',
         'API_SERVER_PORT',
-      ].filter((variable) => env[variable] !== undefined);
-      const child = spawn('docker', [...dockerArgs(name, options.cwd, names), ...args], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, ...Object.fromEntries(names.map((n) => [n, env[n]])) },
-      });
-      return child as unknown as SpawnedProcess;
+      ];
+      return inBox(options.cwd, args, Object.fromEntries(pick.map((name) => [name, env[name]])));
     };
 
-    const dashboardSpawn: DashboardSpawner = (_command, args, options) => {
-      const name = `majlis-gw-real-serve-${process.pid}-${containers.length}`;
-      containers.push(name);
-      const child = spawn(
-        'docker',
-        [...dockerArgs(name, root, ['HERMES_HOME', 'HERMES_DASHBOARD_SESSION_TOKEN']), ...args],
-        {
-          stdio: ['ignore', 'pipe', 'pipe'],
-          env: {
-            ...process.env,
-            HERMES_HOME: root,
-            HERMES_DASHBOARD_SESSION_TOKEN: options.env.HERMES_DASHBOARD_SESSION_TOKEN,
-          },
-        },
-      );
-      return child as unknown as SpawnedProcess;
-    };
+    const dashboardSpawn: DashboardSpawner = (_command, args, options) =>
+      inBox(root, args, {
+        HERMES_HOME: root,
+        HERMES_DASHBOARD_SESSION_TOKEN: options.env.HERMES_DASHBOARD_SESSION_TOKEN,
+      });
 
     const healthy = async (port: number) => {
       try {
@@ -215,6 +192,26 @@ describe.skipIf(!image)(
     beforeAll(async () => {
       mkdirSync(root, { recursive: true });
       chmodSync(root, 0o777);
+      execFileSync('docker', [
+        'run',
+        '-d',
+        '--rm',
+        '--name',
+        box,
+        '--network',
+        'host',
+        '--user',
+        user,
+        '-e',
+        'HOME=/tmp',
+        '-v',
+        `${root}:${root}`,
+        '--entrypoint',
+        'sleep',
+        image!,
+        'infinity',
+      ]);
+
       // A scripted OpenAI-compatible endpoint: every chat answers «pong», streamed or not.
       provider = createServer((request, response) => {
         let raw = '';
@@ -231,7 +228,13 @@ describe.skipIf(!image)(
           if (body.stream) {
             response.writeHead(200, { 'content-type': 'text/event-stream' });
             const chunk = (delta: Record<string, unknown>, finish: string | null) =>
-              `data: ${JSON.stringify({ id, object: 'chat.completion.chunk', created: 0, model: 'scripted-model', choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
+              `data: ${JSON.stringify({
+                id,
+                object: 'chat.completion.chunk',
+                created: 0,
+                model: 'scripted-model',
+                choices: [{ index: 0, delta, finish_reason: finish }],
+              })}\n\n`;
             response.write(chunk({ role: 'assistant', content: 'pong' }, null));
             response.write(chunk({}, 'stop'));
             response.end('data: [DONE]\n\n');
@@ -257,7 +260,7 @@ describe.skipIf(!image)(
         });
       });
       await new Promise<void>((resolve) => provider.listen(0, '127.0.0.1', resolve));
-      providerPort = (provider.address() as { port: number }).port;
+      const providerPort = (provider.address() as { port: number }).port;
 
       // Hermes's own profile, made by Hermes; then both files name the provider with no block —
       // what a gateway found on 2026-09-24.
@@ -269,7 +272,7 @@ describe.skipIf(!image)(
         `${broken}platforms:\n  webhook:\n    enabled: true\n    extra:\n      port: ${WEBHOOK_PORT}\n      secret: e2e-webhook-secret\n`,
       );
 
-      // A `hermes` on PATH so the runtime is `managed`; the spawner runs the image instead.
+      // A `hermes` on PATH so the runtime is `managed`; the spawner runs the image's instead.
       writeFileSync(path.join(bin, 'hermes'), '#!/bin/sh\nexit 0\n');
       chmodSync(path.join(bin, 'hermes'), 0o755);
       const state = {
@@ -315,12 +318,10 @@ describe.skipIf(!image)(
       await runtime?.stop();
       await dashboard?.close();
       provider?.close();
-      for (const name of containers) {
-        try {
-          execFileSync('docker', ['rm', '-f', name], { stdio: 'ignore' });
-        } catch {
-          // already gone with --rm
-        }
+      try {
+        execFileSync('docker', ['rm', '-f', box], { stdio: 'ignore' });
+      } catch {
+        // already gone with --rm
       }
       for (const dir of [dataDir, bin]) {
         try {
@@ -352,19 +353,19 @@ describe.skipIf(!image)(
           const mangerRecord = readGatewayRecord(path.join(root, 'profiles', 'manger'));
           expect(defaultRecord?.gatewayState).toBe('running');
           expect(mangerRecord?.gatewayState).toBe('running');
+          expect(defaultRecord?.pid).toBeTruthy();
           expect(defaultRecord?.pid).not.toBe(mangerRecord?.pid);
         },
         { timeout: 120_000, interval: 2_000 },
       );
       expect(existsSync(path.join(root, 'gateway.lock'))).toBe(true);
       expect(existsSync(path.join(root, 'profiles', 'manger', 'gateway.lock'))).toBe(true);
-      // The block the file lacked, written by the hub before each start.
-      expect(readFileSync(path.join(root, 'profiles', 'manger', 'config.yaml'), 'utf8')).toContain(
-        `${PROVIDER}:`,
-      );
+      // The block the files lacked, written by the hub before each start.
+      for (const home of [root, path.join(root, 'profiles', 'manger')]) {
+        expect(readFileSync(path.join(home, 'config.yaml'), 'utf8')).toContain(`${PROVIDER}:`);
+      }
 
-      const apiKey = runtime.apiKey()!;
-      const fromDefault = await ask(DEFAULT_PORT, apiKey);
+      const fromDefault = await ask(DEFAULT_PORT, runtime.apiKey()!);
       const fromManger = await ask(MANGER_PORT, 'm'.repeat(48));
       expect(fromDefault, JSON.stringify(fromDefault)).toMatchObject({ status: 200 });
       expect(fromManger, JSON.stringify(fromManger)).toMatchObject({ status: 200 });
@@ -376,10 +377,10 @@ describe.skipIf(!image)(
 
       const memory = execFileSync(
         'docker',
-        ['stats', '--no-stream', '--format', '{{.Name}} {{.MemUsage}}', ...containers.slice(0, 2)],
+        ['stats', '--no-stream', '--format', '{{.MemUsage}}', box],
         { encoding: 'utf8' },
       ).trim();
-      console.log(`gateways side by side:\n${memory}`);
+      console.log(`the container with both gateways: ${memory}; provider calls: ${seen.length}`);
     }, 420_000);
 
     it("lists, approves, denies and revokes pairing requests in «manger» through Hermes's API", async () => {
@@ -410,15 +411,14 @@ describe.skipIf(!image)(
         platform: 'whatsapp',
         requestId: sara.request_id,
       });
-      expect(approved).toMatchObject({ user_id: '966500000001@s.whatsapp.net', user_name: 'Sara' });
+      // Hermes keeps a WhatsApp sender by the number alone (`_normalize_user_id`).
+      expect(approved).toMatchObject({ user_id: '966500000001', user_name: 'Sara' });
 
       // Deny: the hub's edit of Hermes's pending file, seen by Hermes's next list.
       denyPairing(path.join(root, 'profiles', 'manger'), 'whatsapp', omar.request_id);
       const after = await listPairing(api, 'manger');
       expect(after.pending).toEqual([]);
-      expect(after.approved.map((sender) => sender.user_id)).toEqual([
-        '966500000001@s.whatsapp.net',
-      ]);
+      expect(after.approved.map((sender) => sender.user_id)).toEqual([approved.user_id]);
       // Hermes itself agrees: its store says Sara may talk, and Omar still may not.
       expect(
         python(
@@ -433,7 +433,7 @@ describe.skipIf(!image)(
       await revokePairing(api, {
         profile: 'manger',
         platform: 'whatsapp',
-        userId: '966500000001@s.whatsapp.net',
+        userId: approved.user_id,
       });
       expect((await listPairing(api, 'manger')).approved).toEqual([]);
       await expect(
