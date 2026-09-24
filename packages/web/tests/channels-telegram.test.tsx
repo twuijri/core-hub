@@ -353,10 +353,19 @@ describe('Link Telegram', () => {
   });
 });
 
+interface Dictionary {
+  channels: {
+    settings: {
+      option: Record<string, { label?: string; help?: string } | undefined>;
+      choice: Record<string, Record<string, string> | undefined>;
+    };
+  };
+}
+
 describe('Telegram settings', () => {
   it('has words for every option the hub knows, in both languages', () => {
     for (const spec of TELEGRAM_OPTIONS) {
-      for (const dictionary of [en, ar] as Array<Record<string, any>>) {
+      for (const dictionary of [en, ar] as unknown as Dictionary[]) {
         const words = dictionary.channels.settings.option[spec.key];
         expect(words?.label, spec.key).toBeTruthy();
         expect(words?.help, spec.key).toBeTruthy();

@@ -26,6 +26,7 @@ afterEach(() => {
   for (const dir of homes.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 const text = (dir: string) => readFileSync(path.join(dir, 'config.yaml'), 'utf8');
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- a parsed YAML document, read by path in assertions
 const yaml = (dir: string) => parse(text(dir)) as Record<string, any>;
 const option = (dir: string, key: string) =>
   readTelegramSettings(dir).find((entry) => entry.key === key)!;

@@ -853,3 +853,41 @@ Rejected: mapping `run_if_missed` onto Hermes's `cron.catch_up_missed` (it is on
 every job of a profile; changing it from one schedule would change all of them), and a
 separate `skipped` status (the contract already says a time not run is `cancelled` with the
 reason, §35).
+
+## 41. Telegram is linked by a bot token; a channel's own settings are options the hub describes
+
+2026-09-24, the owner: «ابي تربط التليجرام … لانه ما سويت الا واتساب وانا احتاج تليجرام», then
+«التليجرام فيه خصائص كثيره … يطلع ثينكينج … في اكثر من شغله».
+
+- **`agents.linkChannel`** (`POST /agents/{agent_id}/channels/{platform}/link`, body
+  `ChannelTokenLink {token, allowed_users?}`, `200` with the channel) is not `agents.loginChannel`:
+  nothing is paired interactively and there is no job. The person makes the bot with @BotFather;
+  the hub checks the token's shape, asks Telegram `getMe`, and stores the token in the selected
+  profile's own Hermes `.env` — never in `config.yaml`, never returned. Hermes's own onboarding
+  can make a bot through an outside service; the hub does not use it. Refusals are named:
+  `token_invalid`, `token_rejected` (Telegram's words in `details.message`),
+  `telegram_unreachable` (`503`), `token_in_use` with the `profile` that has the bot (Telegram
+  lets one process poll a bot), `link_not_supported`, `hermes_not_supervised`.
+- **`Channel.login` gains `token`**, and **`ChannelLink` covers Telegram**: `account_id` is the
+  bot's id, `account_name` its name, the new `account_username` its @username (null for
+  WhatsApp); `account_phone` is null. For Telegram `configured` is `link.linked`.
+  `agents.unlinkChannel` covers Telegram: the token goes, the channel is switched off, the
+  allowlist and the settings stay.
+- **Linking switches pairing on explicitly** (`platforms.telegram.unauthorized_dm_behavior:
+  pair`): Hermes treats strangers as "ignore" by default as soon as an allowlist exists, which
+  would make the optional allowed-users field silently turn pairing off.
+- **`agents.getChannelSettings` / `agents.updateChannelSettings`** describe a channel's options
+  rather than fix them in the schema: `ChannelSetting {key, section, kind, value, default,
+  choices, min, max, shared, source}`. Hermes adds options between releases; a schema property
+  per option would need a contract change each time, and clients would still need their own
+  words for each. The key is stable, clients key their label and help on it, and `value: null`
+  (read or written) means "Hermes's default", which `default` states — including a profile-wide
+  value the option falls back to. `shared: true` marks an option kept once for the profile
+  (speech-to-text, voice replies) that changes every channel there. Only `telegram` today
+  (`409 settings_not_supported` otherwise). A write is all or nothing; a wrong value is `400
+  validation_failed` with `details.field = values.<key>`.
+
+Rejected: a job for linking (it takes one HTTP call), the token in `config.yaml` (Hermes reads
+the environment first, and `.env` is where #90 keeps a profile's secrets), and exposing every
+Hermes key verbatim (a list of internals, some of which no person should touch — the change
+record lists what was left out and why).
