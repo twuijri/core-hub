@@ -14,7 +14,16 @@ import { useTheme } from '../design/theme.js';
 import { useSetupState } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { HOME_PATH, LOGIN_PATH } from '../navigation/routes.js';
-import { Button, Card, Field, Input, Notice, Separator, Spinner, CoreHubMark } from '../ui/index.js';
+import {
+  Button,
+  Card,
+  Field,
+  Input,
+  Notice,
+  Separator,
+  Spinner,
+  CoreHubMark,
+} from '../ui/index.js';
 import { IconGlobe } from '../ui/icons.js';
 
 const MIN_PASSWORD = 8;

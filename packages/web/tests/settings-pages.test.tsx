@@ -204,7 +204,9 @@ describe('Updates', () => {
     });
     mount(<UpdatesTab />, fetchImpl);
     await waitFor(() => expect(screen.getByTestId('updates-source-fields')).toBeTruthy());
-    expect((screen.getByLabelText('Repository') as HTMLInputElement).value).toBe('twuijri/core-hub');
+    expect((screen.getByLabelText('Repository') as HTMLInputElement).value).toBe(
+      'twuijri/core-hub',
+    );
     expect(screen.getByText(/Stored\./)).toBeTruthy();
     // The field itself is empty: the hub's `[stored]` is a fact, not a value to echo.
     expect((screen.getByLabelText('Token') as HTMLInputElement).value).toBe('');

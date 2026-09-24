@@ -53,9 +53,10 @@ describe('an environment variable under its old name', () => {
   });
 
   it('loses to the new name when both are set', () => {
-    expect(readProductEnv({ MAJLIS_VERSION: 'old', COREHUB_VERSION: 'new' }, 'VERSION')).toEqual(
-      { value: 'new', legacyName: null },
-    );
+    expect(readProductEnv({ MAJLIS_VERSION: 'old', COREHUB_VERSION: 'new' }, 'VERSION')).toEqual({
+      value: 'new',
+      legacyName: null,
+    });
   });
 
   it('counts an empty value as unset', () => {

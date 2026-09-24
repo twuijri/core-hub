@@ -853,3 +853,24 @@ Rejected: mapping `run_if_missed` onto Hermes's `cron.catch_up_missed` (it is on
 every job of a profile; changing it from one schedule would change all of them), and a
 separate `skipped` status (the contract already says a time not run is `cancelled` with the
 reason, §35).
+
+## 41. The contract says Core Hub; the names it had as Majlis are still accepted where a client could send them
+
+The product is Core Hub (ADR 0017, owner 2026-09-24). What changes in the contract:
+
+- **`info`**: `title: Core Hub API`, contact and licence URLs on `github.com/twuijri/core-hub`.
+  The event schemas' `$id` are under `https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/`.
+  `meta.get` answers `name: "Core Hub"`.
+- **Webhook signature header**: `X-CoreHub-Signature: sha256=<hex>` (the hub sent
+  `X-Majlis-Signature`; the webhook schema's description said `X-Hub-Signature`, which the hub
+  never sent — it now names the header the hub sends). Webhooks send only the test delivery
+  today (forwarding is not built), so no receiver depends on the old header; it is renamed
+  without a period of sending both.
+- **Pairing QR payload**: `type: "corehub.pairing"`. A client **accepts** `majlis.pairing` too,
+  since a code shown by a hub from before the rename may still be on a screen.
+- **Profile archive with providers**: the file is `<profile>/corehub-providers.json`, format
+  `corehub-providers`. An import also accepts `majlis-providers.json` / `majlis-providers`.
+- **Access tokens**: signed with issuer `corehub`; a token signed with issuer `majlis` is still
+  accepted, so the rename signs nobody out.
+- No endpoint, field or status is added or removed. The generated Swift package is
+  `CoreHubClient`; the Kotlin artifact `corehub-client` (package `hub.core.client` unchanged).

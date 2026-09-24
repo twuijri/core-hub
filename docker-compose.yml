@@ -11,7 +11,7 @@ services:
     build:
       context: .
       dockerfile: packages/server/Dockerfile
-    container_name: corehub
+    container_name: core-hub
     restart: unless-stopped
     ports:
       - '${HUB_PORT:-8080}:8080'

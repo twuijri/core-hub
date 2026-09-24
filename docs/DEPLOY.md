@@ -14,7 +14,7 @@ what the hub and Hermes load at runtime; the prune lists in
 ## 1. Run the image
 
 ```bash
-git clone https://github.com/twuijri/core-hub && cd corehub
+git clone https://github.com/twuijri/core-hub && cd core-hub
 cp .env.example .env            # nothing in it is required
 docker compose up -d            # pulls ghcr.io/twuijri/core-hub:latest, or `--build` to build here
 docker compose logs -f hub      # watch the first boot — the setup token is printed here
@@ -39,6 +39,24 @@ screen and the hub carries them to every agent (§3).
 
 Upgrading is `docker compose pull && docker compose up -d`; the volume is
 untouched.
+
+## 1a. Upgrading a stack from before the rename (Majlis → Core Hub)
+
+The product was called Majlis until 2026-09-24 (ADR 0017). An existing stack upgrades by
+replacing the image; `/data` is read as it is:
+
+- **Image**: `ghcr.io/twuijri/core-hub:<tag>` (the old `ghcr.io/twuijri/majlis` gets no new
+  tags). Change the `image:` line of the stack.
+- **Container name**: the reference Compose file now says `container_name: core-hub`. Renaming
+  it is optional; `docker compose up -d` recreates the container under the new name, and the
+  volume (`hub-data`) is the same.
+- **Environment**: nothing to change. A `MAJLIS_*` variable still works (the hub reads it when
+  the `COREHUB_*` name is unset) and the log says once which name to use instead.
+- **What the hub moves by itself** on its first boot: Hermes provider blocks `majlis-*` become
+  `corehub-*`, with every `model.provider` (and fallback) that named them, in the root home and
+  every profile; `MAJLIS_PROVIDER_*` keys in Hermes's `.env` become `COREHUB_PROVIDER_*`. The
+  web keeps you signed in and keeps your preferences; the terminal client moves
+  `~/.config/majlis/config.json` to `~/.config/corehub/` and still answers to `majlis`.
 
 ## 1b. Getting an image built
 

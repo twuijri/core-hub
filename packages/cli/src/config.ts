@@ -46,7 +46,8 @@ export interface ConfigFile {
 const EMPTY: ConfigFile = { version: 1, device_key: null, session: null };
 
 export function defaultConfigPath(env: NodeJS.ProcessEnv, home: string = homedir()): string {
-  if (env.COREHUB_CONFIG && env.COREHUB_CONFIG.trim() !== '') return path.resolve(env.COREHUB_CONFIG);
+  if (env.COREHUB_CONFIG && env.COREHUB_CONFIG.trim() !== '')
+    return path.resolve(env.COREHUB_CONFIG);
   const xdg = env.XDG_CONFIG_HOME;
   const base = xdg && path.isAbsolute(xdg) ? xdg : path.join(home, '.config');
   return path.join(base, derived.configDir, 'config.json');

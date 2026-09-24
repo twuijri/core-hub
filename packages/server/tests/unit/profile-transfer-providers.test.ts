@@ -157,7 +157,11 @@ describe('profile export and providers (decision §37)', () => {
       const { result, bytes } = await exportOf(hub, id, { providers: true });
       expect(result.providers).toBe(2);
       const archive = unpack(bytes);
-      expect(archive.entries).toEqual(['design', 'design/SOUL.md', 'design/corehub-providers.json']);
+      expect(archive.entries).toEqual([
+        'design',
+        'design/SOUL.md',
+        'design/corehub-providers.json',
+      ]);
       // Every other file is still checked: the key pasted into SOUL.md is overwritten.
       expect(archive.read('design/SOUL.md')).not.toContain(SHARED_KEY);
       const bundle = JSON.parse(archive.read('design/corehub-providers.json')) as {

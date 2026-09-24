@@ -127,7 +127,9 @@ describe('Hermes session: one turn over /v1/runs', () => {
     const events = collect(session, 6);
     const turn = await session.send({ text: 'شغّل الاختبارات' });
     expect(turn).toEqual({ stopReason: 'completed' });
-    expect(hermes.calls.createRun).toEqual([{ input: 'شغّل الاختبارات', session_id: 'corehub-s1' }]);
+    expect(hermes.calls.createRun).toEqual([
+      { input: 'شغّل الاختبارات', session_id: 'corehub-s1' },
+    ]);
     expect(await events).toEqual([
       { type: 'message.delta', text: 'سأشغّل ' },
       {

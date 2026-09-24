@@ -80,8 +80,6 @@ export const LEGACY = {
   envPrefix: 'MAJLIS_',
   storagePrefix: 'majlis.',
   configDir: 'majlis',
-  runFilesDir: '.majlis',
-  webhookSignatureHeader: 'x-majlis-signature',
   pairingType: 'majlis.pairing',
   cliName: 'majlis',
   hermesProviderPrefix: 'majlis-',

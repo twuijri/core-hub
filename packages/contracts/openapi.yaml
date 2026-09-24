@@ -11224,7 +11224,7 @@ paths:
       operationId: notify.createWebhook
       tags: [notify]
       summary: Register a webhook (admin)
-      description: 'Deliveries are signed `X-Hub-Signature: sha256=<hmac>` when `secret` is set.'
+      description: 'Deliveries are signed `X-CoreHub-Signature: sha256=<hmac>` when `secret` is set (decision §41).'
       x-scope: global
       x-roles: [owner, admin]
       requestBody:

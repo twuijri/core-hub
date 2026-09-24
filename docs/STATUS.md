@@ -84,6 +84,15 @@ its approval.
   agents, models, sessions, an interactive `chat` with resume and approvals.
 - Desktop, Android and iOS: not started (ADR 0007, ADR 0009).
 
+## Name
+Since 2026-09-24 the product is **Core Hub** («كور هب», ADR 0017): packages `@corehub/*`, the
+command `corehub`, `COREHUB_*` variables, image `ghcr.io/twuijri/core-hub`. Every name it had
+as Majlis is still read where something older may say it — `MAJLIS_*` variables, `majlis.*`
+browser keys, `~/.config/majlis`, the `majlis` command, tokens signed as `majlis`, Hermes
+provider blocks `majlis-*` (moved to `corehub-*` with every reference to them at boot) and
+archives with `majlis-providers.json` — proven by unit and integration tests, not yet on the
+owner's test stack.
+
 ## First run
 A hub with no account writes a claim token to `<DATA_DIR>/setup-token.txt`,
 logs it once, and the owner account is created from `/setup` in the browser or

@@ -1336,9 +1336,13 @@ describe('models: one key, every agent (ADR 0010)', () => {
     ];
     writeFileSync(
       path.join(home, 'config.yaml'),
-      ['model:', '  default: gpt-5.4', '  provider: majlis-custom-cli-proxy-api', ...oldBlock, ''].join(
-        '\n',
-      ),
+      [
+        'model:',
+        '  default: gpt-5.4',
+        '  provider: majlis-custom-cli-proxy-api',
+        ...oldBlock,
+        '',
+      ].join('\n'),
     );
     writeFileSync(
       path.join(design, 'config.yaml'),
@@ -1625,7 +1629,10 @@ describe.skipIf(!process.env.COREHUB_LIVE_PROVIDER)('models: a live provider', (
   it('reaches the real provider named by COREHUB_LIVE_PROVIDER', async () => {
     const slug = process.env.COREHUB_LIVE_PROVIDER!;
     const key = process.env.COREHUB_LIVE_PROVIDER_KEY;
-    expect(key, 'COREHUB_LIVE_PROVIDER_KEY must be set alongside COREHUB_LIVE_PROVIDER').toBeTruthy();
+    expect(
+      key,
+      'COREHUB_LIVE_PROVIDER_KEY must be set alongside COREHUB_LIVE_PROVIDER',
+    ).toBeTruthy();
     // The real `fetch`: this is the one test in the suite that is allowed out.
     const hub = await signedInHub({}, { models: { fetchImpl: globalThis.fetch } });
     try {
