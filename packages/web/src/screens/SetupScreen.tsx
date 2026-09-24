@@ -59,11 +59,12 @@ export function SetupScreen() {
 
   const openUntil = setupWindow.data?.openUntil ? Date.parse(setupWindow.data.openUntil) : null;
   const remaining = openUntil === null ? 0 : openUntil - now;
-  // Open while the hub says so and the clock has not run out; unknown (still asking) is
-  // neither mode, and a hub that cannot answer gets the token field.
+  // The hub decides the mode; this browser's clock only drives the countdown, and asks the
+  // hub again when it runs out (a skewed clock cannot switch the form by itself). Unknown
+  // (still asking) is neither mode, and a hub that cannot answer gets the token field.
   const mode: 'open' | 'token' | 'unknown' = setupWindow.isPending
     ? 'unknown'
-    : setupWindow.data?.open && remaining > 0
+    : setupWindow.data?.open
       ? 'open'
       : 'token';
 
