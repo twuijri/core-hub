@@ -98,6 +98,21 @@ $ pnpm build && PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwr
 الاختبارات الجديدة تسقط على الكود القديم: `POST /sessions/global-agent` كان `501`، ولم يكن في
 الشريط العلوي `pending-actions`، وصفحة `/global-agent` كانت الصفحة المؤقتة.
 
+بعد دمج `origin/main` (الذي أخذ §45 لإعداد التشغيل الأول؛ صار قرار هذه المهمة §46):
+
+```
+contracts:lint  OK
+check-clients  OK — 281 client file(s) scanned, 176 contract path(s) known.
+i18n:check  OK
+nav:check  OK — 34 destinations, 2 pre-auth screens (login, setup), 39 terms, ar/en complete, routes for web
+change-record  OK — 1 record(s) valid
+All matched files use Prettier code style!
+pnpm typecheck  TC_EXIT 0
+(server) global-agent.test.ts      Tests  5 passed (5)
+(web) pending-actions + i18n + navigation.parity   Tests  21 passed (21)
+pnpm contract:test                 Tests  274 passed (274)
+```
+
 CI: يُحدَّث بعد الدفع.
 
 ## المخاطر والرجوع
