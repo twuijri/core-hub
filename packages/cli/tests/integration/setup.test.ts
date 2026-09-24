@@ -52,7 +52,9 @@ beforeAll(async () => {
   dataDir = temp('setup-data');
   app = await buildServer({
     // No HUB_ADMIN_PASSWORD: this is the fresh-install case the setup command exists for.
-    config: loadConfig({ DATA_DIR: dataDir, PORT: '0' }),
+    // Token only (ADR 0019 `0`): these cases are the claim-token path; the open window has its
+    // own case below, on a hub of its own.
+    config: loadConfig({ DATA_DIR: dataDir, PORT: '0', COREHUB_SETUP_OPEN_MINUTES: '0' }),
     logger: createLogger({ level: 'silent' }),
     modules: defaultModules,
   });
@@ -135,5 +137,33 @@ describe('corehub setup', () => {
     );
     expect(login.code, login.stderr).toBe(0);
     expect(login.stdout).toContain('Signed in as tariq (owner)');
+  });
+});
+
+describe('corehub setup inside the open window (ADR 0019)', () => {
+  it('asks for no token: name and password create the owner', async () => {
+    const openDir = temp('setup-open-data');
+    const openApp = await buildServer({
+      // The default window (60 minutes after boot) is open: nobody needs the terminal log.
+      config: loadConfig({ DATA_DIR: openDir, PORT: '0' }),
+      logger: createLogger({ level: 'silent' }),
+      modules: defaultModules,
+    });
+    try {
+      await openApp.listen({ port: 0, host: '127.0.0.1' });
+      const address = openApp.server.address();
+      const openUrl = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
+      // No token line in the input: the prompts are display name, profile, password, confirm.
+      const result = await cli(
+        ['setup', '--server', openUrl, '--username', 'layla'],
+        ['', '', OWNER_PASSWORD, OWNER_PASSWORD],
+      );
+      expect(result.code, result.stderr).toBe(0);
+      expect(result.stderr).toContain('setup is OPEN to whoever arrives first');
+      expect(result.stderr).not.toContain('Setup token: ');
+      expect(result.stdout).toContain('Owner account layla created');
+    } finally {
+      await openApp.close();
+    }
   });
 });

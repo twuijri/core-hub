@@ -42,7 +42,7 @@ export interface AuthValue {
   client: HubClient;
   anonymous: HubClient;
   signIn(username: string, password: string): Promise<StoredSession>;
-  /** First run only (ADR 0011): trade the hub's setup token for the owner account. */
+  /** First run only (ADR 0011, 0019): create the owner — with the setup token once the window closed. */
   completeSetup(input: SetupInput): Promise<StoredSession>;
   signOut(): Promise<void>;
   /** A new access token now (single flight); true when one was stored. */
@@ -50,7 +50,8 @@ export interface AuthValue {
 }
 
 export interface SetupInput {
-  token: string;
+  /** Left out while the open window lasts (ADR 0019); the claim token after it. */
+  token?: string;
   username: string;
   password: string;
   displayName?: string;
@@ -142,7 +143,7 @@ export function AuthProvider({
     async (input: SetupInput) => {
       const { data } = await bundle.anonymous.request('post', '/auth/setup', {
         body: {
-          token: input.token.trim(),
+          ...(input.token?.trim() ? { token: input.token.trim() } : {}),
           username: input.username.trim(),
           password: input.password,
           ...(input.displayName?.trim() ? { display_name: input.displayName.trim() } : {}),

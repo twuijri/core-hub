@@ -20,8 +20,13 @@ services:
       PORT: '8080'
       # Unattended installs only (ADR 0011): set HUB_ADMIN_PASSWORD in .env and the hub creates
       # the owner `admin` on first boot instead of asking. Left empty — the normal case — the
-      # hub prints a setup token and the owner account is created from the browser.
+      # owner account is created from the browser: open to the first comer for an hour after
+      # the hub starts, then with the setup token it prints (ADR 0019).
       HUB_ADMIN_PASSWORD: ${HUB_ADMIN_PASSWORD:-}
+      # Optional (ADR 0019): minutes first-run setup stays open without the token (default 60,
+      # 0 = token only), and COREHUB_RESET_OWNER=1 to take a grabbed hub back (docs/DEPLOY.md §2).
+      COREHUB_SETUP_OPEN_MINUTES: ${COREHUB_SETUP_OPEN_MINUTES:-}
+      COREHUB_RESET_OWNER: ${COREHUB_RESET_OWNER:-}
       # Optional: shared installs on PostgreSQL instead of the SQLite file under /data.
       # DATABASE_URL: postgres://hub:password@db:5432/hub
     volumes:

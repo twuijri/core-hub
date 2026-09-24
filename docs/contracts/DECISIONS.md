@@ -974,3 +974,27 @@ and Honcho host.
 - **An export's file** is named `<profile name>-<YYYYMMDD-HHMMSS>.tar.gz` (was `<slug>-…`): the
   name without path separators, `:*?"<>|`, control and direction marks, or the slug when nothing
   is left.
+
+## 45. First-run setup says whether it is open without the token, and until when
+
+ADR 0019 (owner, 2026-09-25) opens first-run setup to whoever arrives first for
+`COREHUB_SETUP_OPEN_MINUTES` (60) after the hub starts with no owner; after that the claim token
+of ADR 0011 is required again. What changes in the contract:
+
+- **`Meta`** gains two required fields: `setup_open` (boolean — `auth.completeSetup` needs no
+  token right now) and `setup_open_until` (date-time or `null` — when the window ends; `null`
+  whenever `setup_open` is false). `setup_required` keeps its name and is the "needs an owner"
+  bit: true before first setup and again after `COREHUB_RESET_OWNER` disabled the owner. It is
+  not renamed to `needs_owner`, so no client breaks; a second field saying the same would be
+  two answers to one question.
+- **`SetupRequest.token`** is no longer required. Inside the window it may be left out (and is
+  ignored if sent); after it, a missing token is `401 unauthorized` with the message key
+  `auth.setup_token_required`, a wrong one stays `auth.setup_token_invalid`.
+- `auth.getSetup` still answers `{ required }` alone: the window is `meta.get`'s, which every
+  client already calls before it signs in.
+- Racing setups: exactly one creates the owner; the other is `409` (the existing answer for
+  "already set up").
+
+Rejected: a `setup_mode` enum (`open` / `token`) — the two booleans and the end time say the
+same and the time is what the screen counts down; the server's remaining seconds instead of an
+end time — it goes stale the moment it is sent.

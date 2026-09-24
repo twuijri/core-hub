@@ -109,7 +109,7 @@
     "not_signed_in": "لم تسجّل الدخول. شغّل أولًا `corehub login --server URL`.",
     "server_required": "لا يوجد خادم مضبوط. مرّر --server URL.",
     "server_invalid": "{server} ليس أصل http(s) صالحًا.",
-    "setup_required": "لا يوجد في المركز حساب مالك بعد. شغّل ⁨corehub setup --server URL⁩ برمز التهيئة من سجلّ المركز، أو افتح المركز في المتصفح.",
+    "setup_required": "لا يوجد في المركز حساب مالك بعد. شغّل ⁨corehub setup --server URL⁩ (يُطلب رمز التهيئة من سجلّ المركز فقط بعد انتهاء مدة التهيئة المفتوحة)، أو افتح المركز في المتصفح.",
     "connection": "تعذّر الوصول إلى {server}: {reason}",
     "api": "{message} [{code}, HTTP {status}]",
     "not_implemented": "الخادم يعلن {operation} في العقد لكنه لم ينفّذه بعد [not_implemented, HTTP 501].",
@@ -125,6 +125,7 @@
     "password_mismatch": "كلمتا المرور غير متطابقتين؛ لم يُرسل شيء."
   },
   "setup": {
+    "open": "لا يوجد في ⁨{server}⁩ مالك بعد، والتهيئة مفتوحة لأول من يصل حتى ⁨{until}⁩ — دون رمز. أكملها الآن.",
     "where": "لا يوجد في ⁨{server}⁩ حساب بعد. طُبع رمز التهيئة مرة واحدة في سجلّ المركز وكُتب في الملف ⁨setup-token.txt⁩ داخل مجلد بياناته ⁨(docker compose logs hub)⁩ أو ⁨(docker compose exec hub cat /data/setup-token.txt)⁩.",
     "token": "رمز التهيئة: ",
     "username": "اسم المستخدم للمالك: ",

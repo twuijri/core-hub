@@ -30,8 +30,15 @@ export interface RoutesOptions {
   database: HubDatabase;
   modules: readonly HubModule[];
   contract: OpenApiDocument | null;
-  /** Whether this hub still has no owner (ADR 0011). Injected: `auth` owns the answer. */
-  setupRequired?: () => boolean;
+  /**
+   * Whether this hub still has no owner, and whether setup is open without the claim token
+   * (ADR 0011, 0019). Injected: `auth` owns the answer.
+   */
+  setupMeta?: () => {
+    setup_required: boolean;
+    setup_open: boolean;
+    setup_open_until: string | null;
+  };
 }
 
 /** The display name. One hub, one name; an owner-set one is a later setting, not a guess. */
@@ -133,7 +140,11 @@ export async function registerRoutes(
           realtime_namespaces: [...app.hub.namespaces].sort(),
           locales: [...LOCALES],
           // The owner account decides; `auth` owns that question and answers it here.
-          setup_required: options.setupRequired?.() ?? false,
+          ...(options.setupMeta?.() ?? {
+            setup_required: false,
+            setup_open: false,
+            setup_open_until: null,
+          }),
         };
       });
 

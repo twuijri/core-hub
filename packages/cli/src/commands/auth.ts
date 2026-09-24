@@ -8,11 +8,12 @@ import type { Meta } from '../types.js';
 import { optionString, requireSession } from './shared.js';
 
 /**
- * First run (ADR 0011): the hub has no account at all and printed a claim token when it
- * started. This command trades that token for the owner account and keeps the session, so a
- * headless box can be set up over SSH without ever putting a password in the compose file.
- * The token and the password are asked for here, never taken from argv (`args.ts`
- * §SECRET_OPTIONS refuses `--token` and `--password` outright).
+ * First run (ADR 0011, 0019): the hub has no owner. For a window after it started, setup is
+ * open and needs no token (`meta.setup_open`); after it, the claim token the hub printed when
+ * it started is asked for. Either way this command creates the owner account and keeps the
+ * session, so a headless box can be set up over SSH without ever putting a password in the
+ * compose file. The token and the password are asked for here, never taken from argv
+ * (`args.ts` §SECRET_OPTIONS refuses `--token` and `--password` outright).
  */
 export const setupCommand: CommandSpec = {
   path: ['setup'],
@@ -30,13 +31,31 @@ export const setupCommand: CommandSpec = {
     const { data: state } = await anonymous.request('get', '/auth/setup');
     if (!state.required) throw new CliError('errors.setup_done');
 
-    if (!ctx.globals.json) {
-      ctx.out.notice(ctx.out.style.dim(t('setup.where', { server })));
+    // Open window (ADR 0019): no token. A hub without the fields is an older one: token path.
+    let open = false;
+    let openUntil: string | null = null;
+    try {
+      const { data: meta } = await anonymous.request('get', '/meta');
+      open = meta.setup_open === true;
+      openUntil = meta.setup_open_until ?? null;
+    } catch (error) {
+      if (isConnectionError(error)) throw error;
     }
-    // Shown, not hidden: the hub printed this token in its own log, and a paste the person
-    // cannot read back is a paste they cannot check.
-    const token = await ctx.prompter.ask(t('setup.token'));
-    if (token === null || token.trim() === '') throw new CliError('errors.interrupted');
+
+    let token: string | null = null;
+    if (open) {
+      if (!ctx.globals.json) {
+        ctx.out.notice(t('setup.open', { server, until: openUntil ?? '' }));
+      }
+    } else {
+      if (!ctx.globals.json) {
+        ctx.out.notice(ctx.out.style.dim(t('setup.where', { server })));
+      }
+      // Shown, not hidden: the hub printed this token in its own log, and a paste the person
+      // cannot read back is a paste they cannot check.
+      token = await ctx.prompter.ask(t('setup.token'));
+      if (token === null || token.trim() === '') throw new CliError('errors.interrupted');
+    }
     const username = optionString(ctx, 'username') ?? (await ctx.prompter.ask(t('setup.username')));
     if (username === null || username.trim() === '') throw new CliError('errors.interrupted');
     const displayName =
@@ -53,7 +72,7 @@ export const setupCommand: CommandSpec = {
 
     const { data } = await anonymous.request('post', '/auth/setup', {
       body: {
-        token: token.trim(),
+        ...(token !== null ? { token: token.trim() } : {}),
         username: username.trim(),
         password,
         ...(displayName.trim() ? { display_name: displayName.trim() } : {}),

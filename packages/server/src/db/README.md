@@ -38,6 +38,8 @@ id only (`docs/domain/README.md` §Ownership).
 | `DATABASE_URL` | unset | set a `postgres://` URL to use PostgreSQL instead of SQLite |
 | `PORT` | `8080` | |
 | `HUB_ADMIN_PASSWORD` | unset | optional: consumed once on first boot to create the owner without the first-run setup screen (ADR 0011) |
+| `COREHUB_SETUP_OPEN_MINUTES` | `60` | minutes after boot, with no owner, in which setup needs no token; `0` = token only (ADR 0019) |
+| `COREHUB_RESET_OWNER` | unset | `1`: disable the owner and reopen setup on this boot, once (marker `owner-reset.json`; ADR 0019) |
 
 SQLite file: **`<DATA_DIR>/hub.sqlite`**. Also under the data directory:
 `attachments/` (knowledge), `worktrees/` (tasks, unless a project overrides
