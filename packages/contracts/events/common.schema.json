@@ -485,7 +485,7 @@
         },
         "profiles": {
           "type": "array",
-          "description": "Slugs the user may enter. Owners and admins see every profile.",
+          "description": "Slugs the user may enter. Owners and admins enter every profile, so theirs lists all\nof them. A member's is exactly the list an admin gave them — nothing is added\nimplicitly, not by a profile created later — and empty means the member may enter no\nprofile at all (they can sign in, and every scoped request answers\n`profile_not_found` with `details.reason = no_profile_granted`). With an empty\nlist `default_profile` still reads `default`, which that member cannot enter:\nclients decide from `profiles`.\n",
           "items": {
             "$ref": "#/$defs/ProfileSlug"
           }
@@ -626,7 +626,7 @@
         },
         "profiles": {
           "type": "array",
-          "description": "Empty means every profile.",
+          "description": "The profiles a member may enter — an explicit list, never \"all\". Required with at\nleast one slug when `role` is `member` (the server answers `400 validation_failed`\nwith `details.field = profiles` otherwise; the rule depends on `role`, so it is\nstated here rather than as `minItems`). Ignored for an admin, who enters every\nprofile.\n",
           "items": {
             "$ref": "#/$defs/ProfileSlug"
           }
@@ -655,6 +655,7 @@
         },
         "profiles": {
           "type": "array",
+          "description": "Replaces the member's explicit list. An empty list withdraws every profile: the\nmember can still sign in and enters nothing. Changing `role` from `admin` to\n`member` must carry at least one slug here in the same request (`400\nvalidation_failed`, `details.field = profiles`, otherwise), because an admin holds\nno list.\n",
           "items": {
             "$ref": "#/$defs/ProfileSlug"
           }

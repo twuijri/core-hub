@@ -91,7 +91,13 @@ import {
   updateSelf,
   updateUserAsAdmin,
 } from './users.js';
-import { canEnter, defaultWorkspace, findWorkspace, listWorkspacesFor } from './workspace.js';
+import {
+  canEnter,
+  defaultWorkspace,
+  findWorkspace,
+  listWorkspacesFor,
+  workspaceRefusal,
+} from './workspace.js';
 import { emitToUser, revalidateSockets } from './sockets.js';
 
 // ---------------------------------------------------------------- request schemas
@@ -336,9 +342,8 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
       .from(workspaces)
       .where(and(eq(workspaces.id, id), isNull(workspaces.archivedAt)))
       .get();
-    if (!row || !canEnter(db, principalOf(request).user, row.id)) {
-      throw new HubError('profile_not_found', { details: { profile: id } });
-    }
+    const user = principalOf(request).user;
+    if (!row || !canEnter(db, user, row.id)) throw workspaceRefusal(db, user, id);
     return row;
   };
 
