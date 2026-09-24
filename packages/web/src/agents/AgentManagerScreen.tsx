@@ -168,7 +168,7 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
                 data-state={gateway.state}
               >
                 <span className="font-medium" dir="auto">
-                  {/* The name people gave the profile (decision §43); Hermes's id until the
+                  {/* The name people gave the profile (decision §44); Hermes's id until the
                       list of profiles has answered. */}
                   {gatewayLabel(gateway.profile, nameOf, t)}
                 </span>

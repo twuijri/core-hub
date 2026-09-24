@@ -1417,7 +1417,7 @@ paths:
       tags: [auth]
       summary: Rename a workspace, change its slug, avatar or default model (admin)
       description: |
-        **Renaming** (`name`, decision §43) works for every profile, `default` included, and
+        **Renaming** (`name`, decision §44) works for every profile, `default` included, and
         changes only what people see: the slug stays. Where the hub mirrors Hermes profiles
         (ADR 0014) the name is written to Hermes first as the profile's display name — for
         `default`, `hermes profile rename default <name>`, which keeps Hermes's id `default`;
@@ -1608,7 +1608,7 @@ paths:
         removed, masked}`: `attachment_id` points at the archive (`name` is
         `<profile name>-<YYYYMMDD-HHMMSS>.tar.gz`: the profile's name without what a file name
         cannot carry — path separators, `:*?"<>|`, control and direction marks — or its slug
-        when nothing is left; decision §43), downloaded through `/attachments/{id}/content`
+        when nothing is left; decision §44), downloaded through `/attachments/{id}/content`
         with the bearer header (never a token in a URL) and the same `X-Hub-Profile`; only
         the person who exported it can read that attachment, and it is deleted after
         `expires_at` (24 hours). `removed` lists the paths inside the archive the hub left
@@ -13245,7 +13245,7 @@ components:
       type: string
       description: |
         What people call a profile — any language, shown everywhere the profile is named — and
-        Hermes's display name for it (decision §43). Trimmed; at most 64 characters, Hermes's
+        Hermes's display name for it (decision §44). Trimmed; at most 64 characters, Hermes's
         own limit for a display name. Never the profile's id: that is `slug`.
       minLength: 1
       maxLength: 64

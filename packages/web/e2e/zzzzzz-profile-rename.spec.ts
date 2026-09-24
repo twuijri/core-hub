@@ -1,5 +1,5 @@
 /**
- * Renaming the default profile, against the real hub (contract decision §43): Settings →
+ * Renaming the default profile, against the real hub (contract decision §44): Settings →
  * Profiles → Rename on the default profile, «الرئيسي» typed, and the top profile chip says it
  * at once. The dialog says the id stays; the card keeps showing `default` as the id.
  *

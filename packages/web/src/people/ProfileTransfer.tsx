@@ -253,7 +253,7 @@ export function slugFromArchive(fileName: string): string {
 
 /**
  * `الرئيسي-20260925-101500.tar.gz` → `الرئيسي`: an export is named after the profile's name
- * (contract decision §43), which the import offers back as the new profile's name.
+ * (contract decision §44), which the import offers back as the new profile's name.
  */
 export function nameFromArchive(fileName: string): string {
   return fileName

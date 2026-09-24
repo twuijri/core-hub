@@ -913,7 +913,7 @@ The product is Core Hub (ADR 0017, owner 2026-09-24). What changes in the contra
 - No endpoint, field or status is added or removed. The generated Swift package is
   `CoreHubClient`; the Kotlin artifact `corehub-client` (package `hub.core.client` unchanged).
 
-## 43. A profile's name is Hermes's display name; its id never changes where Hermes runs it
+## 44. A profile's name is Hermes's display name; its id never changes where Hermes runs it
 
 The owner asked whether Hermes lets the default profile be called anything (2026-09-25). Hermes
 (`hermes_cli/profiles.py`, v2026.9.14) keeps a presentation-only `display_name` in a profile's

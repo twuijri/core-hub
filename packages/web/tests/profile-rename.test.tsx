@@ -1,4 +1,4 @@
-// Renaming a profile (contract decision §43) on Settings → Profiles: every profile, the default
+// Renaming a profile (contract decision §44) on Settings → Profiles: every profile, the default
 // one included, takes any name; the dialog says the id stays; the name reaches the top profile
 // chip; Hermes refusing the name is said in the dialog; and the places that named a profile by
 // its Hermes id (a Telegram bot already linked elsewhere, an export's file) use its name.

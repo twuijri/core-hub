@@ -43,7 +43,7 @@ export const IMPORT_REASONS = [
 
 /**
  * `nameOf` turns a Hermes profile id in a refusal into the name people gave that profile
- * (contract decision §43); without it the id is shown.
+ * (contract decision §44); without it the id is shown.
  */
 export function describeToolError(
   error: unknown,

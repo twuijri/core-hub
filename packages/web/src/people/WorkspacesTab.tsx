@@ -11,7 +11,7 @@
  * **Each one moves as Hermes's archive** (ADR 0014 stage 2): exported to a file that leaves
  * every credential behind, and imported from one as a new profile (`ProfileTransfer.tsx`).
  *
- * **Renaming one changes its name, never its id** (contract decision §43): any profile,
+ * **Renaming one changes its name, never its id** (contract decision §44): any profile,
  * `default` included, can be called anything, in any language, and Hermes shows that name
  * too. The slug stays, because it is the Hermes folder chats, channels and schedules use.
  *

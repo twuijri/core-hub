@@ -54,7 +54,7 @@ test.describe('profile export and import', () => {
       await expect(exportDialog.getByTestId('export-ready')).toBeVisible();
       await expect(exportDialog).toContainText('استُبعد: \u2066default/.env\u2069');
       const download = await downloaded;
-      // Named after the profile's name, not its id (contract decision §43).
+      // Named after the profile's name, not its id (contract decision §44).
       expect(download.suggestedFilename()).toMatch(/^Default-\d{8}-\d{6}\.tar\.gz$/);
       const archive = path.join(scratch, download.suggestedFilename());
       await download.saveAs(archive);
