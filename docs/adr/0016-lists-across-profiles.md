@@ -84,7 +84,8 @@ with no filter at all.
    filter (the Tasks board's filter dropdown is removed), each card and schedule with its
    profile's badge when more than one profile is visible; opening a task's conversation uses
    the item's profile instead of switching the top selector (`TasksScreen.openSession` still
-   calls `setProfile(task.profile)` today).
+   calls `setProfile(task.profile)` today). **Built 2026-09-24** (DECISIONS §31,
+   `docs/changes/2026-09-24-twuijri-tasks-schedules-all-profiles.md`).
 3. **Clients:** desktop behaves as the web. Phones: where the top selector lives is not
    decided (docs/clients/NAVIGATION.md: the owner does not want a permanent top bar there);
    the contract and the realtime handshake are already what they need.
