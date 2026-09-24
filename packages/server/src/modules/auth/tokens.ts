@@ -1,6 +1,6 @@
 // Tokens: the HS256 access JWT (short-lived), and the opaque bearer strings for refresh
 // tokens (`hub_rt_…`) and app tokens (`hub_at_…`). Opaque tokens are stored as SHA-256 only.
-import { STABLE } from '@majlis/contracts';
+import { LEGACY, derived } from '@corehub/contracts';
 import { createHash, randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -16,8 +16,14 @@ export const APP_TOKEN_PREFIX = 'hub_at_';
 export const REFRESH_TOKEN_PREFIX = 'hub_rt_';
 
 const JWT_ALG = 'HS256';
-/** Frozen: it is inside every token already signed (`contracts` §STABLE). */
-const JWT_ISSUER = STABLE.jwtIssuer;
+/** Who signs a new access token. */
+export const JWT_ISSUER = derived.jwtIssuer;
+/**
+ * Who a token may have been signed by: this product, and the name it had before (Majlis).
+ * Accepting the old issuer is what keeps a rename from signing everyone out at once; an
+ * access token lives fifteen minutes, so the old name stops appearing on its own.
+ */
+export const ACCEPTED_JWT_ISSUERS = [JWT_ISSUER, LEGACY.jwtIssuer];
 
 export interface AccessClaims {
   /** User id. */
@@ -87,7 +93,7 @@ export async function verifyAccessToken(
   try {
     const { payload } = await jwtVerify(token, key, {
       algorithms: [JWT_ALG],
-      issuer: JWT_ISSUER,
+      issuer: ACCEPTED_JWT_ISSUERS,
       currentDate: new Date(nowMs),
     });
     const { sub, role, sid, iat, exp } = payload as Partial<AccessClaims>;

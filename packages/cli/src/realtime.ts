@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import addFormatsModule, { type FormatsPlugin } from 'ajv-formats';
-import { contractsRoot } from '@majlis/contracts';
+import { contractsRoot } from '@corehub/contracts';
 import { io, type Socket } from 'socket.io-client';
 
 /** Engine path of every namespace (docs/ARCHITECTURE.md §Realtime). */

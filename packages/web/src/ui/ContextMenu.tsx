@@ -24,7 +24,7 @@ export function ContextMenu({
       <RadixContextMenu.Trigger asChild>{trigger}</RadixContextMenu.Trigger>
       <RadixContextMenu.Portal>
         <RadixContextMenu.Content
-          className="mj-menu glass"
+          className="ch-menu glass"
           collisionPadding={8}
           data-testid={testId}
         >
@@ -50,7 +50,7 @@ export function ContextMenuItem({
 }) {
   return (
     <RadixContextMenu.Item
-      className="mj-menu-item"
+      className="ch-menu-item"
       data-tone={tone === 'danger' ? 'danger' : undefined}
       disabled={disabled}
       onSelect={() => onSelect()}
@@ -62,5 +62,5 @@ export function ContextMenuItem({
 }
 
 export function ContextMenuSeparator() {
-  return <RadixContextMenu.Separator className="mj-menu-sep" />;
+  return <RadixContextMenu.Separator className="ch-menu-sep" />;
 }

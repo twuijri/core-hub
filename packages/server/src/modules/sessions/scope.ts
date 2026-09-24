@@ -19,7 +19,7 @@
  * is the slug the client sent. Wiring `auth`'s resolver is one line in
  * `src/modules/index.ts`; after that the ids are the real rows'.
  */
-import { STABLE } from '@majlis/contracts';
+import { STABLE } from '@corehub/contracts';
 import { createHash } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
 

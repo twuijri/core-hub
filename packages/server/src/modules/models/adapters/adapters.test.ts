@@ -3,7 +3,7 @@
  *
  * Nothing here reaches the network and nothing here needs a real key: every response is
  * written out below, which is also how the shapes stay reviewable. A live check against
- * a real account is `models-live.test.ts`, gated on `MAJLIS_LIVE_PROVIDER`.
+ * a real account is `models-live.test.ts`, gated on `COREHUB_LIVE_PROVIDER`.
  */
 import { describe, expect, it } from 'vitest';
 import { anthropicAdapter } from './anthropic.js';

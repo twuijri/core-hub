@@ -18,7 +18,7 @@ import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 const PASSWORD = 'e2e-owner-password';
-const shots = process.env.MAJLIS_SHOTS ?? path.resolve('e2e/shots');
+const shots = process.env.COREHUB_SHOTS ?? path.resolve('e2e/shots');
 mkdirSync(shots, { recursive: true });
 
 test.use({ viewport: { width: 1440, height: 900 } });
@@ -36,7 +36,7 @@ test.describe('profile export and import', () => {
   test('exports a profile without its keys, and imports the file as a new profile', async ({
     page,
   }) => {
-    const scratch = mkdtempSync(path.join(tmpdir(), 'majlis-e2e-transfer-'));
+    const scratch = mkdtempSync(path.join(tmpdir(), 'corehub-e2e-transfer-'));
     try {
       await login(page);
       await page.getByRole('link', { name: 'الإعدادات' }).first().click();

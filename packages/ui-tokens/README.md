@@ -1,7 +1,7 @@
-# @majlis/ui-tokens
+# @corehub/ui-tokens
 
-The design tokens of every Majlis client: `tokens.json` is the source of truth; `pnpm build`
-generates `dist/tokens.css` (custom properties `--mj-*`, light/dark themes, the glass scale
+The design tokens of every Core Hub client: `tokens.json` is the source of truth; `pnpm build`
+generates `dist/tokens.css` (custom properties `--ch-*`, light/dark themes, the glass scale
 0–3, `prefers-reduced-transparency` and `prefers-reduced-motion` handling) and a typed
 `dist/tokens.js`. `tests/contrast.test.ts` fails when any declared text/background pair falls
 under WCAG AA in either theme, including text over the glass chrome at every level.

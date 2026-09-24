@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { loadOpenApiDocument, serverBasePath } from '@majlis/contracts';
+import { loadOpenApiDocument, serverBasePath } from '@corehub/contracts';
 import { anonymousClient, authenticatedClient, normaliseServer } from '../src/client.js';
 import { ConfigStore, type StoredSession } from '../src/config.js';
 import { AuthError, UsageError } from '../src/errors.js';
@@ -12,7 +12,7 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 function store(): ConfigStore {
-  const dir = mkdtempSync(path.join(tmpdir(), 'majlis-cli-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'corehub-cli-'));
   dirs.push(dir);
   return new ConfigStore(path.join(dir, 'config.json'));
 }

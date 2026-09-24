@@ -1,7 +1,7 @@
 /**
  * The second report of 2026-09-24: after the owner approved a sender, WhatsApp answered
  * «⚠️ Provider authentication failed», and the gateway's log said
- * `Unknown provider 'majlis-custom-cli-proxy-api'`, while chats in the web kept working.
+ * `Unknown provider 'corehub-custom-cli-proxy-api'`, while chats in the web kept working.
  *
  * A chat names its provider and model on every turn; a messaging gateway names nothing and
  * reads `model.provider` from its own profile's `config.yaml`, resolving it against the
@@ -70,7 +70,7 @@ const endpoints: typeof fetch = async (input) => {
 };
 
 async function boot() {
-  const bin = mkdtempSync(path.join(tmpdir(), 'majlis-gwp-bin-'));
+  const bin = mkdtempSync(path.join(tmpdir(), 'corehub-gwp-bin-'));
   dirs.push(bin);
   writeFileSync(path.join(bin, 'hermes'), '#!/bin/sh\nexit 0\n');
   chmodSync(path.join(bin, 'hermes'), 0o755);

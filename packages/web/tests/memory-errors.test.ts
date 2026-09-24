@@ -1,6 +1,6 @@
 // The Memory page's refusal when a list would outgrow Hermes's budget says the numbers, in
 // the person's language, instead of the hub's generic "invalid request".
-import { HubApiError } from '@majlis/contracts';
+import { HubApiError } from '@corehub/contracts';
 import { describe, expect, it } from 'vitest';
 import { describeToolError } from '../src/agents/toolErrors.js';
 import { createTranslator } from '../src/i18n/index.js';

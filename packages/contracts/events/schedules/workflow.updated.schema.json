@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/schedules/workflow.updated.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/schedules/workflow.updated.schema.json",
   "title": "/rt/schedules · workflow.updated",
   "description": "Profile-wide; `workflow.status` and `active_run_id` are the live status badge. Emitted by: schedules module (patch, status, run counts).",
   "type": "object",

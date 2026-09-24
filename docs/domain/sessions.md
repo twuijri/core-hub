@@ -162,7 +162,7 @@ Indexes: (workspace, status, requested_at) for the inbox; `run_id`.
 
 `sessions` owns ids, `knowledge` owns bytes (docs/domain/knowledge.md §Attachments and
 a run). Before a run starts, its attachments are copied into
-`<working_dir>/.majlis/runs/<run id>/in` and the prompt names their absolute paths;
+`<working_dir>/.corehub/runs/<run id>/in` and the prompt names their absolute paths;
 `out/` beside it is the folder the agent is told to write into, and whatever is there
 when the turn ends becomes the reply's attachments. A run whose `content` names an
 attachment the workspace does not have is `404` before the message is written.

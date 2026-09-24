@@ -21,7 +21,7 @@
  *
  * Name the image to run it; without one it is skipped:
  *
- *   MAJLIS_HERMES_IMAGE=ghcr.io/twuijri/majlis:latest pnpm --filter @majlis/server exec \
+ *   COREHUB_HERMES_IMAGE=ghcr.io/twuijri/core-hub:latest pnpm --filter @corehub/server exec \
  *     vitest run tests/unit/telegram.real.test.ts
  */
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
@@ -36,7 +36,7 @@ import { writeTelegramSettings } from '../../src/modules/agents/telegram-setting
 import { isMap, parseDocument } from 'yaml';
 import { writeFileSync } from 'node:fs';
 
-const image = process.env.MAJLIS_HERMES_IMAGE;
+const image = process.env.COREHUB_HERMES_IMAGE;
 const HERMES = '/opt/hermes/.venv/bin/hermes';
 const PYTHON = '/opt/hermes/.venv/bin/python';
 const TOKEN = '7012345678:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsawQ';
@@ -44,14 +44,14 @@ const BOT = { id: 7012345678, is_bot: true, first_name: 'Office', username: 'off
 const STRANGER = 555666777;
 
 describe.skipIf(!image)(
-  'Telegram in a named profile (real Hermes; set MAJLIS_HERMES_IMAGE)',
+  'Telegram in a named profile (real Hermes; set COREHUB_HERMES_IMAGE)',
   () => {
-    const dataDir = mkdtempSync(path.join(tmpdir(), 'majlis-tg-real-'));
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'corehub-tg-real-'));
     const root = path.join(dataDir, 'hermes');
     const home = path.join(root, 'profiles', 'tgbot');
     const packages = path.join(dataDir, 'hermes-packages');
     const user = `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`;
-    const box = `majlis-tg-real-${process.pid}`;
+    const box = `corehub-tg-real-${process.pid}`;
     const calls: Array<{ method: string; token: string; body: Record<string, unknown> }> = [];
     let telegram: Server;
     let gateway: ChildProcess | null = null;
@@ -175,7 +175,7 @@ describe.skipIf(!image)(
     }, 240_000);
 
     afterAll(async () => {
-      if (process.env.MAJLIS_TG_REAL_LOG) writeFileSync(process.env.MAJLIS_TG_REAL_LOG, log);
+      if (process.env.COREHUB_TG_REAL_LOG) writeFileSync(process.env.COREHUB_TG_REAL_LOG, log);
       gateway?.kill('SIGTERM');
       try {
         execFileSync('docker', ['rm', '-f', box], { stdio: 'ignore' });
@@ -222,7 +222,7 @@ describe.skipIf(!image)(
           const record = readGatewayRecord(home);
           expect(record?.platforms.telegram?.state, log.slice(-3000)).toBe('connected');
         },
-        { timeout: Number(process.env.MAJLIS_TG_REAL_WAIT ?? 150_000), interval: 1000 },
+        { timeout: Number(process.env.COREHUB_TG_REAL_WAIT ?? 150_000), interval: 1000 },
       );
       expect(calls.some((call) => call.method === 'getMe' && call.token === TOKEN)).toBe(true);
       expect(calls.some((call) => call.method === 'getUpdates')).toBe(true);

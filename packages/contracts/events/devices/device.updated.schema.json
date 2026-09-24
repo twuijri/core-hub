@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/devices/device.updated.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/devices/device.updated.schema.json",
   "title": "/rt/devices · device.updated",
   "description": "User-level. Emitted by: devices module (rename, capabilities, push registration, token renewal).",
   "type": "object",

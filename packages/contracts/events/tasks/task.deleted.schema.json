@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/tasks/task.deleted.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/tasks/task.deleted.schema.json",
   "title": "/rt/tasks · task.deleted",
   "description": "Emitted by: tasks module.",
   "type": "object",

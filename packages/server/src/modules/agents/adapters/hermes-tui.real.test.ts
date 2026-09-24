@@ -6,8 +6,8 @@
  * first answer calls Hermes's `clarify` tool, its second repeats what it was told. No key,
  * no network beyond the loopback. Name the image to run it; without one it is skipped:
  *
- *   docker pull ghcr.io/twuijri/majlis:latest
- *   MAJLIS_HERMES_IMAGE=ghcr.io/twuijri/majlis:latest pnpm --filter @majlis/server test
+ *   docker pull ghcr.io/twuijri/core-hub:latest
+ *   COREHUB_HERMES_IMAGE=ghcr.io/twuijri/core-hub:latest pnpm --filter @corehub/server test
  */
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
@@ -18,7 +18,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { HermesTuiSession, stdioTuiChannel, type TuiChannel } from './hermes-tui.js';
 import type { AgentEvent } from './types.js';
 
-const image = process.env.MAJLIS_HERMES_IMAGE;
+const image = process.env.COREHUB_HERMES_IMAGE;
 
 /** The model: turn one asks, turn two answers with what the tool returned. */
 function scriptedModel(): http.Server {
@@ -102,7 +102,7 @@ function scriptedModel(): http.Server {
   });
 }
 
-describe.skipIf(!image)('Hermes TUI gateway (real Hermes; set MAJLIS_HERMES_IMAGE to run)', () => {
+describe.skipIf(!image)('Hermes TUI gateway (real Hermes; set COREHUB_HERMES_IMAGE to run)', () => {
   let model: http.Server;
   let home: string;
   let channel: TuiChannel;
@@ -111,19 +111,19 @@ describe.skipIf(!image)('Hermes TUI gateway (real Hermes; set MAJLIS_HERMES_IMAG
     model = scriptedModel();
     await new Promise<void>((resolve) => model.listen(0, '127.0.0.1', resolve));
     const port = (model.address() as AddressInfo).port;
-    home = mkdtempSync(path.join(tmpdir(), 'majlis-tui-'));
+    home = mkdtempSync(path.join(tmpdir(), 'corehub-tui-'));
     writeFileSync(
       path.join(home, 'config.yaml'),
       [
         'providers:',
-        '  majlis-fake:',
-        '    name: majlis-fake',
+        '  corehub-fake:',
+        '    name: corehub-fake',
         `    base_url: http://127.0.0.1:${port}/v1`,
-        '    key_env: MAJLIS_FAKE_KEY',
+        '    key_env: COREHUB_FAKE_KEY',
         '    api_mode: chat_completions',
         'model:',
         '  default: fake-1',
-        '  provider: majlis-fake',
+        '  provider: corehub-fake',
         'agent:',
         '  clarify_timeout: 300',
         '',
@@ -144,7 +144,7 @@ describe.skipIf(!image)('Hermes TUI gateway (real Hermes; set MAJLIS_HERMES_IMAG
         '-e',
         'HERMES_HOME=/hh',
         '-e',
-        'MAJLIS_FAKE_KEY=fake-key-000000000000',
+        'COREHUB_FAKE_KEY=fake-key-000000000000',
         '--entrypoint',
         '/opt/hermes/.venv/bin/python',
         image!,
@@ -253,7 +253,7 @@ describe.skipIf(!image)('Hermes TUI gateway (real Hermes; set MAJLIS_HERMES_IMAG
         if (event.type === 'run.completed' || event.type === 'run.failed') return;
       }
     })();
-    await session.send({ text: 'ask me', model: 'fake-2', modelProvider: 'majlis-fake' });
+    await session.send({ text: 'ask me', model: 'fake-2', modelProvider: 'corehub-fake' });
     await reading;
     expect(events.at(-1)).toMatchObject({ type: 'run.completed' });
     const usage = events.find((e) => e.type === 'usage');

@@ -1,5 +1,5 @@
 {
-  "$comment": "Machine-readable navigation contract for every Majlis client (web, desktop, android, ios). docs/clients/NAVIGATION.md explains it; scripts/navigation-check.mjs validates it; each client's parity test reads it.",
+  "$comment": "Machine-readable navigation contract for every Core Hub client (web, desktop, android, ios). docs/clients/NAVIGATION.md explains it; scripts/navigation-check.mjs validates it; each client's parity test reads it.",
   "version": 1,
   "surfaces": ["web", "desktop", "android", "ios"],
   "terms": {

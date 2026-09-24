@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/devices/request.completed.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/devices/request.completed.schema.json",
   "title": "/rt/devices · request.completed",
   "description": "The request was answered, expired or cancelled. To the device and to the session owner. Emitted by: devices module.",
   "type": "object",

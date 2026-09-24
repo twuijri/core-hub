@@ -26,21 +26,21 @@ export function EmptyState({
   testId?: string;
 }) {
   return (
-    <div className={`mj-empty mj-empty-${size}`} role="status" data-testid={testId}>
+    <div className={`ch-empty ch-empty-${size}`} role="status" data-testid={testId}>
       {icon !== undefined && (
-        <span className="mj-empty-icon" aria-hidden>
+        <span className="ch-empty-icon" aria-hidden>
           {icon}
         </span>
       )}
-      <p className="mj-empty-title" dir="auto">
+      <p className="ch-empty-title" dir="auto">
         {title}
       </p>
       {body !== undefined && (
-        <p className="mj-empty-body" dir="auto">
+        <p className="ch-empty-body" dir="auto">
           {body}
         </p>
       )}
-      {action !== undefined && <div className="mj-empty-action">{action}</div>}
+      {action !== undefined && <div className="ch-empty-action">{action}</div>}
     </div>
   );
 }

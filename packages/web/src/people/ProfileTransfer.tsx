@@ -163,7 +163,7 @@ export function ExportDialog({
       <div className="flex flex-col gap-3">
         <p className="text-sm">{t('workspaces.export_what')}</p>
         <fieldset className="flex flex-col gap-1">
-          <legend className="mj-label">{t('workspaces.export_providers')}</legend>
+          <legend className="ch-label">{t('workspaces.export_providers')}</legend>
           <Segmented
             className="self-start"
             label={t('workspaces.export_providers')}

@@ -17,7 +17,7 @@ import {
   verifyAccessToken,
 } from './tokens.js';
 
-const dataDir = mkdtempSync(path.join(tmpdir(), 'majlis-tokens-'));
+const dataDir = mkdtempSync(path.join(tmpdir(), 'corehub-tokens-'));
 afterAll(() => rmSync(dataDir, { recursive: true, force: true }));
 
 describe('auth: tokens', () => {
@@ -51,7 +51,7 @@ describe('auth: tokens', () => {
     await expect(verifyAccessToken(key, tampered, now)).rejects.toMatchObject({
       code: 'unauthorized',
     });
-    const otherKey = loadOrCreateSigningKey(mkdtempSync(path.join(tmpdir(), 'majlis-key2-')));
+    const otherKey = loadOrCreateSigningKey(mkdtempSync(path.join(tmpdir(), 'corehub-key2-')));
     await expect(verifyAccessToken(otherKey, jwt, now)).rejects.toMatchObject({
       code: 'unauthorized',
     });

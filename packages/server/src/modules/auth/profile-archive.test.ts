@@ -7,7 +7,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { ArchiveError, TarFilter, isCredentialFile, rewriteArchive } from './profile-archive.js';
 import { tar, tarGz } from './testing/tar.js';
 
-const root = mkdtempSync(path.join(tmpdir(), 'majlis-archive-'));
+const root = mkdtempSync(path.join(tmpdir(), 'corehub-archive-'));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 let counter = 0;

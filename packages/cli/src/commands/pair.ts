@@ -1,4 +1,5 @@
 // pair · pair claim — QR pairing, both sides.
+import { LEGACY, derived } from '@corehub/contracts';
 import { hostname, platform as osPlatform, release, type as osType } from 'node:os';
 import type { Socket } from 'socket.io-client';
 import type { CommandSpec } from '../args.js';
@@ -46,7 +47,7 @@ export const pairCommand: CommandSpec = {
         }),
       );
       ctx.out.line(t('pair.scan'));
-      ctx.out.line(`  majlis pair claim '${pairing.qr_payload.replace(/'/g, "'\\''")}'`);
+      ctx.out.line(`  corehub pair claim '${pairing.qr_payload.replace(/'/g, "'\\''")}'`);
       if (ctx.options['no-qr'] !== true) {
         ctx.out.line();
         ctx.out.line(renderQr(pairing.qr_payload));
@@ -139,13 +140,13 @@ async function waitForClaim(
 }
 
 interface QrPayload {
-  type: 'majlis.pairing';
+  type: typeof derived.pairingType;
   hub_url?: string;
   pairing_id: string;
   code: string;
 }
 
-function parseQrPayload(text: string): QrPayload | null {
+export function parseQrPayload(text: string): QrPayload | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -154,10 +155,12 @@ function parseQrPayload(text: string): QrPayload | null {
   }
   if (!parsed || typeof parsed !== 'object') return null;
   const p = parsed as Record<string, unknown>;
-  if (p.type !== 'majlis.pairing' || typeof p.pairing_id !== 'string' || typeof p.code !== 'string')
+  // A code shown by a hub from before the rename says `majlis.pairing` (ADR 0017).
+  const known = p.type === derived.pairingType || p.type === LEGACY.pairingType;
+  if (!known || typeof p.pairing_id !== 'string' || typeof p.code !== 'string')
     throw new UsageError('errors.pairing_json_invalid');
   return {
-    type: 'majlis.pairing',
+    type: derived.pairingType,
     pairing_id: p.pairing_id,
     code: p.code,
     ...(typeof p.hub_url === 'string' ? { hub_url: p.hub_url } : {}),

@@ -12,7 +12,7 @@ import {
   serverBasePath,
   type ClientMethod,
   type HubClient,
-} from '@majlis/contracts';
+} from '@corehub/contracts';
 import { profileTransferPorts } from '../../src/modules/index.js';
 import { registerProfileTransfer } from '../../src/modules/auth/index.js';
 import { fakeProfileRuntime } from '../../src/modules/auth/testing/fake-profile-runtime.js';
@@ -24,7 +24,7 @@ const doc = loadOpenApiDocument();
 
 /** A profile archive as the browser's `FormData` sends it, with `purpose: import`. */
 function archiveUpload(body: Buffer) {
-  const boundary = '----majlisContractBoundary';
+  const boundary = '----corehubContractBoundary';
   return {
     payload: Buffer.concat([
       Buffer.from(
@@ -209,7 +209,7 @@ describe.skipIf(!doc)('contract: auth operations answer their success path', () 
       body: { connection: 'lan', ttl_seconds: 300 },
     });
     expect(JSON.parse(pairing.qr_payload as string)).toMatchObject({
-      type: 'majlis.pairing',
+      type: 'corehub.pairing',
       pairing_id: pairing.id,
       code: pairing.code,
     });

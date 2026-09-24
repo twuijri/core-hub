@@ -10,7 +10,7 @@
  * silently:
  *
  *   git clone --depth 1 --branch v2026.9.14 https://github.com/NousResearch/hermes-agent
- *   HERMES_SRC=$PWD/hermes-agent pnpm --filter @majlis/server test
+ *   HERMES_SRC=$PWD/hermes-agent pnpm --filter @corehub/server test
  */
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -35,7 +35,7 @@ describe.skipIf(!source)(
     let kanban: HermesKanban;
 
     beforeAll(() => {
-      home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-kanban-'));
+      home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-kanban-'));
       kanban = createHermesKanban(
         processRunner({
           command: 'python3',
@@ -50,7 +50,7 @@ describe.skipIf(!source)(
     it('creates a card Hermes then lists, in the language it was written in', async () => {
       const card = await kanban.create({
         title: 'جرّب الجسر',
-        body: 'من المجلس',
+        body: 'من المركز',
         idempotencyKey: '01J8QK3ZR2W7M5N4P6T8V9X0A1',
       });
       expect(card.id).toMatch(/^t_[0-9a-f]{8}$/);

@@ -1,7 +1,7 @@
 // chat SESSION_ID — the streamed conversation: `sessions.createRun` over HTTP, the session's
 // events over `/rt/sessions` with `after_seq` resume, approvals answered through
 // `sessions.respondApproval`, Ctrl+C mapped to `sessions.cancelRun`.
-import { HubApiError } from '@majlis/contracts';
+import { HubApiError } from '@corehub/contracts';
 import type { Socket } from 'socket.io-client';
 import type { CommandSpec } from '../args.js';
 import {
@@ -190,9 +190,9 @@ class Chat {
     return code;
   }
 
-  /** Socket lifecycle on stderr when MAJLIS_DEBUG is set; for field diagnosis, never for scripts. */
+  /** Socket lifecycle on stderr when COREHUB_DEBUG is set; for field diagnosis, never for scripts. */
   private debug(message: string): void {
-    if (this.ctx.io.env.MAJLIS_DEBUG) this.ctx.out.notice(`[rt] ${message}`);
+    if (this.ctx.io.env.COREHUB_DEBUG) this.ctx.out.notice(`[rt] ${message}`);
   }
 
   dispose(): void {

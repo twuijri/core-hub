@@ -15,7 +15,7 @@
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
-import { loadOpenApiDocument } from '@majlis/contracts';
+import { loadOpenApiDocument } from '@corehub/contracts';
 import { newUlid } from '../../db/ids.js';
 import { requireSqlite } from '../../lib/db.js';
 import { HubError, notFound } from '../../lib/errors.js';

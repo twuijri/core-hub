@@ -24,7 +24,7 @@
 | أحداث run: `run.created/placed/status_changed/spawned_child/result_recorded/cancelled_tree` | `/rt/schedules` | صيغة `<entity>.<verb>` عندنا |
 
 ## الأفكار التي نرفضها ولماذا
-- **نطاق IDE** (محرّر، طرفيات، Tauri): Majlis مركز لا IDE.
+- **نطاق IDE** (محرّر، طرفيات، Tauri): Core Hub مركز لا IDE.
 - **control plane سحابي بمؤسسات وفوترة**: خارج النطاق.
 - **runtime خاص (AnyHarness)**: عندنا ACP + محوّل Hermes.
 - **سلسلة خطية فقط**: نبقي DAG كما في ARCHITECTURE، مع تجميد التعريف كما فعلوا.

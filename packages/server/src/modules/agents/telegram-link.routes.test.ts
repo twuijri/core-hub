@@ -90,7 +90,7 @@ exit 0
 `;
 
 async function boot(options: { api?: boolean; down?: boolean; external?: boolean } = {}) {
-  const bin = mkdtempSync(path.join(tmpdir(), 'majlis-tg-bin-'));
+  const bin = mkdtempSync(path.join(tmpdir(), 'corehub-tg-bin-'));
   bins.push(bin);
   if (!options.external) {
     writeFileSync(path.join(bin, 'hermes'), FAKE_HERMES);

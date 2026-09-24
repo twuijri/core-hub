@@ -33,11 +33,11 @@ export function Tabs({
 }) {
   return (
     <RadixTabs.Root value={value} onValueChange={onValueChange} data-testid={testId}>
-      <RadixTabs.List className="mj-tabs" aria-label={label}>
+      <RadixTabs.List className="ch-tabs" aria-label={label}>
         {items.map((item) => (
           <RadixTabs.Trigger
             key={item.value}
-            className="mj-tab"
+            className="ch-tab"
             value={item.value}
             disabled={item.disabled ?? false}
           >
@@ -52,7 +52,7 @@ export function Tabs({
 
 export function TabPanel({ value, children }: { value: string; children: ReactNode }) {
   return (
-    <RadixTabs.Content className="mj-tab-panel" value={value}>
+    <RadixTabs.Content className="ch-tab-panel" value={value}>
       {children}
     </RadixTabs.Content>
   );

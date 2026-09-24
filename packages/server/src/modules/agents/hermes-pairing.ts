@@ -196,7 +196,7 @@ export function denyPairing(home: string, platform: string, requestId: string): 
   const key = Object.keys(pending).find((id) => id.toLowerCase() === requestId.toLowerCase());
   if (!key) throw notFound({ resource: 'pairing_request', id: requestId });
   delete pending[key];
-  const temp = `${file}.majlis-${process.pid}.tmp`;
+  const temp = `${file}.corehub-${process.pid}.tmp`;
   writeFileSync(temp, JSON.stringify(pending, null, 2), { mode: 0o600 });
   chmodSync(temp, 0o600);
   renameSync(temp, file);

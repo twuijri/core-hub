@@ -29,7 +29,7 @@ import {
 
 const homes: string[] = [];
 function home(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'majlis-memory-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'corehub-memory-'));
   homes.push(dir);
   return dir;
 }
@@ -111,11 +111,11 @@ describe('writing memory', () => {
   it('writes MEMORY.md and USER.md into memories/, where Hermes reads them — not at the root', () => {
     const dir = home();
     putMemory(dir, 'memory', 'The deploy runs on Fridays.');
-    putMemory(dir, 'user', 'يعمل على مجلس.');
+    putMemory(dir, 'user', 'يعمل على كور هب.');
     expect(readFileSync(path.join(dir, 'memories', 'MEMORY.md'), 'utf8')).toBe(
       'The deploy runs on Fridays.',
     );
-    expect(readFileSync(path.join(dir, 'memories', 'USER.md'), 'utf8')).toBe('يعمل على مجلس.');
+    expect(readFileSync(path.join(dir, 'memories', 'USER.md'), 'utf8')).toBe('يعمل على كور هب.');
     expect(existsSync(path.join(dir, 'MEMORY.md'))).toBe(false);
     expect(existsSync(path.join(dir, 'USER.md'))).toBe(false);
   });

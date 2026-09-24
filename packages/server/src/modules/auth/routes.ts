@@ -1,5 +1,6 @@
 // HTTP routes of the `auth` tag (packages/contracts/openapi.yaml). Thin: validate, call a
 // service, serialize. Guards come from principal.ts; every route here is `x-scope: global`.
+import { PRODUCT } from '@corehub/contracts';
 import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
@@ -336,7 +337,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
   });
 
   const serverMeta = () => ({
-    name: 'Majlis',
+    name: PRODUCT.name,
     server_version: ctx.version,
     contract_version: ctx.contractVersion,
     api_versions: ['v1'],

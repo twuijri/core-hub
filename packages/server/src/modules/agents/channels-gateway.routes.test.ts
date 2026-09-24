@@ -122,7 +122,7 @@ function scriptedHermes(root: () => string) {
 }
 
 async function boot(options: { api?: boolean } = {}) {
-  const bin = mkdtempSync(path.join(tmpdir(), 'majlis-gw-bin-'));
+  const bin = mkdtempSync(path.join(tmpdir(), 'corehub-gw-bin-'));
   bins.push(bin);
   writeFileSync(path.join(bin, 'hermes'), FAKE_HERMES);
   chmodSync(path.join(bin, 'hermes'), 0o755);

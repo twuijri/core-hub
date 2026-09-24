@@ -9,7 +9,7 @@
  * loopback. The provider key is only in the process environment, never in a profile's
  * `.env`: that is how the hub's shared keys reach every profile (ADR 0010).
  *
- *   MAJLIS_HERMES_IMAGE=majlis:local pnpm --filter @majlis/server test hermes-profile.real
+ *   COREHUB_HERMES_IMAGE=corehub:local pnpm --filter @corehub/server test hermes-profile.real
  */
 import { execFile } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -22,7 +22,7 @@ import { createHermesProfiles, type ProfileRunner } from '../hermes-profiles.js'
 import { HermesTuiSession, stdioTuiChannel, type TuiChannel } from './hermes-tui.js';
 import type { AgentEvent } from './types.js';
 
-const image = process.env.MAJLIS_HERMES_IMAGE;
+const image = process.env.COREHUB_HERMES_IMAGE;
 
 const FACTS = {
   soulDefault: 'heron-soul-1203',
@@ -71,20 +71,20 @@ function reportingModel(): http.Server {
 function configFor(port: number): string {
   return [
     'providers:',
-    '  majlis-fake:',
-    '    name: majlis-fake',
+    '  corehub-fake:',
+    '    name: corehub-fake',
     `    base_url: http://127.0.0.1:${port}/v1`,
-    '    key_env: MAJLIS_FAKE_KEY',
+    '    key_env: COREHUB_FAKE_KEY',
     '    api_mode: chat_completions',
     'model:',
     '  default: fake-1',
-    '  provider: majlis-fake',
+    '  provider: corehub-fake',
     '',
   ].join('\n');
 }
 
 describe.skipIf(!image)(
-  'Hermes profiles in conversations (real Hermes; set MAJLIS_HERMES_IMAGE)',
+  'Hermes profiles in conversations (real Hermes; set COREHUB_HERMES_IMAGE)',
   () => {
     let model: http.Server;
     let home: string;
@@ -142,7 +142,7 @@ describe.skipIf(!image)(
       model = reportingModel();
       await new Promise<void>((resolve) => model.listen(0, '127.0.0.1', resolve));
       const port = (model.address() as AddressInfo).port;
-      home = mkdtempSync(path.join(tmpdir(), 'majlis-profile-chat-'));
+      home = mkdtempSync(path.join(tmpdir(), 'corehub-profile-chat-'));
       chmodSync(home, 0o777);
       writeFileSync(path.join(home, 'config.yaml'), configFor(port));
       writeFileSync(
@@ -176,7 +176,7 @@ describe.skipIf(!image)(
           'HERMES_HOME=/hh',
           // The key lives in the process environment only, as the hub hands it over.
           '-e',
-          'MAJLIS_FAKE_KEY=fake-key-000000000000',
+          'COREHUB_FAKE_KEY=fake-key-000000000000',
           '--entrypoint',
           '/opt/hermes/.venv/bin/python',
           image!,

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/sessions/session.deleted.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/sessions/session.deleted.schema.json",
   "title": "/rt/sessions · session.deleted",
   "description": "A session was deleted. Profile-wide. Emitted by: sessions module.",
   "type": "object",

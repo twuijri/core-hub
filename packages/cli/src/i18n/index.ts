@@ -46,11 +46,11 @@ function fromTag(tag: string | undefined): Language | undefined {
     : undefined;
 }
 
-/** `--lang`, then MAJLIS_LANG, then LC_ALL / LC_MESSAGES / LANG, then English. */
+/** `--lang`, then COREHUB_LANG, then LC_ALL / LC_MESSAGES / LANG, then English. */
 export function resolveLanguage(explicit: string | undefined, env: NodeJS.ProcessEnv): Language {
   return (
     fromTag(explicit) ??
-    fromTag(env.MAJLIS_LANG) ??
+    fromTag(env.COREHUB_LANG) ??
     fromTag(env.LC_ALL) ??
     fromTag(env.LC_MESSAGES) ??
     fromTag(env.LANG) ??

@@ -5,6 +5,7 @@
  * already in the contract's wire shape (`mappers.ts`), so a route is a
  * one-liner and there is exactly one place where a rule lives.
  */
+import { PRODUCT } from '@corehub/contracts';
 import { HubError, notFound } from '../../lib/errors.js';
 import { t, type Language } from '../../i18n/index.js';
 import type { FastifyBaseLogger } from 'fastify';
@@ -1038,7 +1039,7 @@ export class SessionsService {
         ? { kind: 'user' as const, id: row.authorId, name: scope.userName, avatar: null }
         : row.authorKind === 'agent'
           ? { kind: 'agent' as const, id: row.authorId, name: 'agent', avatar: null }
-          : { kind: 'system' as const, id: null, name: 'Majlis', avatar: null };
+          : { kind: 'system' as const, id: null, name: PRODUCT.name, avatar: null };
     return toMessage(
       {
         row,

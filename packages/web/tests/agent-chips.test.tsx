@@ -202,7 +202,7 @@ describe('agent chips', () => {
     await waitFor(() => expect(chipNames()).toHaveLength(2));
     const chips = screen.getAllByTestId('agent-chip');
     // The row is the shared segmented control: Radix marks the chosen option as the
-    // checked radio, which is what `.mj-segment[aria-checked='true']` paints. (`data-state`
+    // checked radio, which is what `.ch-segment[aria-checked='true']` paints. (`data-state`
     // cannot be used here: the tooltip trigger composed onto the same button owns it.)
     expect(chips[0]).toHaveAttribute('aria-checked', 'true');
     expect(chips[1]).toHaveAttribute('aria-checked', 'false');

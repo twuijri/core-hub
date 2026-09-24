@@ -10,8 +10,8 @@
  * mounted at the same paths, because the dashboard API exchanges paths, not bytes. Name the
  * image to run it; without one it is skipped:
  *
- *   docker build -f packages/server/Dockerfile -t majlis:local .
- *   MAJLIS_HERMES_IMAGE=majlis:local pnpm --filter @majlis/server exec \
+ *   docker build -f packages/server/Dockerfile -t core-hub:local .
+ *   COREHUB_HERMES_IMAGE=corehub:local pnpm --filter @corehub/server exec \
  *     vitest run src/modules/auth/profile-transfer.real.test.ts
  */
 import { execFile, execFileSync, spawn } from 'node:child_process';
@@ -34,7 +34,7 @@ import { hermesArchivesOver, profileTransferPorts } from '../index.js';
 import { DataKeyRing, SecretStore } from '../models/index.js';
 import { registerProfileTransfer } from './index.js';
 
-const image = process.env.MAJLIS_HERMES_IMAGE;
+const image = process.env.COREHUB_HERMES_IMAGE;
 const HERMES = '/opt/hermes/.venv/bin/hermes';
 const KEY = 'sk-proj-real-hermes-export-0123456789';
 const SOUL = 'I am Nakhla, the designer who only draws palm trees. أنا نخلة.\n';
@@ -42,9 +42,9 @@ const MEMORY = 'The owner prefers teal. المالك يفضّل اللون ال�
 
 type Json = Record<string, unknown>;
 
-describe.skipIf(!image)('profile export and import (real Hermes; set MAJLIS_HERMES_IMAGE)', () => {
-  const home = mkdtempSync(path.join(tmpdir(), 'majlis-transfer-home-'));
-  const scratch = mkdtempSync(path.join(tmpdir(), 'majlis-transfer-scratch-'));
+describe.skipIf(!image)('profile export and import (real Hermes; set COREHUB_HERMES_IMAGE)', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'corehub-transfer-home-'));
+  const scratch = mkdtempSync(path.join(tmpdir(), 'corehub-transfer-scratch-'));
   const user = `${userInfo().uid}:${userInfo().gid}`;
   const containers: string[] = [];
   /** The hub's data directory, known once the hub exists; Hermes writes archives into it. */
@@ -78,7 +78,7 @@ describe.skipIf(!image)('profile export and import (real Hermes; set MAJLIS_HERM
     });
 
   const spawnImpl: DashboardSpawner = (_command, args, options) => {
-    const name = `majlis-transfer-real-${process.pid}-${containers.length}`;
+    const name = `corehub-transfer-real-${process.pid}-${containers.length}`;
     containers.push(name);
     const child = spawn(
       'docker',
@@ -232,7 +232,7 @@ describe.skipIf(!image)('profile export and import (real Hermes; set MAJLIS_HERM
 
       // Import the same archive under a new name.
       const upload = async () => {
-        const boundary = '----majlisRealTransfer';
+        const boundary = '----corehubRealTransfer';
         const payload = Buffer.concat([
           Buffer.from(
             `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${String(result.name)}"\r\n` +

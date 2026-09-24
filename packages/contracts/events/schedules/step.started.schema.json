@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/schedules/step.started.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/schedules/step.started.schema.json",
   "title": "/rt/schedules · step.started",
   "description": "A node began. Emitted by: schedules module (workflow engine).",
   "type": "object",

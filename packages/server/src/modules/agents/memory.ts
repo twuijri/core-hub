@@ -150,7 +150,7 @@ function writeAtomically(file: string, content: string): void {
   mkdirSync(path.dirname(file), { recursive: true });
   const temporary = path.join(
     path.dirname(file),
-    `.majlis-${path.basename(file)}.${randomBytes(6).toString('hex')}`,
+    `.corehub-${path.basename(file)}.${randomBytes(6).toString('hex')}`,
   );
   writeFileSync(temporary, content, 'utf8');
   try {

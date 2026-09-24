@@ -18,7 +18,7 @@
  * Nothing in this file logs a value. The functions return which **names** changed, which
  * is what a log line and an audit row are allowed to carry.
  */
-import { STABLE } from '@majlis/contracts';
+import { LEGACY, derived } from '@corehub/contracts';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
@@ -179,7 +179,7 @@ export interface HermesWriteResult {
  */
 function writeAtomic(file: string, text: string): void {
   mkdirSync(path.dirname(file), { recursive: true });
-  const temp = `${file}.majlis-${process.pid}.tmp`;
+  const temp = `${file}.corehub-${process.pid}.tmp`;
   writeFileSync(temp, text, { mode: 0o600 });
   chmodSync(temp, 0o600);
   renameSync(temp, file);
@@ -340,17 +340,77 @@ function applyModel(
   }
 }
 
-/** Which `providers:` keys the hub owns — and no others. */
+/**
+ * Which `providers:` keys the hub owns — and no others: its own prefix, and the prefix the
+ * same blocks had before the rename (`majlis-`), which a write replaces.
+ */
 function isOwnedProviderKey(key: unknown): boolean {
-  return typeof key === 'string' && key.startsWith(OWNED_PROVIDER_PREFIX);
+  return (
+    typeof key === 'string' &&
+    (key.startsWith(OWNED_PROVIDER_PREFIX) || key.startsWith(LEGACY_PROVIDER_PREFIX))
+  );
 }
 
 /**
  * Kept here rather than imported from `catalogue.ts` so this file stays a pure writer
  * with no opinion about which providers exist. The two are compared by a unit test.
  */
-/** Frozen, and the same string `catalogue.ts` writes (`STABLE`). */
-const OWNED_PROVIDER_PREFIX = STABLE.hermesProviderPrefix;
+const OWNED_PROVIDER_PREFIX = derived.hermesProviderPrefix;
+const LEGACY_PROVIDER_PREFIX = LEGACY.hermesProviderPrefix;
+
+/**
+ * Renames the hub's blocks from before the rename, and everything in the file that names
+ * one of them (ADR 0017).
+ *
+ * A profile's `model.provider` — or a fallback, an auxiliary task, a delegation — may say
+ * `majlis-custom-cli-proxy-api`, written by an older hub or picked in `hermes model`. The
+ * block is about to be written as `corehub-custom-cli-proxy-api` and the old one removed as
+ * no longer wanted, so a reference left alone would name nothing, and Hermes would answer
+ * "Unknown provider". Every scalar **value** equal to an old name the hub owns (a block in
+ * this file, or the old name of a block it is writing) becomes the new name; keys, and
+ * every string that is not exactly such a name, are left as they are.
+ */
+function migrateLegacyProviders(
+  document: YAML.Document,
+  wanted: ReadonlyMap<string, HermesProviderRoute>,
+  result: HermesWriteResult,
+): void {
+  const legacyNames = new Set<string>();
+  for (const name of wanted.keys()) {
+    if (name.startsWith(OWNED_PROVIDER_PREFIX)) {
+      legacyNames.add(`${LEGACY_PROVIDER_PREFIX}${name.slice(OWNED_PROVIDER_PREFIX.length)}`);
+    }
+  }
+  const block = document.get('providers');
+  if (YAML.isMap(block)) {
+    for (const item of block.items) {
+      const key = YAML.isScalar(item.key) ? item.key.value : item.key;
+      if (typeof key === 'string' && key.startsWith(LEGACY_PROVIDER_PREFIX)) legacyNames.add(key);
+    }
+  }
+  if (legacyNames.size === 0) return;
+  const renamed = (name: string) =>
+    `${OWNED_PROVIDER_PREFIX}${name.slice(LEGACY_PROVIDER_PREFIX.length)}`;
+  YAML.visit(document, {
+    Pair(_, pair, path) {
+      // The `providers:` block itself is written by `applyProviders`; its old keys go there.
+      const parent = path.at(-1);
+      if (YAML.isMap(parent) && parent === block) return YAML.visit.SKIP;
+      return undefined;
+    },
+    Scalar(key, node, path) {
+      if (key === 'key') return undefined;
+      if (typeof node.value !== 'string' || !legacyNames.has(node.value)) return undefined;
+      const where = path
+        .filter((step): step is YAML.Pair => YAML.isPair(step))
+        .map((pair) => String(YAML.isScalar(pair.key) ? pair.key.value : pair.key))
+        .join('.');
+      node.value = renamed(node.value);
+      result.changed.push(where || 'provider reference');
+      return undefined;
+    },
+  });
+}
 
 function applyProviders(
   document: YAML.Document,
@@ -358,6 +418,7 @@ function applyProviders(
   result: HermesWriteResult,
 ): void {
   const wanted = new Map(routes.map((route) => [route.name, route]));
+  migrateLegacyProviders(document, wanted, result);
   const existing = document.get('providers');
   const hasBlock = YAML.isMap(existing);
   if (!hasBlock && routes.length === 0) return;

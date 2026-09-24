@@ -1,6 +1,6 @@
 // Row -> contract shape (packages/contracts/openapi.yaml, tag `auth`). snake_case keys,
 // ISO-8601 UTC timestamps, never a hash or a secret.
-import { derived } from '@majlis/contracts';
+import { derived } from '@corehub/contracts';
 import type {
   appTokens,
   loginLockouts,

@@ -1,4 +1,4 @@
-import { derived } from '@majlis/contracts';
+import { derived } from '@corehub/contracts';
 /**
  * The few models this workspace reached for last.
  *

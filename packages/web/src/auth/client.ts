@@ -1,4 +1,4 @@
-// HTTP: the generated client from @majlis/contracts, wrapped so an expired access token
+// HTTP: the generated client from @corehub/contracts, wrapped so an expired access token
 // refreshes itself once (single flight) and proactively near expiry. No hand-typed path
 // exists in this package (`pnpm contracts:check-clients`).
 import {
@@ -7,7 +7,7 @@ import {
   type ClientMethod,
   type HubClient,
   type RawRequestInit,
-} from '@majlis/contracts';
+} from '@corehub/contracts';
 import type { Language } from '../i18n/index.js';
 import { expiresAt, type SessionStore } from './store.js';
 

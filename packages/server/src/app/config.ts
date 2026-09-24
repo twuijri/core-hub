@@ -3,9 +3,27 @@
 import path from 'node:path';
 import { z } from 'zod';
 
-export const ENV_KEYS = ['DATA_DIR', 'PORT', 'DATABASE_URL', 'HUB_ADMIN_PASSWORD'] as const;
+export const ENV_KEYS = [
+  'DATA_DIR',
+  'PORT',
+  'DATABASE_URL',
+  'HUB_ADMIN_PASSWORD',
+  'COREHUB_VERSION',
+] as const;
 export type EnvKey = (typeof ENV_KEYS)[number];
-export type EnvSource = Partial<Record<EnvKey, string | undefined>>;
+export type EnvSource = Partial<Record<EnvKey, string | undefined>> & {
+  /** Old names (Majlis) a value was read under; the hub says so once at boot. */
+  readonly deprecated?: readonly string[];
+};
+
+/**
+ * The variables the hub still reads under the name they had before the product was renamed
+ * (Majlis → Core Hub, ADR 0017). The new name wins when both are set. A stack upgraded by
+ * replacing only its image keeps working; the log says which name to change.
+ */
+export const LEGACY_ENV_KEYS: Readonly<Partial<Record<EnvKey, string>>> = {
+  COREHUB_VERSION: 'MAJLIS_VERSION',
+};
 
 const envSchema = z.object({
   DATA_DIR: z.string().trim().min(1).default('./data'),
@@ -25,7 +43,7 @@ const envSchema = z.object({
    * build stamps the tag here (`packages/server/Dockerfile`) and the hub reports it on
    * /api/v1/health and /api/v1/meta. Empty outside an image: a working tree is no release.
    */
-  MAJLIS_VERSION: z.string().trim().optional(),
+  COREHUB_VERSION: z.string().trim().optional(),
 });
 
 export type DatabaseConfig = { kind: 'sqlite'; file: string } | { kind: 'postgres'; url: string };
@@ -58,8 +76,10 @@ export interface HubConfig {
   bootstrapAdminPassword: string | undefined;
   /** PATH and the variables spawned agents inherit (see `HostEnv`). */
   hostEnv: HostEnv;
-  /** The stamped release version, or `undefined` for a working tree (`MAJLIS_VERSION`). */
+  /** The stamped release version, or `undefined` for a working tree (`COREHUB_VERSION`). */
   version: string | undefined;
+  /** Variables that were read under their old (Majlis) name; logged once at boot. */
+  deprecatedEnv?: readonly string[];
 }
 
 export class ConfigError extends Error {
@@ -89,16 +109,26 @@ export function loadConfig(
       ? { kind: 'postgres', url: env.DATABASE_URL }
       : { kind: 'sqlite', file: path.join(dataDir, 'hub.sqlite') },
     bootstrapAdminPassword: env.HUB_ADMIN_PASSWORD,
-    version: env.MAJLIS_VERSION,
+    version: env.COREHUB_VERSION,
     hostEnv,
+    deprecatedEnv: source.deprecated ?? [],
   };
 }
 
 /** Copy only the keys the hub is allowed to read. */
 export function pickEnv(env: NodeJS.ProcessEnv): EnvSource {
-  const picked: EnvSource = {};
+  const picked: Partial<Record<EnvKey, string>> = {};
+  const deprecated: string[] = [];
   for (const key of ENV_KEYS) {
-    if (env[key] !== undefined && env[key] !== '') picked[key] = env[key];
+    if (env[key] !== undefined && env[key] !== '') {
+      picked[key] = env[key];
+      continue;
+    }
+    const legacy = LEGACY_ENV_KEYS[key];
+    if (legacy && env[legacy] !== undefined && env[legacy] !== '') {
+      picked[key] = env[legacy];
+      deprecated.push(legacy);
+    }
   }
-  return picked;
+  return deprecated.length > 0 ? { ...picked, deprecated } : picked;
 }

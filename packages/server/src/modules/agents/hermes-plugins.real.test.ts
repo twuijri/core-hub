@@ -14,8 +14,8 @@
  *
  * Name the image to run it; without one it is skipped:
  *
- *   docker build -f packages/server/Dockerfile -t majlis:local .
- *   MAJLIS_HERMES_IMAGE=majlis:local pnpm --filter @majlis/server exec \
+ *   docker build -f packages/server/Dockerfile -t core-hub:local .
+ *   COREHUB_HERMES_IMAGE=corehub:local pnpm --filter @corehub/server exec \
  *     vitest run src/modules/agents/hermes-plugins.real.test.ts
  */
 import { execFileSync, spawn } from 'node:child_process';
@@ -36,14 +36,14 @@ import {
 } from './hermes-plugins.js';
 import { listSkills } from './skills.js';
 
-const image = process.env.MAJLIS_HERMES_IMAGE;
+const image = process.env.COREHUB_HERMES_IMAGE;
 const HERMES = '/opt/hermes/.venv/bin/hermes';
 
 describe.skipIf(!image)(
-  'plugins and category skills (real Hermes; set MAJLIS_HERMES_IMAGE)',
+  'plugins and category skills (real Hermes; set COREHUB_HERMES_IMAGE)',
   () => {
-    const home = mkdtempSync(path.join(tmpdir(), 'majlis-plugins-home-'));
-    const dataDir = mkdtempSync(path.join(tmpdir(), 'majlis-plugins-data-'));
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-plugins-home-'));
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'corehub-plugins-data-'));
     chmodSync(home, 0o777);
     const containers: string[] = [];
     const { uid, gid } = userInfo();
@@ -74,7 +74,7 @@ describe.skipIf(!image)(
     /** The hub's `HermesCli`, with `hermes` inside the image instead of beside the hub. */
     const cli: HermesCli = (hermesHome, argv, options) =>
       new Promise((resolve) => {
-        const name = `majlis-plugins-real-${process.pid}-${containers.length}`;
+        const name = `corehub-plugins-real-${process.pid}-${containers.length}`;
         containers.push(name);
         const child = spawn(
           'docker',
@@ -94,7 +94,7 @@ describe.skipIf(!image)(
 
     /** `hermes serve` in the image, for Hermes's own `/api/skills`. */
     const spawnImpl: DashboardSpawner = (_command, args, options) => {
-      const name = `majlis-plugins-serve-${process.pid}-${containers.length}`;
+      const name = `corehub-plugins-serve-${process.pid}-${containers.length}`;
       containers.push(name);
       const child = spawn(
         'docker',
@@ -210,7 +210,7 @@ describe.skipIf(!image)(
       mkdirSync(source, { recursive: true });
       writeFileSync(
         path.join(source, 'plugin.yaml'),
-        'name: majlis-probe\nversion: 0.1.0\ndescription: A probe plugin for the hub test\n',
+        'name: corehub-probe\nversion: 0.1.0\ndescription: A probe plugin for the hub test\n',
       );
       writeFileSync(path.join(source, '__init__.py'), 'def register(ctx):\n    pass\n');
       const git = (...args: string[]) =>
@@ -240,16 +240,16 @@ describe.skipIf(!image)(
         language: 'en',
       });
       console.log(`install output:\n${String(result.output)}`);
-      expect(result.name).toBe('majlis-probe');
-      const listed = (await listPlugins(cli, work)).items.find((i) => i.key === 'majlis-probe');
+      expect(result.name).toBe('corehub-probe');
+      const listed = (await listPlugins(cli, work)).items.find((i) => i.key === 'corehub-probe');
       expect(listed).toMatchObject({ source: 'user', status: 'not_enabled', removable: true });
       // Installed into the profile, not into the default one.
-      expect((await listPlugins(cli, home)).items.some((i) => i.key === 'majlis-probe')).toBe(
+      expect((await listPlugins(cli, home)).items.some((i) => i.key === 'corehub-probe')).toBe(
         false,
       );
 
-      await removePlugin(cli, work, 'majlis-probe');
-      expect((await listPlugins(cli, work)).items.some((i) => i.key === 'majlis-probe')).toBe(
+      await removePlugin(cli, work, 'corehub-probe');
+      expect((await listPlugins(cli, work)).items.some((i) => i.key === 'corehub-probe')).toBe(
         false,
       );
     }, 300_000);

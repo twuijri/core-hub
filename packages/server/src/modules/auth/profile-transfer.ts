@@ -17,6 +17,7 @@
  * which Hermes (the same user, the same container) can write to and which is removed when
  * the job ends, whatever the outcome.
  */
+import { LEGACY, derived } from '@corehub/contracts';
 import { copyFile, mkdir, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -105,12 +106,18 @@ export interface ProfileTransferPorts {
  * The file an export "with providers" adds at the top of the profile folder (§37). An
  * import reads it before Hermes sees the archive and never hands it on.
  */
-export const PROVIDERS_FILE = 'majlis-providers.json';
+export const PROVIDERS_FILE = derived.providersFile;
+/** The same file in an archive exported before the rename (Majlis); read, never written. */
+export const LEGACY_PROVIDERS_FILE = LEGACY.providersFile;
 
 function isProvidersFile(root: string | null) {
   return (entryPath: string) => {
     const parts = entryPath.split('/').filter(Boolean);
-    return parts.length === 2 && parts[1] === PROVIDERS_FILE && (!root || parts[0] === root);
+    return (
+      parts.length === 2 &&
+      (parts[1] === PROVIDERS_FILE || parts[1] === LEGACY_PROVIDERS_FILE) &&
+      (!root || parts[0] === root)
+    );
   };
 }
 

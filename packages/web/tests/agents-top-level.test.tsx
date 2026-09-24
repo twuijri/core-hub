@@ -116,7 +116,7 @@ function hub() {
       return json({
         items: [{ id: '01J8QK3ZR2W7M5N4P6T8V9X0P1', slug: 'default', name: 'Default' }],
       });
-    if (path.endsWith('/meta')) return json({ name: 'Majlis', server_version: '0.0.0' });
+    if (path.endsWith('/meta')) return json({ name: 'Core Hub', server_version: '0.0.0' });
     if (path.includes('/memory')) return json({ items: [] });
     return json({ items: [], next_cursor: null });
   }) as unknown as typeof fetch;

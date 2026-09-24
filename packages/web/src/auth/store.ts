@@ -1,4 +1,4 @@
-import { derived } from '@majlis/contracts';
+import { derived } from '@corehub/contracts';
 // The browser's token store: one JSON document in localStorage. Same shape as the reference
 // client's config file minus `server` (the web app is always same-origin with the hub).
 export interface StoredUser {

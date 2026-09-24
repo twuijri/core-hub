@@ -19,7 +19,7 @@
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
-import { loadOpenApiDocument } from '@majlis/contracts';
+import { PRODUCT, loadOpenApiDocument } from '@corehub/contracts';
 import { createContractIndex } from '../../lib/contract.js';
 import { requireSqlite } from '../../lib/db.js';
 import { HubError, notFound } from '../../lib/errors.js';
@@ -174,7 +174,7 @@ function hermesApiOf(
 /** The name a person's comment carries on Hermes's board: their display name, else username. */
 function displayNameOf(request: FastifyRequest): string {
   const principal = request.principal;
-  if (!principal) return 'Majlis';
+  if (!principal) return PRODUCT.name;
   const row = findUser(requireSqlite(request.server.hub.database), principal.user.id);
   return row?.displayName?.trim() || principal.user.username;
 }

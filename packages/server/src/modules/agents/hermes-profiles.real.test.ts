@@ -3,7 +3,7 @@
  * create` from scratch and as a copy, a refusal in Hermes's words, and the listing that
  * reads what Hermes wrote. Name the image to run it; without one it is skipped:
  *
- *   MAJLIS_HERMES_IMAGE=ghcr.io/twuijri/majlis:latest pnpm --filter @majlis/server test
+ *   COREHUB_HERMES_IMAGE=ghcr.io/twuijri/core-hub:latest pnpm --filter @corehub/server test
  */
 import { chmodSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { execFile } from 'node:child_process';
@@ -12,10 +12,10 @@ import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { HermesProfileError, createHermesProfiles, type ProfileRunner } from './hermes-profiles.js';
 
-const image = process.env.MAJLIS_HERMES_IMAGE;
+const image = process.env.COREHUB_HERMES_IMAGE;
 
-describe.skipIf(!image)('Hermes profiles (real Hermes; set MAJLIS_HERMES_IMAGE to run)', () => {
-  const home = mkdtempSync(path.join(tmpdir(), 'majlis-profiles-'));
+describe.skipIf(!image)('Hermes profiles (real Hermes; set COREHUB_HERMES_IMAGE to run)', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'corehub-profiles-'));
   // The container's user is not ours; the throwaway home must be writable by it.
   chmodSync(home, 0o777);
 

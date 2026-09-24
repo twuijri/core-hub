@@ -31,22 +31,22 @@ export function Checkbox({
 }) {
   const id = useId();
   return (
-    <div className="mj-check-row">
+    <div className="ch-check-row">
       <RadixCheckbox.Root
         id={id}
-        className="mj-check"
+        className="ch-check"
         checked={checked}
         disabled={disabled}
         onCheckedChange={(next) => onChange(next === true)}
         data-testid={testId}
       >
-        <RadixCheckbox.Indicator className="mj-check-mark">
+        <RadixCheckbox.Indicator className="ch-check-mark">
           <IconCheck size={12} />
         </RadixCheckbox.Indicator>
       </RadixCheckbox.Root>
-      <label className={labelHidden ? 'sr-only' : 'mj-check-label'} htmlFor={id}>
+      <label className={labelHidden ? 'sr-only' : 'ch-check-label'} htmlFor={id}>
         <span>{label}</span>
-        {hint !== undefined && <span className="mj-check-hint">{hint}</span>}
+        {hint !== undefined && <span className="ch-check-hint">{hint}</span>}
       </label>
     </div>
   );

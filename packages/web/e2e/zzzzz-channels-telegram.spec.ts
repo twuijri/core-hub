@@ -17,7 +17,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const PASSWORD = 'e2e-owner-password';
 const TOKEN = '7012345678:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsawQ';
-const shots = process.env.MAJLIS_SHOTS ?? path.resolve('e2e/shots');
+const shots = process.env.COREHUB_SHOTS ?? path.resolve('e2e/shots');
 mkdirSync(shots, { recursive: true });
 
 const shot = (page: Page, name: string) =>
@@ -58,15 +58,15 @@ test('31. Telegram linked by a bot token: the steps, the bot named, approvals, a
   // ---- The right token: the bot is named, and the page says how to start.
   await page.getByTestId('telegram-token').fill(TOKEN);
   await page.getByTestId('telegram-link-submit').click();
-  await expect(page.getByTestId('telegram-link-done')).toContainText('@majlis_e2e_bot');
+  await expect(page.getByTestId('telegram-link-done')).toContainText('@corehub_e2e_bot');
   await page.getByTestId('telegram-link-close').click();
 
   await expect(page.getByTestId('channel-link-telegram')).toHaveText('مربوط');
-  await expect(page.getByTestId('channel-account-telegram')).toContainText('@majlis_e2e_bot');
-  await expect(page.getByTestId('channel-account-telegram')).toContainText('مساعد المجلس');
+  await expect(page.getByTestId('channel-account-telegram')).toContainText('@corehub_e2e_bot');
+  await expect(page.getByTestId('channel-account-telegram')).toContainText('مساعد المركز');
   await expect(page.getByTestId('telegram-bot-link')).toHaveAttribute(
     'href',
-    'https://t.me/majlis_e2e_bot',
+    'https://t.me/corehub_e2e_bot',
   );
   await expect(page.getByTestId('telegram-how-to-use')).toContainText('رمز اقتران');
   await expect(page.getByTestId('telegram-link-open')).toHaveCount(0);

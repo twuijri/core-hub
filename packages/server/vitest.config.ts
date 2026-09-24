@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 
-// `pnpm test --filter @majlis/server` runs the unit project (one test per module lives next
+// `pnpm test --filter @corehub/server` runs the unit project (one test per module lives next
 // to the module); `pnpm contract:test` runs every OpenAPI operation against the app.
 export default defineConfig({
   test: {

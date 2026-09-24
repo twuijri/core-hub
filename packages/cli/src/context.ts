@@ -10,6 +10,8 @@ export interface Io {
   stdout: Writable & { isTTY?: boolean };
   stderr: Writable & { isTTY?: boolean };
   env: NodeJS.ProcessEnv;
+  /** The name the command was started by (`corehub`, or the deprecated `majlis`). */
+  invokedAs?: string;
 }
 
 export interface GlobalValues {

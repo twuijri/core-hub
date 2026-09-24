@@ -79,7 +79,7 @@ export function contractsRoot(): string {
     if (existsSync(pkg)) {
       try {
         const parsed = JSON.parse(readFileSync(pkg, 'utf8')) as { name?: string };
-        if (parsed.name === '@majlis/contracts') return dir;
+        if (parsed.name === '@corehub/contracts') return dir;
       } catch {
         // keep walking
       }
@@ -105,7 +105,7 @@ export function loadOpenApiDocument(file: string = openapiDocumentPath()): OpenA
 
 /** True while openapi.yaml is still the scaffold placeholder. */
 export function isScaffoldStub(file: string = openapiDocumentPath()): boolean {
-  return existsSync(file) && readFileSync(file, 'utf8').includes('x-majlis-scaffold-stub: true');
+  return existsSync(file) && readFileSync(file, 'utf8').includes('x-corehub-scaffold-stub: true');
 }
 
 /** Path prefix declared by `servers[0].url` (`/api/v1`), or '' when absent. */

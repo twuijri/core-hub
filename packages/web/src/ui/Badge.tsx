@@ -23,9 +23,9 @@ export function Badge({
   testId?: string;
 }) {
   return (
-    <span className={`mj-badge mj-badge-${tone} ${className}`} data-testid={testId}>
-      {dot && <span className="mj-badge-dot" aria-hidden />}
-      <span className="mj-badge-label" dir="auto">
+    <span className={`ch-badge ch-badge-${tone} ${className}`} data-testid={testId}>
+      {dot && <span className="ch-badge-dot" aria-hidden />}
+      <span className="ch-badge-label" dir="auto">
         {children}
       </span>
     </span>

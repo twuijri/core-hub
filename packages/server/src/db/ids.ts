@@ -1,5 +1,5 @@
 /**
- * ULID identifiers for every row in Majlis.
+ * ULID identifiers for every row in Core Hub.
  *
  * 26 characters, Crockford base32, lexicographically sortable by creation
  * time (48-bit millisecond timestamp + 80 random bits). Generated in the

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/sessions/approval.requested.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/sessions/approval.requested.schema.json",
   "title": "/rt/sessions · approval.requested",
   "description": "The agent is blocked on a decision. Profile-wide so the pending-actions bar can show it anywhere. Emitted by: sessions module when an adapter asks for a decision; schedules module for workflow-step gates.",
   "type": "object",

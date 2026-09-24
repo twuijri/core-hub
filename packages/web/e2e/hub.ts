@@ -332,13 +332,13 @@ class ScriptedRunner implements AgentRunner {
 }
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const port = Number(process.env.MAJLIS_E2E_PORT ?? 8791);
+const port = Number(process.env.COREHUB_E2E_PORT ?? 8791);
 // Journey 4 (first-run setup, ADR 0011) needs the opposite hub: no owner, no
 // HUB_ADMIN_PASSWORD, and a data directory the test can read the claim token from. Playwright
-// starts that one as a second web server with MAJLIS_E2E_MODE=setup and a data dir it names.
-const setupMode = process.env.MAJLIS_E2E_MODE === 'setup';
-const namedDataDir = process.env.MAJLIS_E2E_DATA_DIR;
-const dataDir = namedDataDir ?? mkdtempSync(path.join(tmpdir(), 'majlis-e2e-'));
+// starts that one as a second web server with COREHUB_E2E_MODE=setup and a data dir it names.
+const setupMode = process.env.COREHUB_E2E_MODE === 'setup';
+const namedDataDir = process.env.COREHUB_E2E_DATA_DIR;
+const dataDir = namedDataDir ?? mkdtempSync(path.join(tmpdir(), 'corehub-e2e-'));
 if (namedDataDir) {
   // A fresh hub on every start, so the journey is the same on the first run and on a retry.
   rmSync(namedDataDir, { recursive: true, force: true });
@@ -539,12 +539,12 @@ const scriptedHermesApi: HermesApiCall = async <T>(
     mkdirSync(session, { recursive: true });
     writeFileSync(
       path.join(session, 'creds.json'),
-      JSON.stringify({ me: { id: '966500000000:4@s.whatsapp.net', name: 'مكتب المجلس' } }),
+      JSON.stringify({ me: { id: '966500000000:4@s.whatsapp.net', name: 'مكتب المركز' } }),
     );
     if (pairingPolls === 8) seedPairing();
     return answer({
       status: 'connected',
-      account_name: 'مكتب المجلس',
+      account_name: 'مكتب المركز',
       account_phone: '966500000000',
     });
   }
@@ -567,7 +567,7 @@ const scriptedPlugins = fakeHermesPlugins({ installDelayMs: 1500 });
 
 /**
  * Telegram's Bot API as linking asks it (journey 31), scripted: one token belongs to the bot
- * @majlis_e2e_bot, any other is refused as Telegram refuses it. The moment the bot is asked
+ * @corehub_e2e_bot, any other is refused as Telegram refuses it. The moment the bot is asked
  * about, a stranger has "messaged" it in the default profile — Hermes's pairing file gets the
  * request the journey then approves — so no phone and no network are involved.
  */
@@ -599,8 +599,8 @@ const scriptedTelegram: typeof fetch = async (input) => {
       result: {
         id: 7012345678,
         is_bot: true,
-        first_name: 'مساعد المجلس',
-        username: 'majlis_e2e_bot',
+        first_name: 'مساعد المركز',
+        username: 'corehub_e2e_bot',
       },
     });
   }

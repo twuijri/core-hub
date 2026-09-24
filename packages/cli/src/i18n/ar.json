@@ -1,15 +1,17 @@
 {
   "app": {
-    "name": "مجلس",
-    "tagline": "عميل مجلس المرجعي: عميل طرفية فوق العقد."
+    "name": "كور هب",
+    "tagline": "عميل كور هب المرجعي: عميل طرفية فوق العقد."
   },
   "usage": {
-    "synopsis": "الاستعمال: majlis [خيارات عامة] <أمر> [خيارات]",
+    "synopsis": "الاستعمال: corehub [خيارات عامة] <أمر> [خيارات]",
     "commands": "الأوامر",
     "global_options": "الخيارات العامة",
     "options": "الخيارات",
     "arguments": "المعاملات",
-    "see": "شغّل `majlis help <أمر>` للتفاصيل.",
+    "see": "شغّل `corehub help <أمر>` للتفاصيل.",
+    "legacy_env": "⁨{names}⁩ هو الاسم القديم من أيام «مجلس»؛ ما زال يعمل، لكن غيّره إلى ⁨{renamed}⁩.",
+    "legacy_command": "⁨majlis⁩ هو الاسم القديم لهذا الأمر؛ ما زال يعمل، لكن استعمل ⁨corehub⁩.",
     "no_command": "لم يُذكر أمر.",
     "unknown_command": "أمر غير معروف: {command}",
     "missing_argument": "معامل ناقص: {name}",
@@ -24,8 +26,8 @@
     "profile": "معرّف البروفايل لهذا النداء",
     "json": "اطبع JSON العقد بدل النص",
     "strict": "تحقّق من كل ظرف حي مقابل مخطّطه وتوقّف عند أول مخالفة",
-    "lang": "لغة المخرجات: ar أو en (الافتراضي: MAJLIS_LANG ثم LANG)",
-    "config": "ملف الإعدادات (الافتراضي: $XDG_CONFIG_HOME/majlis/config.json)",
+    "lang": "لغة المخرجات: ar أو en (الافتراضي: COREHUB_LANG ثم LANG)",
+    "config": "ملف الإعدادات (الافتراضي: $XDG_CONFIG_HOME/corehub/config.json)",
     "no_color": "بلا ألوان",
     "help": "اعرض المساعدة",
     "version": "اعرض الإصدار",
@@ -33,7 +35,7 @@
     "ttl": "مدة صلاحية الاقتران بالثواني (60 إلى 900)",
     "connection": "كيف يصل الجهاز إلى الخادم: lan أو relay",
     "no_qr": "لا ترسم رمز QR",
-    "pairing_id": "معرّف الاقتران الذي طبعه `majlis pair` (عندما لا يكون CODE هو JSON الخاص بالـQR)",
+    "pairing_id": "معرّف الاقتران الذي طبعه `corehub pair` (عندما لا يكون CODE هو JSON الخاص بالـQR)",
     "device_name": "الاسم الذي يُسجَّل به هذا الحاسوب",
     "kind": "تصفية بنوع الوكيل: hermes أو acp أو harness أو builtin",
     "limit": "حجم الصفحة",
@@ -104,10 +106,10 @@
     "attachment_id": "معرّف المرفق"
   },
   "errors": {
-    "not_signed_in": "لم تسجّل الدخول. شغّل أولًا `majlis login --server URL`.",
+    "not_signed_in": "لم تسجّل الدخول. شغّل أولًا `corehub login --server URL`.",
     "server_required": "لا يوجد خادم مضبوط. مرّر --server URL.",
     "server_invalid": "{server} ليس أصل http(s) صالحًا.",
-    "setup_required": "لا يوجد في المركز حساب مالك بعد. شغّل ⁨majlis setup --server URL⁩ برمز التهيئة من سجلّ المركز، أو افتح المركز في المتصفح.",
+    "setup_required": "لا يوجد في المركز حساب مالك بعد. شغّل ⁨corehub setup --server URL⁩ برمز التهيئة من سجلّ المركز، أو افتح المركز في المتصفح.",
     "connection": "تعذّر الوصول إلى {server}: {reason}",
     "api": "{message} [{code}, HTTP {status}]",
     "not_implemented": "الخادم يعلن {operation} في العقد لكنه لم ينفّذه بعد [not_implemented, HTTP 501].",
@@ -115,11 +117,11 @@
     "socket": "رُفض الاتصال الحي: {reason}",
     "timeout": "انتهت المهلة بعد {seconds} ثانية.",
     "pairing_id_required": "مرّر JSON الخاص بالـQR، أو الكود مع --pairing-id.",
-    "pairing_json_invalid": "هذا الـJSON ليس حمولة اقتران لمجلس.",
+    "pairing_json_invalid": "هذا الـJSON ليس حمولة اقتران لكور هب.",
     "config_invalid": "ملف الإعدادات {file} ليس JSON صالحًا.",
     "interrupted": "قوطع.",
     "unexpected": "خطأ غير متوقع: {message}",
-    "setup_done": "هذا المركز مهيَّأ بالفعل. شغّل ⁨majlis login --server URL⁩ بدلًا من ذلك.",
+    "setup_done": "هذا المركز مهيَّأ بالفعل. شغّل ⁨corehub login --server URL⁩ بدلًا من ذلك.",
     "password_mismatch": "كلمتا المرور غير متطابقتين؛ لم يُرسل شيء."
   },
   "setup": {
@@ -156,7 +158,7 @@
   },
   "pair": {
     "created": "اقتران {id} · الكود {code} · ينتهي {expires}",
-    "scan": "امسح الـQR بتطبيق مجلس، أو شغّل على الجهاز الآخر:",
+    "scan": "امسح الـQR بتطبيق كور هب، أو شغّل على الجهاز الآخر:",
     "waiting": "بانتظار الجهاز …",
     "claimed": "تم الاقتران: {name} ({platform}، {kind}).",
     "claimed_unknown": "تم الاقتران: الجهاز {device_id}.",
@@ -184,7 +186,7 @@
   "sessions": {
     "empty": "لا جلسات.",
     "more": "المزيد: --cursor {cursor}",
-    "created": "أُنشئت الجلسة {id}. للمحادثة: majlis chat {id}",
+    "created": "أُنشئت الجلسة {id}. للمحادثة: corehub chat {id}",
     "deleted": "حُذفت الجلسة {id}.",
     "untitled": "(محادثة جديدة)",
     "id": "المعرّف",
@@ -245,7 +247,7 @@
     "model": "النموذج",
     "context": "السياق",
     "empty": "لا نماذج بعد. أضف مفتاح مزوّد ويجلب المركز قائمة نماذجه.",
-    "providers_empty": "لم تُضف أي مزوّد بعد. `majlis providers presets` يعرض ما يمكن إضافته.",
+    "providers_empty": "لم تُضف أي مزوّد بعد. `corehub providers presets` يعرض ما يمكن إضافته.",
     "key_stored": "محفوظ",
     "key_missing": "غير موجود",
     "key_not_needed": "اختياري",

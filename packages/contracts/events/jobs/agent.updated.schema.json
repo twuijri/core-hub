@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/jobs/agent.updated.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/jobs/agent.updated.schema.json",
   "title": "/rt/jobs · agent.updated",
   "description": "The registry entry of an agent changed. Carried on /rt/jobs because it is always the outcome of hub-level work. Profile-wide. Emitted by: agents module (install/update/uninstall/restart jobs, discovery, settings, skills/MCP/memory/channel changes).",
   "type": "object",

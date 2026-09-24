@@ -33,8 +33,8 @@ MIT License · Copyright (c) 2023 LobeHub
 > OTHER DEALINGS IN THE SOFTWARE.
 
 **Trademarks.** The marks themselves belong to their owners — Anthropic, OpenAI, Google,
-SST and Nous Research. Majlis shows each one only to identify the agent it names, which is
-what a trademark is for. Majlis is not affiliated with, endorsed by, or a product of any
+SST and Nous Research. Core Hub shows each one only to identify the agent it names, which is
+what a trademark is for. Core Hub is not affiliated with, endorsed by, or a product of any
 of them. The sixth mark, for our own `direct` agent, is drawn by us.
 
 ## Ideas taken, code not taken

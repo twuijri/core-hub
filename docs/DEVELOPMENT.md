@@ -1,4 +1,4 @@
-# Developing Majlis
+# Developing Core Hub
 
 Everything runs from one pnpm workspace. Node is pinned in `.nvmrc`
 (Node 24); `corepack enable` gives you the pinned pnpm.
@@ -22,8 +22,8 @@ git restore --source=origin/main --staged --worktree -- graphify-out   # before 
 ## Run the hub and the web client
 
 ```bash
-pnpm --filter @majlis/server dev     # the hub on :8080, SQLite under ./.data
-pnpm --filter @majlis/web dev        # Vite on :5173, proxying /api and /rt to :8080
+pnpm --filter @corehub/server dev     # the hub on :8080, SQLite under ./.data
+pnpm --filter @corehub/web dev        # Vite on :5173, proxying /api and /rt to :8080
 ```
 
 The first boot has no account. The hub prints a one-time **setup token** and
@@ -32,7 +32,7 @@ on `/setup`, or run `node packages/cli/dist/bin.js setup --server
 http://127.0.0.1:8080` (ADR 0011). A new token is printed on every restart until
 the account exists. To skip the screen — in a script, or when you want the same
 account every time — set `HUB_ADMIN_PASSWORD` once
-(`HUB_ADMIN_PASSWORD=… pnpm --filter @majlis/server dev`) and the hub creates
+(`HUB_ADMIN_PASSWORD=… pnpm --filter @corehub/server dev`) and the hub creates
 `admin` itself; afterwards the variable is ignored. `DATA_DIR` decides where the
 database, the keys, Hermes's home and installed agents live. Those four
 variables are the whole configuration (ARCHITECTURE invariant 5).
@@ -43,7 +43,7 @@ port: the hub serves `packages/web/dist` at `/`.
 The terminal client works against any hub:
 
 ```bash
-pnpm --filter @majlis/cli build && node packages/cli/dist/bin.js login --server http://127.0.0.1:8080
+pnpm --filter @corehub/cli build && node packages/cli/dist/bin.js login --server http://127.0.0.1:8080
 ```
 
 ## Checks
@@ -54,7 +54,7 @@ set, as CI runs it:
 ```bash
 pnpm lint typecheck test contract:test contracts:lint contracts:check-clients nav:check i18n:check build
 pnpm db:generate && pnpm db:migrate
-pnpm --filter @majlis/web test:e2e     # Playwright journeys against a real hub
+pnpm --filter @corehub/web test:e2e     # Playwright journeys against a real hub
 ```
 
 Two rules that catch most mistakes early: an endpoint or event must exist in

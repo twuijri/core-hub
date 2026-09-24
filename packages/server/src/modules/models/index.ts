@@ -27,7 +27,7 @@
 import path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
-import { loadOpenApiDocument } from '@majlis/contracts';
+import { loadOpenApiDocument } from '@corehub/contracts';
 import { requireSqlite } from '../../lib/db.js';
 import { HubError } from '../../lib/errors.js';
 import { createContractIndex } from '../../lib/contract.js';
@@ -94,6 +94,8 @@ export { SecretStore } from './secrets.js';
 export type { SecretSummary } from './secrets.js';
 export {
   HERMES_PROVIDER_PREFIX,
+  LEGACY_HERMES_PROVIDER_PREFIX,
+  legacyHermesKeyEnvOf,
   PROVIDER_CATALOGUE,
   assertCatalogueIsWellFormed,
   authKindOf,

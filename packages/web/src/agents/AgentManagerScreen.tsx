@@ -244,7 +244,7 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
               name: agent.name,
             })}
           >
-            <span className="mj-btn-label">{t('agents.settings')}</span>
+            <span className="ch-btn-label">{t('agents.settings')}</span>
           </Link>
         )}
         {agent.install.update_available && (

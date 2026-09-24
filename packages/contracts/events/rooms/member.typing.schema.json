@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/rooms/member.typing.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/rooms/member.typing.schema.json",
   "title": "/rt/rooms · member.typing",
   "description": "A person started or stopped typing. Not persisted. Emitted by: rooms module from the `typing` command.",
   "type": "object",

@@ -509,7 +509,7 @@ export function writeEnvValue(home: string, key: string, value: string | null): 
   const text = next.length > 0 ? `${next.join('\n')}\n` : '';
   if (text === existing) return;
   mkdirSync(home, { recursive: true });
-  const temp = `${file}.majlis-${process.pid}.tmp`;
+  const temp = `${file}.corehub-${process.pid}.tmp`;
   writeFileSync(temp, text, { mode: 0o600 });
   chmodSync(temp, 0o600);
   renameSync(temp, file);

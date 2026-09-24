@@ -19,7 +19,14 @@
  * blank lines, which is the subset every `.env` reader agrees on.
  */
 
-export const MANAGED_MARKER = '# managed by Majlis — edit the provider in the hub, not here';
+import { LEGACY, derived } from '@corehub/contracts';
+
+export const MANAGED_MARKER: string = derived.managedMarker;
+/**
+ * The marker a hub wrote before the rename (Majlis). It is still the hub's own line: a merge
+ * rewrites it to `MANAGED_MARKER` in place, so the file does not keep two markers.
+ */
+export const LEGACY_MANAGED_MARKER: string = LEGACY.managedMarker;
 
 export interface EnvEntry {
   key: string;
@@ -107,6 +114,10 @@ export function mergeEnv(
   const out: string[] = [];
 
   for (const line of lines) {
+    if (line === LEGACY_MANAGED_MARKER) {
+      out.push(MANAGED_MARKER);
+      continue;
+    }
     const entry = parseLine(line);
     if (!entry || !ownedSet.has(entry.key)) {
       // Drop a stale marker whose variable is about to disappear; keep every other comment.

@@ -5,7 +5,7 @@
 // /data, where it survives the container being recreated. Hermes's dashboard API, which the hub
 // starts on demand (ADR 0015), starts against the sealed code and keeps its token.
 //
-//   node scripts/image-sealed-check.mjs <image>        (CI: majlis:ci)
+//   node scripts/image-sealed-check.mjs <image>        (CI: core-hub:ci)
 //
 // Needs Docker, and the network for the one optional package it installs (edge-tts, Hermes's
 // default voice). Leaves nothing behind: its containers and volume are removed at the end.

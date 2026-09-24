@@ -15,7 +15,7 @@ const TAG = '0010_member_profiles_explicit';
 
 /** The migrations folder as it was just before `TAG`: the hub an upgrade starts from. */
 function folderBefore(tag: string): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'majlis-migration-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'corehub-migration-'));
   cpSync(migrationsFolder, dir, { recursive: true });
   const journalFile = path.join(dir, 'meta', '_journal.json');
   const journal = JSON.parse(readFileSync(journalFile, 'utf8')) as {

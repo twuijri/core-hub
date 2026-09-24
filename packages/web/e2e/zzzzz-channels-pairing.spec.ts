@@ -19,7 +19,7 @@ import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 const PASSWORD = 'e2e-owner-password';
-const shots = process.env.MAJLIS_SHOTS ?? path.resolve('e2e/shots');
+const shots = process.env.COREHUB_SHOTS ?? path.resolve('e2e/shots');
 mkdirSync(shots, { recursive: true });
 
 const shot = (page: Page, name: string) =>
@@ -57,7 +57,7 @@ test('30. a linked WhatsApp: how to use it, the senders waiting for approval, an
   ) {
     // Run on its own: link it the way journey 23 does.
     await page.getByTestId('channel-pair-whatsapp').click();
-    await expect(page.getByTestId('channel-pair-done')).toContainText('مكتب المجلس', {
+    await expect(page.getByTestId('channel-pair-done')).toContainText('مكتب المركز', {
       timeout: 30_000,
     });
     await page.getByTestId('channel-pair').getByRole('button', { name: 'إغلاق' }).first().click();
@@ -65,7 +65,7 @@ test('30. a linked WhatsApp: how to use it, the senders waiting for approval, an
 
   // ---- Linked, and to whom; how to use it, in plain words.
   await expect(linkBadge).toHaveText('مربوط');
-  await expect(page.getByTestId('channel-account-whatsapp')).toContainText('مكتب المجلس');
+  await expect(page.getByTestId('channel-account-whatsapp')).toContainText('مكتب المركز');
   await expect(page.getByTestId('channel-account-whatsapp')).toContainText('+966500000000');
   await expect(page.getByTestId('channel-login-whatsapp')).toHaveCount(0);
   await expect(page.getByTestId('channel-pair-whatsapp')).toHaveCount(0);

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/sessions/run.started.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/sessions/run.started.schema.json",
   "title": "/rt/sessions · run.started",
   "description": "A run began; the assistant message shell exists. Subscribers of the session; also profile-wide on /rt/jobs as `job.*`. Emitted by: sessions module (job runner).",
   "type": "object",

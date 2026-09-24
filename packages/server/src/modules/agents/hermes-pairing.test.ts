@@ -23,7 +23,7 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 function home(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'majlis-pairing-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'corehub-pairing-'));
   dirs.push(dir);
   return dir;
 }

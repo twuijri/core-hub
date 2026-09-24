@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/sessions/tool.failed.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/sessions/tool.failed.schema.json",
   "title": "/rt/sessions · tool.failed",
   "description": "A tool call failed; `tool_call.output` holds the error text. Emitted by: sessions module from the AgentAdapter stream.",
   "type": "object",

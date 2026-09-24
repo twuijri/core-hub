@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/tasks/task.moved.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/tasks/task.moved.schema.json",
   "title": "/rt/tasks · task.moved",
   "description": "The task changed column; `task.status` is the new one. Emitted by: tasks module (move, assign/stop/unassign side effects, dispatch, bulk archive).",
   "type": "object",

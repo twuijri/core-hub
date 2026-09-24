@@ -37,7 +37,7 @@ export function Radio({
   const id = useId();
   return (
     <RadioGroup.Root
-      className="mj-radio-group"
+      className="ch-radio-group"
       aria-label={label}
       value={value ?? ''}
       disabled={disabled}
@@ -45,18 +45,18 @@ export function Radio({
       data-testid={testId}
     >
       {options.map((option) => (
-        <div className="mj-radio-row" key={option.value}>
+        <div className="ch-radio-row" key={option.value}>
           <RadioGroup.Item
-            className="mj-radio"
+            className="ch-radio"
             value={option.value}
             id={`${id}-${option.value}`}
             disabled={option.disabled ?? false}
           >
-            <RadioGroup.Indicator className="mj-radio-dot" />
+            <RadioGroup.Indicator className="ch-radio-dot" />
           </RadioGroup.Item>
-          <label className="mj-radio-label" htmlFor={`${id}-${option.value}`}>
+          <label className="ch-radio-label" htmlFor={`${id}-${option.value}`}>
             <span>{option.label}</span>
-            {option.hint !== undefined && <span className="mj-radio-hint">{option.hint}</span>}
+            {option.hint !== undefined && <span className="ch-radio-hint">{option.hint}</span>}
           </label>
         </div>
       ))}

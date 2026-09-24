@@ -26,15 +26,15 @@
   direction: ltr;
   display: flex;
   align-items: flex-start;
-  gap: var(--mj-space-2);
+  gap: var(--ch-space-2);
   min-inline-size: 0;
   /* A new speaker opens a turn; the next message from the same speaker is grouped
      under it, and the difference between the two gaps is what makes a turn read as
      one thing. */
-  margin-block-start: var(--mj-layout-turn-gap);
+  margin-block-start: var(--ch-layout-turn-gap);
 }
 .msg[data-grouped='true'] {
-  margin-block-start: var(--mj-layout-group-gap);
+  margin-block-start: var(--ch-layout-group-gap);
 }
 .chat-turns > .msg:first-child {
   margin-block-start: 0;
@@ -49,19 +49,19 @@
 /* The avatar column: reserved even when the avatar is not drawn, so a grouped
    message lines up under the first one instead of sliding under the name. */
 .msg-gutter {
-  inline-size: var(--mj-layout-avatar-sm);
+  inline-size: var(--ch-layout-avatar-sm);
   flex: 0 0 auto;
 }
 
 .msg-stack {
   display: flex;
   flex-direction: column;
-  gap: var(--mj-space-1);
+  gap: var(--ch-space-1);
   min-inline-size: 0;
 }
 .msg[data-side='user'] .msg-stack {
   align-items: flex-end;
-  max-inline-size: var(--mj-layout-bubble-max);
+  max-inline-size: var(--ch-layout-bubble-max);
 }
 .msg[data-side='agent'] .msg-stack {
   align-items: flex-start;
@@ -75,14 +75,14 @@
 .msg-head {
   display: flex;
   align-items: center;
-  gap: var(--mj-space-2);
-  min-block-size: var(--mj-layout-avatar-sm);
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-muted);
+  gap: var(--ch-space-2);
+  min-block-size: var(--ch-layout-avatar-sm);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
 }
 .msg-name {
   font-weight: 600;
-  color: var(--mj-color-text);
+  color: var(--ch-color-text);
 }
 
 /* ------------------------------------------------------------------ the bubbles */
@@ -90,10 +90,10 @@
   position: relative;
   min-inline-size: 0;
   max-inline-size: 100%;
-  padding: var(--mj-space-3) var(--mj-space-4);
-  border-radius: var(--mj-radius-lg);
+  padding: var(--ch-space-3) var(--ch-space-4);
+  border-radius: var(--ch-radius-lg);
   border: 1px solid transparent;
-  line-height: var(--mj-font-leading-normal);
+  line-height: var(--ch-font-leading-normal);
   overflow-wrap: anywhere;
   /* The bubble's own text direction comes from its content, not from the row. */
   unicode-bidi: isolate;
@@ -107,32 +107,32 @@
    tightened so the shape leans towards the speaker. No tail — a tail is a chat-app
    affectation that fights a reading column. */
 .msg-user {
-  background: var(--mj-color-user-bubble);
-  border-color: var(--mj-color-user-bubble-border);
-  color: var(--mj-color-user-bubble-text);
-  border-end-end-radius: var(--mj-radius-sm);
+  background: var(--ch-color-user-bubble);
+  border-color: var(--ch-color-user-bubble-border);
+  color: var(--ch-color-user-bubble-text);
+  border-end-end-radius: var(--ch-radius-sm);
 }
 .msg-user[data-role='command'] {
-  font-family: var(--mj-font-mono);
-  font-size: var(--mj-font-size-sm);
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-font-size-sm);
 }
 
 /* The agent: a different surface, not a different shade of the same one, so the two
    voices are told apart at a glance and not by their position alone. */
 .msg-agent-body {
   inline-size: 100%;
-  padding: var(--mj-space-3) var(--mj-space-4);
-  border-radius: var(--mj-radius-lg);
-  border: 1px solid var(--mj-color-agent-bubble-border);
-  background: var(--mj-color-agent-bubble);
-  color: var(--mj-color-agent-bubble-text);
-  border-end-start-radius: var(--mj-radius-sm);
+  padding: var(--ch-space-3) var(--ch-space-4);
+  border-radius: var(--ch-radius-lg);
+  border: 1px solid var(--ch-color-agent-bubble-border);
+  background: var(--ch-color-agent-bubble);
+  color: var(--ch-color-agent-bubble-text);
+  border-end-start-radius: var(--ch-radius-sm);
 }
 .msg-agent-body > * + * {
-  margin-block-start: var(--mj-space-3);
+  margin-block-start: var(--ch-space-3);
 }
 .msg[data-status='failed'] .msg-agent-body {
-  border-color: var(--mj-color-danger);
+  border-color: var(--ch-color-danger);
 }
 
 /* The message a search opened the conversation at (chat/anchor.ts, owner 2026-09-23):
@@ -141,12 +141,12 @@
    simply stays, which is information, not movement. */
 .msg[data-anchored='true'] :is(.msg-bubble, .msg-agent-body),
 .msg-system[data-anchored='true'] > span {
-  animation: msg-anchored 2400ms var(--mj-motion-ease) 1 both;
+  animation: msg-anchored 2400ms var(--ch-motion-ease) 1 both;
 }
 @keyframes msg-anchored {
   0%,
   40% {
-    box-shadow: 0 0 0 3px var(--mj-color-focus);
+    box-shadow: 0 0 0 3px var(--ch-color-focus);
   }
   100% {
     box-shadow: 0 0 0 3px transparent;
@@ -156,13 +156,13 @@
   .msg[data-anchored='true'] :is(.msg-bubble, .msg-agent-body),
   .msg-system[data-anchored='true'] > span {
     animation: none;
-    box-shadow: 0 0 0 2px var(--mj-color-focus);
+    box-shadow: 0 0 0 2px var(--ch-color-focus);
   }
 }
 /* A searched word, in the conversation and in the search result that led there. */
 .msg-hit {
-  background: var(--mj-color-warning-soft);
-  color: var(--mj-color-warning-soft-text);
+  background: var(--ch-color-warning-soft);
+  color: var(--ch-color-warning-soft-text);
   border-radius: 2px;
   padding-inline: 1px;
 }
@@ -171,28 +171,28 @@
 .msg-system {
   display: flex;
   align-items: center;
-  gap: var(--mj-space-3);
-  margin-block: var(--mj-space-4);
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-faint);
+  gap: var(--ch-space-3);
+  margin-block: var(--ch-space-4);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-faint);
 }
 .msg-system::before,
 .msg-system::after {
   content: '';
   flex: 1;
   block-size: 1px;
-  background: var(--mj-color-border);
+  background: var(--ch-color-border);
 }
 
 .msg-attachments {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--mj-space-1);
-  margin-block-start: var(--mj-space-2);
+  gap: var(--ch-space-1);
+  margin-block-start: var(--ch-space-2);
 }
 .msg-usage {
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-faint);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-faint);
   font-variant-numeric: tabular-nums;
 }
 
@@ -211,18 +211,18 @@
 .run-status {
   display: flex;
   align-items: center;
-  gap: var(--mj-space-2);
+  gap: var(--ch-space-2);
   /* It hugs its own words: a pill stretched across the column would read as a banner,
      and the point of it is to be a small live thing beside the composer. */
   inline-size: fit-content;
   max-inline-size: 100%;
-  margin-block-end: var(--mj-space-2);
-  padding: var(--mj-space-1) var(--mj-space-3);
-  border-radius: var(--mj-radius-full);
-  border: 1px solid color-mix(in srgb, var(--mj-color-thinking) 28%, transparent);
-  background: var(--mj-color-accent-soft);
-  color: var(--mj-color-accent-soft-text);
-  font-size: var(--mj-font-size-xs);
+  margin-block-end: var(--ch-space-2);
+  padding: var(--ch-space-1) var(--ch-space-3);
+  border-radius: var(--ch-radius-full);
+  border: 1px solid color-mix(in srgb, var(--ch-color-thinking) 28%, transparent);
+  background: var(--ch-color-accent-soft);
+  color: var(--ch-color-accent-soft-text);
+  font-size: var(--ch-font-size-xs);
 }
 .run-status-word {
   font-weight: 500;
@@ -241,10 +241,10 @@
   white-space: nowrap;
   opacity: 0.85;
   border-inline-start: 1px solid color-mix(in srgb, currentColor 30%, transparent);
-  padding-inline-start: var(--mj-space-2);
+  padding-inline-start: var(--ch-space-2);
 }
 .run-status-step[data-mono='true'] {
-  font-family: var(--mj-font-mono);
+  font-family: var(--ch-font-mono);
 }
 
 /* Three dots breathing in turn: alive, and quiet enough to sit under a transcript. */
@@ -256,9 +256,9 @@
 .run-dot {
   inline-size: 5px;
   block-size: 5px;
-  border-radius: var(--mj-radius-full);
+  border-radius: var(--ch-radius-full);
   background: currentColor;
-  animation: mj-think 1.2s var(--mj-motion-ease) infinite;
+  animation: ch-think 1.2s var(--ch-motion-ease) infinite;
 }
 .run-dot:nth-child(2) {
   animation-delay: 0.16s;
@@ -266,7 +266,7 @@
 .run-dot:nth-child(3) {
   animation-delay: 0.32s;
 }
-@keyframes mj-think {
+@keyframes ch-think {
   0%,
   60%,
   100% {
@@ -291,43 +291,43 @@
    it is not allowed to look like the reply. */
 .reason {
   inline-size: 100%;
-  border-radius: var(--mj-radius-md);
+  border-radius: var(--ch-radius-md);
 }
 .reason-summary {
   display: inline-flex;
   align-items: center;
-  gap: var(--mj-space-1);
-  padding: 2px var(--mj-space-2);
-  border-radius: var(--mj-radius-full);
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-faint);
+  gap: var(--ch-space-1);
+  padding: 2px var(--ch-space-2);
+  border-radius: var(--ch-radius-full);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-faint);
   cursor: pointer;
   list-style: none;
-  transition-duration: var(--mj-motion-fast);
-  transition-timing-function: var(--mj-motion-ease);
+  transition-duration: var(--ch-motion-fast);
+  transition-timing-function: var(--ch-motion-ease);
   transition-property: background-color, color;
 }
 .reason-summary::-webkit-details-marker {
   display: none;
 }
 .reason-summary:hover {
-  background: var(--mj-color-surface-2);
-  color: var(--mj-color-text-muted);
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text-muted);
 }
 .reason-caret {
-  transition: rotate var(--mj-motion-fast) var(--mj-motion-ease);
+  transition: rotate var(--ch-motion-fast) var(--ch-motion-ease);
 }
 .reason[open] .reason-caret {
   rotate: 180deg;
 }
 .reason-text {
-  margin-block-start: var(--mj-space-2);
-  padding: var(--mj-space-2) var(--mj-space-3);
-  border-inline-start: 2px solid var(--mj-color-border);
+  margin-block-start: var(--ch-space-2);
+  padding: var(--ch-space-2) var(--ch-space-3);
+  border-inline-start: 2px solid var(--ch-color-border);
   white-space: pre-wrap;
-  font-size: var(--mj-font-size-sm);
-  color: var(--mj-color-text-muted);
-  line-height: var(--mj-font-leading-relaxed);
+  font-size: var(--ch-font-size-sm);
+  color: var(--ch-color-text-muted);
+  line-height: var(--ch-font-leading-relaxed);
 }
 
 /* ------------------------------------------------------------- the tools of a turn
@@ -337,29 +337,29 @@
   inline-size: fit-content;
   max-inline-size: 100%;
   min-inline-size: min(22rem, 100%);
-  border: 1px solid var(--mj-color-border);
-  border-radius: var(--mj-radius-md);
-  background: var(--mj-color-bg-raised);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-bg-raised);
   overflow: hidden;
-  font-size: var(--mj-font-size-xs);
+  font-size: var(--ch-font-size-xs);
 }
 .tool-group-summary {
   display: flex;
   align-items: center;
-  gap: var(--mj-space-2);
-  padding: var(--mj-space-2) var(--mj-space-3);
+  gap: var(--ch-space-2);
+  padding: var(--ch-space-2) var(--ch-space-3);
   cursor: pointer;
   list-style: none;
-  color: var(--mj-color-text-muted);
+  color: var(--ch-color-text-muted);
 }
 .tool-group-summary::-webkit-details-marker {
   display: none;
 }
 .tool-group-summary:hover {
-  background: var(--mj-color-surface-2);
+  background: var(--ch-color-surface-2);
 }
 .tool-group-caret {
-  transition: rotate var(--mj-motion-fast) var(--mj-motion-ease);
+  transition: rotate var(--ch-motion-fast) var(--ch-motion-ease);
 }
 .tool-group[open] .tool-group-caret,
 .tool-earlier[aria-expanded='true'] .tool-group-caret {
@@ -367,7 +367,7 @@
 }
 .tool-group-count {
   font-weight: 600;
-  color: var(--mj-color-text);
+  color: var(--ch-color-text);
 }
 .tool-group-names {
   min-inline-size: 0;
@@ -375,48 +375,48 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--mj-font-mono);
+  font-family: var(--ch-font-mono);
   unicode-bidi: isolate;
 }
 .tool-group[open] > .tool-group-summary {
-  border-block-end: 1px solid var(--mj-color-border);
+  border-block-end: 1px solid var(--ch-color-border);
 }
 .tool-list > * + * {
-  border-block-start: 1px solid var(--mj-color-border);
+  border-block-start: 1px solid var(--ch-color-border);
 }
 .tool-earlier {
   display: flex;
   align-items: center;
-  gap: var(--mj-space-2);
+  gap: var(--ch-space-2);
   inline-size: 100%;
-  padding: var(--mj-space-1) var(--mj-space-3);
-  border-block-end: 1px solid var(--mj-color-border);
+  padding: var(--ch-space-1) var(--ch-space-3);
+  border-block-end: 1px solid var(--ch-color-border);
   text-align: start;
-  color: var(--mj-color-text-muted);
+  color: var(--ch-color-text-muted);
   cursor: pointer;
 }
 .tool-earlier:hover {
-  background: var(--mj-color-surface-2);
-  color: var(--mj-color-text);
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text);
 }
 .tool-ok {
   display: inline-grid;
   place-items: center;
-  color: var(--mj-color-success);
+  color: var(--ch-color-success);
 }
 .tool-label {
-  margin-block: var(--mj-space-1);
-  font-size: var(--mj-font-size-xs);
+  margin-block: var(--ch-space-1);
+  font-size: var(--ch-font-size-xs);
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: var(--mj-color-text-faint);
+  color: var(--ch-color-text-faint);
 }
 .tool-head {
   display: flex;
   align-items: center;
-  gap: var(--mj-space-2);
-  padding: var(--mj-space-1) var(--mj-space-3);
-  font-size: var(--mj-font-size-xs);
+  gap: var(--ch-space-2);
+  padding: var(--ch-space-1) var(--ch-space-3);
+  font-size: var(--ch-font-size-xs);
   list-style: none;
 }
 summary.tool-head {
@@ -426,10 +426,10 @@ summary.tool-head {
   display: none;
 }
 summary.tool-head:hover {
-  background: var(--mj-color-surface-2);
+  background: var(--ch-color-surface-2);
 }
 .tool-name {
-  font-family: var(--mj-font-mono);
+  font-family: var(--ch-font-mono);
   font-weight: 500;
 }
 .tool-preview {
@@ -438,27 +438,27 @@ summary.tool-head:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--mj-font-mono);
-  color: var(--mj-color-text-muted);
+  font-family: var(--ch-font-mono);
+  color: var(--ch-color-text-muted);
   unicode-bidi: isolate;
 }
 .tool-time {
   font-variant-numeric: tabular-nums;
-  color: var(--mj-color-text-faint);
+  color: var(--ch-color-text-faint);
   unicode-bidi: isolate;
 }
 .tool-body {
-  border-block-start: 1px solid var(--mj-color-border);
-  padding: var(--mj-space-2) var(--mj-space-3);
-  background: var(--mj-color-surface);
+  border-block-start: 1px solid var(--ch-color-border);
+  padding: var(--ch-space-2) var(--ch-space-3);
+  background: var(--ch-color-surface);
 }
 .tool-output {
   max-block-size: 16rem;
   overflow: auto;
   white-space: pre-wrap;
-  font-family: var(--mj-font-mono);
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text);
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text);
 }
 
 /* ------------------------------------------------------------- a code block
@@ -469,40 +469,40 @@ summary.tool-head:hover {
 }
 .code-tools {
   position: absolute;
-  inset-inline-end: var(--mj-space-1);
-  inset-block-start: var(--mj-space-1);
+  inset-inline-end: var(--ch-space-1);
+  inset-block-start: var(--ch-space-1);
   display: flex;
   align-items: center;
-  gap: var(--mj-space-1);
+  gap: var(--ch-space-1);
   opacity: 0;
-  transition: opacity var(--mj-motion-normal) var(--mj-motion-ease);
+  transition: opacity var(--ch-motion-normal) var(--ch-motion-ease);
 }
 .code-block:hover .code-tools,
 .code-tools:focus-within {
   opacity: 1;
 }
 .code-lang {
-  padding-inline: var(--mj-space-2);
-  border-radius: var(--mj-radius-full);
-  background: var(--mj-color-surface-2);
-  color: var(--mj-color-text-muted);
-  font-size: var(--mj-font-size-xs);
+  padding-inline: var(--ch-space-2);
+  border-radius: var(--ch-radius-full);
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text-muted);
+  font-size: var(--ch-font-size-xs);
 }
 
 /* ------------------------------------------------------- the approval card
    The one thing in the transcript that is not a message: an accent card, so it is
    found at a glance among the turns. */
 .approval-card {
-  margin-block-start: var(--mj-layout-turn-gap);
+  margin-block-start: var(--ch-layout-turn-gap);
 }
 .approval-command {
   overflow-x: auto;
-  padding: var(--mj-space-2);
-  border-radius: var(--mj-radius-sm);
-  background: var(--mj-color-code-bg);
-  color: var(--mj-color-code-text);
-  font-family: var(--mj-font-mono);
-  font-size: var(--mj-font-size-xs);
+  padding: var(--ch-space-2);
+  border-radius: var(--ch-radius-sm);
+  background: var(--ch-color-code-bg);
+  color: var(--ch-color-code-text);
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-font-size-xs);
 }
 
 /* ------------------------------------------------- the row under a message */
@@ -512,10 +512,10 @@ summary.tool-head:hover {
 .msg-actions {
   display: flex;
   align-items: center;
-  gap: var(--mj-space-1);
+  gap: var(--ch-space-1);
   min-block-size: 1.75rem;
   opacity: 0;
-  transition: opacity var(--mj-motion-fast) var(--mj-motion-ease);
+  transition: opacity var(--ch-motion-fast) var(--ch-motion-ease);
 }
 .msg[data-side='user'] .msg-actions {
   justify-content: flex-end;
@@ -536,9 +536,9 @@ summary.tool-head:hover {
   }
 }
 .msg-time {
-  padding-inline: var(--mj-space-1);
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-faint);
+  padding-inline: var(--ch-space-1);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-faint);
   font-variant-numeric: tabular-nums;
 }
 
@@ -546,15 +546,15 @@ summary.tool-head:hover {
 .composer-reply {
   display: flex;
   align-items: center;
-  gap: var(--mj-space-2);
-  margin-block-end: var(--mj-space-2);
-  padding-inline: var(--mj-space-3);
-  padding-block: var(--mj-space-1);
-  border-inline-start: 2px solid var(--mj-color-accent);
-  border-radius: var(--mj-radius-sm);
-  background: var(--mj-color-surface-2);
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-muted);
+  gap: var(--ch-space-2);
+  margin-block-end: var(--ch-space-2);
+  padding-inline: var(--ch-space-3);
+  padding-block: var(--ch-space-1);
+  border-inline-start: 2px solid var(--ch-color-accent);
+  border-radius: var(--ch-radius-sm);
+  background: var(--ch-color-surface-2);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
 }
 .composer-reply > :first-child {
   min-inline-size: 0;
@@ -565,58 +565,58 @@ summary.tool-head:hover {
 .session-select-bar {
   display: flex;
   align-items: center;
-  gap: var(--mj-space-1);
-  padding-inline: var(--mj-space-1);
+  gap: var(--ch-space-1);
+  padding-inline: var(--ch-space-1);
 }
 .session-select-count {
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-muted);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
 }
 .session-row[data-selected='true'] {
   /* The accent, not a shade of grey: a chosen row must read as chosen at a glance,
      in both themes, and not only beside an unchosen one. */
-  background: var(--mj-color-accent-soft);
+  background: var(--ch-color-accent-soft);
 }
 
 /* ------------------------------------------------ the messages held back */
 .msg-queue {
   display: flex;
   flex-direction: column;
-  gap: var(--mj-space-1);
-  margin-block-end: var(--mj-space-2);
-  padding: var(--mj-space-2);
-  border: 1px solid var(--mj-color-border);
-  border-radius: var(--mj-radius-md);
-  background: var(--mj-color-surface-2);
+  gap: var(--ch-space-1);
+  margin-block-end: var(--ch-space-2);
+  padding: var(--ch-space-2);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-surface-2);
 }
 .msg-queue-head {
   display: flex;
   align-items: center;
-  gap: var(--mj-space-2);
+  gap: var(--ch-space-2);
 }
 .msg-queue-list {
   display: flex;
   flex-direction: column;
-  gap: var(--mj-space-1);
+  gap: var(--ch-space-1);
 }
 .msg-queue-item {
   display: flex;
   align-items: center;
-  gap: var(--mj-space-1);
-  padding-inline: var(--mj-space-2);
-  padding-block: var(--mj-space-1);
-  border-radius: var(--mj-radius-sm);
-  background: var(--mj-color-surface);
-  font-size: var(--mj-font-size-xs);
+  gap: var(--ch-space-1);
+  padding-inline: var(--ch-space-2);
+  padding-block: var(--ch-space-1);
+  border-radius: var(--ch-radius-sm);
+  background: var(--ch-color-surface);
+  font-size: var(--ch-font-size-xs);
 }
 .msg-queue-index {
   display: inline-grid;
   place-items: center;
   inline-size: 1.25rem;
   block-size: 1.25rem;
-  border-radius: var(--mj-radius-sm);
-  background: var(--mj-color-surface-3);
-  color: var(--mj-color-text-muted);
+  border-radius: var(--ch-radius-sm);
+  background: var(--ch-color-surface-3);
+  color: var(--ch-color-text-muted);
   font-variant-numeric: tabular-nums;
 }
 .msg-queue-text {
@@ -630,26 +630,26 @@ summary.tool-head:hover {
   place-items: center;
   inline-size: 2rem;
   block-size: 2rem;
-  border-radius: var(--mj-radius-full);
-  color: var(--mj-color-text-muted);
+  border-radius: var(--ch-radius-full);
+  color: var(--ch-color-text-muted);
 }
 .context-ring:hover,
 .context-ring:focus-visible {
-  background: var(--mj-color-surface-2);
-  color: var(--mj-color-text);
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text);
 }
 .context-ring-track {
-  stroke: var(--mj-color-border);
+  stroke: var(--ch-color-border);
 }
 .context-ring-fill {
-  stroke: var(--mj-color-accent);
-  transition: stroke-dasharray var(--mj-motion-slow) var(--mj-motion-ease);
+  stroke: var(--ch-color-accent);
+  transition: stroke-dasharray var(--ch-motion-slow) var(--ch-motion-ease);
 }
 .context-ring[data-tone='warning'] .context-ring-fill {
-  stroke: var(--mj-color-warning-soft-text);
+  stroke: var(--ch-color-warning-soft-text);
 }
 .context-ring[data-tone='danger'] .context-ring-fill {
-  stroke: var(--mj-color-danger-soft-text);
+  stroke: var(--ch-color-danger-soft-text);
 }
 @media (prefers-reduced-motion: reduce) {
   .context-ring-fill {
@@ -663,20 +663,20 @@ summary.tool-head:hover {
 .question-card {
   display: flex;
   flex-direction: column;
-  gap: var(--mj-space-2);
-  margin-block-end: var(--mj-space-2);
-  padding: var(--mj-space-3);
-  border: 1px solid var(--mj-color-border);
-  border-radius: var(--mj-radius-lg);
-  background: var(--mj-color-bg-raised);
-  box-shadow: var(--mj-shadow-md);
+  gap: var(--ch-space-2);
+  margin-block-end: var(--ch-space-2);
+  padding: var(--ch-space-3);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-lg);
+  background: var(--ch-color-bg-raised);
+  box-shadow: var(--ch-shadow-md);
 }
 .question-head {
   display: flex;
   align-items: center;
-  gap: var(--mj-space-2);
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-muted);
+  gap: var(--ch-space-2);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
 }
 .question-left {
   font-variant-numeric: tabular-nums;
@@ -684,27 +684,27 @@ summary.tool-head:hover {
 }
 .question-text {
   font-weight: 500;
-  line-height: var(--mj-font-leading-relaxed);
+  line-height: var(--ch-font-leading-relaxed);
 }
 .question-choices {
   display: flex;
   flex-direction: column;
-  gap: var(--mj-space-1);
+  gap: var(--ch-space-1);
 }
 .question-choice {
   display: flex;
   align-items: center;
-  gap: var(--mj-space-3);
+  gap: var(--ch-space-3);
   inline-size: 100%;
-  padding: var(--mj-space-2) var(--mj-space-3);
-  border-radius: var(--mj-radius-md);
+  padding: var(--ch-space-2) var(--ch-space-3);
+  border-radius: var(--ch-radius-md);
   text-align: start;
   cursor: pointer;
-  transition: background-color var(--mj-motion-fast) var(--mj-motion-ease);
+  transition: background-color var(--ch-motion-fast) var(--ch-motion-ease);
 }
 .question-choice:hover,
 .question-choice:focus-visible {
-  background: var(--mj-color-surface-2);
+  background: var(--ch-color-surface-2);
 }
 .question-number {
   display: inline-grid;
@@ -712,11 +712,11 @@ summary.tool-head:hover {
   flex: 0 0 auto;
   inline-size: 1.5rem;
   block-size: 1.5rem;
-  border: 1px solid var(--mj-color-border);
-  border-radius: var(--mj-radius-full);
-  font-size: var(--mj-font-size-xs);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-full);
+  font-size: var(--ch-font-size-xs);
   font-variant-numeric: tabular-nums;
-  color: var(--mj-color-text-muted);
+  color: var(--ch-color-text-muted);
 }
 .question-label {
   flex: 1;
@@ -724,8 +724,8 @@ summary.tool-head:hover {
 }
 .question-go {
   opacity: 0;
-  color: var(--mj-color-text-muted);
-  transition: opacity var(--mj-motion-fast) var(--mj-motion-ease);
+  color: var(--ch-color-text-muted);
+  transition: opacity var(--ch-motion-fast) var(--ch-motion-ease);
 }
 .question-choice:hover .question-go,
 .question-choice:focus-visible .question-go {
@@ -734,46 +734,46 @@ summary.tool-head:hover {
 .question-own {
   display: flex;
   align-items: center;
-  gap: var(--mj-space-2);
-  padding: var(--mj-space-1) var(--mj-space-1) var(--mj-space-1) var(--mj-space-3);
-  border: 1px solid var(--mj-color-border);
-  border-radius: var(--mj-radius-full);
+  gap: var(--ch-space-2);
+  padding: var(--ch-space-1) var(--ch-space-1) var(--ch-space-1) var(--ch-space-3);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-full);
 }
 .question-input {
   flex: 1;
   min-inline-size: 0;
   background: transparent;
   outline: none;
-  font-size: var(--mj-font-size-sm);
+  font-size: var(--ch-font-size-sm);
 }
 
 /* A question the agent asked, and the answer it got, kept in the reply (AnsweredQuestions). */
 .answered-list {
   display: flex;
   flex-direction: column;
-  gap: var(--mj-space-1);
-  margin-block-end: var(--mj-space-2);
+  gap: var(--ch-space-1);
+  margin-block-end: var(--ch-space-2);
 }
 .answered {
   display: flex;
   align-items: flex-start;
-  gap: var(--mj-space-2);
-  padding: var(--mj-space-2) var(--mj-space-3);
-  border: 1px solid var(--mj-color-border);
-  border-radius: var(--mj-radius-md);
-  background: var(--mj-color-surface-2);
-  font-size: var(--mj-font-size-sm);
+  gap: var(--ch-space-2);
+  padding: var(--ch-space-2) var(--ch-space-3);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-surface-2);
+  font-size: var(--ch-font-size-sm);
 }
 .answered-icon {
   flex: none;
   margin-block-start: 0.2em;
-  color: var(--mj-color-text-muted);
+  color: var(--ch-color-text-muted);
 }
 .answered-body {
   min-inline-size: 0;
 }
 .answered-question {
-  color: var(--mj-color-text-muted);
+  color: var(--ch-color-text-muted);
 }
 .answered-answer {
   font-weight: 600;
@@ -786,11 +786,11 @@ summary.tool-head:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--mj-space-1);
+  gap: var(--ch-space-1);
   min-block-size: 2.5rem;
-  margin-block-end: var(--mj-layout-turn-gap);
-  font-size: var(--mj-font-size-xs);
-  color: var(--mj-color-text-muted);
+  margin-block-end: var(--ch-layout-turn-gap);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
 }
 .chat-turns > .chat-older + .msg {
   margin-block-start: 0;

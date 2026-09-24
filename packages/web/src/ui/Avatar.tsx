@@ -49,11 +49,11 @@ export function Avatar({
 }) {
   return (
     <RadixAvatar.Root
-      className={`mj-avatar mj-avatar-${size} mj-avatar-${tone}`}
+      className={`ch-avatar ch-avatar-${size} ch-avatar-${tone}`}
       data-testid={testId}
     >
-      {src ? <RadixAvatar.Image className="mj-avatar-img" src={src} alt={name} /> : null}
-      <RadixAvatar.Fallback className="mj-avatar-fallback" delayMs={src ? 300 : 0}>
+      {src ? <RadixAvatar.Image className="ch-avatar-img" src={src} alt={name} /> : null}
+      <RadixAvatar.Fallback className="ch-avatar-fallback" delayMs={src ? 300 : 0}>
         {mark ?? <span aria-hidden>{initialOf(name)}</span>}
       </RadixAvatar.Fallback>
     </RadixAvatar.Root>

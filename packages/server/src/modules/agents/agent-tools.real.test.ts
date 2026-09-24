@@ -5,11 +5,11 @@
  * installs into a profile's `skills/` is one Hermes itself then lists, front matter intact.
  * Name the image to run it; without one it is skipped:
  *
- *   docker build -f packages/server/Dockerfile -t majlis:local .
- *   MAJLIS_HERMES_IMAGE=majlis:local pnpm --filter @majlis/server exec \
+ *   docker build -f packages/server/Dockerfile -t core-hub:local .
+ *   COREHUB_HERMES_IMAGE=corehub:local pnpm --filter @corehub/server exec \
  *     vitest run src/modules/agents/agent-tools.real.test.ts
  *
- * `MAJLIS_REAL_WHATSAPP=1` also starts a real WhatsApp pairing and waits for Hermes's first QR
+ * `COREHUB_REAL_WHATSAPP=1` also starts a real WhatsApp pairing and waits for Hermes's first QR
  * code (it needs the network: Hermes installs its bridge and asks WhatsApp for a code), then
  * cancels it. Nothing is linked.
  */
@@ -27,15 +27,15 @@ import { pairWhatsApp, testMcpServer, type HermesApiCall } from './hermes-tools.
 import { installPack, planImport } from './skill-import.js';
 import { makeZip } from './testing/make-zip.js';
 
-const image = process.env.MAJLIS_HERMES_IMAGE;
+const image = process.env.COREHUB_HERMES_IMAGE;
 const fixture = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../../tests/fixtures/mcp-stdio-server.mjs',
 );
 
-describe.skipIf(!image)('agent tools (real Hermes; set MAJLIS_HERMES_IMAGE to run)', () => {
-  const home = mkdtempSync(path.join(tmpdir(), 'majlis-tools-home-'));
-  const dataDir = mkdtempSync(path.join(tmpdir(), 'majlis-tools-data-'));
+describe.skipIf(!image)('agent tools (real Hermes; set COREHUB_HERMES_IMAGE to run)', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'corehub-tools-home-'));
+  const dataDir = mkdtempSync(path.join(tmpdir(), 'corehub-tools-data-'));
   chmodSync(home, 0o777);
   const work = path.join(home, 'profiles', 'work');
   mkdirSync(work, { recursive: true });
@@ -69,7 +69,7 @@ describe.skipIf(!image)('agent tools (real Hermes; set MAJLIS_HERMES_IMAGE to ru
 
   /** `hermes serve` in the image, as this user so the files the hub writes are Hermes's too. */
   const spawnImpl: DashboardSpawner = (_command, args, options) => {
-    const name = `majlis-tools-real-${process.pid}-${containers.length}`;
+    const name = `corehub-tools-real-${process.pid}-${containers.length}`;
     containers.push(name);
     const child = spawn(
       'docker',
@@ -235,7 +235,7 @@ describe.skipIf(!image)('agent tools (real Hermes; set MAJLIS_HERMES_IMAGE to ru
     expect(content.content).toBe(document);
   }, 120_000);
 
-  it.skipIf(process.env.MAJLIS_REAL_WHATSAPP !== '1')(
+  it.skipIf(process.env.COREHUB_REAL_WHATSAPP !== '1')(
     'a real WhatsApp pairing reaches its first QR code, and cancelling forgets it',
     async () => {
       const seen: Array<Record<string, unknown> | undefined> = [];

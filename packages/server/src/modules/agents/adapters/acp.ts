@@ -25,7 +25,7 @@
  * Nothing about a specific vendor lives here: which CLIs to look for is data
  *  (`../catalog/`), not code: only a catalog entry the owner approved can be driven.
  */
-import { derived } from '@majlis/contracts';
+import { PRODUCT, derived } from '@corehub/contracts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import type { AgentCapability } from '../schema.js';
@@ -235,7 +235,7 @@ export class AcpSession implements AgentSession {
       id: message.id,
       error: {
         code: JSONRPC_METHOD_NOT_FOUND,
-        message: `Majlis does not implement ${message.method}`,
+        message: `${PRODUCT.name} does not implement ${message.method}`,
       },
     });
   }

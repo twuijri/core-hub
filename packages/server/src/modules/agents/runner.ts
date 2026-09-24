@@ -18,6 +18,7 @@
  * `approve_always` / `deny` and remembers, per approval, which agent option each decision
  * stands for, so `send()` can hand the agent exactly the option it offered.
  */
+import { derived } from '@corehub/contracts';
 import type { FastifyBaseLogger } from 'fastify';
 import { HubError, agentUnavailable } from '../../lib/errors.js';
 import type { AdapterSet } from './adapters/index.js';
@@ -409,7 +410,9 @@ function isClosed(session: AgentSession): boolean {
 
 /** Hermes keys a conversation by the id the client chooses: derive it from the hub's. */
 export function mintSessionRef(adapterKind: string, sessionId: string): string | null {
-  return adapterKind === 'hermes' ? `majlis-${sessionId.toLowerCase()}` : null;
+  // New conversations say the product's name; one started before the rename keeps the ref it
+  // stored (`majlis-…`), which is what Hermes knows it by.
+  return adapterKind === 'hermes' ? `${derived.serviceName}-${sessionId.toLowerCase()}` : null;
 }
 
 /**

@@ -40,7 +40,7 @@ async function boot(hermesApi?: HermesApiCall): Promise<{ hub: Hub; agent: strin
 }
 
 function multipart(name: string, type: string, body: Buffer) {
-  const boundary = '----majlisSkillBoundary';
+  const boundary = '----corehubSkillBoundary';
   return {
     payload: Buffer.concat([
       Buffer.from(

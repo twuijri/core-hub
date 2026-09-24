@@ -1,4 +1,4 @@
-# Agent Map — Majlis
+# Agent Map — Core Hub
 
 This file is the short map for coding agents and new contributors. Keep it
 small; details live in `docs/`.
@@ -8,6 +8,11 @@ A from-scratch, self-hosted hub for AI agents, owned by twuijri. Server first;
 web, desktop, Android and iOS are clients of one contract. Nothing here is
 derived from Hermes Studio / Ekko Studio code (BSL 1.1). See
 `docs/adr/0004-clean-room.md` — it is a hard rule, not guidance.
+
+The product is **Core Hub** («كور هب»; ADR 0017). It was called Majlis until 2026-09-24:
+that name survives only in history (`docs/changes/`, older ADRs) and in the code that still
+reads the old names (`LEGACY` in `packages/contracts/src/product.ts`). New code takes names
+from `PRODUCT` / `derived` there, never a typed literal.
 
 ## First reads (in order)
 - `docs/ARCHITECTURE.md` — system, boundaries, invariants.

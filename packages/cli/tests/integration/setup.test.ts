@@ -1,5 +1,5 @@
 /**
- * `majlis setup` against a real hub that has no owner and no HUB_ADMIN_PASSWORD (ADR 0011):
+ * `corehub setup` against a real hub that has no owner and no HUB_ADMIN_PASSWORD (ADR 0011):
  * the claim token is read from the file the server wrote, the password is typed at a prompt,
  * and the command ends signed in. Nothing here is faked — the hub is the real one, built the
  * way `packages/server/tests/unit/helpers.ts` builds it.
@@ -23,7 +23,7 @@ let dataDir: string;
 let env: NodeJS.ProcessEnv;
 const temps: string[] = [];
 const temp = (name: string) => {
-  const dir = mkdtempSync(path.join(tmpdir(), `majlis-cli-${name}-`));
+  const dir = mkdtempSync(path.join(tmpdir(), `corehub-cli-${name}-`));
   temps.push(dir);
   return dir;
 };
@@ -67,7 +67,7 @@ afterAll(async () => {
   for (const dir of temps) rmSync(dir, { recursive: true, force: true });
 });
 
-describe('majlis setup', () => {
+describe('corehub setup', () => {
   it('refuses a secret on the command line', async () => {
     const withToken = await cli(['setup', '--server', baseUrl, '--token', 'x'.repeat(48)]);
     expect(withToken.code).toBe(2);

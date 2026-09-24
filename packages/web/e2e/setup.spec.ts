@@ -7,7 +7,7 @@ import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { setupBaseURL, setupDataDir } from '../playwright.config.js';
 
-const shots = process.env.MAJLIS_SHOTS ?? path.resolve('e2e/shots');
+const shots = process.env.COREHUB_SHOTS ?? path.resolve('e2e/shots');
 mkdirSync(shots, { recursive: true });
 
 const OWNER = { username: 'tariq', password: 'first-run-owner-password' };
