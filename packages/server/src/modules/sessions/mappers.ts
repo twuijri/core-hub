@@ -405,7 +405,8 @@ export function attachmentUrl(attachmentId: string): string {
 
 export interface ApprovalView {
   row: ApprovalRow;
-  sessionId: string;
+  /** `null` for a workflow step's gate, which belongs to no session. */
+  sessionId: string | null;
   messageId: string | null;
   agent: { id: string; name: string };
 }
@@ -434,8 +435,8 @@ export function toApproval(view: ApprovalView, profile: string): Record<string, 
     run_id: row.runId,
     message_id: view.messageId,
     room_id: null,
-    workflow_run_id: null,
-    node_id: null,
+    workflow_run_id: row.workflowRunId ?? null,
+    node_id: row.nodeId ?? null,
     agent: view.agent,
     title: row.title,
     description: row.description ?? null,

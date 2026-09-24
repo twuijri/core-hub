@@ -25,6 +25,7 @@ import type {
   AttachmentsPort,
   SessionsNotifier,
   SessionsPorts,
+  WorkflowGate,
 } from './ports.js';
 import { noAttachments, noNotifier, unavailableAgents, unavailableRunner } from './unavailable.js';
 
@@ -60,6 +61,7 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
     attachments: resolvePort(options.attachments ?? noAttachments, app),
     notifier: resolvePort(options.notifier ?? noNotifier, app),
     agentTimeoutMs: options.agentTimeoutMs ?? 10 * 60_000,
+    gate: () => workflowGateFactory?.(app) ?? null,
   });
   const scopesFor = (app: FastifyInstance): ScopeResolver =>
     resolvePort(options.scopes ?? derivedScopeResolver, app);
@@ -116,6 +118,11 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
           }
         },
         outcome: (workspace, runId) => serviceFor(app, app.log).turnResult(workspace, runId),
+      });
+      gates.set(app, {
+        raise: (scope, input) => serviceFor(app, app.log).raiseWorkflowApproval(scope, input),
+        cancel: (scope, workflowRunId) =>
+          serviceFor(app, app.log).cancelWorkflowApprovals(scope, workflowRunId),
       });
     },
     registerEvents(io: SocketServer) {
@@ -183,6 +190,46 @@ export function sessionRunsFor(app: FastifyInstance): SessionRuns | null {
   return runs.get(app) ?? null;
 }
 
+/**
+ * A workflow step that waits for a person raises an ordinary approval here (kind
+ * `workflow_step`), and closes the ones a cancelled run leaves open. For `schedules`,
+ * through the composition root.
+ */
+export interface WorkflowApprovals {
+  raise(
+    scope: { workspace: string; profile: string; userId: string },
+    input: {
+      workflowRunId: string;
+      workflowId: string;
+      workflowName: string;
+      nodeId: string;
+      title: string;
+      description: string | null;
+    },
+  ): string;
+  cancel(scope: { workspace: string; profile: string }, workflowRunId: string): number;
+}
+const gates = new WeakMap<FastifyInstance, WorkflowApprovals>();
+
+/** `null` when this app composes no sessions module. */
+export function workflowApprovalsFor(app: FastifyInstance): WorkflowApprovals | null {
+  return gates.get(app) ?? null;
+}
+
+/**
+ * Who continues a paused workflow once its gate is answered (the composition root joins
+ * it to `schedules`). Registered once for the process, like the other cross-module ports,
+ * so every sessions module a test composes answers gates the same way.
+ */
+let workflowGateFactory: ((app: FastifyInstance) => WorkflowGate | null) | null = null;
+export function registerWorkflowGate(
+  factory: ((app: FastifyInstance) => WorkflowGate | null) | null,
+): ((app: FastifyInstance) => WorkflowGate | null) | null {
+  const previous = workflowGateFactory;
+  workflowGateFactory = factory;
+  return previous;
+}
+
 /** The module the app composes (`src/modules/index.ts`). */
 export const sessionsModule = createSessionsModule();
 
@@ -217,6 +264,7 @@ export type {
   AttachmentsPort,
   AttachmentSummary,
   MaterialisedAttachment,
+  WorkflowGate,
 } from './ports.js';
 export { RUN_FILES_DIR, collectOutputs, ensureRunFolders, runFolders } from './run-files.js';
 export type { ProducedFile, ProducedFiles, ProducedRefusal } from './run-files.js';

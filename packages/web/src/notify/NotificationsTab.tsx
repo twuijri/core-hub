@@ -124,7 +124,13 @@ function NoticeRowItem({ notice, language }: { notice: NoticeRow; language: stri
   const target =
     notice.resource?.kind === 'session'
       ? routeOf('chat').replace(':sessionId', notice.resource.id)
-      : null;
+      : // A workflow waiting for a person opens its run, where it is answered.
+        notice.resource?.kind === 'workflow_run'
+        ? `${routeOf('schedules')}?${new URLSearchParams({
+            workflow_run: notice.resource.id,
+            ...(notice.profile ? { profile: notice.profile } : {}),
+          }).toString()}`
+        : null;
 
   return (
     <li>

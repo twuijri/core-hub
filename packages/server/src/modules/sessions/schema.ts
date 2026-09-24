@@ -93,6 +93,8 @@ export const APPROVAL_KINDS = [
   'memory_write',
   'skill_write',
   'question',
+  /** A workflow's `approval` step (or a step with `approval_required`): no session, no run. */
+  'workflow_step',
 ] as const;
 export const APPROVAL_STATUSES = [
   'pending',
@@ -298,9 +300,14 @@ export const approvals = sqliteTable(
   'approvals',
   {
     ...scopedColumns(),
-    runId: ulid('run_id')
-      .notNull()
-      .references(() => runs.id, { onDelete: 'cascade' }),
+    /** The session run that asked; `null` for a workflow step's gate, which has none. */
+    runId: ulid('run_id').references(() => runs.id, { onDelete: 'cascade' }),
+    /**
+     * A workflow step's gate: the workflow run it pauses and the node it stands on
+     * (cross-module ids -> schedules.workflow_runs / its definition's node key).
+     */
+    workflowRunId: ulid('workflow_run_id'),
+    nodeId: text('node_id', { length: 64 }),
     toolCallId: ulid('tool_call_id').references((): AnySQLiteColumn => toolCalls.id, {
       onDelete: 'set null',
     }),
@@ -322,6 +329,7 @@ export const approvals = sqliteTable(
   (t) => [
     index('approvals_workspace_pending_idx').on(t.workspace, t.status, t.requestedAt),
     index('approvals_run_idx').on(t.runId),
+    index('approvals_workflow_run_idx').on(t.workflowRunId),
     check('approvals_kind_check', inList(t.kind, APPROVAL_KINDS)),
     check('approvals_status_check', inList(t.status, APPROVAL_STATUSES)),
   ],

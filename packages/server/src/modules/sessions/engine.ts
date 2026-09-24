@@ -178,7 +178,7 @@ export class RunEngine {
     },
   ): Promise<ApprovalRow> {
     const remember = input.decision === 'approve_session' || input.decision === 'approve_always';
-    const run = this.active.get(approval.runId);
+    const run = approval.runId ? this.active.get(approval.runId) : undefined;
     const ref = (approval.payload as { ref?: unknown }).ref;
 
     if (run) {
@@ -854,7 +854,7 @@ export class RunEngine {
     if (!sessionId) return;
     const agent = run
       ? { id: run.agent.id, name: run.agent.name }
-      : agentRefOf(this.deps.store, scope.workspace, row.runId);
+      : agentRefOf(this.deps.store, scope.workspace, row.runId ?? '');
     const payload = {
       approval: toApproval(
         { row, sessionId, messageId: run?.state.messageId ?? null, agent },

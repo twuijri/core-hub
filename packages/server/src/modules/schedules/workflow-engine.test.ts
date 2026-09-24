@@ -257,13 +257,16 @@ describe('workflows: running', () => {
     }
   });
 
-  it('says plainly that approval steps are not built', async () => {
+  it('fails a step that needs a person when the hub has nobody to ask, saying so', async () => {
+    // Ports with no approvals: a hub composed without sessions. (The approval itself, raised,
+    // answered and surviving a restart, is `tests/unit/workflow-approvals.test.ts`.)
+    fakePorts({});
     const hub = await signedInHub();
     try {
       const id = await workflow(hub, [step('gate', 'approval', null)], []);
       const result = await run(hub, id);
       expect(result.status).toBe('failed');
-      expect(String(result.error)).toContain('approval steps are not built');
+      expect(String(result.error)).toContain('this hub cannot ask anyone for approval');
     } finally {
       await hub.close();
     }

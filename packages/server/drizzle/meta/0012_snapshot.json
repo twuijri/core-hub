@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ab654a7f-0fac-41c5-8fd0-b2be95d05891",
-  "prevId": "4fd49858-438c-41fd-aafd-525c0615d3f5",
+  "id": "b4775667-a677-4519-a64f-fb653c5b5969",
+  "prevId": "ab654a7f-0fac-41c5-8fd0-b2be95d05891",
   "tables": {
     "app_tokens": {
       "name": "app_tokens",
@@ -6305,6 +6305,14 @@
           "notNull": true,
           "autoincrement": false
         },
+        "shared": {
+          "name": "shared",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
         "label": {
           "name": "label",
           "type": "text(80)",
@@ -6466,10 +6474,11 @@
         }
       },
       "indexes": {
-        "providers_workspace_slug_uq": {
-          "name": "providers_workspace_slug_uq",
+        "providers_workspace_shared_slug_uq": {
+          "name": "providers_workspace_shared_slug_uq",
           "columns": [
             "workspace",
+            "shared",
             "slug"
           ],
           "isUnique": true

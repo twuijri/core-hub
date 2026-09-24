@@ -1,6 +1,6 @@
 /**
  * Schedules and workflows over HTTP: what the hub accepts, what it refuses, and what it
- * says about the three things it cannot do yet.
+ * says when a schedule's target cannot start.
  */
 import { describe, expect, it } from 'vitest';
 import { authed, expectModuleRegistered, signedInHub } from '../../../tests/unit/helpers.js';
@@ -122,8 +122,8 @@ describe('schedules: saving one', () => {
   });
 });
 
-describe('schedules: what cannot run yet says so', () => {
-  it('answers 501 with its operation id, after checking the schedule exists', async () => {
+describe('schedules: run now, when the target cannot start', () => {
+  it('records a failed run with the reason and answers 409, after checking the schedule exists', async () => {
     const hub = await signedInHub();
     try {
       const created = (
@@ -134,17 +134,31 @@ describe('schedules: what cannot run yet says so', () => {
         method: 'POST',
         url: '/api/v1/schedules/01J8QK3ZR2W7M5N4P6T8V9X0ZZ/run',
       });
-      // A wrong id is a 404: more useful than "not implemented".
+      // A wrong id is a 404.
       expect(missing.statusCode).toBe(404);
 
+      // The schedule names no agent: nothing can start, and the hub says so — in the
+      // answer and in the history — instead of a run that silently never happened.
       const real = await authed(hub, hub.token, {
         method: 'POST',
         url: `/api/v1/schedules/${created.id as string}/run`,
       });
-      expect(real.statusCode).toBe(501);
-      expect(real.json()).toMatchObject({
-        code: 'not_implemented',
-        details: { operationId: 'schedules.runNow', reason: 'worker_not_built' },
+      expect(real.statusCode).toBe(409);
+      const details = (real.json() as { details: Json }).details;
+      expect(details).toMatchObject({ reason: 'target_unavailable' });
+      expect(String(details.message)).toContain('names no agent');
+      const history = (
+        await authed(hub, hub.token, {
+          method: 'GET',
+          url: `/api/v1/schedules/${created.id as string}/runs`,
+        })
+      ).json() as { items: Json[] };
+      expect(history.items).toHaveLength(1);
+      expect(history.items[0]).toMatchObject({
+        id: details.schedule_run_id,
+        status: 'failed',
+        trigger: 'manual',
+        session_id: null,
       });
     } finally {
       await hub.close();

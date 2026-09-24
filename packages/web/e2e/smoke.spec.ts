@@ -1141,7 +1141,7 @@ test.describe('web smoke journeys', () => {
     await shot(page, 'agent-channels-ar-light');
   });
 
-  test('11. Schedules: a cron saved, its next time computed, and the button that says why', async ({
+  test('11. Schedules: a cron saved, its next time computed, and a run button that runs', async ({
     page,
   }) => {
     await login(page);
@@ -1151,7 +1151,7 @@ test.describe('web smoke journeys', () => {
     await page.getByTestId('schedule-name').fill('تقرير الصباح');
     await page.getByTestId('schedule-value').fill('0 9 * * *');
     await page.getByTestId('schedule-prompt').fill('اكتب ملخص أمس');
-    // Not Hermes (journey 18): an agent without a scheduler of its own waits for the worker.
+    // Not Hermes (journey 18): an agent without a scheduler of its own is fired by the hub.
     await page.getByTestId('schedule-agent').click();
     await page.getByRole('option', { name: /Direct|مباشر/ }).click();
     // A new schedule is made in the profile the person is in — the top selector — and the
@@ -1172,8 +1172,8 @@ test.describe('web smoke journeys', () => {
     await expect(card).toBeVisible();
     // The hub computed a real next time rather than leaving it blank.
     await expect(card).not.toContainText('لا موعد');
-    // And the run button is there, disabled, saying why — not hidden.
-    await expect(card.getByTestId('schedule-run')).toBeDisabled();
+    // The hub fires its own schedules, so "Run now" is a real button (journey 28 presses it).
+    await expect(card.getByTestId('schedule-run')).toBeEnabled();
     await shot(page, 'schedules-ar-light');
 
     // A cron the hub cannot read is refused when it is saved, with the reason.
