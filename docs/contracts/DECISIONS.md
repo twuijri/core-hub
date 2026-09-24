@@ -658,3 +658,39 @@ linter rightly calls unused.
   (`enabled`) and `deleteSkill` answer `409 conflict`, `details.reason = skill_bundled`;
   pinning, the hub's own order, still works. `putSkill` and `updateSkill` gain the `409` they
   can now answer.
+
+## 37. A channel that pairs a device says whether it is linked; who may message the agent is approved in the profile
+
+2026-09-24, with a messaging gateway per Hermes profile (the owner's report: WhatsApp paired in
+profile «manger», Hermes restarted, the number never answered).
+
+- **`Channel.link`.** WhatsApp's identity is the bridge's session folder, not a field, so a
+  paired WhatsApp read as "not configured, 0 fields". `Channel` gains `link` —
+  `{linked, account_id, account_name, account_phone}` for WhatsApp, read from the profile's
+  session, `null` for every other platform — and for WhatsApp `configured` is `link.linked`.
+  `enabled` follows Hermes's own rule for it (`WHATSAPP_ENABLED` in `.env` and
+  `platforms.whatsapp.enabled` in `config.yaml`, whichever says off wins).
+- **`agents.unlinkChannel`** (`POST /agents/{agent_id}/channels/{platform}/unlink`, `200` with
+  the channel) is not `agents.clearChannel`: clearing forgets credentials that are fields,
+  unlinking stops the gateway that runs the bridge, deletes the session and switches the
+  channel off. Hermes and its bridge have no logout, which the description says, so the phone
+  keeps listing the device until it is removed there. Only `whatsapp` (`409`,
+  `unlink_not_supported` otherwise; `not_linked` when nothing is linked).
+- **`agents.listChannels` gains `gateway`**: the messaging gateway that serves the profile and
+  `applies` — `now` in a named profile, whose gateway the hub starts, restarts or stops on each
+  channel change, `on_restart` in the default profile, whose gateway also carries the API
+  server and waits for Hermes's Restart. `null` where the hub does not run Hermes.
+  `Channel.status` now says what that gateway reports (`online`, `error` with Hermes's
+  sentence, `offline`), `unknown` where the hub cannot know.
+- **`AgentRuntime.gateways`** (optional; Hermes only): every messaging gateway, the default
+  one and each named profile's, with its state, restarts and channels.
+- **Pairing approvals** are Hermes's pairing in the selected profile: `agents.listPairing`
+  (`GET /agents/{agent_id}/pairing` → `PairingList`), `agents.approvePairing`
+  (`POST …/pairing/{platform}/requests/{request_id}/approve` → `PairedSender`),
+  `agents.denyPairing` (`DELETE …/pairing/{platform}/requests/{request_id}`, `204`) and
+  `agents.revokePairing` (`DELETE …/pairing/{platform}/approved/{user_id}`, `204`), all
+  `x-roles: [owner, admin]` — the lists are other people's phone numbers. A request is
+  addressed by Hermes's request id, never its code. Hermes has no verb for turning one request
+  down (only one that clears every platform's), so Deny is the hub's removal of that request
+  from Hermes's own pending file; the sender is not told. No realtime event: the page reads
+  the list again every ten seconds while it is open.

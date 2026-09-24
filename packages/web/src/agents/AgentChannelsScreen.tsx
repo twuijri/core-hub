@@ -275,9 +275,12 @@ const STATUS_TONE: Record<Channel['status'], 'success' | 'danger' | 'neutral'> =
   unknown: 'neutral',
 };
 
-/** "Office · +966500000000", whichever of the two Hermes knows. */
+/**
+ * "Office · +966500000000", whichever of the two Hermes knows. The number is isolated left to
+ * right (U+2066 … U+2069), or an Arabic sentence moves its plus sign to the other end.
+ */
 function accountOf(link: ChannelLink): string {
-  return [link.account_name, link.account_phone ? `+${link.account_phone}` : null]
+  return [link.account_name, link.account_phone ? `\u2066+${link.account_phone}\u2069` : null]
     .filter(Boolean)
     .join(' · ');
 }
