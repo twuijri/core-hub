@@ -82,31 +82,58 @@ export interface MessagePageLike<M> {
 export const OLDER_PAGE = 200;
 /** How far back an anchored open will go: 25 pages of 200, past any real conversation. */
 export const MAX_OLDER_PAGES = 25;
+/**
+ * An anchor this close to the top of what was paged in gets one more page before it, so a
+ * jump to an old message opens with history on both sides, not at the edge of what is held.
+ */
+export const AROUND = 20;
+
+/** What paging back gathered: oldest first, and whether the hub has anything older. */
+export interface PagedBack<M> {
+  items: M[];
+  has_more: boolean;
+  /** How many older pages were fetched. */
+  pages: number;
+}
 
 /**
  * The chat opens with the newest page only (`sessions.listMessages`). A search can point
  * further back than that, so an anchored open keeps asking for the page before the oldest
  * one it holds (`before` = that message's id) until the anchor is there, nothing older
- * exists, or `MAX_OLDER_PAGES` is spent. Messages come back oldest first, as the contract
- * returns them.
+ * exists, or `MAX_OLDER_PAGES` is spent — and then, when the anchor sits within `AROUND`
+ * messages of the top, one page more. The same walk keeps a resync from dropping the pages
+ * a person already scrolled back through (useSessionStream). Messages come back oldest
+ * first, as the contract returns them.
  */
 export async function pageBackUntil<M extends { id: string }>(
   first: MessagePageLike<M>,
   anchorId: string,
   older: (before: string) => Promise<MessagePageLike<M>>,
-): Promise<M[]> {
+  { around = 0 }: { around?: number } = {},
+): Promise<PagedBack<M>> {
   let items = first.items;
   let hasMore = first.has_more;
-  for (let pages = 0; pages < MAX_OLDER_PAGES; pages += 1) {
-    if (!hasMore || items.some((m) => m.id === anchorId)) break;
+  let pages = 0;
+  const fetchOne = async (): Promise<boolean> => {
     const oldest = items[0];
-    if (!oldest) break;
+    if (!oldest) return false;
     const page = await older(oldest.id);
-    if (page.items.length === 0) break;
+    pages += 1;
+    if (page.items.length === 0) {
+      hasMore = false;
+      return false;
+    }
     items = [...page.items, ...items];
     hasMore = page.has_more;
+    return true;
+  };
+  while (pages < MAX_OLDER_PAGES) {
+    if (!hasMore || items.some((m) => m.id === anchorId)) break;
+    if (!(await fetchOne())) break;
   }
-  return items;
+  const at = items.findIndex((m) => m.id === anchorId);
+  if (at >= 0 && at < around && hasMore && pages < MAX_OLDER_PAGES) await fetchOne();
+  return { items, has_more: hasMore, pages };
 }
 
 // ------------------------------------------------------------------ marking the words

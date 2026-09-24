@@ -51,7 +51,7 @@
   `profile` ← `400 validation_failed`). وصف `schedules.list` صار «الأحدث أولًا» بمؤشر واحد عبر
   البروفايلات (كان يقول «الموعد التالي أولًا» ولم يكن كذلك).
 - `packages/contracts/events/README.md`: `profiles: 'all'` في مصافحة `/rt/tasks` و`/rt/schedules`.
-- `docs/contracts/DECISIONS.md` **§31** (كان §30 ثم أخذه #80 فصار §31).
+- `docs/contracts/DECISIONS.md` **§32** (§30 و§31 أخذهما #80 و#82 قبله).
 - لا تغيير في مخطط `JobAccepted`: الخادم هو الذي كان مخالفًا وأُصلح.
 
 ## الملفات والتأثير

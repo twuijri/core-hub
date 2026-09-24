@@ -75,7 +75,7 @@ export { HermesRefusal } from './hermes-kanban.js';
  * agent, `auth` for a person. Injected by the composition root so this module never reads
  * another's tables — and resolved here, on the hub, so a card from another profile carries
  * its agent's name instead of leaving each client to guess it from the agents of whatever
- * profile it happens to be in (DECISIONS §31). Without one (tests that compose no names),
+ * profile it happens to be in (DECISIONS §32). Without one (tests that compose no names),
  * an assignee's name is its id, never an invention.
  */
 let taskNamesFactory: ((app: FastifyInstance) => NameOf) | null = null;
@@ -625,7 +625,7 @@ export const tasksModule = defineModule({
         if (!principal) throw new HubError('internal', { message: 'route has no principal' });
 
         const asked = query.profile as string | undefined;
-        // `profiles=all` is what the board is anyway (DECISIONS §31); with `profile` it says
+        // `profiles=all` is what the board is anyway (DECISIONS §32); with `profile` it says
         // two things at once, and the hub does not pick one.
         if (asked && query.profiles === 'all') {
           throw new HubError('validation_failed', {
@@ -773,7 +773,7 @@ export const tasksModule = defineModule({
         const scope = scopeOf(request);
         const service = serviceOf(request);
         const limit = clampLimit(query.limit as number | undefined);
-        // `profiles=all` (ADR 0016, DECISIONS §31): every workspace this person may enter —
+        // `profiles=all` (ADR 0016, DECISIONS §32): every workspace this person may enter —
         // `auth`'s rule, asked here, never a list the client sends. The header was already
         // checked by `requireWorkspace`, so "all" opens no door the header could not.
         const slugOf = new Map<string, string>([[scope.workspace, scope.profile]]);

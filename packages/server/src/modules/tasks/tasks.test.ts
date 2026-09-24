@@ -274,7 +274,7 @@ describe('tasks: assignment', () => {
       });
       expect(response.statusCode).toBe(202);
       // The contract's `JobAccepted` — the job's id, which is what a client reads to follow
-      // it — not the job itself (DECISIONS §31).
+      // it — not the job itself (DECISIONS §32).
       expect(response.json()).toEqual({ job_id: expect.stringMatching(/^[0-9A-Z]{26}$/) });
       await drainJobs(hub.app);
       const after = (

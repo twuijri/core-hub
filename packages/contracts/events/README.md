@@ -36,7 +36,7 @@ for `sessions.list?profiles=all` — so a client showing one list across profile
 `session.*` and `approval.*` from all of them. Each envelope names its `profile`, and
 `seq` stays per (namespace, profile): a client that resumes a session keeps the highest
 `seq` of **that session's profile** only. The same handshake on `/rt/tasks` and
-`/rt/schedules` (DECISIONS §31) hears `task.*`, `project.*`, `schedule.*` and
+`/rt/schedules` (DECISIONS §32) hears `task.*`, `project.*`, `schedule.*` and
 `workflow*.*` of every profile the Tasks board and the Schedules page show.
 
 The token is the same bearer as HTTP and is **required on every namespace** —

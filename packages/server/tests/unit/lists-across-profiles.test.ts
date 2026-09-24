@@ -1,5 +1,5 @@
 /**
- * Tasks and Schedules across profiles (ADR 0016 stage 2, DECISIONS §31).
+ * Tasks and Schedules across profiles (ADR 0016 stage 2, DECISIONS §32).
  *
  * The owner: «الكرون جوب والمهام المفروض تطلع كل البروفايلات بدون تصنيف». The board and the
  * Schedules page gather every profile the caller may enter — the server decides which:

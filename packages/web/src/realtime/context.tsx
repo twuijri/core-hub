@@ -91,7 +91,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           token: () => tokenRef.current,
           profile: () => profileRef.current,
           // The lists that gather every profile hear every profile (ADR 0016): the chats
-          // list, the Tasks board and the Schedules page (DECISIONS §31). The others stay
+          // list, the Tasks board and the Schedules page (DECISIONS §32). The others stay
           // with the profile the person is in. Which profiles "all" is, the hub decides.
           ...(GATHERED.has(name) ? { profiles: 'all' as const } : {}),
           // The hub refuses a handshake whose token expired (every namespace needs a valid

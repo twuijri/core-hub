@@ -582,7 +582,7 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
   const assignable = !fromHermes && open;
   const handable = fromHermes && open;
   const agent = task.assignee?.kind === 'agent' ? task.assignee : null;
-  // The hub names the agent (DECISIONS §31): the card may be from a profile whose agents
+  // The hub names the agent (DECISIONS §32): the card may be from a profile whose agents
   // this page never asked for, so the client does not guess.
   const agentName = agent?.name ?? null;
   // The conversation opens in the task's own profile, from the address (`?profile=`), the

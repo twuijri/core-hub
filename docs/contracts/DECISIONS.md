@@ -520,7 +520,26 @@ person, and grants nobody access.
   keep. A refused pack names `details.reason`, `details.skill`, `details.file` and
   `details.message`; a skill that already exists is `409`, anything else `400`.
 
-## 31. Tasks and schedules list every profile; `profiles=all` is the one word for it
+## 31. Archiving a conversation stops its runs; a paging cursor belongs to its conversation
+
+Owner, 2026-09-24: archiving several chats while one was still working left the agent
+working — and spending — in a conversation that was out of sight, and a task on that run
+stayed `running` on the board. And the chat only ever showed the newest 100 messages.
+
+- `sessions.update` with `archived: true`, and `sessions.bulkUpdate` with the same patch,
+  stop every live run of each session exactly as the chat's Stop does (`sessions.cancelRun`):
+  a queued run is cancelled before it starts (queued ones first, so ending the active run
+  does not hand the adapter the next in line), an active run is interrupted and ends
+  `cancelled` with its own `run.cancelled`. Both operations now declare `run.cancelled` in
+  `x-rt-events`. A task on such a run moves as a stop from the chat moves it (`ready`, still
+  assigned). `archived: false` starts nothing.
+- `sessions.listMessages` pages back by keyset on the message's position in its session.
+  A `before` that is not a message of **this** session — another conversation's, or one
+  that no longer exists — answers `404 not_found` (`details.resource = message`). It used
+  to be ignored, which answered the newest page again: a client paging back would have
+  taken messages it already held for older ones.
+
+## 32. Tasks and schedules list every profile; `profiles=all` is the one word for it
 
 ADR 0016 stage 2 (owner, 2026-09-24: «الكرون جوب والمهام المفروض تطلع كل البروفايلات بدون
 تصنيف»). The Tasks board and the Schedules page show every profile the caller may enter,

@@ -272,7 +272,7 @@ registerTaskRunner((app) => {
  * The names a card shows: an agent's from the registry (`agents`), a person's from `auth`.
  * Resolved on the hub, so a card from any profile carries its agent's name — the board
  * gathers every profile, and a client guessing from the agents of the profile it is in
- * would show an id for the rest (DECISIONS §31).
+ * would show an id for the rest (DECISIONS §32).
  */
 registerTaskNames((app) => (kind, id) => {
   if (kind === 'agent') return agentsServiceFor(app).loadAgent(id).name;

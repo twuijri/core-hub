@@ -229,7 +229,10 @@
     "speak_later": "Speech arrives in a later phase.",
     "replying_to": "Replying to: {text}",
     "estimated": "≈ {amount}",
-    "anchor_missing": "The message this search pointed to is no longer in this conversation."
+    "anchor_missing": "The message this search pointed to is no longer in this conversation.",
+    "older_loading": "Loading older messages…",
+    "older_start": "Beginning of the conversation",
+    "older_failed": "Couldn’t load older messages."
   },
   "composer": {
     "label": "Message composer",

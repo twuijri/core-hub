@@ -451,7 +451,7 @@ export const schedulesModule = defineModule({
       handler: async (request, { query }) => {
         // Global (like the Tasks board): every workspace this person may enter, each
         // schedule with its own. `profile` narrows it to one; `profiles=all` says "every
-        // one" explicitly (DECISIONS §31), and the two together say two things at once.
+        // one" explicitly (DECISIONS §32), and the two together say two things at once.
         const principal = request.principal;
         if (!principal) throw new HubError('internal', { message: 'route has no principal' });
         const service = serviceOf(request);

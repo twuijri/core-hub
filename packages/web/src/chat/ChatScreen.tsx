@@ -1,5 +1,13 @@
 import { HubApiError } from '@majlis/contracts';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useAgents, useForkSession, usePatchSession, usePreferences } from '../hub/queries.js';
 import { ProfileScope, useAuth } from '../auth/context.js';
@@ -38,6 +46,7 @@ import { runProgress, turnsOf } from './turns.js';
 import { useRecentModels } from '../models/useModelPicker.js';
 import { useApprovalMode, useComposerModels } from './useComposerControls.js';
 import { useFollowBottom } from './followBottom.js';
+import { useLoadOlderOnScroll } from './olderMessages.js';
 import { useSessionStream } from './useSessionStream.js';
 import { WorkingDirPicker } from './WorkingDirPicker.js';
 import { ProfileBadge } from '../shell/ProfileBadge.js';
@@ -131,10 +140,30 @@ function OpenSession({ sessionId }: { sessionId: string }) {
     hold: holding,
     onBottom: () => setPhase(['shown'], 'released'),
   });
-  const lastRole = state.messages.at(-1)?.role;
+  // Keyed on the last message, not the count: older pages joining at the top change the
+  // count too, and must never pull a person reading history down to the bottom.
+  const last = state.messages.at(-1);
+  const lastId = last?.id;
+  const lastRole = last?.role;
   useEffect(() => {
     if (lastRole === 'user' && !holding) follow();
-  }, [messageCount, lastRole, follow, holding]);
+  }, [lastId, lastRole, follow, holding]);
+
+  /**
+   * Older messages as the person scrolls up (olderMessages.ts): the page before the oldest
+   * one held joins at the top, and the message at the top of the screen stays put. Not
+   * before an anchored open has made its jump, which decides where the reader is.
+   */
+  const olderEdge = useRef<HTMLDivElement>(null);
+  const loadOlderNow = useLoadOlderOnScroll(
+    transcript,
+    olderEdge,
+    stream.status === 'ready' &&
+      state.hasOlder &&
+      stream.olderStatus !== 'error' &&
+      anchor?.phase !== 'loading',
+    stream.loadOlder,
+  );
 
   /**
    * The jump itself: once the transcript is on the page, the anchored message is scrolled
@@ -382,6 +411,14 @@ function OpenSession({ sessionId }: { sessionId: string }) {
           <p className="max-w-prose text-sm text-muted">{t('chat.empty')}</p>
         </div>
         <div className="chat-stream chat-turns" ref={transcript}>
+          {messageCount > 0 && (state.hasOlder || state.pagedBack) && (
+            <OlderRow
+              edgeRef={olderEdge}
+              hasOlder={state.hasOlder}
+              failed={stream.olderStatus === 'error'}
+              onRetry={loadOlderNow}
+            />
+          )}
           <Transcript
             turns={turns}
             showReasoning={showReasoning}
@@ -499,6 +536,47 @@ function OpenSession({ sessionId }: { sessionId: string }) {
         <div className="chat-pad" aria-hidden />
       </div>
     </AppShell>
+  );
+}
+
+/**
+ * The top of a transcript that pages back: "loading older messages…" while there is more
+ * (it is also the line whose approach asks for the next page), the start of the
+ * conversation once there is not, or the failure with a way to try again. One fixed
+ * height in every state, so switching between them moves nothing below.
+ */
+function OlderRow({
+  edgeRef,
+  hasOlder,
+  failed,
+  onRetry,
+}: {
+  edgeRef: RefObject<HTMLDivElement | null>;
+  hasOlder: boolean;
+  failed: boolean;
+  onRetry: () => void;
+}) {
+  const { t } = useI18n();
+  const phase = !hasOlder ? 'start' : failed ? 'error' : 'loading';
+  return (
+    <div
+      ref={edgeRef}
+      className="chat-older"
+      data-testid="chat-older"
+      data-state={phase}
+      role="status"
+    >
+      {phase === 'start' && t('chat.older_start')}
+      {phase === 'loading' && t('chat.older_loading')}
+      {phase === 'error' && (
+        <>
+          <span>{t('chat.older_failed')}</span>{' '}
+          <button type="button" className="link underline" onClick={onRetry}>
+            {t('common.retry')}
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 
