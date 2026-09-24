@@ -495,9 +495,12 @@ function WebhookDialog({
         />
         <fieldset className="flex flex-col gap-2">
           <legend className="text-sm font-medium">{t('webhooks.signing')}</legend>
-          <p className="text-xs text-muted">
-            {t('webhooks.signing_hint', { header: SIGNATURE_HEADER })}
-          </p>
+          <p className="text-xs text-muted">{t('webhooks.signing_hint')}</p>
+          {/* Latin and symbols in a line of their own, so an Arabic sentence never
+              reorders them. */}
+          <code className="self-start text-xs" dir="ltr">
+            {SIGNATURE_HEADER}: sha256=&lt;hex&gt;
+          </code>
           <Radio
             label={t('webhooks.signing')}
             value={secretChoice}

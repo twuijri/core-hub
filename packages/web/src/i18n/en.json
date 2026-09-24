@@ -865,7 +865,7 @@
     "allow_private": "Allow a private address",
     "allow_private_hint": "Off by default, so a webhook cannot make the hub call machines inside its own network.",
     "signing": "Signing secret",
-    "signing_hint": "With a secret, every delivery carries {header}: sha256=<HMAC of the body>, so the receiver can check it came from this hub.",
+    "signing_hint": "With a secret, every delivery carries the header below, an HMAC-SHA256 of the body, so the receiver can check it came from this hub.",
     "secret_keep": "Keep the current secret",
     "secret_new": "Make a new secret",
     "secret_new_hint": "Shown once after saving; the receiver must be given the new one.",
