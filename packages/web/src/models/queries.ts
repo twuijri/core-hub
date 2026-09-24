@@ -99,18 +99,22 @@ export function useCatalogue() {
   });
 }
 
-/** Everything the screen writes invalidates the same three reads: one rule, no drift. */
+/**
+ * Everything the screen writes invalidates the same reads: one rule, no drift. In **every**
+ * profile, not just this one: providers are the hub's (contract decision §34), and a profile
+ * that chose no model shows the default profile's, so a save here changes what the others
+ * show too.
+ */
 function useModelsMutation<TInput, TResult>(run: (input: TInput) => Promise<TResult>) {
-  const { profile } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: run,
     onSuccess: () => {
       for (const key of ['providers', 'catalogue', 'defaults', 'speech', 'runtime'] as const) {
-        void queryClient.invalidateQueries({ queryKey: ['models', key, profile] });
+        void queryClient.invalidateQueries({ queryKey: ['models', key] });
       }
       // An inherited model is shown on every agent card (ADR 0010 §4).
-      void queryClient.invalidateQueries({ queryKey: ['agents', profile] });
+      void queryClient.invalidateQueries({ queryKey: ['agents'] });
     },
   });
 }
@@ -144,6 +148,8 @@ export interface ProviderCreate {
   base_url: string;
   /** Sent only when the person typed one; every provider accepts one, none demands it. */
   api_key?: string;
+  /** Every profile (`all`, shared) or only the one selected at the top (decision §37). */
+  scope: 'all' | 'profile';
 }
 
 export function useCreateProvider() {
@@ -221,7 +227,7 @@ export interface TestResult {
 
 /** A failure is a `200` with `ok: false`; the screen shows the provider's own words. */
 export function useTestProvider() {
-  const { client, profile } = useAuth();
+  const { client } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) =>
@@ -231,7 +237,8 @@ export function useTestProvider() {
         })
       ).data as TestResult,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: modelKeys.providers(profile) });
+      // The provider is the same row in every profile (contract decision §34).
+      void queryClient.invalidateQueries({ queryKey: ['models', 'providers'] });
     },
   });
 }

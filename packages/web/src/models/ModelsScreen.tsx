@@ -1,5 +1,6 @@
 /**
- * The Models screen: the providers this workspace **added**, and one way to add another.
+ * The Models screen: the providers the hub **added** — one list, shared by every profile
+ * (contract decision §34) — and one way to add another.
  *
  * Owner direction, 2026-09-22: the old screen was a grid of every provider the hub knows,
  * each with its own key box, and he found it scattered. Now the list is what he
@@ -23,6 +24,7 @@ import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { canOpen, navigation, routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
+import { useProfileName } from '../shell/profiles.js';
 import {
   AlertDialog,
   Badge,
@@ -96,6 +98,8 @@ export function ModelsScreen() {
   const refresh = useRefreshProvider();
   const runtime = useRuntimeReport();
   const [adding, setAdding] = useState(false);
+  const { profile } = useAuth();
+  const profileName = useProfileName();
 
   const configured = providers.data ?? [];
   const refreshAll = () => {
@@ -181,7 +185,11 @@ export function ModelsScreen() {
         <AddProviderDialog
           presets={presets.data?.items ?? []}
           host={presets.data?.host}
-          taken={new Set(configured.map((provider) => provider.slug))}
+          taken={{
+            all: new Set(configured.filter((p) => p.scope === 'all').map((p) => p.slug)),
+            profile: new Set(configured.filter((p) => p.scope === 'profile').map((p) => p.slug)),
+          }}
+          profileName={profileName(profile)}
           onClose={() => setAdding(false)}
         />
       )}
@@ -293,6 +301,7 @@ function ProviderCard({
   defaultModel: string | null;
 }) {
   const { t } = useI18n();
+  const profileName = useProfileName();
   const save = useSaveProvider();
   const test = useTestProvider();
   const refresh = useRefreshProvider();
@@ -326,6 +335,14 @@ function ProviderCard({
         }
       />
       <ul className="flex flex-wrap gap-1">
+        <li data-scope={provider.scope}>
+          {/* Who it is for (decision §37): every profile, or this one alone. */}
+          <Badge tone={provider.scope === 'profile' ? 'accent' : 'neutral'} testId="provider-scope">
+            {provider.scope === 'profile'
+              ? t('models.provider.scope_only', { profile: profileName(provider.profile) })
+              : t('models.provider.scope_shared')}
+          </Badge>
+        </li>
         <li>
           <Badge>{t(provider.builtin ? 'models.badge.builtin' : 'models.badge.custom')}</Badge>
         </li>
@@ -749,6 +766,9 @@ function DefaultsTab() {
 
   const tasks = defaults.data.auxiliary.tasks;
   const assignments = defaults.data.auxiliary.assignments as Record<string, ModelRef | undefined>;
+  // Roles this profile left alone show the default profile's choice, and say so (contract
+  // decision §34). Choosing one here makes it this profile's own.
+  const inherited = new Set(defaults.data.inherited ?? []);
 
   return (
     <div className="flex flex-col gap-4">
@@ -758,6 +778,7 @@ function DefaultsTab() {
         label={t('models.defaults.chat')}
         models={models}
         value={refValue(defaults.data.default)}
+        inherited={inherited.has('default')}
         onChange={(ref) => save.mutate({ default: ref })}
       />
       {tasks.map((task) => (
@@ -767,6 +788,7 @@ function DefaultsTab() {
           label={task.label[language === 'ar' ? 'ar' : 'en']}
           models={models}
           value={refValue(assignments[task.key])}
+          inherited={inherited.has(task.key)}
           onChange={(ref) => save.mutate({ assignments: { [task.key]: ref } })}
         />
       ))}
@@ -814,12 +836,15 @@ function ModelSelect({
   label,
   models,
   value,
+  inherited = false,
   onChange,
 }: {
   id: string;
   label: string;
   models: Model[];
   value: string;
+  /** The value is the default profile's, because this profile chose none. */
+  inherited?: boolean;
   onChange(ref: ModelRef | null): void;
 }) {
   const { t } = useI18n();
@@ -846,6 +871,11 @@ function ModelSelect({
           list.map((model) => modelOption(model, refValue(model))),
         )}
       />
+      {inherited && (
+        <span className="text-xs text-muted" data-testid={`${id}-inherited`}>
+          {t('models.defaults.inherited')}
+        </span>
+      )}
     </div>
   );
 }

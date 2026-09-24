@@ -229,21 +229,27 @@ export interface ProfileExportResult {
   removed: string[];
   /** Paths inside the archive where a stored provider key was overwritten. */
   masked: string[];
+  /** How many providers the archive carries, keys included (0 without; decision §37). */
+  providers?: number;
 }
 
 export interface ProfileImportResult {
   profile_id: string;
   slug: string;
   name: string;
+  /** Providers the archive carried, now the imported profile's own (decision §37). */
+  providers?: number;
 }
 
 export function useExportWorkspace() {
   const { client } = useAuth();
   return useMutation({
-    mutationFn: async (id: string) =>
+    // With the profile's providers and their keys only when the person chose it (§37).
+    mutationFn: async ({ id, providers }: { id: string; providers: boolean }) =>
       (
         await client.request('post', '/profiles/{profile_id}/export', {
           params: { profile_id: id },
+          body: { providers },
         })
       ).data.job_id,
   });

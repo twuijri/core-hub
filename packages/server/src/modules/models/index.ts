@@ -35,7 +35,8 @@ import { defineModule } from '../../lib/module.js';
 import { defineRoute } from '../../lib/route.js';
 import { t } from '../../i18n/index.js';
 import {
-  listWorkspacesFor,
+  defaultWorkspace,
+  findWorkspace,
   ownerUser,
   requireRole,
   requireUser,
@@ -196,6 +197,17 @@ function contextOf(app: FastifyInstance): ModelsService {
     audit: auditFor(app),
     jobs: jobRunnerFor(app),
     hermes,
+    // Shared providers, their models and keys are stored under the default profile
+    // (contract decision §37).
+    hubScope: () => {
+      const row = defaultWorkspace(db);
+      return row ? { id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault } : null;
+    },
+    // A named Hermes profile is the workspace of that slug (ADR 0014).
+    profileWorkspace: (profile) => {
+      const row = findWorkspace(db, profile);
+      return row && !row.isDefault ? row.id : null;
+    },
     ...(own.fetchImpl ? { fetchImpl: own.fetchImpl } : {}),
     ...(own.restartDelayMs === undefined ? {} : { restartDelayMs: own.restartDelayMs }),
   });
@@ -269,6 +281,11 @@ export const modelsModule = defineModule({
       directChat(workspace, request) {
         return contextOf(app).chat(workspace, request);
       },
+      // A named Hermes profile, just before one of its turns: the endpoints it uses in its
+      // config, and in its own `.env` exactly the keys that differ from the root's (§37).
+      prepareRuntimeProfile(profileHome) {
+        contextOf(app).prepareProfile(profileHome);
+      },
     };
     registerAgentModelsPort(app.hub.io, port);
 
@@ -291,18 +308,20 @@ export const modelsModule = defineModule({
       const owner = ownerUser(db);
       if (!owner) return;
       const service = contextOf(app);
-      for (const row of listWorkspacesFor(db, owner)) {
-        try {
-          service.reconcile(
-            { id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault },
-            { userId: owner.id },
-          );
-        } catch (error) {
-          app.log.warn(
-            { err: error, workspace: row.slug },
-            'models: could not reconcile the Hermes configuration at boot',
-          );
-        }
+      // Once: the root is the default profile's, whoever saved (decision §37). Reconciling per
+      // profile used to leave Hermes with whichever profile came last.
+      const row = defaultWorkspace(db);
+      if (!row) return;
+      try {
+        service.reconcile(
+          { id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault },
+          { userId: owner.id },
+        );
+      } catch (error) {
+        app.log.warn(
+          { err: error, workspace: row.slug },
+          'models: could not reconcile the Hermes configuration at boot',
+        );
       }
     });
 

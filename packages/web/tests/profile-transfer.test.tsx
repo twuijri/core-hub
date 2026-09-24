@@ -192,6 +192,65 @@ describe('export', () => {
     await waitFor(() => expect(saved).toHaveLength(2));
   });
 
+  it('asks with or without providers, sends none by default, and warns before sending keys', async () => {
+    const { fetchImpl, sent } = hub({
+      job: job({
+        result: {
+          attachment_id: FILE,
+          profile: 'default',
+          name: 'default-20260924-100001.tar.gz',
+          size_bytes: 48_213,
+          expires_at: '2026-09-25T10:00:01Z',
+          removed: [],
+          masked: [],
+          providers: 3,
+        },
+      }),
+    });
+    mount(fetchImpl);
+    await userEvent.click(await screen.findByTestId('export-workspace'));
+    const dialog = await screen.findByTestId('export-workspace-dialog');
+    // Without is the default, and says keys stay behind; no warning yet.
+    expect(within(dialog).getByTestId('export-without-providers')).toBeTruthy();
+    expect(within(dialog).queryByTestId('export-keys-warning')).toBeNull();
+    await userEvent.click(within(dialog).getByTestId('export-with-providers'));
+    expect(within(dialog).getByTestId('export-keys-warning').textContent).toContain(
+      'API keys in the clear',
+    );
+    expect(within(dialog).queryByText(/Keys stay behind/)).toBeNull();
+    await userEvent.click(within(dialog).getByTestId('start-export'));
+    await waitFor(() => {
+      const post = sent.find((s) => s.path.endsWith('/export'));
+      expect(post?.body).toEqual({ providers: true });
+    });
+    expect((await within(dialog).findByTestId('export-providers-carried')).textContent).toContain(
+      '3',
+    );
+  });
+
+  it('sends providers: false when the person keeps the default', async () => {
+    const { fetchImpl, sent } = hub({
+      job: job({
+        result: {
+          attachment_id: FILE,
+          profile: 'default',
+          name: 'd.tar.gz',
+          size_bytes: 1,
+          expires_at: '2026-09-25T10:00:01Z',
+          removed: [],
+          masked: [],
+        },
+      }),
+    });
+    mount(fetchImpl);
+    await userEvent.click(await screen.findByTestId('export-workspace'));
+    await userEvent.click(await screen.findByTestId('start-export'));
+    await waitFor(() => {
+      const post = sent.find((s) => s.path.endsWith('/export'));
+      expect(post?.body).toEqual({ providers: false });
+    });
+  });
+
   it("shows the hub's sentence when it does not run Hermes itself", async () => {
     const { fetchImpl } = hub({
       exportAnswer: [

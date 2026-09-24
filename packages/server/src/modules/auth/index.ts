@@ -82,7 +82,14 @@ export {
   resolveWorkspaceFor,
   type WorkspaceScope,
 } from './workspace.js';
-export { registerWorkspaceStatsProvider, type WorkspaceStatsProvider } from './profiles.js';
+export {
+  onProfileCreated,
+  profileCreated as profileCreatedFor,
+  registerWorkspaceStatsProvider,
+  type ProfileCreatedEvent,
+  type ProfileCreatedListener,
+  type WorkspaceStatsProvider,
+} from './profiles.js';
 export {
   ProfileMirrorError,
   RUNTIME_DEFAULT_PROFILE,

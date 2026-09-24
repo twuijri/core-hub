@@ -1,8 +1,19 @@
 # models
 
 Owns: `secret`, `provider`, `model`, `model_default`, `ensemble`,
-`speech_settings`. Schema: `packages/server/src/modules/models/schema.ts`. All
-scoped (ADR 0005: each workspace has its own models). Base columns omitted.
+`speech_settings`. Schema: `packages/server/src/modules/models/schema.ts`. Base
+columns omitted.
+
+**Two provider scopes, per-profile choices** (contract decision §37, owner 2026-09-24). A
+`provider` row is **shared** (`shared = true`: every profile's; stored, with its models and
+its key `shared-provider:<family>`, under the default profile — which always exists and can
+be neither renamed nor archived) or a profile's **own** (`shared = false`: that profile's
+alone, its key `provider:<family>` in that profile). A profile sees both; where both have a
+slug, its own is the one it uses. A new profile has every shared provider at once; a copy of
+a profile gets its source's own providers with their keys. `model_default`, `ensemble` and
+`speech_settings` stay per profile: they are choices, and a profile that made none uses the
+default profile's (mapped onto the provider of the same slug it uses). Migration `0012`
+(`provider_scope`) added the column: every row older than it is its profile's own.
 
 This module is **the hub's one credential store** (ADR 0010): a person adds a
 provider key once, here, and the hub propagates it to Hermes and to every
@@ -41,7 +52,7 @@ is additive — mint a version, make it active, re-seal the rows that are not on
 it yet, then drop the old version. A row sealed under a version the ring no
 longer holds is *reported*, never silently skipped: that is data loss.
 
-## provider (scoped)
+## provider (scoped; `shared` rows are every profile's)
 
 | column | type | meaning |
 |---|---|---|
@@ -92,7 +103,7 @@ and the only thing allowed to report a key as missing is the endpoint's own
 answer. A preset declares `keyRequirement: required | optional`, and that is the
 only vocabulary there is (contract decision §26; the defect of 2026-09-22).
 
-## model (scoped)
+## model (scoped, with its provider)
 
 | column | type | meaning |
 |---|---|---|
@@ -166,6 +177,20 @@ with a key"; `reason` is an i18n key, never a sentence in one language.
 
 ## Propagation (ADR 0010)
 
+- **Every profile** (decision §37): Hermes's root home is its `default` profile: the keys and
+  endpoints the default profile uses (its own over the shared ones) and its chat model,
+  whichever profile saved; the gateway's process environment gets the same keys. A named
+  profile gets the endpoints **it** uses in its own `config.yaml`, and in its own `.env` every
+  hub-owned variable whose value differs from the root's: its own key (Hermes reads a
+  profile's `.env` before the environment, so it wins), the shared key where the default
+  profile has its own instead, or an empty value where the root has a key that profile must
+  not use (Hermes loads the root `.env` into its environment at start). A variable whose value
+  is the root's is left out. This is done on every save, right after the hub makes a profile
+  (and after a copy or an import took its providers), and before each turn in a named profile
+  (`ModelsService.prepareProfile`).
+- **Export and import** (decision §37): an export "with providers" adds
+  `<profile>/majlis-providers.json` — the providers the profile uses, keys in the clear; an
+  import reads it before Hermes sees the archive and makes each one the imported profile's own.
 - **Hermes**: the hub writes the provider keys into `${HERMES_HOME}/.env` (a
   merge that touches only the variables it owns), **puts the same variables into
   the gateway's own process environment at spawn** (the file is what `hermes

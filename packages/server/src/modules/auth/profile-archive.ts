@@ -56,7 +56,21 @@ export interface ArchiveRules {
   secrets?: readonly string[];
   /** Refuse an archive whose entries add up to more than this (a gzip bomb). */
   maxUnpackedBytes?: number;
+  /**
+   * Entries (also left out, like `drop`) whose bytes the report hands back in `captured`:
+   * how an import reads the providers file before Hermes sees the archive (§37). Each is
+   * capped at `MAX_CAPTURE_BYTES`.
+   */
+  capture?: (path: string) => boolean;
+  /**
+   * Regular files added at the end of the archive, never masked: how an export that carries
+   * the profile's providers writes them (contract decision §37).
+   */
+  append?: readonly { path: string; data: Buffer }[];
 }
+
+/** A captured entry larger than this is not one the hub wrote. */
+export const MAX_CAPTURE_BYTES = 4 * 1024 * 1024;
 
 export interface ArchiveReport {
   /** The distinct first path segments, sorted: a profile archive has exactly one. */
@@ -71,6 +85,8 @@ export interface ArchiveReport {
   unsupported: string[];
   /** Entries whose path is absolute or climbs out with `..`. */
   unsafe: string[];
+  /** The bytes of the entries `capture` asked for, by path. */
+  captured: Record<string, Buffer>;
 }
 
 /** `.env` or `auth.json` at any depth: the files Hermes treats as credentials. */
@@ -153,6 +169,9 @@ export class TarFilter extends Transform {
   };
   private entries = 0;
   private unpacked = 0;
+  /** The entry being captured (its path and bytes so far), while in `skip`. */
+  private capturing: { path: string; chunks: Buffer[]; left: number } | null = null;
+  private readonly captured: Record<string, Buffer> = {};
 
   constructor(private readonly rules: ArchiveRules) {
     super();
@@ -170,6 +189,7 @@ export class TarFilter extends Transform {
       masked: this.lists.masked,
       unsupported: this.lists.unsupported,
       unsafe: this.lists.unsafe,
+      captured: this.captured,
     };
   }
 
@@ -224,7 +244,18 @@ export class TarFilter extends Transform {
       if (this.state === 'skip') {
         const part = this.consume(Math.min(this.remaining, this.buffer.length));
         this.remaining -= part.length;
-        if (this.remaining === 0) this.state = 'header';
+        if (this.capturing) {
+          const own = part.subarray(0, Math.min(part.length, this.capturing.left));
+          this.capturing.chunks.push(Buffer.from(own));
+          this.capturing.left -= own.length;
+        }
+        if (this.remaining === 0) {
+          if (this.capturing) {
+            this.captured[this.capturing.path] = Buffer.concat(this.capturing.chunks);
+            this.capturing = null;
+          }
+          this.state = 'header';
+        }
         continue;
       }
       // data: the entry's bytes (masked when there are secrets), then its padding as is.
@@ -254,8 +285,10 @@ export class TarFilter extends Transform {
 
   private header(block: Buffer): void {
     if (block.every((byte) => byte === 0)) {
-      // End of archive: the zero blocks (and whatever padding follows) pass through.
+      // End of archive: what `append` adds goes in first, then the zero blocks (and
+      // whatever padding follows) pass through.
       this.state = 'end';
+      for (const file of this.rules.append ?? []) this.push(fileEntry(file.path, file.data));
       this.push(block);
       return;
     }
@@ -294,12 +327,21 @@ export class TarFilter extends Transform {
     if (!['0', '\0', '7', '5'].includes(type)) note(this.lists.unsupported, path);
 
     const regular = type === '0' || type === '\0' || type === '7';
-    if (this.rules.drop?.(path)) {
+    const capture = regular && this.rules.capture?.(path) === true;
+    if (capture && size > MAX_CAPTURE_BYTES) {
+      throw new ArchiveError('too_large', `${path} is larger than the hub reads`);
+    }
+    if (capture || this.rules.drop?.(path)) {
       note(this.lists.removed, path);
+      this.capturing = capture ? { path, chunks: [], left: size } : null;
       this.held = [];
       this.state = 'skip';
       this.remaining = regular ? padded : 0;
-      if (this.remaining === 0) this.state = 'header';
+      if (this.remaining === 0) {
+        if (this.capturing) this.captured[path] = Buffer.alloc(0);
+        this.capturing = null;
+        this.state = 'header';
+      }
       return;
     }
     for (const kept of this.held) this.push(kept);
@@ -381,6 +423,32 @@ function note(list: string[], path: string): void {
 }
 
 /** The header's checksum: the sum of its bytes with the checksum field read as spaces. */
+/**
+ * One regular file as tar blocks (a ustar header, the bytes, the padding): what `append`
+ * adds. Mode 0600 — it may hold keys — and a name that fits the header's 100 bytes.
+ */
+function fileEntry(entryPath: string, data: Buffer): Buffer {
+  const name = Buffer.from(entryPath, 'utf8');
+  if (name.length > 100) throw new Error(`${entryPath}: a name this long needs a long-name entry`);
+  const header = Buffer.alloc(BLOCK, 0);
+  name.copy(header, 0);
+  const octal = (value: number, width: number) =>
+    Buffer.from(`${value.toString(8).padStart(width - 1, '0')}\0`, 'latin1');
+  octal(0o600, 8).copy(header, 100);
+  octal(0, 8).copy(header, 108);
+  octal(0, 8).copy(header, 116);
+  octal(data.length, 12).copy(header, 124);
+  octal(Math.floor(Date.now() / 1000), 12).copy(header, 136);
+  header.fill(0x20, 148, 156);
+  header[156] = 0x30; // '0': a regular file
+  Buffer.from('ustar\u000000', 'latin1').copy(header, 257);
+  let sum = 0;
+  for (const byte of header) sum += byte;
+  Buffer.from(`${sum.toString(8).padStart(6, '0')}\0 `, 'latin1').copy(header, 148);
+  const padding = Buffer.alloc((BLOCK - (data.length % BLOCK)) % BLOCK, 0);
+  return Buffer.concat([header, data, padding]);
+}
+
 function checksumMatches(block: Buffer): boolean {
   const stored = readOctal(block.subarray(148, 156));
   if (stored === null) return false;

@@ -700,3 +700,57 @@ Rejected: a separate gate resource beside `Approval` (the contract already names
   (`enabled`) and `deleteSkill` answer `409 conflict`, `details.reason = skill_bundled`;
   pinning, the hub's own order, still works. `putSkill` and `updateSkill` gain the `409` they
   can now answer.
+
+## 37. A provider is every profile's or one profile's own; the model choice is the profile's
+
+ADR 0010 says a provider is added **once** and every agent inherits it. The contract read "the
+providers this workspace has added" and the server kept them per profile, so a profile made
+later had no provider at all, and saving providers in any profile rewrote Hermes's default
+profile with that profile's keys and model. A single hub-wide list was proposed and turned
+down by the owner (2026-09-24): teams in different profiles may hold their own subscriptions —
+Design and Finance each with its own OpenAI key — and one list «كذا بيدمجهم بحساب واحد وهي
+مشكله». Hermes supports this itself: a profile's own `.env` wins over the process environment.
+The owner's design, approved point by point:
+
+- **Two scopes.** `ProviderCreate.scope` (`ProviderScope`: `all`, the default | `profile`) —
+  «لمن هذا المزوّد؟ / Who is this provider for?», «كل البروفايلات / All profiles» or «هذا
+  البروفايل فقط / This profile only» (the profile in `X-Hub-Profile`). `Provider.scope` (new,
+  required) says which, and clients badge it «مشترك / Shared» or «<profile> فقط / <profile>
+  only». Shared rows, their models and keys are stored under `default` (`Provider.profile` is
+  `default`); a profile's own under that profile. `models.updateProvider` has no `scope`: a
+  provider never moves between scopes. The same preset twice **in one scope** is `409
+  provider_exists`; once shared and once as a profile's own is allowed.
+- **Resolution.** A profile lists both; where both have a slug, its **own wins** — for its
+  agents' keys, for the model a turn names (a stored id of the shared row runs on the profile's
+  own of that slug), and in `models.listCatalogue`, which lists the providers the profile uses.
+  A new blank profile has every shared provider and works at once.
+- **Keys to Hermes.** The root home (Hermes's `default`) gets the keys the default profile uses
+  and the gateway's environment the same. A named profile's own keys are written into **its**
+  `.env`, which Hermes reads first. Hermes loads the root `.env` into its environment at start,
+  so a named profile's `.env` also says the shared key where the default profile has its own
+  instead, and an empty value where the root has a key that profile must not use; a variable
+  equal to the root's is left out. Endpoints (`majlis-*` `providers:` blocks) are written into
+  the `config.yaml` of every profile that uses them. Done on each save, after a profile is made,
+  copied or imported, and before each turn in a named profile. Keys never come back (`[stored]`).
+- **Model defaults per profile.** A role a profile has not chosen is the `default` profile's —
+  the same model on the provider of the same slug the profile uses (owner: «صح»).
+  `ModelDefaults.inherited` (new, optional) names those roles: `default` for the chat model with
+  its fallbacks, else the auxiliary key. Saving `null` goes back to inheriting. The speech choice
+  follows the same rule.
+- **Copy.** A profile made as a copy of another gets the source's own providers **with their
+  keys** («علشان لو الكي نسيته ما ابلش وينه»); the owner removes what the copy should not keep.
+- **Export asks** «مع المزوّدين / بدون المزوّدين». `auth.exportProfile` takes an optional body
+  `ProfileExport {providers}` (default `false`, as before: no key in the file). With `true` the
+  archive also carries `<profile>/majlis-providers.json`: the providers the profile uses — its
+  own and the shared ones it has no own row of that slug for — with their models and keys **in
+  the clear**, written as providers of that profile alone; every other file is still checked
+  and masked, and the client warns before it asks. `result.providers` counts them. On
+  `auth.importProfile` the hub reads that file before Hermes sees the archive, never hands it on,
+  and adds each entry to the new profile as its own; `result.providers` counts them.
+- **Existing rows** (migration `0012_provider_scope`): every provider row older than the
+  migration becomes its profile's own, where it was, key included — nothing merged, nothing
+  lost. The owner's data at this point is test data; a shared provider is added once from then on.
+
+Rejected: one hub-wide list (the owner's reason above); a copy of every shared provider in each
+profile (that is the per-profile key entry ADR 0010 said no to); a scope that can be edited in
+place (a key that silently changes owners).

@@ -1,4 +1,5 @@
 // The module list the app composes, in mount order. Every module in ARCHITECTURE §Modules is here.
+import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { HubModule } from '../lib/module.js';
 import { requireSqlite } from '../lib/db.js';
@@ -14,6 +15,8 @@ import {
   listWorkspacesFor,
   principalScopeResolver,
   registerProfileMirror,
+  onProfileCreated,
+  profileCreatedFor,
   registerProfileTransfer,
   type ProfileArchiveRuntime,
   type ProfileTransferPorts,
@@ -239,8 +242,28 @@ export function profileTransferPorts(
       const apiKey = hermes.apiKey();
       return apiKey ? [...values, apiKey] : values;
     },
+    // An export "with providers" carries them; an import makes them the profile's own (§37).
+    providers: {
+      exportOf: (workspaceId) => modelsServiceFor(app).exportProviders(workspaceId),
+      importInto: (workspaceId, actorId, bundle) =>
+        modelsServiceFor(app).importProviders(workspaceId, { userId: actorId }, bundle),
+    },
+    added: (profile, actorId) => profileCreatedFor(app, { profile, source: null, actorId }),
   };
 }
+
+/**
+ * A profile just made — here, as a copy, or by an import (contract decision §37): a copy
+ * takes its source's own providers with their keys, and the Hermes profile gets the
+ * providers it uses (endpoints in its config, its own keys in its `.env`) before its first
+ * turn rather than on it.
+ */
+onProfileCreated((app, { profile, source, actorId }) => {
+  const models = modelsServiceFor(app);
+  if (source) models.copyOwnProviders(source.id, profile.id, { userId: actorId });
+  const home = hermesRuntimeFor(app).status().home;
+  if (home && !profile.isDefault) models.prepareProfile(path.join(home, 'profiles', profile.slug));
+});
 
 /** Hermes's archives through its server, with its errors in `auth`'s words; null unmanaged. */
 function hermesProfileArchives(app: FastifyInstance): ProfileArchiveRuntime | null {

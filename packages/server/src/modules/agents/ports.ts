@@ -78,6 +78,13 @@ export interface AgentModelsPort {
    * row and never sees a key (ADR 0010) — it names what to run and reads what comes out.
    */
   directChat(workspace: string, request: DirectChatRequest): AsyncIterable<DirectChatEvent>;
+  /**
+   * A named Hermes profile is about to run a turn (ADR 0014 stage 3): `models` puts the
+   * providers that profile uses where it reads them — the endpoints in its `config.yaml`,
+   * and in its own `.env` the keys that differ from the root's: its own provider keys,
+   * which Hermes reads before the process environment (contract decision §37). Never throws.
+   */
+  prepareRuntimeProfile?(profileHome: string): void;
 }
 
 // ------------------------------------------------- the direct path (ADOPTION §2.15)
