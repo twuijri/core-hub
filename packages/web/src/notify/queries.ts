@@ -31,6 +31,8 @@ export interface Notice {
   kind: NoticeKind;
   title: string;
   body: string | null;
+  /** The profile it happened in: what it points at is opened there. */
+  profile?: string | null;
   resource: { kind: string; id: string } | null;
   read_at: string | null;
   created_at: string;

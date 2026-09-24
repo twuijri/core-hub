@@ -1,13 +1,15 @@
 /**
- * The Schedules section: what runs on its own, and when it would run next.
+ * The Schedules section: what runs on its own, when it runs next, and what it did.
  *
- * The screen is honest about the hub it talks to. A schedule for **Hermes** lives in
- * Hermes's own scheduler, which fires it — so it runs, and "Run now" works. Any other
- * schedule waits for the hub's worker, which does not exist yet: its "Run now" is present,
- * disabled, and says why in its tooltip rather than being hidden. Someone who came to run
- * something deserves to know the hub cannot yet, not to wonder where the button went.
+ * A schedule for **Hermes** lives in Hermes's own scheduler, which fires it; every other
+ * schedule is fired by the hub itself. Both run on their own time, and "Run now" starts the
+ * same run at once: a prompt schedule's conversation can be opened from its history, a
+ * workflow schedule's run from its line — and a run that waits for a person is answered
+ * where it is shown (`ScheduleRuns.tsx`), or from the inbox, which opens it here
+ * (`?workflow_run=<id>&profile=<slug>`).
  */
 import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/context.js';
 import { HubApiError } from '@majlis/contracts';
@@ -19,7 +21,9 @@ import { useRealtime } from '../realtime/context.js';
 import { SCHEDULE_EVENTS, isEnvelope } from '../realtime/envelope.js';
 import { AppShell } from '../shell/AppShell.js';
 import { ProfileBadge } from '../shell/ProfileBadge.js';
-import { useManyProfiles, useProfileName } from '../shell/profiles.js';
+import { useManyProfiles, useProfileInLink, useProfileName } from '../shell/profiles.js';
+import { chatHref } from '../chat/anchor.js';
+import { ScheduleHistory, WorkflowRunDialog } from './ScheduleRuns.js';
 import {
   Badge,
   Button,
@@ -159,7 +163,7 @@ function useScheduleWrite() {
             params: { schedule_id: schedule.id },
             ...inWorkspace(schedule.profile),
           })
-        ).data,
+        ).data as unknown as Fired,
       onSuccess: refresh,
     }),
     remove: useMutation({
@@ -173,6 +177,13 @@ function useScheduleWrite() {
       onSuccess: refresh,
     }),
   };
+}
+
+/** What "Run now" started (`ScheduleRunAccepted`). */
+interface Fired {
+  schedule_run_id: string;
+  session_id: string | null;
+  workflow_run_id: string | null;
 }
 
 /** A whole object, because the contract marks every field of a trigger required. */
@@ -209,6 +220,8 @@ function describeScheduleError(error: unknown, t: Translate): string {
       return t('schedules.hermes.delivery');
     case 'hermes_prompt_required':
       return t('schedules.hermes.prompt_required');
+    case 'target_unavailable':
+      return t('schedules.target_unavailable', { message: String(details.message ?? '') });
     default:
       return describeError(error, t);
   }
@@ -232,7 +245,27 @@ export function SchedulesScreen() {
   const [name, setName] = useState('');
   const [agentId, setAgentId] = useState<string | null>(null);
   const [zone, setZone] = useState<string | null>(null);
-  const [fired, setFired] = useState<string | null>(null);
+  const [fired, setFired] = useState<{ schedule: Schedule; started: Fired } | null>(null);
+  const [history, setHistory] = useState<Set<string>>(() => new Set());
+  const inLink = useProfileInLink();
+  // A workflow run opened from a line of history, or from the inbox by its address.
+  const [params, setParams] = useSearchParams();
+  const openRun = params.get('workflow_run');
+  const openRunProfile = params.get('profile') ?? homeProfile;
+  const showRun = (id: string, profile: string) =>
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set('workflow_run', id);
+      next.set('profile', profile);
+      return next;
+    });
+  const closeRun = () =>
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete('workflow_run');
+      next.delete('profile');
+      return next;
+    });
   // Hermes is the one agent with a scheduler of its own, so it is the default.
   const agentOptions = (agents.data ?? []).map((agent) => ({ value: agent.id, label: agent.name }));
   const chosenAgent =
@@ -406,7 +439,38 @@ export function SchedulesScreen() {
           {describeScheduleError(update.error ?? run.error ?? remove.error, t)}
         </Notice>
       )}
-      {fired && <Notice tone="success">{t('schedules.hermes.fired')}</Notice>}
+      {fired && (
+        <Notice tone="success">
+          <span className="flex flex-wrap items-center gap-2" data-testid="schedule-fired">
+            {fired.schedule.external?.source === 'hermes'
+              ? t('schedules.hermes.fired')
+              : t('schedules.fired', { name: fired.schedule.name })}
+            {fired.started.session_id && (
+              <Link
+                to={chatHref(
+                  fired.started.session_id,
+                  null,
+                  undefined,
+                  inLink(fired.schedule.profile),
+                )}
+                data-testid="schedule-fired-session"
+              >
+                {t('schedules.history.open_session')}
+              </Link>
+            )}
+            {fired.started.workflow_run_id && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => showRun(fired.started.workflow_run_id!, fired.schedule.profile)}
+                data-testid="schedule-fired-run"
+              >
+                {t('schedules.history.open_run')}
+              </Button>
+            )}
+          </span>
+        </Notice>
+      )}
       {schedules.data && items.length === 0 && (
         <EmptyState icon={<IconSchedules size={20} />} title={t('schedules.empty')} />
       )}
@@ -472,29 +536,40 @@ export function SchedulesScreen() {
                     label={t('schedules.enabled')}
                     testId="schedule-enabled"
                   />
-                  {fromHermes ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      loading={run.isPending && run.variables?.id === schedule.id}
-                      onClick={() =>
-                        run.mutate(schedule, { onSuccess: () => setFired(schedule.id) })
-                      }
-                      data-testid="schedule-run"
-                    >
-                      {t('schedules.run_now')}
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled
-                      tooltip={t('schedules.run_unavailable')}
-                      data-testid="schedule-run"
-                    >
-                      {t('schedules.run_now')}
-                    </Button>
-                  )}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    loading={run.isPending && run.variables?.id === schedule.id}
+                    onClick={() => {
+                      setFired(null);
+                      run.mutate(schedule, {
+                        onSuccess: (started) => {
+                          setFired({ schedule, started });
+                          // The run is in the history now: show it.
+                          setHistory((open) => new Set(open).add(schedule.id));
+                        },
+                      });
+                    }}
+                    data-testid="schedule-run"
+                  >
+                    {t('schedules.run_now')}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-expanded={history.has(schedule.id)}
+                    onClick={() =>
+                      setHistory((open) => {
+                        const next = new Set(open);
+                        if (next.has(schedule.id)) next.delete(schedule.id);
+                        else next.add(schedule.id);
+                        return next;
+                      })
+                    }
+                    data-testid="schedule-history-toggle"
+                  >
+                    {t(history.has(schedule.id) ? 'schedules.history.hide' : 'schedules.history.show')}
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -514,11 +589,23 @@ export function SchedulesScreen() {
                     data-testid="schedule-delete"
                   />
                 </div>
+                {history.has(schedule.id) && (
+                  <div className="mt-3">
+                    <ScheduleHistory
+                      scheduleId={schedule.id}
+                      profile={schedule.profile}
+                      onOpenRun={(id) => showRun(id, schedule.profile)}
+                    />
+                  </div>
+                )}
               </Card>
             </li>
           );
         })}
       </ul>
+      {openRun && (
+        <WorkflowRunDialog runId={openRun} profile={openRunProfile} onClose={closeRun} />
+      )}
       {dialog}
     </AppShell>
   );
