@@ -10,12 +10,17 @@ import { HOME_PATH, LOGIN_PATH, SETUP_PATH, routes } from './navigation/routes.j
 import { RealtimeProvider } from './realtime/context.js';
 import { LoginScreen } from './screens/LoginScreen.js';
 import { SetupScreen } from './screens/SetupScreen.js';
+import { ProfileGate } from './shell/ProfileGate.js';
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { session } = useAuth();
   const location = useLocation();
   if (!session) return <Navigate to={LOGIN_PATH} replace state={{ from: location.pathname }} />;
-  return <RealtimeProvider>{children}</RealtimeProvider>;
+  return (
+    <ProfileGate>
+      <RealtimeProvider>{children}</RealtimeProvider>
+    </ProfileGate>
+  );
 }
 
 function Localised({ children }: { children: ReactNode }) {

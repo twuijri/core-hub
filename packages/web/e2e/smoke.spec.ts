@@ -819,6 +819,8 @@ test.describe('web smoke journeys', () => {
 
   test('13. People and Workspaces: a person added, and a workspace that archives', async ({
     page,
+    browser,
+    request,
   }) => {
     await login(page);
     await page.getByRole('link', { name: 'الإعدادات' }).first().click();
@@ -846,8 +848,8 @@ test.describe('web smoke journeys', () => {
     await expect(page.getByTestId('add-user-dialog')).toContainText('ثمانية أحرف على الأقل');
     await expect(page.getByTestId('new-user-password')).toHaveAttribute('aria-invalid', 'true');
     await page.getByLabel('كلمة المرور الجديدة').fill('a-long-enough-one');
-    // A member is not added until they have somewhere to go: an empty list would open
-    // every workspace to them — and the dialog says so.
+    // A member is not added until they have somewhere to go: a member enters only what is
+    // chosen, and the hub refuses a member with nothing — and the dialog says so.
     await expect(page.getByTestId('save-user')).toBeDisabled();
     await expect(page.getByTestId('workspaces-required')).toBeVisible();
     await page.getByTestId('workspace-default').click();
@@ -899,8 +901,75 @@ test.describe('web smoke journeys', () => {
     await expect(page.getByRole('alertdialog')).toContainText('لا تُمحى');
     await page.keyboard.press('Escape');
 
-    // Sara is given the new workspace too, from her row: a member enters only these.
+    // Labs is new, and nobody gave it to Sara: it is not hers (owner, 2026-09-24: «المفروض ما
+    // يضيفه له بدون ما ادخل انا واضيفه له»). Her row still names `default` alone…
     await page.getByTestId('settings-nav').getByRole('link', { name: 'المستخدمون' }).click();
+    const saraCells = page.getByRole('row').filter({ hasText: 'سارة' });
+    await expect(saraCells).toContainText('default');
+    await expect(saraCells).not.toContainText('labs');
+    // …the hub offers her `default` alone and refuses Labs by name…
+    const signedIn = await request.post('/api/v1/auth/login', {
+      data: { username: 'sara', password: 'a-long-enough-one' },
+    });
+    expect(signedIn.status()).toBe(200);
+    const saraAuth = { authorization: `Bearer ${(await signedIn.json()).access_token}` };
+    const offered = await request.get('/api/v1/profiles', { headers: saraAuth });
+    expect(((await offered.json()).items as { slug: string }[]).map((p) => p.slug)).toEqual([
+      'default',
+    ]);
+    const intoLabs = await request.get('/api/v1/sessions', {
+      headers: { ...saraAuth, 'x-hub-profile': 'labs' },
+    });
+    expect(intoLabs.status()).toBe(404);
+    // …and signed in as her, the profile switcher offers `default` and nothing else.
+    const baseURL = test.info().project.use.baseURL;
+    const saraContext = await browser.newContext({ ...(baseURL ? { baseURL } : {}), locale: 'ar' });
+    const saraPage = await saraContext.newPage();
+    await saraPage.goto('/');
+    await saraPage.getByLabel('اسم المستخدم').fill('sara');
+    await saraPage.getByLabel('كلمة المرور').fill('a-long-enough-one');
+    await saraPage.getByRole('button', { name: 'دخول' }).click();
+    await expect(saraPage).toHaveURL(/\/chat$/);
+    await saraPage.getByTestId('workspace-switcher').first().click();
+    await expect(saraPage.getByRole('option')).toHaveCount(1);
+    await expect(saraPage.getByRole('option')).not.toContainText('Labs');
+    await saraContext.close();
+
+    // A member whose every profile was withdrawn enters nothing — not everything — and is
+    // told so in one page, with the way out, instead of a shell full of refusals.
+    const owner = await request.post('/api/v1/auth/login', {
+      data: { username: 'admin', password: PASSWORD },
+    });
+    const ownerAuth = { authorization: `Bearer ${(await owner.json()).access_token}` };
+    const nour = await request.post('/api/v1/auth/users', {
+      headers: ownerAuth,
+      data: { username: 'nour', password: 'nour-password-1', role: 'member', profiles: ['labs'] },
+    });
+    expect(nour.status()).toBe(201);
+    const nourId = (await nour.json()).id as string;
+    const withdrawn = await request.patch(`/api/v1/auth/users/${nourId}`, {
+      headers: ownerAuth,
+      data: { profiles: [] },
+    });
+    expect((await withdrawn.json()).profiles).toEqual([]);
+    const nourContext = await browser.newContext({ ...(baseURL ? { baseURL } : {}), locale: 'ar' });
+    const nourPage = await nourContext.newPage();
+    await nourPage.goto('/');
+    await nourPage.getByLabel('اسم المستخدم').fill('nour');
+    await nourPage.getByLabel('كلمة المرور').fill('nour-password-1');
+    await nourPage.getByRole('button', { name: 'دخول' }).click();
+    await expect(nourPage.getByTestId('no-profile')).toContainText('اطلب من المشرف');
+    await shot(nourPage, 'no-profile-ar-light');
+    await nourContext.close();
+    await page.reload();
+    await expect(
+      page.getByRole('row').filter({ hasText: 'nour' }).getByTestId('no-workspace'),
+    ).toHaveText('بلا بروفايل');
+    await request.delete(`/api/v1/auth/users/${nourId}`, { headers: ownerAuth });
+    await page.reload();
+    await expect(page.getByRole('row').filter({ hasText: 'nour' })).toHaveCount(0);
+
+    // Sara is given the new workspace from her row, explicitly: a member enters only these.
     await page.getByTestId('user-menu').click();
     await page.getByRole('menuitem', { name: 'البروفايلات…' }).click();
     await page.getByTestId('workspace-labs').click();
