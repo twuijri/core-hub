@@ -8,6 +8,9 @@
  * **Each one is a Hermes profile** (ADR 0014): made in Hermes, from scratch or as a copy of
  * one the person picks, and a profile Hermes already has is listed here.
  *
+ * **Each one moves as Hermes's archive** (ADR 0014 stage 2): exported to a file that leaves
+ * every credential behind, and imported from one as a new profile (`ProfileTransfer.tsx`).
+ *
  * **Removing one archives it**, which is the hub's own word: the rows stay and only the
  * memberships go, and the Hermes profile stays as it is. The button says archive for that reason — a delete that archives is a
  * lie the person finds out later, and the opposite would be worse.
@@ -31,6 +34,7 @@ import {
   SkeletonGroup,
   useConfirm,
 } from '../ui/index.js';
+import { ExportDialog, ImportDialog } from './ProfileTransfer.js';
 import {
   useArchiveWorkspace,
   useCreateWorkspace,
@@ -46,6 +50,7 @@ export function WorkspacesTab() {
   const { t } = useI18n();
   const workspaces = useWorkspaces();
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   return (
     <div className="flex flex-col gap-4">
@@ -54,9 +59,13 @@ export function WorkspacesTab() {
         <Button
           className="ms-auto"
           size="sm"
-          onClick={() => setAdding(true)}
-          data-testid="add-workspace"
+          variant="secondary"
+          onClick={() => setImporting(true)}
+          data-testid="import-workspace"
         >
+          {t('workspaces.import')}
+        </Button>
+        <Button size="sm" onClick={() => setAdding(true)} data-testid="add-workspace">
           {t('workspaces.add')}
         </Button>
       </div>
@@ -79,6 +88,9 @@ export function WorkspacesTab() {
       {adding && (
         <AddWorkspace existing={workspaces.data?.items ?? []} onClose={() => setAdding(false)} />
       )}
+      {importing && (
+        <ImportDialog existing={workspaces.data?.items ?? []} onClose={() => setImporting(false)} />
+      )}
     </div>
   );
 }
@@ -90,6 +102,7 @@ function WorkspaceCard({ workspace }: { workspace: Workspace }) {
   const archive = useArchiveWorkspace();
   const { ask, dialog } = useConfirm();
   const [name, setName] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   // `default` always exists and the hub refuses to archive it, so the button is absent.
   const isDefault = workspace.slug === 'default';
   const isCurrent = workspace.slug === profile;
@@ -115,6 +128,14 @@ function WorkspaceCard({ workspace }: { workspace: Workspace }) {
           <span className="flex items-center gap-1">
             <Button size="sm" variant="ghost" onClick={() => setName(workspace.name)}>
               {t('common.rename')}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              data-testid="export-workspace"
+              onClick={() => setExporting(true)}
+            >
+              {t('workspaces.export')}
             </Button>
             {!isDefault && (
               <Button
@@ -174,6 +195,7 @@ function WorkspaceCard({ workspace }: { workspace: Workspace }) {
           </Field>
         </Dialog>
       )}
+      {exporting && <ExportDialog workspace={workspace} onClose={() => setExporting(false)} />}
       {dialog}
       {(update.isError || archive.isError) && (
         <Notice tone="danger">{describeError(update.error ?? archive.error, t)}</Notice>

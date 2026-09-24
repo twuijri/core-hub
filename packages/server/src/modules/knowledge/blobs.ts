@@ -110,6 +110,26 @@ export class BlobStore {
     return this.write(workspace, createReadStream(filePath), options);
   }
 
+  /**
+   * Copy a file into the store under a key of its own rather than its hash: for a file kept
+   * for a limited time (a profile export), whose bytes must not be shared with — or collide
+   * with — an upload of the very same bytes (`attachments.storage_key` is unique).
+   */
+  async keepCopy(workspace: string, filePath: string, options: WriteOptions): Promise<StoredBlob> {
+    const temp = this.openTemp(workspace);
+    try {
+      const measured = await this.drain(createReadStream(filePath), temp, options);
+      const storageKey = path.posix.join(workspace, 'kept', newUlid());
+      const target = this.pathOf(storageKey);
+      mkdirSync(path.dirname(target), { recursive: true });
+      renameSync(temp, target);
+      return { storageKey, deduplicated: false, ...measured };
+    } catch (error) {
+      rmSync(temp, { force: true });
+      throw error;
+    }
+  }
+
   /** Append one chunk to an open upload's temp file; returns the new size. */
   async append(temp: string, source: Readable, at: number, limit: number): Promise<number> {
     const handle = createWriteStream(temp, { flags: at === 0 ? 'w' : 'r+', start: at });

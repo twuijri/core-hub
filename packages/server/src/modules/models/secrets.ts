@@ -118,6 +118,26 @@ export class SecretStore {
     return plaintext;
   }
 
+  /**
+   * Every stored plaintext, in every workspace. Its one caller is the profile export, which
+   * checks an archive for these bytes and overwrites them before the archive leaves the hub
+   * (ADR 0010, contract decision §34); the values go nowhere else. A row sealed under a
+   * key the ring no longer holds cannot be in any archive this hub wrote, and is skipped.
+   */
+  revealEvery(): string[] {
+    const values: string[] = [];
+    for (const row of this.db.select().from(secrets).all()) {
+      if (!row.ciphertext || !row.nonce || row.wipedAt) continue;
+      try {
+        const value = this.reveal(row.workspace, row.id);
+        if (value) values.push(value);
+      } catch {
+        // unreadable under the current ring: see above
+      }
+    }
+    return values;
+  }
+
   /** Whether a usable secret is stored, without decrypting it. */
   has(workspace: string, id: string | null | undefined): boolean {
     if (!id) return false;

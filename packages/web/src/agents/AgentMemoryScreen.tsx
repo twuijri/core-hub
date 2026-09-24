@@ -1,9 +1,14 @@
 /**
  * An agent's memory: the three documents it reads about itself and about you.
  *
- *   الشخصية  `SOUL.md`    who it is — read at the start of every conversation
- *   الذاكرة  `MEMORY.md`  what it learned and chose to keep
- *   عنك      `USER.md`    what it knows about the person it is talking to
+ *   الشخصية  `SOUL.md`             who it is — read at the start of every conversation
+ *   الذاكرة  `memories/MEMORY.md`  what it learned and chose to keep
+ *   عنك      `memories/USER.md`    what it knows about the person it is talking to
+ *
+ * The files are Hermes's own, in the selected profile: what the agent kept during a
+ * conversation shows here, and what a person writes here reaches its next conversation.
+ * The two memory lists are short entries separated by a line holding only `§`, within a
+ * character budget the hub enforces (`memory_too_long`).
  *
  * Three rows, always. A document the agent has not written yet is shown empty rather
  * than hidden: "nothing has been written about you" is an answer, and a page that had
@@ -15,7 +20,6 @@
  */
 import { useState } from 'react';
 import { useParams } from 'react-router';
-import { describeError } from '../auth/client.js';
 import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { AppShell } from '../shell/AppShell.js';
@@ -138,7 +142,8 @@ function MemoryEditor({
           onChange={(event) => setDraft(event.target.value)}
           data-testid="memory-content"
         />
-        {save.isError && <Notice tone="danger">{describeError(save.error, t)}</Notice>}
+        {item.id !== 'soul' && <p className="text-xs text-muted">{t('memory.entries_hint')}</p>}
+        {save.isError && <Notice tone="danger">{describeToolError(save.error, t)}</Notice>}
       </div>
     </Dialog>
   );

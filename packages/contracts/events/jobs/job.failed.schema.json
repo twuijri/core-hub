@@ -228,7 +228,8 @@
         "export",
         "schedule_run",
         "workflow_run",
-        "channel_login"
+        "channel_login",
+        "import"
       ]
     },
     "JobProgress": {
@@ -285,7 +286,9 @@
             "device_request",
             "webhook",
             "approval",
-            "notice"
+            "notice",
+            "profile",
+            "attachment"
           ]
         },
         "id": {

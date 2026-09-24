@@ -215,10 +215,23 @@ export class KnowledgeService {
 
   // -------------------------------------------------------------- read side
 
-  /** `sessions.getAttachment`. */
-  require(scope: AttachmentScope, id: string): AttachmentRow {
+  /**
+   * `sessions.getAttachment`, and the gate in front of every other read and delete.
+   *
+   * A profile export (`source_kind = export`) holds a profile's memory and chats: only the
+   * person who asked for it may see it, and once past `expires_at` nobody may, even before
+   * the sweep has removed the bytes (contract decision §34). To anyone else it does not
+   * exist — the same `404` as an id that was never issued.
+   */
+  require(scope: AttachmentScope, id: string, now: Date = new Date()): AttachmentRow {
     const row = this.rows.get(scope.workspace, id);
     if (!row) throw notFound({ resource: 'attachment', id });
+    if (row.sourceKind === 'export' && row.ownerId !== scope.userId) {
+      throw notFound({ resource: 'attachment', id });
+    }
+    if (row.expiresAt && row.expiresAt.getTime() <= now.getTime()) {
+      throw notFound({ resource: 'attachment', id, reason: 'expired' });
+    }
     return row;
   }
 
@@ -307,6 +320,54 @@ export class KnowledgeService {
       expiresAt: null,
       meta: { producedPath: file.relativePath },
     });
+  }
+
+  // ------------------------------------------------------- profile archives
+
+  /**
+   * Keep a finished profile export for `scope.userId` until `expiresAt`. Its bytes get a key
+   * of their own (`BlobStore.keepCopy`), so an upload of the same archive later is a file
+   * of its own too.
+   */
+  async keepExport(
+    scope: AttachmentScope,
+    file: string,
+    filename: string,
+    expiresAt: Date,
+    maxBytes: number,
+  ): Promise<AttachmentRow> {
+    const blob = await this.blobs.keepCopy(scope.workspace, file, {
+      maxBytes,
+      onTooLarge: () => tooLarge(maxBytes),
+    });
+    return this.rows.create({
+      workspace: scope.workspace,
+      ownerId: scope.userId,
+      filename: sanitiseFilename(filename),
+      mime: 'application/gzip',
+      sizeBytes: blob.sizeBytes,
+      sha256: blob.sha256,
+      storageKey: blob.storageKey,
+      kind: 'file',
+      sourceKind: 'export',
+      sourceId: null,
+      meta: { purpose: 'import' },
+      expiresAt,
+    });
+  }
+
+  /**
+   * Remove an uploaded profile archive once its import ended: the row as well as the bytes
+   * (when no other row shares them), because nothing refers to it and its storage key must
+   * be free for the next upload of the same file. Unknown ids are ignored.
+   */
+  discardUpload(scope: AttachmentScope, id: string): void {
+    const row = this.rows.get(scope.workspace, id);
+    if (!row || row.sourceKind === 'export') return;
+    this.rows.purge(scope.workspace, row.id);
+    if (this.rows.referencesTo(scope.workspace, row.storageKey) === 0) {
+      this.blobs.remove(row.storageKey);
+    }
   }
 
   // --------------------------------------------------------- housekeeping

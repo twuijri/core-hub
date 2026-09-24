@@ -11,7 +11,9 @@
  * questions instead of offering an action the hub will refuse.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useJobs } from '../agents/useJobs.js';
 import { useAuth } from '../auth/context.js';
+import type { Job } from '../types.js';
 
 export type Role = 'owner' | 'admin' | 'member';
 export type UserStatus = 'active' | 'disabled';
@@ -210,4 +212,73 @@ export function useArchiveWorkspace() {
         .data,
     onSuccess: invalidate,
   });
+}
+
+/**
+ * A profile moved as Hermes's own archive (ADR 0014 stage 2, contract decision §34). Both
+ * operations answer a job at once; the job lives in the profile the person is in, so the
+ * `/rt/jobs` room this client already listens to hears it, and `jobs.get` finds it.
+ */
+export interface ProfileExportResult {
+  attachment_id: string;
+  profile: string;
+  name: string;
+  size_bytes: number;
+  expires_at: string;
+  /** Paths inside the archive the hub left out (credential files). */
+  removed: string[];
+  /** Paths inside the archive where a stored provider key was overwritten. */
+  masked: string[];
+}
+
+export interface ProfileImportResult {
+  profile_id: string;
+  slug: string;
+  name: string;
+}
+
+export function useExportWorkspace() {
+  const { client } = useAuth();
+  return useMutation({
+    mutationFn: async (id: string) =>
+      (
+        await client.request('post', '/profiles/{profile_id}/export', {
+          params: { profile_id: id },
+        })
+      ).data.job_id,
+  });
+}
+
+export function useImportWorkspace() {
+  const { client } = useAuth();
+  return useMutation({
+    mutationFn: async (body: { attachment_id: string; slug: string; name?: string }) =>
+      (await client.request('post', '/profile-imports', { body })).data.job_id,
+  });
+}
+
+const FINISHED: ReadonlySet<string> = new Set(['succeeded', 'failed', 'cancelled']);
+export const jobFinished = (job: Job | undefined): boolean => !!job && FINISHED.has(job.status);
+
+/**
+ * One job, followed to its end: the `/rt/jobs` events as they arrive, and a read every
+ * second until it has finished — an event that went out before this screen subscribed is
+ * then still seen, a second later at worst. Whichever copy has finished wins.
+ */
+export function useFollowedJob(jobId: string | null): Job | undefined {
+  const { client, profile } = useAuth();
+  const live = useJobs();
+  const polled = useQuery({
+    queryKey: ['job', profile, jobId],
+    queryFn: async () =>
+      (await client.request('get', '/jobs/{job_id}', { params: { job_id: jobId ?? '' } }))
+        .data as Job,
+    enabled: jobId !== null,
+    refetchInterval: (query) => (jobFinished(query.state.data) ? false : 1000),
+  });
+  if (!jobId) return undefined;
+  const pushed = live[jobId];
+  if (jobFinished(pushed)) return pushed;
+  if (jobFinished(polled.data)) return polled.data;
+  return pushed ?? polled.data;
 }

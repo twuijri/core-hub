@@ -328,6 +328,15 @@ export class ModelsService {
     this.restartDelayMs = options.restartDelayMs ?? 1_500;
   }
 
+  /**
+   * Every provider key this hub stores, in plaintext, for the one check that must see them:
+   * a profile export overwrites them wherever they appear (ADR 0010). Never logged, never
+   * returned by a route.
+   */
+  storedSecretValues(): string[] {
+    return this.options.secrets.revealEvery();
+  }
+
   private get db(): ModuleDb {
     return this.options.db;
   }

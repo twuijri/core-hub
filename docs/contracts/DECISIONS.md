@@ -598,43 +598,63 @@ Rejected: a new `agents.navigation` operation that tells clients which rows to d
 capabilities already say it), and moving `agent_id` out of the path for a slug (a slug can be
 renamed; the id cannot).
 
-## 34. Providers, keys and models are the hub's; the model choice is the profile's
+## 34. Profile export and import are jobs in the caller's profile
 
-ADR 0010 said a provider is added **once** and every agent inherits it. The contract still read
-"the providers this workspace has added", and the server stored them per profile — so a profile
-made later had no provider, no model, and Hermes refused its turns, and saving providers in any
-profile rewrote Hermes's default profile with that profile's keys and model (found while building
-ADR 0014 stage 3, 2026-09-24).
+ADR 0014 stage 2 makes `auth.exportProfile` and `auth.importProfile` do what they say, and
+three details of the contract had to be settled for that:
 
-- `models.listProviders`, `createProvider`, `updateProvider`, `deleteProvider`, `testProvider`,
-  `refreshProvider`, `putModel`, `deleteModel`, `listCatalogue`, `listVoices` and the provider half
-  of `updateSpeech` act on **one hub-wide list**, whichever profile `X-Hub-Profile` names. The header
-  stays required: it still decides who may call and which profile's *choices* a call reads or
-  writes. Adding a preset the hub already has, from any profile, is `409 provider_exists`.
-- The rows are stored under the `default` profile — it always exists and can be neither renamed nor
-  archived — so `Provider.profile` is always `default`. Keys stay `[stored]` on every read.
-- **What stays per profile: the choices.** `models.getDefaults` / `setDefaults` and the speech
-  choice (`stt_provider_id`, `tts_provider_id`) are the profile's. A role the profile has not chosen
-  is the `default` profile's; `ModelDefaults.inherited` (new, optional) names those roles —
-  `default` for the chat model with its fallbacks, else the auxiliary key. Saving a role makes it
-  the profile's own; saving `null` goes back to inheriting. The first chat default the hub sets by
-  itself (the first provider's first model) is the `default` profile's.
-- **Hermes.** Its root home is its `default` profile: the hub's keys and the `default` profile's
-  model, whoever saves. A named profile gets the hub's endpoints (`providers:` blocks) in its own
-  `config.yaml` and the keys through the process environment (ADR 0014 stage 3); the hub's key
-  names are removed from a named profile's own `.env`, because Hermes reads it before the
-  environment and a copy of `default` (`--clone-from`) carries stale keys there. The same is done
-  before each turn in a named profile and right after the hub makes one, so a profile made later is
-  ready before it runs. A key removed from the hub is removed from the root `.env` too.
-- **Existing rows** (`drizzle/0011_providers_shared.sql`): every live provider of a live profile
-  moves to the `default` profile with its id. The same slug in several profiles keeps the `default`
-  profile's row, else the oldest profile's; the others are archived where they are, with their
-  keys, and each choice is an audit row `provider.merged` naming both profiles. A credential
-  family's key is the one of the highest profile in that order that has one. Nothing is deleted;
-  an old id still resolves to the kept row of the same slug.
+- **Where the job lives.** Both operations are global (`x-scope: global`), but a job is a
+  profile's row and `/rt/jobs` is a profile's room. The job is recorded in the caller's
+  current profile (`X-Hub-Profile`, `default` when absent) — the one the client is already
+  listening to — and so is the exported archive. The profile the export is *about* is the
+  job's `resource: {kind: profile, id}`; the archive an import reads is `resource: {kind:
+  attachment, id}`. `ResourceRef.kind` gains `profile` and `attachment` for that, and
+  `JobKind` gains `import` (the stored kinds are `auth.export` and `auth.import`).
+- **Who may read the archive.** An export holds a profile's memory and chats. Its attachment
+  is readable only by the person who asked for it (`404` for anyone else, even in the same
+  profile), is not listed by `knowledge.listItems`, and is deleted 24 hours later
+  (`expires_at` in the job's result). An uploaded import archive is deleted when its job ends.
+- **What a hub without Hermes answers.** Only a hub that supervises Hermes can ask it for an
+  archive (ADR 0015). Elsewhere both operations answer `409 state_invalid` with
+  `details.reason = hermes_not_supervised` before any job exists, rather than a job that fails
+  a second later.
 
-Rejected: a copy of every provider in every profile (it is the per-profile key entry ADR 0010 said
-no to, and a profile made later still starts empty); a new global operation beside
-`models.listProviders` (every existing caller would keep reading the per-profile answer); a
-sentinel "hub" workspace id (rows no profile listing knows about, and the `default` profile already
-has every property the hub scope needs).
+The result shapes are written in the operations' descriptions rather than as components:
+`Job.result` is free-form for every kind, and a component nothing references is one the
+linter rightly calls unused.
+
+## 36. An agent's plugins are what Hermes lists in the profile; its jobs are its schedules
+
+2026-09-24, with the agent's Plugins and Jobs pages and Hermes's skills in category folders.
+
+- **Plugins are Hermes's, per profile.** `agents.listPlugins` and `agents.updatePlugin`, stubs
+  until now, answer with what Hermes's own `hermes plugins` command says in the Hermes home of
+  the profile in `X-Hub-Profile`. Hermes's dashboard has plugin routes too, but they take no
+  profile (unlike its MCP, skills and cron routes) and so could only ever reach the default
+  profile. Two operations are added: `agents.installPlugin` (`POST /agents/{agent_id}/plugins`,
+  a job of the new `JobKind` `plugin_install`, installed switched off) and `agents.deletePlugin`
+  (`DELETE /agents/{agent_id}/plugins/{plugin_key}`, only what was installed into the profile;
+  what Hermes ships answers `409 conflict`, `details.reason = plugin_bundled`).
+- **`AgentPlugin` gains `status` and `removable`.** `status` is Hermes's own word —
+  `enabled`, `disabled` (its deny list, which wins) or `not_enabled` (on neither; Hermes
+  plugins are opt-in) — because a boolean would have folded the last two together.
+  `removable` says what `DELETE` accepts; `manageable` now means "may be switched", which is
+  true of every plugin Hermes lists, the ones it ships included (they are opt-in too). Fields
+  Hermes's list does not report stay in the schema and are empty, and the schema says so.
+- **A name Hermes lists twice is listed once.** Hermes ships a few plugins under one name in two
+  categories, and its commands take the name to mean the first; the second is named in
+  `warnings`.
+- **Where the hub does not supervise Hermes** every plugin operation answers `409
+  state_invalid`, `details.reason = hermes_not_supervised`, as the other tools that need
+  Hermes to act; an agent that is not Hermes is `plugins_are_hermes_only`.
+- **Jobs need no operation of their own.** For Hermes an agent's jobs are the jobs in Hermes's
+  own scheduler, which `schedules.list` already returns (`profile` + `agent_id`, the
+  "an agent's Jobs screen" its summary always named), and which the schedules operations
+  already run, pause and delete. A second list would have been a second truth.
+- **Skills in category folders.** `agents.listSkills` lists every skill below a folder that has
+  no `SKILL.md` of its own, under that folder as its category (described by its
+  `DESCRIPTION.md`) — Hermes's layout for its built-in skills. A skill Hermes seeded from its
+  bundle (`skills/.bundled_manifest`) is `source: builtin`, and `putSkill`, `updateSkill`
+  (`enabled`) and `deleteSkill` answer `409 conflict`, `details.reason = skill_bundled`;
+  pinning, the hub's own order, still works. `putSkill` and `updateSkill` gain the `409` they
+  can now answer.

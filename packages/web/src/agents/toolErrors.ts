@@ -13,6 +13,8 @@ interface Details {
   skill?: string | null;
   file?: string | null;
   profile?: string;
+  limit?: number;
+  length?: number;
 }
 
 /** Every reason the import route can give (`skill-import.ts`, `zip.ts` on the hub). */
@@ -62,6 +64,12 @@ export function describeToolError(error: unknown, t: T): string {
         return t('agents.tools.runtime_absent');
       case 'login_not_supported':
         return t('channels.login.not_supported');
+      case 'skill_bundled':
+        return t('skills.bundled_refused');
+      case 'plugin_bundled':
+        return t('agent_plugins.bundled_refused');
+      case 'memory_too_long':
+        return t('memory.too_long', { limit: details?.limit ?? 0, length: details?.length ?? 0 });
     }
   }
   return describeError(error, t);
