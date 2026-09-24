@@ -85,7 +85,47 @@
 حقائق `default` فقط، واستئناف `b` بمعرّفه المخزّن يبقى في `b`، و`state.db` لـ`b` في منزل `b`، وبروفايل
 منسوخ من `default` (طريقة إنشاء البروفايل المفقود) يجيب.
 
-(مخرجات الأوامر تُلصق أدناه بعد تشغيلها.)
+القياس (الحاوية كلها، `docker stats` بعد كل دور): 217.1 MiB بعد دور في `b`، 220.2 بعد استئنافه،
+220.4 بعد دور في `default`، 224.5 MiB بعد دور في بروفايل ثالث منسوخ.
+
+الاختبارات الجديدة تفشل على كود `main` (نسخة مؤقتة من `main` مع ملفات الاختبار الجديدة فقط): 11
+اختبار سلوك فشلت كلها، منها «opens a conversation in the workspace's own profile and working folder»،
+«makes a missing profile once, as a copy of default…»، «names the workspace's Hermes profile on every run
+target…»، «declares the endpoint in every Hermes profile's config too…».
+
+كل أمر ثقيل عبر `mj-run` (عاملان لـ vitest، حد 7 GB)، بعد دمج `origin/main` (b21d31e):
+
+```
+$ pnpm lint                       -> exit 0  (All matched files use Prettier code style!)
+$ pnpm typecheck                  -> exit 0
+$ pnpm contracts:lint             -> contracts:lint  OK
+$ pnpm contracts:check-clients    -> check-clients  OK — 231 client file(s) scanned, 167 contract path(s) known.
+$ pnpm contract:test              -> Test Files  2 passed (2)   Tests  255 passed (255)
+$ pnpm i18n:check                 -> i18n:check  OK
+$ pnpm nav:check                  -> nav:check  OK — 34 destinations, 2 pre-auth screens (login, setup), 38 terms, ar/en complete, routes for web
+$ pnpm --filter @majlis/server test
+ Test Files  78 passed | 9 skipped (87)
+      Tests  841 passed | 26 skipped (867)
+$ pnpm --filter @majlis/web test
+ Test Files  39 passed (39)
+      Tests  502 passed (502)
+$ pnpm build                      -> exit 0 (✓ built)
+$ docker build -f packages/server/Dockerfile -t majlis:local .
+Successfully tagged majlis:local
+$ MAJLIS_HERMES_IMAGE=majlis:local npx vitest run --maxWorkers=1 hermes-profile.real hermes-tui.real hermes-profiles.real
+ ✓ hermes-profiles.real > creates from scratch and as a copy, refuses an existing name, and lists both
+ ✓ hermes-profile.real > a conversation in profile b reads b's soul and memory, and nobody else's
+ ✓ hermes-profile.real > the same process serves the default profile with the default's soul and memory
+ ✓ hermes-profile.real > a profile made as a copy of the default one — how a missing profile is made — answers
+ ✓ hermes-tui.real > asks the question Hermes asks, and gives Hermes the answer chosen
+ ✓ hermes-tui.real > asks a batch — the shape Hermes offers the model — and gives Hermes every answer
+ ✓ hermes-tui.real > skips a question when the person skips it
+ ✓ hermes-tui.real > takes a turn on the model the turn names, on this session only
+ ✓ hermes-tui.real > continues the same conversation by its stored id
+ Test Files  3 passed (3)
+      Tests  9 passed (9)
+```
+لم يُشغَّل `web:e2e`: لم يتغيّر شيء في `packages/web`.
 
 ## المخاطر والرجوع
 - **مجلد العمل تغيّر لجلسات هرمز**: كانت أدوات هرمز تعمل في منزل هرمز الجذري، والآن في مجلد الجلسة.
