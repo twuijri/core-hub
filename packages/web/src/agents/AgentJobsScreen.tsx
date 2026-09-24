@@ -53,7 +53,7 @@ export function AgentJobsScreen() {
   useAgentJobEvents();
   const { pause, run, remove } = useAgentJobWrite();
   const { ask, dialog } = useConfirm();
-  const [fired, setFired] = useState<string | null>(null);
+  const [fired, setFired] = useState<AgentJob | null>(null);
 
   const agent = agents.data?.find((entry) => entry.id === agentId);
   const title = agent ? t('agent_jobs.title_of', { name: agent.name }) : t('nav.jobs');
@@ -105,7 +105,12 @@ export function AgentJobsScreen() {
         )}
         {fired && (
           <Notice tone="success">
-            <span data-testid="agent-jobs-fired">{t('schedules.hermes.fired')}</span>
+            <span data-testid="agent-jobs-fired">
+              {/* Hermes runs its own on its next tick; the hub starts any other at once. */}
+              {fired.external?.source === 'hermes'
+                ? t('schedules.hermes.fired')
+                : t('schedules.fired', { name: fired.name })}
+            </span>
           </Notice>
         )}
         {jobs.data && items.length === 0 && (
@@ -167,10 +172,8 @@ export function AgentJobsScreen() {
                     <Button
                       variant="secondary"
                       size="sm"
-                      disabled={!fromHermes}
-                      {...(fromHermes ? {} : { tooltip: t('schedules.run_unavailable') })}
                       loading={run.isPending && run.variables?.id === job.id}
-                      onClick={() => run.mutate(job, { onSuccess: () => setFired(job.id) })}
+                      onClick={() => run.mutate(job, { onSuccess: () => setFired(job) })}
                       data-testid={`agent-job-run-${job.id}`}
                     >
                       {t('schedules.run_now')}

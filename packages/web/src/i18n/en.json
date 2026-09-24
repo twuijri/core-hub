@@ -736,7 +736,7 @@
   },
   "schedules": {
     "new": "New schedule",
-    "new_hint": "Saved with its next run computed. A schedule for Hermes runs in Hermes's own scheduler; any other waits for the hub's worker.",
+    "new_hint": "Saved with its next run computed. A schedule for Hermes runs in Hermes's own scheduler; any other is run by the hub itself.",
     "name": "Name",
     "kind": "Kind",
     "prompt": "What should the agent be asked?",
@@ -757,7 +757,6 @@
     "never": "No next time",
     "enabled": "Enabled",
     "run_now": "Run now",
-    "run_unavailable": "The hub does not start runs yet; a schedule is saved and its next time computed.",
     "confirm_delete": "Delete “{name}”?",
     "state": {
       "scheduled": "Scheduled",
@@ -778,7 +777,53 @@
       "prompt_required": "A schedule for Hermes needs a prompt.",
       "fired": "Hermes will run it on its next tick."
     },
-    "in_profile": "New schedules are made in {name}. To make one in another profile, switch the profile at the top of the page."
+    "in_profile": "New schedules are made in {name}. To make one in another profile, switch the profile at the top of the page.",
+    "fired": "“{name}” started.",
+    "target_unavailable": "It could not start: {message}",
+    "history": {
+      "show": "History",
+      "hide": "Hide history",
+      "empty": "It has not run yet.",
+      "open_session": "Open the conversation",
+      "open_run": "Open the run",
+      "trigger": {
+        "schedule": "On its time",
+        "manual": "Run now"
+      },
+      "status": {
+        "queued": "Queued",
+        "running": "Running",
+        "succeeded": "Done",
+        "failed": "Failed",
+        "cancelled": "Not run"
+      }
+    },
+    "run": {
+      "title": "Workflow run",
+      "waiting": "This run is waiting for your approval.",
+      "reason": "Reason (optional)",
+      "approve": "Approve",
+      "deny": "Deny",
+      "status": {
+        "queued": "Queued",
+        "running": "Running",
+        "waiting": "Waiting",
+        "succeeded": "Done",
+        "failed": "Failed",
+        "cancelled": "Cancelled"
+      },
+      "step_status": {
+        "pending": "Pending",
+        "queued": "Queued",
+        "running": "Running",
+        "waiting_approval": "Waiting for approval",
+        "succeeded": "Done",
+        "failed": "Failed",
+        "skipped": "Skipped",
+        "cancelled": "Cancelled",
+        "rejected": "Rejected"
+      }
+    }
   },
   "audit": {
     "period": "Period",

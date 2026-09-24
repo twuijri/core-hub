@@ -13,7 +13,7 @@
  * seen, so a page stays stable while new rows arrive at the top — which they
  * constantly do in a chat.
  */
-import { and, asc, desc, eq, inArray, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
 import type { ModuleDatabase } from '../../db/handle.js';
 import { newUlid } from '../../db/ids.js';
 import { approvals, messages, runs, sessions, toolCalls } from './schema.js';
@@ -489,7 +489,8 @@ export class SessionsStore {
       this.db
         .update(approvals)
         .set({ status: 'cancelled', respondedAt: new Date(), updatedAt: new Date() })
-        .where(eq(approvals.status, 'pending'))
+        // A workflow step's gate has no session run: it outlives a restart on purpose.
+        .where(and(eq(approvals.status, 'pending'), isNotNull(approvals.runId)))
         .run();
     }
     return result.changes;
@@ -589,8 +590,10 @@ export class SessionsStore {
   upsertApproval(
     workspace: string,
     ownerId: string,
-    runId: string,
+    runId: string | null,
     approval: {
+      workflowRunId?: string | null;
+      nodeId?: string | null;
       id: string;
       toolCallId: string | null;
       kind: ApprovalRow['kind'];
@@ -677,9 +680,52 @@ export class SessionsStore {
       .all();
   }
 
-  /** The session an approval belongs to, through its run. */
+  /** The session an approval belongs to, through its run; a workflow step's gate has none. */
   sessionIdOfApproval(workspace: string, approval: ApprovalRow): string | undefined {
-    return this.getRun(workspace, approval.runId)?.sessionId;
+    return approval.runId ? this.getRun(workspace, approval.runId)?.sessionId : undefined;
+  }
+
+  /**
+   * Record an answer on an approval that is still pending — and only then. Two people
+   * answering at once, or an answer racing a cancel: exactly one of them wins.
+   */
+  resolvePending(
+    workspace: string,
+    id: string,
+    answer: {
+      status: ApprovalRow['status'];
+      response: Record<string, unknown> | null;
+      respondedByUserId: string | null;
+    },
+  ): ApprovalRow | undefined {
+    const now = new Date();
+    const result = this.db
+      .update(approvals)
+      .set({ ...answer, respondedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(approvals.workspace, workspace),
+          eq(approvals.id, id),
+          eq(approvals.status, 'pending'),
+        ),
+      )
+      .run();
+    return result.changes === 1 ? this.getApproval(workspace, id) : undefined;
+  }
+
+  /** The gates of a workflow run still waiting for someone. */
+  pendingWorkflowApprovals(workspace: string, workflowRunId: string): ApprovalRow[] {
+    return this.db
+      .select()
+      .from(approvals)
+      .where(
+        and(
+          eq(approvals.workspace, workspace),
+          eq(approvals.workflowRunId, workflowRunId),
+          eq(approvals.status, 'pending'),
+        ),
+      )
+      .all();
   }
 }
 
