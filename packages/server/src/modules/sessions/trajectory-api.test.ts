@@ -78,7 +78,12 @@ describe('sessions.getTrajectory', () => {
       let body: {
         live: boolean;
         timing: string;
-        steps: Array<{ kind: string; status: string; text: string | null }>;
+        steps: Array<{
+          kind: string;
+          status: string;
+          text: string | null;
+          tool_call_only: boolean;
+        }>;
         metrics: Record<string, unknown>;
       } = { live: true, timing: 'none', steps: [], metrics: {} };
       for (let attempt = 0; attempt < 50 && body.live; attempt += 1) {
@@ -89,19 +94,20 @@ describe('sessions.getTrajectory', () => {
       expect(schemaErrors('Trajectory', body)).toEqual([]);
       expect(body.live).toBe(false);
       expect(body.timing).toBe('full');
-      expect(body.steps.map((s) => [s.kind, s.status])).toEqual([
-        ['input', 'succeeded'],
-        ['turn', 'succeeded'],
-        ['tool', 'succeeded'],
-        ['tool', 'failed'],
-        ['turn', 'succeeded'],
+      // Between the two calls the model may hold the floor for a few milliseconds, or none:
+      // a silent turn that only hands over to the next tool appears only when it took time.
+      const said = body.steps.filter((s) => !(s.kind === 'turn' && s.tool_call_only));
+      expect(said.map((s) => [s.kind, s.status, s.text])).toEqual([
+        ['input', 'succeeded', 'اقرأ الملف ثم شغّل الأمر'],
+        ['turn', 'succeeded', 'سأقرأ الملف.'],
+        ['tool', 'succeeded', null],
+        ['tool', 'failed', null],
+        ['turn', 'succeeded', 'فشل الأمر.'],
       ]);
-      expect(body.steps[1]?.text).toBe('سأقرأ الملف.');
-      expect(body.steps[4]?.text).toBe('فشل الأمر.');
       expect(body.metrics).toMatchObject({
         exchanges: 1,
-        turns: 2,
-        steps: 5,
+        turns: body.steps.filter((s) => s.kind === 'turn').length,
+        steps: body.steps.length,
         tool_calls: 2,
         failed_tool_calls: 1,
         input_tokens: 40,
