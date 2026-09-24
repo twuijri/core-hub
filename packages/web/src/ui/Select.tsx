@@ -74,7 +74,7 @@ export function Select({
       <RadixSelect.Value>
         <span className="truncate">{chosen?.label ?? placeholder ?? label}</span>
       </RadixSelect.Value>
-      <RadixSelect.Icon>
+      <RadixSelect.Icon className="mj-select-chevron">
         <IconChevron size={12} />
       </RadixSelect.Icon>
     </RadixSelect.Trigger>
