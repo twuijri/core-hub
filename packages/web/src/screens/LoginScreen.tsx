@@ -6,7 +6,7 @@ import { describeError } from '../auth/client.js';
 import { useTheme } from '../design/theme.js';
 import { useI18n } from '../i18n/context.js';
 import { HOME_PATH, SETUP_PATH } from '../navigation/routes.js';
-import { Button, Field, Input, Notice, Separator } from '../ui/index.js';
+import { Button, Field, Input, Notice, Separator, MajlisMark } from '../ui/index.js';
 import { IconGlobe } from '../ui/icons.js';
 
 /** Signing in: one card, two fields, and nothing else on the page to look at. */
@@ -50,7 +50,7 @@ export function LoginScreen() {
       >
         <header className="gate-head">
           <span className="gate-mark" aria-hidden>
-            م
+            <MajlisMark size={36} />
           </span>
           <div className="gate-headings">
             <h1 id="login-title" className="gate-title">
