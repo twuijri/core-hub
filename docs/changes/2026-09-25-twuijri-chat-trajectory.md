@@ -114,7 +114,15 @@ $ PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwright test e2e/
 ملّي ثوانٍ بين الأداتين فظهر دور صامت حقيقي، والاختبار كان يفترض غيابه. ثم ظهر بعد الدمج أن
 حدثين في الملّي ثانية نفسها كانا يُرتَّبان بالساعة فتسبق الأداةَ دورٌ جاء بعدها. الإصلاح: كل دور
 يحفظ عدد الأدوات التي بدأت قبله (`toolsBefore`)، والترتيب من الأحداث لا من الساعة، مع اختبار
-«أحداث في الملّي ثانية نفسها». نتيجة CI الأخيرة في طلب الدمج.
+«أحداث في الملّي ثانية نفسها». CI على `4b584cb` (بعد الإصلاح ودمج إعادة التسمية) — كلها خضراء:
+```
+Docker image builds and answers /health                pass  3m2s
+Lint, typecheck, contracts, tests, build               pass  16m28s
+PR adds or updates a change record                     pass  7s
+PR leaves graphify-out/ to the code-map bot            pass  8s
+Web smoke journeys (Playwright against the real hub)   pass  4m38s
+db:generate + db:migrate (SQLite and PostgreSQL)       pass  1m2s
+```
 
 ## المخاطر والرجوع
 - **الأدوار مستنتَجة** من البث لا من نداءات النموذج الفعلية؛ وكيل يبث نصًّا أثناء عمل أدواته
