@@ -690,6 +690,14 @@
   transition-timing-function: var(--mj-motion-ease);
   transition-property: background-color, color;
 }
+/* The chevron sits at the end of the trigger, not against the label: on a trigger wider than
+   its text (a form field) it belongs at the far edge (owner, 2026-09-24). Logical, so it is the
+   left edge in Arabic and the right edge in English. */
+.mj-select-chevron {
+  margin-inline-start: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+}
 .mj-select:hover:not(:disabled) {
   background: var(--mj-color-surface-3);
   color: var(--mj-color-text);

@@ -364,19 +364,82 @@
   gap: var(--mj-space-1);
   padding: var(--mj-space-2);
   border: 1px solid var(--mj-color-border);
-  border-inline-start: 2px solid transparent;
   border-radius: var(--mj-radius-sm);
   background: var(--mj-color-surface);
 }
-/* The stage a card is in, readable from across the board without opening anything. */
-.task-card.status-ready {
-  border-inline-start-color: var(--mj-color-warning-soft-text);
+/* The stage a card is in, readable from across the board without opening anything (the
+   owner's board decision of 2026-09-17, rebuilt here). A frame around the whole card, each
+   one drawn differently — turning, solid, dashed — so the stage is never told by colour
+   alone, and the status word stays on the card for whoever cannot tell the colours apart.
+   The frame is 2px, so the padding gives the extra pixel back and the text never moves. */
+.task-card[data-frame] {
+  border-width: 2px;
+  padding: calc(var(--mj-space-2) - 1px);
 }
-.task-card.status-running {
-  border-inline-start-color: var(--mj-color-accent);
+/* Ready: todo with a yes. A quiet edge and the badge, not a frame — it is not an alarm. */
+.task-card[data-frame='ready'] {
+  border-width: 1px;
+  border-inline-start: 3px solid var(--mj-color-status-ready);
+  padding: var(--mj-space-2);
+  padding-inline-start: calc(var(--mj-space-2) - 2px);
 }
-.task-card.status-blocked {
-  border-inline-start-color: var(--mj-color-danger-soft-text);
+.task-card[data-frame='blocked'] {
+  border-color: var(--mj-color-status-blocked);
+}
+.task-card[data-frame='scheduled'] {
+  border-style: dashed;
+  border-color: var(--mj-color-status-scheduled);
+}
+.task-card[data-frame='review'] {
+  border-color: var(--mj-color-status-review);
+}
+/* Running: a green frame that turns. The card's own surface is painted inside the border
+   box and a conic gradient behind it, so what shows is the border — and the gradient's
+   brighter sweep is what goes round. */
+@property --task-frame-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+.task-card[data-frame='running'] {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--mj-color-surface), var(--mj-color-surface)) padding-box,
+    conic-gradient(
+        from var(--task-frame-angle),
+        var(--mj-color-status-running-sweep),
+        var(--mj-color-status-running) 18%,
+        var(--mj-color-status-running) 82%,
+        var(--mj-color-status-running-sweep)
+      )
+      border-box;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mj-color-status-running) 16%, transparent);
+  animation: task-frame-turn 2.8s linear infinite;
+}
+@keyframes task-frame-turn {
+  to {
+    --task-frame-angle: 360deg;
+  }
+}
+/* The word, in the stage's tone. Review has no tone in the kit, so it is painted here. */
+.task-status {
+  font-weight: 500;
+}
+.task-card .mj-badge.task-status-review {
+  background: var(--mj-color-review-soft);
+  color: var(--mj-color-review-soft-text);
+}
+.task-status .mj-badge-label {
+  /* The dot or the clock sits on the word's line, not above it. */
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mj-space-1);
+}
+.task-status .task-card-live {
+  margin-inline-end: 0;
+}
+.task-status-icon {
+  flex: 0 0 auto;
 }
 .task-card-grip {
   display: inline-grid;
@@ -430,7 +493,7 @@
   block-size: 0.4rem;
   margin-inline-end: var(--mj-space-1);
   border-radius: var(--mj-radius-full);
-  background: var(--mj-color-accent);
+  background: currentColor;
   animation: task-live 1.6s ease-in-out infinite;
 }
 @keyframes task-live {
@@ -459,6 +522,40 @@
   .task-card-live {
     animation: none;
   }
+  /* Still a green frame, still unlike the others — it just stops going round. */
+  .task-card[data-frame='running'] {
+    animation: none;
+    background:
+      linear-gradient(var(--mj-color-surface), var(--mj-color-surface)) padding-box,
+      linear-gradient(var(--mj-color-status-running), var(--mj-color-status-running)) border-box;
+  }
+}
+/* The archive behind Done: a link that opens it, and cards that are there to be found,
+   not worked. */
+.task-archive {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mj-space-2);
+  padding-block-start: var(--mj-space-2);
+  border-block-start: 1px solid var(--mj-color-border);
+}
+.task-archive-toggle {
+  align-self: start;
+  color: var(--mj-color-link);
+  font-size: var(--mj-font-size-xs);
+  cursor: pointer;
+}
+.task-archive-toggle:hover {
+  text-decoration: underline;
+}
+.task-archive-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mj-space-2);
+}
+.task-card-archived {
+  background: var(--mj-color-surface-2);
+  color: var(--mj-color-text-muted);
 }
 
 /* --------------------------------------------------------------- the logs */
