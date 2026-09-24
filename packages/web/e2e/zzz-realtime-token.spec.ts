@@ -42,7 +42,7 @@ test('23. an access token that expired while away: the sockets take a new one, c
   await page.getByRole('link', { name: 'محادثة جديدة' }).first().click();
   await page.getByTestId('composer-input').fill('مرحبا قبل انتهاء المفتاح');
   await page.getByTestId('send').click();
-  await expect(page).toHaveURL(/\/chat\/[0-9A-Z]{26}$/);
+  await expect(page).toHaveURL(/\/chat\/[0-9A-Z]{26}(\?|$)/);
   const chatUrl = page.url();
   await expect(page.getByTestId('message-assistant').last()).toHaveAttribute(
     'data-status',
@@ -68,11 +68,14 @@ test('23. an access token that expired while away: the sockets take a new one, c
     ] as const,
   );
 
-  // Hold the page's HTTP back for a moment, so its own refresh cannot come first: the
-  // sockets meet the hub with the expired token and are refused ("Offline").
+  // Hold the page's API calls (the generated client's `fetch`) back for a moment, so its
+  // own refresh cannot come first: the sockets meet the hub with the expired token and are
+  // refused ("Offline"). Page assets and the sockets pass.
   let held = true;
-  await page.route('**/api/v1/**', async (route) => {
-    while (held) await new Promise((resolve) => setTimeout(resolve, 50));
+  await page.route('**/*', async (route) => {
+    if (route.request().resourceType() === 'fetch') {
+      while (held) await new Promise((resolve) => setTimeout(resolve, 50));
+    }
     await route.continue();
   });
   await page.reload();
