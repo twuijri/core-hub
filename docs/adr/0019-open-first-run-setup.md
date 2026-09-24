@@ -44,7 +44,7 @@ as the fallback.
    screen shows either the open form — saying it is open to whoever opens the page
    first, «التسجيل مفتوح لأول شخص يفتح هذه الصفحة — أكمله الآن», with the time left —
    or the token field with where to find the token. When the countdown ends the
-   screen asks the hub again and switches to the token. Contract decision §44.
+   screen asks the hub again and switches to the token. Contract decision §45.
 5. **Once an owner exists** setup is closed for good (`409`). Two setups racing
    inside the window are serialized: "no owner yet" is checked again inside the
    transaction that creates the owner, so exactly one wins.

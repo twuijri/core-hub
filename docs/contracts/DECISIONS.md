@@ -947,7 +947,7 @@ Rejected: building the trajectory in each client from the transcript (every clie
 re-derive turns it cannot see, and the log would differ from the view), per-turn usage (no
 agent reports it), and showing `0` for a metric nobody measured.
 
-## 44. First-run setup says whether it is open without the token, and until when
+## 45. First-run setup says whether it is open without the token, and until when
 
 ADR 0019 (owner, 2026-09-25) opens first-run setup to whoever arrives first for
 `COREHUB_SETUP_OPEN_MINUTES` (60) after the hub starts with no owner; after that the claim token
