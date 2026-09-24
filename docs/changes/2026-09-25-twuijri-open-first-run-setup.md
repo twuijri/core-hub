@@ -110,14 +110,28 @@ $ pnpm build && PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwr
   1 passed (8.0s)
 ```
 
-`pnpm change-record:check` ونتيجة CI تُضاف بعد الدفع.
+```
+$ pnpm change-record:check
+change-record  OK — 1 record(s) valid
+```
+
+CI على الـPR #103 (الالتزام `ff982af`، تشغيل 36072773550) — أخضر كله:
+
+```
+✓ Web smoke journeys (Playwright against the real hub) in 5m9s
+✓ Docker image builds and answers /health in 3m33s
+✓ db:generate + db:migrate (SQLite and PostgreSQL) in 1m2s
+✓ Lint, typecheck, contracts, tests, build in 16m55s
+✓ PR leaves graphify-out/ to the code-map bot in 9s
+```
 
 ## المخاطر والرجوع
 - **تعرّض حقيقي لمدة ساعة** على نطاق عام: من يصل أولًا يصبح المالك. هذا ما قرّره المالك؛ الشاشة
   تقول ذلك وتطلب الإكمال الآن، والاسترجاع متاح. من يريد السلوك القديم يضبط
   `COREHUB_SETUP_OPEN_MINUTES=0`.
 - الساعة محسوبة من ساعة الخادم، والعدّ التنازلي في المتصفح من ساعة الجهاز؛ فرق الساعتين يغيّر
-  المعروض فقط، والخادم هو الحكم (وعند 401 تسأل الشاشة من جديد).
+  المعروض فقط: الخادم وحده يقرر الوضع (مفتوح أو رمز)، وعند انتهاء العدّ أو عند 401 تسأل الشاشة
+  من جديد.
 - بعد الاسترجاع وقبل المالك الجديد لا يدخل أحد (حتى المشرفون)؛ مقصود ومذكور في DEPLOY.
 - الرجوع: revert لهذا الـPR يعيد «الرمز فقط». علامة `owner-reset.json` إن وُجدت لا يقرؤها الكود
   القديم، ولا ضرر منها.
