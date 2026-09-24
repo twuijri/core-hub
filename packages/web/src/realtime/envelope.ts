@@ -61,6 +61,15 @@ export const SCHEDULE_EVENTS = [
   'schedule_run.started',
   'schedule_run.completed',
   'schedule_run.failed',
+  // A workflow run as it goes, so a run on the screen follows it — a gate raised or answered.
+  'workflow_run.started',
+  'workflow_run.completed',
+  'workflow_run.failed',
+  'workflow_run.cancelled',
+  'step.started',
+  'step.completed',
+  'step.failed',
+  'step.waiting',
 ] as const;
 
 export const JOB_EVENTS = [

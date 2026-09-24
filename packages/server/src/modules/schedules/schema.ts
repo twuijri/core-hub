@@ -44,6 +44,7 @@ export const SCHEDULE_RUN_STATUSES = [
   'skipped',
   'cancelled',
 ] as const;
+export const SCHEDULE_RUN_TRIGGERS = ['schedule', 'manual'] as const;
 export const WORKFLOW_TRIGGERS = ['manual', 'schedule', 'event'] as const;
 export const WORKFLOW_RUN_TRIGGERS = ['manual', 'schedule', 'event', 'api'] as const;
 export const WORKFLOW_RUN_STATUSES = [
@@ -127,6 +128,13 @@ export type WorkflowEdge = {
   from: string;
   to: string;
   route: 'always' | 'success' | 'failure';
+};
+
+/** A paused run's place (`workflow_runs.resume_state`). */
+export type WorkflowResumeState = {
+  queue: string[];
+  ran: string[];
+  steps: Record<string, { output: unknown }>;
 };
 
 export type WorkflowDefinition = {
@@ -232,6 +240,11 @@ export const workflowRuns = sqliteTable(
     output: json<Record<string, unknown>>('output'),
     /** Node keys currently running or waiting; drives the live diagram. */
     activeNodeKeys: json<string[]>('active_node_keys').notNull().default(EMPTY_ARRAY),
+    /**
+     * Where a run paused at an approval stands, so it can go on after a restart: the nodes
+     * still to visit, the nodes already visited, and every step's output so far.
+     */
+    resumeState: json<WorkflowResumeState>('resume_state'),
     error: text('error'),
     startedAt: timestampMs('started_at'),
     finishedAt: timestampMs('finished_at'),
@@ -286,6 +299,10 @@ export const scheduleRuns = sqliteTable(
     status: text('status', { enum: SCHEDULE_RUN_STATUSES }).notNull().default('queued'),
     /** target=prompt: the sessions.run. */
     runId: ulid('run_id'),
+    /** target=prompt: the session the run talks in (-> sessions.sessions), so it can be opened. */
+    sessionId: ulid('session_id'),
+    /** `schedule` when its time came, `manual` when a person pressed "Run now". */
+    trigger: text('trigger', { enum: SCHEDULE_RUN_TRIGGERS }).notNull().default('schedule'),
     /** target=workflow: the workflow_run. */
     workflowRunId: ulid('workflow_run_id').references(() => workflowRuns.id, {
       onDelete: 'set null',

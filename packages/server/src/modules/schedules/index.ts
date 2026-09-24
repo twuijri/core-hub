@@ -1,11 +1,12 @@
 /**
  * Module `schedules`: when something should happen, and what.
  *
- * Twenty of the twenty-three operations answer. The three that would **start** something —
- * `runNow`, `runWorkflow`, `rerunWorkflowFromNode` — answer `501` with their operation ids,
- * because firing a schedule means opening a session and queueing a run and that worker is
- * not built (the same gap the Tasks board names). Everything that defines, validates,
- * lists and remembers answers properly, and `next_run_at` is computed for real.
+ * Every operation answers. A schedule for Hermes lives in Hermes's own scheduler, which
+ * fires it (`hermes-cron.ts`); every other schedule — a `direct` agent, a coding agent, a
+ * workflow — is fired by the hub itself (`scheduler.ts` claims the tick, `schedule-runs.ts`
+ * starts it), and `runNow` starts that same run at once and answers with its real ids.
+ * Workflows run step by step (`workflow-engine.ts`), and a step can wait for a person: an
+ * ordinary approval, answered through `/approvals/{id}/respond`, that survives a restart.
  *
  * A cron expression the hub cannot evaluate is refused **when the schedule is saved**,
  * with the field and the reason. A schedule that looks fine and never fires is the failure
@@ -17,13 +18,14 @@ import { loadOpenApiDocument } from '@majlis/contracts';
 import { newUlid } from '../../db/ids.js';
 import { createContractIndex } from '../../lib/contract.js';
 import { requireSqlite } from '../../lib/db.js';
-import { HubError, notFound } from '../../lib/errors.js';
+import { conflict, HubError, notFound } from '../../lib/errors.js';
 import { defineModule, REALTIME_NAMESPACES } from '../../lib/module.js';
 import { clampLimit, decodeCursor, pageOf } from '../../lib/pagination.js';
 import { createRealtime, type Realtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
 import {
   defaultWorkspace,
+  findUser,
   listWorkspacesFor,
   requireRole,
   requireUser,
@@ -38,11 +40,15 @@ import {
 } from './service.js';
 import type { WorkflowDefinition } from './schema.js';
 import { HermesCron, refusedByHermesCron, type HermesCronPort } from './hermes-cron.js';
-import { WorkflowEngine, type RunScope, type WorkflowPorts } from './workflow-engine.js';
+import { WorkflowEngine, stepOf, type RunScope, type WorkflowPorts } from './workflow-engine.js';
+import { ScheduleRuns, type ScheduleRunPorts } from './schedule-runs.js';
+import { HubScheduler } from './scheduler.js';
 
 export { SchedulesService, validateDefinition, warningsFor } from './service.js';
 export type { Scope } from './service.js';
 export { nextRunAt, parseCron, nextCron, CronError } from './cron.js';
+export type { ScheduleRunPorts, TurnOutcome } from './schedule-runs.js';
+export { MISSED_GRACE_MS } from './scheduler.js';
 
 function scopeOf(request: FastifyRequest): Scope {
   const workspace = request.workspace;
@@ -113,11 +119,129 @@ export function workflowEngineFor(app: FastifyInstance): WorkflowEngine {
     (profile, event, payload) =>
       realtimeOf(app).emit(REALTIME_NAMESPACES.schedules, event, { profile }, payload),
     app.log,
+    // A run a schedule started settles its history line when it ends — hours later, after
+    // an approval, or after a restart: whenever that is.
+    (run, outcome) => firerFor(app).settleWorkflow(run, outcome),
   );
   engines.set(app.hub.io, engine);
   const stale = new SchedulesService(requireSqlite(app.hub.database)).failInterruptedRuns();
   if (stale > 0) app.log.warn({ runs: stale }, 'workflows: runs left by a restart failed');
   return engine;
+}
+
+/**
+ * What firing a prompt schedule reaches in `sessions` — a session of source `schedule`
+ * and its run — composed in `modules/index.ts`. Without it, a prompt schedule's run fails
+ * saying the hub cannot run an agent; workflow schedules still run.
+ */
+let scheduleRunnerFactory: ((app: FastifyInstance) => ScheduleRunPorts | null) | null = null;
+export function registerScheduleRunner(
+  factory: ((app: FastifyInstance) => ScheduleRunPorts | null) | null,
+): ((app: FastifyInstance) => ScheduleRunPorts | null) | null {
+  const previous = scheduleRunnerFactory;
+  scheduleRunnerFactory = factory;
+  return previous;
+}
+
+/**
+ * Who a scheduled run acts as: the schedule's owner, in the schedule's profile and the
+ * owner's own language — nobody's request is there to say otherwise.
+ */
+function runScopeFor(app: FastifyInstance, workspace: string, userId: string): RunScope | null {
+  const db = requireSqlite(app.hub.database);
+  const row = listWorkspacesFor(db, { id: '', role: 'owner' }).find((w) => w.id === workspace);
+  const user = findUser(db, userId);
+  if (!row || !user) return null;
+  return {
+    workspace: row.id,
+    profile: row.slug,
+    userId: user.id,
+    userName: user.username,
+    language: user.locale === 'en' ? 'en' : 'ar',
+  };
+}
+
+function profileOf(app: FastifyInstance, workspace: string): string | null {
+  const db = requireSqlite(app.hub.database);
+  return (
+    listWorkspacesFor(db, { id: '', role: 'owner' }).find((w) => w.id === workspace)?.slug ?? null
+  );
+}
+
+const firers = new WeakMap<SocketServer, ScheduleRuns>();
+/** The app's firing of its own schedules (`schedule-runs.ts`). */
+export function firerFor(app: FastifyInstance): ScheduleRuns {
+  const existing = firers.get(app.hub.io);
+  if (existing) return existing;
+  const created = new ScheduleRuns({
+    service: () => new SchedulesService(requireSqlite(app.hub.database)),
+    ports: () => scheduleRunnerFactory?.(app) ?? null,
+    engine: () => workflowEngineFor(app),
+    scopeOf: (workspace, userId) => runScopeFor(app, workspace, userId),
+    profileOf: (workspace) => profileOf(app, workspace),
+    emit: (profile, event, payload) =>
+      realtimeOf(app).emit(REALTIME_NAMESPACES.schedules, event, { profile }, payload),
+    toSchedule: (row, profile) =>
+      toSchedule(
+        row,
+        profile,
+        new SchedulesService(requireSqlite(app.hub.database)).shownNext(row),
+      ),
+    toRun: (row) => toScheduleRun(row, { full: false }),
+    log: app.log,
+  });
+  firers.set(app.hub.io, created);
+  return created;
+}
+
+const schedulers = new WeakMap<SocketServer, HubScheduler>();
+/** The app's scheduler; started when the hub is ready, stopped when it closes. */
+export function schedulerFor(app: FastifyInstance): HubScheduler {
+  const existing = schedulers.get(app.hub.io);
+  if (existing) return existing;
+  const created = new HubScheduler({
+    service: () => new SchedulesService(requireSqlite(app.hub.database)),
+    fire: (schedule, line) => firerFor(app).fire(schedule, line),
+    skipped: (schedule) => firerFor(app).skipped(schedule),
+    log: app.log,
+  });
+  schedulers.set(app.hub.io, created);
+  return created;
+}
+
+/**
+ * The paused-workflow half of an approval (`sessions` records the answer, then hands it
+ * here through the composition root): the run goes on as its owner, from where it stopped.
+ */
+export function workflowGateFor(app: FastifyInstance) {
+  return {
+    async resolve(input: {
+      workspace: string;
+      workflowRunId: string;
+      nodeId: string;
+      approved: boolean;
+      answer: string | null;
+      respondedBy: { id: string; name: string };
+    }): Promise<void> {
+      const service = new SchedulesService(requireSqlite(app.hub.database));
+      const run = service.workflowRunById(input.workflowRunId);
+      if (!run || run.workspace !== input.workspace) return;
+      const scope = runScopeFor(app, run.workspace, run.ownerId);
+      if (!scope) return;
+      const resumed = workflowEngineFor(app).resume(service, scope, run.id, {
+        nodeId: input.nodeId,
+        approved: input.approved,
+        answer: input.answer,
+        by: input.respondedBy.name,
+      });
+      if (!resumed) {
+        app.log.warn(
+          { workflowRunId: run.id },
+          'workflows: an answer came for a run no longer waiting',
+        );
+      }
+    },
+  };
 }
 
 function runScopeOf(request: FastifyRequest): RunScope {
@@ -237,10 +361,12 @@ function toScheduleRun(
     schedule_id: row.scheduleId,
     job_id: row.id,
     run_id: row.runId,
-    session_id: null,
+    session_id: row.sessionId,
     workflow_run_id: row.workflowRunId,
+    // The contract has no `skipped`: a tick not run is a run that did not happen, and its
+    // `error` says why.
     status: row.status === 'skipped' ? 'cancelled' : row.status,
-    trigger: 'schedule',
+    trigger: row.trigger,
     output_preview: row.outputPreview,
     // The full text belongs to the single-run read only, as the contract says.
     output: options.full ? row.outputPreview : null,
@@ -290,20 +416,22 @@ function toWorkflowRun(
     updated_at: row.updatedAt.toISOString(),
     workflow_id: row.workflowId,
     job_id: row.id,
-    status: row.status,
-    trigger: row.triggerKind === 'api' ? 'manual' : row.triggerKind,
-    input: null,
-    steps: steps.map((step) => ({
-      node_id: step.nodeKey,
-      attempt: step.attempt,
-      status: step.status,
-      session_id: null,
-      run_id: step.runId,
-      approval_id: step.approvalId,
-      error: step.error,
-      started_at: step.startedAt?.toISOString() ?? null,
-      finished_at: step.finishedAt?.toISOString() ?? null,
-    })),
+    // The contract's six: a run paused at an approval (or paused at all) is `waiting`.
+    status:
+      row.status === 'waiting_approval' || row.status === 'paused'
+        ? 'waiting'
+        : row.status === 'timed_out'
+          ? 'failed'
+          : row.status,
+    // Who or what started it (`RunTrigger`): a person, a schedule, or the API.
+    trigger:
+      row.triggerKind === 'schedule'
+        ? { kind: 'schedule', id: row.scheduleId }
+        : row.triggerKind === 'manual'
+          ? { kind: 'user', id: row.ownerId }
+          : { kind: 'api', id: null },
+    input: (row.input as { input?: string | null } | null)?.input ?? null,
+    steps: steps.map(stepOf),
     error: row.error,
     started_at: row.startedAt?.toISOString() ?? null,
     finished_at: row.finishedAt?.toISOString() ?? null,
@@ -327,17 +455,6 @@ const PREVIEW_TTL_MS = 10 * 60_000;
 
 function sweepPreviews(now: number): void {
   for (const [id, preview] of previews) if (preview.expiresAt <= now) previews.delete(id);
-}
-
-/** The operation that would start something, and cannot yet. */
-function notBuilt(operationId: string): never {
-  throw new HubError('not_implemented', {
-    details: {
-      operationId,
-      reason: 'worker_not_built',
-      message: 'the hub can define and remember a run, but nothing starts one yet',
-    },
-  });
 }
 
 /**
@@ -444,6 +561,28 @@ export const schedulesModule = defineModule({
       );
     };
 
+    /**
+     * The hub's own scheduler runs while the hub serves. Before it looks: workflow runs a
+     * restart cut short are failed (the engine's first use), and history lines a restart
+     * left open are settled — so a missed tick is judged against an honest history.
+     */
+    app.addHook('onReady', async () => {
+      try {
+        workflowEngineFor(app);
+        const settled = firerFor(app).settleStranded();
+        if (settled > 0)
+          app.log.warn({ runs: settled }, 'schedules: settled runs a restart cut short');
+      } catch (error) {
+        app.log.warn({ err: error }, 'schedules: could not settle runs left open');
+      }
+      schedulerFor(app).start();
+    });
+    app.addHook('onClose', async () => {
+      const scheduler = schedulerFor(app);
+      scheduler.stop();
+      await scheduler.settled().catch(() => undefined);
+    });
+
     // ----------------------------------------------------------- schedules
 
     defineRoute(app, deps, {
@@ -496,7 +635,7 @@ export const schedulesModule = defineModule({
           limit: limit + 1,
         });
         return pageOf(rows, limit, (row) =>
-          toSchedule(row, slugOf.get(row.workspace) ?? '', service.nextFor(row)),
+          toSchedule(row, slugOf.get(row.workspace) ?? '', service.shownNext(row)),
         );
       },
     });
@@ -524,7 +663,7 @@ export const schedulesModule = defineModule({
             refusedByHermesCron(error);
           }
         }
-        const schedule = toSchedule(row, scope.profile, service.nextFor(row));
+        const schedule = toSchedule(row, scope.profile, service.shownNext(row));
         announce(request, 'schedule.created', { schedule });
         return schedule;
       },
@@ -536,7 +675,7 @@ export const schedulesModule = defineModule({
         const scope = scopeOf(request);
         const service = serviceOf(request);
         const row = service.get(scope, params.schedule_id as string);
-        return toSchedule(row, scope.profile, service.nextFor(row));
+        return toSchedule(row, scope.profile, service.shownNext(row));
       },
     });
 
@@ -565,7 +704,7 @@ export const schedulesModule = defineModule({
         } else {
           row = service.update(scope, id, patch);
         }
-        const schedule = toSchedule(row, scope.profile, service.nextFor(row));
+        const schedule = toSchedule(row, scope.profile, service.shownNext(row));
         announce(request, 'schedule.updated', { schedule });
         return schedule;
       },
@@ -604,10 +743,35 @@ export const schedulesModule = defineModule({
         if (row.externalSource === 'hermes' && row.externalId && jobs) {
           await jobs.run(row.externalId).catch(refusedByHermesCron);
           const run = service.queueRun(scope, row.id);
-          announce(request, 'schedule.fired', { schedule_id: row.id, schedule_run_id: run.id });
-          return { job_id: run.id, schedule_run_id: run.id };
+          announce(request, 'schedule.fired', {
+            schedule: toSchedule(row, scope.profile, service.shownNext(row)),
+            schedule_run_id: run.id,
+          });
+          return {
+            job_id: run.id,
+            schedule_run_id: run.id,
+            session_id: null,
+            run_id: null,
+            workflow_run_id: null,
+          };
         }
-        return notBuilt('schedules.runNow');
+        // The hub's own: the same run its time would start, now, leaving the next time alone.
+        const line = service.manualRun(row);
+        const fired = await firerFor(request.server).fire(row, line);
+        if (fired.error) {
+          throw conflict({
+            reason: 'target_unavailable',
+            message: fired.error,
+            schedule_run_id: line.id,
+          });
+        }
+        return {
+          job_id: fired.jobId,
+          schedule_run_id: fired.scheduleRunId,
+          session_id: fired.sessionId,
+          run_id: fired.runId,
+          workflow_run_id: fired.workflowRunId,
+        };
       },
     });
 
@@ -740,7 +904,18 @@ export const schedulesModule = defineModule({
       operationId: 'schedules.deleteWorkflow',
       status: 204,
       handler: (request, { params }) => {
-        serviceOf(request).removeWorkflow(scopeOf(request), params.workflow_id as string);
+        const scope = scopeOf(request);
+        const service = serviceOf(request);
+        const workflow = service.workflow(scope, params.workflow_id as string);
+        // Its runs go with it: nobody should still be asked to approve a step of one.
+        for (const run of service.waitingRunsOf(workflow.id)) {
+          workflowEngineFor(request.server).closeGates(service, scope, run.id);
+          workflowEngineFor(request.server).announceFinished(run, {
+            status: 'cancelled',
+            error: 'the workflow was deleted',
+          });
+        }
+        service.removeWorkflow(scope, workflow.id);
         announce(request, 'workflow.deleted', { workflow_id: params.workflow_id });
         return null;
       },
@@ -803,7 +978,16 @@ export const schedulesModule = defineModule({
       operationId: 'schedules.deleteWorkflowRun',
       status: 204,
       handler: (request, { params }) => {
-        serviceOf(request).removeWorkflowRun(scopeOf(request), params.workflow_run_id as string);
+        const scope = scopeOf(request);
+        const service = serviceOf(request);
+        const run = service.workflowRun(scope, params.workflow_run_id as string);
+        if (!['succeeded', 'failed', 'cancelled', 'timed_out'].includes(run.status)) {
+          const engine = workflowEngineFor(request.server);
+          engine.cancel(run.id);
+          engine.closeGates(service, scope, run.id);
+          engine.announceFinished(run, { status: 'cancelled', error: 'the run was deleted' });
+        }
+        service.removeWorkflowRun(scope, run.id);
         return null;
       },
     });
@@ -814,7 +998,17 @@ export const schedulesModule = defineModule({
         const scope = scopeOf(request);
         const service = serviceOf(request);
         const row = service.cancelWorkflowRun(scope, params.workflow_run_id as string);
-        workflowEngineFor(request.server).cancel(row.id);
+        const engine = workflowEngineFor(request.server);
+        engine.cancel(row.id);
+        // A run waiting at a gate has nothing live to stop: its step and approval close here.
+        engine.closeGates(service, scope, row.id);
+        engine.announceFinished(row, { status: 'cancelled', error: null });
+        realtimeOf(request.server).emit(
+          REALTIME_NAMESPACES.schedules,
+          'workflow_run.cancelled',
+          { profile: scope.profile },
+          { workflow_run_id: row.id, workflow_id: row.workflowId },
+        );
         return toWorkflowRun(row, scope.profile, service.stepsOf(row.id));
       },
     });

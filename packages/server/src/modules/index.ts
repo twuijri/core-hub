@@ -37,8 +37,10 @@ import {
 import {
   attachmentReferences,
   createSessionsModule,
+  registerWorkflowGate,
   sessionRunsFor,
   sessionTurnsFor,
+  workflowApprovalsFor,
 } from './sessions/index.js';
 import { roomsModule } from './rooms/index.js';
 import {
@@ -53,7 +55,13 @@ import {
 } from './tasks/index.js';
 import { createHermesKanban, processRunner } from './tasks/hermes-kanban.js';
 import { createHermesJobs } from './schedules/hermes-jobs.js';
-import { registerHermesCron, registerWorkflowPorts, schedulesModule } from './schedules/index.js';
+import {
+  registerHermesCron,
+  registerScheduleRunner,
+  registerWorkflowPorts,
+  schedulesModule,
+  workflowGateFor,
+} from './schedules/index.js';
 import {
   attachmentsPort,
   knowledgeModule,
@@ -96,7 +104,8 @@ export const notifierPort = (app: FastifyInstance): SessionsNotifier => {
       notifier.announce(
         { userId: input.userId, workspace: input.workspace, profile: input.profile },
         { kind: 'approval_requested', agent: input.agentName, session: '', what: input.what },
-        { kind: 'session', id: input.sessionId },
+        // A workflow waiting at a step opens its run; an agent waiting opens its chat.
+        input.resource ?? { kind: 'session', id: input.sessionId },
       );
     },
   };
@@ -295,6 +304,41 @@ registerWorkflowPorts((app) => {
         { kind: 'system', title: input.title, body: input.body },
         null,
       ),
+    // A step that waits for a person raises an ordinary approval: listed with the others,
+    // announced profile-wide, in the inbox, answered by the same `respondApproval`.
+    approvals: {
+      raise(scope, input) {
+        const approvals = workflowApprovalsFor(app);
+        if (!approvals) throw new Error('this hub composes no sessions module to ask anyone');
+        return approvals.raise(scope, input);
+      },
+      cancel: (scope, workflowRunId) =>
+        workflowApprovalsFor(app)?.cancel(scope, workflowRunId) ?? 0,
+    },
+  };
+});
+
+/** The answer to a workflow step's gate (`sessions`) continues the paused run (`schedules`). */
+registerWorkflowGate((app) => workflowGateFor(app));
+
+/**
+ * The hub fires its own schedules: a prompt schedule's run is a `sessions` turn in a
+ * session of its own (source `schedule`, origin its history line), which the history opens.
+ */
+registerScheduleRunner((app) => {
+  const runs = sessionRunsFor(app);
+  if (!runs) return null;
+  return {
+    start: (scope, input) =>
+      runs.start(scope, {
+        agentId: input.agentId,
+        prompt: input.prompt,
+        title: input.title,
+        source: 'schedule',
+        // The session serves one firing: its origin is the history line (`schedule_run`).
+        origin: { kind: 'schedule', id: input.scheduleRunId },
+      }),
+    outcome: (workspace, runId) => runs.outcome(workspace, runId),
   };
 });
 
