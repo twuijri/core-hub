@@ -68,8 +68,9 @@ RUN set -eu; \
 # copies one tree. Hermes refuses to build a wheel ("distributed via the shell installer,
 # Docker image, or Nix"); the supported route is an editable install from a checkout, so the
 # pinned tag is cloned to /opt/hermes/src and stays there. Core dependencies only, plus what
-# the API server (aiohttp), cron and MCP need: no dashboard, TUI, browsers, ffmpeg or
-# messaging extras — the hub is the UI.
+# the API server (aiohttp), cron and MCP need, plus the two channels the hub links itself
+# (Telegram, WhatsApp — below): no dashboard, TUI, browsers, ffmpeg or other messaging extras —
+# the hub is the UI.
 FROM node:24-bookworm AS hermes
 ARG HERMES_REF=v2026.9.14
 ARG UV_VERSION=0.11.6
@@ -86,6 +87,34 @@ RUN sh /tmp/uv-installer.sh \
  && cd /opt/hermes/src \
  && uv pip install --python /opt/hermes/.venv/bin/python -e ".[cron,mcp]" "aiohttp==3.14.3" \
  && /opt/hermes/.venv/bin/hermes --version
+# The two messaging channels the hub links itself ship in the image, so linking one downloads
+# nothing at runtime (docs/changes/2026-09-25-twuijri-image-channel-deps.md).
+#
+# Telegram: Hermes installs its client on first use (tools/lazy_deps.py, `platform.telegram`)
+# from PyPI. The spec is read from that table here, so the image carries exactly what Hermes
+# would install and the pin cannot drift from Hermes's own. The venv's current versions are the
+# constraints — the rule Hermes itself applies to a lazy install — so no core package moves; a
+# conflict fails the build instead. The last line is Hermes's own question: is_available is what
+# ensure() asks before it installs anything.
+RUN set -eu; cd /opt/hermes/src; \
+    py=/opt/hermes/.venv/bin/python; \
+    specs=$("$py" -c "from tools.lazy_deps import LAZY_DEPS; print(' '.join(LAZY_DEPS['platform.telegram']))"); \
+    uv pip freeze --python "$py" | grep -E '^[A-Za-z0-9._-]+==' > /tmp/core-constraints.txt; \
+    echo "platform.telegram: $specs"; \
+    uv pip install --python "$py" --constraint /tmp/core-constraints.txt $specs; \
+    rm /tmp/core-constraints.txt; \
+    "$py" -c "from tools import lazy_deps; import telegram, telegram.ext; assert lazy_deps.is_available('platform.telegram'), lazy_deps.feature_missing('platform.telegram')"
+# WhatsApp: Hermes's bridge (scripts/whatsapp-bridge, Baileys) runs `npm install` the first time
+# a phone is linked. Its locked dependencies are installed here instead, read-only in the image;
+# the hub points each profile's copy of the bridge at them (modules/agents/whatsapp-bridge.ts).
+# The stamp is the one Hermes's adapter compares before it would install again
+# (plugins/platforms/whatsapp/adapter.py §_ensure_bridge_deps), written with Hermes's own hash.
+RUN set -eu; cd /opt/hermes/src/scripts/whatsapp-bridge; \
+    npm ci --omit=dev --no-audit --no-fund; \
+    rm -rf /root/.npm; \
+    /opt/hermes/.venv/bin/python -c "import sys; sys.path.insert(0, '/opt/hermes/src'); from pathlib import Path; from plugins.platforms.whatsapp.adapter import _file_content_hash as h; Path('node_modules/.hermes-pkg-hash').write_text(h(Path('package.json')), encoding='utf-8')"; \
+    test -s node_modules/.hermes-pkg-hash; \
+    node --input-type=module -e "await Promise.all(['@whiskeysockets/baileys', 'express', 'pino', 'qrcode-terminal', '@hapi/boom'].map((m) => import(m)))"
 # Prune the checkout to what the editable install and Hermes's runtime actually read. The
 # packages come from pyproject [tool.setuptools.packages.find] plus the root modules; the data
 # directories are the ones Hermes resolves relative to its source root (locales, skills,
