@@ -1,6 +1,6 @@
 /**
  * Profile export and import through the hub's own routes (ADR 0014 stage 2, contract
- * decision §30), with Hermes scripted (`auth/testing/fake-profile-runtime.ts`) and
+ * decision §33), with Hermes scripted (`auth/testing/fake-profile-runtime.ts`) and
  * everything else real: the jobs runner, the file registry, the secret store.
  *
  * What must hold: an export is a real job whose archive downloads, carries no credential
@@ -376,14 +376,14 @@ describe('a hub that does not supervise Hermes', () => {
       expect(exported.status).toBe(409);
       expect(exported.body).toMatchObject({
         code: 'state_invalid',
-        details: { reason: 'hermes_not_managed' },
+        details: { reason: 'hermes_not_supervised' },
       });
       const imported = await json(hub, 'POST', '/api/v1/profile-imports', {
         attachment_id: await upload(hub, 'x.tar.gz', tarGz([{ path: 'p/a', content: 'a' }])),
         slug: 'fresh',
       });
       expect(imported.status).toBe(409);
-      expect(imported.body).toMatchObject({ details: { reason: 'hermes_not_managed' } });
+      expect(imported.body).toMatchObject({ details: { reason: 'hermes_not_supervised' } });
       const jobs = await json(hub, 'GET', '/api/v1/jobs');
       expect(
         (jobs.body.items as Json[]).filter((j) => ['export', 'import'].includes(String(j.kind))),

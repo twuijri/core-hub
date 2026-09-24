@@ -18,8 +18,11 @@ import { fakeProfileRuntime } from '../../server/src/modules/auth/testing/fake-p
 import { principalScopeResolver } from '../../server/src/modules/auth/index.js';
 import { overrideAgents } from '../../server/src/modules/agents/index.js';
 import { overrideModels } from '../../server/src/modules/models/index.js';
-import type { AgentInstaller } from '../../server/src/modules/agents/index.js';
+import type { AgentInstaller, HermesApiCall } from '../../server/src/modules/agents/index.js';
 import { createSessionsModule } from '../../server/src/modules/sessions/index.js';
+import { SessionsStore } from '../../server/src/modules/sessions/store.js';
+import { sessions as sessionRows } from '../../server/src/modules/sessions/schema.js';
+import { requireSqlite } from '../../server/src/lib/db.js';
 import { createHermesCardApi, registerHermesBoard } from '../../server/src/modules/tasks/index.js';
 import { registerHermesCron } from '../../server/src/modules/schedules/index.js';
 import { createHermesJobs } from '../../server/src/modules/schedules/hermes-jobs.js';
@@ -172,6 +175,16 @@ function scriptFor(prompt: string): Step[] {
         text: '```ts\nsocket.emit("subscribe", { session_id, after_seq });\n```\n',
       },
       { type: 'usage', inputTokens: 41, outputTokens: 96 },
+      { type: 'completed' },
+    ];
+  }
+  if (/حتى أوقفك|until stopped/i.test(prompt)) {
+    // Works until somebody stops it — by the Stop button, or by archiving its conversation
+    // (zzz-chat-history): only an interrupt ends it.
+    return [
+      { type: 'message_delta', text: 'أعمل على ذلك… ' },
+      { type: 'delay', ms: 180_000 },
+      { type: 'message_delta', text: 'هذا الجزء لا يصل بعد الإيقاف.' },
       { type: 'completed' },
     ];
   }
@@ -357,10 +370,67 @@ const scriptedGateway: typeof fetch = async (input) => {
   }
   return new Response('not found', { status: 404 });
 };
+/**
+ * Hermes's own API for the agent tools (ADR 0015), scripted: an MCP server called `broken`
+ * fails in Hermes's words and any other lists two tools; a WhatsApp pairing hands out one
+ * code, then a second, and is linked on the next question — so journey 23 sees a code drawn,
+ * replaced, and the channel linked, without a phone or a network.
+ */
+let pairingPolls = 0;
+const scriptedHermesApi: HermesApiCall = async <T>(method: string, route: string): Promise<T> => {
+  const answer = (value: unknown) => value as T;
+  const mcp = /^\/api\/mcp\/servers\/([^/]+)\/test/.exec(route);
+  if (mcp) {
+    return mcp[1] === 'broken'
+      ? answer({
+          ok: false,
+          error: "[Errno 2] No such file or directory: 'not-a-command'",
+          tools: [],
+        })
+      : answer({
+          ok: true,
+          tools: [
+            { name: 'read_file', description: 'Read a file from the allowed folders.' },
+            { name: 'list_directory', description: 'List a folder.' },
+          ],
+        });
+  }
+  const expires = new Date(Date.now() + 10 * 60_000).toISOString();
+  if (route.endsWith('/whatsapp/onboarding/start')) {
+    pairingPolls = 0;
+    return answer({ pairing_id: 'e2e-pairing', status: 'installing', expires_at: expires });
+  }
+  if (method === 'GET' && route.includes('/whatsapp/onboarding/')) {
+    pairingPolls += 1;
+    if (pairingPolls < 4) {
+      return answer({
+        status: 'waiting',
+        qr_payload: 'https://wa.me/e2e#first-code',
+        expires_at: expires,
+      });
+    }
+    if (pairingPolls < 8) {
+      return answer({
+        status: 'waiting',
+        qr_payload: 'https://wa.me/e2e#second-code',
+        expires_at: expires,
+      });
+    }
+    return answer({
+      status: 'connected',
+      account_name: 'مكتب المجلس',
+      account_phone: '966500000000',
+    });
+  }
+  return answer({ ok: true });
+};
+
 overrideAgents({
   pathValue: path.join(dataDir, 'no-such-bin'),
   installer: e2eInstaller,
   adapterOptions: { hermes: { fetchImpl: scriptedGateway } },
+  hermesApi: scriptedHermesApi,
+  pairingPollMs: 700,
 });
 
 /**
@@ -511,6 +581,37 @@ const app = await buildServer({
 app.post('/__e2e/drop-sockets', async () => {
   app.hub.io.of('/rt/sessions').disconnectSockets(true);
   return { ok: true };
+});
+
+// Test-only control: a long history for a conversation that already exists — the texts are
+// appended in order, alternating the person and the agent, straight into the store (as if
+// written over months), so the chat has more than one page to scroll back through.
+app.post('/__e2e/seed-messages', async (request) => {
+  const { session_id, texts } = request.body as { session_id: string; texts: string[] };
+  const db = requireSqlite(app.hub.database);
+  const row = db
+    .select()
+    .from(sessionRows)
+    .all()
+    .find((each) => each.id === session_id);
+  if (!row) return { ok: false };
+  const store = new SessionsStore(db);
+  texts.forEach((text, index) => {
+    const user = index % 2 === 0;
+    store.appendMessage({
+      workspace: row.workspace,
+      ownerId: row.ownerId,
+      sessionId: row.id,
+      runId: null,
+      role: user ? 'user' : 'assistant',
+      authorKind: user ? 'user' : 'agent',
+      authorId: user ? row.ownerId : row.agentId,
+      content: text,
+      parts: [],
+      attachmentIds: [],
+    });
+  });
+  return { ok: true, count: texts.length };
 });
 
 // Test-only control: the same access token, already expired — what a laptop that slept

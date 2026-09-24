@@ -121,7 +121,7 @@ export class SecretStore {
   /**
    * Every stored plaintext, in every workspace. Its one caller is the profile export, which
    * checks an archive for these bytes and overwrites them before the archive leaves the hub
-   * (ADR 0010, contract decision §30); the values go nowhere else. A row sealed under a
+   * (ADR 0010, contract decision §33); the values go nowhere else. A row sealed under a
    * key the ring no longer holds cannot be in any archive this hub wrote, and is skipped.
    */
   revealEvery(): string[] {

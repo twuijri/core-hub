@@ -34,6 +34,12 @@ export interface AgentTarget {
    * settings form), which is why it is optional.
    */
   workspace?: string;
+  /**
+   * The agent runtime's own profile this conversation runs in (ADR 0014 stage 3): for
+   * Hermes, the workspace's slug, or `default` for the hub's default workspace. Absent
+   * outside a run and for agents without profiles; absent is the runtime's own default.
+   */
+  profile?: string | null;
   /** argv to start the agent; never a shell string (AGENTS.md hard rules). */
   command: readonly string[];
   executablePath: string | null;

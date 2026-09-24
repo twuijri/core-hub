@@ -12,6 +12,7 @@ import {
   type HermesRunEvent,
   type HermesTransport,
 } from './hermes.js';
+import type { TuiChannel } from './hermes-tui.js';
 import type { AgentEvent } from './types.js';
 
 /**
@@ -374,5 +375,71 @@ describe('Hermes transport: the wire', () => {
     expect(session.id).toBe('majlis-adapter');
     expect(await session.send({ text: 'hi' })).toEqual({ stopReason: 'completed' });
     await session.close();
+  });
+
+  describe('a conversation in its profile (ADR 0014 stage 3)', () => {
+    /** A TUI channel that records every call and answers `session.create`. */
+    function recordingChannel() {
+      const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
+      const channel: TuiChannel = {
+        alive: true,
+        busy: false,
+        request: async (method, params) => {
+          calls.push({ method, params });
+          return method === 'session.create' ? { session_id: 'l1', stored_session_id: 's1' } : {};
+        },
+        attach: () => () => undefined,
+        onExit: () => () => undefined,
+        close: async () => undefined,
+      };
+      return { channel, calls };
+    }
+    const target = {
+      slug: 'hermes',
+      name: 'Hermes',
+      command: ['hermes'],
+      executablePath: null,
+      endpoint: null,
+      sessionRef: 'majlis-x',
+    };
+
+    it('makes sure the profile exists, then opens the conversation there', async () => {
+      const { channel, calls } = recordingChannel();
+      const ensured: string[] = [];
+      const adapter = createHermesAdapter({
+        host: { pathValue: '/nowhere-at-all' },
+        tui: () => channel,
+        ensureProfile: async (name) => {
+          ensured.push(name);
+          calls.push({ method: '(ensure)', params: { name } });
+        },
+      });
+      await adapter.start({ ...target, profile: 'design', cwd: '/data/workspaces/design/x' });
+      expect(ensured).toEqual(['design']);
+      expect(calls.map((c) => c.method)).toEqual(['(ensure)', 'session.resume', 'session.create']);
+      expect(calls[2]?.params).toMatchObject({
+        profile: 'design',
+        cwd: '/data/workspaces/design/x',
+      });
+    });
+
+    it("never makes Hermes's default profile, and refuses the turn when a profile cannot be made", async () => {
+      const { channel } = recordingChannel();
+      const ensured: string[] = [];
+      const adapter = createHermesAdapter({
+        host: { pathValue: '/nowhere-at-all' },
+        tui: () => channel,
+        ensureProfile: async (name) => {
+          ensured.push(name);
+          if (name === 'broken') throw new Error('Hermes said no');
+        },
+      });
+      await adapter.start({ ...target, profile: 'default' });
+      await adapter.start({ ...target, profile: null });
+      expect(ensured).toEqual([]);
+      await expect(adapter.start({ ...target, profile: 'broken' })).rejects.toThrow(
+        'Hermes said no',
+      );
+    });
   });
 });

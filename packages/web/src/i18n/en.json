@@ -229,7 +229,10 @@
     "speak_later": "Speech arrives in a later phase.",
     "replying_to": "Replying to: {text}",
     "estimated": "≈ {amount}",
-    "anchor_missing": "The message this search pointed to is no longer in this conversation."
+    "anchor_missing": "The message this search pointed to is no longer in this conversation.",
+    "older_loading": "Loading older messages…",
+    "older_start": "Beginning of the conversation",
+    "older_failed": "Couldn’t load older messages."
   },
   "composer": {
     "label": "Message composer",
@@ -356,7 +359,14 @@
     "check_update": "Check for updates",
     "update_now": "Update now",
     "auto_update": "Update automatically",
-    "auto_update_hint": "Takes a new version as soon as it ships, without asking."
+    "auto_update_hint": "Takes a new version as soon as it ships, without asking.",
+    "tools": {
+      "not_supervised": "This hub does not run Hermes itself, so it cannot ask Hermes to do this.",
+      "refused": "Hermes refused: {message}",
+      "api_unavailable": "Hermes's API did not answer: {message}",
+      "profile_absent": "Hermes has no profile named {profile} yet, so it has no files to show here.",
+      "runtime_absent": "Hermes is not installed or running here, so it has no folder to read."
+    }
   },
   "jobs": {
     "status": {
@@ -574,7 +584,10 @@
       "gateway_reloaded": {
         "ok": "The runtime restarted after the last change.",
         "missing": "The runtime has not restarted since the last change."
-      }
+      },
+      "all_ok": "Everything works",
+      "show": "Show checks",
+      "hide": "Hide checks"
     }
   },
   "working_dir": {
@@ -812,6 +825,92 @@
       "system": "System messages"
     }
   },
+  "webhooks": {
+    "intro": "Addresses this hub calls on its own, signed so the receiver can check the sender. Webhooks belong to the profile you are in.",
+    "add": "Add webhook",
+    "forwarding_note": "Today the hub sends a webhook only the test delivery from this page. Forwarding the events you choose is not built yet: they are saved and will be used once it is.",
+    "none": "No webhooks yet",
+    "none_body": "Add one to give an outside service an address the hub can call.",
+    "facts": "About this webhook",
+    "enabled": "Enabled",
+    "on": "On",
+    "off": "Off",
+    "signed": "Signed",
+    "unsigned": "Not signed",
+    "no_events": "No events chosen",
+    "event_count": "Events: {count}",
+    "private_allowed": "Private address allowed",
+    "stats": "Delivered {delivered} · failed {failed}",
+    "last_delivery": "last delivered {when}",
+    "last_error": "Last failure: {error}",
+    "test": "Send test",
+    "testing": "Sending the test delivery…",
+    "test_ok": "Delivered — the endpoint answered {status}.",
+    "test_status": "Not delivered — the endpoint answered {status}.",
+    "test_failed": "Not delivered: {error}",
+    "show_deliveries": "Recent deliveries",
+    "hide_deliveries": "Hide deliveries",
+    "deliveries": "Recent deliveries",
+    "no_deliveries": "Nothing has been sent to this webhook yet.",
+    "col_when": "When",
+    "col_event": "Event",
+    "col_status": "Status",
+    "col_code": "Response",
+    "col_error": "Error",
+    "delivery": {
+      "queued": "Queued",
+      "delivered": "Delivered",
+      "failed": "Failed",
+      "dead": "Gave up"
+    },
+    "delete_title": "Delete the webhook “{name}”?",
+    "delete_body": "The hub stops calling this address and forgets its delivery history.",
+    "edit_title": "Edit “{name}”",
+    "name": "Name",
+    "url": "Address",
+    "url_hint": "An http or https URL. The hub checks where it points before saving it.",
+    "url_scheme": "Use an address that starts with http:// or https://.",
+    "url_unresolvable": "The hub could not find this address. Check the host name.",
+    "url_private": "This address points inside a private network. Allow private addresses below if that is on purpose.",
+    "allow_private": "Allow a private address",
+    "allow_private_hint": "Off by default, so a webhook cannot make the hub call machines inside its own network.",
+    "signing": "Signing secret",
+    "signing_hint": "With a secret, every delivery carries the header below, an HMAC-SHA256 of the body, so the receiver can check it came from this hub.",
+    "secret_keep": "Keep the current secret",
+    "secret_new": "Make a new secret",
+    "secret_new_hint": "Shown once after saving; the receiver must be given the new one.",
+    "secret_remove": "Stop signing",
+    "secret_make": "Sign deliveries with a new secret",
+    "secret_none": "Do not sign",
+    "events": "Events",
+    "events_hint": "Which of the hub's events this webhook is for. Saved now; sent once forwarding exists.",
+    "events_filter": "Filter events",
+    "events_no_match": "No event matches.",
+    "secret_title": "Signing secret",
+    "secret_once": "Copy it now. The hub keeps it but will never show it again.",
+    "secret_done": "I copied it",
+    "copy": "Copy",
+    "copied": "Copied"
+  },
+  "privacy": {
+    "access": "Apps and devices with access",
+    "access_hint": "Paired phones and integrations each hold a token that acts as you. Revoke one and it stops working at once; a paired device is unlinked.",
+    "col_name": "Name",
+    "col_scopes": "Can",
+    "col_used": "Last used",
+    "col_expires": "Expires",
+    "kind_device": "Paired device",
+    "kind_app": "App token",
+    "never_used": "Never",
+    "no_expiry": "Never",
+    "revoke": "Revoke",
+    "revoke_title": "Revoke “{name}”?",
+    "revoke_body": "Anything using this token loses access at once. This cannot be undone.",
+    "revoke_device_body": "This device loses access at once and is unlinked; pairing it again gives it a new token.",
+    "none": "No app or device holds a token",
+    "none_body": "Only your own sign-ins can reach your account.",
+    "browsers_note": "Browsers you signed in to are not listed here. Changing your password under Account signs out every browser except this one; it does not revoke the tokens above."
+  },
   "people": {
     "title": "People",
     "add": "Add person",
@@ -980,7 +1079,34 @@
     "delete_body": "The whole skill folder goes, with every file in it. Turning it off keeps everything.",
     "key": "Key",
     "document": "SKILL.md",
-    "editor_note": "This is what the agent reads, verbatim — front matter and body. Nothing is reshaped on save."
+    "editor_note": "This is what the agent reads, verbatim — front matter and body. Nothing is reshaped on save.",
+    "import": {
+      "button": "Import",
+      "running": "Importing…",
+      "done": "Imported {count}: {names}.",
+      "reason": {
+        "pack_unrecognised": "A skill pack is a SKILL.md file or a zip archive",
+        "pack_has_no_skill": "The archive holds no SKILL.md",
+        "pack_path_unsafe": "The archive has a path that would land outside its skill",
+        "pack_unsupported": "The archive uses something the hub does not read",
+        "pack_corrupt": "The archive is damaged",
+        "pack_too_large": "The archive is too large once unpacked",
+        "skill_empty": "SKILL.md is empty",
+        "skill_too_large": "SKILL.md is longer than Hermes reads",
+        "skill_front_matter_missing": "SKILL.md does not start with a front matter block (---)",
+        "skill_front_matter_unclosed": "SKILL.md's front matter is not closed with ---",
+        "skill_front_matter_invalid": "SKILL.md's front matter is not valid YAML",
+        "skill_name_required": "SKILL.md's front matter has no name",
+        "skill_description_required": "SKILL.md's front matter has no description",
+        "skill_description_too_long": "The description is longer than Hermes reads",
+        "skill_body_empty": "SKILL.md has nothing after its front matter",
+        "skill_name_invalid": "The skill name is not one Hermes accepts",
+        "skill_not_utf8": "SKILL.md is not UTF-8 text",
+        "skill_nested": "A skill in the archive sits inside another skill",
+        "skill_duplicate": "The same skill ({skill}) is in the upload twice",
+        "skill_exists": "This profile already has the skill {skill}; delete it first to replace it"
+      }
+    }
   },
   "mcp": {
     "title_of": "{name} MCP servers",
@@ -995,7 +1121,14 @@
     "restart_note": "This page writes to the agent's config file. Hermes connects to these servers when it starts, so restart it for a change to take effect.",
     "editor_note": "Every MCP server has its own fields. It is edited as it is, and nothing we do not recognise is dropped. A credential reads as [stored]; leaving it keeps the one on file.",
     "delete_title": "Delete {name}?",
-    "delete_body": "It goes from the config file. Nothing is removed from the server itself."
+    "delete_body": "It goes from the config file. Nothing is removed from the server itself.",
+    "test": {
+      "button": "Test",
+      "running": "Testing…",
+      "ok": "Hermes connected — {count} tools, {seconds} s.",
+      "no_tools": "The server lists no tools.",
+      "failed": "Hermes could not connect:"
+    }
   },
   "memory": {
     "title_of": "{name} memory",
@@ -1027,7 +1160,21 @@
     "secret_hint": "Leave it to keep the one already stored.",
     "no_fields": "This channel has no fields yet.",
     "clear_title": "Forget the {name} identity?",
-    "clear_body": "The tokens and secrets are removed and the channel is switched off. Its other settings stay."
+    "clear_body": "The tokens and secrets are removed and the channel is switched off. Its other settings stay.",
+    "login": {
+      "button": "Pair by QR",
+      "whatsapp": "Link WhatsApp",
+      "title": "Link {name}",
+      "note": "Hermes pairs this profile's agent with a phone. Scan the code from WhatsApp on the phone: Settings → Linked devices → Link a device.",
+      "expires": "The code is valid until {time}.",
+      "done": "Linked. The agent answers on it after its next restart.",
+      "done_as": "Linked as {account}. The agent answers on it after its next restart.",
+      "failed": "The pairing failed.",
+      "cancelled": "The pairing was stopped.",
+      "again": "Start again",
+      "close": "Close",
+      "not_supported": "This platform does not pair by QR; fill in its fields instead."
+    }
   },
   "question": {
     "title": "Question",

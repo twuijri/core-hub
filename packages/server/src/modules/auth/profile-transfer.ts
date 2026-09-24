@@ -7,7 +7,7 @@
  *
  * - `runtime` — Hermes's dashboard API (ADR 0015), which writes and reads the archive. It
  *   exists only where the hub supervises Hermes; `null` anywhere else, and both operations
- *   then answer `409 state_invalid` (`hermes_not_managed`) before any job is made.
+ *   then answer `409 state_invalid` (`hermes_not_supervised`) before any job is made.
  * - `files` — `knowledge`, which keeps the finished export as an attachment only its
  *   requester can read, and hands back the path of an uploaded archive.
  * - `secrets` — every credential value the hub holds (`models`' provider keys, Hermes's API
@@ -32,7 +32,7 @@ import { workspaces } from './schema.js';
 import type { WorkspaceRow } from './serialize.js';
 import { findWorkspace } from './workspace.js';
 
-/** How long a finished export stays downloadable (contract decision §30). */
+/** How long a finished export stays downloadable (contract decision §33). */
 export const EXPORT_KEEP_MS = 24 * 60 * 60_000;
 /** An export larger than this is refused rather than stored (the hub's disk is not a backup). */
 export const MAX_EXPORT_BYTES = 1024 * 1024 * 1024;
@@ -119,7 +119,7 @@ export function requireTransfer(
   if (!ports?.runtime) {
     throw new HubError('state_invalid', {
       messageKey: 'auth.profile_transfer_unmanaged',
-      details: { reason: 'hermes_not_managed' },
+      details: { reason: 'hermes_not_supervised' },
     });
   }
   return ports as ProfileTransferPorts & { runtime: ProfileArchiveRuntime };

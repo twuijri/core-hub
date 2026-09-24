@@ -274,11 +274,11 @@ describe.skipIf(!doc)('contract: auth operations answer their success path', () 
     expect((settings.settings as { privacy: { redact_pii: boolean } }).privacy.redact_pii).toBe(
       true,
     );
-    // A hub that does not supervise Hermes names the reason (contract decision §30) …
+    // A hub that does not supervise Hermes names the reason (contract decision §33) …
     const unmanaged = await call('auth.exportProfile', 409, {
       params: { profile_id: work.id as string },
     });
-    expect(unmanaged.details).toEqual({ reason: 'hermes_not_managed' });
+    expect(unmanaged.details).toEqual({ reason: 'hermes_not_supervised' });
     // … and with Hermes (scripted here) both are jobs that finish.
     const previous = registerProfileTransfer((app) =>
       profileTransferPorts(app, fakeProfileRuntime().runtime),

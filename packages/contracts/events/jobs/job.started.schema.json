@@ -222,6 +222,7 @@
         "export",
         "schedule_run",
         "workflow_run",
+        "channel_login",
         "import"
       ]
     },

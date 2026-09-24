@@ -134,7 +134,7 @@ export class KnowledgeItems {
           and(
             eq(attachments.workspace, query.workspace),
             isNull(attachments.deletedAt),
-            // A profile export is its requester's alone (contract decision §30), and it
+            // A profile export is its requester's alone (contract decision §33), and it
             // is on its way out: it is not one of the profile's files.
             ne(attachments.sourceKind, 'export'),
             before ? lt(attachments.id, before) : undefined,

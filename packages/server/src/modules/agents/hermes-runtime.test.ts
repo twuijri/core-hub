@@ -3,7 +3,7 @@
  * environment the child gets, that a crash restarts it and that stop stops it.
  */
 import { EventEmitter } from 'node:events';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
@@ -11,9 +11,11 @@ import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
 import { capturingLogger, unreachableFetch } from '../../../tests/unit/helpers.js';
 import { HermesTuiSession, type Spawned } from './adapters/hermes-tui.js';
+import { HubError } from '../../lib/errors.js';
 import {
   HermesRuntime,
   loadOrCreateHermesApiKey,
+  type HermesRuntimeOptions,
   type SpawnedProcess,
   type Spawner,
 } from './hermes-runtime.js';
@@ -348,6 +350,98 @@ describe('Hermes runtime: the TUI gateway and changing keys', () => {
     expect(first.alive).toBe(false);
     expect(started[0]!.killed).toBe(true);
     expect(runtime.tuiChannel()).not.toBe(first);
+    await runtime.stop();
+  });
+});
+
+describe('Hermes runtime: the profile a conversation runs in (ADR 0014 stage 3)', () => {
+  async function managedRuntime(profileRun: HermesRuntimeOptions['profileRun']) {
+    const { logger } = capturingLogger();
+    const { spawnImpl } = fakeSpawner();
+    const runtime = new HermesRuntime({
+      dataDir: tempDir(),
+      host: { pathValue: binDirWithHermes() },
+      log: logger,
+      fetchImpl: unreachableFetch,
+      spawnImpl,
+      healthIntervalMs: 0,
+      ...(profileRun ? { profileRun } : {}),
+    });
+    await runtime.start();
+    return runtime;
+  }
+
+  it('makes a missing profile once, as a copy of default, however many turns ask at once', async () => {
+    const runs: string[][] = [];
+    let home = '';
+    const runtime = await managedRuntime(async (argv) => {
+      runs.push([...argv]);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      mkdirSync(path.join(home, 'profiles', 'design'), { recursive: true });
+      return { code: 0, stdout: '', stderr: '' };
+    });
+    home = runtime.home;
+    await Promise.all([runtime.ensureProfile('design'), runtime.ensureProfile('design')]);
+    expect(runs).toEqual([
+      ['profile', 'create', 'design', '--no-alias', '--clone-from', 'default'],
+    ]);
+    // It is there now: nothing more is run.
+    await runtime.ensureProfile('design');
+    expect(runs).toHaveLength(1);
+    await runtime.stop();
+  });
+
+  it('leaves `default` and an existing profile alone', async () => {
+    const runs: string[][] = [];
+    const runtime = await managedRuntime(async (argv) => {
+      runs.push([...argv]);
+      return { code: 0, stdout: '', stderr: '' };
+    });
+    mkdirSync(path.join(runtime.home, 'profiles', 'ops'), { recursive: true });
+    await runtime.ensureProfile('default');
+    await runtime.ensureProfile('ops');
+    expect(runs).toEqual([]);
+    await runtime.stop();
+  });
+
+  it("refuses the turn in Hermes's words when the profile cannot be made", async () => {
+    const runtime = await managedRuntime(async () => ({
+      code: 1,
+      stdout: '',
+      stderr: "Traceback …\nError: Source profile 'default' does not exist\n",
+    }));
+    const refusal = await runtime.ensureProfile('design').catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(HubError);
+    expect(refusal).toMatchObject({
+      code: 'agent_unavailable',
+      details: { reason: 'hermes_profile_unavailable', profile: 'design' },
+    });
+    expect((refusal as Error).message).toContain("Source profile 'default' does not exist");
+    await runtime.stop();
+  });
+
+  it('serves conversations in different profiles from the one TUI gateway it supervises', async () => {
+    const { logger } = capturingLogger();
+    const { spawnImpl } = fakeSpawner();
+    const { started, tuiSpawn } = tuiGateways();
+    const bin = binDirWithHermes();
+    writeFileSync(path.join(bin, 'python'), '');
+    const runtime = new HermesRuntime({
+      dataDir: tempDir(),
+      host: { pathValue: bin },
+      log: logger,
+      fetchImpl: unreachableFetch,
+      spawnImpl,
+      tuiSpawn,
+      healthIntervalMs: 0,
+    });
+    await runtime.start();
+    const a = await HermesTuiSession.open(runtime.tuiChannel()!, null, { profile: 'design' });
+    const b = await HermesTuiSession.open(runtime.tuiChannel()!, null, { profile: 'ops' });
+    const c = await HermesTuiSession.open(runtime.tuiChannel()!, null, { profile: 'default' });
+    expect([a.id, b.id, c.id]).toHaveLength(3);
+    // A profile is a parameter of the session, not a process: one child for all three.
+    expect(started).toHaveLength(1);
     await runtime.stop();
   });
 });

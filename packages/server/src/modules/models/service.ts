@@ -51,6 +51,7 @@ import {
   agentEnvironment,
   hermesEnvPlan,
   writeHermesConfiguration,
+  writeHermesProviders,
   type HermesModelChoice,
   type HermesProviderRoute,
   type PropagationState,
@@ -107,6 +108,12 @@ export interface HermesTarget {
   mode?(): 'managed' | 'external' | 'absent';
   /** When the process last (re)started, in ms — what "it took the files" means. */
   reloadedAt?(): number | null;
+  /**
+   * The homes of Hermes's named profiles (ADR 0014). A conversation runs in its workspace's
+   * profile (stage 3), which reads its own `config.yaml`; the hub's endpoints are written
+   * there too, so a turn that names one finds it in whichever profile it runs.
+   */
+  profileHomes?(): string[];
 }
 
 /** The contract's `RuntimeCheck` and `RuntimeReport` (`models.getRuntime`). */
@@ -430,7 +437,7 @@ export class ModelsService {
     if (existing && !existing.archivedAt) {
       throw conflict({
         reason: 'provider_exists',
-        detail: `${primarySlug} is already added to this workspace`,
+        detail: `${primarySlug} is already added to this profile`,
       });
     }
 
@@ -1668,6 +1675,7 @@ export class ModelsService {
       );
       return;
     }
+    this.propagateToProfiles(state);
     if (!result.dirty && !envChanged) return;
     this.lastWriteAt = this.now().getTime();
     const changed = [...result.env.changed, ...result.config.changed];
@@ -1685,10 +1693,41 @@ export class ModelsService {
       action: 'agent.reconfigured',
       entityKind: 'agent',
       entityId: 'hermes',
-      summary: 'Hermes received the workspace providers',
+      summary: 'Hermes received the profile providers',
       data: { changed, removed },
     });
     this.scheduleRestart();
+  }
+
+  /**
+   * The endpoints (`providers:` blocks) in every named profile's `config.yaml` too — the
+   * same blocks, by the same rule: the hub's own keys only, everything else in the file
+   * untouched. Keys are not copied: they reach every profile through the process
+   * environment, which Hermes reads after a profile's own `.env` (ADR 0010, ADR 0014 stage
+   * 3). A profile's model stays its own — every hub turn names its model anyway. Nothing
+   * restarts: a conversation reads its profile's configuration when it opens.
+   */
+  private propagateToProfiles(state: PropagationState): void {
+    for (const profileHome of this.options.hermes.profileHomes?.() ?? []) {
+      try {
+        const written = writeHermesProviders(profileHome, state.hermesProviders);
+        if (written.dirty) {
+          this.options.log.info(
+            {
+              profile: path.basename(profileHome),
+              changed: written.changed,
+              removed: written.removed,
+            },
+            'models: Hermes profile endpoints updated',
+          );
+        }
+      } catch (error) {
+        this.options.log.warn(
+          { err: error, profile: path.basename(profileHome) },
+          'models: could not write a Hermes profile configuration; its endpoints are unchanged',
+        );
+      }
+    }
   }
 
   /**
@@ -1918,7 +1957,7 @@ export class ModelsService {
     if (!row || row.archivedAt) {
       throw validationFailed({
         field: 'model',
-        reason: 'the workspace has no such model on that provider',
+        reason: 'the profile has no such model on that provider',
         model: modelKeyOf(provider.slug, ref.model),
       });
     }

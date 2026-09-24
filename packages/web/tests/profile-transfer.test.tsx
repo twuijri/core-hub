@@ -199,7 +199,7 @@ describe('export', () => {
         {
           error: 'Exporting and importing a profile needs the Hermes this hub runs itself.',
           code: 'state_invalid',
-          details: { reason: 'hermes_not_managed' },
+          details: { reason: 'hermes_not_supervised' },
         },
       ],
     });

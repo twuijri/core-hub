@@ -12,7 +12,7 @@ import {
   signedInHub,
   testHub,
 } from '../../../tests/unit/helpers.js';
-import { agentsModule } from './index.js';
+import { agentsModule, agentsServiceFor } from './index.js';
 import { agentStatus, serializeAgent } from './serialize.js';
 import { CATALOG, HERMES_ENTRY, INSTALLABLE, assertCatalogIsWellFormed } from './catalog/index.js';
 import { parseVersion } from './adapters/host.js';
@@ -550,5 +550,32 @@ describe('agents: host probing helpers', () => {
     expect(parseVersion('claude-code/2.1.4 (darwin-arm64)')).toBe('2.1.4');
     expect(parseVersion('hermes version 0.21.3-rc.1')).toBe('0.21.3-rc.1');
     expect(parseVersion('no version here')).toBeNull();
+  });
+});
+
+describe('agents: the profile a run is started in (ADR 0014 stage 3)', () => {
+  it("names the workspace's Hermes profile on every run target: its slug, or `default`", async () => {
+    const hub = await signedInHub();
+    try {
+      const created = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/profiles',
+        payload: { slug: 'designer', name: 'Designer' },
+      });
+      expect(created.statusCode).toBe(201);
+      const listed = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/profiles' });
+      const items = (listed.json() as { items: { id: string; slug: string }[] }).items;
+      const idOf = (slug: string) => items.find((item) => item.slug === slug)!.id;
+
+      const agents = agentsServiceFor(hub.app);
+      const hermes = agents.loadAgentBySlug('hermes');
+      const run = { sessionRef: null, cwd: null, model: null, reasoningEffort: null };
+      expect(agents.targetFor(hermes, idOf('designer'), run).profile).toBe('designer');
+      expect(agents.targetFor(hermes, idOf('default'), run).profile).toBe('default');
+      // A workspace the hub does not know has no profile: the runtime's own default.
+      expect(agents.targetFor(hermes, '01J8QK3ZR2W7M5N4P6T8V9X0ZZ', run).profile).toBeNull();
+    } finally {
+      await hub.close();
+    }
   });
 });

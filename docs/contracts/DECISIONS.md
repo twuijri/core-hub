@@ -496,7 +496,50 @@ had been granted. That rule is withdrawn.
 Not changed: `Webhook.profiles` ("Empty means every workspace") scopes a webhook, not a
 person, and grants nobody access.
 
-## 30. Profile export and import are jobs in the caller's profile
+## 30. A job may show its state while it runs; the agent tools that need Hermes to act
+
+2026-09-24, with `agents.testMcpServer`, `agents.loginChannel` and `agents.importSkills`.
+
+- **`channel_login` is a `JobKind`.** A QR pairing is long work with a state a screen must
+  draw while it runs, so it is a job (invariant 4). `progress.message` stays a line for a
+  person; the code itself travels in the job's `result` while the job runs —
+  `{status, qr, expires_at}` — and the outcome replaces it when the job ends
+  (`{status: connected, account_name, account_phone}`). Putting the QR payload in
+  `progress.message` (the earlier wording) would have made a machine value out of a line
+  every client shows as text.
+- **Only `whatsapp` pairs by QR today**; any other platform is `409 state_invalid` with
+  `details.reason = login_not_supported`. Telegram's onboarding in Hermes creates a bot
+  through an outside service and asks for allowed user ids — a different product, not a pairing.
+- **Where the hub does not supervise Hermes** the two tools that ask Hermes to act answer
+  `409 state_invalid`, `details.reason = hermes_not_supervised`; Hermes refusing is `409
+  conflict`, `hermes_refused`, with Hermes's `details.message`; Hermes's API not starting is
+  `503 service_unavailable`, `hermes_api_unavailable`.
+- **`SkillImport.category` is optional and not used for placement.** An imported skill is
+  installed beside the others and lists under the category its own front matter names, like
+  every other skill; a required field nobody used would have been a promise the hub did not
+  keep. A refused pack names `details.reason`, `details.skill`, `details.file` and
+  `details.message`; a skill that already exists is `409`, anything else `400`.
+
+## 31. Archiving a conversation stops its runs; a paging cursor belongs to its conversation
+
+Owner, 2026-09-24: archiving several chats while one was still working left the agent
+working — and spending — in a conversation that was out of sight, and a task on that run
+stayed `running` on the board. And the chat only ever showed the newest 100 messages.
+
+- `sessions.update` with `archived: true`, and `sessions.bulkUpdate` with the same patch,
+  stop every live run of each session exactly as the chat's Stop does (`sessions.cancelRun`):
+  a queued run is cancelled before it starts (queued ones first, so ending the active run
+  does not hand the adapter the next in line), an active run is interrupted and ends
+  `cancelled` with its own `run.cancelled`. Both operations now declare `run.cancelled` in
+  `x-rt-events`. A task on such a run moves as a stop from the chat moves it (`ready`, still
+  assigned). `archived: false` starts nothing.
+- `sessions.listMessages` pages back by keyset on the message's position in its session.
+  A `before` that is not a message of **this** session — another conversation's, or one
+  that no longer exists — answers `404 not_found` (`details.resource = message`). It used
+  to be ignored, which answered the newest page again: a client paging back would have
+  taken messages it already held for older ones.
+
+## 33. Profile export and import are jobs in the caller's profile
 
 ADR 0014 stage 2 makes `auth.exportProfile` and `auth.importProfile` do what they say, and
 three details of the contract had to be settled for that:
@@ -514,7 +557,7 @@ three details of the contract had to be settled for that:
   (`expires_at` in the job's result). An uploaded import archive is deleted when its job ends.
 - **What a hub without Hermes answers.** Only a hub that supervises Hermes can ask it for an
   archive (ADR 0015). Elsewhere both operations answer `409 state_invalid` with
-  `details.reason = hermes_not_managed` before any job exists, rather than a job that fails
+  `details.reason = hermes_not_supervised` before any job exists, rather than a job that fails
   a second later.
 
 The result shapes are written in the operations' descriptions rather than as components:

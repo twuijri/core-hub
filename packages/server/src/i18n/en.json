@@ -2,12 +2,12 @@
   "errors": {
     "bad_request": "The request could not be understood.",
     "validation_failed": "The request did not match the expected shape.",
-    "profile_required": "A workspace scope (X-Hub-Profile) is required.",
+    "profile_required": "A profile scope (X-Hub-Profile) is required.",
     "unauthorized": "Sign in to continue.",
     "token_expired": "Your session expired. Sign in again.",
     "forbidden": "You do not have permission to do this.",
     "not_found": "The requested item does not exist.",
-    "profile_not_found": "That workspace does not exist.",
+    "profile_not_found": "That profile does not exist.",
     "conflict": "This conflicts with the current state.",
     "state_invalid": "That is not allowed in the current state.",
     "already_running": "Something is already running here.",
@@ -15,7 +15,7 @@
     "unsupported_media_type": "That file type is not supported.",
     "agent_unavailable": "The agent cannot serve this request right now.",
     "agent_error": "The agent reported an error.",
-    "provider_not_configured": "No model provider is configured for this workspace. Open Settings → Models → Defaults and choose a chat model.",
+    "provider_not_configured": "No model provider is configured for this profile. Open Settings → Models → Defaults and choose a chat model.",
     "provider_unauthorized": "The provider rejected the stored key. Open Settings → Models and replace it.",
     "rate_limited": "Too many requests. Try again shortly.",
     "internal": "Something went wrong on the hub.",
@@ -46,10 +46,10 @@
     "owner_immutable": "The owner account's role, status and existence cannot be changed here.",
     "self_immutable": "You cannot disable or delete your own account.",
     "user_not_found": "The user does not exist.",
-    "profile_unknown": "A named workspace does not exist.",
-    "default_profile_outside": "The default workspace must be one the user may enter.",
-    "slug_taken": "That workspace slug is already taken.",
-    "default_profile_immutable": "The default workspace cannot be deleted or have its slug changed.",
+    "profile_unknown": "A named profile does not exist.",
+    "default_profile_outside": "The default profile must be one the user may enter.",
+    "slug_taken": "That profile slug is already taken.",
+    "default_profile_immutable": "The default profile cannot be deleted or have its slug changed.",
     "avatar_invalid": "The avatar must be a PNG or JPEG data URL of at most 512 KB.",
     "avatar_none": "This user has no uploaded avatar.",
     "token_not_found": "The app token does not exist.",
@@ -110,7 +110,19 @@
     "restart_started": "Restarting the Hermes runtime…",
     "restart_done": "Hermes runtime restarted.",
     "refresh_started": "Asking the provider for its models…",
-    "refresh_done": "Model list updated."
+    "refresh_done": "Model list updated.",
+    "channel_login": {
+      "started": "Starting the pairing in Hermes…",
+      "preparing": "Hermes is preparing the pairing code…",
+      "scan": "Scan the code with WhatsApp on your phone: Settings → Linked devices → Link a device.",
+      "saving": "Paired. Turning the channel on in this profile…",
+      "done": "WhatsApp is linked. The agent answers on it after its next restart.",
+      "no_id": "Hermes started no pairing session.",
+      "failed": "Hermes reported that the pairing failed, without saying why.",
+      "ended": "The pairing ended before a phone was linked.",
+      "expired": "The pairing code expired before a phone was linked. Start again.",
+      "not_saved": "The phone was linked, but Hermes did not turn the channel on:"
+    }
   },
   "models": {
     "test": {
@@ -126,7 +138,7 @@
       "not_refreshable": "This provider does not publish a model list; add its models by hand."
     },
     "speech": {
-      "no_tts_provider": "No text-to-speech provider is chosen for this workspace.",
+      "no_tts_provider": "No text-to-speech provider is chosen for this profile.",
       "provider_disabled": "The chosen text-to-speech provider is switched off.",
       "failed": "The speech provider did not return audio.",
       "stt": {
@@ -152,5 +164,11 @@
   },
   "knowledge": {
     "attachment_in_use": "A message already points at this file, so it cannot be deleted."
+  },
+  "agents": {
+    "mcp_test": {
+      "no_answer": "The server did not answer within {seconds} s (its connect_timeout).",
+      "hermes_silent": "Hermes did not report back within {seconds} s."
+    }
   }
 }
