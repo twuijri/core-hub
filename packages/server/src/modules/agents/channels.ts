@@ -78,12 +78,18 @@ export interface ChannelField {
   value: string | boolean | null;
 }
 
-/** A platform that pairs a device (WhatsApp): whether this profile holds a session, and whose. */
+/**
+ * A platform that is linked rather than filled in: WhatsApp (a paired device — whether this
+ * profile holds a session, and whose) and Telegram (a bot token — whether the profile has one,
+ * and which bot).
+ */
 export interface ChannelLink {
   linked: boolean;
   accountId: string | null;
   accountName: string | null;
   accountPhone: string | null;
+  /** Telegram: the bot's @username without the @. */
+  accountUsername: string | null;
 }
 
 export interface Channel {
@@ -96,7 +102,7 @@ export interface Channel {
   configured: boolean;
   exclusive: boolean;
   fields: ChannelField[];
-  /** Set for WhatsApp only: its session, read from the profile's own folder. */
+  /** Set for WhatsApp (its session) and Telegram (its bot), read from the profile's own files. */
   link: ChannelLink | null;
 }
 
@@ -176,6 +182,10 @@ export function listChannels(home: string): Channel[] {
   if (!nodes.whatsapp && (whatsapp.linked || env.WHATSAPP_ENABLED !== undefined)) {
     nodes.whatsapp = {};
   }
+  // Telegram likewise: a bot token in `.env` is a Telegram channel whether or not the file
+  // names it (Hermes enables the platform from the variable alone).
+  const telegram = telegramLink(home, nodes.telegram, env);
+  if (!nodes.telegram && telegram.linked) nodes.telegram = {};
   return Object.entries(nodes)
     .map(([platform, node]) => {
       const fields = fieldsOf(node);
@@ -187,6 +197,16 @@ export function listChannels(home: string): Channel[] {
           exclusive: true,
           fields,
           link: whatsapp,
+        };
+      }
+      if (platform === 'telegram') {
+        return {
+          platform,
+          enabled: telegramEnabled(node, env.TELEGRAM_BOT_TOKEN),
+          configured: telegram.linked,
+          exclusive: true,
+          fields,
+          link: telegram,
         };
       }
       return {
@@ -261,9 +281,7 @@ function hasContent(target: string): boolean {
  */
 export function whatsappLink(home: string): ChannelLink {
   const file = path.join(whatsappSessionDir(home), 'creds.json');
-  if (!existsSync(file)) {
-    return { linked: false, accountId: null, accountName: null, accountPhone: null };
-  }
+  if (!existsSync(file)) return UNLINKED;
   let payload: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(readFileSync(file, 'utf8')) as unknown;
@@ -290,7 +308,150 @@ export function whatsappLink(home: string): ChannelLink {
     accountId,
     accountName: first(['name', 'verifiedName', 'notify', 'pushName']),
     accountPhone: digits || null,
+    accountUsername: null,
   };
+}
+
+const UNLINKED: ChannelLink = {
+  linked: false,
+  accountId: null,
+  accountName: null,
+  accountPhone: null,
+  accountUsername: null,
+};
+
+// ------------------------------------------------------------------ Telegram bot
+
+/**
+ * The shape Hermes itself accepts for a bot token (`hermes_cli/setup_platforms.py`
+ * §_TELEGRAM_BOT_TOKEN_RE): the bot's numeric id, a colon, and 30 or more URL-safe characters.
+ */
+export const TELEGRAM_TOKEN = /^\d+:[A-Za-z0-9_-]{30,}$/;
+
+/** The bot a linked token belongs to, as Telegram answered `getMe` when it was linked. */
+export interface TelegramBot {
+  id: string;
+  username: string | null;
+  name: string | null;
+}
+
+/**
+ * Where the hub keeps what Telegram said about the profile's bot, beside the rest of Hermes's
+ * per-platform state. Not Hermes's file and not read by Hermes: it only lets the page name the
+ * bot without asking Telegram on every read.
+ */
+function telegramBotNote(home: string): string {
+  return path.join(home, 'platforms', 'telegram', 'hub-bot.json');
+}
+
+/** The profile's bot token: `.env` first (Hermes's environment wins), then the file's `token`. */
+export function telegramToken(
+  home: string,
+  node?: Record<string, unknown>,
+  env: Record<string, string> = readEnv(home),
+): string | null {
+  const fromEnv = (env.TELEGRAM_BOT_TOKEN ?? '').trim();
+  if (fromEnv) return fromEnv;
+  let block = node;
+  if (block === undefined) {
+    try {
+      block = load(home).toJS()?.[BLOCK]?.telegram as Record<string, unknown> | undefined;
+    } catch {
+      block = undefined;
+    }
+  }
+  const fromFile = typeof block?.token === 'string' ? block.token.trim() : '';
+  return fromFile || null;
+}
+
+/**
+ * Whether this profile has a bot, and which. The id is the token's own prefix, so a token
+ * somebody replaced by hand is never named after the bot it replaced: the note is used only
+ * while its id matches.
+ */
+export function telegramLink(
+  home: string,
+  node?: Record<string, unknown>,
+  env: Record<string, string> = readEnv(home),
+): ChannelLink {
+  const token = telegramToken(home, node, env);
+  if (!token) return UNLINKED;
+  const id = token.split(':')[0] ?? '';
+  let bot: Partial<TelegramBot> = {};
+  try {
+    const parsed = JSON.parse(readFileSync(telegramBotNote(home), 'utf8')) as Partial<TelegramBot>;
+    if (parsed && String(parsed.id) === id) bot = parsed;
+  } catch {
+    // No note (linked by hand, or before the hub named bots): linked, name unknown.
+  }
+  return {
+    linked: true,
+    accountId: /^\d+$/.test(id) ? id : null,
+    accountName: typeof bot.name === 'string' && bot.name ? bot.name : null,
+    accountPhone: null,
+    accountUsername: typeof bot.username === 'string' && bot.username ? bot.username : null,
+  };
+}
+
+/**
+ * Hermes's rule for Telegram (`gateway/config_env.py`, `_Cred` + §_enable_from_env): a token in
+ * the environment switches the platform on unless the file says `enabled: false`; without it the
+ * file decides, and a node that does not say `enabled: true` is off.
+ */
+function telegramEnabled(node: Record<string, unknown>, envToken: string | undefined): boolean {
+  if ((envToken ?? '').trim()) return node.enabled !== false;
+  return node.enabled === true;
+}
+
+/**
+ * Links a bot to this profile: the token into the profile's own `.env` (never the file, never a
+ * client), the allowed users beside it when given, and the channel switched on with pairing for
+ * unknown senders — Hermes's `unauthorized_dm_behavior: pair` for the platform, which also keeps
+ * pairing on when an allowlist is set (Hermes would otherwise ignore strangers silently then).
+ * A token written into `platforms.telegram.token` by hand is removed, so there is one.
+ */
+export function linkTelegram(
+  home: string,
+  input: { token: string; bot: TelegramBot; allowedUsers?: readonly string[] | undefined },
+): Channel {
+  writeEnvValue(home, 'TELEGRAM_BOT_TOKEN', input.token);
+  if (input.allowedUsers !== undefined) {
+    writeEnvValue(
+      home,
+      'TELEGRAM_ALLOWED_USERS',
+      input.allowedUsers.length > 0 ? input.allowedUsers.join(',') : null,
+    );
+  }
+  const doc = load(home);
+  ensureMap(doc, [BLOCK, 'telegram']);
+  if (doc.hasIn([BLOCK, 'telegram', 'token'])) doc.deleteIn([BLOCK, 'telegram', 'token']);
+  doc.setIn([BLOCK, 'telegram', 'enabled'], true);
+  doc.setIn([BLOCK, 'telegram', 'unauthorized_dm_behavior'], 'pair');
+  save(home, doc);
+  const note = telegramBotNote(home);
+  mkdirSync(path.dirname(note), { recursive: true });
+  writeFileSync(note, `${JSON.stringify(input.bot, null, 2)}\n`, { mode: 0o600 });
+  const written = getChannel(home, 'telegram');
+  if (!written) throw new ChannelError('channel_write_failed');
+  return written;
+}
+
+/**
+ * Forgets the bot in this profile: the token out of `.env` and the file, the note deleted, the
+ * channel switched off. The allowed users and every setting stay, so linking again is linking
+ * again. The bot itself still exists in Telegram; @BotFather deletes bots.
+ */
+export function unlinkTelegram(home: string): Channel {
+  writeEnvValue(home, 'TELEGRAM_BOT_TOKEN', null);
+  rmSync(telegramBotNote(home), { force: true });
+  const doc = load(home);
+  ensureMap(doc, [BLOCK, 'telegram']);
+  if (doc.hasIn([BLOCK, 'telegram', 'token'])) doc.deleteIn([BLOCK, 'telegram', 'token']);
+  doc.setIn([BLOCK, 'telegram', 'enabled'], false);
+  save(home, doc);
+  const written = getChannel(home, 'telegram');
+  if (!written) throw new ChannelError('channel_write_failed');
+  return written;
 }
 
 // ------------------------------------------------------------------ .env

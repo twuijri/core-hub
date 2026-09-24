@@ -68,6 +68,14 @@ export function describeToolError(error: unknown, t: T): string {
         return t('channels.unlink_not_linked');
       case 'unlink_not_supported':
         return t('channels.unlink_not_supported');
+      case 'token_invalid':
+        return t('channels.telegram.token_invalid');
+      case 'token_rejected':
+        return t('channels.telegram.token_rejected', { message: details?.message ?? '' });
+      case 'telegram_unreachable':
+        return t('channels.telegram.unreachable');
+      case 'token_in_use':
+        return t('channels.telegram.token_in_use', { profile: details?.profile ?? '' });
       case 'skill_bundled':
         return t('skills.bundled_refused');
       case 'plugin_bundled':

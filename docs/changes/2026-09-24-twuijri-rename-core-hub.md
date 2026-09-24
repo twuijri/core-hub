@@ -60,13 +60,13 @@
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 - `openapi.yaml`: `info` (العنوان والوصف ورابط التواصل `github.com/twuijri/core-hub`)، أمثلة الأسماء،
-  ووصف ترويسة توقيع الويبهوك (`X-CoreHub-Signature`، القرار §41). لا مسار ولا حقل ولا حالة أُضيفت أو حُذفت.
+  ووصف ترويسة توقيع الويبهوك (`X-CoreHub-Signature`، القرار §42). لا مسار ولا حقل ولا حالة أُضيفت أو حُذفت.
 - `events/*.schema.json`: الـ`$id` تحت `https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/`
   وعنوان المشترك «Core Hub realtime».
 - `src/product.ts`: `PRODUCT` (`corehub`، `Core Hub`، `كور هب`)، `derived` الموسّع، `LEGACY` الجديد،
   `STABLE` = `idNamespace` وحده، و`readProductEnv`. مصدّرة من `@corehub/contracts`.
 - `openapi-generator/{kotlin,swift}.yaml`: `corehub-client` و`CoreHubClient`.
-- `docs/contracts/DECISIONS.md` §41.
+- `docs/contracts/DECISIONS.md` §42 (رقم §41 أخذه #97).
 
 ## الملفات والتأثير
 - إعادة التسمية الآلية (٣٣٣ ملفًا في أول commit): كل الحزم و`package.json` و`pnpm-lock.yaml` (أسماء
@@ -87,7 +87,7 @@
   وسبب كلٍّ:
   - تاريخ: ADR 0004 و0007 و0008 و0009 و0011 و0012 (الاثنان) و0013؛ و`docs/inspirations/hermes-studio.md`
     (يصف اسمًا داخليًا لمنتج آخر، نسخة المالك من Hermes Studio).
-  - يشرح الاسم القديم: ADR 0017، `AGENTS.md`، `docs/DEPLOY.md` §1a، `docs/STATUS.md`، DECISIONS §41.
+  - يشرح الاسم القديم: ADR 0017، `AGENTS.md`، `docs/DEPLOY.md` §1a، `docs/STATUS.md`، DECISIONS §42.
   - الأسماء القديمة المقبولة (`LEGACY`) والبذرة المجمّدة: `packages/contracts/src/product.ts`.
   - الكود الذي يقرؤها ويشرحها: `server/src/app/config.ts`، `auth/{tokens,profile-transfer}.ts`،
     `models/{catalogue,propagation,dotenv,service}.ts`، `agents/runner.ts` (تعليق)، `cli/src/{legacy,config,context}.ts`
@@ -151,6 +151,23 @@ $ docker run … -e COREHUB_VERSION= -e MAJLIS_VERSION=9.9.9-legacy core-hub:ren
 - **بعد دمج #98** (رخصة Apache-2.0): تعارضان حُلّا بإبقاء سطور الرخصة من #98 كما هي
   (`"license": "Apache-2.0"` في `package.json` و`info.license` في العقد) مع وصف Core Hub. محليًا بعده:
   `lint` و`typecheck` و`contracts:lint` و`contract:test` و`change-record:check`، ثم CI من جديد.
+- **بعد دمج #97** (تيليجرام): أخذ #97 رقم §41 في DECISIONS، فصار قرار هذا الفرع **§42** (والإحالة في
+  العقد معه). طُبّقت إعادة التسمية على ما أضافه #97 (`MAJLIS_*` في اختبار هرمز الحقيقي، مجلّدات مؤقتة،
+  `majlis_e2e_bot` → `corehub_e2e_bot`، «مساعد المجلس» → «مساعد المركز»، اسم `meta` في اختبار الويب)،
+  وحُلّ تعارض `docs/STATUS.md` بنصّ #97 مع `corehub-…`. محليًا بعده، عبر `mj-run`:
+```
+$ pnpm lint / typecheck / contracts:lint / contracts:check-clients / i18n:check / nav:check → exit 0
+$ pnpm contract:test
+      Tests  271 passed (271)
+$ vitest run telegram-link.routes telegram-settings product propagation   (server)
+ Test Files  4 passed (4)
+      Tests  57 passed (57)
+$ vitest run channels-telegram topbar-name storage-legacy   (web)
+ Test Files  3 passed (3)
+      Tests  11 passed (11)
+$ playwright test zzzzz-channels-telegram zzzzz-channels-pairing
+  2 passed (29.3s)
+```
 - **الاختبارات الجديدة تسقط على الكود القديم**: بإيقاف `migrateLegacyProviders` سقط اختباران في
   `propagation.test.ts`، وبإيقاف امتلاك `MAJLIS_PROVIDER_*` سقط اختبار الإقلاع في `models-api.test.ts`
   (`expected '# managed by Core Hub — …' not to contain 'MAJLIS'`).

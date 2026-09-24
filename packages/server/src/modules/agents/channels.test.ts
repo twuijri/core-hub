@@ -12,9 +12,11 @@ import {
   clearChannel,
   ensureWhatsAppBridgePort,
   getChannel,
+  linkTelegram,
   listChannels,
   putChannel,
   readEnv,
+  unlinkTelegram,
   unlinkWhatsApp,
   whatsappBridgePort,
   writeEnvValue,
@@ -266,6 +268,67 @@ describe('WhatsApp, whose identity is a session and not a field', () => {
     });
     expect(read(dir)).toContain('bridge_port: 3004');
     expect(activeChannels(dir)).toEqual([]);
+  });
+});
+
+describe('Telegram, whose identity is a bot token', () => {
+  const TOKEN = '7012345678:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsawQ';
+  const BOT = { id: '7012345678', username: 'office_helper_bot', name: 'Office' };
+
+  it('is listed from a token in `.env` alone, on unless the file says `enabled: false`', () => {
+    const dir = home('# keep me\n');
+    writeEnvValue(dir, 'TELEGRAM_BOT_TOKEN', TOKEN);
+    expect(getChannel(dir, 'telegram')).toMatchObject({
+      enabled: true,
+      configured: true,
+      link: { linked: true, accountId: '7012345678', accountUsername: null },
+    });
+    writeFileSync(path.join(dir, 'config.yaml'), 'platforms:\n  telegram:\n    enabled: false\n');
+    expect(getChannel(dir, 'telegram')?.enabled).toBe(false);
+    expect(activeChannels(dir)).toEqual([]);
+  });
+
+  it('links: the token in `.env` only, the switch and pairing in the file, comments kept', () => {
+    const dir = home(
+      '# hermes\nplatforms:\n  telegram:\n    token: 1:old\n    require_mention: true\n',
+    );
+    const channel = linkTelegram(dir, { token: TOKEN, bot: BOT, allowedUsers: ['1', '2'] });
+    expect(channel).toMatchObject({
+      enabled: true,
+      configured: true,
+      link: { accountName: 'Office', accountUsername: 'office_helper_bot' },
+    });
+    expect(readEnv(dir)).toMatchObject({
+      TELEGRAM_BOT_TOKEN: TOKEN,
+      TELEGRAM_ALLOWED_USERS: '1,2',
+    });
+    const text = read(dir);
+    expect(text).toContain('# hermes');
+    expect(text).toContain('require_mention: true');
+    expect(text).toContain('unauthorized_dm_behavior: pair');
+    expect(text).not.toContain('1:old');
+    expect(activeChannels(dir)).toEqual(['telegram']);
+  });
+
+  it('does not name a bot the token no longer belongs to', () => {
+    const dir = home();
+    linkTelegram(dir, { token: TOKEN, bot: BOT });
+    writeEnvValue(dir, 'TELEGRAM_BOT_TOKEN', '7099999999:AAFfffffffffffffffffffffffffffffffffff');
+    expect(getChannel(dir, 'telegram')?.link).toMatchObject({
+      accountId: '7099999999',
+      accountUsername: null,
+      accountName: null,
+    });
+  });
+
+  it('unlinks: the token and the note are gone, the channel is off, the allowlist stays', () => {
+    const dir = home();
+    linkTelegram(dir, { token: TOKEN, bot: BOT, allowedUsers: ['1'] });
+    const channel = unlinkTelegram(dir);
+    expect(channel).toMatchObject({ enabled: false, configured: false, link: { linked: false } });
+    expect(readEnv(dir).TELEGRAM_BOT_TOKEN).toBeUndefined();
+    expect(readEnv(dir).TELEGRAM_ALLOWED_USERS).toBe('1');
+    expect(existsSync(path.join(dir, 'platforms', 'telegram', 'hub-bot.json'))).toBe(false);
   });
 });
 
