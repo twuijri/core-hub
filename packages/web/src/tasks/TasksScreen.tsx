@@ -36,7 +36,6 @@ import { CSS } from '@dnd-kit/utilities';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { describeError } from '../auth/client.js';
-import { HubApiError } from '@majlis/contracts';
 import { agentMark } from '../ui/brand/marks.js';
 import { Tooltip } from '../ui/Tooltip.js';
 import { useAuth } from '../auth/context.js';
@@ -61,6 +60,9 @@ import {
 } from '../ui/index.js';
 import { IconGrip, IconMore, IconPlus, IconSchedules, IconStop, IconTrash } from '../ui/icons.js';
 import { AssignDialog } from './AssignDialog.js';
+import { describeTaskError } from './errors.js';
+import { HandOverDialog } from './HandOverDialog.js';
+import { TaskDialog } from './TaskDialog.js';
 import {
   COLUMNS,
   INTAKE_STATUS,
@@ -92,11 +94,15 @@ import {
 } from './queries.js';
 
 /** What a card can ask of the board beyond moving: the agent side of a task. */
-interface CardActions {
+export interface CardActions {
   onMove(status: TaskStatus): void;
   onRename(): void;
+  /** Open the task on its own: its words, priority and comments. */
+  onEdit(): void;
   onDelete(): void;
   onAssign(): void;
+  /** A Hermes card: hand it to another workspace's Hermes profile. */
+  onHandOver(): void;
   onStop(): void;
   onUnassign(): void;
 }
@@ -127,6 +133,10 @@ export function TasksScreen() {
   useTaskEvents();
   /** The task whose "assign to an agent" dialog is open. */
   const [assigning, setAssigning] = useState<Task | null>(null);
+  /** The task open on its own (details and comments). */
+  const [editing, setEditing] = useState<Task | null>(null);
+  /** The Hermes card being handed to another workspace. */
+  const [handing, setHanding] = useState<Task | null>(null);
   const { ask, dialog } = useConfirm();
   const { ask: askText, dialog: textDialog } = usePrompt();
   const [draft, setDraft] = useState('');
@@ -170,7 +180,8 @@ export function TasksScreen() {
         label: t('tasks.reason'),
         confirmLabel: t('common.save'),
       }).then((reason) => {
-        if (reason !== null) move.mutate({ id: task.id, status: drop.to, reason });
+        if (reason !== null)
+          move.mutate({ id: task.id, profile: task.profile, status: drop.to, reason });
       });
       return;
     }
@@ -179,11 +190,11 @@ export function TasksScreen() {
         title: t(`tasks.confirm.${drop.transition.action}`, { title: task.title }),
         confirmLabel: t(`tasks.action.${drop.transition.action}`),
       }).then((sure) => {
-        if (sure) move.mutate({ id: task.id, status: drop.to });
+        if (sure) move.mutate({ id: task.id, profile: task.profile, status: drop.to });
       });
       return;
     }
-    move.mutate({ id: task.id, status: drop.to });
+    move.mutate({ id: task.id, profile: task.profile, status: drop.to });
   };
 
   /**
@@ -193,7 +204,7 @@ export function TasksScreen() {
   const moveTo = (task: Task, status: TaskStatus) => {
     const found = transitionFor(task.status, status);
     if (found) apply(task, { to: status, transition: found });
-    else move.mutate({ id: task.id, status });
+    else move.mutate({ id: task.id, profile: task.profile, status });
   };
 
   const actionsFor = (task: Task): CardActions => ({
@@ -205,19 +216,26 @@ export function TasksScreen() {
         initialValue: task.title,
         confirmLabel: t('common.save'),
       }).then((value) => {
-        if (value) update.mutate({ id: task.id, patch: { title: value } });
+        if (value) update.mutate({ id: task.id, profile: task.profile, patch: { title: value } });
       }),
+    onEdit: () => setEditing(task),
     onDelete: () =>
       void ask({
         title: t('tasks.confirm_delete', { title: task.title }),
-        body: t('tasks.confirm_delete_body'),
+        // A Hermes card goes from Hermes's board too: the person should know before.
+        body: t(
+          task.external?.source === 'hermes'
+            ? 'tasks.hermes.confirm_delete_body'
+            : 'tasks.confirm_delete_body',
+        ),
         confirmLabel: t('common.delete'),
       }).then((sure) => {
-        if (sure) remove.mutate(task.id);
+        if (sure) remove.mutate({ id: task.id, profile: task.profile });
       }),
     onAssign: () => setAssigning(task),
-    onStop: () => stop.mutate(task.id),
-    onUnassign: () => unassign.mutate(task.id),
+    onHandOver: () => setHanding(task),
+    onStop: () => stop.mutate({ id: task.id, profile: task.profile }),
+    onUnassign: () => unassign.mutate({ id: task.id, profile: task.profile }),
   });
 
   const onDragEnd = (event: DragEndEvent) => {
@@ -237,7 +255,12 @@ export function TasksScreen() {
     if (options.length === 0) {
       const target = byId.get(overId);
       if (target && target.id !== task.id && column.statuses.includes(task.status)) {
-        move.mutate({ id: task.id, status: task.status, after_task_id: target.id });
+        move.mutate({
+          id: task.id,
+          profile: task.profile,
+          status: task.status,
+          after_task_id: target.id,
+        });
       }
       return;
     }
@@ -423,6 +446,8 @@ export function TasksScreen() {
         </div>
       </Dialog>
       <AssignDialog task={assigning} onClose={() => setAssigning(null)} />
+      <TaskDialog task={editing} onClose={() => setEditing(null)} />
+      <HandOverDialog task={handing} onClose={() => setHanding(null)} />
       {dialog}
       {textDialog}
     </AppShell>
@@ -540,11 +565,15 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
   // colour nor motion is the only thing that says it.
   const showsStatus = showsStatusWord(task.status);
   const frame = cardFrame(task.status);
-  // A card on Hermes's own board: Hermes owns its words and its life, the hub reflects it.
+  // A card on Hermes's own board: the hub mirrors it, and every change is made on Hermes
+  // first (the hub answers with Hermes's refusal, in Hermes's words, when Hermes says no).
   const fromHermes = task.external?.source === 'hermes';
   const running = task.status === 'running';
-  // A task can be given to an agent until it is finished; Hermes's cards are Hermes's.
-  const assignable = !fromHermes && task.status !== 'done' && task.status !== 'archived';
+  const open = task.status !== 'done' && task.status !== 'archived';
+  // A task can be given to an agent until it is finished; a Hermes card is handed to
+  // another workspace's Hermes profile instead, because Hermes's dispatcher runs it.
+  const assignable = !fromHermes && open;
+  const handable = fromHermes && open;
   const agent = task.assignee?.kind === 'agent' ? task.assignee : null;
   // The registry knows the agent's name; the task row carries only what it was given.
   const agents = useAgents();
@@ -644,7 +673,7 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
           </Link>
         )}
       </div>
-      {running && !fromHermes ? (
+      {running ? (
         <Button
           variant="ghost"
           size="sm"
@@ -689,7 +718,8 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
             {t(agent ? 'tasks.assign.again' : 'tasks.assign.open')}
           </MenuItem>
         )}
-        {running && !fromHermes && (
+        {handable && <MenuItem onSelect={actions.onHandOver}>{t('tasks.handover.open')}</MenuItem>}
+        {running && (
           <MenuItem icon={<IconStop size={14} />} onSelect={actions.onStop}>
             {t('tasks.stop')}
           </MenuItem>
@@ -697,22 +727,21 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
         {agent && !fromHermes && (
           <MenuItem onSelect={actions.onUnassign}>{t('tasks.unassign')}</MenuItem>
         )}
-        {assignable && <MenuSeparator />}
-        {!fromHermes && <MenuItem onSelect={actions.onRename}>{t('tasks.rename')}</MenuItem>}
-        {!fromHermes && <MenuSeparator />}
+        {(assignable || handable) && <MenuSeparator />}
+        <MenuItem onSelect={actions.onEdit}>{t('tasks.details.open')}</MenuItem>
+        <MenuItem onSelect={actions.onRename}>{t('tasks.rename')}</MenuItem>
+        <MenuSeparator />
         {/* Only the moves the hub would accept, so the menu never offers a dead end. */}
         {COLUMNS.flatMap((column) => dropOptions(task.status, column)).map((option) => (
           <MenuItem key={option.to} onSelect={() => actions.onMove(option.to)}>
             {t(`tasks.action.${option.transition.action}`)}
           </MenuItem>
         ))}
-        {/* Hermes would bring a deleted card back on the next read; it is Hermes's to remove. */}
-        {!fromHermes && <MenuSeparator />}
-        {!fromHermes && (
-          <MenuItem icon={<IconTrash size={14} />} tone="danger" onSelect={actions.onDelete}>
-            {t('common.delete')}
-          </MenuItem>
-        )}
+        {/* A Hermes card is deleted on Hermes first, so it does not come back on the next read. */}
+        <MenuSeparator />
+        <MenuItem icon={<IconTrash size={14} />} tone="danger" onSelect={actions.onDelete}>
+          {t('common.delete')}
+        </MenuItem>
       </Menu>
     </li>
   );
@@ -773,24 +802,4 @@ function ArchivedCard({ task }: { task: Task }) {
       </div>
     </li>
   );
-}
-
-/**
- * The board's own refusals, in the person's language — and Hermes's, in Hermes's words.
- * Hermes answers in the language its CLI speaks; the hub passes the sentence on unchanged
- * rather than guessing at a translation of it.
- */
-function describeTaskError(
-  error: unknown,
-  t: (key: string, p?: Record<string, string | number>) => string,
-): string {
-  if (error instanceof HubApiError && error.status === 409) {
-    const details = (error.body as { details?: { reason?: string; message?: string } } | undefined)
-      ?.details;
-    if (details?.reason === 'hermes_refused')
-      return t('tasks.hermes.refused', { message: details.message ?? '' });
-    if (details?.reason === 'hermes_owns_text') return t('tasks.hermes.owns_text');
-    if (details?.reason === 'hermes_owns_card') return t('tasks.hermes.owns_card');
-  }
-  return describeError(error, t);
 }

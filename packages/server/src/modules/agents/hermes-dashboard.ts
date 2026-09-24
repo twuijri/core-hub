@@ -234,6 +234,29 @@ export class HermesDashboard {
     }
   }
 
+  /**
+   * Start the server in the background when it is not running, so the call a person is
+   * about to make does not wait for the start (the Tasks board warms it when it opens).
+   * Counts as a use: the idle clock starts again from now. Never throws and never waits —
+   * a start that fails is logged, and the next real call tries again.
+   */
+  warm(): void {
+    if (!this.available()) return;
+    this.inFlight += 1;
+    this.clearIdle();
+    void this.ensure()
+      .catch((error: unknown) =>
+        this.log.warn(
+          { err: error instanceof Error ? error.message : String(error) },
+          'hermes: dashboard API warm-up failed; the next call starts it again',
+        ),
+      )
+      .finally(() => {
+        this.inFlight -= 1;
+        this.scheduleIdle();
+      });
+  }
+
   /** Stops the server now. The next request starts it again. */
   async stop(reason = 'requested'): Promise<void> {
     this.clearIdle();

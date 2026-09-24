@@ -14,7 +14,7 @@ import { overrideAgents } from '../../server/src/modules/agents/index.js';
 import { overrideModels } from '../../server/src/modules/models/index.js';
 import type { AgentInstaller } from '../../server/src/modules/agents/index.js';
 import { createSessionsModule } from '../../server/src/modules/sessions/index.js';
-import { registerHermesBoard } from '../../server/src/modules/tasks/index.js';
+import { createHermesCardApi, registerHermesBoard } from '../../server/src/modules/tasks/index.js';
 import { registerHermesCron } from '../../server/src/modules/schedules/index.js';
 import { createHermesJobs } from '../../server/src/modules/schedules/hermes-jobs.js';
 import { FakeHermesApi } from '../../server/src/modules/schedules/testing/fake-hermes-api.js';
@@ -391,6 +391,9 @@ overrideModels({ fetchImpl: scriptedProvider });
  * Hermes's own board, scripted: one card Hermes finished, and a Hermes that refuses to let
  * it go — so journey 17 can show the card's mark and Hermes's refusal in Hermes's words.
  * Whether the developer's box has a real Hermes must not decide what the board shows.
+ *
+ * Its server (ADR 0015) is scripted too, answering the two calls journey 17 makes: open the
+ * card, edit its words. An edit lands on the card, so the next read shows Hermes's copy.
  */
 const hermesCard: HermesTask = {
   id: 't_e2e00001',
@@ -416,7 +419,26 @@ registerHermesBoard(() => ({
     },
   }),
   agentId: () => null,
+  api: () => hermesServer,
+  profiles: () => [],
 }));
+
+const hermesServer = createHermesCardApi({
+  warm: () => {},
+  request: async <T>(method: string, route: string, body?: unknown): Promise<T> => {
+    // Hermes's path for the one card (`…/plugins/kanban/tasks/{id}`), nothing else.
+    if (!route.endsWith(`/kanban/tasks/${hermesCard.id}`)) {
+      throw new HermesRefusal(`${method} ${route}`, 'the e2e Hermes answers one card only');
+    }
+    if (method === 'PATCH') {
+      const patch = (body ?? {}) as { title?: string; body?: string; priority?: number };
+      if (patch.title !== undefined) hermesCard.title = patch.title.trim();
+      if (patch.body !== undefined) hermesCard.body = patch.body;
+      if (patch.priority !== undefined) hermesCard.priority = patch.priority;
+    }
+    return { task: hermesCard, comments: [] } as T;
+  },
+});
 
 /**
  * Hermes's scheduler, scripted: the same in-memory jobs API the unit tests use, behind

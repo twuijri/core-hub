@@ -1,15 +1,22 @@
 /**
  * The hub's board reflecting Hermes's.
  *
- * `hermes-kanban.ts` talks to Hermes; this decides **when** and **what it means** for the
- * hub's rows. Three rules, all of them the owner's (2026-09-23):
+ * `hermes-kanban.ts` and `hermes-api.ts` talk to Hermes; this decides **when** and **what
+ * it means** for the hub's rows. Three rules, all of them the owner's (2026-09-23, 2026-09-24):
  *
  * 1. **The hub's board is the one page.** Hermes's cards appear on it beside every other
  *    card, as rows of their own, so filters, order and the four columns work on them.
  * 2. **Hermes wins.** On every read, Hermes's title, body, status and result overwrite
- *    the reflection. A card Hermes archived or deleted is archived here.
- * 3. **Moves go through Hermes.** Moving a Hermes card asks Hermes first; if Hermes
- *    refuses, the hub refuses with Hermes's own sentence and changes nothing.
+ *    the reflection. A card Hermes archived or deleted is archived here. Where the hub
+ *    runs Hermes's server, Hermes's priority, its comments and the profile it gave the card
+ *    to (which is a workspace, ADR 0014) are reflected too.
+ * 3. **Writes go through Hermes.** Moving a card goes through Hermes's CLI; editing its
+ *    words or priority, deleting it, commenting, stopping its run and handing it to another
+ *    profile go through Hermes's own server (ADR 0015) — first, before the hub touches the
+ *    row. If Hermes refuses, the hub refuses with Hermes's own sentence and changes nothing;
+ *    if Hermes accepts, the reflection is refreshed from Hermes's answer, not from what the
+ *    person typed. Without Hermes's server (Hermes not supervised here) those writes are
+ *    refused, because the next read would undo them.
  *
  * Sync happens **on read**, throttled — not in a timer. A board nobody is looking at does
  * not need to be current, and a background loop would be one more thing that runs at
@@ -17,8 +24,15 @@
  */
 import type { HermesKanban, HermesTask } from './hermes-kanban.js';
 import type { TasksService, TaskStatus } from './service.js';
-import type { TaskRow } from './serialize.js';
+import type { CommentRow, TaskRow } from './serialize.js';
 import { HERMES_STATUSES } from './hermes-kanban.js';
+import {
+  fromHermesPriority,
+  toHermesPriority,
+  type HermesCardApi,
+  type HermesComment,
+  type HubPriority,
+} from './hermes-api.js';
 
 interface Scope {
   workspace: string;
@@ -34,6 +48,17 @@ export interface HermesBoardPort {
   agentId(workspace: string): string | null;
   /** How stale the reflection may be when someone opens the board. Five seconds by default. */
   throttleMs?: number;
+  /**
+   * Hermes's own server, for the writes its CLI cannot make (ADR 0015) — or `null` where
+   * the hub does not supervise Hermes. Absent or `null`: those writes are refused, as before.
+   */
+  api?(): HermesCardApi | null;
+  /**
+   * Every workspace with the name of its Hermes profile (a workspace is a Hermes profile,
+   * ADR 0014), so a card Hermes gave to a profile shows in that workspace and a card handed
+   * to a workspace goes to its profile.
+   */
+  profiles?(): Array<{ workspace: string; slug: string; profile: string }>;
 }
 
 export interface SyncReport {
@@ -138,20 +163,7 @@ export class HermesMirror {
       if (!KNOWN.has(card.status) || !card.id || typeof card.title !== 'string') continue;
       if (archivedOnHermes.has(card.id)) continue;
       seen.add(card.id);
-      const { created } = service.reflectExternal(
-        scope,
-        {
-          source: 'hermes',
-          id: card.id,
-          title: card.title,
-          body: card.body ?? null,
-          status: card.status as TaskStatus,
-          result: card.result ?? null,
-          agentId,
-          completedAt: card.completed_at ? new Date(card.completed_at * 1000) : null,
-        },
-        now,
-      );
+      const { created } = service.reflectExternal(scope, this.input(card, agentId), now);
       if (created) added += 1;
       else updated += 1;
     }
@@ -200,16 +212,128 @@ export class HermesMirror {
     title: string;
     body: string | null;
     triage: boolean;
+    /** The workspace the card is made in: it goes to that workspace's Hermes profile. */
+    workspace?: string;
+    priority?: HubPriority;
   }): Promise<string | null> {
     const kanban = this.port.kanban();
     if (!kanban) return null;
+    const assignee = input.workspace ? this.profileOf(input.workspace) : null;
+    const priority =
+      input.priority && input.priority !== 'normal' ? toHermesPriority(input.priority) : null;
     const card = await kanban.create({
       title: input.title,
       body: input.body,
       idempotencyKey: input.id,
       triage: input.triage,
+      ...(assignee ? { assignee } : {}),
+      ...(priority !== null ? { priority } : {}),
     });
     return card.id;
+  }
+
+  // ------------------------------------------------ Hermes's server (ADR 0015)
+
+  /** Hermes's own server, or `null` where the hub does not run it. */
+  api(): HermesCardApi | null {
+    if (!this.port.kanban()) return null;
+    return this.port.api?.() ?? null;
+  }
+
+  /** Start Hermes's server in the background when a page that will need it opens. */
+  warm(): void {
+    this.api()?.warm();
+  }
+
+  /** The Hermes profile a workspace is (ADR 0014), or `null` when the port does not say. */
+  profileOf(workspace: string): string | null {
+    return this.port.profiles?.().find((entry) => entry.workspace === workspace)?.profile ?? null;
+  }
+
+  /** The workspace a Hermes profile is, by id; `null` for a profile the hub has no workspace for. */
+  workspaceOf(profile: string | null | undefined): string | null {
+    if (!profile) return null;
+    return this.port.profiles?.().find((entry) => entry.profile === profile)?.workspace ?? null;
+  }
+
+  /** The workspace with this slug or id, with its Hermes profile. */
+  target(slugOrId: string): { workspace: string; slug: string; profile: string } | null {
+    return (
+      this.port
+        .profiles?.()
+        .find((entry) => entry.slug === slugOrId || entry.workspace === slugOrId) ?? null
+    );
+  }
+
+  /**
+   * What the hub reflects of one of Hermes's cards. Priority and the profile it is given to
+   * are reflected only where the hub can write them back through Hermes's server — without
+   * it they stay the hub's, as they always were, rather than being undone on every read.
+   */
+  private input(card: HermesTask, agentId: string | null) {
+    const writable = this.api() !== null;
+    return {
+      source: 'hermes' as const,
+      id: card.id,
+      title: card.title,
+      body: card.body ?? null,
+      status: card.status as TaskStatus,
+      result: card.result ?? null,
+      agentId,
+      completedAt: card.completed_at ? new Date(card.completed_at * 1000) : null,
+      ...(writable
+        ? {
+            priority: fromHermesPriority(card.priority),
+            workspace: this.workspaceOf(card.assignee),
+          }
+        : {}),
+    };
+  }
+
+  /**
+   * Refresh one reflection from what Hermes just answered — after a write, so the row shows
+   * what Hermes kept, which is not always what was typed (Hermes trims a title, for one).
+   */
+  reflectCard(service: TasksService, scope: Scope, card: HermesTask): TaskRow {
+    if (!KNOWN.has(card.status)) {
+      throw new Error(`Hermes answered a status this release does not know: ${card.status}`);
+    }
+    return service.reflectExternal(scope, this.input(card, this.port.agentId(scope.workspace))).row;
+  }
+
+  /**
+   * Hermes's comments on the card, reflected: the ones the hub has not seen are added with
+   * Hermes's time. Nothing is removed — Hermes has no way to delete a comment, and a comment
+   * written here before the hub ran Hermes's server lives only here.
+   *
+   * An author who is one of Hermes's profiles is an agent; anyone else is a person.
+   * `poster` names the person who just posted through the hub, so their comment carries
+   * their id as well as their name.
+   */
+  reflectComments(
+    service: TasksService,
+    row: TaskRow,
+    comments: readonly HermesComment[],
+    poster?: { id: string | null; name: string; body: string },
+  ): CommentRow[] {
+    const profiles = new Set((this.port.profiles?.() ?? []).map((entry) => entry.profile));
+    return service.reflectComments(
+      row,
+      comments.map((comment) => {
+        const mine =
+          poster && comment.author === poster.name && comment.body === poster.body
+            ? poster.id
+            : null;
+        return {
+          author: comment.author,
+          authorKind:
+            profiles.has(comment.author) && !mine ? ('agent' as const) : ('user' as const),
+          authorId: mine,
+          body: comment.body,
+          createdAt: new Date(comment.created_at * 1000),
+        };
+      }),
+    );
   }
 
   /** True when `agentId` is the Hermes agent of this workspace. */
