@@ -47,6 +47,12 @@ export function readProfileParam(params: URLSearchParams): string | null {
  * The chat's address for a session, opened at `messageId` when there is one, in
  * `profile` when it is given.
  */
+/** The global agent's page (NAVIGATION §4), in `profile` when it is given. */
+export function globalAgentHref(profile?: string | null): string {
+  const base = routeOf('global_agent');
+  return profile ? `${base}?${PROFILE_PARAM}=${encodeURIComponent(profile)}` : base;
+}
+
 export function chatHref(
   sessionId: string,
   messageId?: string | null,

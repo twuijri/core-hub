@@ -64,7 +64,11 @@ describe('sessions.openGlobalAgent', () => {
       const first = await open(hub.app);
       expect(first.status).toBe(201);
       const session = first.json();
-      expect(session).toMatchObject({ source: 'global_agent', agent_id: AGENT_ID, archived: false });
+      expect(session).toMatchObject({
+        source: 'global_agent',
+        agent_id: AGENT_ID,
+        archived: false,
+      });
       expect(validateSession(session)).toBe(true);
 
       const again = await open(hub.app);
@@ -73,9 +77,7 @@ describe('sessions.openGlobalAgent', () => {
 
       // Search finds it by its source, which is how the web routes a hit to its page.
       const listed = await call(hub.app, 'GET', '/sessions?source=global_agent');
-      expect((listed.json().items as Array<{ id: string }>).map((s) => s.id)).toEqual([
-        session.id,
-      ]);
+      expect((listed.json().items as Array<{ id: string }>).map((s) => s.id)).toEqual([session.id]);
     } finally {
       await hub.close();
     }
