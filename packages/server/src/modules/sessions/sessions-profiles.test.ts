@@ -4,7 +4,8 @@
  *
  * The rules under test are all about **who decides**: the server lists every profile the
  * caller may enter — owners and admins every one, a member only the ones they are enrolled
- * in — and nothing the client sends can widen that. Paging stays one order across every
+ * in — and nothing the client sends can widen that. (Only enrolled members are used: what an
+ * empty enrolment means is `auth`'s rule, and it is being changed on its own branch.) Paging stays one order across every
  * profile, and a list without `profiles` is exactly what it was before.
  */
 import { io as connect, type Socket } from 'socket.io-client';

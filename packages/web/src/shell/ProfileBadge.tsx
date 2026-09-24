@@ -1,6 +1,6 @@
 import { useI18n } from '../i18n/context.js';
 import { Badge } from '../ui/index.js';
-import { useProfileName } from './profileSelector.js';
+import { useProfileName } from './profiles.js';
 
 /**
  * Which profile an item is from, on a list that gathers several (ADR 0016). The name is

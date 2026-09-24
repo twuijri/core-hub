@@ -16,25 +16,25 @@ import { starterSuggestions } from '../chat/starters.js';
 import { useApprovalMode, useComposerModels } from '../chat/useComposerControls.js';
 import { useRecentModels } from '../models/useModelPicker.js';
 import { WorkingDirPicker } from '../chat/WorkingDirPicker.js';
-import { useAgents, useCreateSession, useProfiles } from '../hub/queries.js';
+import { useAgents, useCreateSession } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import type { ContentBlock } from '../types.js';
 import { Notice } from '../ui/Notice.js';
-import { Select } from '../ui/Select.js';
-import { useProfileInLink } from '../shell/profileSelector.js';
+import { useManyProfiles, useProfileInLink, useProfileName } from '../shell/profiles.js';
 
 export function NewChatScreen() {
   const { t, language } = useI18n();
   const agents = useAgents();
   const create = useCreateSession();
   const navigate = useNavigate();
-  // Where this chat is made (ADR 0016): the person's own profile — the last one they
-  // chose, else their default — never "all". Said on the screen, and changeable here,
-  // so the lists showing every profile never make it a guess.
-  const { homeProfile, setProfile } = useAuth();
-  const profiles = useProfiles().data ?? [];
+  // Where this chat is made (ADR 0016): the profile in the top selector, always. Said on
+  // the screen once there is more than one profile, so a list showing every profile never
+  // makes it a guess; changed only at the top, so no second control can disagree with it.
+  const { profile } = useAuth();
+  const manyProfiles = useManyProfiles();
+  const nameOf = useProfileName();
   const inLink = useProfileInLink();
   const [params] = useSearchParams();
   const title = t(termKey('new_chat'));
@@ -91,7 +91,7 @@ export function NewChatScreen() {
   };
 
   return (
-    <AppShell title={title} profiles="lists">
+    <AppShell title={title}>
       {/* The same column an empty chat uses (`.chat-flow`), so nothing shifts when the
           first message turns this draft into a session. */}
       <div className="chat-flow" data-empty="true" data-testid="new-chat">
@@ -99,17 +99,10 @@ export function NewChatScreen() {
         <div className="chat-lede">
           <h1 className="text-xl font-semibold">{t('new_chat.greeting')}</h1>
           <p className="max-w-prose text-sm text-muted">{t('new_chat.lede')}</p>
-          {profiles.length > 1 && (
-            <span className="inline-flex items-center gap-1 text-xs">
-              <span className="text-muted">{t('new_chat.in_profile')}</span>
-              <Select
-                value={homeProfile}
-                onValueChange={(next) => next && setProfile(next)}
-                options={profiles.map((p) => ({ value: p.slug, label: p.name }))}
-                label={t('new_chat.in_profile')}
-                testId="new-chat-profile"
-              />
-            </span>
+          {manyProfiles && (
+            <p className="text-xs text-muted" data-testid="new-chat-profile" data-profile={profile}>
+              {t('new_chat.in_profile', { name: nameOf(profile) })}
+            </p>
           )}
           <WorkingDirPicker value={workingDir} onChange={setWorkingDir} />
           {noneInstalled && (
