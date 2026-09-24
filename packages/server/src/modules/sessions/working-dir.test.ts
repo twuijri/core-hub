@@ -25,7 +25,7 @@ describe('working-dir (pure)', () => {
   let base: string;
   let root: string;
   beforeEach(() => {
-    base = mkdtempSync(path.join(tmpdir(), 'majlis-wd-'));
+    base = mkdtempSync(path.join(tmpdir(), 'corehub-wd-'));
     root = workspaceRoot(base, 'work');
   });
   afterEach(() => rmSync(base, { recursive: true, force: true }));
@@ -35,7 +35,7 @@ describe('working-dir (pure)', () => {
   });
 
   it('accepts a relative name and an absolute path inside the root', () => {
-    expect(resolveWorkingDir(root, 'majlis')).toBe(path.join(root, 'majlis'));
+    expect(resolveWorkingDir(root, 'corehub')).toBe(path.join(root, 'corehub'));
     expect(resolveWorkingDir(root, path.join(root, 'deep', 'er'))).toBe(
       path.join(root, 'deep', 'er'),
     );
@@ -137,11 +137,11 @@ describe('sessions: the working directory over HTTP', () => {
   it('creates the folder the client named, and finds it again on the next session', async () => {
     const first = await call(hub.app, 'POST', '/sessions', {
       agent_id: AGENT_ID,
-      working_dir: 'majlis',
+      working_dir: 'corehub',
     });
     expect(first.statusCode).toBe(201);
     const dir = (first.json() as { working_dir: string }).working_dir;
-    expect(path.basename(dir)).toBe('majlis');
+    expect(path.basename(dir)).toBe('corehub');
     expect(statSync(dir).isDirectory()).toBe(true);
 
     const second = await call(hub.app, 'POST', '/sessions', {

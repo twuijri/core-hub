@@ -1,5 +1,5 @@
 // Contract entity types, taken from the generated client (ADR 0003). Nothing here is hand-typed.
-import type { components } from '@majlis/contracts';
+import type { components } from '@corehub/contracts';
 
 export type Schemas = components['schemas'];
 export type Agent = Schemas['Agent'];

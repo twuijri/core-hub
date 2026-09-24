@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/tasks/comment.created.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/tasks/comment.created.schema.json",
   "title": "/rt/tasks · comment.created",
   "description": "Emitted by: tasks module (people and agents).",
   "type": "object",

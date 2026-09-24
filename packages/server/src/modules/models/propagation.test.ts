@@ -27,7 +27,7 @@ const homes: string[] = [];
 
 /** A Hermes home with whatever files the test wants already in it. */
 function hermesHome(files: Record<string, string> = {}): string {
-  const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-'));
+  const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-'));
   homes.push(home);
   mkdirSync(home, { recursive: true });
   for (const [name, body] of Object.entries(files)) {
@@ -58,10 +58,10 @@ function state(over: Partial<PropagationState> = {}): PropagationState {
 }
 
 const route = (over: Partial<HermesProviderRoute> = {}): HermesProviderRoute => ({
-  name: 'majlis-lmstudio',
+  name: 'corehub-lmstudio',
   baseUrl: 'http://127.0.0.1:1234/v1',
   apiMode: 'chat_completions',
-  keyEnv: 'MAJLIS_PROVIDER_LMSTUDIO_API_KEY',
+  keyEnv: 'COREHUB_PROVIDER_LMSTUDIO_API_KEY',
   ...over,
 });
 
@@ -300,12 +300,12 @@ describe('models: OpenAI-compatible endpoints as Hermes providers', () => {
   it('writes a block Hermes understands, with only the keys it documents', () => {
     const home = hermesHome();
     const result = writeHermesProviders(home, [route()]);
-    expect(result.changed).toEqual(['providers.majlis-lmstudio']);
+    expect(result.changed).toEqual(['providers.corehub-lmstudio']);
     const text = readFileSync(path.join(home, 'config.yaml'), 'utf8');
-    expect(text).toContain('majlis-lmstudio:');
+    expect(text).toContain('corehub-lmstudio:');
     expect(text).toContain('base_url: http://127.0.0.1:1234/v1');
     expect(text).toContain('api_mode: chat_completions');
-    expect(text).toContain('key_env: MAJLIS_PROVIDER_LMSTUDIO_API_KEY');
+    expect(text).toContain('key_env: COREHUB_PROVIDER_LMSTUDIO_API_KEY');
     // `enabled` is honoured by Hermes but absent from its accepted-keys list, so writing
     // it makes the gateway log "unknown config keys ignored" about our own file.
     expect(text).not.toContain('enabled:');
@@ -324,7 +324,7 @@ describe('models: OpenAI-compatible endpoints as Hermes providers', () => {
         'providers:',
         '  my-own-proxy:',
         '    base_url: https://proxy.example/v1',
-        '  majlis-gone:',
+        '  corehub-gone:',
         '    base_url: https://gone.example/v1',
         'model:',
         '  default: keep-me',
@@ -332,13 +332,13 @@ describe('models: OpenAI-compatible endpoints as Hermes providers', () => {
       ].join('\n'),
     });
     const result = writeHermesProviders(home, [route()]);
-    expect(result.removed).toEqual(['providers.majlis-gone']);
+    expect(result.removed).toEqual(['providers.corehub-gone']);
     const text = readFileSync(path.join(home, 'config.yaml'), 'utf8');
     expect(text).toContain('# a comment the hub must not destroy');
     expect(text).toContain('my-own-proxy:');
     expect(text).toContain('default: keep-me');
-    expect(text).not.toContain('majlis-gone');
-    expect(text).toContain('majlis-lmstudio:');
+    expect(text).not.toContain('corehub-gone');
+    expect(text).toContain('corehub-lmstudio:');
   });
 
   it('rewrites nothing when the blocks already say what they should', () => {
@@ -354,7 +354,7 @@ describe('models: OpenAI-compatible endpoints as Hermes providers', () => {
     const home = hermesHome();
     writeHermesProviders(home, [route()]);
     const result = writeHermesProviders(home, []);
-    expect(result.removed).toEqual(['providers.majlis-lmstudio']);
+    expect(result.removed).toEqual(['providers.corehub-lmstudio']);
     expect(readFileSync(path.join(home, 'config.yaml'), 'utf8')).not.toContain('providers:');
   });
 });

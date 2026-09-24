@@ -11,7 +11,7 @@
  * to the first choice). The mark becomes a badge here; the answer sent is the choice as
  * the agent wrote it, and the adapter drops the mark before Hermes reads it.
  */
-import { HubApiError } from '@majlis/contracts';
+import { HubApiError } from '@corehub/contracts';
 import { useEffect, useState, type KeyboardEvent } from 'react';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';

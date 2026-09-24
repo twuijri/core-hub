@@ -24,8 +24,8 @@ import { attachments } from '../../src/modules/knowledge/schema.js';
 import { DataKeyRing, SecretStore } from '../../src/modules/models/index.js';
 import { authed, drainJobs, signedInHub, type TestHub } from './helpers.js';
 
-const KEY = 'sk-proj-majlis-test-0123456789abcdef';
-const scratch = mkdtempSync(path.join(tmpdir(), 'majlis-transfer-'));
+const KEY = 'sk-proj-corehub-test-0123456789abcdef';
+const scratch = mkdtempSync(path.join(tmpdir(), 'corehub-transfer-'));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 type Hub = TestHub & { token: string; userId: string };
@@ -81,7 +81,7 @@ async function job(hub: Hub, id: string): Promise<Json> {
 }
 
 function multipart(name: string, body: Buffer, purpose = 'import') {
-  const boundary = '----majlisTransferBoundary';
+  const boundary = '----corehubTransferBoundary';
   const payload = Buffer.concat([
     Buffer.from(
       `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\n` +

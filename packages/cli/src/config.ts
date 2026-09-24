@@ -1,8 +1,16 @@
-// The token store: `$XDG_CONFIG_HOME/majlis/config.json` (or `~/.config/majlis/config.json`),
+// The token store: `$XDG_CONFIG_HOME/corehub/config.json` (or `~/.config/corehub/config.json`),
 // directory 0700, file 0600, written atomically. Secrets never travel on the command line.
-import { derived } from '@majlis/contracts';
+import { LEGACY, derived } from '@corehub/contracts';
 import { randomUUID } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { CliError } from './errors.js';
@@ -38,16 +46,36 @@ export interface ConfigFile {
 const EMPTY: ConfigFile = { version: 1, device_key: null, session: null };
 
 export function defaultConfigPath(env: NodeJS.ProcessEnv, home: string = homedir()): string {
-  if (env.MAJLIS_CONFIG && env.MAJLIS_CONFIG.trim() !== '') return path.resolve(env.MAJLIS_CONFIG);
+  if (env.COREHUB_CONFIG && env.COREHUB_CONFIG.trim() !== '') return path.resolve(env.COREHUB_CONFIG);
   const xdg = env.XDG_CONFIG_HOME;
   const base = xdg && path.isAbsolute(xdg) ? xdg : path.join(home, '.config');
   return path.join(base, derived.configDir, 'config.json');
 }
 
+/**
+ * Where the same file lived before the rename (`$XDG_CONFIG_HOME/majlis/config.json`), or
+ * null when the path was chosen explicitly — an explicit file is never swapped for another.
+ */
+export function legacyConfigPath(env: NodeJS.ProcessEnv, home: string = homedir()): string | null {
+  if (env.COREHUB_CONFIG && env.COREHUB_CONFIG.trim() !== '') return null;
+  const xdg = env.XDG_CONFIG_HOME;
+  const base = xdg && path.isAbsolute(xdg) ? xdg : path.join(home, '.config');
+  return path.join(base, LEGACY.configDir, 'config.json');
+}
+
 export class ConfigStore {
-  constructor(readonly file: string) {}
+  /**
+   * `legacyFile` is where a client from before the rename kept the same file. The first read
+   * that finds no file here moves that one in (ADR 0017), so an upgrade does not sign anyone
+   * out or forget the device.
+   */
+  constructor(
+    readonly file: string,
+    readonly legacyFile: string | null = null,
+  ) {}
 
   read(): ConfigFile {
+    if (!existsSync(this.file)) this.adoptLegacy();
     if (!existsSync(this.file)) return { ...EMPTY };
     let parsed: unknown;
     try {
@@ -72,6 +100,26 @@ export class ConfigStore {
     writeFileSync(tmp, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
     chmodSync(tmp, 0o600);
     renameSync(tmp, this.file);
+  }
+
+  private adoptLegacy(): void {
+    if (!this.legacyFile || this.legacyFile === this.file || !existsSync(this.legacyFile)) return;
+    let text: string;
+    try {
+      text = readFileSync(this.legacyFile, 'utf8');
+      JSON.parse(text);
+    } catch {
+      // Not ours to judge: an unreadable old file stays where it is, and this one starts empty.
+      return;
+    }
+    const dir = path.dirname(this.file);
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const tmp = `${this.file}.${process.pid}.tmp`;
+    writeFileSync(tmp, text, { mode: 0o600 });
+    chmodSync(tmp, 0o600);
+    renameSync(tmp, this.file);
+    // The token must not stay in two places.
+    unlinkSync(this.legacyFile);
   }
 
   session(): StoredSession | null {

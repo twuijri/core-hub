@@ -1,13 +1,13 @@
 // Five smoke journeys against the real hub (e2e/hub.ts): a new chat where the folder is
 // chosen before the first message and the session is minted by that message; approvals;
 // resume after a socket drop; stopping a run mid-stream. Screenshots for light/dark and
-// RTL/LTR land in MAJLIS_SHOTS (or e2e/shots) for the change record.
+// RTL/LTR land in COREHUB_SHOTS (or e2e/shots) for the change record.
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 const PASSWORD = 'e2e-owner-password';
-const shots = process.env.MAJLIS_SHOTS ?? path.resolve('e2e/shots');
+const shots = process.env.COREHUB_SHOTS ?? path.resolve('e2e/shots');
 mkdirSync(shots, { recursive: true });
 
 const shot = (page: Page, name: string) =>
@@ -1034,7 +1034,7 @@ test.describe('web smoke journeys', () => {
 
     // Updates: the sentence that stops the page being misread, then an empty shelf.
     await nav.getByRole('link', { name: 'التحديثات' }).click();
-    await expect(page.getByText(/يخدمه المجلس نفسه/)).toBeVisible();
+    await expect(page.getByText(/يخدمه المركز نفسه/)).toBeVisible();
     await expect(page.getByText('لا إصدارات')).toBeVisible();
     // The source fields are not there until the hub is told to fetch from one.
     await expect(page.getByTestId('updates-source-fields')).toHaveCount(0);

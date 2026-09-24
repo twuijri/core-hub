@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/rooms/room.updated.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/rooms/room.updated.schema.json",
   "title": "/rt/rooms · room.updated",
   "description": "Room fields changed. Members of the room. Emitted by: rooms module (patch, invite rotation, token count changes).",
   "type": "object",

@@ -22,7 +22,7 @@ import {
 
 const dirs: string[] = [];
 function tempDir(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-'));
   dirs.push(dir);
   return dir;
 }

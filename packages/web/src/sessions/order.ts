@@ -1,7 +1,7 @@
 // Manual order of the sidebar list. The contract has no sort field (only `pinned`), so the
 // order a person drags into is kept locally per workspace and applied on top of the server's
 // `last_message_at desc` order; unknown sessions keep the server order.
-import { derived } from '@majlis/contracts';
+import { derived } from '@corehub/contracts';
 import type { Session } from '../types.js';
 
 export function orderKey(profile: string): string {

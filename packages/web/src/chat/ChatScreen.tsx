@@ -1,4 +1,4 @@
-import { HubApiError } from '@majlis/contracts';
+import { HubApiError } from '@corehub/contracts';
 import {
   useCallback,
   useEffect,

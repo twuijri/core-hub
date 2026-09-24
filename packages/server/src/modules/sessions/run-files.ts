@@ -1,15 +1,15 @@
 /**
  * The two folders one run exchanges files through.
  *
- *   <session.working_dir>/.majlis/runs/<run id>/in    what the person attached
- *   <session.working_dir>/.majlis/runs/<run id>/out   what the agent wrote back
+ *   <session.working_dir>/.corehub/runs/<run id>/in    what the person attached
+ *   <session.working_dir>/.corehub/runs/<run id>/out   what the agent wrote back
  *
  * Why per run, and why hidden:
  *
  * - **Per run** is what makes "what did this turn produce" answerable at all. A shared
  *   folder would make the hub re-offer yesterday's file on every reply, or force it to
  *   diff the whole working directory — the thing this module exists not to do.
- * - **Hidden** (`.majlis/`) keeps a working directory that is also a git checkout
+ * - **Hidden** (`.corehub/`) keeps a working directory that is also a git checkout
  *   readable: the agent's own files stay where the person put them.
  *
  * The output side is watched, not scanned: `fs.watch` on that one folder tells us a
@@ -17,7 +17,7 @@
  * tree is never walked, on any event. The caps below are applied at collection and
  * what they refused is reported, never silently dropped — `collect()` answers both.
  */
-import { derived } from '@majlis/contracts';
+import { derived } from '@corehub/contracts';
 import { mkdirSync, readdirSync, statSync, watch, type FSWatcher } from 'node:fs';
 import path from 'node:path';
 

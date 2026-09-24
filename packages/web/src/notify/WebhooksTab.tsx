@@ -15,7 +15,7 @@
  * field that caused it rather than as a generic error.
  */
 import { useMemo, useState } from 'react';
-import { HubApiError } from '@majlis/contracts';
+import { HubApiError } from '@corehub/contracts';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import {
@@ -61,7 +61,7 @@ import {
 type Translate = (key: string, p?: Record<string, string | number>) => string;
 
 /** The header a receiver verifies (`derived.webhookSignatureHeader` in the contract package). */
-const SIGNATURE_HEADER = 'X-Majlis-Signature';
+const SIGNATURE_HEADER = 'X-CoreHub-Signature';
 
 export function WebhooksTab() {
   const { t } = useI18n();

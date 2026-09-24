@@ -19,7 +19,7 @@ import {
 
 const homes: string[] = [];
 function home(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'majlis-skills-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'corehub-skills-'));
   homes.push(dir);
   mkdirSync(path.join(dir, 'skills'), { recursive: true });
   return dir;
@@ -114,7 +114,7 @@ describe('reading what is on disk', () => {
   });
 
   it('says nothing at all when the agent has no skills folder yet', () => {
-    expect(listSkills(mkdtempSync(path.join(tmpdir(), 'majlis-empty-')))).toEqual([]);
+    expect(listSkills(mkdtempSync(path.join(tmpdir(), 'corehub-empty-')))).toEqual([]);
   });
 });
 

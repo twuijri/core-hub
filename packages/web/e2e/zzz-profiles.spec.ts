@@ -17,7 +17,7 @@ import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 const PASSWORD = 'e2e-owner-password';
-const shots = process.env.MAJLIS_SHOTS ?? path.resolve('e2e/shots');
+const shots = process.env.COREHUB_SHOTS ?? path.resolve('e2e/shots');
 mkdirSync(shots, { recursive: true });
 
 test.use({ viewport: { width: 1440, height: 900 } });

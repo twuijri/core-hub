@@ -205,7 +205,7 @@ push, and `notice.resource` says what to open.
 
 ## 15. Pairing QR is JSON with a fixed `type`
 
-`{ "type": "majlis.pairing", "hub_url", "pairing_id", "code", "expires_at" }`.
+`{ "type": "corehub.pairing", "hub_url", "pairing_id", "code", "expires_at" }`.
 The phone validates `type`, refuses expired codes, and claims with
 `POST /auth/pairings/{id}/claim`. The claim returns the app token, the device,
 the user and `Meta` (contract version) in one response; the web receives
@@ -729,7 +729,7 @@ The owner's design, approved point by point:
   `.env`, which Hermes reads first. Hermes loads the root `.env` into its environment at start,
   so a named profile's `.env` also says the shared key where the default profile has its own
   instead, and an empty value where the root has a key that profile must not use; a variable
-  equal to the root's is left out. Endpoints (`majlis-*` `providers:` blocks) are written into
+  equal to the root's is left out. Endpoints (`corehub-*` `providers:` blocks) are written into
   the `config.yaml` of every profile that uses them. Done on each save, after a profile is made,
   copied or imported, and before each turn in a named profile. Keys never come back (`[stored]`).
 - **Model defaults per profile.** A role a profile has not chosen is the `default` profile's —
@@ -741,7 +741,7 @@ The owner's design, approved point by point:
   keys** («علشان لو الكي نسيته ما ابلش وينه»); the owner removes what the copy should not keep.
 - **Export asks** «مع المزوّدين / بدون المزوّدين». `auth.exportProfile` takes an optional body
   `ProfileExport {providers}` (default `false`, as before: no key in the file). With `true` the
-  archive also carries `<profile>/majlis-providers.json`: the providers the profile uses — its
+  archive also carries `<profile>/corehub-providers.json`: the providers the profile uses — its
   own and the shared ones it has no own row of that slug for — with their models and keys **in
   the clear**, written as providers of that profile alone; every other file is still checked
   and masked, and the client warns before it asks. `result.providers` counts them. On

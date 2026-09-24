@@ -4,7 +4,7 @@
  * A key is never a command-line argument (`args.ts` §SECRET_OPTIONS refuses `--token` and
  * friends for the same reason): it would land in the shell history and in `ps`. `providers
  * add` reads it from the prompt, hidden, or from stdin when stdout is a pipe — so a script
- * can do `printf '%s' "$KEY" | majlis providers add anthropic`.
+ * can do `printf '%s' "$KEY" | corehub providers add anthropic`.
  *
  * Two rules the web client obeys too (contract decision §26):
  * - `providers list` shows the providers this workspace **added**; `providers presets`

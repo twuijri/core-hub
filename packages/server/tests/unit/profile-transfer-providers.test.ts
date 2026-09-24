@@ -20,7 +20,7 @@ import { authed, drainJobs, signedInHub, type TestHub } from './helpers.js';
 
 const SHARED_KEY = 'sk-ant-shared-key-0123456789';
 const OWN_KEY = 'gsk-design-own-key-0123456789';
-const scratch = mkdtempSync(path.join(tmpdir(), 'majlis-transfer-providers-'));
+const scratch = mkdtempSync(path.join(tmpdir(), 'corehub-transfer-providers-'));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 type Hub = TestHub & { token: string; userId: string };
@@ -157,14 +157,14 @@ describe('profile export and providers (decision §37)', () => {
       const { result, bytes } = await exportOf(hub, id, { providers: true });
       expect(result.providers).toBe(2);
       const archive = unpack(bytes);
-      expect(archive.entries).toEqual(['design', 'design/SOUL.md', 'design/majlis-providers.json']);
+      expect(archive.entries).toEqual(['design', 'design/SOUL.md', 'design/corehub-providers.json']);
       // Every other file is still checked: the key pasted into SOUL.md is overwritten.
       expect(archive.read('design/SOUL.md')).not.toContain(SHARED_KEY);
-      const bundle = JSON.parse(archive.read('design/majlis-providers.json')) as {
+      const bundle = JSON.parse(archive.read('design/corehub-providers.json')) as {
         format: string;
         providers: { slug: string; api_key: string; models: { model_key: string }[] }[];
       };
-      expect(bundle.format).toBe('majlis-providers');
+      expect(bundle.format).toBe('corehub-providers');
       expect(bundle.providers.map((p) => [p.slug, p.api_key])).toEqual([
         ['anthropic', SHARED_KEY],
         ['groq', OWN_KEY],
@@ -184,7 +184,7 @@ describe('profile export and providers (decision §37)', () => {
       const id = await designWithProviders(hub);
       const { bytes } = await exportOf(hub, id, { providers: true });
 
-      const boundary = '----majlisProvidersBoundary';
+      const boundary = '----corehubProvidersBoundary';
       const form = Buffer.concat([
         Buffer.from(
           `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="design.tar.gz"\r\n` +

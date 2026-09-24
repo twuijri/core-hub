@@ -23,7 +23,7 @@ import { STORED } from './mcp.js';
 
 const homes: string[] = [];
 function home(config?: string): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'majlis-channels-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'corehub-channels-'));
   homes.push(dir);
   if (config !== undefined) writeFileSync(path.join(dir, 'config.yaml'), config, 'utf8');
   return dir;

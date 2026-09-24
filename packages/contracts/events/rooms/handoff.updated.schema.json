@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/rooms/handoff.updated.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/rooms/handoff.updated.schema.json",
   "title": "/rt/rooms · handoff.updated",
   "description": "A handoff chain advanced, stopped or completed. Members. Emitted by: rooms module.",
   "type": "object",

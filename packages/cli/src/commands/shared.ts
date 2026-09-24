@@ -1,4 +1,4 @@
-import { HubApiError } from '@majlis/contracts';
+import { HubApiError } from '@corehub/contracts';
 import { authenticatedClient, type AuthenticatedClient } from '../client.js';
 import type { CommandContext } from '../context.js';
 import { UsageError } from '../errors.js';

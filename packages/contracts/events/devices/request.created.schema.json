@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/devices/request.created.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/devices/request.created.schema.json",
   "title": "/rt/devices · request.created",
   "description": "Delivered only to the addressed device. The device shows consent UI and answers through `POST /device-requests/{id}/respond`. Emitted by: devices module (an agent asked for a capability).",
   "type": "object",

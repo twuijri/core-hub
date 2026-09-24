@@ -16,7 +16,7 @@ import {
   type ContractOperation,
   type OpenApiDocument,
   type OpenApiParameter,
-} from '@majlis/contracts';
+} from '@corehub/contracts';
 import { validationFailed } from './errors.js';
 
 export const PROFILE_PARAMETER = 'X-Hub-Profile';

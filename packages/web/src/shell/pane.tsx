@@ -1,6 +1,6 @@
 // The right-hand split pane: artifacts, code, preview, tool output, later the tasks. One
 // provider; any screen can open content in it. Width is remembered per browser.
-import { derived } from '@majlis/contracts';
+import { derived } from '@corehub/contracts';
 import {
   createContext,
   useCallback,

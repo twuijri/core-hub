@@ -52,7 +52,7 @@ createInterface({ input: process.stdin }).on('line', (line) => {
         result: {
           protocolVersion: params?.protocolVersion ?? '2025-06-18',
           capabilities: { tools: {} },
-          serverInfo: { name: 'majlis-fixture', version: '1.0.0' },
+          serverInfo: { name: 'corehub-fixture', version: '1.0.0' },
         },
       });
       return;

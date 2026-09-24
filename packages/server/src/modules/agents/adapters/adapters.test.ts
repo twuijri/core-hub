@@ -115,7 +115,7 @@ describe('ACP adapter: the handshake', () => {
     const agent = fakeAgent();
     const { session } = await AcpSession.connect(agent.transport, {
       cwd: '/work',
-      clientName: 'majlis',
+      clientName: 'corehub',
       clientVersion: '1.0.0',
     });
     expect(session.id).toBe('sess-1');
@@ -138,7 +138,7 @@ describe('ACP adapter: the handshake', () => {
     await expect(
       AcpSession.connect(agent.transport, {
         cwd: '/work',
-        clientName: 'majlis',
+        clientName: 'corehub',
         clientVersion: '1.0.0',
       }),
     ).rejects.toThrow(/ACP v2/);
@@ -150,7 +150,7 @@ describe('ACP adapter: a turn', () => {
     const agent = fakeAgent();
     const { session } = await AcpSession.connect(agent.transport, {
       cwd: '/work',
-      clientName: 'majlis',
+      clientName: 'corehub',
       clientVersion: '1.0.0',
     });
     const events = take(session.stream(), 6);
@@ -176,7 +176,7 @@ describe('ACP adapter: a turn', () => {
     const agent = fakeAgent();
     const { session } = await AcpSession.connect(agent.transport, {
       cwd: '/work',
-      clientName: 'majlis',
+      clientName: 'corehub',
       clientVersion: '1.0.0',
     });
     const events = take(session.stream(), 1);
@@ -205,7 +205,7 @@ describe('ACP adapter: a turn', () => {
     const agent = fakeAgent();
     const { session } = await AcpSession.connect(agent.transport, {
       cwd: '/work',
-      clientName: 'majlis',
+      clientName: 'corehub',
       clientVersion: '1.0.0',
     });
     await session.interrupt();
@@ -220,7 +220,7 @@ describe('ACP adapter: a turn', () => {
     const agent = fakeAgent();
     await AcpSession.connect(agent.transport, {
       cwd: '/work',
-      clientName: 'majlis',
+      clientName: 'corehub',
       clientVersion: '1.0.0',
     });
     // The hub declared `fs.readTextFile: false`; an agent that asks anyway gets a
@@ -237,7 +237,7 @@ describe('ACP adapter: a turn', () => {
     const agent = fakeAgent();
     const { session } = await AcpSession.connect(agent.transport, {
       cwd: '/work',
-      clientName: 'majlis',
+      clientName: 'corehub',
       clientVersion: '1.0.0',
     });
     const events = take(session.stream(), 1);
@@ -248,7 +248,7 @@ describe('ACP adapter: a turn', () => {
 
 describe('ACP adapter: host detection', () => {
   it('finds a catalog entry’s binary on PATH and reads its version', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'majlis-acp-'));
+    const dir = mkdtempSync(path.join(tmpdir(), 'corehub-acp-'));
     try {
       const binary = path.join(dir, 'gemini');
       writeFileSync(binary, '#!/bin/sh\necho "gemini 4.5.6"\n');
@@ -297,7 +297,7 @@ describe('ACP adapter: host detection', () => {
   });
 
   it('whichSync ignores a file that is not executable', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'majlis-which-'));
+    const dir = mkdtempSync(path.join(tmpdir(), 'corehub-which-'));
     try {
       writeFileSync(path.join(dir, 'tool'), 'not executable');
       expect(whichSync('tool', { pathValue: dir })).toBeNull();
@@ -370,7 +370,7 @@ describe('Hermes adapter', () => {
 
   it('refuses to start a conversation without the API server key it would need', async () => {
     const adapter = createHermesAdapter({ host: { pathValue: '/nowhere-at-all' }, apiKey: null });
-    await expect(adapter.start({ ...target, sessionRef: 'majlis-x' })).rejects.toMatchObject({
+    await expect(adapter.start({ ...target, sessionRef: 'corehub-x' })).rejects.toMatchObject({
       code: 'agent_unavailable',
       details: { reason: 'hermes_api_key_missing' },
     });

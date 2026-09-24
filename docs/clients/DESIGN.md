@@ -1,4 +1,4 @@
-# The look of every Majlis client
+# The look of every Core Hub client
 
 Owner direction, 2026-09-21. It binds web, desktop and phones alike; the
 tokens in `packages/ui-tokens` are the single source they all read.

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/rooms/room.deleted.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/rooms/room.deleted.schema.json",
   "title": "/rt/rooms · room.deleted",
   "description": "The room is gone. Members. Emitted by: rooms module.",
   "type": "object",

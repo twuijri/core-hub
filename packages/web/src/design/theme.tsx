@@ -3,7 +3,7 @@
 // in (theme, locale, text_scale exist in the contract; the glass level does not, so it stays
 // local). Writes land on <html> as data-theme / data-glass / dir / lang / --mj-text-scale;
 // the generated tokens.css reacts to those.
-import { derived } from '@majlis/contracts';
+import { derived } from '@corehub/contracts';
 import {
   createContext,
   useCallback,
@@ -13,7 +13,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { DEFAULT_GLASS, type GlassLevel } from '@majlis/ui-tokens';
+import { DEFAULT_GLASS, type GlassLevel } from '@corehub/ui-tokens';
 import { browserLanguage, directionOf, isLanguage, type Language } from '../i18n/index.js';
 import { IconDisplay, IconMoon, IconSun } from '../ui/icons.js';
 

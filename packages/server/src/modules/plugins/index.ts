@@ -16,7 +16,7 @@
  */
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { loadOpenApiDocument } from '@majlis/contracts';
+import { loadOpenApiDocument } from '@corehub/contracts';
 import { createContractIndex } from '../../lib/contract.js';
 import { requireSqlite } from '../../lib/db.js';
 import { defineModule } from '../../lib/module.js';

@@ -5,7 +5,7 @@
 // It is the one card in the transcript that is not a message, so it says so: an accent
 // card with the agent named above the question, and the answer a real multi-line field —
 // an agent that asks "what should I call it?" may be answered in a sentence.
-import { HubApiError } from '@majlis/contracts';
+import { HubApiError } from '@corehub/contracts';
 import { useState, type KeyboardEvent } from 'react';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';

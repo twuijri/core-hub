@@ -1,5 +1,5 @@
 /**
- * The board's visual language (owner's board decision of 2026-09-17, rebuilt in Majlis):
+ * The board's visual language (owner's board decision of 2026-09-17, rebuilt in Core Hub):
  * a card says its stage with a frame drawn for it *and* the word, a todo card offers the
  * promote button, the Waiting strip opens when it has something, and Done keeps the
  * archive behind a link — read-only — with archiving asked for before it happens.

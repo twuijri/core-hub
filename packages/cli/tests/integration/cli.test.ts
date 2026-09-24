@@ -36,7 +36,7 @@ let runner: FakeAgentRunner;
 let directory: FakeAgentDirectory;
 const temps: string[] = [];
 const temp = (name: string) => {
-  const dir = mkdtempSync(path.join(tmpdir(), `majlis-cli-${name}-`));
+  const dir = mkdtempSync(path.join(tmpdir(), `corehub-cli-${name}-`));
   temps.push(dir);
   return dir;
 };
@@ -159,7 +159,7 @@ describe('the reference client against the hub', () => {
   it('refuses to work before signing in (exit 3) and rejects a wrong password (exit 3)', async () => {
     const before = await cli(['whoami']);
     expect(before.code).toBe(3);
-    expect(before.stderr).toContain('majlis login --server URL');
+    expect(before.stderr).toContain('corehub login --server URL');
     const wrong = await cli(['login', '--server', baseUrl, '--username', 'admin'], ['not-it']);
     expect(wrong.code).toBe(3);
     expect(wrong.stderr).toMatch(/\[unauthorized, HTTP 401\]/);
@@ -170,7 +170,7 @@ describe('the reference client against the hub', () => {
     expect(result.code, result.stderr).toBe(0);
     expect(result.stdout).toContain('Signed in as admin (owner). Profile: default.');
     expect(result.stderr).toContain('Password: ');
-    const file = path.join(env.XDG_CONFIG_HOME!, 'majlis', 'config.json');
+    const file = path.join(env.XDG_CONFIG_HOME!, 'corehub', 'config.json');
     expect(statSync(file).mode & 0o777).toBe(0o600);
     const stored = JSON.parse(readFileSync(file, 'utf8')) as { session: { token_kind: string } };
     expect(stored.session.token_kind).toBe('session');
@@ -518,7 +518,7 @@ describe('the reference client against the hub', () => {
     ]);
     const chat = start(['chat', sessionId, '--message', 'count', '--once', '--strict'], [], {
       ...env,
-      MAJLIS_DEBUG: '1',
+      COREHUB_DEBUG: '1',
     });
     await waitUntil(() => chat.stdout().includes('one '));
     // The connection is lost; the agent keeps talking while nobody listens.
@@ -558,7 +558,7 @@ describe('the reference client against the hub', () => {
     const created = ndjson(pairing.stdout())[0] as { id: string; code: string; qr_payload: string };
     expect(created.code).toMatch(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/);
     expect(JSON.parse(created.qr_payload)).toMatchObject({
-      type: 'majlis.pairing',
+      type: 'corehub.pairing',
       pairing_id: created.id,
       hub_url: baseUrl,
     });

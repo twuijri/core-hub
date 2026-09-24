@@ -1,5 +1,5 @@
 /**
- * The curated catalog of agents Majlis can run (ADR 0006).
+ * The curated catalog of agents Core Hub can run (ADR 0006).
  *
  * One file per agent, approved by the project owner. This list is the **only** thing a
  * person can install: `agents.install` takes an agent id that must already be a row in

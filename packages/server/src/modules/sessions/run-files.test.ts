@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadOpenApiDocument } from '@majlis/contracts';
+import { loadOpenApiDocument } from '@corehub/contracts';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import addFormatsModule, { type FormatsPlugin } from 'ajv-formats';
 import { modules as defaultModules } from '../index.js';
@@ -71,7 +71,7 @@ async function hubWithAgent(onStart?: (request: AgentRunRequest) => void | Promi
 const TEXT = Buffer.from('رقم الطلب: 4417\n');
 
 function multipart(name: string, body: Buffer, type: string) {
-  const boundary = '----majlisRunFiles';
+  const boundary = '----corehubRunFiles';
   return {
     payload: Buffer.concat([
       Buffer.from(
@@ -296,7 +296,7 @@ describe('a run: the files the agent produced', () => {
 
 describe('the output folder is read once, and capped', () => {
   it('refuses what is over the caps and says which files', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'majlis-out-'));
+    const dir = mkdtempSync(path.join(tmpdir(), 'corehub-out-'));
     for (const name of ['a.txt', 'b.txt', 'c.txt'])
       writeFileSync(path.join(dir, name), 'x'.repeat(10));
     const capped = collectOutputs(dir, { maxFiles: 2 });
@@ -318,7 +318,7 @@ describe('the output folder is read once, and capped', () => {
   });
 
   it('watches one folder and never walks a tree', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'majlis-watch-'));
+    const dir = mkdtempSync(path.join(tmpdir(), 'corehub-watch-'));
     const watcher = new OutputWatcher(dir, { maxFiles: 1 }).start();
     writeFileSync(path.join(dir, 'one.txt'), '1');
     const collected = watcher.collect();

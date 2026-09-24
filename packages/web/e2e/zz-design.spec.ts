@@ -11,14 +11,14 @@
  * It runs last on purpose (`zz-`): it leaves extra sessions in the shared hub, and
  * smoke.spec.ts counts the rows in the session list.
  *
- * Everything lands in MAJLIS_SHOTS (or e2e/shots) at 1440×900.
+ * Everything lands in COREHUB_SHOTS (or e2e/shots) at 1440×900.
  */
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 const PASSWORD = 'e2e-owner-password';
-const shots = process.env.MAJLIS_SHOTS ?? path.resolve('e2e/shots');
+const shots = process.env.COREHUB_SHOTS ?? path.resolve('e2e/shots');
 mkdirSync(shots, { recursive: true });
 
 test.use({ viewport: { width: 1440, height: 900 } });

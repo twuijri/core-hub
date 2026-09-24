@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/devices/pairing.claimed.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/devices/pairing.claimed.schema.json",
   "title": "/rt/devices · pairing.claimed",
   "description": "The QR the web showed was claimed; the web closes the dialog. User-level, to the client that created the pairing. Emitted by: auth module.",
   "type": "object",
@@ -57,7 +57,7 @@
           "status": "claimed",
           "code": "7KQ2-M9XW",
           "connection": "lan",
-          "qr_payload": "{\"type\":\"majlis.pairing\"}",
+          "qr_payload": "{\"type\":\"corehub.pairing\"}",
           "expires_at": "2026-09-21T11:20:00Z",
           "device_id": "01J8QK3ZR2W7M5N4P6T8V9X0DV",
           "created_at": "2026-09-21T11:15:00Z"
@@ -278,7 +278,7 @@
         },
         "qr_payload": {
           "type": "string",
-          "description": "JSON to encode in the QR: `{ type: \"majlis.pairing\", hub_url, pairing_id, code, expires_at }`."
+          "description": "JSON to encode in the QR: `{ type: \"corehub.pairing\", hub_url, pairing_id, code, expires_at }`."
         },
         "expires_at": {
           "$ref": "#/$defs/Timestamp"

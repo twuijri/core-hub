@@ -1,6 +1,6 @@
-# @majlis/web
+# @corehub/web
 
-The web client of Majlis: Vite 8 + React 19 + TypeScript strict, generated from
+The web client of Core Hub: Vite 8 + React 19 + TypeScript strict, generated from
 `packages/contracts` (every HTTP call goes through `createHubClient`; every realtime message
 is the envelope of `packages/contracts/events`), implementing `docs/clients/NAVIGATION.md`
 one destination = one screen.
@@ -14,7 +14,7 @@ pnpm build                     # builds tokens, contracts, the client (packages/
 node packages/server/dist/main.js   # serves the built client from /
 ```
 
-`MAJLIS_HUB=http://host:port` points the dev proxy at another hub. In production the app is
+`COREHUB_HUB=http://host:port` points the dev proxy at another hub. In production the app is
 same-origin with the hub (`packages/server/src/app/web.ts`).
 
 ## Layout
@@ -36,14 +36,14 @@ same-origin with the hub (`packages/server/src/app/web.ts`).
 
 ## Tests
 
-- `pnpm --filter @majlis/web test` — Vitest: navigation parity against the manifest
+- `pnpm --filter @corehub/web test` — Vitest: navigation parity against the manifest
   (docs/clients/README.md rules 1–8), the logical-CSS guard (no `left`/`right`), i18n key
   coverage, the transcript reducer, the refreshing client, display preferences, approvals.
-- `pnpm --filter @majlis/web test:e2e` — Playwright, four journeys against two real hubs
+- `pnpm --filter @corehub/web test:e2e` — Playwright, four journeys against two real hubs
   (the signed-in one, and one with no owner for the first-run setup journey)
   with a scripted agent (`e2e/hub.ts`): login → new session → streamed reply; approvals
   once/session/always/deny; resume after a socket drop. Needs `pnpm build` first and
-  `playwright install chromium`. Screenshots go to `MAJLIS_SHOTS` (default `e2e/shots`).
+  `playwright install chromium`. Screenshots go to `COREHUB_SHOTS` (default `e2e/shots`).
 
 ## Third-party layers (owner decision, 2026-09-22)
 

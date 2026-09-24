@@ -3,7 +3,7 @@
  * Hermes answers in the language it speaks; the hub passes the sentence on unchanged rather
  * than guessing at a translation of it.
  */
-import { HubApiError } from '@majlis/contracts';
+import { HubApiError } from '@corehub/contracts';
 import { describeError } from '../auth/client.js';
 
 export function describeTaskError(

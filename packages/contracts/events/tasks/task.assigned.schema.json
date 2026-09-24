@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/tasks/task.assigned.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/tasks/task.assigned.schema.json",
   "title": "/rt/tasks · task.assigned",
   "description": "`task.assignee` is set; a run may follow (`run.queued` on /rt/sessions). Emitted by: tasks module (assign, dispatch).",
   "type": "object",

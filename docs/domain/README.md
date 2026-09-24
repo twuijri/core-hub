@@ -1,6 +1,6 @@
 # Domain model
 
-The entities Majlis stores, who owns each one, how they relate, how the
+The entities Core Hub stores, who owns each one, how they relate, how the
 long-lived ones change state, and what "delete" means. One file per module
 sits next to this one; the Drizzle schemas that implement it live in
 `packages/server/src/modules/<module>/schema.ts` and are aggregated by

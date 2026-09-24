@@ -1,5 +1,5 @@
-# Majlis server image. Build from the repository root:
-#   docker build -f packages/server/Dockerfile -t majlis .
+# Core Hub server image. Build from the repository root:
+#   docker build -f packages/server/Dockerfile -t core-hub .
 # One process, one container, one data directory (/data). Non-root. Healthcheck on /api/v1/health.
 # The image also carries the built web client, served by the hub from /.
 # The image holds the hub and the Hermes runtime only (ADR 0006); the hub starts and supervises
@@ -20,12 +20,12 @@ WORKDIR /app
 # The version being released, stamped into both halves of the image: the web bundle prints it
 # before the hub answers, and the hub reports it on /api/v1/health and /api/v1/meta. The
 # workspace's package.json files stay at 0.0.0 — a release is a tag, not a commit.
-ARG MAJLIS_VERSION=0.0.0
+ARG COREHUB_VERSION=0.0.0
 
 # ---- all dependencies + build -------------------------------------------------------------
 FROM base AS build
-ARG MAJLIS_VERSION
-ENV MAJLIS_VERSION=${MAJLIS_VERSION}
+ARG COREHUB_VERSION
+ENV COREHUB_VERSION=${COREHUB_VERSION}
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/server/package.json packages/server/
@@ -145,8 +145,8 @@ RUN /opt/hermes/.venv/bin/python -m ensurepip --default-pip >/dev/null \
 # node image's own apt layer (wget, gnupg) — nothing here uses them. npm stays: the hub installs
 # catalog agents with `npm install --global --prefix` (modules/agents/installer.ts).
 FROM debian:bookworm-slim AS runtime
-ARG MAJLIS_VERSION
-ENV MAJLIS_VERSION=${MAJLIS_VERSION} \
+ARG COREHUB_VERSION
+ENV COREHUB_VERSION=${COREHUB_VERSION} \
     NODE_ENV=production \
     DATA_DIR=/data \
     PORT=8080 \

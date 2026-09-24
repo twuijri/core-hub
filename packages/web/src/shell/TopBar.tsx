@@ -24,7 +24,7 @@ export function TopBar({ title, onMenu }: { title: string; onMenu: () => void })
       <h1 className="min-w-0 flex-1 truncate text-base font-semibold" dir="auto">
         {title}
       </h1>
-      <span className="hidden text-xs text-muted sm:inline">{meta.data?.name ?? 'Majlis'}</span>
+      <span className="hidden text-xs text-muted sm:inline">{meta.data?.name ?? 'Core Hub'}</span>
       <WorkspaceSwitcher />
       {pane.content && pane.collapsed && (
         <button

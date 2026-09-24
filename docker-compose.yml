@@ -1,4 +1,4 @@
-# One-box install of Majlis. Copy .env.example to .env (nothing in it is required), then:
+# One-box install of Core Hub. Copy .env.example to .env (nothing in it is required), then:
 #   docker compose up -d
 #   docker compose logs hub     # prints the first-run setup token once; open the site and paste it
 # Upgrades replace only the image; /data (SQLite, keys, Hermes's home, coding agents) lives in
@@ -7,11 +7,11 @@
 # propagates them to every agent, Hermes included (ADR 0010; docs/DEPLOY.md §3).
 services:
   hub:
-    image: ghcr.io/twuijri/majlis:latest
+    image: ghcr.io/twuijri/core-hub:latest
     build:
       context: .
       dockerfile: packages/server/Dockerfile
-    container_name: majlis
+    container_name: corehub
     restart: unless-stopped
     ports:
       - '${HUB_PORT:-8080}:8080'

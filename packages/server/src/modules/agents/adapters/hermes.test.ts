@@ -19,7 +19,7 @@ import type { AgentEvent } from './types.js';
  * A Hermes that answers `createRun` with a run id and plays `frames` on `events`.
  *
  * It also answers the hub's **title question** (contract decision §26), which arrives as
- * an ordinary run in a conversation of its own (`majlis-ask-…`). It is kept apart from
+ * an ordinary run in a conversation of its own (`corehub-ask-…`). It is kept apart from
  * `calls.createRun` and answered from `title` in one frame, so a test's script stays a
  * script of the conversation it is about and naming never races it.
  */
@@ -37,7 +37,7 @@ export function scriptedHermes(
   let gate: (() => void) | null = null;
   const transport: HermesTransport = {
     async createRun(body) {
-      if (body.session_id.startsWith('majlis-ask-')) {
+      if (body.session_id.startsWith('corehub-ask-')) {
         calls.ask.push(body);
         const runId = `ask_${calls.ask.length}`;
         asks.add(runId);
@@ -109,7 +109,7 @@ describe('Hermes session: one turn over /v1/runs', () => {
       { event: 'reasoning.available', text: 'سأشغّل الاختبارات الآن.' },
       {
         event: 'run.completed',
-        session_id: 'majlis-s1',
+        session_id: 'corehub-s1',
         completed: true,
         partial: false,
         interrupted: false,
@@ -123,11 +123,11 @@ describe('Hermes session: one turn over /v1/runs', () => {
         runtime: { provider: 'nous', model: 'hermes-4' },
       },
     ]);
-    const session = new HermesSession(hermes.transport, { sessionRef: 'majlis-s1', model: null });
+    const session = new HermesSession(hermes.transport, { sessionRef: 'corehub-s1', model: null });
     const events = collect(session, 6);
     const turn = await session.send({ text: 'شغّل الاختبارات' });
     expect(turn).toEqual({ stopReason: 'completed' });
-    expect(hermes.calls.createRun).toEqual([{ input: 'شغّل الاختبارات', session_id: 'majlis-s1' }]);
+    expect(hermes.calls.createRun).toEqual([{ input: 'شغّل الاختبارات', session_id: 'corehub-s1' }]);
     expect(await events).toEqual([
       { type: 'message.delta', text: 'سأشغّل ' },
       {
@@ -162,14 +162,14 @@ describe('Hermes session: one turn over /v1/runs', () => {
   it('sends the model and the reasoning effort the run asked for', async () => {
     const hermes = scriptedHermes([{ event: 'run.completed', completed: true, output: 'ok' }]);
     const session = new HermesSession(hermes.transport, {
-      sessionRef: 'majlis-s2',
+      sessionRef: 'corehub-s2',
       model: 'hermes-4-405b',
       reasoningEffort: 'high',
     });
     await session.send({ text: 'hi' });
     expect(hermes.calls.createRun[0]).toEqual({
       input: 'hi',
-      session_id: 'majlis-s2',
+      session_id: 'corehub-s2',
       model: 'hermes-4-405b',
       model_options: { reasoning_effort: 'high' },
     });
@@ -179,7 +179,7 @@ describe('Hermes session: one turn over /v1/runs', () => {
     const hermes = scriptedHermes([
       { event: 'run.completed', completed: true, output: 'مرحبا', usage: {} },
     ]);
-    const session = new HermesSession(hermes.transport, { sessionRef: 'majlis-s3' });
+    const session = new HermesSession(hermes.transport, { sessionRef: 'corehub-s3' });
     const events = collect(session, 3);
     await session.send({ text: 'قل مرحبا' });
     expect(await events).toEqual([
@@ -206,7 +206,7 @@ describe('Hermes session: one turn over /v1/runs', () => {
       { event: 'tool.completed', tool: 'terminal', duration: 0.1, error: false, preview: '' },
       { event: 'run.completed', completed: true, output: 'حذفت المجلد.' },
     ]);
-    const session = new HermesSession(hermes.transport, { sessionRef: 'majlis-s4' });
+    const session = new HermesSession(hermes.transport, { sessionRef: 'corehub-s4' });
     const first = collect(session, 2);
     const turn = session.send({ text: 'نظّف' });
     const [started, approval] = await first;
@@ -238,7 +238,7 @@ describe('Hermes session: one turn over /v1/runs', () => {
       { event: '__wait__' },
       { event: 'run.cancelled', completed: false, interrupted: true },
     ]);
-    const a = new HermesSession(stopped.transport, { sessionRef: 'majlis-s5' });
+    const a = new HermesSession(stopped.transport, { sessionRef: 'corehub-s5' });
     const turnA = a.send({ text: 'go' });
     await collect(a, 1);
     await a.interrupt();
@@ -253,7 +253,7 @@ describe('Hermes session: one turn over /v1/runs', () => {
     const failed = scriptedHermes([
       { event: 'run.failed', completed: false, error: 'No API key configured for provider' },
     ]);
-    const b = new HermesSession(failed.transport, { sessionRef: 'majlis-s6' });
+    const b = new HermesSession(failed.transport, { sessionRef: 'corehub-s6' });
     expect(await b.send({ text: 'go' })).toEqual({ stopReason: 'failed' });
     expect((await collect(b, 1))[0]).toEqual({
       type: 'run.failed',
@@ -263,7 +263,7 @@ describe('Hermes session: one turn over /v1/runs', () => {
 
   it('fails the turn, not the process, when the stream ends without a terminal frame', async () => {
     const hermes = scriptedHermes([{ event: 'message.delta', delta: 'half' }]);
-    const session = new HermesSession(hermes.transport, { sessionRef: 'majlis-s7' });
+    const session = new HermesSession(hermes.transport, { sessionRef: 'corehub-s7' });
     expect(await session.send({ text: 'go' })).toEqual({ stopReason: 'failed' });
     expect(await collect(session, 2)).toEqual([
       { type: 'message.delta', text: 'half' },
@@ -276,7 +276,7 @@ describe('Hermes session: one turn over /v1/runs', () => {
       { event: '__wait__' },
       { event: 'run.completed', completed: true },
     ]);
-    const session = new HermesSession(hermes.transport, { sessionRef: 'majlis-s8' });
+    const session = new HermesSession(hermes.transport, { sessionRef: 'corehub-s8' });
     const first = session.send({ text: 'one' });
     await new Promise((resolve) => setTimeout(resolve, 5));
     await expect(session.send({ text: 'two' })).rejects.toMatchObject({ code: 'already_running' });
@@ -341,7 +341,7 @@ describe('Hermes transport: the wire', () => {
       fetchImpl,
     });
     const accepted = await transport.createRun(
-      { input: 'hi', session_id: 'majlis-x' },
+      { input: 'hi', session_id: 'corehub-x' },
       new AbortController().signal,
     );
     expect(accepted).toEqual({ run_id: 'run_9' });
@@ -370,9 +370,9 @@ describe('Hermes transport: the wire', () => {
       command: ['hermes'],
       executablePath: null,
       endpoint: null,
-      sessionRef: 'majlis-adapter',
+      sessionRef: 'corehub-adapter',
     });
-    expect(session.id).toBe('majlis-adapter');
+    expect(session.id).toBe('corehub-adapter');
     expect(await session.send({ text: 'hi' })).toEqual({ stopReason: 'completed' });
     await session.close();
   });
@@ -400,7 +400,7 @@ describe('Hermes transport: the wire', () => {
       command: ['hermes'],
       executablePath: null,
       endpoint: null,
-      sessionRef: 'majlis-x',
+      sessionRef: 'corehub-x',
     };
 
     it('makes sure the profile exists, then opens the conversation there', async () => {

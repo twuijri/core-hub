@@ -14,7 +14,7 @@
  * instead of fighting it.
  *
  * **Trademarks.** These marks belong to their owners (Anthropic, OpenAI, Google, SST,
- * Nous Research). Majlis uses them only to name the agent they identify — it is not
+ * Nous Research). Core Hub uses them only to name the agent they identify — it is not
  * affiliated with, endorsed by, or a product of any of them.
  */
 import type { ReactNode, SVGProps } from 'react';

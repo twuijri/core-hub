@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
-  title: Majlis API
+  title: Core Hub API
   version: 1.0.0
-  summary: The one HTTP contract every Majlis client renders.
+  summary: The one HTTP contract every Core Hub client renders.
   description: |
-    Majlis is a self-hosted hub for AI agents. This document is the source of
+    Core Hub is a self-hosted hub for AI agents. This document is the source of
     truth for `/api/v1` (ADR 0003). Clients are generated from it; a hand-typed
     path in a client fails CI. Realtime events are declared next to it in
     `events/*.schema.json` and referenced from each operation's `x-rt-events`.
@@ -16,11 +16,11 @@ info:
     * long work answers `202 { job_id }` and streams on `/rt/jobs`;
     * JSON keys are snake_case, ids are ULIDs, timestamps are ISO-8601 UTC.
   contact:
-    name: Majlis maintainers
-    url: https://github.com/twuijri/majlis
+    name: Core Hub maintainers
+    url: https://github.com/twuijri/core-hub
   license:
     name: Proprietary — see repository LICENSE
-    url: https://github.com/twuijri/majlis/blob/main/LICENSE
+    url: https://github.com/twuijri/core-hub/blob/main/LICENSE
 servers:
   - url: /api/v1
     description: The hub the client is signed in to (same origin as the realtime namespaces).
@@ -107,7 +107,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Meta'
               example:
-                name: 'Majlis'
+                name: 'Core Hub'
                 server_version: 0.1.0
                 contract_version: 1.0.0
                 api_versions: [v1]
@@ -1114,7 +1114,7 @@ paths:
                 status: pending
                 code: 7KQ2-M9XW
                 connection: lan
-                qr_payload: '{"type":"majlis.pairing","hub_url":"https://hub.example","pairing_id":"01J8QK3ZR2W7M5N4P6T8V9X0PR","code":"7KQ2-M9XW","expires_at":"2026-09-21T11:20:00Z"}'
+                qr_payload: '{"type":"corehub.pairing","hub_url":"https://hub.example","pairing_id":"01J8QK3ZR2W7M5N4P6T8V9X0PR","code":"7KQ2-M9XW","expires_at":"2026-09-21T11:20:00Z"}'
                 expires_at: '2026-09-21T11:20:00Z'
                 device_id: null
                 created_at: '2026-09-21T11:15:00Z'
@@ -1149,7 +1149,7 @@ paths:
                 status: claimed
                 code: 7KQ2-M9XW
                 connection: lan
-                qr_payload: '{"type":"majlis.pairing","hub_url":"https://hub.example","pairing_id":"01J8QK3ZR2W7M5N4P6T8V9X0PR","code":"7KQ2-M9XW","expires_at":"2026-09-21T11:20:00Z"}'
+                qr_payload: '{"type":"corehub.pairing","hub_url":"https://hub.example","pairing_id":"01J8QK3ZR2W7M5N4P6T8V9X0PR","code":"7KQ2-M9XW","expires_at":"2026-09-21T11:20:00Z"}'
                 expires_at: '2026-09-21T11:20:00Z'
                 device_id: 01J8QK3ZR2W7M5N4P6T8V9X0DV
                 created_at: '2026-09-21T11:15:00Z'
@@ -1268,7 +1268,7 @@ paths:
                   created_at: '2026-09-01T00:00:00Z'
                   updated_at: '2026-09-21T08:00:00Z'
                 server:
-                  name: 'Majlis'
+                  name: 'Core Hub'
                   server_version: 0.1.0
                   contract_version: 1.0.0
                   api_versions: [v1]
@@ -1599,7 +1599,7 @@ paths:
         out, `masked` the paths where a stored key was overwritten.
 
         **With providers** (`providers: true`, decision §37): the archive also carries
-        `<profile>/majlis-providers.json` — the profile's own providers and the shared ones it
+        `<profile>/corehub-providers.json` — the profile's own providers and the shared ones it
         uses, each with its models and its key **in the clear**, written as providers of that
         profile alone. Every other file is still checked and masked as above. `result.providers`
         is how many it carries (0 without). Without (the default), the archive holds no key.
@@ -1655,7 +1655,7 @@ paths:
         `{profile_id, slug, name, providers}`.
 
         An archive exported **with providers** (decision §37) carries
-        `<profile>/majlis-providers.json`: the hub reads it before Hermes sees the archive,
+        `<profile>/corehub-providers.json`: the hub reads it before Hermes sees the archive,
         never hands it to Hermes, and adds every provider in it to the new profile as that
         profile's own (`scope: profile`), with its models and its key. `providers` is how many
         it added.
@@ -1781,7 +1781,7 @@ paths:
                     model: claude-sonnet-4-5
                     provider: anthropic
                     reasoning_effort: medium
-                    working_dir: /home/agent/projects/majlis
+                    working_dir: /home/agent/projects/corehub
                     pinned: true
                     archived: false
                     category_id: 01J8QK3ZR2W7M5N4P6T8V9X0CT
@@ -1831,7 +1831,7 @@ paths:
               model: null
               provider: null
               reasoning_effort: null
-              working_dir: /home/agent/projects/majlis
+              working_dir: /home/agent/projects/corehub
               category_id: null
       x-rt-events: [session.created]
       responses:
@@ -1855,7 +1855,7 @@ paths:
                 model: null
                 provider: null
                 reasoning_effort: null
-                working_dir: /home/agent/projects/majlis
+                working_dir: /home/agent/projects/corehub
                 pinned: false
                 archived: false
                 category_id: null
@@ -2013,7 +2013,7 @@ paths:
                 model: claude-sonnet-4-5
                 provider: anthropic
                 reasoning_effort: medium
-                working_dir: /home/agent/projects/majlis
+                working_dir: /home/agent/projects/corehub
                 pinned: true
                 archived: false
                 category_id: 01J8QK3ZR2W7M5N4P6T8V9X0CT
@@ -2138,7 +2138,7 @@ paths:
                 model: claude-sonnet-4-5
                 provider: anthropic
                 reasoning_effort: medium
-                working_dir: /home/agent/projects/majlis
+                working_dir: /home/agent/projects/corehub
                 pinned: true
                 archived: false
                 category_id: 01J8QK3ZR2W7M5N4P6T8V9X0CT
@@ -2575,7 +2575,7 @@ paths:
                 model: claude-sonnet-4-5
                 provider: anthropic
                 reasoning_effort: medium
-                working_dir: /home/agent/projects/majlis
+                working_dir: /home/agent/projects/corehub
                 pinned: false
                 archived: false
                 category_id: 01J8QK3ZR2W7M5N4P6T8V9X0CT
@@ -5342,7 +5342,7 @@ paths:
                     created_at: '2026-09-20T09:00:00Z'
                     updated_at: '2026-09-21T10:00:00Z'
                     name: 'غرفة الإطلاق'
-                    working_dir: /home/agent/projects/majlis
+                    working_dir: /home/agent/projects/corehub
                     invite_code: 7KQ2M9XW
                     can_manage: true
                     can_mention_all: true
@@ -5400,7 +5400,7 @@ paths:
               $ref: '#/components/schemas/RoomCreate'
             example:
               name: 'غرفة الإطلاق'
-              working_dir: /home/agent/projects/majlis
+              working_dir: /home/agent/projects/corehub
               seats:
                 - agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AG
                   name: 'المخطِّط'
@@ -5434,7 +5434,7 @@ paths:
                   created_at: '2026-09-20T09:00:00Z'
                   updated_at: '2026-09-20T09:00:00Z'
                   name: 'غرفة الإطلاق'
-                  working_dir: /home/agent/projects/majlis
+                  working_dir: /home/agent/projects/corehub
                   invite_code: 7KQ2M9XW
                   can_manage: true
                   can_mention_all: true
@@ -5483,7 +5483,7 @@ paths:
                 created_at: '2026-09-20T09:00:00Z'
                 updated_at: '2026-09-21T10:00:00Z'
                 name: 'غرفة الإطلاق'
-                working_dir: /home/agent/projects/majlis
+                working_dir: /home/agent/projects/corehub
                 invite_code: 7KQ2M9XW
                 can_manage: true
                 can_mention_all: true
@@ -5598,7 +5598,7 @@ paths:
                 created_at: '2026-09-20T09:00:00Z'
                 updated_at: '2026-09-21T11:55:00Z'
                 name: 'غرفة الإطلاق — النسخة الأولى'
-                working_dir: /home/agent/projects/majlis
+                working_dir: /home/agent/projects/corehub
                 invite_code: 7KQ2M9XW
                 can_manage: true
                 can_mention_all: true
@@ -5670,7 +5670,7 @@ paths:
                 created_at: '2026-09-21T11:56:00Z'
                 updated_at: '2026-09-21T11:56:00Z'
                 name: 'غرفة الإطلاق (نسخة)'
-                working_dir: /home/agent/projects/majlis
+                working_dir: /home/agent/projects/corehub
                 invite_code: 3HXK7RQ2
                 can_manage: true
                 can_mention_all: true
@@ -5788,7 +5788,7 @@ paths:
                 created_at: '2026-09-20T09:00:00Z'
                 updated_at: '2026-09-21T12:00:00Z'
                 name: 'غرفة الإطلاق'
-                working_dir: /home/agent/projects/majlis
+                working_dir: /home/agent/projects/corehub
                 invite_code: 7KQ2M9XW
                 can_manage: false
                 can_mention_all: true
@@ -6623,12 +6623,12 @@ paths:
                     owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
                     created_at: '2026-09-10T00:00:00Z'
                     updated_at: '2026-09-21T10:00:00Z'
-                    name: 'Majlis'
+                    name: 'Core Hub'
                     description: 'الخادم والعملاء'
                     status: active
                     color: '#4a90d9'
-                    repo_url: https://github.com/twuijri/majlis
-                    working_dir: /home/agent/projects/majlis
+                    repo_url: https://github.com/twuijri/core-hub
+                    working_dir: /home/agent/projects/corehub
                     default_branch: main
                     default_agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
                     report_room_id: 01J8QK3ZR2W7M5N4P6T8V9X0RM
@@ -6665,11 +6665,11 @@ paths:
             schema:
               $ref: '#/components/schemas/ProjectWrite'
             example:
-              name: 'Majlis'
+              name: 'Core Hub'
               description: 'الخادم والعملاء'
               color: '#4a90d9'
-              repo_url: https://github.com/twuijri/majlis
-              working_dir: /home/agent/projects/majlis
+              repo_url: https://github.com/twuijri/core-hub
+              working_dir: /home/agent/projects/corehub
               default_branch: main
               default_agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
               report_room_id: null
@@ -6688,12 +6688,12 @@ paths:
                 owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
                 created_at: '2026-09-10T00:00:00Z'
                 updated_at: '2026-09-10T00:00:00Z'
-                name: 'Majlis'
+                name: 'Core Hub'
                 description: 'الخادم والعملاء'
                 status: active
                 color: '#4a90d9'
-                repo_url: https://github.com/twuijri/majlis
-                working_dir: /home/agent/projects/majlis
+                repo_url: https://github.com/twuijri/core-hub
+                working_dir: /home/agent/projects/corehub
                 default_branch: main
                 default_agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
                 report_room_id: null
@@ -6731,12 +6731,12 @@ paths:
                 owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
                 created_at: '2026-09-10T00:00:00Z'
                 updated_at: '2026-09-21T10:00:00Z'
-                name: 'Majlis'
+                name: 'Core Hub'
                 description: 'الخادم والعملاء'
                 status: active
                 color: '#4a90d9'
-                repo_url: https://github.com/twuijri/majlis
-                working_dir: /home/agent/projects/majlis
+                repo_url: https://github.com/twuijri/core-hub
+                working_dir: /home/agent/projects/corehub
                 default_branch: main
                 default_agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
                 report_room_id: 01J8QK3ZR2W7M5N4P6T8V9X0RM
@@ -6775,12 +6775,12 @@ paths:
                 owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
                 created_at: '2026-09-10T00:00:00Z'
                 updated_at: '2026-09-21T12:20:00Z'
-                name: 'Majlis'
+                name: 'Core Hub'
                 description: 'الخادم والعملاء'
                 status: active
                 color: '#4a90d9'
-                repo_url: https://github.com/twuijri/majlis
-                working_dir: /home/agent/projects/majlis
+                repo_url: https://github.com/twuijri/core-hub
+                working_dir: /home/agent/projects/corehub
                 default_branch: main
                 default_agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
                 report_room_id: 01J8QK3ZR2W7M5N4P6T8V9X0RM
@@ -7203,7 +7203,7 @@ paths:
                   done: 1
                 depends_on: []
                 worktree:
-                  path: /home/agent/worktrees/majlis/task-01J8QK3ZR2W7M5N4P6T8V9X0TK
+                  path: /home/agent/worktrees/corehub/task-01J8QK3ZR2W7M5N4P6T8V9X0TK
                   branch: task/settings-page
                   base_branch: main
                   status: ready
@@ -7814,7 +7814,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Worktree'
               example:
-                path: /home/agent/worktrees/majlis/task-01J8QK3ZR2W7M5N4P6T8V9X0TK
+                path: /home/agent/worktrees/corehub/task-01J8QK3ZR2W7M5N4P6T8V9X0TK
                 branch: task/settings-page
                 base_branch: main
                 status: ready
@@ -8464,7 +8464,7 @@ paths:
                     updated_at: '2026-09-21T09:00:00Z'
                     name: 'مراجعة ثم نشر'
                     description: 'يراجع التغييرات، ينتظر موافقة، ثم ينشر.'
-                    working_dir: /home/agent/projects/majlis
+                    working_dir: /home/agent/projects/corehub
                     nodes:
                       - id: review
                         kind: agent
@@ -8523,7 +8523,7 @@ paths:
             example:
               name: 'مراجعة ثم نشر'
               description: 'يراجع التغييرات، ينتظر موافقة، ثم ينشر.'
-              working_dir: /home/agent/projects/majlis
+              working_dir: /home/agent/projects/corehub
               nodes:
                 - id: review
                   kind: agent
@@ -8555,7 +8555,7 @@ paths:
                 updated_at: '2026-09-18T00:00:00Z'
                 name: 'مراجعة ثم نشر'
                 description: 'يراجع التغييرات، ينتظر موافقة، ثم ينشر.'
-                working_dir: /home/agent/projects/majlis
+                working_dir: /home/agent/projects/corehub
                 nodes:
                   - id: review
                     kind: agent
@@ -10747,7 +10747,7 @@ paths:
     get:
       operationId: devices.listPeers
       tags: [devices]
-      summary: Other Majlis installations linked to this one (the admin `Devices` tab)
+      summary: Other Core Hub installations linked to this one (the admin `Devices` tab)
       x-scope: global
       x-roles: [owner, admin]
       x-rt-events: []
@@ -11201,7 +11201,7 @@ paths:
                 items:
                   - id: 01J8QK3ZR2W7M5N4P6T8V9X0WH
                     name: 'n8n'
-                    url: https://n8n.example/webhook/majlis
+                    url: https://n8n.example/webhook/corehub
                     events: [run.completed, task.moved]
                     profiles: [work]
                     enabled: true
@@ -11235,7 +11235,7 @@ paths:
               $ref: '#/components/schemas/WebhookWrite'
             example:
               name: 'n8n'
-              url: https://n8n.example/webhook/majlis
+              url: https://n8n.example/webhook/corehub
               events: [run.completed, task.moved]
               profiles: [work]
               enabled: true
@@ -11254,7 +11254,7 @@ paths:
               example:
                 id: 01J8QK3ZR2W7M5N4P6T8V9X0WH
                 name: 'n8n'
-                url: https://n8n.example/webhook/majlis
+                url: https://n8n.example/webhook/corehub
                 events: [run.completed, task.moved]
                 profiles: [work]
                 enabled: true
@@ -11307,7 +11307,7 @@ paths:
               example:
                 id: 01J8QK3ZR2W7M5N4P6T8V9X0WH
                 name: 'n8n'
-                url: https://n8n.example/webhook/majlis
+                url: https://n8n.example/webhook/corehub
                 events: [run.completed, task.moved]
                 profiles: [work]
                 enabled: false
@@ -11664,7 +11664,7 @@ paths:
                 default_channel: stable
                 source:
                   kind: github_release
-                  repo: twuijri/majlis-clients
+                  repo: twuijri/core-hub-clients
                   token: '[stored]'
                 auto_publish: true
         '401':
@@ -11687,7 +11687,7 @@ paths:
               default_channel: stable
               source:
                 kind: github_release
-                repo: twuijri/majlis-clients
+                repo: twuijri/core-hub-clients
                 token: ghp_…
               auto_publish: true
       x-rt-events: []
@@ -11702,7 +11702,7 @@ paths:
                 default_channel: stable
                 source:
                   kind: github_release
-                  repo: twuijri/majlis-clients
+                  repo: twuijri/core-hub-clients
                   token: '[stored]'
                 auto_publish: true
         '400':
@@ -12395,7 +12395,7 @@ components:
       properties:
         name:
           type: string
-          description: Display name the owner set (defaults to "Majlis").
+          description: Display name the owner set (defaults to "Core Hub").
         server_version:
           type: string
         contract_version:
@@ -12920,7 +12920,7 @@ components:
           $ref: '#/components/schemas/PairingConnection'
         qr_payload:
           type: string
-          description: 'JSON to encode in the QR: `{ type: "majlis.pairing", hub_url, pairing_id, code, expires_at }`.'
+          description: 'JSON to encode in the QR: `{ type: "corehub.pairing", hub_url, pairing_id, code, expires_at }`.'
         expires_at:
           $ref: '#/components/schemas/Timestamp'
         device_id:
@@ -13131,7 +13131,7 @@ components:
           default: false
           description: >-
             Carry the profile's providers with their keys in the clear
-            (`majlis-providers.json`). The client warns before it asks for this.
+            (`corehub-providers.json`). The client warns before it asks for this.
     ProfileImport:
       type: object
       required: [attachment_id, slug]
@@ -13333,12 +13333,12 @@ components:
           items:
             $ref: '#/components/schemas/WorkingDir'
       example:
-        root: /var/lib/majlis/workspaces/work
+        root: /var/lib/corehub/workspaces/work
         items:
-          - name: majlis
-            path: /var/lib/majlis/workspaces/work/majlis
+          - name: corehub
+            path: /var/lib/corehub/workspaces/work/corehub
           - name: 01J8QK3ZR2W7M5N4P6T8V9X0YA
-            path: /var/lib/majlis/workspaces/work/01J8QK3ZR2W7M5N4P6T8V9X0YA
+            path: /var/lib/corehub/workspaces/work/01J8QK3ZR2W7M5N4P6T8V9X0YA
     SessionCreate:
       type: object
       required: [agent_id]

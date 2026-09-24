@@ -11,7 +11,7 @@
 //   did not extract this time; the copy has no graph.json. Code is parsed locally with no
 //   model, so a full build takes seconds.
 // - With root-relative names only. Graphify names an import whose target it did not scan
-//   after the *absolute* path (`tmp_majlis_graph_…_packages_…`); those names are rewritten
+//   after the *absolute* path (`tmp_corehub_graph_…_packages_…`); those names are rewritten
 //   to the root-relative form every other node already has.
 // - With the date out of the report's title, and in one canonical order (see `canonical`):
 //   Graphify clusters in the order the file system lists files, which differs between
@@ -50,7 +50,7 @@ const files = execFileSync(
   .split('\0')
   .filter((file) => file && !file.startsWith(`${OUT}/`) && existsSync(file));
 
-const work = mkdtempSync(path.join(tmpdir(), 'majlis-graph-'));
+const work = mkdtempSync(path.join(tmpdir(), 'corehub-graph-'));
 try {
   for (const file of files) {
     mkdirSync(path.join(work, path.dirname(file)), { recursive: true });
@@ -90,7 +90,7 @@ writeFileSync(graphFile, `${JSON.stringify(canonical(graph), null, 2)}\n`);
 const report = `${OUT}/GRAPH_REPORT.md`;
 writeFileSync(
   report,
-  readFileSync(report, 'utf8').replace(/^# Graph Report - .*$/m, '# Graph Report - majlis'),
+  readFileSync(report, 'utf8').replace(/^# Graph Report - .*$/m, '# Graph Report - corehub'),
 );
 
 /** Nodes by id, and each undirected edge with its ends in order, then edges in order. */

@@ -77,9 +77,9 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @majlis/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @corehub/web exec playwright install --with-deps chromium
       - run: pnpm build
-      - run: pnpm --filter @majlis/web test:e2e
+      - run: pnpm --filter @corehub/web test:e2e
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -164,12 +164,12 @@ jobs:
           file: packages/server/Dockerfile
           push: false
           load: true
-          tags: majlis:ci
+          tags: core-hub:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Smoke test the image
         run: |
-          docker run -d --name hub -p 8080:8080 -e HUB_ADMIN_PASSWORD=ci-only-password majlis:ci
+          docker run -d --name hub -p 8080:8080 -e HUB_ADMIN_PASSWORD=ci-only-password core-hub:ci
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8080/api/v1/health; then
               echo
@@ -183,4 +183,4 @@ jobs:
       - name: The image is sealed and Hermes still works
         # /app and /opt/hermes are read-only to the hub; Hermes runs, writes its profiles to
         # /data and installs an optional package into /data/hermes-packages (network needed).
-        run: node scripts/image-sealed-check.mjs majlis:ci
+        run: node scripts/image-sealed-check.mjs core-hub:ci

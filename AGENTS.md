@@ -1,4 +1,4 @@
-# Agent Map — Majlis
+# Agent Map — Core Hub
 
 This file is the short map for coding agents and new contributors. Keep it
 small; details live in `docs/`.

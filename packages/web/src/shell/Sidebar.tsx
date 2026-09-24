@@ -5,7 +5,7 @@
 // the row geometry, the scrolling middle, the footer — comes from `ui/SidebarShell.tsx`,
 // so the phone drawer and any later rail are assembled from the same pieces rather than
 // drawn again (docs/clients/DESIGN.md §UI policy).
-import { derived } from '@majlis/contracts';
+import { derived } from '@corehub/contracts';
 import { useEffect, type ReactElement } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth/context.js';
@@ -36,7 +36,7 @@ import {
 } from '../ui/icons.js';
 import {
   Badge,
-  MajlisMark,
+  CoreHubMark,
   Button,
   Segmented,
   SidebarBody,
@@ -140,7 +140,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <SidebarFrame label={t('shell.sidebar')}>
-      <SidebarBrand mark={<MajlisMark size={28} />} name={t('app.name')} />
+      <SidebarBrand mark={<CoreHubMark size={28} />} name={t('app.name')} />
 
       {/* Slim by design (NAVIGATION §1): starting a chat, finding one, the agents, tasks,
           schedules, and the list. Everything configured once lives on a page inside

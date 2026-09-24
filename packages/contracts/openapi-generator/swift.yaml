@@ -1,8 +1,8 @@
 # openapi-generator config for the Swift client (iOS).
 generatorName: swift6
-projectName: MajlisClient
+projectName: CoreHubClient
 additionalProperties:
   responseAs: AsyncAwait
   useSPMFileStructure: true
   hashableModels: true
-  swiftPackagePath: MajlisClient
+  swiftPackagePath: CoreHubClient

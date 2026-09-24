@@ -1,4 +1,4 @@
-// A small set of inline icons drawn for Majlis (stroke icons on a 24-grid). Decorative by
+// A small set of inline icons drawn for Core Hub (stroke icons on a 24-grid). Decorative by
 // default; pass `label` for a standalone meaning.
 import type { SVGProps } from 'react';
 

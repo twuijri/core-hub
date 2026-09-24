@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/schedules/workflow_run.failed.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/schedules/workflow_run.failed.schema.json",
   "title": "/rt/schedules · workflow_run.failed",
   "description": "Run-level state with all steps. Subscribers of the workflow; profile-wide as `job.*` on /rt/jobs. Emitted by: schedules module (workflow engine).",
   "type": "object",

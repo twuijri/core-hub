@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { listOperations, loadOpenApiDocument } from '@majlis/contracts';
+import { listOperations, loadOpenApiDocument } from '@corehub/contracts';
 import { testHub } from './helpers.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');

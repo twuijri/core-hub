@@ -250,7 +250,7 @@ describe('workflows: an approval step', () => {
 
 describe('workflows: an approval outlives a restart', () => {
   it('is still pending after a restart, and approving then continues the run', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'majlis-gate-restart-'));
+    const dir = mkdtempSync(path.join(tmpdir(), 'corehub-gate-restart-'));
     cleanup.push(dir);
     const first = await signedInHub({ DATA_DIR: dir });
     const runId = await start(first, await workflow(first, gated, line));

@@ -13,6 +13,7 @@
  * Every write that can change what an agent should be using ends in `propagate()`. That
  * is the whole of the owner's requirement, in one call site per mutation.
  */
+import { LEGACY, derived } from '@corehub/contracts';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { FastifyBaseLogger } from 'fastify';
@@ -40,6 +41,7 @@ import {
   hermesBaseUrlOf,
   hermesKeyEnvOf,
   hermesProviderNameOf,
+  legacyHermesKeyEnvOf,
   hermesRouteOf,
   secretNameOf,
   type ProviderCatalogueEntry,
@@ -195,11 +197,13 @@ interface ProviderOwner {
   shared: boolean;
 }
 
-export const PROVIDER_BUNDLE_FORMAT = 'majlis-providers';
+export const PROVIDER_BUNDLE_FORMAT = derived.providersBundleFormat;
+/** The format an archive exported before the rename (Majlis) says; read, never written. */
+const LEGACY_PROVIDER_BUNDLE_FORMAT = LEGACY.providersBundleFormat;
 
 /**
  * A profile's providers with their keys, as an export that carries them writes them into
- * the archive (`majlis-providers.json`, decision §37). Keys are in the clear: the dialog
+ * the archive (`corehub-providers.json`, decision §37). Keys are in the clear: the dialog
  * that asks for this says so.
  */
 export interface ProviderBundle {
@@ -242,10 +246,14 @@ export interface ProviderBundleItem {
 
 /** Reads a bundle from an archive somebody uploaded: only the shape the hub writes. */
 export function parseProviderBundle(value: unknown): ProviderBundle {
-  const bad = (why: string) => validationFailed({ field: 'majlis-providers.json', reason: why });
+  const bad = (why: string) => validationFailed({ field: derived.providersFile, reason: why });
   if (!value || typeof value !== 'object') throw bad('not an object');
   const bundle = value as Partial<ProviderBundle>;
-  if (bundle.format !== PROVIDER_BUNDLE_FORMAT || bundle.version !== 1) {
+  const format = bundle.format as string | undefined;
+  if (
+    (format !== PROVIDER_BUNDLE_FORMAT && format !== LEGACY_PROVIDER_BUNDLE_FORMAT) ||
+    bundle.version !== 1
+  ) {
     throw bad('not a provider list this hub writes');
   }
   if (!Array.isArray(bundle.providers)) throw bad('no providers');
@@ -1915,7 +1923,12 @@ export class ModelsService {
       if (entry && entry.hermesEnvVars.length > 0) {
         for (const name of entry.hermesEnvVars) names.add(name);
       } else {
-        names.add(entry?.envVar ?? hermesKeyEnvOf(row.slug, entry));
+        const name = entry?.envVar ?? hermesKeyEnvOf(row.slug, entry);
+        names.add(name);
+        // The name the same key had before the rename is the hub's too: owning it is what
+        // takes the old line out of the file once the new one is there (ADR 0017).
+        const legacy = legacyHermesKeyEnvOf(name);
+        if (legacy) names.add(legacy);
       }
     }
     return [...names].sort();
@@ -2195,7 +2208,7 @@ export class ModelsService {
    * slug for.
    *
    * - `config.yaml`: the endpoints (`providers:` blocks) of those providers — a turn that
-   *   names `majlis-<slug>` finds it, with this profile's address when it has its own.
+   *   names `corehub-<slug>` finds it, with this profile's address when it has its own.
    * - `.env`: Hermes reads a profile's `.env` **before** the process environment
    *   (`agent/secret_scope.py` §get_secret), and the process environment is the root's —
    *   Hermes loads the root `.env` into it at start. So for every variable the hub owns, the

@@ -8,7 +8,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import type { HubClient } from '@majlis/contracts';
+import type { HubClient } from '@corehub/contracts';
 import { useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '../i18n/context.js';
 import { createClientBundle } from './client.js';

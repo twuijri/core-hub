@@ -60,7 +60,7 @@
     "profile_runtime_refused": "رفض هرمز إنشاء البروفايل.",
     "no_profile_granted": "لم يُعطَ حسابك أي بروفايل بعد. اطلب من المشرف أن يعطيك واحدًا.",
     "member_needs_profile": "العضو يجب أن يُعطى بروفايلًا واحدًا على الأقل.",
-    "profile_transfer_unmanaged": "تصدير البروفايل واستيراده يحتاجان هرمز الذي يشغّله المجلس بنفسه؛ هذا المجلس يصل إلى هرمز في مكان آخر أو لا هرمز عنده.",
+    "profile_transfer_unmanaged": "تصدير البروفايل واستيراده يحتاجان هرمز الذي يشغّله المركز بنفسه؛ هذا المركز يصل إلى هرمز في مكان آخر أو لا هرمز عنده.",
     "profile_transfer_unreachable": "تعذّر الوصول إلى هرمز:",
     "profile_export_hermes": "هرمز يكتب أرشيف البروفايل…",
     "profile_export_checking": "فحص الأرشيف: استبعاد ملفات الاعتماد وأي مفتاح محفوظ…",
@@ -68,7 +68,7 @@
     "profile_export_done": "الأرشيف جاهز للتنزيل.",
     "profile_export_refused": "رفض هرمز تصدير البروفايل:",
     "profile_export_unexpected": "أرشيف هرمز لا يحوي مجلد البروفايل نفسه، فلن يُسلَّم.",
-    "profile_export_too_large": "أرشيف البروفايل أكبر مما يحفظه المجلس (١ غيغابايت).",
+    "profile_export_too_large": "أرشيف البروفايل أكبر مما يحفظه المركز (١ غيغابايت).",
     "profile_import_checking": "التحقق من أن الملف أرشيف بروفايل…",
     "profile_import_hermes": "هرمز ينشئ البروفايل…",
     "profile_import_adding": "إضافة البروفايل…",
@@ -80,7 +80,7 @@
     "profile_archive_not_gzip": "الملف ليس أرشيف ⁦.tar.gz⁩.",
     "profile_archive_not_tar": "الملف مضغوط لكنه ليس أرشيف ⁦tar⁩.",
     "profile_archive_truncated": "الأرشيف مقطوع؛ ارفعه من جديد.",
-    "profile_archive_too_large": "الأرشيف يتفكك إلى أكبر مما يقبله المجلس (٤ غيغابايت)."
+    "profile_archive_too_large": "الأرشيف يتفكك إلى أكبر مما يقبله المركز (٤ غيغابايت)."
   },
   "sessions": {
     "run_interrupted": "أوقفه المستخدم.",

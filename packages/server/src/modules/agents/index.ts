@@ -33,7 +33,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
-import { loadOpenApiDocument } from '@majlis/contracts';
+import { loadOpenApiDocument } from '@corehub/contracts';
 import { requireSqlite } from '../../lib/db.js';
 import { HubError, notFound } from '../../lib/errors.js';
 import { createContractIndex } from '../../lib/contract.js';
@@ -816,7 +816,7 @@ export const agentsModule = defineModule({
             details: { reason: 'attachments_unavailable' },
           });
         }
-        const scratch = mkdtempSync(path.join(tmpdir(), 'majlis-skill-import-'));
+        const scratch = mkdtempSync(path.join(tmpdir(), 'corehub-skill-import-'));
         try {
           const landed = port.materialise(scope.id, ids, scratch);
           const missing = ids.filter((id) => !landed.some((file) => file.id === id));

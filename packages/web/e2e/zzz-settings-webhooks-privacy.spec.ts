@@ -18,7 +18,7 @@ import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 const PASSWORD = 'e2e-owner-password';
-const shots = process.env.MAJLIS_SHOTS ?? path.resolve('e2e/shots');
+const shots = process.env.COREHUB_SHOTS ?? path.resolve('e2e/shots');
 mkdirSync(shots, { recursive: true });
 const shot = (page: Page, name: string) =>
   page.screenshot({ path: path.join(shots, `${name}.png`), fullPage: true });
@@ -116,7 +116,7 @@ test('24. Webhooks: a private address needs a yes, the secret shows once, and th
     expect(endpoint.received).toHaveLength(1);
     const arrived = endpoint.received[0]!;
     expect(JSON.parse(arrived.body)).toMatchObject({ event: 'webhook.test' });
-    expect(arrived.headers['x-majlis-signature']).toBe(
+    expect(arrived.headers['x-corehub-signature']).toBe(
       `sha256=${createHmac('sha256', secret).update(arrived.body).digest('hex')}`,
     );
 

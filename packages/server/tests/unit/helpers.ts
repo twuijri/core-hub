@@ -59,7 +59,7 @@ export interface TestHubOptions extends Omit<BuildOptions, 'config'> {
 }
 
 export async function testHub(env: EnvSource = {}, options: TestHubOptions = {}): Promise<TestHub> {
-  const dataDir = mkdtempSync(path.join(tmpdir(), 'majlis-test-'));
+  const dataDir = mkdtempSync(path.join(tmpdir(), 'corehub-test-'));
   const config = loadConfig({ DATA_DIR: dataDir, PORT: '0', ...env });
   const { agents: agentOverrides, models: modelOverrides, ...build } = options;
   // The suite must say the same thing on every machine: a PATH with nothing on it, and a
@@ -166,15 +166,15 @@ export function fakeInstaller(
   const calls: string[] = [];
   return {
     calls,
-    root: '/tmp/majlis-test-agents',
-    binDirFor: (id: string) => `/tmp/majlis-test-agents/${id}/bin`,
+    root: '/tmp/corehub-test-agents',
+    binDirFor: (id: string) => `/tmp/corehub-test-agents/${id}/bin`,
     isPresent: () => false,
     async install(entry, report) {
       calls.push(`install:${entry.id}`);
       await report(50, 'downloading');
       return {
         version: '1.2.3',
-        executablePath: `/tmp/majlis-test-agents/${entry.id}/bin/${entry.binary}`,
+        executablePath: `/tmp/corehub-test-agents/${entry.id}/bin/${entry.binary}`,
       };
     },
     async uninstall(entry) {

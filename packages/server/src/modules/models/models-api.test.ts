@@ -1029,7 +1029,7 @@ describe('models: one key, every agent (ADR 0010)', () => {
 
   it('writes the key and the model into the Hermes home this hub supervises', async () => {
     const { fetchImpl } = anthropicOnly();
-    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-home-'));
     homes.push(home);
     let restarts = 0;
     const hub = await signedInHub(
@@ -1084,7 +1084,7 @@ describe('models: one key, every agent (ADR 0010)', () => {
         ? { json: { data: [{ id: 'llama-3.3-70b-versatile' }] } }
         : { status: 503, json: {} },
     );
-    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-home-'));
     homes.push(home);
     const hub = await signedInHub(
       {},
@@ -1106,7 +1106,7 @@ describe('models: one key, every agent (ADR 0010)', () => {
       // …and now the endpoint does too, prefixed so it cannot collide with one of
       // Hermes's own provider names.
       const config = readFileSync(path.join(home, 'config.yaml'), 'utf8');
-      expect(config).toContain('majlis-groq:');
+      expect(config).toContain('corehub-groq:');
       expect(config).toContain('base_url: https://api.groq.com/openai/v1');
       expect(config).toContain('key_env: GROQ_API_KEY');
 
@@ -1117,7 +1117,7 @@ describe('models: one key, every agent (ADR 0010)', () => {
         (defaults.json() as { default: { provider_id: string; model: string } }).default,
       ).toEqual({ provider_id: groq.id, model: 'llama-3.3-70b-versatile' });
       expect(config).toContain('default: llama-3.3-70b-versatile');
-      expect(config).toContain('provider: majlis-groq');
+      expect(config).toContain('provider: corehub-groq');
     } finally {
       await hub.close();
     }
@@ -1125,14 +1125,14 @@ describe('models: one key, every agent (ADR 0010)', () => {
 
   it("declares the endpoint in every Hermes profile's config too, and nothing else there", async () => {
     // A conversation runs in its workspace's own Hermes profile (ADR 0014 stage 3), which
-    // reads its own `config.yaml`: a turn that names `majlis-groq` must find it there. The
+    // reads its own `config.yaml`: a turn that names `corehub-groq` must find it there. The
     // key is not copied — it reaches every profile through the process environment.
     const groqModels = scriptedFetch((url) =>
       url.startsWith('https://api.groq.com')
         ? { json: { data: [{ id: 'llama-3.3-70b-versatile' }] } }
         : { status: 503, json: {} },
     );
-    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-home-'));
     homes.push(home);
     const design = path.join(home, 'profiles', 'design');
     mkdirSync(design, { recursive: true });
@@ -1158,7 +1158,7 @@ describe('models: one key, every agent (ADR 0010)', () => {
       await drainJobs(hub.app);
       const config = readFileSync(path.join(design, 'config.yaml'), 'utf8');
       expect(config).toContain('# design profile');
-      expect(config).toContain('majlis-groq:');
+      expect(config).toContain('corehub-groq:');
       expect(config).toContain('base_url: https://api.groq.com/openai/v1');
       expect(config).toContain('key_env: GROQ_API_KEY');
       // The profile's own model is its own; the hub names a model on every turn.
@@ -1178,7 +1178,7 @@ describe('models: one key, every agent (ADR 0010)', () => {
           ? { json: { data: [{ id: 'llama-3.3-70b-versatile' }] } }
           : { status: 503, json: {} },
     );
-    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-home-'));
     homes.push(home);
     const hub = await signedInHub(
       {},
@@ -1223,7 +1223,7 @@ describe('models: one key, every agent (ADR 0010)', () => {
         ? { json: { data: [{ id: 'qwen3-30b' }] } }
         : { status: 503, json: {} },
     );
-    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-home-'));
     homes.push(home);
     const hub = await signedInHub(
       {},
@@ -1238,13 +1238,13 @@ describe('models: one key, every agent (ADR 0010)', () => {
       await addProvider(hub, 'lmstudio', { base_url: 'http://127.0.0.1:1234/v1' });
       await drainJobs(hub.app);
       const config = readFileSync(path.join(home, 'config.yaml'), 'utf8');
-      expect(config).toContain('majlis-lmstudio:');
+      expect(config).toContain('corehub-lmstudio:');
       expect(config).toContain('base_url: http://127.0.0.1:1234/v1');
-      expect(config).toContain('provider: majlis-lmstudio');
+      expect(config).toContain('provider: corehub-lmstudio');
       expect(config).toContain('default: qwen3-30b');
       // Nothing was invented for a provider that takes no key: the variable is named in
       // the block so a key added later needs no second screen, and the file holds none.
-      expect(config).toContain('key_env: MAJLIS_PROVIDER_LMSTUDIO_API_KEY');
+      expect(config).toContain('key_env: COREHUB_PROVIDER_LMSTUDIO_API_KEY');
       // And no `.env` at all: a file holding only the marker is a file that says nothing,
       // and the next merge would append a second marker above the first variable.
       expect(() => readFileSync(path.join(home, '.env'), 'utf8')).toThrow();
@@ -1260,7 +1260,7 @@ describe('models: one key, every agent (ADR 0010)', () => {
     const mine = scriptedFetchWithAuth('https://lab.example/v1/models', () => 'sk-my-own', {
       data: [{ id: 'my-model' }],
     });
-    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-home-'));
     homes.push(home);
     const hub = await signedInHub(
       {},
@@ -1280,15 +1280,15 @@ describe('models: one key, every agent (ADR 0010)', () => {
       expect(provider.slug).toBe('custom-lab');
       await drainJobs(hub.app);
 
-      const variable = 'MAJLIS_PROVIDER_CUSTOM_LAB_API_KEY';
+      const variable = 'COREHUB_PROVIDER_CUSTOM_LAB_API_KEY';
       expect(parseEnv(readFileSync(path.join(home, '.env'), 'utf8')).get(variable)).toBe(
         'sk-my-own',
       );
       const config = readFileSync(path.join(home, 'config.yaml'), 'utf8');
-      expect(config).toContain('majlis-custom-lab:');
+      expect(config).toContain('corehub-custom-lab:');
       expect(config).toContain('base_url: https://lab.example/v1');
       expect(config).toContain(`key_env: ${variable}`);
-      expect(config).toContain('provider: majlis-custom-lab');
+      expect(config).toContain('provider: corehub-custom-lab');
       expect(config).toContain('default: my-model');
     } finally {
       await hub.close();
@@ -1299,7 +1299,7 @@ describe('models: one key, every agent (ADR 0010)', () => {
     // A restored backup, an image upgrade, a hand-edited config: the rows are right and
     // the files are not. Writing only on change meant that state could never heal.
     const { fetchImpl } = anthropicOnly();
-    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-home-'));
     homes.push(home);
     const hermes = { home: () => home, restart: () => Promise.resolve(true) };
 
@@ -1342,7 +1342,7 @@ describe('models: one key, every agent (ADR 0010)', () => {
         ? { json: { data: ids.map((id) => ({ id })) } }
         : { status: 503, json: {} },
     );
-    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-home-'));
     homes.push(home);
     const hub = await signedInHub(
       {},
@@ -1386,7 +1386,7 @@ describe('models: one key, every agent (ADR 0010)', () => {
     // Silence was the defect: the hub logged one line, wrote nothing, and the run went
     // out on a different provider's configuration.
     const eleven = scriptedFetch(() => ({ status: 503, json: {} }));
-    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-home-'));
     homes.push(home);
     const hub = await signedInHub(
       {},
@@ -1421,7 +1421,7 @@ describe('models: one key, every agent (ADR 0010)', () => {
 
   it('shows, check by check, whether the runtime actually took any of it', async () => {
     const { fetchImpl } = anthropicOnly();
-    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-home-'));
     homes.push(home);
     let startedAt: number | null = null;
     const hub = await signedInHub(
@@ -1474,7 +1474,7 @@ describe('models: one key, every agent (ADR 0010)', () => {
 
   it('waits for a turn to finish before recycling the runtime', async () => {
     const { fetchImpl } = anthropicOnly();
-    const home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-home-'));
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-home-'));
     homes.push(home);
     let restarts = 0;
     let busy = true;
@@ -1533,11 +1533,11 @@ async function workspaceIdOf(hub: TestHub & { token: string }): Promise<string> 
 }
 
 /** A gated live check: a real key, only when the owner asks for it. */
-describe.skipIf(!process.env.MAJLIS_LIVE_PROVIDER)('models: a live provider', () => {
-  it('reaches the real provider named by MAJLIS_LIVE_PROVIDER', async () => {
-    const slug = process.env.MAJLIS_LIVE_PROVIDER!;
-    const key = process.env.MAJLIS_LIVE_PROVIDER_KEY;
-    expect(key, 'MAJLIS_LIVE_PROVIDER_KEY must be set alongside MAJLIS_LIVE_PROVIDER').toBeTruthy();
+describe.skipIf(!process.env.COREHUB_LIVE_PROVIDER)('models: a live provider', () => {
+  it('reaches the real provider named by COREHUB_LIVE_PROVIDER', async () => {
+    const slug = process.env.COREHUB_LIVE_PROVIDER!;
+    const key = process.env.COREHUB_LIVE_PROVIDER_KEY;
+    expect(key, 'COREHUB_LIVE_PROVIDER_KEY must be set alongside COREHUB_LIVE_PROVIDER').toBeTruthy();
     // The real `fetch`: this is the one test in the suite that is allowed out.
     const hub = await signedInHub({}, { models: { fetchImpl: globalThis.fetch } });
     try {

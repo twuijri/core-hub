@@ -1,4 +1,4 @@
-// The HTTP side: the generated client from @majlis/contracts, wrapped so an expired web
+// The HTTP side: the generated client from @corehub/contracts, wrapped so an expired web
 // session refreshes itself once and an app token renews before it lapses. Every request the
 // CLI makes goes through `createHubClient` — no hand-typed path exists in this package.
 import {
@@ -7,7 +7,7 @@ import {
   type ClientMethod,
   type HubClient,
   type RawRequestInit,
-} from '@majlis/contracts';
+} from '@corehub/contracts';
 import type { ConfigStore, StoredSession } from './config.js';
 import { AuthError, UsageError } from './errors.js';
 import type { Language } from './i18n/index.js';

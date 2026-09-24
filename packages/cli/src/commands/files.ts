@@ -5,11 +5,11 @@
 // `FormData`, the chunks of a big file are `ArrayBuffer`s, and the download asks the
 // client for bytes rather than text.
 //
-//   majlis files upload ./report.pdf              -> the attachment id, and its facts
-//   majlis chat SESSION --message "…" --attach ./report.pdf
-//   majlis files show ID
-//   majlis files download ID --out ./here.pdf     (or `-` for stdout)
-//   majlis files delete ID
+//   corehub files upload ./report.pdf              -> the attachment id, and its facts
+//   corehub chat SESSION --message "…" --attach ./report.pdf
+//   corehub files show ID
+//   corehub files download ID --out ./here.pdf     (or `-` for stdout)
+//   corehub files delete ID
 import { createReadStream } from 'node:fs';
 import { open, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -195,7 +195,7 @@ export const filesDownloadCommand: CommandSpec = {
     const bytes = await downloadFile(auth, id);
     const target = optionString(ctx, 'out') ?? attachment.name;
     if (target === '-') {
-      // `-` writes the bytes to stdout, so `majlis files download ID --out - | …` works.
+      // `-` writes the bytes to stdout, so `corehub files download ID --out - | …` works.
       ctx.out.write(bytes.toString('binary'));
       return 0;
     }

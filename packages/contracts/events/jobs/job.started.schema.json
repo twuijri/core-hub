@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/jobs/job.started.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/jobs/job.started.schema.json",
   "title": "/rt/jobs · job.started",
   "description": "A job began. Profile-wide. Emitted by: the jobs kernel module, for every job of the workspace.",
   "type": "object",

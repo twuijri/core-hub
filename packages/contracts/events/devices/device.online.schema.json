@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/devices/device.online.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/devices/device.online.schema.json",
   "title": "/rt/devices · device.online",
   "description": "User-level. Emitted by: socket layer when the device connects to /rt/devices.",
   "type": "object",

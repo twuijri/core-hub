@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/schedules/schedule.created.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/schedules/schedule.created.schema.json",
   "title": "/rt/schedules · schedule.created",
   "description": "Profile-wide. Emitted by: schedules module.",
   "type": "object",

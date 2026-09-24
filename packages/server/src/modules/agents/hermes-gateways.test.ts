@@ -17,7 +17,7 @@ import { HermesRuntime, type SpawnedProcess, type Spawner } from './hermes-runti
 
 const dirs: string[] = [];
 function tempDir(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'majlis-gateways-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'corehub-gateways-'));
   dirs.push(dir);
   return dir;
 }
@@ -194,14 +194,14 @@ describe('a messaging gateway per profile', () => {
         prepared.push(profile);
         writeFileSync(
           path.join(home, 'config.yaml'),
-          `${TELEGRAM_ON}model:\n  provider: majlis-x\n`,
+          `${TELEGRAM_ON}model:\n  provider: corehub-x\n`,
         );
       },
     });
     await gateways.reconcile();
     await gateways.restartAll();
     expect(prepared).toEqual(['sales', 'sales']);
-    expect(spawned.every((entry) => entry.config.includes('provider: majlis-x'))).toBe(true);
+    expect(spawned.every((entry) => entry.config.includes('provider: corehub-x'))).toBe(true);
     await gateways.stopAll();
   });
 

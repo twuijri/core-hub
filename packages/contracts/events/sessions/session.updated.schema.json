@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/sessions/session.updated.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/sessions/session.updated.schema.json",
   "title": "/rt/sessions · session.updated",
   "description": "Any field of a session changed (title, pinned, archived, category, model, status, usage). Profile-wide. Emitted by: sessions module (patch, bulk patch, title generation, model change, status change).",
   "type": "object",
@@ -63,7 +63,7 @@
           "model": "claude-sonnet-4-5",
           "provider": "anthropic",
           "reasoning_effort": "medium",
-          "working_dir": "/home/agent/projects/majlis",
+          "working_dir": "/home/agent/projects/corehub",
           "pinned": true,
           "archived": false,
           "category_id": null,

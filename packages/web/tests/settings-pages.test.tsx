@@ -77,7 +77,7 @@ function hub(state: State = {}) {
     if (path.endsWith('/meta'))
       return json(
         state.meta ?? {
-          name: 'Majlis',
+          name: 'Core Hub',
           server_version: '0.1.0-alpha.6',
           contract_version: '1.0.0',
           api_versions: ['v1'],
@@ -198,13 +198,13 @@ describe('Updates', () => {
     const { fetchImpl } = hub({
       updateSettings: {
         default_channel: 'test',
-        source: { kind: 'github_release', repo: 'twuijri/majlis', token: '[stored]' },
+        source: { kind: 'github_release', repo: 'twuijri/core-hub', token: '[stored]' },
         auto_publish: true,
       },
     });
     mount(<UpdatesTab />, fetchImpl);
     await waitFor(() => expect(screen.getByTestId('updates-source-fields')).toBeTruthy());
-    expect((screen.getByLabelText('Repository') as HTMLInputElement).value).toBe('twuijri/majlis');
+    expect((screen.getByLabelText('Repository') as HTMLInputElement).value).toBe('twuijri/core-hub');
     expect(screen.getByText(/Stored\./)).toBeTruthy();
     // The field itself is empty: the hub's `[stored]` is a fact, not a value to echo.
     expect((screen.getByLabelText('Token') as HTMLInputElement).value).toBe('');

@@ -193,7 +193,7 @@ importers:
 
   packages/cli:
     dependencies:
-      '@majlis/contracts':
+      '@corehub/contracts':
         specifier: workspace:*
         version: link:../contracts
       ajv:
@@ -258,7 +258,7 @@ importers:
       '@fastify/static':
         specifier: ^10.1.4
         version: 10.1.4
-      '@majlis/contracts':
+      '@corehub/contracts':
         specifier: workspace:*
         version: link:../contracts
       ajv:
@@ -349,10 +349,10 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.3.0)
-      '@majlis/contracts':
+      '@corehub/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@majlis/ui-tokens':
+      '@corehub/ui-tokens':
         specifier: workspace:*
         version: link:../ui-tokens
       '@tanstack/react-query':

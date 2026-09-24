@@ -17,7 +17,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { makeZip } from '../../server/src/modules/agents/testing/make-zip.js';
 
 const PASSWORD = 'e2e-owner-password';
-const shots = process.env.MAJLIS_SHOTS ?? path.resolve('e2e/shots');
+const shots = process.env.COREHUB_SHOTS ?? path.resolve('e2e/shots');
 mkdirSync(shots, { recursive: true });
 
 const shot = (page: Page, name: string) =>
@@ -126,7 +126,7 @@ test('23. the agent tools ask Hermes: an MCP test, a skill pack imported, WhatsA
   await expect(qr).toHaveAttribute('data-qr', 'https://wa.me/e2e#second-code', {
     timeout: 20_000,
   });
-  await expect(page.getByTestId('channel-pair-done')).toContainText('مكتب المجلس', {
+  await expect(page.getByTestId('channel-pair-done')).toContainText('مكتب المركز', {
     timeout: 20_000,
   });
   await expect(qr).toHaveCount(0);

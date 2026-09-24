@@ -38,7 +38,7 @@ const png = Buffer.concat([
 ]);
 
 function scratch(): { dir: string; done(): void } {
-  const dir = mkdtempSync(path.join(tmpdir(), 'majlis-attach-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'corehub-attach-'));
   return { dir, done: () => rmSync(dir, { recursive: true, force: true }) };
 }
 

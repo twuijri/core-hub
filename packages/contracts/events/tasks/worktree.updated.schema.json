@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/tasks/worktree.updated.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/tasks/worktree.updated.schema.json",
   "title": "/rt/tasks · worktree.updated",
   "description": "Emitted by: tasks module (worktree jobs, git status polling while a run is active).",
   "type": "object",
@@ -61,7 +61,7 @@
       "payload": {
         "task_id": "01J8QK3ZR2W7M5N4P6T8V9X0TK",
         "worktree": {
-          "path": "/home/agent/worktrees/majlis/task-01J8QK3ZR2W7M5N4P6T8V9X0TK",
+          "path": "/home/agent/worktrees/corehub/task-01J8QK3ZR2W7M5N4P6T8V9X0TK",
           "branch": "task/settings-page",
           "base_branch": "main",
           "status": "ready",

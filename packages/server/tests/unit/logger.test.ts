@@ -18,7 +18,7 @@ describe('logger', () => {
     );
     const line = lines[0]!;
     expect(line.msg).toBe('boot');
-    expect(line.service).toBe('majlis');
+    expect(line.service).toBe('corehub');
     expect(line.password).toBe(REDACTED);
     expect((line.user as Record<string, unknown>).apiKey).toBe(REDACTED);
     expect((line.user as Record<string, unknown>).token).toBe(REDACTED);

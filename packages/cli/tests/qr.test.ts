@@ -3,7 +3,7 @@ import { qrModules, renderModules, renderQr } from '../src/qr.js';
 
 describe('qrModules', () => {
   it('produces a square matrix with the three finder patterns', () => {
-    const m = qrModules('{"type":"majlis.pairing","code":"7KQ2-M9XW"}');
+    const m = qrModules('{"type":"corehub.pairing","code":"7KQ2-M9XW"}');
     const size = m.length;
     expect(size).toBeGreaterThanOrEqual(21);
     expect((size - 21) % 4).toBe(0);
@@ -24,7 +24,7 @@ describe('qrModules', () => {
   });
 
   it('encodes Arabic text without throwing', () => {
-    expect(qrModules('مجلس').length).toBeGreaterThan(0);
+    expect(qrModules('كور هب').length).toBeGreaterThan(0);
   });
 });
 

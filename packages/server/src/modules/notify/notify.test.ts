@@ -328,7 +328,7 @@ describe('notify: webhooks', () => {
 
       expect(calls).toHaveLength(1);
       // Signed, so the receiver can verify the body instead of trusting it.
-      expect(calls[0]!.headers['x-majlis-signature']).toMatch(/^sha256=[0-9a-f]{64}$/);
+      expect(calls[0]!.headers['x-corehub-signature']).toMatch(/^sha256=[0-9a-f]{64}$/);
       expect(JSON.parse(calls[0]!.body)).toMatchObject({ event: 'webhook.test' });
 
       const after = (

@@ -29,7 +29,7 @@ import type { Readable } from 'node:stream';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
 import multipart from '@fastify/multipart';
-import { loadOpenApiDocument } from '@majlis/contracts';
+import { loadOpenApiDocument } from '@corehub/contracts';
 import { createContractIndex } from '../../lib/contract.js';
 import { clampLimit, decodeCursor, encodeCursor } from '../../lib/pagination.js';
 import { requireSqlite } from '../../lib/db.js';

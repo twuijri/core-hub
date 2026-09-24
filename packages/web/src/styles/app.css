@@ -2,7 +2,7 @@
    size is written twice. Physical properties (left/right) are forbidden — a test greps for
    them — so the same stylesheet serves Arabic (rtl) and English (ltr). */
 @import 'tailwindcss';
-@import '@majlis/ui-tokens/tokens.css';
+@import '@corehub/ui-tokens/tokens.css';
 /* The component kit's paint (packages/web/src/ui/). Imported here because Tailwind reads
    this file as the entry; the kit owns every control, this file owns the screens' layout. */
 @import './kit.css';

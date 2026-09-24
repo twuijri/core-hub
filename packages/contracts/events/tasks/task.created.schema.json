@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://majlis.dev/contracts/events/tasks/task.created.schema.json",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/tasks/task.created.schema.json",
   "title": "/rt/tasks · task.created",
   "description": "Subscribers of the project (or profile-wide when subscribed without a project). Emitted by: tasks module.",
   "type": "object",

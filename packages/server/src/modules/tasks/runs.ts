@@ -26,6 +26,7 @@
  * Not here yet (stage 2): a git worktree per task, reporting into a room, and starting
  * an `auto_start` task on its own.
  */
+import { PRODUCT } from '@corehub/contracts';
 import type { FastifyBaseLogger } from 'fastify';
 import type { ModuleDb } from '../../lib/db.js';
 import { TasksService, type Actor, type Scope, type TaskStatus } from './service.js';
@@ -85,7 +86,7 @@ const WORDS = {
       'نفّذ المهمة. وحين تنتهي اختم بملخص قصير لما فعلته وما بقي، فهذا ما يظهر على بطاقة المهمة.',
     failed: 'فشل التشغيل',
     stopped: 'أُوقف التشغيل من المحادثة',
-    restarted: 'أُعيد تشغيل المجلس أثناء تنفيذ المهمة، فلم يكتمل تشغيلها',
+    restarted: 'أُعيد تشغيل المركز أثناء تنفيذ المهمة، فلم يكتمل تشغيلها',
   },
   en: {
     checklist: 'Checklist',
@@ -303,7 +304,7 @@ export class TaskRuns {
               name: (task.assignee as { name?: string } | null)?.name ?? 'agent',
               avatar: null,
             }
-          : { kind: 'system', id: null, name: 'Majlis', avatar: null },
+          : { kind: 'system', id: null, name: PRODUCT.name, avatar: null },
     });
   }
 }

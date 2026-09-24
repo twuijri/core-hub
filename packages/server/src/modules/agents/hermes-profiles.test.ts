@@ -17,7 +17,7 @@ const idle: ProfileRunner = async () => ({ code: 0, stdout: '', stderr: '' });
 
 describe("Hermes's profiles", () => {
   it('lists what Hermes lists: valid ids, not default, not deleted, directories only', async () => {
-    home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-'));
+    home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-'));
     const root = path.join(home, 'profiles');
     for (const name of ['worker', 'design', 'default', 'Bad', 'data_team', '.deleted', 'gone']) {
       mkdirSync(path.join(root, name), { recursive: true });
@@ -31,12 +31,12 @@ describe("Hermes's profiles", () => {
   });
 
   it('lists nothing when Hermes has no named profile yet', async () => {
-    home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-'));
+    home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-'));
     expect(await createHermesProfiles({ home, run: idle }).list()).toEqual([]);
   });
 
   it("creates through Hermes, from scratch or as a copy, and says Hermes's reason when it refuses", async () => {
-    home = mkdtempSync(path.join(tmpdir(), 'majlis-hermes-'));
+    home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-'));
     const calls: string[][] = [];
     let answer = { code: 0, stdout: 'Profile created', stderr: '' };
     const profiles = createHermesProfiles({

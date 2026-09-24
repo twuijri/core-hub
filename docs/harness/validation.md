@@ -4,10 +4,10 @@
 |---|---|
 | `packages/contracts` | `pnpm contracts:lint` (OpenAPI + schemas), `pnpm contracts:generate` (all three clients regenerate with no diff left uncommitted), `pnpm test --filter contracts` |
 | `packages/server` | `pnpm typecheck`, `pnpm test --filter server`, `pnpm contract:test` (every route exercised from the generated client), `pnpm lint` |
-| `packages/cli` | `pnpm typecheck`, `pnpm test --filter @majlis/cli` (unit + the in-process integration test against the real server), `pnpm contracts:check-clients`, `pnpm i18n:check`, `pnpm lint`, `pnpm build` then `node packages/cli/dist/bin.js --help` |
-| `packages/ui-tokens` | `pnpm --filter @majlis/ui-tokens test` (WCAG AA contrast of every declared pair in both themes and over every glass level), `pnpm tokens:build` leaves `dist/` regenerated |
-| `packages/web` | `pnpm typecheck`, `pnpm test --filter @majlis/web` (navigation parity, logical CSS, i18n coverage, reducer, auth client), `pnpm contracts:check-clients`, `pnpm i18n:check`, `pnpm nav:check`, `pnpm lint`, `pnpm build`, then `pnpm web:e2e` (four Playwright journeys against the real hub — the fourth boots a second hub with no owner for first-run setup; `playwright install chromium` once) |
-| `docs/clients/navigation.json` | `pnpm nav:check` plus the web parity test (`pnpm test --filter @majlis/web`) |
+| `packages/cli` | `pnpm typecheck`, `pnpm test --filter @corehub/cli` (unit + the in-process integration test against the real server), `pnpm contracts:check-clients`, `pnpm i18n:check`, `pnpm lint`, `pnpm build` then `node packages/cli/dist/bin.js --help` |
+| `packages/ui-tokens` | `pnpm --filter @corehub/ui-tokens test` (WCAG AA contrast of every declared pair in both themes and over every glass level), `pnpm tokens:build` leaves `dist/` regenerated |
+| `packages/web` | `pnpm typecheck`, `pnpm test --filter @corehub/web` (navigation parity, logical CSS, i18n coverage, reducer, auth client), `pnpm contracts:check-clients`, `pnpm i18n:check`, `pnpm nav:check`, `pnpm lint`, `pnpm build`, then `pnpm web:e2e` (four Playwright journeys against the real hub — the fourth boots a second hub with no owner for first-run setup; `playwright install chromium` once) |
+| `docs/clients/navigation.json` | `pnpm nav:check` plus the web parity test (`pnpm test --filter @corehub/web`) |
 | a module's schema | `pnpm db:generate` produces a migration; `pnpm db:migrate` on a fresh SQLite and on PostgreSQL in CI |
 | any user text | `pnpm i18n:check` (ar/en parity, no missing keys) |
 | any code or doc file | nothing for the code map: do **not** commit `graphify-out/` — the code-map bot proposes it after merge (docs/harness/knowledge-graph.md). `pnpm graph` is for your own queries |
