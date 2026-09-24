@@ -78,6 +78,13 @@
       "when": 1790209089401,
       "tag": "0010_member_profiles_explicit",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1790261033334,
+      "tag": "0011_providers_shared",
+      "breakpoints": true
     }
   ]
 }

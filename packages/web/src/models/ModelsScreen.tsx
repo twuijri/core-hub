@@ -1,5 +1,6 @@
 /**
- * The Models screen: the providers this workspace **added**, and one way to add another.
+ * The Models screen: the providers the hub **added** — one list, shared by every profile
+ * (contract decision §34) — and one way to add another.
  *
  * Owner direction, 2026-09-22: the old screen was a grid of every provider the hub knows,
  * each with its own key box, and he found it scattered. Now the list is what he
@@ -745,6 +746,9 @@ function DefaultsTab() {
 
   const tasks = defaults.data.auxiliary.tasks;
   const assignments = defaults.data.auxiliary.assignments as Record<string, ModelRef | undefined>;
+  // Roles this profile left alone show the default profile's choice, and say so (contract
+  // decision §34). Choosing one here makes it this profile's own.
+  const inherited = new Set(defaults.data.inherited ?? []);
 
   return (
     <div className="flex flex-col gap-4">
@@ -754,6 +758,7 @@ function DefaultsTab() {
         label={t('models.defaults.chat')}
         models={models}
         value={refValue(defaults.data.default)}
+        inherited={inherited.has('default')}
         onChange={(ref) => save.mutate({ default: ref })}
       />
       {tasks.map((task) => (
@@ -763,6 +768,7 @@ function DefaultsTab() {
           label={task.label[language === 'ar' ? 'ar' : 'en']}
           models={models}
           value={refValue(assignments[task.key])}
+          inherited={inherited.has(task.key)}
           onChange={(ref) => save.mutate({ assignments: { [task.key]: ref } })}
         />
       ))}
@@ -806,12 +812,15 @@ function ModelSelect({
   label,
   models,
   value,
+  inherited = false,
   onChange,
 }: {
   id: string;
   label: string;
   models: Model[];
   value: string;
+  /** The value is the default profile's, because this profile chose none. */
+  inherited?: boolean;
   onChange(ref: ModelRef | null): void;
 }) {
   const { t } = useI18n();
@@ -838,6 +847,11 @@ function ModelSelect({
           list.map((model) => modelOption(model, refValue(model))),
         )}
       />
+      {inherited && (
+        <span className="text-xs text-muted" data-testid={`${id}-inherited`}>
+          {t('models.defaults.inherited')}
+        </span>
+      )}
     </div>
   );
 }

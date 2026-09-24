@@ -80,6 +80,13 @@ export interface PropagationState {
   hermesModel: HermesModelChoice | null;
   /** Why `hermesModel` is null, when the owner did choose a default. */
   hermesModelBlocked: string | null;
+  /**
+   * Every variable name the hub writes a key under, including those of providers it had and
+   * removed. The hub owns these names in Hermes's `.env`: one with no key any more is removed
+   * from the file (contract decision §34 — removing a provider applies everywhere). Absent,
+   * only the names of the current credentials are owned, as before.
+   */
+  ownedEnv?: string[];
 }
 
 // --------------------------------------------------------------- process agents
@@ -146,7 +153,7 @@ export interface HermesEnvPlan {
  */
 export function hermesEnvPlan(home: string, state: PropagationState): HermesEnvPlan {
   const values: Record<string, string> = {};
-  const owned = new Set<string>();
+  const owned = new Set<string>(state.ownedEnv ?? []);
   for (const credential of state.credentials) {
     for (const name of credential.hermesEnvVars) {
       owned.add(name);

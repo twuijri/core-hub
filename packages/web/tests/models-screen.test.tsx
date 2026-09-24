@@ -593,6 +593,40 @@ describe('models screen', () => {
     expect(inheriting.textContent).toContain('Not chosen');
   });
 
+  it('says the providers are shared by every profile, in both languages', async () => {
+    const { fetchImpl } = hub();
+    renderScreen(fetchImpl);
+    await waitFor(() => expect(screen.getByTestId('provider-list')).toBeTruthy());
+    expect(screen.getByText(/shared by every profile/)).toBeTruthy();
+    expect(screen.getByText(/every agent in every profile uses it/)).toBeTruthy();
+    cleanup();
+    renderScreen(hub().fetchImpl, 'ar');
+    await waitFor(() => expect(screen.getByTestId('provider-list')).toBeTruthy());
+    expect(screen.getByText(/مشتركون بين كل البروفايلات/)).toBeTruthy();
+  });
+
+  it("marks a default this profile inherited from the default profile, and only that one", async () => {
+    const { fetchImpl } = hub({
+      models: [MODEL],
+      defaults: {
+        default: { provider_id: PROVIDER_ID, model: 'claude-sonnet-4-5' },
+        fallbacks: [],
+        auxiliary: {
+          tasks: [{ key: 'coding', label: { ar: 'وكلاء البرمجة', en: 'Coding agents' } }],
+          assignments: { coding: { provider_id: PROVIDER_ID, model: 'claude-sonnet-4-5' } },
+        },
+        inherited: ['default'],
+      },
+    });
+    renderScreen(fetchImpl);
+    await waitFor(() => expect(screen.getByTestId('models-tabs')).toBeTruthy());
+    await userEvent.click(screen.getByText('Defaults'));
+    const mark = await screen.findByTestId('default-chat-inherited');
+    expect(mark.textContent).toBe('From the default profile');
+    // The coding model is this profile's own choice: nothing to say about it.
+    expect(screen.queryByTestId('default-coding-inherited')).toBeNull();
+  });
+
   it('folds the Runtime card to one line when every check passes', async () => {
     const { fetchImpl } = hub();
     const user = userEvent.setup();

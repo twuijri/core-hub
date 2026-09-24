@@ -464,7 +464,7 @@
       "tts_providers": "Text to speech"
     },
     "providers": {
-      "hint": "The providers you added. A key is typed once here; every agent uses it.",
+      "hint": "The providers you added. They are shared by every profile: a key is typed once here, and every agent in every profile uses it.",
       "empty": "No provider of this kind is configured.",
       "none": "No providers yet. Add the first one and its models arrive with it."
     },
@@ -491,9 +491,10 @@
       "confirm_remove_body": "Its key and its model list go with it, and there is no undo."
     },
     "defaults": {
-      "hint": "One chat model and one coding model. Every agent inherits them unless it is pinned to something else.",
+      "hint": "This profile's chat and coding models. Every agent here inherits them unless it is pinned to something else; a choice this profile has not made comes from the default profile.",
       "chat": "Chat",
       "none": "Not chosen",
+      "inherited": "From the default profile",
       "no_models": "No models yet. Add a provider key and the hub fetches its model list.",
       "inheriting": "Agents inheriting these",
       "inheriting_hint": "What each agent will use when a chat does not name a model."

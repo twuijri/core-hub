@@ -99,18 +99,22 @@ export function useCatalogue() {
   });
 }
 
-/** Everything the screen writes invalidates the same three reads: one rule, no drift. */
+/**
+ * Everything the screen writes invalidates the same reads: one rule, no drift. In **every**
+ * profile, not just this one: providers are the hub's (contract decision §34), and a profile
+ * that chose no model shows the default profile's, so a save here changes what the others
+ * show too.
+ */
 function useModelsMutation<TInput, TResult>(run: (input: TInput) => Promise<TResult>) {
-  const { profile } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: run,
     onSuccess: () => {
       for (const key of ['providers', 'catalogue', 'defaults', 'speech', 'runtime'] as const) {
-        void queryClient.invalidateQueries({ queryKey: ['models', key, profile] });
+        void queryClient.invalidateQueries({ queryKey: ['models', key] });
       }
       // An inherited model is shown on every agent card (ADR 0010 §4).
-      void queryClient.invalidateQueries({ queryKey: ['agents', profile] });
+      void queryClient.invalidateQueries({ queryKey: ['agents'] });
     },
   });
 }
@@ -231,7 +235,8 @@ export function useTestProvider() {
         })
       ).data as TestResult,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: modelKeys.providers(profile) });
+      // The provider is the same row in every profile (contract decision §34).
+      void queryClient.invalidateQueries({ queryKey: ['models', 'providers'] });
     },
   });
 }

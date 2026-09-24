@@ -8580,10 +8580,13 @@ paths:
     get:
       operationId: models.listProviders
       tags: [models]
-      summary: List the providers this workspace has added (the General Models tab)
+      summary: List the providers the hub has added (the General Models tab)
       description: >-
-        Only configured providers: a fresh workspace answers with an empty list and the
-        client offers "Add provider" (`models.listProviderPresets`).
+        Only configured providers: a fresh hub answers with an empty list and the client
+        offers "Add provider" (`models.listProviderPresets`). Providers, their keys and
+        their models belong to the hub, not to a profile (decision §34): every profile
+        answers with the same rows, stored under the `default` profile, so adding,
+        editing or removing one in any profile applies to all of them.
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: kind
@@ -8658,7 +8661,9 @@ paths:
         The one way a provider row comes into existence: `models.listProviders` returns
         what was added here, not the bundled catalogue. With `preset` the hub also creates
         the sibling rows of the same credential family (OpenAI chat, dictation and speech
-        are three rows and one key, ADR 0010).
+        are three rows and one key, ADR 0010). The provider is the hub's: added from any
+        profile, every profile has it (decision §34), and adding the same preset again
+        from another profile is `409 conflict` (`provider_exists`).
       parameters:
         - $ref: '#/components/parameters/Profile'
       x-roles: [owner, admin]
@@ -9259,7 +9264,12 @@ paths:
     get:
       operationId: models.getDefaults
       tags: [models]
-      summary: The workspace default model, fallback chain and auxiliary-role assignments
+      summary: The profile's default model, fallback chain and auxiliary-role assignments
+      description: >-
+        The choices in effect for the profile in `X-Hub-Profile`. A role the profile chose
+        is its own; a role it left alone is the `default` profile's, and `inherited` names
+        it (decision §34). Saving a role in a profile makes it that profile's own; saving
+        `null` goes back to inheriting.
       parameters:
         - $ref: '#/components/parameters/Profile'
       x-rt-events: []
@@ -15881,6 +15891,10 @@ components:
           items:
             type: string
     Provider:
+      description: >-
+        A provider the hub added. It belongs to the hub, not to a profile (decision §34):
+        every profile lists the same row, and `profile` is always `default`, the profile
+        it is stored under.
       allOf:
         - $ref: '#/components/schemas/Scoped'
         - type: object
@@ -16146,6 +16160,14 @@ components:
       type: object
       required: [default, fallbacks, auxiliary]
       properties:
+        inherited:
+          type: array
+          description: >-
+            The roles whose value is the `default` profile's, because this profile chose
+            none (decision §34): `default` for the chat model (with its fallbacks), else an
+            auxiliary task key. Always empty in the `default` profile.
+          items:
+            type: string
         default:
           oneOf:
             - $ref: '#/components/schemas/ModelRef'

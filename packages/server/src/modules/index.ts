@@ -1,4 +1,5 @@
 // The module list the app composes, in mount order. Every module in ARCHITECTURE §Modules is here.
+import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { HubModule } from '../lib/module.js';
 import { requireSqlite } from '../lib/db.js';
@@ -51,7 +52,7 @@ import {
   knowledgeModule,
   registerAttachmentReferences,
 } from './knowledge/index.js';
-import { modelsModule } from './models/index.js';
+import { modelsModule, modelsServiceFor } from './models/index.js';
 import { devicesModule } from './devices/index.js';
 import { createNotifier, notifyModule } from './notify/index.js';
 import { updatesModule } from './updates/index.js';
@@ -198,6 +199,9 @@ registerProfileMirror((app) => {
       } catch (error) {
         throw error instanceof HermesProfileError ? new ProfileMirrorError(error.message) : error;
       }
+      // The hub's providers reach the new profile at once — and a copy of `default` does
+      // not keep a copy of its keys in its own folder (contract decision §34).
+      modelsServiceFor(app).prepareProfile(path.join(home, 'profiles', name));
     },
   };
 });
