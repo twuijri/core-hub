@@ -29,18 +29,13 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 export const taskKeys = {
   projects: (profile: string) => ['projects', profile] as const,
   /**
-   * The board is global, so the key is the **filter**, not the workspace. Switching the
-   * workspace chip no longer changes what the board shows — one page holds every
-   * workspace (owner decision, 2026-09-23) — so the profile is only in the key when it
-   * is the filter the person chose.
+   * The board is global, so the key is the **filter**, never a profile: it holds every
+   * profile the person may enter, with no profile filter (ADR 0016, owner 2026-09-24:
+   * «الكرون جوب والمهام المفروض تطلع كل البروفايلات بدون تصنيف»). Switching the top
+   * selector does not change what the board shows.
    */
   board: (filter: BoardFilter) =>
-    [
-      'task-columns',
-      filter.profile ?? 'all',
-      filter.projectId ?? 'all',
-      filter.agentId ?? 'all',
-    ] as const,
+    ['task-columns', filter.projectId ?? 'all', filter.agentId ?? 'all'] as const,
 };
 
 export interface Project {
@@ -68,7 +63,7 @@ export interface Task {
   due_at: string | null;
   /** Set when the card reflects one on an agent's own board (Hermes's kanban). */
   external?: { source: 'hermes'; id: string } | null;
-  /** The workspace the task is in; the board holds every workspace. */
+  /** The profile the task is in; the board holds every profile. */
   profile?: string;
   /** The conversation the agent works the task in, once it has been started. */
   session_id?: string | null;
@@ -131,8 +126,8 @@ export function useProjects() {
   });
 }
 
+/** What narrows the board. Never a profile: the board is every profile (ADR 0016). */
 export interface BoardFilter {
-  profile?: string | undefined;
   projectId?: string | undefined;
   agentId?: string | undefined;
 }
@@ -143,8 +138,8 @@ export const RUNNING_REFRESH_MS = 4_000;
 export function useBoard(filter: BoardFilter) {
   const { client, session } = useAuth();
   return useQuery({
-    // A run ends on its own time. The realtime events refresh the board for the workspace
-    // in the header; a card from another workspace is caught by this, and only while
+    // A run ends on its own time. The realtime events of every profile refresh the board
+    // (`/rt/tasks` with `profiles: 'all'`); this is the net under them, and only while
     // something is actually running.
     refetchInterval: (query) =>
       query.state.data?.columns.some((column) => column.status === 'running' && column.count > 0)
@@ -155,7 +150,8 @@ export function useBoard(filter: BoardFilter) {
       (
         await client.request('get', '/task-columns', {
           query: {
-            ...(filter.profile ? { profile: filter.profile } : {}),
+            // Every profile the person may enter — the hub decides which (DECISIONS §30).
+            profiles: 'all',
             ...(filter.projectId ? { project_id: filter.projectId } : {}),
             ...(filter.agentId ? { agent_id: filter.agentId } : {}),
           },
@@ -184,7 +180,7 @@ export function useArchive(filter: BoardFilter) {
         await client.request('get', '/task-columns', {
           query: {
             include_archived: true,
-            ...(filter.profile ? { profile: filter.profile } : {}),
+            profiles: 'all',
             ...(filter.projectId ? { project_id: filter.projectId } : {}),
             ...(filter.agentId ? { agent_id: filter.agentId } : {}),
           },
@@ -223,13 +219,19 @@ export function useCreateProject() {
   });
 }
 
+/**
+ * A new task is made in the profile the person is in — the top selector — and nowhere else
+ * (ADR 0016): the board shows every profile, but only one control decides where things are
+ * made.
+ */
 export function useCreateTask() {
-  const { client } = useAuth();
+  const { client, homeProfile } = useAuth();
   const refresh = useInvalidateBoard();
   return useMutation({
     mutationFn: async (body: { title: string; status?: 'triage' | 'todo' | 'ready' }) =>
       (
         await client.request('post', '/tasks', {
+          ...inWorkspace(homeProfile),
           // `auto_start` and `status` carry defaults in the contract and are required on
           // the wire, so the client sends them rather than relying on the server's.
           // No `project_id`: the hub puts it in the workspace's own project, so writing
@@ -414,7 +416,8 @@ export function useUnassignTask() {
 
 /**
  * The board follows `/rt/tasks`: a run that ends moves its card on the hub, and the board
- * redraws when the hub says so rather than when somebody reloads.
+ * redraws when the hub says so rather than when somebody reloads. The socket hears every
+ * profile the person may enter (`profiles: 'all'`, realtime/context.tsx), as the board shows.
  */
 export function useTaskEvents(): void {
   const realtime = useRealtime();

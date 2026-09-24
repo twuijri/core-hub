@@ -16,6 +16,9 @@ import { NAMESPACES, connectNamespace, type NamespaceName } from './socket.js';
 
 export type ConnectionState = 'connected' | 'connecting' | 'offline';
 
+/** The namespaces behind lists that gather every profile the person may enter. */
+const GATHERED: ReadonlySet<NamespaceName> = new Set(['sessions', 'tasks', 'schedules']);
+
 interface RealtimeValue {
   socket(name: NamespaceName): Socket;
   state: ConnectionState;
@@ -87,9 +90,10 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           namespace: NAMESPACES[name],
           token: () => tokenRef.current,
           profile: () => profileRef.current,
-          // The sessions socket hears every profile the lists gather (ADR 0016); the
-          // others stay with the profile the person is in.
-          ...(name === 'sessions' ? { profiles: 'all' as const } : {}),
+          // The lists that gather every profile hear every profile (ADR 0016): the chats
+          // list, the Tasks board and the Schedules page (DECISIONS §30). The others stay
+          // with the profile the person is in. Which profiles "all" is, the hub decides.
+          ...(GATHERED.has(name) ? { profiles: 'all' as const } : {}),
           // The hub refuses a handshake whose token expired (every namespace needs a valid
           // one). A newer token may be here already — the HTTP client refreshes on its
           // own — then just come back; otherwise ask for one, once per token: the effect
