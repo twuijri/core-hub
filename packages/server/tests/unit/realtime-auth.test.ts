@@ -279,6 +279,28 @@ describe('realtime: following a session', () => {
   });
 });
 
+describe('realtime: following across profiles (ADR 0016)', () => {
+  it('follows a session in another profile the caller may enter', async () => {
+    const socket = await admitted(REALTIME_NAMESPACES.sessions, {
+      token: hub.token,
+      profile: 'alpha',
+      profiles: 'all',
+    });
+    expect(await subscribe(socket, sessionIn.beta)).toMatchObject({ ok: true });
+  });
+
+  it('never reaches past what the member may enter, even when asking for every profile', async () => {
+    const mem = await member('everywhere', ['alpha']);
+    const socket = await admitted(REALTIME_NAMESPACES.sessions, {
+      token: mem.token,
+      profile: 'alpha',
+      profiles: 'all',
+    });
+    expect(await subscribe(socket, sessionIn.beta)).toMatchObject({ ok: false, code: 'not_found' });
+    expect(await subscribe(socket, sessionIn.alpha)).toMatchObject({ ok: true });
+  });
+});
+
 describe('realtime: access taken away', () => {
   it('drops a disabled member at once, and refuses them on the way back', async () => {
     const mem = await member('disabled', ['alpha']);

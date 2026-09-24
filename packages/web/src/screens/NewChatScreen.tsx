@@ -6,26 +6,36 @@
  */
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
+import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { AgentChips, enabledAgents, installedAgents } from '../chat/AgentChips.js';
 import { Composer } from '../chat/Composer.js';
 import { putFirstMessage } from '../chat/firstMessage.js';
+import { chatHref } from '../chat/anchor.js';
 import { starterSuggestions } from '../chat/starters.js';
 import { useApprovalMode, useComposerModels } from '../chat/useComposerControls.js';
 import { useRecentModels } from '../models/useModelPicker.js';
 import { WorkingDirPicker } from '../chat/WorkingDirPicker.js';
-import { useAgents, useCreateSession } from '../hub/queries.js';
+import { useAgents, useCreateSession, useProfiles } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import type { ContentBlock } from '../types.js';
 import { Notice } from '../ui/Notice.js';
+import { Select } from '../ui/Select.js';
+import { useProfileInLink } from '../shell/profileSelector.js';
 
 export function NewChatScreen() {
   const { t, language } = useI18n();
   const agents = useAgents();
   const create = useCreateSession();
   const navigate = useNavigate();
+  // Where this chat is made (ADR 0016): the person's own profile — the last one they
+  // chose, else their default — never "all". Said on the screen, and changeable here,
+  // so the lists showing every profile never make it a guess.
+  const { homeProfile, setProfile } = useAuth();
+  const profiles = useProfiles().data ?? [];
+  const inLink = useProfileInLink();
   const [params] = useSearchParams();
   const title = t(termKey('new_chat'));
 
@@ -77,11 +87,11 @@ export function NewChatScreen() {
       working_dir: workingDir,
     });
     putFirstMessage(session.id, blocks);
-    navigate(routeOf('chat').replace(':sessionId?', session.id));
+    navigate(chatHref(session.id, null, undefined, inLink(session.profile)));
   };
 
   return (
-    <AppShell title={title}>
+    <AppShell title={title} profiles="lists">
       {/* The same column an empty chat uses (`.chat-flow`), so nothing shifts when the
           first message turns this draft into a session. */}
       <div className="chat-flow" data-empty="true" data-testid="new-chat">
@@ -89,6 +99,18 @@ export function NewChatScreen() {
         <div className="chat-lede">
           <h1 className="text-xl font-semibold">{t('new_chat.greeting')}</h1>
           <p className="max-w-prose text-sm text-muted">{t('new_chat.lede')}</p>
+          {profiles.length > 1 && (
+            <span className="inline-flex items-center gap-1 text-xs">
+              <span className="text-muted">{t('new_chat.in_profile')}</span>
+              <Select
+                value={homeProfile}
+                onValueChange={(next) => next && setProfile(next)}
+                options={profiles.map((p) => ({ value: p.slug, label: p.name }))}
+                label={t('new_chat.in_profile')}
+                testId="new-chat-profile"
+              />
+            </span>
+          )}
           <WorkingDirPicker value={workingDir} onChange={setWorkingDir} />
           {noneInstalled && (
             <Notice tone="warning">

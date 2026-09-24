@@ -4,6 +4,7 @@ import {
   useContext,
   useMemo,
   useRef,
+  useState,
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
@@ -17,9 +18,24 @@ export interface AuthValue {
   baseUrl: string;
   session: StoredSession | null;
   user: StoredUser | null;
-  /** The workspace scope every request and socket carries (ADR 0005). */
+  /**
+   * The workspace scope every request carries (ADR 0005). Inside a `ProfileScope` it is
+   * that item's profile (a conversation from another profile); everywhere else it is
+   * `homeProfile`.
+   */
   profile: string;
+  /**
+   * The concrete profile the person is in: where a new chat or task is created and which
+   * profile a configuration page edits (ADR 0016). Never changed by opening an item.
+   */
+  homeProfile: string;
   setProfile(slug: string): void;
+  /**
+   * Lists gather every profile the person may enter (ADR 0016). On by default every time
+   * the app is entered; kept in memory only, so a reload starts on "All profiles" again.
+   */
+  allProfiles: boolean;
+  setAllProfiles(on: boolean): void;
   client: HubClient;
   anonymous: HubClient;
   signIn(username: string, password: string): Promise<StoredSession>;
@@ -39,6 +55,8 @@ export interface SetupInput {
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
+/** The provider's own value, which no `ProfileScope` overrides (`ChromeScope`). */
+const RootAuthContext = createContext<AuthValue | null>(null);
 
 export function AuthProvider({
   children,
@@ -147,6 +165,10 @@ export function AuthProvider({
     }
   }, [bundle, store, queryClient]);
 
+  // Every entry into the app starts on "All profiles" (owner, 2026-09-24: «كل البروفايلات
+  // افتراضيا»), not on the last profile the lists were narrowed to.
+  const [allProfiles, setAllProfiles] = useState(true);
+
   const setProfile = useCallback(
     (slug: string) => {
       const current = store.read();
@@ -164,7 +186,10 @@ export function AuthProvider({
       session,
       user: session?.user ?? null,
       profile: session?.profile ?? 'default',
+      homeProfile: session?.profile ?? 'default',
       setProfile,
+      allProfiles,
+      setAllProfiles,
       client: bundle.client,
       anonymous: bundle.anonymous,
       signIn,
@@ -172,9 +197,48 @@ export function AuthProvider({
       signOut,
       refresh: bundle.refresh,
     }),
-    [baseUrl, session, setProfile, bundle, signIn, completeSetup, signOut],
+    [baseUrl, session, setProfile, allProfiles, bundle, signIn, completeSetup, signOut],
   );
+  return (
+    <RootAuthContext.Provider value={value}>
+      <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+    </RootAuthContext.Provider>
+  );
+}
+
+/**
+ * Everything inside works in `profile` — one conversation from another profile — without
+ * touching the person's own profile or the top selector (ADR 0016). Each request carries
+ * `X-Hub-Profile: <profile>` unless it names one itself, and every query key built from
+ * `useAuth().profile` is that profile's, so its models, agents and settings are its own.
+ */
+export function ProfileScope({ profile, children }: { profile: string; children: ReactNode }) {
+  const parent = useAuth();
+  const value = useMemo<AuthValue>(() => {
+    if (profile === parent.profile) return parent;
+    const raw: HubClient['raw'] = (method, path, init) =>
+      parent.client.raw(method, path, {
+        ...init,
+        headers: { 'X-Hub-Profile': profile, ...init?.headers },
+      });
+    return {
+      ...parent,
+      profile,
+      client: { raw, request: raw as unknown as HubClient['request'] },
+    };
+  }, [parent, profile]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+/**
+ * The frame around a page — sidebar, top bar — always speaks for the person, never for the
+ * item a page has scoped itself to: the chats list and the selector stay where they were
+ * while a conversation from another profile is open.
+ */
+export function ChromeScope({ children }: { children: ReactNode }) {
+  const root = useContext(RootAuthContext);
+  if (!root) return <>{children}</>;
+  return <AuthContext.Provider value={root}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthValue {
