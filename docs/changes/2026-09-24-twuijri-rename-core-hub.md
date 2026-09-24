@@ -143,7 +143,14 @@ $ docker run … -e COREHUB_VERSION= -e MAJLIS_VERSION=9.9.9-legacy core-hub:ren
 ```
 - `pnpm test` من الجذر مرّة واحدة: قُتل خادم الاختبارات (`Killed`) في منتصفه؛ أُعيد كل حزمة وحدها
   (النواتج أعلاه). `pnpm contracts:generate` للعملاء الأصليين يحتاج Java، غير موجودة هنا: يشغّله CI.
-- لصاقات OCI في `Dockerfile` أُضيفت **بعد** البناء المحلّي؛ بناؤها يثبت في CI.
+- لصاقات OCI في `Dockerfile` أُضيفت **بعد** البناء المحلّي؛ بناها CI (المهمة أدناه).
+- **CI على #99** (قبل دمج #98): كل الفحوص خضراء —
+  `Lint, typecheck, contracts, tests, build` pass (15m40s) · `Web smoke journeys` pass (5m3s) ·
+  `Docker image builds and answers /health` pass (3m40s) · `db:generate + db:migrate` pass ·
+  `PR adds or updates a change record` pass · `PR leaves graphify-out/ to the code-map bot` pass.
+- **بعد دمج #98** (رخصة Apache-2.0): تعارضان حُلّا بإبقاء سطور الرخصة من #98 كما هي
+  (`"license": "Apache-2.0"` في `package.json` و`info.license` في العقد) مع وصف Core Hub. محليًا بعده:
+  `lint` و`typecheck` و`contracts:lint` و`contract:test` و`change-record:check`، ثم CI من جديد.
 - **الاختبارات الجديدة تسقط على الكود القديم**: بإيقاف `migrateLegacyProviders` سقط اختباران في
   `propagation.test.ts`، وبإيقاف امتلاك `MAJLIS_PROVIDER_*` سقط اختبار الإقلاع في `models-api.test.ts`
   (`expected '# managed by Core Hub — …' not to contain 'MAJLIS'`).
