@@ -43,13 +43,17 @@ export interface NavigationManifest {
   segments: string[];
   footer: string[];
   settingsTabs: string[];
-  /** Pages configured once — agents, models, devices, knowledge — inside Settings. */
+  /** Pages configured once — models, devices, knowledge — inside Settings. */
   settingsManagement: string[];
   settingsTools: string[];
   agentLevel: string[];
   secondaryEntries: Record<string, string[]>;
   preAuth: Record<string, PreAuthScreen>;
   surfaceRoutes: Record<string, Record<string, string>>;
+  /** What an agent's pages put in the sidebar: a back row (a term) to `returnsTo`. */
+  agentShell: { back: string; returnsTo: string };
+  /** Old path prefixes each surface still redirects, old → new; the rest of the path is kept. */
+  legacyRoutes: Record<string, Record<string, string>>;
 }
 
 export const navigation = manifest as unknown as NavigationManifest;
@@ -110,4 +114,46 @@ export function agentMenu(capabilities: readonly string[], role: string): Destin
   return visibleEntries(navigation.agentLevel, role).filter(
     (d) => !!d.capability && capabilities.includes(d.capability),
   );
+}
+
+/** Whether this role may open a destination at all (the router refuses what the menu hides). */
+export function canOpen(id: string, role: string): boolean {
+  const destination = destinationsById.get(id);
+  return !!destination && roleAllows(destination, role);
+}
+
+/** The URL of an agent-level page for one agent. */
+export function agentRoute(id: string, agentId: string): string {
+  return routeOf(id).replace(':agentId', encodeURIComponent(agentId));
+}
+
+/**
+ * Which agent page this path is — `{ id, agentId }` — or `null` outside the agent level. The
+ * sidebar reads it to become that agent's list (NAVIGATION §4).
+ */
+export function agentPageFromPath(pathname: string): { id: string; agentId: string } | null {
+  for (const id of navigation.agentLevel) {
+    const route = navigation.surfaceRoutes.web?.[id];
+    if (!route) continue;
+    const [before, after] = route.split(':agentId');
+    if (before === undefined || after === undefined || !pathname.startsWith(before)) continue;
+    const rest = pathname.slice(before.length);
+    if (!rest.endsWith(after)) continue;
+    const agentId = rest.slice(0, rest.length - after.length);
+    if (agentId && !agentId.includes('/')) return { id, agentId: decodeURIComponent(agentId) };
+  }
+  return null;
+}
+
+/**
+ * Where an old URL lives now (`legacyRoutes.web`), or `null` when the path is not an old one.
+ * `/settings/agents/01J…/memory` → `/agents/01J…/memory`.
+ */
+export function legacyRedirect(pathname: string): string | null {
+  for (const [from, to] of Object.entries(navigation.legacyRoutes?.web ?? {})) {
+    if (from.startsWith('$')) continue;
+    if (pathname === from) return to;
+    if (pathname.startsWith(`${from}/`)) return `${to}${pathname.slice(from.length)}`;
+  }
+  return null;
 }

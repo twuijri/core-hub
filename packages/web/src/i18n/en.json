@@ -6,7 +6,7 @@
     "new_chat": "New chat",
     "search": "Search",
     "device_connections": "Device connections",
-    "agent_manager": "Agent Manager",
+    "agent_manager": "Agents",
     "models": "Models",
     "knowledge": "Knowledge",
     "chat": "Chat",
@@ -44,7 +44,8 @@
     "agent_skills": "Skills",
     "agent_mcp": "MCP",
     "agent_memory": "Memory",
-    "agent_channels": "Channels"
+    "agent_channels": "Channels",
+    "back_to_agents": "Back to agents"
   },
   "common": {
     "loading": "Loading…",
@@ -183,7 +184,7 @@
   },
   "new_chat": {
     "pick_agent": "Pick the agent this chat talks to. The list is the hub's registry.",
-    "no_agents": "No agent is enabled on this hub. Install or enable one in Agent Manager.",
+    "no_agents": "No agent is enabled on this hub. Install or enable one on the Agents page.",
     "greeting": "What shall we start with?",
     "lede": "Pick an installed agent from the chips, choose a working folder if you like, then type.",
     "in_profile": "New chat in {name}. To start it in another profile, switch the profile at the top of the page.",
@@ -366,7 +367,10 @@
       "api_unavailable": "Hermes's API did not answer: {message}",
       "profile_absent": "Hermes has no profile named {profile} yet, so it has no files to show here.",
       "runtime_absent": "Hermes is not installed or running here, so it has no folder to read."
-    }
+    },
+    "sections": "{name} sections",
+    "open_section": "{section} · {name}",
+    "not_found": "No agent with this id in this profile."
   },
   "jobs": {
     "status": {

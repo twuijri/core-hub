@@ -1,5 +1,10 @@
-// The Agent Manager: one card per agent in the catalog, with its health, its capabilities
-// and the one action it can take right now.
+// The Agents page: one card per agent in the catalog, with its health, its capabilities
+// and the one action it can take right now. A main-sidebar entry above Tasks since the owner's
+// decision of 2026-09-24 («قراري اننا ندخل الايجنتات داخل الاعدادات كان خطا بالتصميم»).
+//
+// The card is also the way into the agent: each chip under it (Skills, MCP, Memory, …) and its
+// Settings button open that page of the agent directly, and inside it the sidebar becomes the
+// agent's own list (`AgentNav.tsx`). The capability tags at the top only inform.
 //
 // Assembled from the kit (`src/ui/`): the card, its header with the avatar, the status
 // badge, the capability badges, the buttons and the empty state all come from there, so
@@ -12,7 +17,7 @@ import { useAgents } from '../hub/queries.js';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
-import { agentMenu, routeOf, termKey } from '../navigation/manifest.js';
+import { agentRoute, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import type { Agent, Job } from '../types.js';
 import {
@@ -31,7 +36,8 @@ import {
   SkeletonGroup,
   type BadgeTone,
 } from '../ui/index.js';
-import { IconAgents } from '../ui/icons.js';
+import { IconAgents, IconArrowEnd } from '../ui/icons.js';
+import { agentSections, configurable } from './sections.js';
 import { useJobs } from './useJobs.js';
 
 /** A capability's label, falling back to the raw name the catalog declared. */
@@ -90,7 +96,7 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
   const job = jobId ? jobs[jobId] : undefined;
   const running = job ? job.status === 'queued' || job.status === 'running' : false;
   const managed = agent.install.source === 'managed' || agent.install.source === 'none';
-  const installed = agent.status !== 'not_installed' && agent.install.source !== 'none';
+  const installed = configurable(agent);
 
   const act = async (kind: 'install' | 'uninstall' | 'restart') => {
     setError(null);
@@ -108,7 +114,10 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
       setError(err);
     }
   };
-  const menu = agentMenu(agent.capabilities, user?.role ?? 'member');
+  // The card's chips: every agent page but Settings, which is the button in the footer.
+  const menu = agentSections(agent, user?.role ?? 'member').filter(
+    (d) => d.id !== 'agent_settings',
+  );
 
   return (
     <Card
@@ -131,7 +140,8 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
       {agent.limited && <Notice tone="warning">{t('agents.limited')}</Notice>}
       {agent.runtime.error && <Notice tone="danger">{agent.runtime.error}</Notice>}
       {agent.install.error && <Notice tone="danger">{agent.install.error}</Notice>}
-      <ul className="flex flex-wrap gap-1">
+      {/* What the agent can do — information, not a way anywhere. */}
+      <ul className="flex flex-wrap gap-1" data-testid="agent-capabilities">
         {agent.capabilities.map((c) => (
           <li key={c}>
             <Badge>{capabilityLabel(t, c)}</Badge>
@@ -177,9 +187,13 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
             the button a person already came for (owner, 2026-09-22). */}
         {installed && (
           <Link
-            to={routeOf('agent_settings').replace(':agentId', agent.id)}
+            to={agentRoute('agent_settings', agent.id)}
             className={buttonClass('secondary', 'md')}
             data-testid="agent-settings-link"
+            aria-label={t('agents.open_section', {
+              section: t(termKey('agent_settings')),
+              name: agent.name,
+            })}
           >
             <span className="mj-btn-label">{t('agents.settings')}</span>
           </Link>
@@ -198,14 +212,21 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
             className="flex flex-wrap gap-1"
             data-testid="agent-menu"
           >
+            {/* Chips that go somewhere look it: an outline, the accent on hover, an arrow
+                toward the page, and a name that says whose page it is. */}
             {menu.map((d) => (
               <Link
                 key={d.id}
-                to={routeOf(d.id).replace(':agentId', agent.id)}
+                to={agentRoute(d.id, agent.id)}
                 className="agent-menu-link"
                 data-nav-id={d.id}
+                aria-label={t('agents.open_section', {
+                  section: t(termKey(d.id)),
+                  name: agent.name,
+                })}
               >
-                {t(termKey(d.id))}
+                <span>{t(termKey(d.id))}</span>
+                <IconArrowEnd size={12} />
               </Link>
             ))}
           </nav>

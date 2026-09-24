@@ -19,9 +19,10 @@
 import { useMemo, useState } from 'react';
 import { NavLink, useSearchParams } from 'react-router';
 import { describeError } from '../auth/client.js';
+import { useAuth } from '../auth/context.js';
 import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
-import { navigation, routeOf, termKey } from '../navigation/manifest.js';
+import { canOpen, navigation, routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import {
   AlertDialog,
@@ -728,6 +729,9 @@ function DefaultsTab() {
   const providers = useProviders();
   const agents = useAgents();
   const save = useSaveDefaults();
+  const { user } = useAuth();
+  // A member sees the names; only whoever may open the Agents page gets a link to it.
+  const canManage = canOpen('agent_manager', user?.role ?? 'member');
 
   if (defaults.isPending || catalogue.isPending)
     return (
@@ -782,9 +786,13 @@ function DefaultsTab() {
         <ul className="flex flex-col gap-1 text-sm" data-testid="inheriting-agents">
           {(agents.data ?? []).map((agent: Agent) => (
             <li key={agent.id} className="flex flex-wrap items-center gap-2">
-              <NavLink to={routeOf('agent_manager')} className="link underline" dir="auto">
-                {agent.name}
-              </NavLink>
+              {canManage ? (
+                <NavLink to={routeOf('agent_manager')} className="link underline" dir="auto">
+                  {agent.name}
+                </NavLink>
+              ) : (
+                <span dir="auto">{agent.name}</span>
+              )}
               <span dir="ltr">
                 <Badge tone={agent.default_model ? 'accent' : 'neutral'}>
                   {agent.default_model

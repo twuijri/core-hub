@@ -183,21 +183,29 @@
   transition-timing-function: var(--mj-motion-ease);
   transition-property: inline-size;
 }
+/* A chip that opens one of the agent's pages. It must not read as the capability tags above
+   it, which only inform: an outline, the accent's text, an arrow toward the page, and the
+   accent's soft fill under the pointer. */
 .agent-menu-link {
   display: inline-flex;
   align-items: center;
-  padding: 1px var(--mj-space-2);
+  gap: var(--mj-space-1);
+  padding: 2px var(--mj-space-2);
+  border: 1px solid var(--mj-color-border-strong);
   border-radius: var(--mj-radius-full);
-  background: var(--mj-color-surface-2);
-  color: var(--mj-color-text-muted);
+  background: var(--mj-color-surface);
+  color: var(--mj-color-accent);
   font-size: var(--mj-font-size-xs);
+  font-weight: 500;
+  cursor: pointer;
   transition-duration: var(--mj-motion-fast);
   transition-timing-function: var(--mj-motion-ease);
-  transition-property: background-color, color;
+  transition-property: background-color, color, border-color;
 }
 .agent-menu-link:hover {
-  background: var(--mj-color-surface-3);
-  color: var(--mj-color-text);
+  border-color: var(--mj-color-accent);
+  background: var(--mj-color-accent-soft);
+  color: var(--mj-color-accent-soft-text);
 }
 
 /* --------------------------------------------------------------------- models */

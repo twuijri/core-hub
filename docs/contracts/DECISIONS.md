@@ -571,6 +571,33 @@ Rejected: a profile filter on either page (the owner's words above); a new globa
 beside `tasks.listTasks` (the same reason as §28); changing the default of the two global
 lists to "the header's profile" (it would silently narrow every existing caller).
 
+## 33. An agent's pages are addressed by the agent's id; the contract does not move with the menu
+
+Owner, 2026-09-24: «قراري اننا ندخل الايجنتات داخل الاعدادات كان خطا بالتصميم — تطلع فوق
+Tasks في الصفحة الرئيسية». The Agents page leaves Settings for the main sidebar, above Tasks,
+and an agent's pages carry the agent's own list (`docs/clients/NAVIGATION.md` §4). This is a
+client decision; what it asks of the contract is recorded here so no client reads more into it.
+
+- **No operation changes.** The Agents page is `agents.list`; each agent page is the operation
+  it already was (`agents.listSkills`, `agents.listMcpServers`, `agents.listMemory`,
+  `agents.listChannels`, `agents.getSettings`, …), addressed by `agent_id`. A client's own
+  address for a page (`/agents/{agent_id}/memory` on the web) carries the same id and nothing
+  the hub has to know about.
+- **Which pages an agent has is the registry's answer, not the client's.** The pages come from
+  the agent's `capabilities`; Settings is there for every installed agent, because every
+  adapter has a settings descriptor (ADR 0002). `Agent.sections` stays as declared; the clients
+  do not read it for this, so there is one rule and not two.
+- **An agent page is scoped like any other call**: the person's `X-Hub-Profile`. Skills, MCP,
+  memory and channels are per profile, so every client keeps the profile selector visible on
+  these pages — the header decides which profile's tools are being edited.
+- **Owners and admins, as before.** The operations keep their `x-roles` unchanged. Clients hide
+  the entry from members and send a member who types the address back home; that is a menu
+  rule, and the hub's own `x-roles` stay the refusal that counts.
+
+Rejected: a new `agents.navigation` operation that tells clients which rows to draw (the
+capabilities already say it), and moving `agent_id` out of the path for a slug (a slug can be
+renamed; the id cannot).
+
 ## 34. Providers, keys and models are the hub's; the model choice is the profile's
 
 ADR 0010 said a provider is added **once** and every agent inherits it. The contract still read

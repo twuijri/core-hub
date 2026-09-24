@@ -128,10 +128,10 @@ test.describe('web smoke journeys', () => {
     expect(Number(await separator.getAttribute('aria-valuenow'))).toBeGreaterThan(before);
     await page.screenshot({ path: path.join(shots, 'chat-pane-ar-light.png'), fullPage: true });
 
-    // The sidebar is slim: the rail is New chat · Search · Tasks · Schedules, and the
-    // segment row is Chat · Rooms only. Both belong to the chat list, so they are checked
+    // The sidebar is slim: the rail is New chat · Search · Agents · Tasks · Schedules (Agents
+    // above Tasks since 2026-09-24), and the segment row is Chat · Rooms only. Both belong to the chat list, so they are checked
     // here, before Settings replaces the list with its own.
-    await expect(page.getByTestId('rail').getByRole('link')).toHaveCount(4);
+    await expect(page.getByTestId('rail').getByRole('link')).toHaveCount(5);
     await expect(page.getByTestId('segments').getByRole('radio')).toHaveCount(2);
     await expect(page.getByTestId('segments')).not.toContainText('السجل');
 
@@ -140,7 +140,8 @@ test.describe('web smoke journeys', () => {
     await page.getByRole('link', { name: 'الإعدادات' }).click();
     // Inside Settings the sidebar *is* the settings list (owner, 2026-09-22): the
     // management pages are rows in it, and the conversation list has stepped aside.
-    await expect(page.getByTestId('settings-management').getByRole('link')).toHaveCount(4);
+    // Models · Device connections · Knowledge: Agents left for the rail (owner, 2026-09-24).
+    await expect(page.getByTestId('settings-management').getByRole('link')).toHaveCount(3);
     await expect(page.getByTestId('session-row')).toHaveCount(0);
     // And the rail too (owner, 2026-09-23): one row leads back, to the conversation that
     // was open — not a New chat pressed to get out.
@@ -149,7 +150,7 @@ test.describe('web smoke journeys', () => {
     await page.getByTestId('settings-nav').getByRole('link', { name: 'المستخدمون' }).click();
     await page.getByTestId('back-to-chats').click();
     await expect(page).toHaveURL(chatUrl);
-    await expect(page.getByTestId('rail').getByRole('link')).toHaveCount(4);
+    await expect(page.getByTestId('rail').getByRole('link')).toHaveCount(5);
     await expect(page.getByTestId('back-to-chats')).toHaveCount(0);
     await page.getByRole('link', { name: 'الإعدادات' }).click();
     await page.screenshot({
@@ -209,7 +210,7 @@ test.describe('web smoke journeys', () => {
     const row = page.getByTestId('agent-chips');
     // Six agents from the catalog — Hermes, the hub's own `direct` agent
     // (ADOPTION-BACKLOG §2.15) and the four coding CLIs — and a trailing "+" that goes
-    // to the Agent Manager.
+    // to the Agents page.
     await expect(page.getByTestId('agent-chip')).toHaveCount(6);
     await expect(page.getByTestId('agent-add')).toBeVisible();
     // Pages take the whole width (owner, 2026-09-23), so on a wide screen the row is at the
@@ -1053,9 +1054,8 @@ test.describe('web smoke journeys', () => {
 
   test('15. an agent’s skills are the files in its folder', async ({ page }) => {
     await login(page);
-    // The agent manager lives in the Settings list, like every management page.
-    await page.getByRole('link', { name: 'الإعدادات' }).first().click();
-    await page.getByTestId('settings-nav').getByRole('link', { name: 'مدير الوكلاء' }).click();
+    // Agents is a rail entry above Tasks (owner, 2026-09-24).
+    await page.getByTestId('rail').getByRole('link', { name: 'الوكلاء' }).click();
     // The link is not hand-placed: the card lists every agent-level page whose capability
     // the registry declares, and Hermes declares `skills`.
     await page.getByTestId('agent-menu').getByRole('link', { name: 'المهارات' }).first().click();
@@ -1093,9 +1093,9 @@ test.describe('web smoke journeys', () => {
     await expect(page.getByTestId('skill-content')).toHaveValue(/license: MIT/);
     await page.keyboard.press('Escape');
 
-    // MCP: the same agent, the other page. It writes one block of config.yaml.
-    await page.getByTestId('settings-nav').getByRole('link', { name: 'مدير الوكلاء' }).click();
-    await page.getByTestId('agent-menu').getByRole('link', { name: 'MCP' }).first().click();
+    // MCP: the same agent, the other page — one row away in the agent's side list. It writes
+    // one block of config.yaml.
+    await page.getByTestId('agent-sections').getByRole('link', { name: 'MCP' }).click();
     await expect(page).toHaveURL(/\/mcp$/);
     await expect(page.getByText(/أعد تشغيله ليسري التغيير/)).toBeVisible();
     await expect(page.getByText('لا خوادم')).toBeVisible();
@@ -1117,8 +1117,7 @@ test.describe('web smoke journeys', () => {
     await shot(page, 'agent-mcp-ar-light');
 
     // Memory: the persona cannot be deleted, only emptied.
-    await page.getByTestId('settings-nav').getByRole('link', { name: 'مدير الوكلاء' }).click();
-    await page.getByTestId('agent-menu').getByRole('link', { name: 'الذاكرة' }).first().click();
+    await page.getByTestId('agent-sections').getByRole('link', { name: 'الذاكرة' }).click();
     await expect(page).toHaveURL(/\/memory$/);
 
     // Always the same three documents, including the ones nothing has written yet.
@@ -1136,8 +1135,7 @@ test.describe('web smoke journeys', () => {
     await shot(page, 'agent-memory-ar-light');
 
     // Channels: the fields come from the agent's own file, not from a form we wrote.
-    await page.getByTestId('settings-nav').getByRole('link', { name: 'مدير الوكلاء' }).click();
-    await page.getByTestId('agent-menu').getByRole('link', { name: 'القنوات' }).first().click();
+    await page.getByTestId('agent-sections').getByRole('link', { name: 'القنوات' }).click();
     await expect(page).toHaveURL(/\/channels$/);
     await expect(page.getByText('لا قنوات')).toBeVisible();
     await shot(page, 'agent-channels-ar-light');
