@@ -32,9 +32,11 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/chat$/);
 }
 
+/** Agents is a rail entry; inside an agent's pages the rail is the row back (2026-09-24). */
 async function openAgentPage(page: Page, name: string, url: RegExp) {
-  await page.getByRole('link', { name: 'الإعدادات' }).first().click();
-  await page.getByTestId('settings-nav').getByRole('link', { name: 'مدير الوكلاء' }).click();
+  const back = page.getByTestId('back-to-agents');
+  if ((await back.count()) > 0) await back.click();
+  else await page.getByTestId('rail').getByRole('link', { name: 'الوكلاء' }).click();
   await page.getByTestId('agent-menu').getByRole('link', { name }).first().click();
   await expect(page).toHaveURL(url);
 }
