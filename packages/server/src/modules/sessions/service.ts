@@ -211,6 +211,36 @@ export class SessionsService {
     };
   }
 
+  /**
+   * `sessions.list?profiles=all` (ADR 0016): one page over every workspace in `scopes`,
+   * each item rendered in its own workspace — its `profile`, its usage, its match — as if
+   * it had been listed there. `scopes` comes from `auth`, never from the request body.
+   */
+  listAcross(
+    scopes: readonly EngineScope[],
+    filters: SessionFilters,
+    cursor: string | undefined,
+    limit: number,
+  ): { items: Record<string, unknown>[]; next_cursor: string | null } {
+    const byWorkspace = new Map(scopes.map((scope) => [scope.workspace, scope]));
+    const page = this.store.listSessions([...byWorkspace.keys()], filters, cursor, limit);
+    return {
+      items: page.items.flatMap((row) => {
+        const scope = byWorkspace.get(row.workspace);
+        if (!scope) return [];
+        const session = this.sessionOf(scope, row);
+        if (filters.q) {
+          const hit = this.store.findMatch(scope.workspace, row.id, filters.q);
+          session.match = hit
+            ? { message_id: hit.id, snippet: excerpt(hit.content, filters.q) ?? '' }
+            : { message_id: null, snippet: row.title ?? '' };
+        }
+        return [session];
+      }),
+      next_cursor: page.nextCursor,
+    };
+  }
+
   get(scope: EngineScope, sessionId: string): Record<string, unknown> {
     const row = this.requireSession(scope, sessionId);
     const live = this.store.liveRuns(scope.workspace, row.id);

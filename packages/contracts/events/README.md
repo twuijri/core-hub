@@ -30,6 +30,13 @@ where `profile` is optional. Acks are always `{ ok: true }` or
 `{ ok: false, error, code }` with a code from the fixed list in
 `docs/contracts/README.md` §4.
 
+`auth: { token, profile, profiles: 'all' }` (ADR 0016) also joins the rooms of every
+other profile the signed-in person may enter — the server decides which, as it does
+for `sessions.list?profiles=all` — so a client showing one list across profiles hears
+`session.*` and `approval.*` from all of them. Each envelope names its `profile`, and
+`seq` stays per (namespace, profile): a client that resumes a session keeps the highest
+`seq` of **that session's profile** only. Without a token, `profiles` joins nothing.
+
 | Namespace | Command | Payload | What it does |
 |---|---|---|---|
 | `/rt/sessions` | `subscribe` | `{ session_id, after_seq? }` | receive the session's message/run/tool events (profile-wide events need no subscription); with `after_seq`, resume — see below |

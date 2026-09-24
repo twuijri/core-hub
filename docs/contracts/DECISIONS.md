@@ -450,3 +450,21 @@ naming back and the hub names it again, emitting `session.updated` on
 `/rt/sessions`. Rejected: a `title_source` enum on `Session`. Every client would
 have to render a state nobody displays, and the one question a client actually
 asks — "may I ask for a new title?" — is answered by sending `title: null`.
+
+## 28. A list may span every profile the caller may enter (`profiles=all`)
+
+§4 keeps the header as the one way to name *the* profile a request acts in. ADR 0016
+(owner, 2026-09-24) makes the chats list and search gather every profile a person may
+enter, so `sessions.list` takes `profiles=all`: the page holds every enterable profile,
+each item names its own `profile`, and the header still has to name one of them. It is a
+query value rather than a second header or a `*` in `X-Hub-Profile` because it narrows
+*which rows are listed*, the way `archived=all` does, and the header's meaning — where
+the request acts — stays the same for every other call. Which profiles "all" covers is
+the server's decision (`auth`'s membership rule), never a list the client sends. Opening
+an item is an ordinary call with the item's `profile` in the header. The realtime
+counterpart is the handshake's `profiles: 'all'` (events/README.md §Connecting).
+
+Rejected: `X-Hub-Profile: *` (every scoped operation would have to refuse it but one),
+and a new global operation beside `sessions.list` (two lists with the same filters and
+the same cursor, drifting apart). `tasks.getColumns` stays the global operation it
+already was.
