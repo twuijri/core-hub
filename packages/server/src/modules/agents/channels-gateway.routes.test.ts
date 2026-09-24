@@ -303,7 +303,7 @@ describe('unlinking WhatsApp', () => {
     expect(again.json()).toMatchObject({ details: { reason: 'not_linked' } });
     const other = await authed(h, h.token, {
       method: 'POST',
-      url: `/api/v1/agents/${agent}/channels/telegram/unlink`,
+      url: `/api/v1/agents/${agent}/channels/slack/unlink`,
       profile: 'manger',
     });
     expect(other.json()).toMatchObject({ details: { reason: 'unlink_not_supported' } });

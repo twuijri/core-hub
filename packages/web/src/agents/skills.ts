@@ -299,8 +299,9 @@ export interface Channel {
   exclusive: boolean;
   status: 'online' | 'offline' | 'error' | 'unknown';
   error: string | null;
-  login: 'qr' | null;
-  /** WhatsApp only: whether this profile holds a session, and whose. */
+  /** `qr` pairs by a code (WhatsApp); `token` links by a bot token (Telegram). */
+  login: 'qr' | 'token' | null;
+  /** WhatsApp (its session) and Telegram (its bot): whether this profile has one, and whose. */
   link: ChannelLink | null;
   fields: ChannelField[];
 }
@@ -310,6 +311,8 @@ export interface ChannelLink {
   account_id: string | null;
   account_name: string | null;
   account_phone: string | null;
+  /** Telegram: the bot's @username, without the @. */
+  account_username: string | null;
 }
 
 /** The messaging gateway serving the profile's channels (`agents.listChannels`). */
@@ -403,6 +406,76 @@ export function useUnlinkChannel(agentId: string | undefined) {
         })
       ).data as unknown as Channel,
     onSuccess: invalidate,
+  });
+}
+
+/** Link Telegram by the token @BotFather gave (`agents.linkChannel`). */
+export function useLinkChannel(agentId: string | undefined) {
+  const { client } = useAuth();
+  const invalidate = useChannelInvalidation(agentId);
+  return useMutation({
+    mutationFn: async (input: { platform: string; token: string; allowed_users?: string[] }) =>
+      (
+        await client.request('post', '/agents/{agent_id}/channels/{platform}/link', {
+          params: { agent_id: agentId ?? '', platform: input.platform },
+          body: {
+            token: input.token,
+            ...(input.allowed_users ? { allowed_users: input.allowed_users } : {}),
+          },
+        })
+      ).data as unknown as Channel,
+    onSuccess: invalidate,
+  });
+}
+
+/** One of a channel's own settings (`agents.getChannelSettings`). */
+export interface ChannelSetting {
+  key: string;
+  section: 'access' | 'replies' | 'groups' | 'media' | 'advanced';
+  kind: 'toggle' | 'select' | 'number' | 'text' | 'list';
+  value: unknown;
+  default: unknown;
+  choices: string[] | null;
+  min: number | null;
+  max: number | null;
+  /** Kept once for the profile: it changes every channel there, not only this one. */
+  shared: boolean;
+  source: 'config' | 'env' | null;
+}
+
+const settingsKey = (profile: string, agentId: string, platform: string) =>
+  ['agent-channel-settings', profile, agentId, platform] as const;
+
+export function useChannelSettings(agentId: string | undefined, platform: string, open: boolean) {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: settingsKey(profile, agentId ?? '', platform),
+    queryFn: async () =>
+      (
+        await client.request('get', '/agents/{agent_id}/channels/{platform}/settings', {
+          params: { agent_id: agentId ?? '', platform },
+        })
+      ).data as unknown as { platform: string; options: ChannelSetting[] },
+    enabled: !!session && !!agentId && open,
+  });
+}
+
+export function useUpdateChannelSettings(agentId: string | undefined, platform: string) {
+  const { client, profile } = useAuth();
+  const queryClient = useQueryClient();
+  const invalidate = useChannelInvalidation(agentId);
+  return useMutation({
+    mutationFn: async (values: Record<string, unknown>) =>
+      (
+        await client.request('patch', '/agents/{agent_id}/channels/{platform}/settings', {
+          params: { agent_id: agentId ?? '', platform },
+          body: { values } as never,
+        })
+      ).data as unknown as { platform: string; options: ChannelSetting[] },
+    onSuccess: (data) => {
+      queryClient.setQueryData(settingsKey(profile, agentId ?? '', platform), data);
+      invalidate();
+    },
   });
 }
 
