@@ -200,7 +200,10 @@ export function openInside(root: string, requested: string, cap: (type: FileType
   const { relative, absolute } = resolveInside(root, requested);
   let fd: number;
   try {
-    fd = openSync(absolute, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+    fd = openSync(
+      absolute,
+      constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0),
+    );
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ELOOP') refuse('symlink');
     throw notFound({ resource: 'file', id: requested });
@@ -451,8 +454,7 @@ export function listSessionFiles(input: {
     if (entries.has(key)) continue;
     const type = fileTypeOf(attachment.name);
     // The stored type wins when the name says nothing (a pasted picture named `image`).
-    const kind =
-      type.kind === 'none' && attachment.mime.startsWith('image/') ? 'image' : type.kind;
+    const kind = type.kind === 'none' && attachment.mime.startsWith('image/') ? 'image' : type.kind;
     entries.set(key, {
       key,
       name: attachment.name,

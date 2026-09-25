@@ -21,7 +21,9 @@ import { usePane } from '../shell/pane.js';
 import type { ToolCall } from '../types.js';
 import { Badge, type BadgeTone } from '../ui/Badge.js';
 import { Button } from '../ui/Button.js';
-import { IconCheck, IconChevron, IconPanel, IconTool } from '../ui/icons.js';
+import { IconCheck, IconChevron, IconFolder, IconPanel, IconTool } from '../ui/icons.js';
+import { useOpenFile, useSessionFilesOptional } from '../files/context.js';
+import { filesOfToolCall } from '../files/kinds.js';
 
 export function formatDuration(ms: number): string {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
@@ -52,6 +54,40 @@ function argumentsOf(call: ToolCall): string | null {
   }
 }
 
+/**
+ * The files this call wrote or named, as links that open them beside the chat (decision
+ * §47). Inside the row's `<summary>` a click must not also fold the row.
+ */
+function ToolFiles({ call }: { call: ToolCall }) {
+  const { t } = useI18n();
+  const files = useSessionFilesOptional();
+  const open = useOpenFile();
+  if (!files || !open) return null;
+  const linked = filesOfToolCall(files.files, call.id);
+  if (linked.length === 0) return null;
+  return (
+    <>
+      {linked.map((file) => (
+        <button
+          key={file.key}
+          type="button"
+          className="tool-file"
+          aria-label={t('files.open', { name: file.name })}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            open(file.key);
+          }}
+          data-testid="tool-file-link"
+        >
+          <IconFolder size={12} />
+          <span dir="auto">{file.name}</span>
+        </button>
+      ))}
+    </>
+  );
+}
+
 function ToolRow({ call }: { call: ToolCall }) {
   const { t } = useI18n();
   const output = call.output ?? '';
@@ -65,6 +101,7 @@ function ToolRow({ call }: { call: ToolCall }) {
           {call.preview}
         </span>
       )}
+      <ToolFiles call={call} />
       {call.status === 'succeeded' ? (
         <span className="tool-ok" aria-label={t('tool.status.succeeded')}>
           <IconCheck size={12} />

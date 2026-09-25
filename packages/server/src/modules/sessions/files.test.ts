@@ -8,7 +8,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { HubError } from '../../lib/errors.js';
-import { acpToolInput } from '../agents/adapters/acp.js';
 import {
   PREVIEW_MAX_BYTES,
   SCAN_MAX_DEPTH,
@@ -194,19 +193,6 @@ describe('fileRefsOf', () => {
   });
 });
 
-describe('acpToolInput', () => {
-  it("keeps the agent's rawInput and adds the paths it touches as locations", () => {
-    expect(
-      acpToolInput({
-        rawInput: { file_path: '/w/a.md', content: 'x' },
-        locations: [{ path: '/w/a.md', line: 1 }],
-        content: [{ type: 'diff', path: '/w/b.md', oldText: '', newText: 'x' }],
-      }),
-    ).toEqual({ file_path: '/w/a.md', content: 'x', locations: ['/w/a.md', '/w/b.md'] });
-    expect(acpToolInput({ title: 'Run tests' })).toEqual({});
-  });
-});
-
 describe('listSessionFiles', () => {
   it('lists tool files, folder files and attachments once each, newest first', () => {
     writeFileSync(path.join(root, 'notes.md'), '# ملاحظات');
@@ -215,9 +201,30 @@ describe('listSessionFiles', () => {
     const list = listSessionFiles({
       workingDir: root,
       toolCalls: [
-        { id: 'T1', runId: 'R', name: 'write_file', kind: null, title: null, input: { path: 'report.html' } },
-        { id: 'T2', runId: 'R', name: 'read_file', kind: null, title: null, input: { path: '../secret/passwd' } },
-        { id: 'T3', runId: 'R', name: 'write_file', kind: null, title: null, input: { path: 'deleted.txt' } },
+        {
+          id: 'T1',
+          runId: 'R',
+          name: 'write_file',
+          kind: null,
+          title: null,
+          input: { path: 'report.html' },
+        },
+        {
+          id: 'T2',
+          runId: 'R',
+          name: 'read_file',
+          kind: null,
+          title: null,
+          input: { path: '../secret/passwd' },
+        },
+        {
+          id: 'T3',
+          runId: 'R',
+          name: 'write_file',
+          kind: null,
+          title: null,
+          input: { path: 'deleted.txt' },
+        },
       ],
       attachments: [
         {

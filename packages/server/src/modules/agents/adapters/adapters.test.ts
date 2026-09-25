@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { createAcpAdapter, AcpSession, type AcpTransport } from './acp.js';
+import { createAcpAdapter, AcpSession, acpToolInput, type AcpTransport } from './acp.js';
 import { createHermesAdapter } from './hermes.js';
 import { createProcessAdapter } from './process.js';
 import { createAdapterSet } from './index.js';
@@ -160,7 +160,14 @@ describe('ACP adapter: a turn', () => {
       { type: 'reasoning.delta', text: 'thinking' },
       { type: 'message.delta', text: 'Hello' },
       { type: 'message.delta', text: ' world' },
-      { type: 'tool.started', id: 'tc1', title: 'read file', kind: 'read', input: {}, raw: expect.anything() },
+      {
+        type: 'tool.started',
+        id: 'tc1',
+        title: 'read file',
+        kind: 'read',
+        input: {},
+        raw: expect.anything(),
+      },
       {
         type: 'tool.completed',
         id: 'tc1',
@@ -419,5 +426,20 @@ describe('the adapter set', () => {
     // `builtin` is the direct agent (ADOPTION-BACKLOG §2.15): the contract reserved the
     // kind from the start and it is filled now.
     expect(set.byKind('builtin').capabilities()).toEqual(['streaming', 'vision', 'resume']);
+  });
+});
+
+// Decision §47: the files an ACP tool call touches are recorded with it, so the chat can
+// open them.
+describe('acpToolInput', () => {
+  it("keeps the agent's rawInput and adds the paths it touches as locations", () => {
+    expect(
+      acpToolInput({
+        rawInput: { file_path: '/w/a.md', content: 'x' },
+        locations: [{ path: '/w/a.md', line: 1 }],
+        content: [{ type: 'diff', path: '/w/b.md', oldText: '', newText: 'x' }],
+      }),
+    ).toEqual({ file_path: '/w/a.md', content: 'x', locations: ['/w/a.md', '/w/b.md'] });
+    expect(acpToolInput({ title: 'Run tests' })).toEqual({});
   });
 });

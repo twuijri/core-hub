@@ -111,7 +111,10 @@ describe('sessions.listFiles', () => {
         preview: 'html',
       });
       expect(byKey.get('path:report.html')?.tool_call_ids).toHaveLength(1);
-      expect(byKey.get('path:data.csv')).toMatchObject({ sources: ['working_dir'], preview: 'csv' });
+      expect(byKey.get('path:data.csv')).toMatchObject({
+        sources: ['working_dir'],
+        preview: 'csv',
+      });
       expect(byKey.get('path:notes.md')?.preview).toBe('markdown');
 
       // Another profile does not see this conversation, nor its files.
@@ -150,18 +153,21 @@ describe('sessions.readFile', () => {
       expect(html.headers['cache-control']).toBe('no-store');
       expect(html.headers['content-disposition']).toMatch(/^inline; filename="report.html"/);
 
-      expect((await get(h.app, `/sessions/${id}/files/content?path=data.csv`)).headers[
-        'content-type'
-      ]).toBe('text/csv; charset=utf-8');
-      expect((await get(h.app, `/sessions/${id}/files/content?path=notes.md`)).headers[
-        'content-type'
-      ]).toBe('text/markdown; charset=utf-8');
+      expect(
+        (await get(h.app, `/sessions/${id}/files/content?path=data.csv`)).headers['content-type'],
+      ).toBe('text/csv; charset=utf-8');
+      expect(
+        (await get(h.app, `/sessions/${id}/files/content?path=notes.md`)).headers['content-type'],
+      ).toBe('text/markdown; charset=utf-8');
       // Code is never sent as something a browser would run.
-      expect((await get(h.app, `/sessions/${id}/files/content?path=app.js`)).headers[
-        'content-type'
-      ]).toBe('text/plain; charset=utf-8');
+      expect(
+        (await get(h.app, `/sessions/${id}/files/content?path=app.js`)).headers['content-type'],
+      ).toBe('text/plain; charset=utf-8');
 
-      const saved = await get(h.app, `/sessions/${id}/files/content?path=report.html&download=true`);
+      const saved = await get(
+        h.app,
+        `/sessions/${id}/files/content?path=report.html&download=true`,
+      );
       expect(saved.headers['content-disposition']).toMatch(/^attachment; filename="report.html"/);
     } finally {
       await h.close();

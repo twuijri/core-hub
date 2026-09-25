@@ -543,7 +543,14 @@ export class SessionsService {
   ): { working_dir: string | null; truncated: boolean; items: SessionFileEntry[] } {
     const row = this.requireSession(scope, sessionId);
     const runs = this.store.allRuns(scope.workspace, row.id);
-    const calls = [...this.store.toolCallsForRuns(scope.workspace, runs.map((r) => r.id)).values()]
+    const calls = [
+      ...this.store
+        .toolCallsForRuns(
+          scope.workspace,
+          runs.map((r) => r.id),
+        )
+        .values(),
+    ]
       .flat()
       .sort(
         (a, b) => (a.startedAt?.getTime() ?? 0) - (b.startedAt?.getTime() ?? 0) || a.seq - b.seq,
@@ -587,7 +594,12 @@ export class SessionsService {
    * caller streams the descriptor and closes it. Checked against the preview limit of its
    * kind, or the download limit when it is being saved.
    */
-  openFile(scope: EngineScope, sessionId: string, requested: string, download: boolean): OpenedFile {
+  openFile(
+    scope: EngineScope,
+    sessionId: string,
+    requested: string,
+    download: boolean,
+  ): OpenedFile {
     const row = this.requireSession(scope, sessionId);
     if (!row.workingDir) throw notFound({ resource: 'file', id: requested });
     return openInside(row.workingDir, requested, (type) =>

@@ -1637,5 +1637,47 @@
       "input_tokens": "Input tokens",
       "output_tokens": "Output tokens"
     }
+  },
+  "files": {
+    "button": "Files",
+    "button_count": "Files ({count})",
+    "title": "Files",
+    "list_label": "Files of this conversation",
+    "empty": "No files yet. What the agent writes in this conversation's folder, and what is attached, appears here.",
+    "truncated": "The folder holds more files than are listed; the newest are shown.",
+    "load_failed": "The files could not be read.",
+    "panel_label": "Open files",
+    "close_tab": "Close {name}",
+    "open": "Open {name}",
+    "download": "Download",
+    "open_new_tab": "Open in new tab",
+    "view_source": "View source",
+    "view_rendered": "View page",
+    "loading": "Loading the file…",
+    "too_large": "This file is too large to show here ({size}). Download it to open it.",
+    "no_preview": "This kind of file cannot be shown here. Download it to open it.",
+    "source": {
+      "tool": "written by a tool",
+      "working_dir": "in the folder",
+      "attachment": "attached"
+    },
+    "rows_capped": "Showing the first {shown} of {total} rows.",
+    "columns_capped": "Only the first {count} columns are shown.",
+    "sheets_label": "Sheets",
+    "slide": "Slide {number}",
+    "untitled_slide": "Untitled slide",
+    "pptx_outline": "An outline of the slides' titles and text. The slides themselves are not drawn here; download the file to see them.",
+    "docx_note": "The text of the document; pictures and page layout are not shown.",
+    "office_error": {
+      "too_many_entries": "The file holds too many parts to open safely.",
+      "too_large": "The file unpacks to more than can be opened safely.",
+      "not_office": "This is not the Office file its name says.",
+      "damaged": "The file is damaged and cannot be read."
+    },
+    "html_note": "Shown in a sandbox: its scripts run apart from this app and it cannot contact anything.",
+    "modified": "Changed {time}",
+    "updated": "Updated just now",
+    "gone": "This file is no longer in the conversation's folder.",
+    "close": "Close the files"
   }
 }
