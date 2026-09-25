@@ -117,7 +117,7 @@ class ConnectViewModel(private val graph: AppGraph) : ViewModel() {
         }
         _state.update { it.copy(busy = true, error = null, invalidPairing = false) }
         viewModelScope.launch {
-            val registration = thisPhone(graph.store.deviceKey, deviceName)
+            val registration = thisPhone(graph.store.deviceKey, deviceName, graph.pushBlocker())
             hubCall {
                 graph.anonymous(request.hub).auth.authClaimPairing(request.pairingId, PairingClaim(request.code, registration))
             }.onSuccess { result ->

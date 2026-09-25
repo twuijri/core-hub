@@ -18,7 +18,7 @@ export type {
   OpenApiParameter,
   OpenApiResponse,
 } from './document.js';
-export { LEGACY, PRODUCT, STABLE, derived, readProductEnv } from './product.js';
+export { APP_IDS, LEGACY, PRODUCT, STABLE, derived, readProductEnv } from './product.js';
 export type { ProductEnvRead } from './product.js';
 export { HubApiError, createHubClient, fillPath } from './client.js';
 export type {

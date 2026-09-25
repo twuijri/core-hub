@@ -1477,6 +1477,7 @@ paths:
                 kind: phone
                 brand: Google
                 model: Pixel 9
+                os_version: '15'
                 app_version: 1.0.2-test.22
                 capabilities: [location, camera, microphone, notifications, clipboard]
       responses:
@@ -1499,10 +1500,12 @@ paths:
                   kind: phone
                   brand: Google
                   model: Pixel 9
+                  os_version: '15'
                   app_version: 1.0.2-test.22
                   connection: lan
                   online: true
                   last_seen_at: '2026-09-21T11:16:00Z'
+                  paired_at: '2026-09-21T11:16:00Z'
                   app_token_id: 01J8QK3ZR2W7M5N4P6T8V9X0AK
                   capabilities:
                     - kind: location
@@ -1521,6 +1524,7 @@ paths:
                       enabled: true
                       consent_at: null
                   push: null
+                  push_blocker: none
                   this_device: true
                   created_at: '2026-09-21T11:16:00Z'
                   updated_at: '2026-09-21T11:16:00Z'
@@ -12700,10 +12704,12 @@ paths:
                     kind: phone
                     brand: Google
                     model: Pixel 9
+                    os_version: '15'
                     app_version: 1.0.2-test.22
                     connection: lan
                     online: true
                     last_seen_at: '2026-09-21T13:00:00Z'
+                    paired_at: '2026-09-21T11:16:00Z'
                     app_token_id: 01J8QK3ZR2W7M5N4P6T8V9X0AK
                     capabilities:
                       - kind: location
@@ -12716,6 +12722,7 @@ paths:
                       provider: fcm
                       locale: ar
                       registered_at: '2026-09-21T11:17:00Z'
+                    push_blocker: none
                     this_device: true
                     created_at: '2026-09-21T11:16:00Z'
                     updated_at: '2026-09-21T13:00:00Z'
@@ -12748,6 +12755,7 @@ paths:
               kind: browser
               brand: null
               model: null
+              os_version: null
               app_version: null
               capabilities: [notifications]
       x-rt-events: [device.linked, device.updated]
@@ -12767,16 +12775,19 @@ paths:
                 kind: browser
                 brand: null
                 model: null
+                os_version: null
                 app_version: null
                 connection: lan
                 online: false
                 last_seen_at: '2026-09-25T09:00:00Z'
+                paired_at: '2026-09-25T09:00:00Z'
                 app_token_id: null
                 capabilities:
                   - kind: notifications
                     enabled: true
                     consent_at: null
                 push: null
+                push_blocker: null
                 this_device: true
                 created_at: '2026-09-24T20:00:00Z'
                 updated_at: '2026-09-25T09:00:00Z'
@@ -12795,16 +12806,19 @@ paths:
                 kind: browser
                 brand: null
                 model: null
+                os_version: null
                 app_version: null
                 connection: lan
                 online: false
                 last_seen_at: '2026-09-25T09:00:00Z'
+                paired_at: '2026-09-25T09:00:00Z'
                 app_token_id: null
                 capabilities:
                   - kind: notifications
                     enabled: true
                     consent_at: null
                 push: null
+                push_blocker: null
                 this_device: true
                 created_at: '2026-09-25T09:00:00Z'
                 updated_at: '2026-09-25T09:00:00Z'
@@ -12839,13 +12853,16 @@ paths:
                 kind: phone
                 brand: Google
                 model: Pixel 9
+                os_version: '15'
                 app_version: 1.0.2-test.22
                 connection: lan
                 online: true
                 last_seen_at: '2026-09-21T13:00:00Z'
+                paired_at: '2026-09-21T11:16:00Z'
                 app_token_id: 01J8QK3ZR2W7M5N4P6T8V9X0AK
                 capabilities: []
                 push: null
+                push_blocker: none
                 this_device: false
                 created_at: '2026-09-21T11:16:00Z'
                 updated_at: '2026-09-21T13:00:00Z'
@@ -12856,7 +12873,7 @@ paths:
     patch:
       operationId: devices.update
       tags: [devices]
-      summary: Rename a device or update its capabilities and app version (the device itself, its owner, or an admin)
+      summary: Rename a device, or let it report its model, versions, push blocker and capabilities (the device itself, its owner, or an admin)
       x-scope: global
       requestBody:
         required: true
@@ -12866,7 +12883,9 @@ paths:
               $ref: '#/components/schemas/DevicePatch'
             example:
               name: 'هاتف طارق الجديد'
+              os_version: '15'
               app_version: 1.0.3-test.24
+              push_blocker: permission_pending
               capabilities:
                 - kind: location
                   enabled: false
@@ -12888,16 +12907,19 @@ paths:
                 kind: phone
                 brand: Google
                 model: Pixel 9
+                os_version: '15'
                 app_version: 1.0.3-test.24
                 connection: lan
                 online: true
                 last_seen_at: '2026-09-21T13:02:00Z'
+                paired_at: '2026-09-21T11:16:00Z'
                 app_token_id: 01J8QK3ZR2W7M5N4P6T8V9X0AK
                 capabilities:
                   - kind: location
                     enabled: false
                     consent_at: null
                 push: null
+                push_blocker: permission_pending
                 this_device: true
                 created_at: '2026-09-21T11:16:00Z'
                 updated_at: '2026-09-21T13:02:00Z'
@@ -22849,10 +22871,26 @@ components:
           type: [string, 'null']
         app_version:
           type: [string, 'null']
+        os_version:
+          type: [string, 'null']
+          maxLength: 64
+          description: The operating system's version as the device reports it (`18.6`, `15`). Optional; older apps leave it out.
+        push_blocker:
+          oneOf:
+            - $ref: '#/components/schemas/PushBlocker'
+            - type: 'null'
         capabilities:
           type: array
           items:
             $ref: '#/components/schemas/CapabilityKind'
+    PushBlocker:
+      type: string
+      enum: [none, not_in_build, permission_pending, permission_denied]
+      description: |
+        Why the device has no push, as the device itself reports it: `none` (nothing on the device
+        stops it; the hub may still have no sender), `not_in_build` (this build of the app cannot
+        receive push), `permission_pending` (the person has not been asked, or not answered, yet),
+        `permission_denied` (notifications are turned off for the app on the device).
     PushStatus:
       type: object
       required: [provider, locale, registered_at]
@@ -22893,13 +22931,16 @@ components:
           kind,
           brand,
           model,
+          os_version,
           app_version,
           connection,
           online,
           last_seen_at,
+          paired_at,
           app_token_id,
           capabilities,
           push,
+          push_blocker,
           this_device,
           created_at,
           updated_at,
@@ -22921,6 +22962,10 @@ components:
           type: [string, 'null']
         model:
           type: [string, 'null']
+          description: The model's marketing name when the device knows it (`iPhone 16 Pro`, `Pixel 9`).
+        os_version:
+          type: [string, 'null']
+          description: The operating system's version the device last reported; null from an app that does not say.
         app_version:
           type: [string, 'null']
         connection:
@@ -22932,6 +22977,17 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'
             - type: 'null'
+          description: |
+            The device's last authenticated call to the hub, written at most once a minute: any call
+            made with its pairing token, or with the sign-in that registered it (`devices.register`).
+        paired_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: |
+            When the device was last paired (or registered, for one that signed in). Always set by
+            this hub; null-able so that an app reading an older hub, which does not send it, still
+            decodes the device.
         app_token_id:
           oneOf:
             - $ref: '#/components/schemas/Ulid'
@@ -22944,6 +23000,11 @@ components:
           oneOf:
             - $ref: '#/components/schemas/PushStatus'
             - type: 'null'
+        push_blocker:
+          oneOf:
+            - $ref: '#/components/schemas/PushBlocker'
+            - type: 'null'
+          description: What the device last said stops push on it; null when it never said (an older app, a browser).
         this_device:
           type: boolean
         created_at:
@@ -23039,12 +23100,28 @@ components:
           type: [string, 'null']
     DevicePatch:
       type: object
+      description: |
+        A name set here is the person's: registering or pairing the same device again keeps it.
+        The other fields are what the device says about itself, sent again at each launch.
       properties:
         name:
           type: string
           maxLength: 80
+        brand:
+          type: [string, 'null']
+          maxLength: 80
+        model:
+          type: [string, 'null']
+          maxLength: 120
+        os_version:
+          type: [string, 'null']
+          maxLength: 64
         app_version:
           type: [string, 'null']
+        push_blocker:
+          oneOf:
+            - $ref: '#/components/schemas/PushBlocker'
+            - type: 'null'
         capabilities:
           type: array
           items:

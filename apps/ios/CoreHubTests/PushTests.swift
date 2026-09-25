@@ -47,6 +47,18 @@ private final class FakePushBackend: PushBackend {
     func unregisterPush(deviceID: String) async throws {
         calls.append("unpush \(deviceID)")
     }
+
+    var updateStatuses: [Int] = []
+    private(set) var patches: [(deviceID: String, patch: DevicePatch)] = []
+
+    func update(deviceID: String, patch: DevicePatch) async throws {
+        calls.append("update \(deviceID)")
+        if !updateStatuses.isEmpty {
+            let status = updateStatuses.removeFirst()
+            if status != 200 { throw refuse(status) }
+        }
+        patches.append((deviceID, patch))
+    }
 }
 
 final class PushTests: XCTestCase {
