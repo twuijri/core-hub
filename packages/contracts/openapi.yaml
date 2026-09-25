@@ -12428,7 +12428,7 @@ paths:
       tags: [knowledge]
       summary: Put one file into a folder (owner and admin)
       description: |
-        Multipart, one `file` part, into the folder `path` names (created when missing). At
+        Multipart, one `file` part, into the folder `path` names, which must exist (`404`). At
         most `WorkspaceFileLimits.max_upload_bytes` (`413`). A file of that name already
         there is `409 conflict` (`details.reason = exists`) unless `overwrite=true`; a folder
         or a symlink of that name is never replaced. Recorded in the audit log

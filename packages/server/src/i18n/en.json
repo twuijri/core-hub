@@ -173,7 +173,15 @@
   "knowledge": {
     "attachment_in_use": "A message already points at this file, so it cannot be deleted.",
     "attachment_bytes_gone": "The file was removed while it was being uploaded. Upload it again.",
-    "attachment_conflict": "The file could not be stored because of a conflicting record. Upload it again."
+    "attachment_conflict": "The file could not be stored because of a conflicting record. Upload it again.",
+    "workspace_outside": "This path is outside the profile's files, so it cannot be used.",
+    "workspace_root": "The profile's folder itself cannot be moved or deleted.",
+    "workspace_into_itself": "A folder cannot be moved or copied into itself.",
+    "workspace_symlink": "This is a link; it cannot be written through. Open the file it points to instead.",
+    "workspace_invalid_name": "This name cannot be used for a file or folder.",
+    "workspace_exists": "Something with this name is already here.",
+    "workspace_changed": "The file changed on disk after you opened it. Reload it, or save your text under another name.",
+    "workspace_not_text": "This file is not plain text, so it cannot be edited here. Download it instead."
   },
   "agents": {
     "mcp_test": {
