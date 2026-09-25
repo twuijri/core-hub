@@ -374,7 +374,10 @@ describe.skipIf(!PY)('the library’s helper scripts (Python 3)', () => {
                       role: 'assistant',
                       content: 'Here is the fox.',
                       images: [
-                        { type: 'image_url', image_url: { url: `data:image/png;base64,${OPAQUE}` } },
+                        {
+                          type: 'image_url',
+                          image_url: { url: `data:image/png;base64,${OPAQUE}` },
+                        },
                       ],
                     },
                   },
@@ -437,7 +440,10 @@ describe.skipIf(!PY)('the library’s helper scripts (Python 3)', () => {
         ['generate', '--prompt', 'a red fox', '--aspect', '16:9', '--out', 'out'],
         {
           cwd: dir,
-          env: chosen({ COREHUB_IMAGE_PROVIDER: 'chat', COREHUB_IMAGE_MODEL: 'gemini-3.1-flash-image' }),
+          env: chosen({
+            COREHUB_IMAGE_PROVIDER: 'chat',
+            COREHUB_IMAGE_MODEL: 'gemini-3.1-flash-image',
+          }),
         },
       );
       expect(result.json).toMatchObject({ ok: true, provider: 'chat', note: 'Here is the fox.' });
@@ -534,7 +540,10 @@ describe.skipIf(!PY)('the library’s helper scripts (Python 3)', () => {
         ['remove-bg', '--image', 'photo.png', '--out', 'out'],
         {
           cwd: dir,
-          env: chosen({ COREHUB_IMAGE_PROVIDER: 'chat', COREHUB_IMAGE_MODEL: 'gemini-3.1-flash-image' }),
+          env: chosen({
+            COREHUB_IMAGE_PROVIDER: 'chat',
+            COREHUB_IMAGE_MODEL: 'gemini-3.1-flash-image',
+          }),
         },
       );
       expect(flat.json).toMatchObject({

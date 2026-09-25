@@ -1760,7 +1760,12 @@ export class ModelsService {
         this.store.clearDefault(scope.id, 'image');
       } else {
         const model = this.requireImageModel(scope, body.image);
-        this.store.setDefault({ workspace: scope.id, ownerId: actor.userId }, 'image', model.id, []);
+        this.store.setDefault(
+          { workspace: scope.id, ownerId: actor.userId },
+          'image',
+          model.id,
+          [],
+        );
       }
     }
 
@@ -2640,10 +2645,8 @@ export class ModelsService {
     // same — `hermes model`, `hermes config` and a shell in the container read it.
     const envChanged = this.options.hermes.applyEnvironment?.(hermesProcessEnv(state)) ?? false;
     let result;
-    let plugin: string[];
     try {
       result = writeHermesConfiguration(home, state);
-      plugin = writeHermesImagePlugin(home, state.hermesImage === true);
     } catch (error) {
       this.options.log.warn(
         { err: error, home },
@@ -2651,6 +2654,7 @@ export class ModelsService {
       );
       return;
     }
+    const plugin = this.installImageBackend(home, state.hermesImage === true);
     this.propagateToProfiles(state);
     if (!result.dirty && !envChanged && plugin.length === 0) return;
     this.lastWriteAt = this.now().getTime();
@@ -2700,7 +2704,7 @@ export class ModelsService {
     }
     try {
       const written = writeHermesConfiguration(home, root);
-      const plugin = writeHermesImagePlugin(home, root.hermesImage === true);
+      const plugin = this.installImageBackend(home, root.hermesImage === true);
       if (written.dirty || plugin.length > 0) {
         this.options.log.info(
           {
@@ -2716,6 +2720,23 @@ export class ModelsService {
         { err: error, profile },
         'models: could not write the providers of a messaging gateway; it starts on what is there',
       );
+    }
+  }
+
+  /**
+   * The hub's image backend in one Hermes home (decision §72), when the profile draws. A
+   * failure here is logged and costs only Hermes's own image tool — the providers, keys and
+   * the skills' variables are already written. Returns the files written.
+   */
+  private installImageBackend(home: string, wanted: boolean): string[] {
+    try {
+      return writeHermesImagePlugin(home, wanted);
+    } catch (error) {
+      this.options.log.warn(
+        { err: error, home },
+        "models: could not install the hub's image backend; Hermes's image tool will not draw",
+      );
+      return [];
     }
   }
 
@@ -2771,7 +2792,7 @@ export class ModelsService {
             mine.hermesImage ?? null,
           );
       // The profile's own `image_gen` backend, where Hermes looks for it (decision §72).
-      const plugin = writeHermesImagePlugin(profileHome, mine.hermesImage === true);
+      const plugin = this.installImageBackend(profileHome, mine.hermesImage === true);
       const rootValues = hermesProcessEnv(root);
       const ownValues = hermesProcessEnv(mine);
       const owned = [
@@ -3100,7 +3121,9 @@ export class ModelsService {
     }
     if (provider.kind !== 'llm') throw refuse('image models come from chat providers');
     if (provider.authKind === 'oauth') {
-      throw refuse('a provider signed in through Hermes cannot draw for the hub; add one with a key');
+      throw refuse(
+        'a provider signed in through Hermes cannot draw for the hub; add one with a key',
+      );
     }
     if (!imageProtocolOf(this.entryOf(provider)?.protocol ?? 'openai', row.modelKey)) {
       throw refuse('this provider cannot draw images for the hub');

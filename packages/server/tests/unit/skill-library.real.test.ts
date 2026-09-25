@@ -6,9 +6,9 @@
  *    lists every library skill in the `core-hub` category, beside Hermes's own.
  * 2. One image skill end to end, in a real Hermes turn: a scripted model loads `image-generate`
  *    with `skill_view` and runs its script with `terminal`, exactly as the skill tells it to; the
- *    script reaches a scripted OpenAI-style image endpoint with the key from the profile's `.env`
- *    (`COREHUB_IMAGE_API_KEY`, which Hermes passes to the terminal because the skill declares
- *    it), and the PNG lands in the working folder.
+ *    script reaches a scripted OpenAI-style image endpoint with the image model the hub wrote into
+ *    the profile's `.env` for Models → Images (decision §72: `COREHUB_IMAGE_*`, which Hermes passes
+ *    to the terminal because the skill declares them), and the PNG lands in the working folder.
  *
  * Name the image to run it; without one it is skipped:
  *
@@ -29,6 +29,7 @@ import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { tmpdir, userInfo } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { imageEnvOf } from '../../src/modules/models/images.js';
 import { writeHermesRoute } from '../../src/modules/models/propagation.js';
 import { seedSkillLibraryOfEveryProfile } from '../../src/modules/agents/index.js';
 import { LIBRARY_CATEGORY, shippedLibrary } from '../../src/modules/agents/skill-library.js';
@@ -267,12 +268,18 @@ describe.skipIf(!image)(
         hermesModel: { provider: PROVIDER, model: 'scripted-model' },
         hermesModelBlocked: null,
       } as never);
+      // The image model as the hub writes it for the profile's Images choice (decision §72).
+      const imageEnv = imageEnvOf({
+        protocol: 'compatible',
+        baseUrl: `http://127.0.0.1:${imagesPort}/v1`,
+        model: 'gpt-image-1',
+        apiKey: IMAGE_KEY,
+      });
       writeFileSync(
         path.join(home, '.env'),
         [
           `${KEY_ENV}=sk-model-real-test`,
-          `COREHUB_IMAGE_API_KEY=${IMAGE_KEY}`,
-          `COREHUB_IMAGE_BASE_URL=http://127.0.0.1:${imagesPort}/v1`,
+          ...Object.entries(imageEnv).map(([name, value]) => `${name}=${value}`),
           '',
         ].join('\n'),
       );

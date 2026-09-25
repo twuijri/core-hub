@@ -1,5 +1,5 @@
 # صفحة النماذج: الصوت في تبويباته، وتبويب «الصور» يختار نموذج الصور من مزوّدي المحادثة
-المسؤول: twuijri · الفرع: feat/models-page-roles · الحالة: in-progress
+المسؤول: twuijri · الفرع: feat/models-page-roles · الحالة: review
 
 ## المشكلة والهدف
 قرارات المالك (2026-09-25) لصفحة النماذج:
@@ -75,13 +75,114 @@
 - DECISIONS §72.
 
 ## الملفات والتأثير
-(يُكمل عند الانتهاء.)
+- العقد: `packages/contracts/openapi.yaml` (`ModelCapability.image_output`، `ModelDefaults.image`،
+  `ModelDefaultsWrite.image`، وصف `inherited`)؛ `docs/contracts/DECISIONS.md` §72.
+- الخادم (`packages/server/src/modules/models/`): `images.ts` (جديد: هل النموذج للصور، وبأي بروتوكول يُكلَّم،
+  وأسماء المتغيّرات واسم الإضافة)، `hermes-image-plugin.ts` (جديد: يضع الإضافة في بيت هرمز)، `schema.ts`
+  (الدور `image` والقدرة `image_output`)، `defaults.ts`، `service.ts` (قراءة الدور وحفظه والتحقق منه، وحلّ
+  الاختيار إلى متغيّرات، وكتابته في الجذر وكل بروفايل مسمّى، وتثبيت الإضافة دون أن يُفشل فشلُها حفظ
+  المزوّدين)، `propagation.ts` (`imageEnv` و`hermesImage` و`applyImage`)، `serialize.ts`،
+  `adapters/openai.ts` (قراءة `output_modalities`)؛ ترحيل `drizzle/0021_model_role_image.sql`.
+- المكتبة: `skill-library/image-generate` و`image-edit` (`SKILL.md` بالنسخة 1.1.0، و`image_api.py` واحد في
+  المهارتين: بروتوكول `chat` جديد، و`remove-bg`، و`draw()` للإضافة، ولا مفاتيح احتياطية)، و
+  `skill-library/_hermes-plugin/` (جديد، ليس مهارة: `plugin.yaml` و`__init__.py`).
+- الويب: `packages/web/src/models/ModelsScreen.tsx` (تبويب المزوّدين للمحادثة فقط بلا مرشّح، وتبويبا الصوت
+  بزر إضافة داخلهما وبطاقات بلا «النموذج الافتراضي»، ونافذة الإضافة بقوالب نوع التبويب، وتبويب الصور)،
+  `queries.ts`، `i18n/ar.json` و`en.json` (مفاتيح `models.tab.images` و`models.images.*`
+  و`models.speech.add_*`/`none_*`، وحُذفت `models.filter` و`models.filter_all` و`models.providers.empty` التي
+  لم يعد يستعملها شيء).
+- التنقّل والتوثيق: `docs/clients/navigation.json` (تبويب `images`)، `docs/clients/NAVIGATION.md` §٣،
+  `docs/domain/models.md`، `docs/STATUS.md`.
+- الاختبارات: `models/images-role.test.ts` (جديد)، `agents/skill-library.lint.test.ts`،
+  `tests/unit/skill-library.real.test.ts` (يكتب `.env` بما يكتبه الهب)، `web/tests/models-screen.test.tsx`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-(يُكمل عند الانتهاء.)
+كلها عبر `mj-run`، واحدًا بعد الآخر، في الشجرة `corehub-wt-modelsroles` بعد دمج `origin/night/2026-09-26`:
+
+```
+$ pnpm lint
+$ eslint . && prettier --check .
+Checking formatting...
+All matched files use Prettier code style!
+
+$ pnpm typecheck            → exit 0 (كل الحزم)
+
+$ pnpm contracts:lint
+Woohoo! Your API description is valid. 🎉
+contracts:lint  validating 96 event schema file(s)
+contracts:lint  OK
+$ pnpm contracts:check-clients
+check-clients  OK — 570 client file(s) scanned, 222 contract path(s) known.
+$ pnpm contract:test
+ Test Files  19 passed (19)
+      Tests  364 passed (364)
+$ pnpm --filter @corehub/contracts test
+ Test Files  7 passed (7)
+      Tests  38 passed (38)
+
+$ pnpm i18n:check
+i18n:check  OK
+$ pnpm nav:check
+nav:check  OK — 37 destinations, 2 pre-auth screens (login, setup), 42 terms, ar/en complete, routes for web, ios, android, desktop
+
+# الخادم: وحدة النماذج كاملة (قبل الدمج)، ثم الملفات التي لمستها
+$ vitest run --project unit src/modules/models/
+ Test Files  11 passed (11)
+      Tests  170 passed | 1 skipped (171)
+$ vitest run --project unit src/modules/models/images-role.test.ts src/modules/agents/skill-library.lint.test.ts \
+    src/modules/models/propagation.test.ts src/modules/models/providers-shared.test.ts
+ Test Files  4 passed (4)
+      Tests  78 passed (78)
+$ vitest run --project unit src/modules/agents/hermes-gateways.test.ts src/modules/agents/channels-gateway.routes.test.ts \
+    src/modules/agents/skill-library.test.ts src/modules/agents/skill-library.routes.test.ts
+ Test Files  4 passed (4)
+      Tests  47 passed (47)
+
+# الويب
+$ vitest run tests/models-screen.test.tsx
+ Test Files  1 passed (1)
+      Tests  30 passed (30)
+$ vitest run tests/navigation.parity.test.tsx tests/voice-dictation.test.tsx tests/i18n.test.ts tests/model-fallback-signin.test.tsx
+      Tests  28 passed (28)
+
+# الاختبارات الجديدة تفشل على الشاشة القديمة (ModelsScreen.tsx من night/2026-09-26):
+     × lists only chat providers on Providers, with no speech filter
+     × lists, adds, edits and removes speech providers in their own tab
+     × chooses the image model from the chat providers' image models
+     × says an inherited image model is the default profile's, and a chosen one can go back to it
+     × says in Arabic when no chat provider offers an image model, and leads to Providers
+      Tests  5 failed | 25 passed (30)
+```
+
+ما تثبته اختبارات الخادم الجديدة (`images-role.test.ts`): القدرة `image_output` على نموذج
+`gemini-3.1-flash-image` لمزوّد cli-proxy-api مخصّص ولا تظهر على `gemini-2.5-pro`؛ الوراثة (بروفايل `work` يرى
+اختيار الافتراضي و`inherited: [image]`، ثم اختياره الخاص، ثم الرجوع بـ`null`)؛ رفض نموذج لا يرسم (`400`)؛ وفي
+بيت هرمز: `image_gen.provider: corehub-images` و`image_gen/corehub-images` في `plugins.enabled` وملفات الإضافة
+مطابقة، والمتغيّرات الأربعة في `.env` الجذر وفي بيئة العملية، وبروفايل `design` يرث بلا نسخة في `.env`ـه مع
+بقاء إعداداته الخاصة (`my-own-plugin` و`image_gen.fal`)، ثم اختياره الخاص في `.env`ـه، ثم المسح يزيل ما كتبه
+الهب فقط؛ و`fal` الذي اختاره شخص لا يُمسّ. واختبار يشغّل الإضافة ببايثون فعلي مع واجهة هرمز مكتوبة
+بكلماتنا (`agent/image_gen_provider.py`، `agent/secret_scope.py`): تُسجَّل باسمها، وترسم وتعدّل عبر نقطة
+`/chat/completions` مُبرمجة بمفتاح المزوّد، والصورة في مجلد الذاكرة المؤقتة، ولا يظهر المفتاح في الناتج؛
+وبلا نموذج تقول `image_model_not_chosen` و«Models → Images».
+
+**لم أشغّل** (قواعد السرعة: CI يشغّلها على كل دفع): حزم الخادم والويب كاملة، و`pnpm build`، ورحلات Playwright
+(لم أضف رحلة جديدة)، والاختبار الحقيقي مع هرمز في الصورة (`skill-library.real.test.ts` يحتاج Docker، وليس
+معي في هذه المهمة) — فالإضافة لم تُجرَّب بعد داخل هرمز حقيقي.
+
+نتيجة CI على #144: تُضاف بعد الدفع.
 
 ## المخاطر والرجوع
-(يُكمل عند الانتهاء.)
+- **أنماط الأسماء** (أي نموذج للصور، وأي بروتوكول) تخمين من الاسم حين لا يقول المزوّد؛ نموذج صور باسم غريب
+  لا يظهر في التبويب حتى يقول مزوّده `output_modalities`. والرجوع بسيط: توسيع النمط في `images.ts`.
+- **cli-proxy-api وبروتوكول `chat`**: الشكل المقروء هو شكل OpenRouter (`message.images`) مع بديلين (أجزاء
+  `image_url` في المحتوى، و`data:` في النص). لم يُجرَّب على cli-proxy-api حقيقي.
+- **الإضافة في هرمز** لم تُجرَّب في دور هرمز حقيقي؛ فشل تثبيتها يُسجَّل ولا يوقف كتابة المزوّدين، والمهارتان
+  تعملان من المتغيّرات دونها.
+- `.env` البروفايل صار يحمل مفتاح مزوّد الصور مرة ثانية باسم `COREHUB_IMAGE_API_KEY` (الهب يملكه ويحذفه).
+- الرجوع: revert لهذا الفرع؛ الترحيل `0021` ينسخ الجدول كما هو، وصف بدور `image` يبقى بلا أثر على الأدوار
+  الأخرى (والرجوع الكامل يحتاج حذف تلك الصفوف قبل إعادة القيد القديم).
 
 ## التسليم والخطوة التالية
-(يُكمل عند الانتهاء.)
+- للمالك أن يؤكّد القرارات المقترحة: أنماط التعرّف والبروتوكول، وحذف مرشّح «اعرض»، وزر الإضافة داخل تبويبي
+  الصوت، والأخضر الصافي لونًا افتراضيًا للقصّ.
+- التالي: تجربة الإضافة في دور هرمز حقيقي بالصورة، وعلى cli-proxy-api الحقيقي بـ`gemini-3.1-flash-image`.

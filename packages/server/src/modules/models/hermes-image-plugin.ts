@@ -55,12 +55,12 @@ export function imagePluginDir(home: string): string {
 export function writeHermesImagePlugin(
   home: string,
   wanted: boolean,
-  files: readonly PluginFile[] = shippedFiles(),
+  files?: readonly PluginFile[],
 ): string[] {
   if (!wanted) return [];
   const dir = imagePluginDir(home);
   const written: string[] = [];
-  for (const file of files) {
+  for (const file of files ?? shippedFiles()) {
     const target = path.join(dir, file.name);
     if (existsSync(target) && readFileSync(target).equals(file.data)) continue;
     mkdirSync(dir, { recursive: true });
