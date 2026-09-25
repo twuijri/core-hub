@@ -487,7 +487,10 @@ function contextOf(app: FastifyInstance): AgentsContext {
     leases,
     dataDir: hub.config.dataDir,
     version: hub.version,
-    hermesAgentId: () => HERMES_ENTRY.id,
+    hermesAgentId: (workspaceId) =>
+      service
+        .list({ id: workspaceId, slug: '', name: '', isDefault: false }, { kind: 'hermes' })
+        .find((agent) => agent.slug === 'hermes')?.id ?? null,
     notify: () => hubToolsNotifyFactory?.(app) ?? null,
     timezone: () => runtime.timezone(),
     refreshRuntime: () => runtime.refreshTui(),
@@ -544,6 +547,16 @@ export function hermesRuntimeFor(app: FastifyInstance): HermesRuntime {
 export function hermesDashboardFor(app: FastifyInstance): HermesDashboard | null {
   const { dashboard } = contextOf(app);
   return dashboard.available() ? dashboard : null;
+}
+
+/** The hub's own tools of this app (contract decision §47). */
+export function hubToolsFor(app: FastifyInstance): HubToolsService {
+  return contextOf(app).hubTools;
+}
+
+/** Who each live run acts for — the hub's own tools read it; a test opens one by hand. */
+export function runLeasesFor(app: FastifyInstance): RunLeases {
+  return contextOf(app).leases;
 }
 
 /** The live turns, for anything that must not interrupt one (`models` recycles Hermes). */

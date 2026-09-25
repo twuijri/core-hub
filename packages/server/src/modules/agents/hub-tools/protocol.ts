@@ -55,7 +55,10 @@ function failure(id: Id, code: number, message: string): RpcResponse {
  * One JSON-RPC message in, its answer out — or `null` for a notification or a response,
  * which the transport acknowledges with `202` and no body.
  */
-export async function handleRpc(message: unknown, handlers: McpHandlers): Promise<RpcResponse | null> {
+export async function handleRpc(
+  message: unknown,
+  handlers: McpHandlers,
+): Promise<RpcResponse | null> {
   if (!message || typeof message !== 'object' || Array.isArray(message)) {
     return failure(null, INVALID_REQUEST, 'one JSON-RPC message per request');
   }
@@ -63,7 +66,11 @@ export async function handleRpc(message: unknown, handlers: McpHandlers): Promis
   if (rpc.jsonrpc !== '2.0') return failure(null, INVALID_REQUEST, 'jsonrpc must be "2.0"');
   const hasId = 'id' in rpc && rpc.id !== undefined;
   const id: Id =
-    typeof rpc.id === 'string' || typeof rpc.id === 'number' ? rpc.id : rpc.id === null ? null : null;
+    typeof rpc.id === 'string' || typeof rpc.id === 'number'
+      ? rpc.id
+      : rpc.id === null
+        ? null
+        : null;
   if (typeof rpc.method !== 'string') {
     // A response to something we asked (we never ask) or a malformed message.
     return hasId && ('result' in rpc || 'error' in rpc)

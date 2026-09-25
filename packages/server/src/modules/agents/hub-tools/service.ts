@@ -60,7 +60,7 @@ export interface HubToolsDeps {
   dataDir: string;
   version: string;
   /** The Hermes agent's registry id (a new schedule runs it unless told otherwise). */
-  hermesAgentId(): string;
+  hermesAgentId(workspaceId: string): string | null;
   notify(): HubToolsNotify | null;
   timezone(): string;
   /** Hermes reads its MCP servers when a conversation's gateway starts: start a new one. */
@@ -247,9 +247,7 @@ export class HubToolsService {
       this.deps.db
         .select()
         .from(hubToolSettings)
-        .where(
-          and(eq(hubToolSettings.keyHash, hashKey(bearer)), eq(hubToolSettings.enabled, true)),
-        )
+        .where(and(eq(hubToolSettings.keyHash, hashKey(bearer)), eq(hubToolSettings.enabled, true)))
         .get() ?? null;
     const workspace = row ? findWorkspace(this.deps.db, row.workspace) : null;
     if (!row || !workspace || workspace.id !== row.workspace) {
@@ -310,12 +308,18 @@ export class HubToolsService {
       call: (method, route, options) =>
         this.inject(lease.token, workspace.slug, person?.locale ?? 'en', method, route, options),
       profile: workspace.slug,
-      agentId: this.deps.hermesAgentId(),
+      agentId: this.deps.hermesAgentId(workspace.id),
       filesRoot: path.join(this.deps.dataDir, 'workspaces', workspace.slug),
       notify: (title, body) => {
         const notify = this.deps.notify();
         if (!notify) throw new ToolRefusal('service_unavailable', 'notifications are not composed');
-        notify({ workspaceId: workspace.id, profile: workspace.slug, userId: lease.userId, title, body });
+        notify({
+          workspaceId: workspace.id,
+          profile: workspace.slug,
+          userId: lease.userId,
+          title,
+          body,
+        });
       },
       timezone: this.deps.timezone(),
     };

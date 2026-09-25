@@ -55,7 +55,7 @@ export interface ToolContext {
   /** The profile's slug (what `schedules.list` is asked for). */
   profile: string;
   /** The Hermes agent whose tools these are: a new schedule runs it unless told otherwise. */
-  agentId: string;
+  agentId: string | null;
   /** The folder of the profile's work: `${DATA_DIR}/workspaces/<profile>`. */
   filesRoot: string;
   /** A notice in the run owner's inbox, in this profile. */
@@ -317,7 +317,10 @@ export const HUB_TOOLS: readonly HubToolDefinition[] = [
     inputSchema: {
       type: 'object',
       required: ['task_id', 'content'],
-      properties: { task_id: ID('task'), content: { type: 'string', minLength: 1, maxLength: 8000 } },
+      properties: {
+        task_id: ID('task'),
+        content: { type: 'string', minLength: 1, maxLength: 8000 },
+      },
     },
     async run(ctx, args) {
       const body = await ctx.call('POST', `/tasks/${seg(need(args, 'task_id'))}/comments`, {
