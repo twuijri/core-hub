@@ -32,6 +32,8 @@ protocol PushBackend {
     func thisDevice() async throws -> String?
     func registerPush(deviceID: String, token: String, locale: HubLocale) async throws
     func unregisterPush(deviceID: String) async throws
+    /// `devices.update`: what the phone says about itself at each launch.
+    func update(deviceID: String, patch: DevicePatch) async throws
 }
 
 /// The rules of registering this phone's APNs token. Pure over `PushBackend`; tested.
@@ -90,6 +92,45 @@ struct PushRegistrar {
         }
     }
 
+    /// At each launch: tells the hub what this phone is now. A password sign-in with no device
+    /// row yet registers one (which says all of it); a row removed on the web is registered
+    /// again, once. Returns the device's id, or nil when the hub could not be told.
+    func report(_ patch: DevicePatch, kind: Credentials.Kind, knownDeviceID: String?,
+                device: DeviceRegistration) async -> String? {
+        var deviceID = knownDeviceID
+        var retried = false
+        while true {
+            let id: String
+            if let deviceID {
+                id = deviceID
+            } else {
+                do {
+                    switch kind {
+                    case .device:
+                        guard let found = try await backend.thisDevice() else { return nil }
+                        id = found
+                    case .password:
+                        // Registering describes the phone in full: nothing more to send.
+                        return try await backend.register(device)
+                    }
+                } catch {
+                    return nil
+                }
+            }
+            do {
+                try await backend.update(deviceID: id, patch: patch)
+                return id
+            } catch {
+                if HubFailure(error).status == 404, kind == .password, !retried {
+                    retried = true
+                    deviceID = nil
+                    continue
+                }
+                return nil
+            }
+        }
+    }
+
     /// Stops pushes to this phone; best effort, signing out goes on whatever the hub answers.
     func unregister(deviceID: String?) async {
         guard let deviceID else { return }
@@ -138,6 +179,12 @@ struct HubPushBackend: PushBackend {
     func unregisterPush(deviceID: String) async throws {
         try await api.call { try await DevicesAPI.devicesUnregisterPush(deviceId: deviceID, apiConfiguration: $0) }
     }
+
+    func update(deviceID: String, patch: DevicePatch) async throws {
+        _ = try await api.call {
+            try await DevicesAPI.devicesUpdate(deviceId: deviceID, devicePatch: patch, apiConfiguration: $0)
+        }
+    }
 }
 
 /// APNs on this phone: asks, registers, hands the token to the hub, and forgets it at sign-out.
@@ -156,11 +203,27 @@ final class PushCenter {
     /// right after sign-in (AppModel.finishSignIn); here the answer decides whether to register.
     func start(app: AppModel) async {
         self.app = app
-        switch await LocalNotices.shared.status() {
+        let status = await LocalNotices.shared.status()
+        await report(blocker: DeviceInfo.pushBlocker(status))
+        switch status {
         case .authorized, .provisional, .ephemeral:
             UIApplication.shared.registerForRemoteNotifications()
         default:
             state = .notAllowed
+        }
+    }
+
+    /// Tells the hub what this phone is now (model, iOS and app versions, what stops push), so
+    /// its card on the web is current; the device id it learns is kept with the sign-in.
+    private func report(blocker: PushBlocker) async {
+        guard let app, let credentials = await app.keeper.credentials else { return }
+        let registrar = PushRegistrar(backend: HubPushBackend(api: app.api))
+        let id = await registrar.report(
+            app.thisDeviceReport(pushBlocker: blocker), kind: credentials.kind,
+            knownDeviceID: credentials.deviceID, device: app.thisDevice(pushBlocker: blocker)
+        )
+        if let id, credentials.deviceID != id {
+            await app.keeper.update { if $0.userID == credentials.userID { $0.deviceID = id } }
         }
     }
 
@@ -181,7 +244,7 @@ final class PushCenter {
         let registrar = PushRegistrar(backend: HubPushBackend(api: app.api))
         let outcome = await registrar.register(
             token: token, locale: locale, kind: credentials.kind, knownDeviceID: credentials.deviceID,
-            device: app.thisDevice()
+            device: app.thisDevice(pushBlocker: ._none)
         )
         guard app.phase == .signedIn else { return }
         switch outcome {

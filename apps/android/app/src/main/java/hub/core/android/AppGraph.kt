@@ -18,13 +18,17 @@ import hub.core.android.phone.Notifier
 import hub.core.android.phone.PushManager
 import hub.core.android.phone.PushRegistrar
 import hub.core.android.phone.PushState
+import hub.core.android.phone.DeviceInfos
 import hub.core.android.phone.thisPhone
+import hub.core.android.phone.thisPhoneReport
 import hub.core.android.data.hubCall
 import hub.core.android.phone.Speaker
 import hub.core.android.realtime.DEVICES_NAMESPACE
 import hub.core.android.realtime.Realtime
 import hub.core.client.infrastructure.Serializer
 import hub.core.client.model.Notice
+import hub.core.client.model.PushBlocker
+import androidx.core.app.NotificationManagerCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -98,10 +102,25 @@ class AppGraph(context: Context) {
     /** FCM: registered with the hub while someone is signed in, when this build has Firebase. */
     val push = PushManager(
         context,
-        PushRegistrar(store, { apis(it) }) { thisPhone(store.deviceKey) },
+        PushRegistrar(store, { apis(it) }) { thisPhone(store.deviceKey, DeviceInfos.current(context).name, pushBlocker()) },
         { prefs.effectiveLanguage.tag },
         scope,
     )
+
+    private val appContext: Context = context.applicationContext ?: context
+
+    /** What stops push on this phone right now (the hub shows it on the device's card). */
+    fun pushBlocker(): PushBlocker = DeviceInfos.pushBlocker(
+        inBuild = push.inBuild,
+        notificationsAllowed = NotificationManagerCompat.from(appContext).areNotificationsEnabled(),
+        asked = device.askedNotifications,
+        sdk = android.os.Build.VERSION.SDK_INT,
+    )
+
+    /** Tells the hub what this phone is now; at each launch and after the permission answer. */
+    fun reportDevice() {
+        scope.launch { push.registrar.report(thisPhoneReport(pushBlocker(), DeviceInfos.current(appContext))) }
+    }
 
     /** True while a screen of the app is visible. */
     fun inForeground(): Boolean = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
@@ -165,7 +184,12 @@ class AppGraph(context: Context) {
         // decided (a revoked device, an expired session) deletes the FCM token.
         scope.launch {
             store.session.map { s -> s?.let { it.hub to it.user.id } }.distinctUntilChanged().collect { who ->
-                if (who != null) push.refresh() else push.forget()
+                if (who != null) {
+                    reportDevice()
+                    push.refresh()
+                } else {
+                    push.forget()
+                }
             }
         }
         // The background check runs while someone is signed in, This device allows it, and push

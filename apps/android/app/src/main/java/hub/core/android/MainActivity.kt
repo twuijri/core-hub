@@ -153,7 +153,10 @@ private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Uni
 @Composable
 private fun NotificationPermission() {
     val graph = androidx.compose.ui.platform.LocalContext.current.graph
-    val ask = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {}
+    // The answer changes what stops push here: the hub's device card hears it at once.
+    val ask = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {
+        graph.reportDevice()
+    }
     LaunchedEffect(Unit) {
         if (android.os.Build.VERSION.SDK_INT >= 33 && !graph.device.askedNotifications) {
             graph.device.askedNotifications = true

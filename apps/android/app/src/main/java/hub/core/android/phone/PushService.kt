@@ -1,7 +1,6 @@
 package hub.core.android.phone
 
 import android.content.Context
-import android.os.Build
 import android.util.Log
 import com.google.android.gms.tasks.Task
 import com.google.firebase.FirebaseApp
@@ -12,8 +11,10 @@ import hub.core.android.BuildConfig
 import hub.core.android.data.StoredSession
 import hub.core.android.graph
 import hub.core.client.model.DeviceKind
+import hub.core.client.model.DevicePatch
 import hub.core.client.model.DevicePlatform
 import hub.core.client.model.DeviceRegistration
+import hub.core.client.model.PushBlocker
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.CoroutineScope
@@ -25,16 +26,36 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** How this phone describes itself to the hub (pairing and `devices.register` alike). */
-fun thisPhone(deviceKey: String, name: String = "${Build.MANUFACTURER} ${Build.MODEL}") = DeviceRegistration(
+/**
+ * How this phone describes itself to the hub (pairing and `devices.register` alike): its name
+ * (the one given, else the phone's own), maker, model, Android and app versions, and what stops
+ * push on it.
+ */
+fun thisPhone(
+    deviceKey: String,
+    name: String? = null,
+    blocker: PushBlocker? = null,
+    info: DeviceInfo = DeviceInfos.current(),
+) = DeviceRegistration(
     deviceKey = deviceKey,
-    name = name.trim().ifEmpty { Build.MODEL ?: "Android" }.take(80),
+    name = name?.trim()?.takeIf { it.isNotEmpty() }?.take(80) ?: info.name,
     platform = DevicePlatform.ANDROID,
     kind = DeviceKind.PHONE,
-    brand = Build.MANUFACTURER,
-    model = Build.MODEL,
-    appVersion = BuildConfig.VERSION_NAME,
+    brand = info.brand,
+    model = info.model,
+    appVersion = info.appVersion,
+    osVersion = info.osVersion,
+    pushBlocker = blocker,
     capabilities = emptyList(),
+)
+
+/** What the app sends at each launch: everything the phone says about itself except its name. */
+fun thisPhoneReport(blocker: PushBlocker?, info: DeviceInfo = DeviceInfos.current()) = DevicePatch(
+    brand = info.brand,
+    model = info.model,
+    osVersion = info.osVersion,
+    appVersion = info.appVersion,
+    pushBlocker = blocker,
 )
 
 /**
@@ -51,7 +72,7 @@ fun thisPhone(deviceKey: String, name: String = "${Build.MANUFACTURER} ${Build.M
 @Suppress("DEPRECATION")
 class PushManager(
     private val context: Context,
-    private val registrar: PushRegistrar,
+    val registrar: PushRegistrar,
     private val language: () -> String,
     private val scope: CoroutineScope,
 ) {
@@ -61,6 +82,9 @@ class PushManager(
 
     /** True while the hub pushes to this phone; the background check is off then. */
     val active: Boolean get() = _state.value == PushState.ACTIVE
+
+    /** Whether this build can receive push at all (it was made with a Firebase project). */
+    val inBuild: Boolean get() = available()
 
     private fun available(): Boolean =
         BuildConfig.FIREBASE && runCatching { FirebaseApp.getApps(context).isNotEmpty() }.getOrDefault(false)

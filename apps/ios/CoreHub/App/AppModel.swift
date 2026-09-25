@@ -165,24 +165,35 @@ final class AppModel {
         ))
     }
 
-    /// How this phone describes itself to the hub: pairing and `devices.register` alike.
-    func thisDevice() -> DeviceRegistration {
-        let device = UIDevice.current
+    /// How this phone describes itself to the hub: pairing and `devices.register` alike — its
+    /// name, its model by marketing name, the iOS and app versions, and what stops push.
+    func thisDevice(pushBlocker: PushBlocker? = nil) -> DeviceRegistration {
+        let described = DeviceInfo.current(appVersion: appVersion)
         return DeviceRegistration(
             deviceKey: DeviceKey.current(defaults: defaults),
-            name: device.name,
+            name: described.name,
             platform: .ios,
-            kind: device.userInterfaceIdiom == .pad ? .tablet : .phone,
+            kind: UIDevice.current.userInterfaceIdiom == .pad ? .tablet : .phone,
             brand: "Apple",
-            model: device.model,
-            appVersion: appVersion,
+            model: described.model,
+            appVersion: described.appVersion,
+            osVersion: described.osVersion,
+            pushBlocker: pushBlocker,
             capabilities: [.camera, .microphone, .notifications, .clipboard]
         )
     }
 
+    /// What the app says at each launch: everything `thisDevice` says except the name, which is
+    /// the person's to change on the hub.
+    func thisDeviceReport(pushBlocker: PushBlocker?) -> DevicePatch {
+        let described = DeviceInfo.current(appVersion: appVersion)
+        return DevicePatch(brand: "Apple", model: described.model, osVersion: described.osVersion,
+                           appVersion: described.appVersion, pushBlocker: pushBlocker)
+    }
+
     /// Claims a pairing the web made (Settings → Device connections → App).
     func pair(_ payload: PairingPayload) async throws {
-        let registration = thisDevice()
+        let registration = thisDevice(pushBlocker: DeviceInfo.pushBlocker(await LocalNotices.shared.status()))
         let result = try await api.anonymous(hub: payload.hubURL) {
             try await AuthAPI.authClaimPairing(
                 pairingId: payload.pairingID,
