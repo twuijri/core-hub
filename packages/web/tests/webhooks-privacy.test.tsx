@@ -13,7 +13,7 @@ import { ThemeProvider } from '../src/design/theme.js';
 import { I18nProvider } from '../src/i18n/context.js';
 import { RealtimeProvider } from '../src/realtime/context.js';
 import { WebhooksTab } from '../src/notify/WebhooksTab.js';
-import { newSigningSecret } from '../src/notify/webhooks.js';
+import { canRedeliver, clampRetries, newSigningSecret } from '../src/notify/webhooks.js';
 import { PrivacyTab } from '../src/settings/PrivacyTab.js';
 
 function memoryStorage(): Storage {
@@ -96,11 +96,41 @@ function hub(initial: Partial<State> = {}) {
       );
     if (path.endsWith('/notify/webhook-events'))
       return json({
-        items: ['run.completed', 'task.moved', 'job.failed'].map((name) => ({
-          name,
-          description: { ar: name, en: name },
-        })),
+        items: [
+          {
+            name: 'run.completed',
+            description: { ar: 'انتهى تشغيل وكيل', en: 'An agent run finished' },
+          },
+          { name: 'task.moved', description: { ar: 'انتقلت مهمة', en: 'A task changed column' } },
+          {
+            name: 'notice.created',
+            description: { ar: 'وصل إشعار', en: 'A notification was created' },
+          },
+        ],
       });
+    if (path.endsWith('/profiles'))
+      return json({
+        items: [
+          { slug: 'default', name: 'Default' },
+          { slug: 'work', name: 'Work' },
+        ],
+      });
+    if (path.endsWith('/redeliver') && method === 'POST')
+      return json(
+        {
+          id: '01J8QK3ZR2W7M5N4P6T8V9X0WR',
+          webhook_id: HOOK_ID,
+          event: 'run.completed',
+          status: 'queued',
+          attempts: 0,
+          response_status: null,
+          error: null,
+          created_at: '2026-09-25T10:00:00Z',
+          delivered_at: null,
+          next_attempt_at: '2026-09-25T10:00:00Z',
+        },
+        202,
+      );
     if (path.endsWith('/notify/webhooks') && method === 'POST') {
       if (state.refuse) return json(state.refuse.body, state.refuse.status);
       const created = webhook({
@@ -190,14 +220,14 @@ function mount(node: React.ReactElement, fetchImpl: typeof fetch, language: 'en'
 afterEach(cleanup);
 
 describe('Webhooks', () => {
-  it('says an empty list is empty, and says what the hub does not send yet', async () => {
+  it('says an empty list is empty, and how events are sent', async () => {
     const { fetchImpl } = hub();
     mount(<WebhooksTab />, fetchImpl);
     await waitFor(() => expect(screen.getByTestId('webhooks-empty')).toBeTruthy());
-    // The events are stored, not forwarded: the page says so instead of implying it.
-    expect(screen.getByTestId('webhooks-forwarding-note').textContent).toContain(
-      'only the test delivery',
-    );
+    // Events are forwarded now (decision §59), with retries: the page says what happens.
+    const note = screen.getByTestId('webhooks-forwarding-note').textContent;
+    expect(note).toContain('as it happens');
+    expect(note).not.toContain('only the test delivery');
   });
 
   it('makes the signing secret here, sends it once, and shows it once', async () => {
@@ -208,7 +238,10 @@ describe('Webhooks', () => {
     const dialog = await screen.findByTestId('webhook-dialog');
     await user.type(within(dialog).getByTestId('webhook-name'), 'CI');
     await user.type(within(dialog).getByTestId('webhook-url-input'), 'https://ci.example/hook');
-    await user.click(await within(dialog).findByRole('checkbox', { name: 'task.moved' }));
+    // Each event reads as a sentence, with its name beside it.
+    await user.click(
+      await within(dialog).findByRole('checkbox', { name: /A task changed column/ }),
+    );
     await user.click(within(dialog).getByTestId('save-webhook'));
 
     const secretDialog = await screen.findByTestId('webhook-secret-dialog');
@@ -221,6 +254,10 @@ describe('Webhooks', () => {
       name: 'CI',
       url: 'https://ci.example/hook',
       events: ['task.moved'],
+      // Every profile, no message text, five retries: the defaults a new webhook starts with.
+      profiles: [],
+      include_content: false,
+      max_retries: 5,
       enabled: true,
       allow_private_network: false,
       secret: shown,
@@ -315,6 +352,7 @@ describe('Webhooks', () => {
         error: null,
         created_at: '2026-09-24T10:00:00Z',
         delivered_at: '2026-09-24T10:00:01Z',
+        next_attempt_at: null,
       },
     ];
     expect((await screen.findByTestId('webhook-test-outcome')).textContent).toBe(
@@ -369,6 +407,162 @@ describe('Webhooks', () => {
     mount(<WebhooksTab />, fetchImpl, 'ar');
     expect(await screen.findByText('إرسال تجريبي')).toBeTruthy();
     expect(screen.getByText('موقَّع')).toBeTruthy();
+  });
+});
+
+describe('Webhooks: which profiles, what content, how many retries', () => {
+  it('sends the profiles chosen, the content switch and the retries', async () => {
+    const { fetchImpl, sent } = hub();
+    const user = userEvent.setup();
+    mount(<WebhooksTab />, fetchImpl);
+    await user.click(await screen.findByTestId('add-webhook'));
+    const dialog = await screen.findByTestId('webhook-dialog');
+    await user.type(within(dialog).getByTestId('webhook-name'), 'Work only');
+    await user.type(within(dialog).getByTestId('webhook-url-input'), 'https://ci.example/hook');
+    await user.click(within(dialog).getByRole('radio', { name: 'Only these profiles' }));
+    // None chosen yet: nothing to save.
+    expect(within(dialog).getByText('Choose at least one profile.')).toBeTruthy();
+    expect((within(dialog).getByTestId('save-webhook') as HTMLButtonElement).disabled).toBe(true);
+    await user.click(await within(dialog).findByRole('checkbox', { name: 'Work' }));
+    await user.click(within(dialog).getByRole('switch', { name: /Include message text/ }));
+    const retries = within(dialog).getByTestId('webhook-max-retries');
+    await user.clear(retries);
+    await user.type(retries, '2');
+    await user.click(within(dialog).getByTestId('save-webhook'));
+    await waitFor(() =>
+      expect(sent.some((s) => s.method === 'POST' && s.path.endsWith('/notify/webhooks'))).toBe(
+        true,
+      ),
+    );
+    const post = sent.find((s) => s.method === 'POST' && s.path.endsWith('/notify/webhooks'))!;
+    expect(post.body).toMatchObject({ profiles: ['work'], include_content: true, max_retries: 2 });
+  });
+
+  it('shows what an existing webhook listens to, and drops an event the hub no longer has', async () => {
+    const { fetchImpl, sent } = hub({
+      hooks: [
+        webhook({
+          profiles: ['work'],
+          include_content: true,
+          events: ['run.completed', 'message.delta'],
+        }),
+      ],
+    });
+    const user = userEvent.setup();
+    mount(<WebhooksTab />, fetchImpl);
+    expect((await screen.findByTestId('webhook-profiles')).textContent).toBe('Profiles: 1');
+    expect(screen.getByTestId('webhook-content').textContent).toBe('Includes message text');
+    await user.click(screen.getByTestId('webhook-edit'));
+    const dialog = await screen.findByTestId('webhook-dialog');
+    const isOn = (el: HTMLElement) =>
+      (el as HTMLInputElement).checked === true || el.getAttribute('aria-checked') === 'true';
+    expect(isOn(within(dialog).getByRole('radio', { name: 'Only these profiles' }))).toBe(true);
+    expect(isOn(await within(dialog).findByRole('checkbox', { name: 'Work' }))).toBe(true);
+    await within(dialog).findByRole('checkbox', { name: /An agent run finished/ });
+    await user.click(within(dialog).getByTestId('save-webhook'));
+    await waitFor(() => expect(sent.some((s) => s.method === 'PATCH')).toBe(true));
+    expect(sent.find((s) => s.method === 'PATCH')!.body).toMatchObject({
+      events: ['run.completed'],
+      profiles: ['work'],
+      include_content: true,
+      max_retries: 3,
+    });
+  });
+
+  it('lists each delivery’s attempts, answer and next try, and redelivers a failed one', async () => {
+    const delivery = (over: Record<string, unknown>) => ({
+      webhook_id: HOOK_ID,
+      event: 'run.completed',
+      error: null,
+      created_at: '2026-09-25T10:00:00Z',
+      delivered_at: null,
+      next_attempt_at: null,
+      ...over,
+    });
+    const { fetchImpl, sent } = hub({
+      hooks: [webhook()],
+      deliveries: [
+        delivery({
+          id: '01J8QK3ZR2W7M5N4P6T8V9X0W1',
+          status: 'failed',
+          attempts: 2,
+          response_status: 502,
+          error: 'the endpoint answered 502',
+          next_attempt_at: '2026-09-25T10:05:00Z',
+        }),
+        delivery({
+          id: '01J8QK3ZR2W7M5N4P6T8V9X0W2',
+          event: 'task.moved',
+          status: 'dead',
+          attempts: 6,
+          response_status: 500,
+          error: 'the endpoint answered 500',
+        }),
+        delivery({
+          id: '01J8QK3ZR2W7M5N4P6T8V9X0W3',
+          status: 'delivered',
+          attempts: 1,
+          response_status: 200,
+          delivered_at: '2026-09-25T10:00:01Z',
+        }),
+      ],
+    });
+    const user = userEvent.setup();
+    mount(<WebhooksTab />, fetchImpl);
+    await user.click(await screen.findByTestId('webhook-deliveries-toggle'));
+    const table = await screen.findByTestId('webhook-deliveries');
+    const rows = within(table).getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(3);
+    // Still retrying: its next try is shown, and there is nothing to redeliver yet.
+    expect(within(rows[0]!).getByText('Failed')).toBeTruthy();
+    expect(within(rows[0]!).getByTestId('delivery-attempts').textContent).toBe('2');
+    expect(within(rows[0]!).getByTestId('delivery-code').textContent).toBe('502');
+    expect(within(rows[0]!).getByTestId('delivery-next')).toBeTruthy();
+    expect(within(rows[0]!).queryByTestId('delivery-redeliver')).toBeNull();
+    // Given up: redeliverable.
+    expect(within(rows[1]!).getByText('Gave up')).toBeTruthy();
+    expect(within(rows[1]!).getByText('task.moved')).toBeTruthy();
+    expect(within(rows[1]!).getByTestId('delivery-attempts').textContent).toBe('6');
+    expect(within(rows[2]!).queryByTestId('delivery-redeliver')).toBeNull();
+    await user.click(within(rows[1]!).getByTestId('delivery-redeliver'));
+    expect((await screen.findByTestId('delivery-requeued')).textContent).toContain('Queued again');
+    expect(
+      sent.some(
+        (s) =>
+          s.method === 'POST' &&
+          s.path.endsWith(`/${HOOK_ID}/deliveries/01J8QK3ZR2W7M5N4P6T8V9X0W2/redeliver`),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('canRedeliver and clampRetries', () => {
+  const base = {
+    id: 'd',
+    webhook_id: 'w',
+    event: 'run.completed',
+    attempts: 1,
+    response_status: null,
+    error: null,
+    created_at: '',
+    delivered_at: null,
+  };
+  it('offers a redelivery only for one that is over and did not arrive', () => {
+    expect(canRedeliver({ ...base, status: 'dead', next_attempt_at: null })).toBe(true);
+    expect(canRedeliver({ ...base, status: 'failed', next_attempt_at: null })).toBe(true);
+    expect(
+      canRedeliver({ ...base, status: 'failed', next_attempt_at: '2026-09-25T10:00:00Z' }),
+    ).toBe(false);
+    expect(canRedeliver({ ...base, status: 'delivered', next_attempt_at: null })).toBe(false);
+    expect(
+      canRedeliver({ ...base, status: 'queued', next_attempt_at: '2026-09-25T10:00:00Z' }),
+    ).toBe(false);
+  });
+  it('keeps retries within the contract’s 0–10', () => {
+    expect(clampRetries(-3)).toBe(0);
+    expect(clampRetries(42)).toBe(10);
+    expect(clampRetries(2.6)).toBe(3);
+    expect(clampRetries(Number.NaN)).toBe(5);
   });
 });
 

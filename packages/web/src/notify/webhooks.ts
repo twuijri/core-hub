@@ -5,6 +5,10 @@
  * but the hub keeps each webhook in the profile the request came from, so switching
  * profiles lists a different set — the key carries the profile for that reason.
  *
+ * **Deliveries happen in the background** (contract decision §59): an event is queued,
+ * sent, and retried with backoff by the hub; the table here follows it and can send a
+ * failed one again.
+ *
  * **A signing secret is written once and never read back.** The hub answers `[stored]`
  * for one that exists; the only moment the real value is on screen is right after this
  * client made it (`newSigningSecret`), which is why it is generated here rather than asked
@@ -38,10 +42,19 @@ export interface WebhookWrite {
   name?: string;
   url?: string;
   events?: string[];
+  /** Empty: every profile the person saving it may enter. */
+  profiles?: string[];
   enabled?: boolean;
   secret?: string | null;
+  include_content?: boolean;
   allow_private_network?: boolean;
+  max_retries?: number;
 }
+
+/** What a new webhook retries when nobody changes it (the contract's default). */
+export const DEFAULT_MAX_RETRIES = 5;
+/** The contract's bounds for `max_retries`. */
+export const MAX_RETRIES_LIMIT = 10;
 
 export type DeliveryStatus = 'queued' | 'delivered' | 'failed' | 'dead';
 
@@ -55,6 +68,24 @@ export interface WebhookDelivery {
   error: string | null;
   created_at: string;
   delivered_at: string | null;
+  next_attempt_at: string | null;
+}
+
+/**
+ * Whether a person may send this delivery again: it is over and did not arrive. One still
+ * waiting for its retry will be sent anyway (the hub answers 409 for it).
+ */
+export function canRedeliver(delivery: WebhookDelivery): boolean {
+  return (
+    delivery.status === 'dead' ||
+    (delivery.status === 'failed' && delivery.next_attempt_at === null)
+  );
+}
+
+/** A number for the retries field, within the contract's 0–10. */
+export function clampRetries(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_MAX_RETRIES;
+  return Math.min(Math.max(Math.round(value), 0), MAX_RETRIES_LIMIT);
 }
 
 export interface WebhookEvent {
@@ -123,6 +154,12 @@ export function useWebhookDeliveries(id: string, enabled: boolean) {
         })
       ).data as unknown as { items: WebhookDelivery[] },
     enabled: !!session && enabled,
+    // The hub sends in the background, so an open table follows it: quickly while
+    // something is waiting to be sent, slowly otherwise, to show new events arriving.
+    refetchInterval: (query) =>
+      query.state.data?.items.some((d) => d.status === 'queued' || d.next_attempt_at !== null)
+        ? 1_500
+        : 5_000,
   });
 }
 
@@ -168,6 +205,23 @@ export function useDeleteWebhook() {
         params: { webhook_id: id },
       });
     },
+    onSuccess: () => void invalidate(),
+  });
+}
+
+/** Send a failed delivery again; the hub queues a new one with the same body. */
+export function useRedeliver() {
+  const { client } = useAuth();
+  const invalidate = useWebhookInvalidation();
+  return useMutation({
+    mutationFn: async ({ webhookId, deliveryId }: { webhookId: string; deliveryId: string }) =>
+      (
+        await client.request(
+          'post',
+          '/notify/webhooks/{webhook_id}/deliveries/{delivery_id}/redeliver',
+          { params: { webhook_id: webhookId, delivery_id: deliveryId } },
+        )
+      ).data as unknown as WebhookDelivery,
     onSuccess: () => void invalidate(),
   });
 }

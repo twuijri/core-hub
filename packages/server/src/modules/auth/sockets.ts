@@ -20,7 +20,7 @@ import { eq } from 'drizzle-orm';
 import type { ModuleDb } from '../../lib/db.js';
 import { HubError, type ErrorCode } from '../../lib/errors.js';
 import { REALTIME_NAMESPACES } from '../../lib/module.js';
-import { profileRoom } from '../../lib/realtime.js';
+import { profileRoom, publishToTaps } from '../../lib/realtime.js';
 import type { AuthContext } from './context.js';
 import { resolvePrincipal, type Principal } from './principal.js';
 import { appTokens } from './schema.js';
@@ -145,14 +145,14 @@ export function emitToUser(
 ): void {
   if (!io) return;
   seq += 1;
-  io.of(namespace)
-    .to(userRoom(userId))
-    .emit(event, {
-      event,
-      namespace,
-      profile: null,
-      ts: new Date(now).toISOString(),
-      seq,
-      payload,
-    });
+  const ts = new Date(now).toISOString();
+  io.of(namespace).to(userRoom(userId)).emit(event, {
+    event,
+    namespace,
+    profile: null,
+    ts,
+    seq,
+    payload,
+  });
+  publishToTaps(io, { namespace, event, profile: null, ts, payload });
 }
