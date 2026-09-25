@@ -45,7 +45,12 @@ function fakeSpawner(): ShellSpawner & { shells: FakeShell[] } {
 
 const IDLE = 15 * 60_000;
 const OWNER = '01J8QK3ZR2W7M5N4P6T8V9X0OW';
-const where = { ownerId: OWNER, workspaceId: 'ws', profile: 'default', cwd: '/data/workspaces/default' };
+const where = {
+  ownerId: OWNER,
+  workspaceId: 'ws',
+  profile: 'default',
+  cwd: '/data/workspaces/default',
+};
 
 describe('module: terminal', () => {
   it('is composed by the app with routes and events registered', async () => {

@@ -4,14 +4,7 @@
   "title": "/rt/terminal · terminal.output",
   "description": "Bytes the shell wrote, as UTF-8 text, in order. Only to the sockets attached to that session (the owner's). Emitted by: terminal module.",
   "type": "object",
-  "required": [
-    "event",
-    "namespace",
-    "profile",
-    "ts",
-    "seq",
-    "payload"
-  ],
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
   "properties": {
     "event": {
       "const": "terminal.output"
@@ -31,10 +24,7 @@
     },
     "payload": {
       "type": "object",
-      "required": [
-        "terminal_id",
-        "data"
-      ],
+      "required": ["terminal_id", "data"],
       "properties": {
         "terminal_id": {
           "$ref": "#/$defs/Ulid"
@@ -66,17 +56,13 @@
       "type": "string",
       "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
       "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
-      "examples": [
-        "work"
-      ]
+      "examples": ["work"]
     },
     "Timestamp": {
       "type": "string",
       "format": "date-time",
       "description": "ISO-8601 UTC with `Z`.",
-      "examples": [
-        "2026-09-21T10:15:00Z"
-      ]
+      "examples": ["2026-09-21T10:15:00Z"]
     },
     "Ulid": {
       "type": "string",
@@ -84,9 +70,7 @@
       "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
       "minLength": 26,
       "maxLength": 26,
-      "examples": [
-        "01J8QK3ZR2W7M5N4P6T8V9X0YA"
-      ]
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
     }
   }
 }

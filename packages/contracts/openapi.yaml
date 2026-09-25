@@ -114,7 +114,15 @@ paths:
                 contract_version: 1.0.0
                 api_versions: [v1]
                 realtime_namespaces:
-                  [/rt/sessions, /rt/rooms, /rt/tasks, /rt/schedules, /rt/devices, /rt/jobs, /rt/terminal]
+                  [
+                    /rt/sessions,
+                    /rt/rooms,
+                    /rt/tasks,
+                    /rt/schedules,
+                    /rt/devices,
+                    /rt/jobs,
+                    /rt/terminal,
+                  ]
                 locales: [ar, en]
                 setup_required: false
                 setup_open: false
@@ -1284,7 +1292,15 @@ paths:
                   contract_version: 1.0.0
                   api_versions: [v1]
                   realtime_namespaces:
-                    [/rt/sessions, /rt/rooms, /rt/tasks, /rt/schedules, /rt/devices, /rt/jobs, /rt/terminal]
+                    [
+                      /rt/sessions,
+                      /rt/rooms,
+                      /rt/tasks,
+                      /rt/schedules,
+                      /rt/devices,
+                      /rt/jobs,
+                      /rt/terminal,
+                    ]
                   locales: [ar, en]
                   setup_required: false
                   setup_open: false

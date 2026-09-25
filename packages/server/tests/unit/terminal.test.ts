@@ -67,7 +67,10 @@ const command = (socket: Socket, name: string, payload: Record<string, unknown>)
 function outputUntil(socket: Socket, id: string, predicate: (text: string) => boolean) {
   return new Promise<string>((resolve, reject) => {
     let text = '';
-    const timer = setTimeout(() => reject(new Error(`no match in: ${JSON.stringify(text)}`)), 10_000);
+    const timer = setTimeout(
+      () => reject(new Error(`no match in: ${JSON.stringify(text)}`)),
+      10_000,
+    );
     const listener = (envelope: Envelope) => {
       if (envelope.payload.terminal_id !== id) return;
       text += envelope.payload.data ?? '';
@@ -140,7 +143,10 @@ describe('web terminal: off unless COREHUB_WEB_TERMINAL=1', () => {
   it('refuses even the owner, on the route and on the socket', async () => {
     const res = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/terminal' });
     expect(res.statusCode).toBe(403);
-    expect(res.json()).toMatchObject({ code: 'forbidden', details: { reason: 'terminal_disabled' } });
+    expect(res.json()).toMatchObject({
+      code: 'forbidden',
+      details: { reason: 'terminal_disabled' },
+    });
 
     const { refused } = await open(baseUrl, hub.token);
     expect(refused?.message).toBe('forbidden');
@@ -240,7 +246,11 @@ describe('web terminal: on', () => {
     const rows = auditRows(hub).filter((row) => row.entityId === id);
     expect(rows.map((row) => row.action).sort()).toEqual(['terminal.closed', 'terminal.opened']);
     const openedRow = rows.find((row) => row.action === 'terminal.opened')!;
-    expect(openedRow).toMatchObject({ actorKind: 'user', actorId: hub.userId, ownerId: hub.userId });
+    expect(openedRow).toMatchObject({
+      actorKind: 'user',
+      actorId: hub.userId,
+      ownerId: hub.userId,
+    });
     expect(openedRow.data).toMatchObject({
       cwd: path.join(hub.dataDir, 'workspaces', 'default'),
       profile: 'default',
@@ -259,7 +269,11 @@ describe('web terminal: on', () => {
       ids.push(ack.session!.id);
     }
     const fourth = await command(socket, 'open', { profile: 'default', cols: 80, rows: 24 });
-    expect(fourth).toMatchObject({ ok: false, code: 'conflict', details: { reason: 'terminal_limit' } });
+    expect(fourth).toMatchObject({
+      ok: false,
+      code: 'conflict',
+      details: { reason: 'terminal_limit' },
+    });
     for (const id of ids) await command(socket, 'close', { terminal_id: id });
     expect(terminalManagerFor(hub.app)?.size).toBe(0);
   });
