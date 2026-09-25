@@ -1,7 +1,7 @@
 // The desktop app end to end: first run → remote mode against a real hub → sign in → a chat
 // that streams through the app's loopback origin (HTTP and WebSocket) → This device. Then a
 // second computer pairs by link instead of a password.
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,13 +17,16 @@ const PASSWORD = 'e2e-owner-password';
 const shots = path.join(appDir, 'test-results', 'shots');
 mkdirSync(shots, { recursive: true });
 
+const userDataDirs = new WeakMap<ElectronApplication, string>();
+const userDataOf = (app: ElectronApplication) => userDataDirs.get(app) ?? '';
+
 async function launch(
   language: 'ar' | 'en',
   env: Record<string, string> = {},
 ): Promise<ElectronApplication> {
   const userData = mkdtempSync(path.join(os.tmpdir(), 'corehub-desktop-'));
   writeFileSync(path.join(userData, 'desktop.json'), JSON.stringify({ language }));
-  return electron.launch({
+  const app = await electron.launch({
     executablePath,
     // On Linux the test draws on the X server xvfb-run gives it, never on the desktop session
     // of whoever runs it (a Wayland session would otherwise be picked up from the env).
@@ -39,6 +42,8 @@ async function launch(
       ...env,
     },
   });
+  userDataDirs.set(app, userData);
+  return app;
 }
 
 test('remote mode: connect, sign in, chat, This device', async () => {
@@ -171,6 +176,34 @@ test('local mode: no Hermes found → the hub starts on this computer anyway →
     await expect(page.getByTestId('this-device-hermes')).toContainText('غير موجود');
     await expect(page.getByTestId('this-device-data-dir')).toContainText('local-hub');
     await page.screenshot({ path: path.join(shots, 'this-device-local-ar.png') });
+
+    // The local helper: off until turned on, then an MCP server on this computer only.
+    await expect(page.getByTestId('helper-enabled')).toHaveAttribute('aria-checked', 'false');
+    await page.getByTestId('helper-enabled').click();
+    const url = (await page.getByTestId('helper-url').textContent()) ?? '';
+    expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
+    const settings = JSON.parse(
+      readFileSync(path.join(userDataOf(app), 'desktop.json'), 'utf8'),
+    ) as { helper: { token: string; enabled: boolean } };
+    expect(settings.helper.enabled).toBe(true);
+    const call = (body: unknown, token = settings.helper.token) =>
+      fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+    expect((await call({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, 'wrong')).status).toBe(401);
+    const tools = (await (await call({ jsonrpc: '2.0', id: 1, method: 'tools/list' })).json()) as {
+      result: { tools: Array<{ name: string }> };
+    };
+    // No folder shared and nothing allowed: agents may only ask what is shared.
+    expect(tools.result.tools.map((t) => t.name)).toEqual([
+      'list_allowed_folders',
+      'list_directory',
+      'read_text_file',
+    ]);
+    await expect(page.getByTestId('helper-no-folders')).toBeVisible();
+    await page.getByTestId('helper').screenshot({ path: path.join(shots, 'helper-ar.png') });
   } finally {
     await app.close();
   }

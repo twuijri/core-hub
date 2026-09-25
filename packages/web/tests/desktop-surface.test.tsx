@@ -7,7 +7,11 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../src/auth/context.js';
 import { SessionStore, type StoredSession } from '../src/auth/store.js';
-import type { DesktopBridge, DesktopState } from '../src/desktop/bridge-types.js';
+import type {
+  DesktopBridge,
+  DesktopHelperState,
+  DesktopState,
+} from '../src/desktop/bridge-types.js';
 import { ThemeProvider } from '../src/design/theme.js';
 import { I18nProvider } from '../src/i18n/context.js';
 import { RealtimeProvider } from '../src/realtime/context.js';
@@ -36,7 +40,44 @@ const SESSION: StoredSession = {
   user: { id: 'u', username: 'owner', display_name: 'Owner', role: 'owner' },
 };
 
-function fakeBridge(over: Partial<DesktopState> = {}) {
+function fakeHelper(over: Partial<DesktopHelperState> = {}) {
+  let helper: DesktopHelperState = {
+    enabled: false,
+    url: null,
+    token: 'a'.repeat(64),
+    folders: [],
+    allowOpen: false,
+    tools: [
+      { name: 'list_allowed_folders', description: '' },
+      { name: 'list_directory', description: '' },
+      { name: 'read_text_file', description: '' },
+    ],
+    activity: [],
+    error: null,
+    ...over,
+  };
+  const set = (patch: Partial<DesktopHelperState>) => (helper = { ...helper, ...patch });
+  return {
+    get: vi.fn(async () => helper),
+    setEnabled: vi.fn(async (value: boolean) =>
+      set({ enabled: value, url: value ? 'http://127.0.0.1:47001/mcp' : null }),
+    ),
+    addFolder: vi.fn(async () =>
+      set({ folders: [...helper.folders, { path: '/home/t/Docs', write: false }] }),
+    ),
+    removeFolder: vi.fn(async (folder: string) =>
+      set({ folders: helper.folders.filter((f) => f.path !== folder) }),
+    ),
+    setFolderWrite: vi.fn(async () => helper),
+    setAllowOpen: vi.fn(async (value: boolean) => set({ allowOpen: value })),
+    newToken: vi.fn(async () => helper),
+  };
+}
+
+function fakeBridge(
+  over: Partial<DesktopState> = {},
+  helperOver: Partial<DesktopHelperState> = {},
+) {
   let state: DesktopState = {
     appVersion: '1.2.3',
     platform: 'linux',
@@ -60,6 +101,7 @@ function fakeBridge(over: Partial<DesktopState> = {}) {
     notify: vi.fn(),
     setUnreadCount: vi.fn(),
     onOpenPath: vi.fn(() => () => {}),
+    helper: fakeHelper(helperOver),
   } satisfies DesktopBridge;
   return bridge;
 }
@@ -73,13 +115,19 @@ const meta = {
   locales: ['ar', 'en'],
   setup_required: false,
 };
-const fetchImpl = (async (url: string) =>
-  new URL(String(url)).pathname.endsWith('/meta')
-    ? new Response(JSON.stringify(meta), { headers: { 'content-type': 'application/json' } })
-    : new Response(JSON.stringify({ error: 'x', code: 'not_found' }), {
-        status: 404,
-        headers: { 'content-type': 'application/json' },
-      })) as unknown as typeof fetch;
+const sent: Array<{ method: string; path: string; body: unknown }> = [];
+const json = (value: unknown, status = 200) =>
+  new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
+const fetchImpl = (async (url: string, init: RequestInit = {}) => {
+  const pathname = new URL(String(url)).pathname;
+  const method = (init.method ?? 'GET').toUpperCase();
+  sent.push({ method, path: pathname, body: init.body ? JSON.parse(String(init.body)) : null });
+  if (pathname.endsWith('/meta')) return json(meta);
+  if (pathname.endsWith('/agents')) return json({ items: [{ id: 'AG1', slug: 'hermes' }] });
+  if (pathname.endsWith('/agents/AG1/mcp-servers'))
+    return method === 'POST' ? json({ name: 'this-computer' }, 201) : json({ items: [] });
+  return json({ error: 'x', code: 'not_found' }, 404);
+}) as unknown as typeof fetch;
 
 function mountThisDevice() {
   const store = new SessionStore(memoryStorage());
@@ -272,6 +320,65 @@ describe('This device in local mode', () => {
     mountThisDevice();
     await screen.findByTestId('this-device-hub');
     expect(screen.queryByTestId('this-device-hermes')).toBeNull();
+  });
+});
+
+describe('local helper permission screen', () => {
+  it('is off by default and shows exactly the tools and folders the app reports', async () => {
+    const bridge = fakeBridge({ mode: 'local', hubUrl: 'http://127.0.0.1:40123' });
+    withBridge(bridge);
+    mountThisDevice();
+    const helper = await screen.findByTestId('helper');
+    expect(screen.getByTestId('helper-enabled').getAttribute('aria-checked')).toBe('false');
+    expect(
+      [...helper.querySelectorAll('[data-tool]')].map((li) => li.getAttribute('data-tool')),
+    ).toEqual(['list_allowed_folders', 'list_directory', 'read_text_file']);
+    expect(screen.getByTestId('helper-no-folders')).toBeTruthy();
+    await userEvent.click(screen.getByTestId('helper-add-folder'));
+    await waitFor(() =>
+      expect(screen.getByTestId('helper-folders').textContent).toContain('/home/t/Docs'),
+    );
+  });
+
+  it('turned on in local mode, adds itself to Hermes through the hub’s MCP contract', async () => {
+    sent.length = 0;
+    const bridge = fakeBridge({ mode: 'local', hubUrl: 'http://127.0.0.1:40123' });
+    withBridge(bridge);
+    mountThisDevice();
+    await screen.findByTestId('helper');
+    const toggle = screen.getByTestId('helper-enabled');
+    await userEvent.click(toggle);
+    expect(bridge.helper.setEnabled).toHaveBeenCalledWith(true);
+    await waitFor(() =>
+      expect(screen.getByTestId('helper-url').textContent).toBe('http://127.0.0.1:47001/mcp'),
+    );
+    const add = await screen.findByTestId('helper-add-to-hermes');
+    await waitFor(() => expect(add.hasAttribute('disabled')).toBe(false));
+    await userEvent.click(add);
+    await waitFor(() =>
+      expect(sent.find((r) => r.method === 'POST')).toEqual({
+        method: 'POST',
+        // The contract's agents.createMcpServer, for the Hermes agent the hub listed.
+        path: expect.stringMatching(/\/agents\/AG1\/mcp-servers$/),
+        body: {
+          name: 'this-computer',
+          transport: 'http',
+          enabled: true,
+          config: {
+            url: 'http://127.0.0.1:47001/mcp',
+            headers: { Authorization: `Bearer ${'a'.repeat(64)}` },
+          },
+        },
+      }),
+    );
+  });
+
+  it('says a hub on a server cannot reach it, and offers no Hermes button', async () => {
+    withBridge(fakeBridge({}, { enabled: true, url: 'http://127.0.0.1:47001/mcp' }));
+    mountThisDevice();
+    await screen.findByTestId('helper-url');
+    expect(screen.getByText(/cannot reach it/)).toBeTruthy();
+    expect(screen.queryByTestId('helper-add-to-hermes')).toBeNull();
   });
 });
 

@@ -22,6 +22,13 @@ export const CHANNELS = {
   welcomePrefill: 'welcome:prefill',
   welcomeInstallHermes: 'welcome:install-hermes',
   welcomeInstallLog: 'welcome:install-log',
+  helperGet: 'helper:get',
+  helperEnable: 'helper:enable',
+  helperAddFolder: 'helper:add-folder',
+  helperRemoveFolder: 'helper:remove-folder',
+  helperFolderWrite: 'helper:folder-write',
+  helperAllowOpen: 'helper:allow-open',
+  helperNewToken: 'helper:new-token',
 } as const;
 
 export interface WelcomeInit {

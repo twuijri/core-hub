@@ -97,5 +97,8 @@
     "without_hint": "The hub starts now; its agents show Hermes as not installed until you install it.",
     "docs": "Hermes's installation guide",
     "log": "Installer output"
+  },
+  "helper": {
+    "pick_folder": "Choose a folder to share with the local helper"
   }
 }

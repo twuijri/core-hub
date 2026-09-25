@@ -63,4 +63,50 @@ export interface DesktopBridge {
   setUnreadCount(count: number): void;
   /** A `corehub://open/…` link, or a clicked notification, asks for an app path. */
   onOpenPath(listener: (path: string) => void): () => void;
+  /** The local helper (MCP) — what this computer exposes to agents (ADR 0022). */
+  helper: DesktopHelperBridge;
+}
+
+export interface DesktopHelperFolder {
+  path: string;
+  /** Read only unless true. */
+  write: boolean;
+}
+
+export interface DesktopHelperActivity {
+  at: string;
+  tool: string;
+  target: string | null;
+  ok: boolean;
+  detail: string | null;
+}
+
+export interface DesktopHelperState {
+  /** Off by default; nothing listens until it is on. */
+  enabled: boolean;
+  /** The MCP address an agent on this computer connects to, while it runs. */
+  url: string | null;
+  /** The bearer token that address wants. */
+  token: string;
+  folders: DesktopHelperFolder[];
+  /** Opening files (in the shared folders) and web links on this computer. */
+  allowOpen: boolean;
+  /** Exactly the tools an agent sees now, as the helper describes them. */
+  tools: Array<{ name: string; description: string }>;
+  /** The last calls, newest first. */
+  activity: DesktopHelperActivity[];
+  /** Why it is not running although on, or null. */
+  error: string | null;
+}
+
+export interface DesktopHelperBridge {
+  get(): Promise<DesktopHelperState>;
+  setEnabled(value: boolean): Promise<DesktopHelperState>;
+  /** Opens the system's folder picker; nothing changes if the person cancels. */
+  addFolder(): Promise<DesktopHelperState>;
+  removeFolder(path: string): Promise<DesktopHelperState>;
+  setFolderWrite(path: string, write: boolean): Promise<DesktopHelperState>;
+  setAllowOpen(value: boolean): Promise<DesktopHelperState>;
+  /** A new token; whatever used the old one must be given the new one. */
+  newToken(): Promise<DesktopHelperState>;
 }

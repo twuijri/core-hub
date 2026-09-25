@@ -137,6 +137,7 @@ describe('corehub:// links', () => {
 
 describe('settings file', () => {
   const id = () => 'device-key-1234';
+  const token = () => 'a'.repeat(64);
 
   it('starts at the first-run screen with a device key', () => {
     const config = defaultConfig(id);
@@ -171,8 +172,8 @@ describe('settings file', () => {
   });
 
   it('survives a file that is not an object', () => {
-    expect(parseConfig('garbage', id)).toEqual(defaultConfig(id));
-    expect(parseConfig(null, id)).toEqual(defaultConfig(id));
+    expect(parseConfig('garbage', id, token)).toEqual(defaultConfig(id, token));
+    expect(parseConfig(null, id, token)).toEqual(defaultConfig(id, token));
   });
 
   it('remembers hubs newest first, without repeats, up to the limit', () => {
