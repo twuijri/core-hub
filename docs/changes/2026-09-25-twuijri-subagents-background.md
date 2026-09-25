@@ -140,7 +140,13 @@ subagent signals: [{"phase":"started","id":"sa-0-ed6fba21","depth":0,"goal":"CHI
 الاتصال مرتين فيقطع المركز الاتصال كله ويعيده بلا نهاية؛ الخطافان الجديدان يتصلان فقط إن لم يكن المقبس
 متصلًا **ولا في طريقه** (`socket.active`).
 
-**CI على طلب الدمج**: يُكتب هنا بعد اكتماله.
+**CI على #114**: الدفعة الأولى — كل الفحوص خضراء (Playwright كاملًا 5:21 مع الرحلة 41، ترحيل SQLite
+وPostgreSQL، صورة Docker، اختبارات الخادم 108 ملفًا) إلا `pnpm test` للويب في `all-profiles.test.tsx`: بديل
+الشبكة في ذلك الاختبار يجيب `/sessions/{id}/subagents` بشيء بلا `items`، فانكسر حساب «هل فيها ما يعمل».
+الإصلاح: قائمة بلا `items` تُقرأ فارغة (`subagents/queries.ts`). بعده حزمة الويب كاملة محليًا 57/57 ملفًا
+(638 اختبارًا)، والدفعة الثانية على CI خضراء كلها: `Lint, typecheck, contracts, tests, build` (17:49)،
+`Web smoke journeys` (5:40)، `db:generate + db:migrate`، `Docker image builds and answers /health`،
+`PR adds or updates a change record`، `PR leaves graphify-out/ to the code-map bot`.
 
 ## المخاطر والرجوع
 - **Hermes عبر بوابة TUI فقط**: Hermes الخارجي (بلا بوابة TUI) لا يرسل تقارير، فتبقى اللوحة فارغة.
