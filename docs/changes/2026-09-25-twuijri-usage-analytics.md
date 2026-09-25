@@ -143,7 +143,17 @@ $ PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwright test \
 `audit.test.ts` كان يتوقع `501` لـ `skills`؛ `status.test.ts` يفرض 266 عملية؛ والرحلة ٣٢ تفتح
 `/settings/skills-usage` التي لم تكن.
 
-CI: يُلصق ناتجه في طلب الدمج بعد الدفع.
+`pnpm change-record:check` ⇐ `change-record  OK — 1 record(s) valid` (بعد إيداع السجل).
+
+**CI على #108** (التشغيل 36081313582 على الالتزام `8d79507`؛ `main` لم يتحرك منذ تفرّع الفرع):
+```
+Lint, typecheck, contracts, tests, build                pass  13m57s
+Web smoke journeys (Playwright against the real hub)    pass  4m26s
+db:generate + db:migrate (SQLite and PostgreSQL)        pass  1m4s
+Docker image builds and answers /health                 pass  2m59s
+PR adds or updates a change record                      pass  10s
+PR leaves graphify-out/ to the code-map bot             pass  8s
+```
 
 ## المخاطر والرجوع
 - **لم يُجرَّب على Hermes حقيقي** (لم يُحجز Docker لهذه المهمة): الالتقاط مثبت أمام بوابة TUI مكتوبة
