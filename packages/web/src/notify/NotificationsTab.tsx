@@ -27,6 +27,7 @@ import {
   Switch,
 } from '../ui/index.js';
 import { IconAlert, IconCheck } from '../ui/icons.js';
+import { BrowserPushSection } from './BrowserPushSection.js';
 import {
   NOTICE_KINDS,
   useMarkAllRead,
@@ -46,6 +47,8 @@ export function NotificationsTab() {
       <Separator />
       <Preferences />
       <p className="text-xs text-muted">{t('notify.push_note')}</p>
+      <Separator />
+      <BrowserPushSection />
     </div>
   );
 }
@@ -204,23 +207,30 @@ function Preferences() {
         {NOTICE_KINDS.map((kind) => {
           // A kind with no row was never turned off, so it is on.
           const on = current.events[kind]?.in_app ?? true;
+          const push = current.events[kind]?.push ?? true;
+          const set = (channels: { in_app: boolean; push: boolean }) =>
+            write({
+              ...current,
+              quiet_hours: quiet,
+              events: { ...current.events, [kind]: channels },
+            });
           return (
-            <Switch
-              key={kind}
-              checked={on}
-              label={t(`notify.kind.${kind}`)}
-              testId={`notify-kind-${kind}`}
-              onChange={(next) =>
-                write({
-                  ...current,
-                  quiet_hours: quiet,
-                  events: {
-                    ...current.events,
-                    [kind]: { in_app: next, push: current.events[kind]?.push ?? true },
-                  },
-                })
-              }
-            />
+            <div key={kind} className="flex flex-wrap items-center justify-between gap-x-4">
+              <Switch
+                checked={on}
+                label={t(`notify.kind.${kind}`)}
+                testId={`notify-kind-${kind}`}
+                onChange={(next) => set({ in_app: next, push })}
+              />
+              {/* Push mirrors the inbox: a kind that is not written is not pushed either. */}
+              <Switch
+                checked={on && push}
+                disabled={!on}
+                label={t('notify.push_switch')}
+                testId={`notify-push-${kind}`}
+                onChange={(next) => set({ in_app: on, push: next })}
+              />
+            </div>
           );
         })}
       </div>
