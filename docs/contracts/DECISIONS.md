@@ -2292,3 +2292,30 @@ Agents now do the same, proposed — owner to confirm:
 No web control to set it yet (no planned surface: the agent card has no edit sheet); the API,
 the CLI and the phones can. Rejected: a knowledge attachment (attachments are profile-scoped and
 an agent row is not); an `avatar_mime` column (a migration for what the file already says).
+
+## 77. The platform catalog says when a platform needs a program the image lacks; five more platforms
+
+2026-09-25, the owner: one «ربط منصة» button and a picker of every platform Hermes supports,
+instead of a long list under the linked channels. Checking every platform against the pinned
+Hermes (v2026.9.14, MIT) for the picker found five it has that §64's catalog did not list.
+Proposed here — owner to confirm:
+
+- **`ChannelPlatform.program`** (`string | null`, required): the outside program Hermes runs for
+  the platform that neither Hermes nor the hub's image carries — Raft's `raft` (its
+  `raft agent bridge`) and Buzz's `buzz` CLI. A client says so before the person links it.
+  `null` everywhere else. Additive: older clients ignore it.
+- **The catalog gains** `photon` (iMessage via Photon: `PHOTON_PROJECT_ID`,
+  `PHOTON_PROJECT_SECRET`; its Node bridge is installed with npm on first start, so
+  `packages: first_use`), `wecom_callback` (WeCom Callback: corp id and secret, agent id,
+  token and AES key; a webhook on port 8645, so `inbound`; `defusedxml` on first start),
+  `yuanbao` (Yuanbao: app id and secret; its own access list, so `allowed_users_key` is
+  `YUANBAO_DM_ALLOW_FROM`), `raft` (`RAFT_PROFILE`) and `buzz` (`BUZZ_RELAY_URL`,
+  `BUZZ_PRIVATE_KEY`), all `generic`. `exclusive` is now true where the adapter takes Hermes's
+  platform lock on its identity: LINE, QQ, Yuanbao and Buzz as well.
+- The picker's grouping, order and names are the client's (the catalog stays unordered beyond
+  `full` first): popular first — Telegram, WhatsApp, Discord, Slack, Email, Teams, Google Chat,
+  Signal — then the rest alphabetically in the reader's language.
+
+Left out on purpose: Hermes's `api_server`, `webhook`, `msgraph_webhook` and `relay` (the hub's
+own API, webhooks and an experimental connector — not a place people message the agent) and
+`a2a` (agent-to-agent; it declares no required variable, so there is nothing to link).

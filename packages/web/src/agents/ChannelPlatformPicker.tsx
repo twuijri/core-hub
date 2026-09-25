@@ -4,8 +4,8 @@
  *
  * - The widely used platforms come first, in a fixed order; the rest follow alphabetically in the
  *   reader's language (a platform with an Arabic name sorts by it in Arabic).
- * - The search matches the name as shown, the platform's own name and Hermes's key, so "telegram"
- *   finds «تيليجرام» too.
+ * - The search matches the platform's name in either language, its own name and Hermes's key, so
+ *   "telegram" and «تيليجرام» both find it, whatever the interface language.
  * - Each row carries what the platform needs before it can work, as small badges: a library
  *   downloaded on first start, an address the internet can reach, a program the image lacks.
  * - A platform already linked in this profile is marked and cannot be picked twice.
@@ -14,6 +14,7 @@
  */
 import { useMemo, useState } from 'react';
 import { useI18n } from '../i18n/context.js';
+import { LANGUAGES, createTranslator } from '../i18n/index.js';
 import { Badge, Dialog, Input } from '../ui/index.js';
 import { IconSearch } from '../ui/icons.js';
 import type { ChannelPlatform } from './skills.js';
@@ -42,6 +43,11 @@ function fold(text: string): string {
     .replace(/_/g, ' ');
 }
 
+/** Both languages' names are searched, whichever one the page is in. */
+const TRANSLATORS = Object.fromEntries(
+  LANGUAGES.map((each) => [each, createTranslator(each)]),
+) as Record<(typeof LANGUAGES)[number], T>;
+
 export interface PickerGroups {
   popular: ChannelPlatform[];
   more: ChannelPlatform[];
@@ -60,9 +66,11 @@ export function pickerGroups(
   const needle = fold(query.trim());
   const matches = (spec: ChannelPlatform) =>
     needle === '' ||
-    [platformName(spec.platform, t, spec.label), spec.label, spec.platform].some((text) =>
-      fold(text).includes(needle),
-    );
+    [
+      ...LANGUAGES.map((each) => platformName(spec.platform, TRANSLATORS[each], spec.label)),
+      spec.label,
+      spec.platform,
+    ].some((text) => fold(text).includes(needle));
   const shown = platforms.filter(matches);
   const popular = POPULAR_PLATFORMS.map((platform) =>
     shown.find((spec) => spec.platform === platform),
@@ -100,7 +108,7 @@ export function ChannelPlatformPicker({
     const name = platformName(spec.platform, t, spec.label);
     const done = linked.has(spec.platform);
     return (
-      <li key={spec.platform} className="skill-row">
+      <li key={spec.platform} className="skill-row" data-enabled={done ? undefined : true}>
         <button
           type="button"
           className="skill-open"
@@ -143,17 +151,20 @@ export function ChannelPlatformPicker({
       testId="platform-picker"
     >
       <div className="flex flex-col gap-3">
-        <Input
-          type="search"
-          inputSize="sm"
-          icon={<IconSearch size={14} />}
-          placeholder={t('channels.picker.search')}
-          aria-label={t('channels.picker.search')}
-          autoFocus
-          value={query}
-          data-testid="platform-picker-search"
-          onChange={(event) => setQuery(event.target.value)}
-        />
+        {/* The search stays in view while the list scrolls under it. */}
+        <div className="sticky top-0 z-10 bg-surface px-0.5 pt-0.5 pb-1">
+          <Input
+            type="search"
+            inputSize="sm"
+            icon={<IconSearch size={14} />}
+            placeholder={t('channels.picker.search')}
+            aria-label={t('channels.picker.search')}
+            autoFocus
+            value={query}
+            data-testid="platform-picker-search"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </div>
         {groups.popular.length > 0 && (
           <section className="flex flex-col gap-2" data-testid="platform-picker-popular">
             <h3 className="text-sm font-semibold text-muted">{t('channels.picker.popular')}</h3>

@@ -1,13 +1,13 @@
 /**
  * More messaging platforms on the Channels page, linked like Telegram (the owner: «link more
- * messaging platforms from the Channels page, like Telegram»):
+ * messaging platforms from the Channels page, like Telegram»). They are reached through «ربط منصة»
+ * (`channels-picker.test.tsx` covers the picker itself):
  *
- * - «منصات أخرى» lists the platforms the hub can link — the checked ones first, each with
- *   «ربط <المنصة>», then Hermes's other platforms with a note that nothing there is checked;
  * - «ربط ديسكورد» explains the developer portal in plain steps, hides the token, warns that an
  *   empty allowlist means nobody is answered, sends the credentials and the people in the
  *   selected profile, and names the bot; a refusal is said in Discord's words;
- * - linked, the row names the account and opens Discord's own settings; Unlink asks first;
+ * - linked, the row names the account, keeps its "how to start" in its own card, and opens
+ *   Discord's own settings; Unlink asks first;
  * - a generic platform (Signal) is a form of the variables Hermes reads, said to be unchecked.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -17,6 +17,7 @@ import type { Agent } from '../src/types.js';
 import ar from '../src/i18n/ar.json' with { type: 'json' };
 import en from '../src/i18n/en.json' with { type: 'json' };
 import { PLATFORMS } from '../../server/src/modules/agents/channel-platforms.js';
+import { catalogOf } from './helpers/channel-catalog.js';
 
 class FakeSocket {
   connected = false;
@@ -118,22 +119,7 @@ const AGENT = {
   },
 } as unknown as Agent;
 
-const CATALOG = PLATFORMS.map((spec) => ({
-  platform: spec.platform,
-  label: spec.label,
-  support: spec.support,
-  login: spec.login,
-  credentials: spec.credentials.map(({ key, kind, required }) => ({ key, kind, required })),
-  allowed_users_key: spec.allowedUsers?.key ?? null,
-  validates: spec.validates,
-  pairs: spec.pairs,
-  allowlist: spec.allowlist,
-  settings: spec.settings !== null || spec.platform === 'telegram',
-  exclusive: spec.exclusive,
-  packages: spec.packages,
-  inbound: spec.inbound,
-  docs_url: spec.docsUrl,
-}));
+const CATALOG = catalogOf();
 
 const TOKEN = 'fake-discord-token-for-tests-only-0000000000000000000000000000001';
 
@@ -285,36 +271,17 @@ function mount(path: string, fetchImpl: typeof fetch) {
   );
 }
 
-describe('More platforms', () => {
-  it('lists the ones the hub checks first, then Hermes’s others with a note', async () => {
-    const { fetchImpl } = hub();
-    mount(`/agents/${HERMES}/channels`, fetchImpl);
-    const catalog = await screen.findByTestId('platform-catalog');
-    for (const platform of ['discord', 'slack', 'matrix', 'mattermost', 'email']) {
-      expect(screen.getByTestId(`platform-link-${platform}`)).toBeTruthy();
-    }
-    expect(screen.getByTestId('platform-link-discord').textContent).toMatch(
-      /^(ربط ديسكورد|Link Discord)$/,
-    );
-    const generic = screen.getByTestId('platform-generic');
-    expect(generic.textContent).toContain('Signal');
-    expect(generic.textContent).toContain('Microsoft Teams');
-    // Telegram and WhatsApp keep their own buttons; they are not repeated here.
-    expect(screen.queryByTestId('platform-link-telegram')).toBeNull();
-    expect(screen.queryByTestId('platform-link-whatsapp')).toBeNull();
-    // The checked ones come first.
-    const order = [...catalog.querySelectorAll('[data-testid^="platform-card-"]')].map((node) =>
-      node.getAttribute('data-testid'),
-    );
-    expect(order.indexOf('platform-card-discord')).toBeLessThan(
-      order.indexOf('platform-card-signal'),
-    );
-  });
+/** «ربط منصة», then the platform. */
+async function openForm(platform: string) {
+  fireEvent.click(await screen.findByTestId('platform-picker-open'));
+  fireEvent.click(await screen.findByTestId(`platform-option-${platform}`));
+}
 
+describe('More platforms', () => {
   it('links Discord: the steps, the hidden token, the people, and the bot named', async () => {
     const { fetchImpl, sent } = hub();
     mount(`/agents/${HERMES}/channels`, fetchImpl);
-    fireEvent.click(await screen.findByTestId('platform-link-discord'));
+    await openForm('discord');
     const steps = await screen.findByTestId('platform-steps');
     expect(steps.textContent).toContain('Message Content Intent');
     expect(steps.textContent).toContain('applications.commands');
@@ -346,17 +313,22 @@ describe('More platforms', () => {
     await waitFor(() =>
       expect(screen.getByTestId('channel-account-discord').textContent).toContain('@office_helper'),
     );
-    expect(screen.getByTestId('platform-how-discord').textContent).toMatch(
-      /قائمة المسموح|allowed list/,
-    );
-    // Linked, it leaves the catalog.
-    expect(screen.queryByTestId('platform-link-discord')).toBeNull();
+    // Discord answers only its allowlist, so nobody waits for approval: its "how to start" stays
+    // behind the card's own button.
+    expect(screen.queryByTestId('platform-how-discord')).toBeNull();
+    fireEvent.click(screen.getByTestId('channel-guide-discord'));
+    const how = screen.getByTestId('platform-how-discord');
+    expect(how.textContent).toMatch(/قائمة المسموح|allowed list/);
+    expect(screen.getByTestId('channel-list').contains(how)).toBe(true);
+    // Linked, the picker marks it instead of offering it again.
+    fireEvent.click(screen.getByTestId('platform-picker-open'));
+    expect(screen.getByTestId('platform-option-linked-discord')).toBeTruthy();
   });
 
   it('says in Discord’s words why it refused the token', async () => {
     const { fetchImpl } = hub({ refuse: true });
     mount(`/agents/${HERMES}/channels`, fetchImpl);
-    fireEvent.click(await screen.findByTestId('platform-link-discord'));
+    await openForm('discord');
     fireEvent.change(await screen.findByTestId('platform-field-DISCORD_BOT_TOKEN'), {
       target: { value: TOKEN },
     });
@@ -382,7 +354,8 @@ describe('More platforms', () => {
     expect(sent.some((entry) => entry.path.endsWith('/unlink'))).toBe(false);
     expect((await screen.findByTestId('confirm-dialog')).textContent).toMatch(/ديسكورد|Discord/);
     fireEvent.click(screen.getByTestId('confirm-yes'));
-    await screen.findByTestId('platform-link-discord');
+    await screen.findByTestId('channels-empty');
+    expect(screen.getByTestId('channel-unlinked').textContent).toMatch(/ديسكورد|Discord/);
     expect(sent.find((entry) => entry.path.endsWith('/channels/discord/unlink'))).toMatchObject({
       method: 'POST',
       profile: 'manger',
@@ -392,7 +365,7 @@ describe('More platforms', () => {
   it('links a generic platform with the variables Hermes reads, said to be unchecked', async () => {
     const { fetchImpl, sent } = hub();
     mount(`/agents/${HERMES}/channels`, fetchImpl);
-    fireEvent.click(await screen.findByTestId('platform-link-signal'));
+    await openForm('signal');
     expect((await screen.findByTestId('platform-generic-note')).textContent).toMatch(
       /لا يتحقق|does not check/,
     );
@@ -442,7 +415,7 @@ describe('Words for every platform the hub checks', () => {
         const words = dictionary.channels.platform;
         const own = words[spec.platform] as Record<string, string> | undefined;
         expect(words.name[spec.platform], spec.platform).toBeTruthy();
-        for (const key of ['summary', 'intro', 'step1', 'how']) {
+        for (const key of ['intro', 'step1', 'how']) {
           expect(own?.[key], `${spec.platform}.${key}`).toBeTruthy();
         }
         for (const credential of spec.credentials) {

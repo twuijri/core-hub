@@ -2,8 +2,9 @@
  * The Channels page after the owner's report of 2026-09-24 («سويت رستارت وراسلته ولا رد»):
  *
  * - a WhatsApp Hermes paired reads as linked, names the account, offers Unlink (behind a
- *   confirm) instead of Pair by QR, and says in plain words how to use it — message the number
- *   from another account, approve the first request here — with the personal-number warning;
+ *   confirm) instead of Pair by QR, and says in plain words in its own card how to use it —
+ *   message the number from another account, approve the first request here — with the
+ *   personal-number warning;
  * - in a named profile the page says a change takes effect at once, and how the gateway is;
  * - «طلبات بانتظار الموافقة»: each waiting sender with its platform, id, name and age, approved
  *   or turned down here, and the approved senders below, each revocable.
@@ -268,12 +269,14 @@ describe('a linked WhatsApp on the Channels page', () => {
     // Plain words: message the number from another account, approve the first request here.
     const how = screen.getByTestId('channel-how-to-use');
     expect(how.textContent).toContain('+966500000000');
+    // In WhatsApp's own card, not over the page.
+    expect(screen.getByTestId('channel-list').contains(how)).toBe(true);
     expect(screen.getByTestId('channel-personal-warning')).toBeTruthy();
     // A named profile: the change is live, and the gateway says how it is.
     expect(screen.getByTestId('channel-gateway-state').getAttribute('data-state')).toBe('running');
   });
 
-  it('unlinks after a confirm, and shows Pair by QR again', async () => {
+  it('unlinks after a confirm; with senders still waiting, the row stays with Pair by QR', async () => {
     const { fetchImpl, sent } = hub();
     mount(`/agents/${HERMES}/channels`, fetchImpl);
     fireEvent.click(await screen.findByTestId('channel-unlink-whatsapp'));
@@ -284,7 +287,8 @@ describe('a linked WhatsApp on the Channels page', () => {
     const unlink = sent.find((call) => call.path.endsWith('/channels/whatsapp/unlink'));
     expect(unlink).toMatchObject({ method: 'POST', profile: 'manger' });
     expect(screen.getByTestId('channel-link-whatsapp').textContent).toMatch(/not linked|غير مربوط/);
-    expect(screen.getByTestId('channel-pair-whatsapp')).toBeTruthy();
+    expect(screen.getByTestId('channel-unlinked')).toBeTruthy();
+    expect(screen.getByTestId('platform-picker-open')).toBeTruthy();
   });
 
   it('in the default profile, says a change waits for the Restart', async () => {
@@ -301,7 +305,7 @@ describe('senders waiting for approval', () => {
     const { fetchImpl, sent } = hub();
     mount(`/agents/${HERMES}/channels`, fetchImpl);
     const first = await screen.findByTestId('pairing-request-aaaaaaaaaaaaaaaa');
-    expect(first.textContent).toContain('whatsapp');
+    expect(first.textContent).toMatch(/واتساب|WhatsApp/);
     expect(first.textContent).toContain('966500000001@s.whatsapp.net');
     expect(first.textContent).toContain('سارة');
     expect(first.textContent).toMatch(/5/);

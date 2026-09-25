@@ -141,7 +141,6 @@ export function AgentChannelsScreen() {
     <Button
       size="sm"
       icon={<IconPlus size={14} />}
-      disabled={!platforms.data}
       onClick={() => setPicking(true)}
       data-testid="platform-picker-open"
     >
@@ -279,7 +278,8 @@ function ChannelRow({
   const { t } = useI18n();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState<boolean | null>(null);
-  const name = platformName(channel.platform, t, spec?.label);
+  // The platform's name in the reader's language where it has one («تيليجرام»), else its own.
+  const name = platformName(channel.platform, t, spec?.label ?? channel.label);
   const hasSettings =
     (channel.platform === 'telegram' || spec?.settings === true) && channel.link?.linked === true;
   const credentials = channel.login === 'credentials';
@@ -295,128 +295,145 @@ function ChannelRow({
     channel.platform === 'whatsapp' || channel.platform === 'telegram' || spec?.pairs === true;
   const showGuide = guide !== null && (guideOpen ?? (starting && waitsForPeople));
 
+  const failed = channel.status === 'error' && channel.error;
+
   return (
     <div className="flex flex-col gap-2">
-      <div className="skill-row" data-enabled={channel.enabled || undefined}>
-        <Switch
-          checked={channel.enabled}
-          label={t('channels.enabled')}
-          labelHidden
-          testId={`channel-toggle-${channel.platform}`}
-          onChange={(next) => update.mutate({ platform: channel.platform, enabled: next })}
-        />
-        <button type="button" className="skill-open" onClick={onEdit}>
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="font-medium" dir="auto">
-              {credentials ? name : channel.label}
+      <div
+        className="channel-card"
+        data-enabled={channel.enabled || undefined}
+        data-testid={`channel-card-${channel.platform}`}
+      >
+        <div className="skill-row" data-enabled={channel.enabled || undefined}>
+          <Switch
+            checked={channel.enabled}
+            label={t('channels.enabled')}
+            labelHidden
+            testId={`channel-toggle-${channel.platform}`}
+            onChange={(next) => update.mutate({ platform: channel.platform, enabled: next })}
+          />
+          <button type="button" className="skill-open" onClick={onEdit}>
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="font-medium" dir="auto">
+                {name}
+              </span>
+              {channel.exclusive && <Badge tone="warning">{t('channels.exclusive')}</Badge>}
+              {link ? (
+                <Badge
+                  tone={link.linked ? 'success' : 'neutral'}
+                  testId={`channel-link-${channel.platform}`}
+                >
+                  {t(link.linked ? 'channels.linked' : 'channels.not_linked')}
+                </Badge>
+              ) : (
+                !channel.configured && <Badge>{t('channels.not_configured')}</Badge>
+              )}
+              {channel.status !== 'unknown' && (
+                <Badge
+                  tone={STATUS_TONE[channel.status]}
+                  testId={`channel-status-${channel.platform}`}
+                >
+                  {t(`channels.status.${channel.status}`)}
+                </Badge>
+              )}
             </span>
-            {channel.exclusive && <Badge tone="warning">{t('channels.exclusive')}</Badge>}
-            {link ? (
-              <Badge
-                tone={link.linked ? 'success' : 'neutral'}
-                testId={`channel-link-${channel.platform}`}
-              >
-                {t(link.linked ? 'channels.linked' : 'channels.not_linked')}
-              </Badge>
-            ) : (
-              !channel.configured && <Badge>{t('channels.not_configured')}</Badge>
+            <span className="skill-description" data-testid={`channel-account-${channel.platform}`}>
+              {link?.linked && account ? (
+                <span dir="auto">{t('channels.linked_as', { account })}</span>
+              ) : (
+                t('channels.fields_n', { count: String(channel.fields.length) })
+              )}
+            </span>
+          </button>
+          {channel.login === 'qr' && !link?.linked && (
+            <Button size="sm" data-testid={`channel-login-${channel.platform}`} onClick={onPair}>
+              {t('channels.login.button')}
+            </Button>
+          )}
+          {(channel.login === 'token' || (credentials && spec)) && !link?.linked && (
+            <Button size="sm" data-testid={`channel-login-${channel.platform}`} onClick={onPair}>
+              {t('channels.telegram.link_button')}
+            </Button>
+          )}
+          {hasSettings && (
+            <Button
+              size="sm"
+              variant={settingsOpen ? 'primary' : 'ghost'}
+              aria-expanded={settingsOpen}
+              data-testid={`channel-settings-${channel.platform}`}
+              onClick={() => setSettingsOpen(!settingsOpen)}
+            >
+              {t('channels.settings.open')}
+            </Button>
+          )}
+          {guide && (
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-expanded={showGuide}
+              data-testid={`channel-guide-${channel.platform}`}
+              onClick={() => setGuideOpen(!showGuide)}
+            >
+              {t('channels.guide')}
+            </Button>
+          )}
+          {link?.linked && (
+            <Button
+              size="sm"
+              variant="danger"
+              data-testid={`channel-unlink-${channel.platform}`}
+              disabled={unlinking}
+              onClick={() => {
+                void ask({
+                  title: t('channels.unlink_title', { name }),
+                  body:
+                    channel.platform === 'telegram'
+                      ? t('channels.telegram.unlink_body')
+                      : credentials
+                        ? t('channels.platform.unlink_body', { name })
+                        : t('channels.unlink_body'),
+                  confirmLabel: t('channels.unlink'),
+                }).then((yes) => {
+                  if (yes) onUnlink();
+                });
+              }}
+            >
+              {t('channels.unlink')}
+            </Button>
+          )}
+          {!link && channel.configured && (
+            <Button
+              size="sm"
+              variant="ghost"
+              data-testid={`channel-clear-${channel.platform}`}
+              onClick={() => {
+                void ask({
+                  title: t('channels.clear_title', { name: channel.label }),
+                  // Not a delete: the settings the person tuned are not what they asked to
+                  // clear, only the identity.
+                  body: t('channels.clear_body'),
+                  confirmLabel: t('channels.clear'),
+                }).then((yes) => {
+                  if (yes) clear.mutate(channel.platform);
+                });
+              }}
+            >
+              {t('channels.clear')}
+            </Button>
+          )}
+          {dialog}
+        </div>
+        {(showGuide || failed) && (
+          <div className="channel-card-body">
+            {failed && (
+              <Notice tone="danger">
+                <span dir="auto">{channel.error}</span>
+              </Notice>
             )}
-            {channel.status !== 'unknown' && (
-              <Badge
-                tone={STATUS_TONE[channel.status]}
-                testId={`channel-status-${channel.platform}`}
-              >
-                {t(`channels.status.${channel.status}`)}
-              </Badge>
-            )}
-          </span>
-          <span className="skill-description" data-testid={`channel-account-${channel.platform}`}>
-            {link?.linked && account ? (
-              <span dir="auto">{t('channels.linked_as', { account })}</span>
-            ) : (
-              t('channels.fields_n', { count: String(channel.fields.length) })
-            )}
-          </span>
-        </button>
-        {channel.login === 'qr' && !link?.linked && (
-          <Button size="sm" data-testid={`channel-login-${channel.platform}`} onClick={onPair}>
-            {t('channels.login.button')}
-          </Button>
+            {showGuide && guide}
+          </div>
         )}
-        {(channel.login === 'token' || (credentials && spec)) && !link?.linked && (
-          <Button size="sm" data-testid={`channel-login-${channel.platform}`} onClick={onPair}>
-            {t('channels.telegram.link_button')}
-          </Button>
-        )}
-        {hasSettings && (
-          <Button
-            size="sm"
-            variant={settingsOpen ? 'primary' : 'ghost'}
-            aria-expanded={settingsOpen}
-            data-testid={`channel-settings-${channel.platform}`}
-            onClick={() => setSettingsOpen(!settingsOpen)}
-          >
-            {t('channels.settings.open')}
-          </Button>
-        )}
-        {guide && (
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-expanded={showGuide}
-            data-testid={`channel-guide-${channel.platform}`}
-            onClick={() => setGuideOpen(!showGuide)}
-          >
-            {t('channels.guide')}
-          </Button>
-        )}
-        {link?.linked && (
-          <Button
-            size="sm"
-            variant="danger"
-            data-testid={`channel-unlink-${channel.platform}`}
-            disabled={unlinking}
-            onClick={() => {
-              void ask({
-                title: t('channels.unlink_title', { name: credentials ? name : channel.label }),
-                body:
-                  channel.platform === 'telegram'
-                    ? t('channels.telegram.unlink_body')
-                    : credentials
-                      ? t('channels.platform.unlink_body', { name })
-                      : t('channels.unlink_body'),
-                confirmLabel: t('channels.unlink'),
-              }).then((yes) => {
-                if (yes) onUnlink();
-              });
-            }}
-          >
-            {t('channels.unlink')}
-          </Button>
-        )}
-        {!link && channel.configured && (
-          <Button
-            size="sm"
-            variant="ghost"
-            data-testid={`channel-clear-${channel.platform}`}
-            onClick={() => {
-              void ask({
-                title: t('channels.clear_title', { name: channel.label }),
-                // Not a delete: the settings the person tuned are not what they asked to
-                // clear, only the identity.
-                body: t('channels.clear_body'),
-                confirmLabel: t('channels.clear'),
-              }).then((yes) => {
-                if (yes) clear.mutate(channel.platform);
-              });
-            }}
-          >
-            {t('channels.clear')}
-          </Button>
-        )}
-        {dialog}
       </div>
-      {showGuide && guide}
       {hasSettings && settingsOpen && (
         <ChannelSettingsPanel
           agentId={agentId}
@@ -424,11 +441,6 @@ function ChannelRow({
           name={name}
           gateway={gateway}
         />
-      )}
-      {channel.status === 'error' && channel.error && (
-        <Notice tone="danger">
-          <span dir="auto">{channel.error}</span>
-        </Notice>
       )}
     </div>
   );
