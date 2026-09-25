@@ -48,7 +48,8 @@
     "agent_channels": "Channels",
     "back_to_agents": "Back to agents",
     "terminal": "Terminal",
-    "files": "Files"
+    "files": "Files",
+    "config_files": "Config files"
   },
   "common": {
     "loading": "Loading…",
@@ -1964,7 +1965,10 @@
       "path_outside_profile": "the path was outside the profile's folder",
       "forbidden": "the person may not do that",
       "not_found": "not found",
-      "validation_failed": "the arguments were not valid"
+      "validation_failed": "the arguments were not valid",
+      "hub_tools_sender_not_linked": "the message came from a messaging account nobody linked",
+      "hub_tools_sender_no_access": "the person who linked that account may not use this profile",
+      "hub_tools_group_chat": "the message came from a group chat"
     }
   },
   "memory": {
@@ -3240,5 +3244,52 @@
       "failed": "Failed",
       "cancelled": "Stopped"
     }
+  },
+  "config_files": {
+    "title_of": "{name} config files",
+    "shared": "These files are shared by every profile: coding agents read them from the home of the user Core Hub runs as, whichever profile a conversation is in. A change here applies everywhere, from the agent's next conversation.",
+    "none": "This agent has no config files Core Hub can edit.",
+    "file_instructions": "Instructions",
+    "file_settings": "Settings",
+    "about_instructions": "What the agent reads at the start of every conversation, in every project.",
+    "about_settings": "The agent's own settings, read when a conversation starts. A settings file can hold keys: only owners and admins see this page.",
+    "not_yet": "Not created yet",
+    "unsaved": "Unsaved changes",
+    "revert": "Revert",
+    "reload": "Load the current file",
+    "saved": "Saved. The agent reads it from its next conversation; the previous version is kept as a backup on the hub.",
+    "changed": "The file changed after you opened it (by hand, or by the agent). Nothing was written.",
+    "invalid_json": "This is not valid JSON, so nothing was written: {message}",
+    "symlink_outside": "This file is a link to somewhere outside the agent's folder and the home, so Core Hub will not open it.",
+    "not_text": "This file is not UTF-8 text, so it cannot be edited here.",
+    "too_large": "The file is larger than 1 MiB, the most this page edits."
+  },
+  "channel_accounts": {
+    "title": "Messaging accounts",
+    "subtitle": "Link your own Telegram or WhatsApp so the agent's Core Hub tools act as you when you message its bot. A message from an account nobody linked gets none of them, and a group chat none either.",
+    "none": "No messaging account is linked to you.",
+    "platform": "Platform",
+    "account": "Account",
+    "linked_at": "Linked",
+    "last_used": "Last used",
+    "actions": "Actions",
+    "platform_telegram": "Telegram",
+    "platform_whatsapp": "WhatsApp",
+    "link": "Link an account",
+    "send_this": "From the Telegram or WhatsApp account you want to link, send this to your agent's bot:",
+    "copy": "Copy",
+    "copied": "Copied",
+    "expires": "The code works once, until {time}.",
+    "must_answer": "The bot must already answer you (paired, or on its allowed list). It replies when the account is linked.",
+    "waiting": "Waiting for the message…",
+    "linked": "Linked. Messages from that account now use Core Hub's tools as you.",
+    "unlink": "Unlink",
+    "unlink_title": "Unlink this account?",
+    "unlink_body": "Its next message gets none of Core Hub's tools. The agent still answers it.",
+    "all_title": "Linked messaging accounts",
+    "all_subtitle": "Each person's Telegram and WhatsApp accounts. A message from one acts as that person, in the profiles they may enter.",
+    "all_none": "Nobody has linked a messaging account.",
+    "remove": "Remove",
+    "remove_title": "Remove {name}'s link?"
   }
 }

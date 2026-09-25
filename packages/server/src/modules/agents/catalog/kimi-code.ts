@@ -19,7 +19,7 @@ export const kimiCode: CatalogEntry = {
   // in with its own account until the hub has a Moonshot credential family to map.
   credentials: {},
   health: { kind: 'command', args: ['--version'] },
-  capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'resume'],
+  capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'resume', 'config_files'],
   sections: ['mcp', 'settings'],
   // Not verified that its ACP stream marks a delegation, so none is claimed (§56): an
   // unmarked tool call stays the parent's (added when #114 and #140 were integrated).

@@ -19,6 +19,8 @@ data class DeviceChoices(
     val spokenReplies: Boolean = false,
     /** Look for new notices every 15 minutes while the app is closed. */
     val backgroundNotices: Boolean = true,
+    /** Whose speech dictation and spoken replies use: the hub's providers (when it has them) or the phone's. */
+    val voiceSource: VoiceSource = VoiceSource.HUB,
 )
 
 object DictationLanguage {
@@ -42,6 +44,7 @@ class DeviceSettings(private val prefs: SharedPreferences) {
         dictation = runCatching { Dictation.valueOf(prefs.getString(DICTATION, null) ?: "") }.getOrDefault(Dictation.APP),
         spokenReplies = prefs.getBoolean(SPOKEN, false),
         backgroundNotices = prefs.getBoolean(BACKGROUND, true),
+        voiceSource = runCatching { VoiceSource.valueOf(prefs.getString(VOICE_SOURCE, null) ?: "") }.getOrDefault(VoiceSource.HUB),
     )
 
     fun update(change: (DeviceChoices) -> DeviceChoices) {
@@ -51,6 +54,7 @@ class DeviceSettings(private val prefs: SharedPreferences) {
             .putString(DICTATION, next.dictation.name)
             .putBoolean(SPOKEN, next.spokenReplies)
             .putBoolean(BACKGROUND, next.backgroundNotices)
+            .putString(VOICE_SOURCE, next.voiceSource.name)
             .apply()
         _choices.value = next
     }
@@ -65,6 +69,11 @@ class DeviceSettings(private val prefs: SharedPreferences) {
         get() = prefs.getBoolean(ASKED, false)
         set(value) = prefs.edit().putBoolean(ASKED, value).apply()
 
+    /** The person answered no to the notification prompt: the app never asks again by itself. */
+    var notificationsDenied: Boolean
+        get() = prefs.getBoolean(DENIED, false)
+        set(value) = prefs.edit().putBoolean(DENIED, value).apply()
+
     private companion object {
         const val VOICE = "voice_input"
         const val DICTATION = "dictation"
@@ -72,5 +81,7 @@ class DeviceSettings(private val prefs: SharedPreferences) {
         const val BACKGROUND = "background_notices"
         const val SEEN = "notices_seen_at"
         const val ASKED = "asked_notifications"
+        const val DENIED = "notifications_denied"
+        const val VOICE_SOURCE = "voice_source"
     }
 }

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "62ae30a9-4be9-421a-8806-3968d90c55b4",
+  "id": "ae2f07d7-c08c-4dab-b541-243263c23de2",
   "prevId": "734365a9-c7c4-48f9-8de8-68eb92c18905",
   "tables": {
     "app_tokens": {
@@ -146,6 +146,107 @@
         "app_tokens_kind_check": {
           "name": "app_tokens_kind_check",
           "value": "\"app_tokens\".\"kind\" in ('personal', 'device', 'web')"
+        }
+      }
+    },
+    "channel_identities": {
+      "name": "channel_identities",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text(26)",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text(26)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text(26)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "platform": {
+          "name": "platform",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sender_id": {
+          "name": "sender_id",
+          "type": "text(320)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "channel_identities_account_uq": {
+          "name": "channel_identities_account_uq",
+          "columns": [
+            "platform",
+            "sender_id"
+          ],
+          "isUnique": true
+        },
+        "channel_identities_user_idx": {
+          "name": "channel_identities_user_idx",
+          "columns": [
+            "user_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "channel_identities_user_id_users_id_fk": {
+          "name": "channel_identities_user_id_users_id_fk",
+          "tableFrom": "channel_identities",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "channel_identities_platform_check": {
+          "name": "channel_identities_platform_check",
+          "value": "\"channel_identities\".\"platform\" in ('telegram', 'whatsapp')"
         }
       }
     },
@@ -7994,27 +8095,6 @@
         "push_session_id": {
           "name": "push_session_id",
           "type": "text(26)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "push_blocker": {
-          "name": "push_blocker",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "seen_session_id": {
-          "name": "seen_session_id",
-          "type": "text(26)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "renamed_at": {
-          "name": "renamed_at",
-          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

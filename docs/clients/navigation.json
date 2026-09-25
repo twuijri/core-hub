@@ -170,6 +170,10 @@
     "terminal": {
       "en": "Terminal",
       "ar": "الطرفية"
+    },
+    "config_files": {
+      "en": "Config files",
+      "ar": "ملفات الإعداد"
     }
   },
   "destinations": [
@@ -204,7 +208,7 @@
         "kind": "settings-management"
       },
       "roles": ["member"],
-      "note": "One page since 2026-09-26 (it had tabs App / Devices): pairing at the top, then the person's devices as cards grouped by kind (rename, remove, test, last active, push); an admin sees everyone's and the push senders folded at the bottom (contract decisions §66, §78). A Settings page since 2026-09-22: configured once, so not in the sidebar."
+      "note": "One page since 2026-09-26 (it had tabs App / Devices): pairing at the top, then the person's devices as cards grouped by kind (rename, remove, test, last active, push); an admin sees everyone's and the push senders folded at the bottom (contract decisions §66, §81). A Settings page since 2026-09-22: configured once, so not in the sidebar."
     },
     {
       "id": "agent_manager",
@@ -558,6 +562,19 @@
       "roles": ["admin"]
     },
     {
+      "id": "agent_config_files",
+      "title": "config_files",
+      "module": "agents",
+      "level": "agent",
+      "capability": "config_files",
+      "entry": {
+        "kind": "agent"
+      },
+      "roles": ["admin"],
+      "surfaces": ["web", "desktop"],
+      "note": "A coding agent's own instructions and settings files (CLAUDE.md, settings.json, AGENTS.md, config.toml …), one set for every profile in the home of the user the hub runs as (DECISIONS §78). Owners and admins; not on the phones."
+    },
+    {
       "id": "agent_settings",
       "title": "agent_settings",
       "module": "agents",
@@ -615,6 +632,7 @@
     "agent_jobs",
     "agent_channels",
     "agent_plugins",
+    "agent_config_files",
     "agent_settings"
   ],
   "secondaryEntries": {
@@ -693,6 +711,7 @@
       "agent_jobs": "/agents/:agentId/jobs",
       "agent_channels": "/agents/:agentId/channels",
       "agent_plugins": "/agents/:agentId/plugins",
+      "agent_config_files": "/agents/:agentId/config-files",
       "agent_settings": "/agents/:agentId/settings",
       "global_agent": "/global-agent"
     },

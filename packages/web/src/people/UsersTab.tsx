@@ -34,6 +34,7 @@ import {
   type Column,
 } from '../ui/index.js';
 import { IconMore, IconTrash, IconShield } from '../ui/icons.js';
+import { AllChannelAccounts } from './ChannelAccounts.js';
 import {
   isOwner,
   isSelf,
@@ -77,6 +78,7 @@ export function UsersTab() {
         {users.isError && <Notice tone="danger">{describeError(users.error, t)}</Notice>}
         {users.data && <UserTable users={users.data.items} />}
       </section>
+      {users.data && <AllChannelAccounts users={users.data.items} />}
       <Lockouts />
       {adding && <AddUser onClose={() => setAdding(false)} />}
     </div>

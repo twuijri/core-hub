@@ -20,6 +20,15 @@ import { configPath } from '../mcp.js';
 export const HUB_SERVER_NAME = 'corehub';
 /** The `.env` entry the block's header reads. */
 export const HUB_KEY_ENV = 'COREHUB_MCP_TOKEN';
+/**
+ * The variable the hub sets in the environment of each Hermes process it starts (decision §79):
+ * `hub` for the one its own conversations run in, `gateway` for a messaging gateway. Never in a
+ * `.env`, so it is the process's own, and the block's second header carries it to every call —
+ * a call from a gateway is told apart from a call from the hub's own runs.
+ */
+export const HUB_ORIGIN_ENV = 'COREHUB_MCP_ORIGIN';
+export const HUB_ORIGIN_HEADER = 'x-corehub-origin';
+export type HubOrigin = 'hub' | 'gateway';
 const BLOCK = 'mcp_servers';
 const MARK =
   ' Managed by Core Hub (Agents → Hermes → MCP → Core Hub tools). The hub rewrites this block;' +
@@ -44,7 +53,10 @@ function load(home: string): Document {
 export function blockFor(url: string): Record<string, unknown> {
   return {
     url,
-    headers: { Authorization: `Bearer \${${HUB_KEY_ENV}}` },
+    headers: {
+      Authorization: `Bearer \${${HUB_KEY_ENV}}`,
+      'X-Corehub-Origin': `\${${HUB_ORIGIN_ENV}}`,
+    },
     enabled: true,
     connect_timeout: 10,
   };

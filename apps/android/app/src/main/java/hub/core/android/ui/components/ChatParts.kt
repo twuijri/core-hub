@@ -417,6 +417,8 @@ fun Composer(
     onSend: () -> Unit,
     onStop: () -> Unit,
     extra: @Composable () -> Unit = {},
+    /** Files are attached and uploaded: the message may go without words. */
+    hasAttachments: Boolean = false,
 ) {
     val t = LocalTokens.current
     val shape = RoundedCornerShape(24.dp)
@@ -445,7 +447,7 @@ fun Composer(
         }
         FilledIconButton(
             onClick = onSend,
-            enabled = text.isNotBlank() && !sending,
+            enabled = (text.isNotBlank() || hasAttachments) && !sending,
             colors = IconButtonDefaults.filledIconButtonColors(containerColor = t.accent, contentColor = t.accentText),
         ) {
             Icon(Icons.AutoMirrored.Filled.Send, stringResource(R.string.chat_send))

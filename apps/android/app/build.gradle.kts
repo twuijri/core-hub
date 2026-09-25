@@ -308,6 +308,8 @@ android {
     sourceSets["test"].resources.srcDir(File(repoRoot, "docs/clients"))
     testOptions {
         unitTests.isReturnDefaultValues = true
+        // Robolectric reads the merged manifest and resources (the Compose UI tests).
+        unitTests.isIncludeAndroidResources = true
         unitTests.all { it.systemProperty("corehub.repoRoot", repoRoot.absolutePath) }
     }
     lint {
@@ -352,4 +354,11 @@ dependencies {
     testImplementation(libs.json)
     // Reads packages/contracts/openapi.yaml so the contract's own examples are decoded by the client.
     testImplementation(libs.snakeyaml)
+    // Compose UI tests on the JVM (Robolectric): the keyboard and drawer behaviour, no emulator.
+    // They live in src/testDebug: ComponentActivity comes from ui-test-manifest, a debug-only library.
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.junit)
+    debugImplementation(libs.compose.ui.test.manifest)
 }

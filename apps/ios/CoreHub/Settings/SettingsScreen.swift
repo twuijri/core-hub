@@ -1,6 +1,7 @@
 // Settings (destination `settings`) on a phone: the list is the page itself (NAVIGATION.md §٢),
 // its first row goes back to the chats, and each page opened from it shows the way back.
 import SwiftUI
+import UIKit
 import UserNotifications
 
 struct SettingsScreen: View {
@@ -89,11 +90,15 @@ struct SettingsPage: View {
 struct ThisDeviceExtras: View {
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
-    @State private var notifications: UNAuthorizationStatus = .notDetermined
 
     var body: some View {
         @Bindable var device = app.device
-        Section(l10n("device.voice")) {
+        Section {
+            Picker(l10n("device.voice_source"), selection: $device.voiceSource) {
+                Text(l10n("device.voice_hub")).tag(DeviceSettings.VoiceSource.hub)
+                Text(l10n("device.voice_phone")).tag(DeviceSettings.VoiceSource.phone)
+            }
+            .accessibilityIdentifier("device.voice_source")
             Toggle(l10n("device.voice_input"), isOn: $device.voiceInput)
             Picker(l10n("device.dictation_language"), selection: $device.dictationLanguage) {
                 Text(l10n("device.dictation_app")).tag(DeviceSettings.DictationLanguage.app)
@@ -101,29 +106,15 @@ struct ThisDeviceExtras: View {
                 Text(l10n("shell.language_en")).tag(DeviceSettings.DictationLanguage.en)
             }
             Toggle(l10n("device.spoken_replies"), isOn: $device.spokenReplies)
+        } header: {
+            Text(l10n("device.voice"))
+        } footer: {
+            Text(l10n("device.voice_source_hint"))
         }
         Section {
             Toggle(l10n("device.background_checks"), isOn: $device.backgroundChecks)
-            switch notifications {
-            case .authorized, .provisional, .ephemeral:
-                FactRow(label: l10n("device.notifications"), value: l10n("device.notifications_allowed"))
-            case .denied:
-                FactRow(label: l10n("device.notifications"), value: l10n("device.notifications_denied"))
-            default:
-                Button(l10n("device.notifications_ask")) {
-                    Task {
-                        _ = await LocalNotices.shared.requestPermission()
-                        notifications = await LocalNotices.shared.status()
-                        await PushCenter.shared.start(app: app)
-                    }
-                }
-            }
-        } header: {
-            Text(l10n("device.notifications"))
-        } footer: {
-            Text(l10n(ThisDeviceExtras.pushNote(PushCenter.shared.state)))
         }
-        .task { notifications = await LocalNotices.shared.status() }
+        PushStatusSection()
     }
 
     /// What This device says about push, by its state (PushCenter).
@@ -131,9 +122,70 @@ struct ThisDeviceExtras: View {
         switch state {
         case .active: return "device.push_active"
         case .idle: return "device.push_idle"
-        case .notAllowed: return "device.push_not_allowed"
+        case .waiting, .notAllowed: return "device.push_not_allowed"
         case .noSender: return "device.push_no_sender"
         case .failed: return "device.push_failed"
+        }
+    }
+
+    /// The state in plain words, for the row.
+    nonisolated static func pushLabel(_ state: PushState) -> String {
+        switch state {
+        case .active: return "device.push_on"
+        case .idle: return "device.push_setting_up"
+        case .waiting: return "device.push_waiting"
+        case .notAllowed: return "device.push_off"
+        case .noSender: return "device.push_no_sender_short"
+        case .failed: return "device.push_failed_short"
+        }
+    }
+}
+
+/// Push on this phone, in plain words (This device, and Settings → Notifications): the state,
+/// and what the person can do about it — allow while iOS has not asked, or open the iPhone's
+/// Settings once they turned notifications off (the app cannot ask again then).
+struct PushStatusSection: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.l10n) private var l10n
+    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        let state = PushCenter.shared.state
+        Section {
+            FactRow(label: l10n("device.notifications"), value: l10n(ThisDeviceExtras.pushLabel(state)))
+                .accessibilityIdentifier("push.state")
+            switch state {
+            case .notAllowed:
+                Button {
+                    if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(l10n("device.notifications_off"))
+                            .foregroundStyle(Tone.text)
+                        Text(l10n("device.open_settings"))
+                            .font(.system(size: FontSize.sizeSm, weight: .medium))
+                    }
+                }
+                .accessibilityIdentifier("push.open_settings")
+            case .waiting:
+                Button(l10n("device.notifications_ask")) {
+                    Task {
+                        _ = await LocalNotices.shared.requestPermission()
+                        await PushCenter.shared.start(app: app)
+                    }
+                }
+            default:
+                EmptyView()
+            }
+        } header: {
+            Text(l10n("device.notifications"))
+        } footer: {
+            Text(l10n(ThisDeviceExtras.pushNote(state)))
+        }
+        // Back from the iPhone's Settings: read the permission again.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await PushCenter.shared.foreground(app: app) } }
         }
     }
 }

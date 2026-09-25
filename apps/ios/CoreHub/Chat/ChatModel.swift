@@ -31,10 +31,10 @@ final class ChatModel {
     @ObservationIgnored private var buffer: [(SessionEvent, Envelope)] = []
     @ObservationIgnored private var subscribedOnce = false
     @ObservationIgnored private var firstSubscription: CheckedContinuation<Void, Never>?
-    @ObservationIgnored private var pendingFirstMessage: String?
+    @ObservationIgnored private var pendingFirstMessage: OutgoingMessage?
     @ObservationIgnored private var started = false
 
-    init(app: AppModel, sessionID: String, profile: String, firstMessage: String? = nil) {
+    init(app: AppModel, sessionID: String, profile: String, firstMessage: OutgoingMessage? = nil) {
         self.app = app
         self.sessionID = sessionID
         self.profile = profile
@@ -100,9 +100,9 @@ final class ChatModel {
             }
             buffer.removeAll()
             load = .ready
-            if let text = pendingFirstMessage {
+            if let first = pendingFirstMessage {
                 pendingFirstMessage = nil
-                await send(text)
+                await send(first)
             }
         } catch {
             load = .failed(HubFailure(error).describe(l10n))
@@ -166,7 +166,7 @@ final class ChatModel {
             state.apply(event, seq: envelope.seq, profile: envelope.profile)
             if case .runCompleted(let run, let message) = event, run.sessionId == sessionID,
                app?.device.spokenReplies == true {
-                Speaker.shared.speak(message.text)
+                Speaker.shared.speak(message.text, app: app, profile: profile)
             }
         } else {
             buffer.append((event, envelope))
@@ -176,14 +176,18 @@ final class ChatModel {
     // MARK: - Actions (HTTP, never the socket)
 
     func send(_ text: String) async {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let app else { return }
+        await send(OutgoingMessage(text: text))
+    }
+
+    /// The person's words and the files they attached, as one run (web: `blocksFor`).
+    func send(_ message: OutgoingMessage) async {
+        guard !message.isEmpty, let app else { return }
         sending = true
         actionError = nil
         defer { sending = false }
         let profile = profile
         let sessionID = sessionID
-        let run = RunCreate(content: [.typeTextBlock(TextBlock(type: .text, text: trimmed))], when: .queue)
+        let run = RunCreate(content: message.blocks, when: .queue)
         let key = ULID.make()
         do {
             _ = try await app.api.call {

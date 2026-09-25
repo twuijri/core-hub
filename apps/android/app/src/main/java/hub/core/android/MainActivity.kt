@@ -139,7 +139,8 @@ private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Uni
     val nav = remember(session?.hub, session?.user?.id) { Navigator() }
     val shared by graph.sharedText.collectAsState()
     LaunchedEffect(shared) { if (shared != null) nav.go(Route.NewChat) }
-    NotificationPermission()
+    // While Android has not asked yet: once a launch, never again after a no (NotificationAsk).
+    hub.core.android.phone.NotificationPermission()
     // `corehub://open/<path>`: the same paths as the web (surfaceRoutes.android).
     LaunchedEffect(pendingPath) {
         val path = pendingPath ?: return@LaunchedEffect
@@ -147,22 +148,6 @@ private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Uni
         onPathHandled()
     }
     MainShell(nav) { route, navigator, shell, openDrawer -> Destination(route, navigator, shell, openDrawer) }
-}
-
-/** Asks once, after sign-in, for the permission Android 13+ needs before a notice can be shown. */
-@Composable
-private fun NotificationPermission() {
-    val graph = androidx.compose.ui.platform.LocalContext.current.graph
-    // The answer changes what stops push here: the hub's device card hears it at once.
-    val ask = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {
-        graph.reportDevice()
-    }
-    LaunchedEffect(Unit) {
-        if (android.os.Build.VERSION.SDK_INT >= 33 && !graph.device.askedNotifications) {
-            graph.device.askedNotifications = true
-            ask.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
 }
 
 /** What each route draws. Pages not built on the phone yet say so plainly. */

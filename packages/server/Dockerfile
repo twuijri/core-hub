@@ -208,10 +208,16 @@ ENV COREHUB_VERSION=${COREHUB_VERSION} \
     DATA_DIR=/data \
     PORT=8080 \
     HERMES_HOME=/data/hermes \
+    HOME=/data/home \
+    NPM_CONFIG_CACHE=/tmp/.npm \
     PATH=/opt/hermes/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     PYTHONDONTWRITEBYTECODE=1 \
     HERMES_DISABLE_LAZY_INSTALLS=1 \
     HERMES_LAZY_INSTALL_TARGET=/data/hermes-packages
+# HOME is inside the volume (decision §78): the coding agents read their own config files from
+# it (`~/.claude/CLAUDE.md`, `~/.codex/config.toml` …), edited from the web, and an upgrade that
+# replaces the container must not drop them. The hub makes the folder on the first boot of a
+# volume that predates it. npm's cache stays outside the volume, where it always was.
 # The code is sealed (docs/changes/2026-09-23-twuijri-sealed-image.md): /app and /opt/hermes are
 # root's and read-only to `hub`, so nothing the hub or an agent runs can change the hub's or
 # Hermes's code — a change comes with a new image. Everything that is written lives in /data.

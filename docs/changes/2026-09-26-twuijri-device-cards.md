@@ -17,7 +17,7 @@
 دائمًا فلا تختفي؛ إعداد المرسِلات مطويّ للمشرف ويبدأ من الملف.
 
 ## القرار والموافقات
-طلب المالك المهمة. كل ما يلي **مقترح — ينتظر تأكيد المالك** (DECISIONS §78):
+طلب المالك المهمة. كل ما يلي **مقترح — ينتظر تأكيد المالك** (DECISIONS §81):
 
 1. **صفحة واحدة بدل تبويبين** (طلب المنسّق بعد ملاحظة المالك): الإقران في الأعلى، ثم «أجهزتك»
    (للمشرف «الأجهزة») بطاقات مجمّعة حسب النوع: الجوالات والأجهزة اللوحية، الحواسيب، المتصفحات.
@@ -67,11 +67,11 @@
   جديد `PushBlocker`، وأمثلة العمليات. لا عملية جديدة.
 - `events/devices/*.schema.json`: نسخة `Device` في `$defs` بالحقول نفسها.
 - `src/product.ts`: `APP_IDS` (معرّفا التطبيقين في المتجرين؛ لا يتبعان إعادة التسمية).
-- DECISIONS §78.
+- DECISIONS §81.
 
 ## الملفات والتأثير
 - الخادم: `modules/devices/schema.ts` (أعمدة `push_blocker`، `seen_session_id`، `renamed_at`)،
-  `drizzle/0025_device_report.sql` (+ لقطة وسجل)، `modules/devices/index.ts` (التسلسل، الاسم المحفوظ،
+  `drizzle/0026_device_report.sql` (+ لقطة وسجل)، `modules/devices/index.ts` (التسلسل، الاسم المحفوظ،
   آخر نشاط لتسجيل الدخول)، `modules/devices/push.ts` و`senders.ts` (`checkApnsKey`، معرّف الحزمة
   الافتراضي، رفض `google-services.json`)، `modules/auth/routes.ts` (حقول الإقران).
 - الويب: `screens/DeviceConnectionsScreen.tsx` (صفحة واحدة)، `devices/DeviceCard.tsx` (جديد)،
@@ -85,7 +85,7 @@
   (جديد)، `packages/web/tests/push-sender-files.test.tsx` (جديد)، `packages/web/tests/devices-push.test.tsx`،
   `packages/web/e2e/zzzzzz-browser-push.spec.ts` (ولقطته)، `DeviceInfoTest.kt` (جديد)، `PushTest.kt`،
   `DeviceInfoTests.swift` (جديد)، `PushTests.swift`.
-- وثائق: `docs/STATUS.md`، `docs/contracts/DECISIONS.md` (§78)، `docs/clients/navigation.json`
+- وثائق: `docs/STATUS.md`، `docs/contracts/DECISIONS.md` (§81)، `docs/clients/navigation.json`
   و`NAVIGATION.md` (لا تبويبات)، `docs/DEPLOY.md` (مكان المرسِلات).
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
@@ -145,8 +145,29 @@ Key ID ومعرّف الحزمة من المركز، `google-services.json` يُ
 تحويل معلومات الجهاز، سبب توقف الدفع، وتقرير التشغيل (الجهاز المقترن يرسل `PATCH` دون اسم؛ الدخول
 بكلمة المرور يسجّل مرة، والصف المحذوف يُسجَّل من جديد مرة).
 
+بعد دمج `origin/main` الثاني (`6ce936f6`، #147 و#148 أخذا §78–§80 والترحيل `0025_channel_identities`):
+القرار صار **§81** والترحيل **`0026_device_report`** (أُعيد توليده بـ`db:generate` فوق لقطة `main`).
+تعارضان في الكود حُلّا بإبقاء ما في `main` وإضافة التقرير إليه: طلب إذن الإشعارات في أندرويد انتقل إلى
+`phone/NotificationStatus.kt` (يرسل `reportDevice()` بعد الإجابة، و«سبق الرفض» صار
+`notificationsDenied`)، و`PushCenter.start` في iOS صار يطلب الإذن بنفسه (التقرير يُرسل بعد معرفة الإذن).
+```
+$ pnpm lint                      → All matched files use Prettier code style!
+$ pnpm typecheck                 → exit 0
+$ DATA_DIR=<جديد> pnpm db:migrate → db: migrations applied (sqlite)
+    migrations: 27 · devices: push_blocker,seen_session_id,renamed_at · channel_identities: true
+$ pnpm contracts:lint            → contracts:lint  OK
+$ pnpm contracts:check-clients   → check-clients  OK — 609 client file(s) scanned, 228 contract path(s) known.
+$ pnpm i18n:check                → i18n:check  OK
+$ pnpm nav:check                 → nav:check  OK — 38 destinations, 2 pre-auth screens, 43 terms, ar/en complete
+$ vitest (server) devices-push, devices/push, auth/pairing   → Test Files 3 passed · Tests 45 passed
+$ vitest (web) device-cards, devices-push, push-sender-files → Test Files 3 passed · Tests 23 passed
+$ ./gradlew testDebugUnitTest --tests 'hub.core.android.phone.*'
+  DeviceInfoTest 5 · PushTest 10 · PhoneTest 6 · NotificationStatusTest 3 · AttachmentsTest 4 · VoiceSourceTest 4 · LucideDrawablesTest 1 — failures="0" errors="0"
+$ node apps/ios/scripts/generate-swift.mjs --check → generate-swift  OK
+```
+
 ## المخاطر والرجوع
-- **الرجوع**: revert للطلب. الترحيل `0025` يضيف ثلاثة أعمدة قابلة لـ null فقط؛ الكود القديم يتجاهلها.
+- **الرجوع**: revert للطلب. الترحيل `0026` يضيف ثلاثة أعمدة قابلة لـ null فقط؛ الكود القديم يتجاهلها.
 - جدول أسماء طرازات iOS مكتوب يدويًا حتى تشكيلة 2025؛ المعرّف غير المعروف يُرسل كما هو (يفرّق بين
   الأجهزة لكنه ليس اسمًا تسويقيًا). تحديث الجدول مع كل تشكيلة جديدة.
 - لم يُشغَّل شيء على هاتف حقيقي ولا على مركز المالك.

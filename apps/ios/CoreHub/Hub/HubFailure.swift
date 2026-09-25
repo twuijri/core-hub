@@ -25,6 +25,8 @@ struct HubFailure: Error, Equatable {
     var operationID: String?
     var requestID: String?
     var detail: String
+    /// `details.reason`, where the hub names why (e.g. `no_speech` for a silent recording).
+    var reason: String?
 
     static let signedOut = HubFailure(kind: .signedOut, status: 401, code: "unauthorized", message: nil, operationID: nil, requestID: nil, detail: "")
 
@@ -54,7 +56,7 @@ struct HubFailure: Error, Equatable {
             } else {
                 kind = .http
             }
-            return HubFailure(
+            var failure = HubFailure(
                 kind: kind,
                 status: status,
                 code: envelope?.code,
@@ -63,6 +65,8 @@ struct HubFailure: Error, Equatable {
                 requestID: envelope?.details?.request_id,
                 detail: String(describing: underlying)
             )
+            failure.reason = envelope?.details?.reason
+            return failure
         }
         if error is URLError {
             return HubFailure(kind: .connection, status: -1, code: nil, message: nil, operationID: nil, requestID: nil, detail: String(describing: error))
@@ -76,6 +80,17 @@ struct HubFailure: Error, Equatable {
         struct Details: Decodable {
             let operationId: String?
             let request_id: String?
+            let reason: String?
+
+            private enum Keys: String, CodingKey { case operationId, request_id, reason }
+
+            /// Each field on its own: one of an unexpected type must not lose the others.
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: Keys.self)
+                operationId = try? container.decodeIfPresent(String.self, forKey: .operationId)
+                request_id = try? container.decodeIfPresent(String.self, forKey: .request_id)
+                reason = try? container.decodeIfPresent(String.self, forKey: .reason)
+            }
         }
 
         let error: String?

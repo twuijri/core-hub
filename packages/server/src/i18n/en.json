@@ -211,6 +211,15 @@
     },
     "plugins": {
       "duplicate": "Hermes lists more than one plugin by this name; the one shown is the one its commands act on."
+    },
+    "channel_link": {
+      "linked": "Linked: this {platform} account now acts as {name} in Core Hub.",
+      "again": "This {platform} account is already linked to {name} in Core Hub.",
+      "invalid": "This code is not valid or has expired. Make a new one in Core Hub → Settings → Account.",
+      "platform": "Accounts can be linked from Telegram or WhatsApp only.",
+      "taken": "This account is linked to someone else in Core Hub; they or an admin must unlink it first.",
+      "platform_telegram": "Telegram",
+      "platform_whatsapp": "WhatsApp"
     }
   },
   "terminal": {

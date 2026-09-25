@@ -15,7 +15,7 @@ export const geminiCli: CatalogEntry = {
   // account, which is exactly the rename this one line exists for.
   credentials: { google: 'GEMINI_API_KEY' },
   health: { kind: 'command', args: ['--version'] },
-  capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'resume'],
+  capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'resume', 'config_files'],
   sections: ['mcp', 'settings'],
   // A Gemini subagent arrives as an ordinary tool call of kind `think`, with nothing that
   // tells it from any other (§56).

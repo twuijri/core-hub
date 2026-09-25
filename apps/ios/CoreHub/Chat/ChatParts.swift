@@ -289,6 +289,10 @@ struct Composer: View {
     let sending: Bool
     let onSend: () -> Void
     let onStop: () -> Void
+    /// Files waiting to go with the message (the «+» button and its chips); none when nil.
+    var attachments: AttachmentTray? = nil
+    /// The profile the files are uploaded into: the chat's own.
+    var profile: String = ""
     @Environment(\.l10n) private var l10n
     @Environment(AppModel.self) private var app
     @FocusState private var focused: Bool
@@ -296,7 +300,11 @@ struct Composer: View {
     /// What was typed before dictation started; what is heard follows it.
     @State private var dictationBase = ""
 
-    private var canSend: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !sending }
+    private var hasFiles: Bool { !(attachments?.attachments.isEmpty ?? true) }
+    private var canSend: Bool {
+        (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || hasFiles)
+            && !sending && !(attachments?.uploading ?? false)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s1) {
@@ -305,6 +313,9 @@ struct Composer: View {
                     .font(.system(size: FontSize.sizeXs))
                     .foregroundStyle(Tone.dangerSoftText)
                     .padding(.horizontal, Space.s3)
+            }
+            if let attachments, !attachments.isEmpty {
+                AttachmentChips(tray: attachments)
             }
             field
         }
@@ -315,6 +326,9 @@ struct Composer: View {
 
     private var field: some View {
         HStack(alignment: .bottom, spacing: Space.s2) {
+            if let attachments {
+                AttachButton(tray: attachments, profile: profile)
+            }
             TextField(placeholder, text: $text, axis: .vertical)
                 .lineLimit(1...6)
                 .font(.system(size: FontSize.sizeMd))
@@ -326,15 +340,26 @@ struct Composer: View {
                 Button {
                     toggleDictation()
                 } label: {
-                    Image(systemName: dictation.state == .listening ? "mic.fill" : "mic")
-                        .font(.system(size: FontSize.sizeMd))
-                        .foregroundStyle(dictation.state == .listening ? Tone.danger : Tone.textMuted)
-                        .frame(width: Control.heightMd, height: Control.heightMd)
+                    Group {
+                        if dictation.state == .transcribing {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(lucide: .mic)
+                                .resizable()
+                                .frame(width: 20, height: 20)
+                                .foregroundStyle(dictation.state == .listening ? Tone.danger : Tone.textMuted)
+                        }
+                    }
+                    .frame(width: Control.heightMd, height: Control.heightMd)
                 }
-                .accessibilityLabel(dictation.state == .listening ? l10n("voice.stop") : l10n("voice.dictate"))
+                .disabled(dictation.state == .transcribing)
+                .accessibilityLabel(
+                    dictation.state == .transcribing ? l10n("voice.transcribing")
+                        : dictation.state == .listening ? l10n("voice.stop") : l10n("voice.dictate")
+                )
                 .accessibilityIdentifier("composer.dictate")
             }
-            if busy && text.isEmpty {
+            if busy && text.isEmpty && !hasFiles {
                 Button(action: onStop) {
                     Image(systemName: "stop.fill")
                         .frame(width: Control.heightMd, height: Control.heightMd)
@@ -356,7 +381,7 @@ struct Composer: View {
                 .accessibilityIdentifier("composer.send")
             }
         }
-        .padding(.leading, Space.s3)
+        .padding(.leading, attachments == nil ? Space.s3 : Space.s1)
         .padding(.trailing, Space.s1)
         .padding(.vertical, Space.s1)
         .floatingChrome(cornerRadius: Radius.xl)
@@ -370,6 +395,25 @@ struct Composer: View {
         }
         dictationBase = text
         let locale = app.device.dictationLocale(app: app.language)
-        Task { await dictation.start(locale: locale, l10n: l10n) }
+        let language = String(locale.identifier.prefix(2))
+        let target = profile.isEmpty ? app.currentProfile : profile
+        Task {
+            // The hub listens when the person chose Core Hub and the profile has a provider.
+            var hub: Dictation.Transcribe?
+            if app.device.voiceSource == .hub {
+                let ready = await HubSpeech.shared.ready(app: app, profile: target)
+                if VoiceRoute.choose(app.device.voiceSource, hubReady: ready?.stt) == .hub {
+                    hub = { [app] audio, durationMs in
+                        try await app.api.call {
+                            try await ModelsAPI.modelsTranscribe(
+                                xHubProfile: target, audio: audio, language: language, durationMs: durationMs,
+                                apiConfiguration: $0
+                            )
+                        }.text
+                    }
+                }
+            }
+            await dictation.start(locale: locale, l10n: l10n, hub: hub)
+        }
     }
 }

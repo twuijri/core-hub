@@ -5,6 +5,7 @@ import type { ReactElement } from 'react';
 import { AgentManagerScreen } from '../agents/AgentManagerScreen.js';
 import { AgentSettingsScreen } from '../agents/AgentSettingsScreen.js';
 import { AgentChannelsScreen } from '../agents/AgentChannelsScreen.js';
+import { AgentConfigFilesScreen } from '../agents/AgentConfigFilesScreen.js';
 import { AgentJobsScreen } from '../agents/AgentJobsScreen.js';
 import { AgentMcpScreen } from '../agents/AgentMcpScreen.js';
 import { AgentMemoryScreen } from '../agents/AgentMemoryScreen.js';
@@ -42,6 +43,7 @@ const SPECIAL: Record<string, () => ReactElement> = {
   agent_channels: () => <AgentChannelsScreen />,
   agent_jobs: () => <AgentJobsScreen />,
   agent_plugins: () => <AgentPluginsScreen />,
+  agent_config_files: () => <AgentConfigFilesScreen />,
   chat: () => <ChatScreen />,
   rooms: () => <RoomsScreen />,
   tasks: () => <TasksScreen />,
