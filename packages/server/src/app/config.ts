@@ -19,6 +19,8 @@ export const ENV_KEYS = [
   'COREHUB_APNS_BUNDLE_ID',
   'COREHUB_APNS_KEY',
   'COREHUB_APNS_ENVIRONMENT',
+  'COREHUB_PUSH_RELAY_URL',
+  'COREHUB_PUSH_RELAY',
   'COREHUB_WEB_TERMINAL',
   'COREHUB_WEB_TERMINAL_IDLE_MINUTES',
 ] as const;
@@ -110,6 +112,22 @@ const envSchema = z.object({
     })
     .optional(),
   /**
+   * The Core Hub push relay (ADR 0024, DECISIONS §82): delivers to the official iOS and Android
+   * apps when this hub has no APNs / FCM credentials of its own. `COREHUB_PUSH_RELAY_URL`
+   * replaces the address built into the hub (`DEFAULT_RELAY_URL` in modules/devices/relay.ts);
+   * `COREHUB_PUSH_RELAY=off` never uses a relay, whatever Settings say.
+   */
+  COREHUB_PUSH_RELAY_URL: z
+    .string()
+    .trim()
+    .regex(/^https:\/\/[^\s/]+(\/[^\s]*)?$/, 'COREHUB_PUSH_RELAY_URL must be an https:// URL')
+    .optional(),
+  COREHUB_PUSH_RELAY: z
+    .enum(['on', 'off', '1', '0', 'true', 'false'], {
+      message: 'COREHUB_PUSH_RELAY must be on or off',
+    })
+    .optional(),
+  /**
    * The owner's web terminal (DECISIONS §70): a shell on this host, as the hub's own user,
    * reachable from the browser by the owner account only. Off unless this is `1`.
    */
@@ -141,6 +159,8 @@ export interface PushEnv {
     key: string | undefined;
     environment: 'production' | 'sandbox' | undefined;
   };
+  /** The push relay: another address, or `off` (`COREHUB_PUSH_RELAY_URL`, `COREHUB_PUSH_RELAY`). */
+  relay: { url: string | undefined; off: boolean };
 }
 
 export type DatabaseConfig = { kind: 'sqlite'; file: string } | { kind: 'postgres'; url: string };
@@ -242,6 +262,13 @@ export function loadConfig(
         bundleId: env.COREHUB_APNS_BUNDLE_ID,
         key: env.COREHUB_APNS_KEY,
         environment: env.COREHUB_APNS_ENVIRONMENT,
+      },
+      relay: {
+        url: env.COREHUB_PUSH_RELAY_URL,
+        off:
+          env.COREHUB_PUSH_RELAY === 'off' ||
+          env.COREHUB_PUSH_RELAY === '0' ||
+          env.COREHUB_PUSH_RELAY === 'false',
       },
     },
     webTerminal: {

@@ -190,6 +190,13 @@
       "when": 1790364851110,
       "tag": "0026_device_report",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1790365740066,
+      "tag": "0027_push_relay",
+      "breakpoints": true
     }
   ]
 }
