@@ -12,7 +12,14 @@
 //
 // The desktop app's update check (src/shared/updates.ts, assetFor) picks the installer for its
 // platform from these names; tests/unit/release-assets.test.ts keeps the two in step.
-import { copyFileSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,7 +34,8 @@ export function msixVersion(version) {
   const m = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(String(version).trim());
   if (!m) throw new Error(`msixVersion: "${version}" is not X.Y.Z`);
   const parts = [m[1], m[2], m[3]].map(Number);
-  if (parts.some((n) => n > 65535)) throw new Error(`msixVersion: "${version}" has a part over 65535`);
+  if (parts.some((n) => n > 65535))
+    throw new Error(`msixVersion: "${version}" has a part over 65535`);
   return `${parts.join('.')}.0`;
 }
 

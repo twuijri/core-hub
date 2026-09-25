@@ -155,8 +155,9 @@ describe('collecting the release files', () => {
     dir = mkdtempSync(path.join(os.tmpdir(), 'corehub-release-'));
     mkdirSync(path.join(dir, 'a'));
     writeFileSync(path.join(dir, 'a', 'Core-Hub-Setup-1.1.0-x64.exe'), 'x');
-    expect(() => collect({ version: '1.1.0', from: path.join(dir, 'a'), to: path.join(dir, 'b') }))
-      .toThrow(/missing .*Core-Hub-1\.1\.0-arm64\.dmg.*app-release\.apk/);
+    expect(() =>
+      collect({ version: '1.1.0', from: path.join(dir, 'a'), to: path.join(dir, 'b') }),
+    ).toThrow(/missing .*Core-Hub-1\.1\.0-arm64\.dmg.*app-release\.apk/);
   });
 });
 

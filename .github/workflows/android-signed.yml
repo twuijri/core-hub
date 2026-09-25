@@ -1,9 +1,10 @@
 name: Android signed build
 
 # A signed release APK and AAB of the Android app (docs/RELEASING.md), with Firebase configured
-# from the repository's secrets. Never on a pull request: only when the owner runs it by hand or
-# pushes a release tag. It publishes nothing; the files become workflow artifacts only on a tag,
-# or on a manual run that asks for them (the repository is public, so a check run keeps nothing).
+# from the repository's secrets. Never on a pull request: only when the owner runs it by hand, or
+# on a release tag through publish-release.yml (which calls it and attaches the APK to the tag's
+# GitHub release). It publishes nothing itself; the files become workflow artifacts only for a
+# release, or on a manual run that asks for them (the repository is public).
 on:
   workflow_dispatch:
     inputs:
@@ -11,8 +12,15 @@ on:
         description: 'Keep the signed APK and AAB as workflow artifacts (anyone can download them)'
         type: boolean
         default: false
-  push:
-    tags: ['v*']
+  workflow_call:
+    inputs:
+      ref:
+        description: 'The release tag to build (refs/tags/vX.Y.Z)'
+        type: string
+        required: true
+      keep_artifacts:
+        type: boolean
+        default: true
 
 concurrency:
   group: android-signed-${{ github.ref }}
@@ -26,20 +34,25 @@ jobs:
     name: Signed release APK and AAB
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      # The ref being built: the release tag when publish-release.yml calls this, else the run's.
+      BUILD_REF: ${{ inputs.ref || github.ref }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || '' }}
       - name: Refuse tags that are not on main
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(env.BUILD_REF, 'refs/tags/')
         run: |
           git fetch --no-tags origin main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+          if ! git merge-base --is-ancestor HEAD origin/main; then
             echo '::error::Release tags must point at a commit on main.'
             exit 1
           fi
       # One version for every deliverable (docs/RELEASING.md): a tag must say the root's.
       - name: The tag matches the root package.json version
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: node scripts/version-check.mjs
+        if: startsWith(env.BUILD_REF, 'refs/tags/v')
+        run: node scripts/version-check.mjs --tag "${BUILD_REF#refs/tags/}"
       - name: Enable pnpm
         run: corepack enable
       - uses: actions/setup-node@v4
@@ -77,9 +90,15 @@ jobs:
           fi
           echo "COREHUB_ANDROID_KEYSTORE=$RUNNER_TEMP/corehub-release.jks" >> "$GITHUB_ENV"
       # The run number + 100: every build is newer than the last, and newer than the old app's
-      # builds under the same id (up to 63). GitHub expressions cannot add, so a step does.
+      # builds under the same id (up to 63). A release (publish-release.yml calls this with a
+      # tag, and the run number is that workflow's own count) adds 1000, so a release is always
+      # newer than any build made by hand. GitHub expressions cannot add, so a step does.
       - name: Build number
-        run: echo "COREHUB_ANDROID_VERSION_CODE=$((GITHUB_RUN_NUMBER + 100))" | tee -a "$GITHUB_ENV"
+        env:
+          FROM_RELEASE: ${{ github.workflow != 'Android signed build' }}
+        run: |
+          if [ "$FROM_RELEASE" = true ]; then offset=1000; else offset=100; fi
+          echo "COREHUB_ANDROID_VERSION_CODE=$((GITHUB_RUN_NUMBER + offset))" | tee -a "$GITHUB_ENV"
       - name: Build the signed APK and AAB
         working-directory: apps/android
         env:
@@ -108,7 +127,7 @@ jobs:
             echo "Signed APK: $(du -h "$apk" | cut -f1), AAB: $(du -h "$aab" | cut -f1)"
           } | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
-        if: github.event_name == 'push' || inputs.keep_artifacts
+        if: inputs.keep_artifacts
         with:
           name: corehub-android-signed
           path: |
