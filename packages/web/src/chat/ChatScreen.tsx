@@ -1,4 +1,5 @@
 import { HubApiError } from '@corehub/contracts';
+import { useQuery } from '@tanstack/react-query';
 import {
   useCallback,
   useEffect,
@@ -16,7 +17,7 @@ import { useI18n } from '../i18n/context.js';
 import { routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import { sessionTitle } from '../sessions/SessionList.js';
-import type { ContentBlock, Message, ReasoningEffort } from '../types.js';
+import type { ContentBlock, Message, ReasoningEffort, Run } from '../types.js';
 import {
   Button,
   buttonClass,
@@ -47,7 +48,7 @@ import { Transcript } from './MessageView.js';
 import { holdsBack, queued, type QueuedMessage } from './outbox.js';
 import { QuestionCard } from './QuestionCard.js';
 import { RunStatus } from './RunStatus.js';
-import { RunFailureNotice } from './RunFailureNotice.js';
+import { RunFailureNotice, failuresByMessage } from './RunFailureNotice.js';
 import { SessionAgent } from './SessionAgent.js';
 import { useCatalogue, useRuntimeReport } from '../models/queries.js';
 import { activeRun, isBusy, textOf } from './transcript.js';
@@ -373,11 +374,43 @@ export function OpenSession({
 
   const title = pageTitle ?? (state.session ? sessionTitle(state.session, t) : t(termKey('chat')));
   const showReasoning = preferences.data?.show_reasoning ?? true;
-  const failedRun = Object.values(state.runs).find((r) => r.status === 'failed' && r.error);
+  // A failure hangs under the turn that failed, never above the composer (owner,
+  // 2026-09-25): the live runs, and the failed history so a reload keeps it on its turn.
+  const liveFailed = Object.values(state.runs)
+    .filter((run) => run.status === 'failed')
+    .map((run) => run.id)
+    .join(',');
+  const failedHistory = useQuery({
+    queryKey: ['session-failed-runs', profile, sessionId],
+    queryFn: async () =>
+      (
+        await client.request('get', '/sessions/{session_id}/runs', {
+          params: { session_id: sessionId },
+          query: { status: 'failed', limit: 100 },
+        })
+      ).data.items as Run[],
+  });
+  // A resync keeps only the live runs; read the history again once a run has failed here.
+  const refetchFailed = failedHistory.refetch;
+  useEffect(() => {
+    if (liveFailed) void refetchFailed();
+  }, [liveFailed, refetchFailed]);
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
+  const failures = useMemo(() => {
+    const known = new Map<string, Run>();
+    for (const run of failedHistory.data ?? []) known.set(run.id, run);
+    for (const run of Object.values(state.runs)) known.set(run.id, run);
+    const byMessage = failuresByMessage(state.messages, known.values());
+    for (const [messageId, entry] of byMessage)
+      if (dismissed.has(entry.runId)) byMessage.delete(messageId);
+    return byMessage;
+  }, [failedHistory.data, state.runs, state.messages, dismissed]);
   // Only asked for once a run has failed for want of a provider, and then asked fresh:
   // the notice says which step of propagation is missing right now.
   const runtime = useRuntimeReport({
-    enabled: failedRun?.error?.code === 'provider_not_configured',
+    enabled: [...failures.values()].some(
+      (entry) => entry.failure.code === 'provider_not_configured',
+    ),
   });
   // The folder moves freely until the first run; after that the transcript would no longer
   // describe where the work happened, and the hub refuses (`409 state_invalid`).
@@ -501,6 +534,16 @@ export function OpenSession({
                 runs={state.runs}
                 slugOf={(id) => (agents.data ?? []).find((agent) => agent.id === id)?.slug}
                 anchor={anchor && anchor.phase !== 'missing' ? anchor : null}
+                noticeFor={(message) => {
+                  const entry = failures.get(message.id);
+                  return entry ? (
+                    <RunFailureNotice
+                      failure={entry.failure}
+                      runtime={runtime.data}
+                      onDismiss={() => setDismissed((held) => new Set(held).add(entry.runId))}
+                    />
+                  ) : null;
+                }}
                 onReply={setReplyTo}
                 onFork={forkFrom}
               />
@@ -510,18 +553,6 @@ export function OpenSession({
                 .map((approval) => (
                   <ApprovalCard key={approval.id} approval={approval} />
                 ))}
-              {failedRun?.error &&
-                // A failed run often leaves an empty assistant message; the badge alone would
-                // hide the reason, so the notice is only suppressed when that message has text
-                // — except for the one failure whose way out the hub knows, which is never
-                // suppressed: the agent's own text does not say where to go.
-                (failedRun.error.code === 'provider_not_configured' ||
-                  !state.messages.some(
-                    (m) =>
-                      m.run_id === failedRun.id &&
-                      m.status === 'failed' &&
-                      m.content.some((part) => part.type === 'text' && part.text.trim() !== ''),
-                  )) && <RunFailureNotice failure={failedRun.error} runtime={runtime.data} />}
             </div>
             <Composer
               busy={busy}

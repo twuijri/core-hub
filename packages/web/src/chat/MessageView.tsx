@@ -87,6 +87,7 @@ export function MessageView({
   markSlug,
   anchored = false,
   mark = null,
+  notice = null,
   onReply,
   onFork,
 }: {
@@ -108,6 +109,8 @@ export function MessageView({
   anchored?: boolean;
   /** The searched words, marked inside this message's text. */
   mark?: string | null;
+  /** Drawn under this message, inside its turn: the failure of the run it belongs to. */
+  notice?: ReactNode;
   onReply?: ((message: Message) => void) | undefined;
   onFork?: ((message: Message) => void) | undefined;
 }) {
@@ -152,6 +155,7 @@ export function MessageView({
             </p>
             <Attachments message={message} />
           </div>
+          {notice}
           <MessageActions message={message} onFork={onFork} />
         </div>
       </article>
@@ -218,6 +222,7 @@ export function MessageView({
               : ''}
           </p>
         )}
+        {notice}
         {!streaming && <MessageActions message={message} onReply={onReply} onFork={onFork} />}
       </div>
     </article>
@@ -232,6 +237,7 @@ export function Transcript({
   runs,
   slugOf,
   anchor = null,
+  noticeFor,
   onReply,
   onFork,
 }: {
@@ -243,6 +249,8 @@ export function Transcript({
   slugOf?: ((authorId: string | null) => string | undefined) | undefined;
   /** The message a search opened the conversation at, and the words to mark in it. */
   anchor?: { messageId: string; query: string } | null;
+  /** What hangs under a message: a failed run's notice, on the turn that failed. */
+  noticeFor?: ((message: Message) => ReactNode) | undefined;
   onReply?: ((message: Message) => void) | undefined;
   onFork?: ((message: Message) => void) | undefined;
 }) {
@@ -259,6 +267,7 @@ export function Transcript({
           markSlug={slugOf?.(turn.message.author.id ?? null)}
           anchored={turn.message.id === anchor?.messageId}
           mark={turn.message.id === anchor?.messageId ? anchor.query : null}
+          notice={noticeFor?.(turn.message) ?? null}
           onReply={onReply}
           onFork={onFork}
         />
