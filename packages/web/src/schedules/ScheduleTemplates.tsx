@@ -163,7 +163,7 @@ export function NextRuns({ trigger, profile }: { trigger: Trigger; profile: stri
               : 'ready'
       }
     >
-      <p className="font-medium">{t('schedules.preview.title', { zone: settled.timezone })}</p>
+      <p className="font-medium">{t('schedules.preview.title', { zone })}</p>
       {incomplete && <p className="text-muted">{t('schedules.preview.incomplete')}</p>}
       {!incomplete && preview.isPending && <Skeleton height="2.75rem" radius="sm" />}
       {!incomplete && preview.isError && (
