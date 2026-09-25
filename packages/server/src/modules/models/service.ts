@@ -2176,7 +2176,12 @@ export class ModelsService {
     checks.push({
       id: 'provider_keys',
       ok: home !== null && missingKeys.length === 0,
-      detail: wanted ? (missingKeys[0] ?? String(wanted.owned.length)) : null,
+      // The count is of provider keys: the image model's variables (decision §72) are checked
+      // with them but are not keys of their own.
+      detail: wanted
+        ? (missingKeys[0] ??
+          String(wanted.owned.filter((name) => !IMAGE_ENV_NAMES.includes(name)).length))
+        : null,
     });
 
     // 3. Did the provider itself accept the key? Stored when it was saved and refreshed
