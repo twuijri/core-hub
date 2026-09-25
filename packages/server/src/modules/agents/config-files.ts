@@ -270,9 +270,9 @@ export class ConfigFileStore {
       dir = path.join(home, ...folder.under);
       display = `~/${folder.under.join('/')}`;
     }
-    const roots = [home, dir].map((root) => realParts(root)).map(({ real, missing }) =>
-      path.join(real, ...missing),
-    );
+    const roots = [home, dir]
+      .map((root) => realParts(root))
+      .map(({ real, missing }) => path.join(real, ...missing));
     return { dir, display, roots };
   }
 

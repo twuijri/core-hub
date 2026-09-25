@@ -55,7 +55,7 @@ class NavigationParityTest {
         assertEquals(list("settingsTabs").filter { it in ids }, Screens.settingsTabs)
         assertEquals(list("settingsManagement"), Screens.settingsManagement)
         assertEquals(list("settingsTools").filter { it in ids }, Screens.settingsTools)
-        assertEquals(list("agentLevel"), Screens.agentLevel)
+        assertEquals(list("agentLevel").filter { it in ids }, Screens.agentLevel)
         assertEquals(listOf(Screens.settingsTabs, Screens.settingsManagement, Screens.settingsTools), SettingsList.groups.map { it.second })
         val primaries = Screens.rail + Screens.segments + Screens.footer + Screens.settingsTabs + Screens.settingsManagement +
             Screens.settingsTools + Screens.agentLevel

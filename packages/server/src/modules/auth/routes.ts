@@ -847,24 +847,25 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     });
   });
 
-  route(
-    'DELETE',
-    '/auth/me/channel-identities/:identity_id',
-    signedIn,
-    async (request, reply) => {
-      const id = param(request, 'identity_id', 'channel_identity');
-      const row = findIdentity(db, id);
-      if (!row || row.userId !== principalOf(request).user.id) {
-        throw new HubError('not_found', { details: { resource: 'channel_identity', id } });
-      }
-      deleteIdentity(db, row.id);
-      audit(request, 'auth.channel_identity_unlinked', { kind: 'channel_identity', id }, 'messaging account unlinked', {
+  route('DELETE', '/auth/me/channel-identities/:identity_id', signedIn, async (request, reply) => {
+    const id = param(request, 'identity_id', 'channel_identity');
+    const row = findIdentity(db, id);
+    if (!row || row.userId !== principalOf(request).user.id) {
+      throw new HubError('not_found', { details: { resource: 'channel_identity', id } });
+    }
+    deleteIdentity(db, row.id);
+    audit(
+      request,
+      'auth.channel_identity_unlinked',
+      { kind: 'channel_identity', id },
+      'messaging account unlinked',
+      {
         platform: row.platform,
         by: 'self',
-      });
-      return noContent(reply);
-    },
-  );
+      },
+    );
+    return noContent(reply);
+  });
 
   route('GET', '/auth/channel-identities', admin, async () => ({
     items: listIdentities(db).map(presentIdentity),
@@ -875,11 +876,17 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     const row = findIdentity(db, id);
     if (!row) throw new HubError('not_found', { details: { resource: 'channel_identity', id } });
     deleteIdentity(db, row.id);
-    audit(request, 'auth.channel_identity_unlinked', { kind: 'channel_identity', id }, 'messaging account unlinked', {
-      platform: row.platform,
-      user_id: row.userId,
-      by: 'admin',
-    });
+    audit(
+      request,
+      'auth.channel_identity_unlinked',
+      { kind: 'channel_identity', id },
+      'messaging account unlinked',
+      {
+        platform: row.platform,
+        user_id: row.userId,
+        by: 'admin',
+      },
+    );
     return noContent(reply);
   });
 

@@ -366,7 +366,10 @@ export class HubToolsService {
    * One POST to `agents.hubChannelEvent` from the hub's hook in Hermes's messaging gateway
    * (decision §78): a turn's sender, or a `/start` link code.
    */
-  channelEvent(bearer: string | null, input: HubChannelEventInput): {
+  channelEvent(
+    bearer: string | null,
+    input: HubChannelEventInput,
+  ): {
     handled: boolean;
     message: string | null;
   } {
@@ -385,7 +388,10 @@ export class HubToolsService {
             outcome.again ? 'agents.channel_link.again' : 'agents.channel_link.linked',
             language,
           )
-            .replace('{platform}', t(`agents.channel_link.platform_${outcome.row.platform}`, language))
+            .replace(
+              '{platform}',
+              t(`agents.channel_link.platform_${outcome.row.platform}`, language),
+            )
             .replace('{name}', outcome.userName);
           this.deps.app.log.info(
             { profile: workspace.slug, platform: outcome.row.platform, user: outcome.row.userId },
@@ -450,7 +456,12 @@ export class HubToolsService {
     const record = (
       ok: boolean,
       errorCode: string | null,
-      lease: { userId: string; sessionId: string | null; runId: string; kind: 'run' | 'channel' } | null,
+      lease: {
+        userId: string;
+        sessionId: string | null;
+        runId: string;
+        kind: 'run' | 'channel';
+      } | null,
     ) => this.record(workspace.id, name, ok, errorCode, lease, Date.now() - started);
 
     if (!tool || !offered(tool)) {
@@ -556,7 +567,12 @@ export class HubToolsService {
     tool: string,
     ok: boolean,
     errorCode: string | null,
-    lease: { userId: string; sessionId: string | null; runId: string; kind: 'run' | 'channel' } | null,
+    lease: {
+      userId: string;
+      sessionId: string | null;
+      runId: string;
+      kind: 'run' | 'channel';
+    } | null,
     durationMs: number,
   ): void {
     const settings = this.row(workspaceId);

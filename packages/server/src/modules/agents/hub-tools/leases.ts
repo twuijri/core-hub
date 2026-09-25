@@ -36,9 +36,7 @@ const POLL_MS = 50;
 
 /** Why a channel turn acts for nobody (decision §78). */
 export type ChannelRefusal =
-  | 'hub_tools_sender_not_linked'
-  | 'hub_tools_sender_no_access'
-  | 'hub_tools_group_chat';
+  'hub_tools_sender_not_linked' | 'hub_tools_sender_no_access' | 'hub_tools_group_chat';
 
 export interface Lease {
   runId: string;
@@ -181,11 +179,14 @@ export class RunLeases {
    * (`hub`) can only be one of the hub's runs, a messaging gateway (`gateway`) only one of its
    * turns; unknown (`null`, a Hermes the hub did not start) could be either.
    */
-  private decide(workspaceId: string, origin: HubOrigin | null, final: boolean): Attribution | null {
+  private decide(
+    workspaceId: string,
+    origin: HubOrigin | null,
+    final: boolean,
+  ): Attribution | null {
     const live = this.live(workspaceId).filter(
       (lease) =>
-        origin === null ||
-        (origin === 'hub' ? lease.kind === 'run' : lease.kind === 'channel'),
+        origin === null || (origin === 'hub' ? lease.kind === 'run' : lease.kind === 'channel'),
     );
     if (live.length === 0) return { ok: false, reason: 'hub_tools_no_live_run' };
     const ownerOf = (lease: Lease) => lease.userId ?? `nobody:${lease.runId}`;

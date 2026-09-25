@@ -168,7 +168,9 @@ class FakeTelegram {
         chat: { id: userId, type: 'private', first_name: `User ${userId}` },
         from: { id: userId, is_bot: false, first_name: `User ${userId}` },
         text,
-        ...(command ? { entities: [{ type: 'bot_command', offset: 0, length: command.length }] } : {}),
+        ...(command
+          ? { entities: [{ type: 'bot_command', offset: 0, length: command.length }] }
+          : {}),
       },
     });
   }
@@ -228,224 +230,237 @@ class FakeTelegram {
   }
 }
 
-describe.skipIf(!image)('channel identities (real Hermes gateway; set COREHUB_HERMES_IMAGE)', () => {
-  let model: http.Server;
-  const telegram = new FakeTelegram();
-  let hub: TestHub & { token: string; userId: string };
-  let gateway: ChildProcess | null = null;
-  const log: string[] = [];
-  const container = `corehub-channelid-real-${process.pid}`;
+describe.skipIf(!image)(
+  'channel identities (real Hermes gateway; set COREHUB_HERMES_IMAGE)',
+  () => {
+    let model: http.Server;
+    const telegram = new FakeTelegram();
+    let hub: TestHub & { token: string; userId: string };
+    let gateway: ChildProcess | null = null;
+    const log: string[] = [];
+    const container = `corehub-channelid-real-${process.pid}`;
 
-  beforeAll(async () => {
-    model = scriptedModel();
-    await new Promise<void>((resolve) => model.listen(0, '127.0.0.1', resolve));
-    await new Promise<void>((resolve) => telegram.server.listen(0, '127.0.0.1', resolve));
-    const modelPort = (model.address() as AddressInfo).port;
-    const telegramPort = (telegram.server.address() as AddressInfo).port;
-    hub = await signedInHub(
-      {},
-      {
-        agents: {
-          adapterOptions: {
-            hermes: {
-              // A gateway that answers its probe: the runtime is `external` and has a home.
-              fetchImpl: async () =>
-                new Response('{"status":"ok"}', {
-                  status: 200,
-                  headers: { 'content-type': 'application/json' },
-                }),
-              ensureProfile: async () => undefined,
+    beforeAll(async () => {
+      model = scriptedModel();
+      await new Promise<void>((resolve) => model.listen(0, '127.0.0.1', resolve));
+      await new Promise<void>((resolve) => telegram.server.listen(0, '127.0.0.1', resolve));
+      const modelPort = (model.address() as AddressInfo).port;
+      const telegramPort = (telegram.server.address() as AddressInfo).port;
+      hub = await signedInHub(
+        {},
+        {
+          agents: {
+            adapterOptions: {
+              hermes: {
+                // A gateway that answers its probe: the runtime is `external` and has a home.
+                fetchImpl: async () =>
+                  new Response('{"status":"ok"}', {
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                  }),
+                ensureProfile: async () => undefined,
+              },
             },
           },
         },
-      },
-    );
-    const home = path.join(hub.dataDir, 'hermes');
-    mkdirSync(home, { recursive: true });
-    chmodSync(hub.dataDir, 0o777);
-    writeFileSync(
-      path.join(home, 'config.yaml'),
-      [
-        '# written by the real-Hermes test',
-        'providers:',
-        '  corehub-fake:',
-        '    name: corehub-fake',
-        `    base_url: http://127.0.0.1:${modelPort}/v1`,
-        '    key_env: COREHUB_FAKE_KEY',
-        '    api_mode: chat_completions',
-        'model:',
-        '  default: fake-1',
-        '  provider: corehub-fake',
-        'platforms:',
-        '  telegram:',
-        '    enabled: true',
-        '    extra:',
-        `      base_url: http://127.0.0.1:${telegramPort}/bot`,
-        '',
-      ].join('\n'),
-    );
-    await hub.app.listen({ port: 0, host: '127.0.0.1' });
+      );
+      const home = path.join(hub.dataDir, 'hermes');
+      mkdirSync(home, { recursive: true });
+      chmodSync(hub.dataDir, 0o777);
+      writeFileSync(
+        path.join(home, 'config.yaml'),
+        [
+          '# written by the real-Hermes test',
+          'providers:',
+          '  corehub-fake:',
+          '    name: corehub-fake',
+          `    base_url: http://127.0.0.1:${modelPort}/v1`,
+          '    key_env: COREHUB_FAKE_KEY',
+          '    api_mode: chat_completions',
+          'model:',
+          '  default: fake-1',
+          '  provider: corehub-fake',
+          'platforms:',
+          '  telegram:',
+          '    enabled: true',
+          '    extra:',
+          `      base_url: http://127.0.0.1:${telegramPort}/bot`,
+          '',
+        ].join('\n'),
+      );
+      await hub.app.listen({ port: 0, host: '127.0.0.1' });
 
-    const agents = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/agents' });
-    const hermes = (agents.json().items as Array<{ id: string; kind: string }>).find(
-      (agent) => agent.kind === 'hermes',
-    )!.id;
-    const on = await authed(hub, hub.token, {
-      method: 'PATCH',
-      url: `/api/v1/agents/${hermes}/hub-tools`,
-      payload: { enabled: true, groups: [{ id: 'tasks', allow_writes: true }] },
+      const agents = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/agents' });
+      const hermes = (agents.json().items as Array<{ id: string; kind: string }>).find(
+        (agent) => agent.kind === 'hermes',
+      )!.id;
+      const on = await authed(hub, hub.token, {
+        method: 'PATCH',
+        url: `/api/v1/agents/${hermes}/hub-tools`,
+        payload: { enabled: true, groups: [{ id: 'tasks', allow_writes: true }] },
+      });
+      expect(on.statusCode, on.body).toBe(200);
+      // The bot, and the two accounts Hermes lets through (its own allowlist).
+      appendFileSync(
+        path.join(home, '.env'),
+        `TELEGRAM_BOT_TOKEN=${BOT_TOKEN}\nTELEGRAM_ALLOWED_USERS=${LINKED},${STRANGER}\n`,
+      );
+
+      const { uid, gid } = userInfo();
+      gateway = spawn(
+        'docker',
+        [
+          'run',
+          '--rm',
+          '--name',
+          container,
+          '--network',
+          'host',
+          '--user',
+          `${uid}:${gid}`,
+          '-v',
+          `${hub.dataDir}:${hub.dataDir}`,
+          '-e',
+          `HERMES_HOME=${home}`,
+          '-e',
+          'HOME=/tmp',
+          '-e',
+          'COREHUB_FAKE_KEY=fake-key-000000000000',
+          // What the hub sets in every messaging gateway it starts.
+          '-e',
+          'COREHUB_MCP_ORIGIN=gateway',
+          '-e',
+          'HERMES_DASHBOARD=0',
+          '-e',
+          'PYTHONUNBUFFERED=1',
+          '--entrypoint',
+          '/opt/hermes/.venv/bin/hermes',
+          image!,
+          'gateway',
+          'run',
+        ],
+        { stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      for (const stream of [gateway.stdout, gateway.stderr]) {
+        stream?.on('data', (chunk: Buffer) => log.push(...chunk.toString().split('\n')));
+      }
+      // Ready when python-telegram-bot starts polling the fake Bot API.
+      for (let i = 0; i < 240 && !telegram.methods.includes('getUpdates'); i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      expect(telegram.methods, log.slice(-60).join('\n')).toContain('getUpdates');
+    }, 180_000);
+
+    afterAll(async () => {
+      try {
+        execFileSync('docker', ['rm', '-f', container], { stdio: 'ignore' });
+      } catch {
+        // gone with --rm
+      }
+      gateway?.kill();
+      await hub?.close().catch(() => undefined);
+      model?.close();
+      telegram.server.close();
+      try {
+        rmSync(hub?.dataDir ?? '', { recursive: true, force: true });
+      } catch {
+        // a temp directory
+      }
     });
-    expect(on.statusCode, on.body).toBe(200);
-    // The bot, and the two accounts Hermes lets through (its own allowlist).
-    appendFileSync(
-      path.join(home, '.env'),
-      `TELEGRAM_BOT_TOKEN=${BOT_TOKEN}\nTELEGRAM_ALLOWED_USERS=${LINKED},${STRANGER}\n`,
-    );
 
-    const { uid, gid } = userInfo();
-    gateway = spawn(
-      'docker',
-      [
-        'run',
-        '--rm',
-        '--name',
-        container,
-        '--network',
-        'host',
-        '--user',
-        `${uid}:${gid}`,
-        '-v',
-        `${hub.dataDir}:${hub.dataDir}`,
-        '-e',
-        `HERMES_HOME=${home}`,
-        '-e',
-        'HOME=/tmp',
-        '-e',
-        'COREHUB_FAKE_KEY=fake-key-000000000000',
-        // What the hub sets in every messaging gateway it starts.
-        '-e',
-        'COREHUB_MCP_ORIGIN=gateway',
-        '-e',
-        'HERMES_DASHBOARD=0',
-        '-e',
-        'PYTHONUNBUFFERED=1',
-        '--entrypoint',
-        '/opt/hermes/.venv/bin/hermes',
-        image!,
-        'gateway',
-        'run',
-      ],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    for (const stream of [gateway.stdout, gateway.stderr]) {
-      stream?.on('data', (chunk: Buffer) => log.push(...chunk.toString().split('\n')));
-    }
-    // Ready when python-telegram-bot starts polling the fake Bot API.
-    for (let i = 0; i < 240 && !telegram.methods.includes('getUpdates'); i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-    expect(telegram.methods, log.slice(-60).join('\n')).toContain('getUpdates');
-  }, 180_000);
+    it('links a Telegram account with /start <code>, then its turn acts as the person and a stranger’s does not', async () => {
+      const hint = () =>
+        `${telegram.sent.map((s) => `${s.chatId}: ${s.text}`).join('\n')}\n---\n${log.slice(-80).join('\n')}`;
 
-  afterAll(async () => {
-    try {
-      execFileSync('docker', ['rm', '-f', container], { stdio: 'ignore' });
-    } catch {
-      // gone with --rm
-    }
-    gateway?.kill();
-    await hub?.close().catch(() => undefined);
-    model?.close();
-    telegram.server.close();
-    try {
-      rmSync(hub?.dataDir ?? '', { recursive: true, force: true });
-    } catch {
-      // a temp directory
-    }
-  });
+      // 1. The code, sent from the account being linked.
+      const code = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/auth/me/channel-identities/link-codes',
+      });
+      expect(code.statusCode, code.body).toBe(201);
+      telegram.say(LINKED, code.json().command as string);
+      const reply = await telegram.waitFor(
+        (s) => s.chatId === String(LINKED) && /Linked|تم الربط/.test(s.text),
+        90_000,
+      );
+      expect(reply, hint()).not.toBeNull();
+      const links = await authed(hub, hub.token, {
+        method: 'GET',
+        url: '/api/v1/auth/me/channel-identities',
+      });
+      expect(links.json().items).toEqual([
+        expect.objectContaining({
+          platform: 'telegram',
+          sender_id: String(LINKED),
+          user_id: hub.userId,
+        }),
+      ]);
 
-  it('links a Telegram account with /start <code>, then its turn acts as the person and a stranger’s does not', async () => {
-    const hint = () => `${telegram.sent.map((s) => `${s.chatId}: ${s.text}`).join('\n')}\n---\n${log.slice(-80).join('\n')}`;
+      // 2. The linked account's turn: the task is the person's.
+      telegram.say(LINKED, 'File a task for me, please.');
+      const done = await telegram.waitFor(
+        (s) => s.chatId === String(LINKED) && s.text.includes('tool said'),
+        180_000,
+      );
+      expect(done, hint()).not.toBeNull();
+      const board = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/tasks' });
+      const tasks = (board.json().items as Array<{ title: string; owner_id: string }>).filter(
+        (item) => item.title === TITLE,
+      );
+      expect(tasks, board.body).toHaveLength(1);
+      expect(tasks[0]!.owner_id).toBe(hub.userId);
 
-    // 1. The code, sent from the account being linked.
-    const code = await authed(hub, hub.token, {
-      method: 'POST',
-      url: '/api/v1/auth/me/channel-identities/link-codes',
-    });
-    expect(code.statusCode, code.body).toBe(201);
-    telegram.say(LINKED, code.json().command as string);
-    const reply = await telegram.waitFor(
-      (s) => s.chatId === String(LINKED) && /Linked|تم الربط/.test(s.text),
-      90_000,
-    );
-    expect(reply, hint()).not.toBeNull();
-    const links = await authed(hub, hub.token, {
-      method: 'GET',
-      url: '/api/v1/auth/me/channel-identities',
-    });
-    expect(links.json().items).toEqual([
-      expect.objectContaining({ platform: 'telegram', sender_id: String(LINKED), user_id: hub.userId }),
-    ]);
+      // 3. A stranger's turn: refused, and nothing made — even while the person has a chat of
+      // their own running in the hub. Hermes's gateway sends `X-Corehub-Origin: gateway` (the
+      // variable the hub sets): without it the two could not be told apart and the call would be
+      // `hub_tools_run_ambiguous` instead.
+      const workspace = (await authed(hub, hub.token, { method: 'GET', url: '/api/v1/profiles' }))
+        .json()
+        .items.find((p: { slug: string }) => p.slug === 'default').id as string;
+      runLeasesFor(hub.app).open({
+        runId: 'RUNREAL',
+        sessionId: 'SESREAL',
+        workspaceId: workspace,
+        userId: hub.userId,
+      });
+      telegram.say(STRANGER, 'File a task for me, please.');
+      const refused = await telegram.waitFor(
+        (s) => s.chatId === String(STRANGER) && s.text.includes('tool said'),
+        180_000,
+      );
+      expect(refused, hint()).not.toBeNull();
+      // Telegram's Markdown escapes: read the words without the backslashes.
+      expect(refused!.text.replace(/\\/g, '')).toContain('hub_tools_sender_not_linked');
+      runLeasesFor(hub.app).close('RUNREAL');
+      const after = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/tasks' });
+      expect(
+        (after.json().items as Array<{ title: string }>).filter((item) => item.title === TITLE),
+      ).toHaveLength(1);
 
-    // 2. The linked account's turn: the task is the person's.
-    telegram.say(LINKED, 'File a task for me, please.');
-    const done = await telegram.waitFor(
-      (s) => s.chatId === String(LINKED) && s.text.includes('tool said'),
-      180_000,
-    );
-    expect(done, hint()).not.toBeNull();
-    const board = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/tasks' });
-    const tasks = (board.json().items as Array<{ title: string; owner_id: string }>).filter(
-      (item) => item.title === TITLE,
-    );
-    expect(tasks, board.body).toHaveLength(1);
-    expect(tasks[0]!.owner_id).toBe(hub.userId);
-
-    // 3. A stranger's turn: refused, and nothing made — even while the person has a chat of
-    // their own running in the hub. Hermes's gateway sends `X-Corehub-Origin: gateway` (the
-    // variable the hub sets): without it the two could not be told apart and the call would be
-    // `hub_tools_run_ambiguous` instead.
-    const workspace = (await authed(hub, hub.token, { method: 'GET', url: '/api/v1/profiles' }))
-      .json()
-      .items.find((p: { slug: string }) => p.slug === 'default').id as string;
-    runLeasesFor(hub.app).open({
-      runId: 'RUNREAL',
-      sessionId: 'SESREAL',
-      workspaceId: workspace,
-      userId: hub.userId,
-    });
-    telegram.say(STRANGER, 'File a task for me, please.');
-    const refused = await telegram.waitFor(
-      (s) => s.chatId === String(STRANGER) && s.text.includes('tool said'),
-      180_000,
-    );
-    expect(refused, hint()).not.toBeNull();
-    // Telegram's Markdown escapes: read the words without the backslashes.
-    expect(refused!.text.replace(/\\/g, '')).toContain('hub_tools_sender_not_linked');
-    runLeasesFor(hub.app).close('RUNREAL');
-    const after = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/tasks' });
-    expect(
-      (after.json().items as Array<{ title: string }>).filter((item) => item.title === TITLE),
-    ).toHaveLength(1);
-
-    // The card's last calls say the same: the person's call, then the stranger's refusal.
-    const hermes = (
-      (await authed(hub, hub.token, { method: 'GET', url: '/api/v1/agents' })).json()
-        .items as Array<{ id: string; kind: string }>
-    ).find((agent) => agent.kind === 'hermes')!.id;
-    const card = await authed(hub, hub.token, {
-      method: 'GET',
-      url: `/api/v1/agents/${hermes}/hub-tools`,
-    });
-    const calls = card.json().recent_calls as Array<{
-      tool: string;
-      ok: boolean;
-      user_id: string | null;
-      error_code: string | null;
-    }>;
-    expect(calls.slice(0, 2), card.body).toEqual([
-      expect.objectContaining({ tool: 'tasks.create', ok: false, error_code: 'hub_tools_sender_not_linked', user_id: null }),
-      expect.objectContaining({ tool: 'tasks.create', ok: true, user_id: hub.userId }),
-    ]);
-  }, 600_000);
-});
+      // The card's last calls say the same: the person's call, then the stranger's refusal.
+      const hermes = (
+        (await authed(hub, hub.token, { method: 'GET', url: '/api/v1/agents' })).json()
+          .items as Array<{ id: string; kind: string }>
+      ).find((agent) => agent.kind === 'hermes')!.id;
+      const card = await authed(hub, hub.token, {
+        method: 'GET',
+        url: `/api/v1/agents/${hermes}/hub-tools`,
+      });
+      const calls = card.json().recent_calls as Array<{
+        tool: string;
+        ok: boolean;
+        user_id: string | null;
+        error_code: string | null;
+      }>;
+      expect(calls.slice(0, 2), card.body).toEqual([
+        expect.objectContaining({
+          tool: 'tasks.create',
+          ok: false,
+          error_code: 'hub_tools_sender_not_linked',
+          user_id: null,
+        }),
+        expect.objectContaining({ tool: 'tasks.create', ok: true, user_id: hub.userId }),
+      ]);
+    }, 600_000);
+  },
+);

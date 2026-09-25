@@ -16764,7 +16764,7 @@ components:
       properties:
         handled:
           type: boolean
-          description: '`link` only: the command was the hub''s, and the gateway answers `message` instead of passing it on.'
+          description: "`link` only: the command was the hub's, and the gateway answers `message` instead of passing it on."
         message:
           type: [string, 'null']
     PairingConnection:

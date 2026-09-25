@@ -67,7 +67,11 @@ describe("coding agents' config files", () => {
         revision: null,
         content: null,
       }),
-      expect.objectContaining({ key: 'settings', path: '~/.claude/settings.json', language: 'json' }),
+      expect.objectContaining({
+        key: 'settings',
+        path: '~/.claude/settings.json',
+        language: 'json',
+      }),
     ]);
 
     const empty = await authed(h, h.token, { method: 'GET', url: url(claude, 'instructions') });
@@ -238,7 +242,12 @@ describe("coding agents' config files", () => {
     const created = await authed(h, h.token, {
       method: 'POST',
       url: '/api/v1/auth/users',
-      payload: { username: 'mem', password: 'mem-password-1', role: 'member', profiles: ['default'] },
+      payload: {
+        username: 'mem',
+        password: 'mem-password-1',
+        role: 'member',
+        profiles: ['default'],
+      },
     });
     expect(created.statusCode, created.body).toBe(201);
     const login = await h.app.inject({
@@ -250,7 +259,11 @@ describe("coding agents' config files", () => {
     for (const request of [
       { method: 'GET' as const, url: url(claude) },
       { method: 'GET' as const, url: url(claude, 'instructions') },
-      { method: 'PUT' as const, url: url(claude, 'instructions'), payload: { content: 'x', revision: null } },
+      {
+        method: 'PUT' as const,
+        url: url(claude, 'instructions'),
+        payload: { content: 'x', revision: null },
+      },
     ]) {
       const refused = await authed(h, member, request);
       expect(refused.statusCode, `${request.method} ${request.url}`).toBe(403);

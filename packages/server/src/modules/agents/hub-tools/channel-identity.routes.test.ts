@@ -157,35 +157,73 @@ describe('channel identities: a message on a channel acts for the person who lin
     const code = await codeFor(h, h.token);
 
     // Not the hub's code: the gateway passes `/start` on as usual.
-    const ping = await event(h, key, { event: 'link', platform: 'telegram', sender_id: '4242', code: 'hello' });
+    const ping = await event(h, key, {
+      event: 'link',
+      platform: 'telegram',
+      sender_id: '4242',
+      code: 'hello',
+    });
     expect(ping.json()).toEqual({ handled: false, message: null });
 
-    const bad = await event(h, 'hub_mcp_nope', { event: 'link', platform: 'telegram', sender_id: '4242', code });
+    const bad = await event(h, 'hub_mcp_nope', {
+      event: 'link',
+      platform: 'telegram',
+      sender_id: '4242',
+      code,
+    });
     expect(bad.statusCode).toBe(401);
 
-    const linked = await event(h, key, { event: 'link', platform: 'telegram', sender_id: '4242', code });
+    const linked = await event(h, key, {
+      event: 'link',
+      platform: 'telegram',
+      sender_id: '4242',
+      code,
+    });
     expect(linked.statusCode, linked.body).toBe(200);
     expect(linked.json().handled).toBe(true);
     expect(linked.json().message).toMatch(/تم الربط|Linked/);
 
-    const mine = await authed(h, h.token, { method: 'GET', url: '/api/v1/auth/me/channel-identities' });
+    const mine = await authed(h, h.token, {
+      method: 'GET',
+      url: '/api/v1/auth/me/channel-identities',
+    });
     expect(mine.json().items).toEqual([
-      expect.objectContaining({ platform: 'telegram', sender_id: '4242', user_id: h.userId, last_used_at: null }),
+      expect.objectContaining({
+        platform: 'telegram',
+        sender_id: '4242',
+        user_id: h.userId,
+        last_used_at: null,
+      }),
     ]);
 
     // A code works once.
-    const again = await event(h, key, { event: 'link', platform: 'telegram', sender_id: '4242', code });
+    const again = await event(h, key, {
+      event: 'link',
+      platform: 'telegram',
+      sender_id: '4242',
+      code,
+    });
     expect(again.json().handled).toBe(true);
     expect(again.json().message).toContain('not valid');
 
     // Somebody else cannot take an account that is linked.
     const other = await signIn(h, 'sara', ['default']);
     const theirs = await codeFor(h, other.token);
-    const taken = await event(h, key, { event: 'link', platform: 'telegram', sender_id: '4242', code: theirs });
+    const taken = await event(h, key, {
+      event: 'link',
+      platform: 'telegram',
+      sender_id: '4242',
+      code: theirs,
+    });
     expect(taken.json().message).toContain('someone else');
     // A code is spent by its first use, whatever came of it: Sara makes another.
     const fresh = await codeFor(h, other.token);
-    const discord = await event(h, key, { event: 'link', platform: 'discord', sender_id: '77', code: fresh });
+    const discord = await event(h, key, {
+      event: 'link',
+      platform: 'discord',
+      sender_id: '77',
+      code: fresh,
+    });
     expect(discord.json().message).toContain('Telegram or WhatsApp');
     const whatsapp = await event(h, key, {
       event: 'link',
@@ -194,7 +232,10 @@ describe('channel identities: a message on a channel acts for the person who lin
       code: fresh,
     });
     expect(whatsapp.json().handled).toBe(true);
-    const saras = await authed(h, other.token, { method: 'GET', url: '/api/v1/auth/me/channel-identities' });
+    const saras = await authed(h, other.token, {
+      method: 'GET',
+      url: '/api/v1/auth/me/channel-identities',
+    });
     expect(saras.json().items).toEqual([
       expect.objectContaining({ platform: 'whatsapp', user_id: other.id }),
     ]);
@@ -202,7 +243,10 @@ describe('channel identities: a message on a channel acts for the person who lin
     // An admin sees every link; a member sees only their own and cannot remove somebody else's.
     const all = await authed(h, h.token, { method: 'GET', url: '/api/v1/auth/channel-identities' });
     expect(all.json().items).toHaveLength(2);
-    const listAll = await authed(h, other.token, { method: 'GET', url: '/api/v1/auth/channel-identities' });
+    const listAll = await authed(h, other.token, {
+      method: 'GET',
+      url: '/api/v1/auth/channel-identities',
+    });
     expect(listAll.statusCode).toBe(403);
     const ownerLink = mine.json().items[0].id as string;
     const notTheirs = await authed(h, other.token, {
@@ -235,11 +279,24 @@ describe('channel identities: a message on a channel acts for the person who lin
     const board = await authed(h, h.token, { method: 'GET', url: '/api/v1/tasks' });
     const task = board.json().items.find((t: { title: string }) => t.title === 'From Telegram');
     expect(task.owner_id).toBe(h.userId);
-    const mine = await authed(h, h.token, { method: 'GET', url: '/api/v1/auth/me/channel-identities' });
+    const mine = await authed(h, h.token, {
+      method: 'GET',
+      url: '/api/v1/auth/me/channel-identities',
+    });
     expect(mine.json().items[0].last_used_at).not.toBeNull();
 
-    await event(h, key, { event: 'turn_step', platform: 'telegram', sender_id: '4242', session_id: 'tg-session-1' });
-    await event(h, key, { event: 'turn_ended', platform: 'telegram', sender_id: '4242', session_id: 'tg-session-1' });
+    await event(h, key, {
+      event: 'turn_step',
+      platform: 'telegram',
+      sender_id: '4242',
+      session_id: 'tg-session-1',
+    });
+    await event(h, key, {
+      event: 'turn_ended',
+      platform: 'telegram',
+      sender_id: '4242',
+      session_id: 'tg-session-1',
+    });
     expect((await call(h, key, 'gateway', 'tasks.list')).body.code).toBe('hub_tools_no_live_run');
 
     // A stranger's turn: no tools, and it says why.
@@ -257,7 +314,12 @@ describe('channel identities: a message on a channel acts for the person who lin
     // The owner's own chat in the hub is live at the same time: the stranger's gateway call
     // still acts for nobody, and a call from the hub's own process is the owner's run.
     const leases = runLeasesFor(h.app);
-    leases.open({ runId: 'RUNOWNER', sessionId: 'SESOWNER', workspaceId: workspace, userId: h.userId });
+    leases.open({
+      runId: 'RUNOWNER',
+      sessionId: 'SESOWNER',
+      workspaceId: workspace,
+      userId: h.userId,
+    });
     expect((await call(h, key, 'gateway', 'tasks.create', { title: 'Borrowed' })).body.code).toBe(
       'hub_tools_sender_not_linked',
     );
@@ -266,7 +328,12 @@ describe('channel identities: a message on a channel acts for the person who lin
     // Unknown origin (a Hermes the hub did not start): the two cannot be told apart.
     expect((await call(h, key, null, 'tasks.list')).body.code).toBe('hub_tools_run_ambiguous');
     leases.close('RUNOWNER');
-    await event(h, key, { event: 'turn_ended', platform: 'telegram', sender_id: '9999', session_id: 'tg-session-2' });
+    await event(h, key, {
+      event: 'turn_ended',
+      platform: 'telegram',
+      sender_id: '9999',
+      session_id: 'tg-session-2',
+    });
 
     const titles = (await authed(h, h.token, { method: 'GET', url: '/api/v1/tasks' }))
       .json()
@@ -287,13 +354,27 @@ describe('channel identities: a message on a channel acts for the person who lin
       chat_type: 'group',
     });
     expect((await call(h, key, 'gateway', 'tasks.list')).body.code).toBe('hub_tools_group_chat');
-    await event(h, key, { event: 'turn_ended', platform: 'telegram', sender_id: '4242', session_id: 'tg-group' });
+    await event(h, key, {
+      event: 'turn_ended',
+      platform: 'telegram',
+      sender_id: '4242',
+      session_id: 'tg-group',
+    });
 
     // A member granted another profile only, linked from WhatsApp.
-    await authed(h, h.token, { method: 'POST', url: '/api/v1/profiles', payload: { slug: 'work', name: 'work' } });
+    await authed(h, h.token, {
+      method: 'POST',
+      url: '/api/v1/profiles',
+      payload: { slug: 'work', name: 'work' },
+    });
     const outsider = await signIn(h, 'omar', ['work']);
     const code = await codeFor(h, outsider.token);
-    const linked = await event(h, key, { event: 'link', platform: 'whatsapp', sender_id: '555@lid', code });
+    const linked = await event(h, key, {
+      event: 'link',
+      platform: 'whatsapp',
+      sender_id: '555@lid',
+      code,
+    });
     expect(linked.json().handled).toBe(true);
     await event(h, key, {
       event: 'turn_started',
@@ -302,13 +383,27 @@ describe('channel identities: a message on a channel acts for the person who lin
       session_id: 'wa-1',
       chat_type: 'dm',
     });
-    expect((await call(h, key, 'gateway', 'tasks.list')).body.code).toBe('hub_tools_sender_no_access');
-    await event(h, key, { event: 'turn_ended', platform: 'whatsapp', sender_id: '555@lid', session_id: 'wa-1' });
+    expect((await call(h, key, 'gateway', 'tasks.list')).body.code).toBe(
+      'hub_tools_sender_no_access',
+    );
+    await event(h, key, {
+      event: 'turn_ended',
+      platform: 'whatsapp',
+      sender_id: '555@lid',
+      session_id: 'wa-1',
+    });
 
     // The owner unlinks their Telegram: its next turn gets nothing.
-    const mine = await authed(h, h.token, { method: 'GET', url: '/api/v1/auth/me/channel-identities' });
-    const link = mine.json().items.find((i: { platform: string }) => i.platform === 'telegram').id as string;
-    const gone = await authed(h, h.token, { method: 'DELETE', url: `/api/v1/auth/me/channel-identities/${link}` });
+    const mine = await authed(h, h.token, {
+      method: 'GET',
+      url: '/api/v1/auth/me/channel-identities',
+    });
+    const link = mine.json().items.find((i: { platform: string }) => i.platform === 'telegram')
+      .id as string;
+    const gone = await authed(h, h.token, {
+      method: 'DELETE',
+      url: `/api/v1/auth/me/channel-identities/${link}`,
+    });
     expect(gone.statusCode).toBe(204);
     await event(h, key, {
       event: 'turn_started',
@@ -317,15 +412,28 @@ describe('channel identities: a message on a channel acts for the person who lin
       session_id: 'tg-3',
       chat_type: 'dm',
     });
-    expect((await call(h, key, 'gateway', 'tasks.list')).body.code).toBe('hub_tools_sender_not_linked');
-    await event(h, key, { event: 'turn_ended', platform: 'telegram', sender_id: '4242', session_id: 'tg-3' });
+    expect((await call(h, key, 'gateway', 'tasks.list')).body.code).toBe(
+      'hub_tools_sender_not_linked',
+    );
+    await event(h, key, {
+      event: 'turn_ended',
+      platform: 'telegram',
+      sender_id: '4242',
+      session_id: 'tg-3',
+    });
 
     // An admin removes somebody else's link.
     const all = await authed(h, h.token, { method: 'GET', url: '/api/v1/auth/channel-identities' });
     const omars = all.json().items.find((i: { user_id: string }) => i.user_id === outsider.id).id;
-    const removed = await authed(h, h.token, { method: 'DELETE', url: `/api/v1/auth/channel-identities/${omars}` });
+    const removed = await authed(h, h.token, {
+      method: 'DELETE',
+      url: `/api/v1/auth/channel-identities/${omars}`,
+    });
     expect(removed.statusCode).toBe(204);
-    const left = await authed(h, outsider.token, { method: 'GET', url: '/api/v1/auth/me/channel-identities' });
+    const left = await authed(h, outsider.token, {
+      method: 'GET',
+      url: '/api/v1/auth/me/channel-identities',
+    });
     expect(left.json().items).toEqual([]);
   });
 });

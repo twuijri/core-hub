@@ -52,7 +52,8 @@ export class LinkCodes {
   /** A fresh code for `userId`; the person's earlier one stops working. */
   issue(userId: string, now: number): { code: string; expiresAt: number } {
     this.sweep(now);
-    for (const [hash, pending] of this.byHash) if (pending.userId === userId) this.byHash.delete(hash);
+    for (const [hash, pending] of this.byHash)
+      if (pending.userId === userId) this.byHash.delete(hash);
     let body = '';
     for (let i = 0; i < CODE_LENGTH; i += 1) body += ALPHABET[randomInt(ALPHABET.length)];
     const code = `${LINK_CODE_PREFIX}${body}`;
@@ -73,7 +74,8 @@ export class LinkCodes {
   }
 
   private sweep(now: number): void {
-    for (const [hash, pending] of this.byHash) if (pending.expiresAt <= now) this.byHash.delete(hash);
+    for (const [hash, pending] of this.byHash)
+      if (pending.expiresAt <= now) this.byHash.delete(hash);
   }
 }
 
@@ -126,7 +128,9 @@ export function identityOf(
     db
       .select()
       .from(channelIdentities)
-      .where(and(eq(channelIdentities.platform, platform), eq(channelIdentities.senderId, senderId)))
+      .where(
+        and(eq(channelIdentities.platform, platform), eq(channelIdentities.senderId, senderId)),
+      )
       .get() ?? null
   );
 }
