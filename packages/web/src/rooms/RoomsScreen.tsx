@@ -4,7 +4,7 @@
  *
  * In a room the person's own messages are on the right, as in a chat; everyone else — the
  * other people and the agents — on the left, each with a name, because in a room "the other
- * side" is several speakers (owner to confirm, DECISIONS §57). While a seat works the strip
+ * side" is several speakers (owner to confirm, DECISIONS §69). While a seat works the strip
  * above the composer says who, and what tool it is using; people typing are said there too.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';

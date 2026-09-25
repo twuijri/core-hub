@@ -1,5 +1,5 @@
 /**
- * Rooms, part 2 (DECISIONS §57): agents answering in the room — who a message wakes, what a
+ * Rooms, part 2 (DECISIONS §69): agents answering in the room — who a message wakes, what a
  * seat is told, the reply streaming into the room, handoffs with their loop guard and depth
  * cap, continuing a stopped chain, stopping a seat and clearing the context. `sessions` runs
  * the turns on a scripted runner whose script is chosen by the seat the prompt addresses.

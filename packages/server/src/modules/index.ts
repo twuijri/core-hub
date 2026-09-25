@@ -430,7 +430,7 @@ registerTaskNames((app) => (kind, id) => {
 
 /**
  * A room's seats are conversations in `sessions`, its agents are `agents`', its people are
- * `auth`'s (DECISIONS §57). The three meet here, so `rooms` imports none of them for what
+ * `auth`'s (DECISIONS §69). The three meet here, so `rooms` imports none of them for what
  * they do.
  */
 registerRoomPorts((app) => ({

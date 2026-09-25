@@ -1,6 +1,6 @@
 /**
  * What a seat is told on its turn, and what its reply asks of the room — pure functions, so
- * the rules are read and tested without a hub (DECISIONS §57).
+ * the rules are read and tested without a hub (DECISIONS §69).
  *
  * A seat keeps its own conversation in `sessions`, so it already has what it said and what it
  * was shown before. Each turn therefore hands it only the room as it has **not** seen it: the

@@ -1,5 +1,5 @@
 /**
- * What a room is and who may do what in it (DECISIONS §57, proposed — owner to confirm).
+ * What a room is and who may do what in it (DECISIONS §69, proposed — owner to confirm).
  *
  * - A room lives in one profile and is its **members'**: the person who made it (role
  *   `owner`, who manages it) and the people who joined it by its invite code. Anyone else —
@@ -185,7 +185,7 @@ export class RoomsService {
     const fresh = this.store.getRoom(scope.workspace, room.id) as RoomRow;
     const payload = this.roomOf(scope, fresh);
     // Only its maker is in a new room, and the room carries its invite code: the event goes
-    // to that person's sockets, not the whole profile (DECISIONS §57).
+    // to that person's sockets, not the whole profile (DECISIONS §69).
     this.realtime.toUser(scope.profile, scope.userId, 'room.created', { room: payload });
     return { room: payload, seat_results: seatResults };
   }

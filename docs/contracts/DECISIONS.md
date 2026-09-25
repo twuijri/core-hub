@@ -1025,7 +1025,7 @@ Rejected: a new `source` field on `SessionCreate` (a client could then make any 
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
 
-## 57. A room is its members'; a message that names nobody goes to the lead seat
+## 69. A room is its members'; a message that names nobody goes to the lead seat
 
 Proposed — owner to confirm (rooms were "later"; built on the owner's «كمل كل الشغل», 2026-09-25).
 

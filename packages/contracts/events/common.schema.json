@@ -4122,7 +4122,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The seat that answers a message that mentions nobody (DECISIONS §57). The first\nseat added becomes the lead; `null` means such a message is only read.\n"
+              "description": "The seat that answers a message that mentions nobody (DECISIONS §69). The first\nseat added becomes the lead; `null` means such a message is only read.\n"
             },
             "archived_at": {
               "oneOf": [

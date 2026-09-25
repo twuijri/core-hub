@@ -6577,7 +6577,7 @@ paths:
       description: |
         Mentions are structured (`mentions`), never parsed from text. `@all` (`kind: all`)
         addresses every seat and is refused (`400`) unless `can_mention_all`. With no mention the
-        room's lead seat answers (`lead_seat_id`), or nobody when it has none (DECISIONS §57).
+        room's lead seat answers (`lead_seat_id`), or nobody when it has none (DECISIONS §69).
         Each triggered seat gets a run; the runs are returned so the client can show the queue at
         once. An archived room refuses new messages with `409 state_invalid`.
       parameters:
@@ -15871,7 +15871,7 @@ components:
                 - $ref: '#/components/schemas/Ulid'
                 - type: 'null'
               description: |
-                The seat that answers a message that mentions nobody (DECISIONS §57). The first
+                The seat that answers a message that mentions nobody (DECISIONS §69). The first
                 seat added becomes the lead; `null` means such a message is only read.
             archived_at:
               oneOf:
