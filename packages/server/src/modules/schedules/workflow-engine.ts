@@ -696,8 +696,8 @@ export class WorkflowEngine {
       },
     };
 
-    const work = this.perform(scope, node, rendered, ctx, state, control).catch(
-      (error: unknown) => fail(error instanceof Error ? error.message : String(error)),
+    const work = this.perform(scope, node, rendered, ctx, state, control).catch((error: unknown) =>
+      fail(error instanceof Error ? error.message : String(error)),
     );
     let result = await Promise.race([work, tripped]);
     for (const timer of timers) clearTimeout(timer);
