@@ -191,6 +191,179 @@ describe('devices: the registry', () => {
     expect(row.lastSeenAt!.getTime()).toBeGreaterThan(Date.now() - 60_000);
   });
 
+  it('keeps what a device says about itself, and a name a person gave it', async () => {
+    const hub = await hubWith();
+    const created = await authed(hub, hub.token, {
+      method: 'POST',
+      url: '/api/v1/auth/pairings',
+      payload: { ttl_seconds: 120 },
+    });
+    const pairing = created.json() as { id: string; code: string };
+    const device = {
+      device_key: 'iphone-key',
+      name: 'iPhone',
+      platform: 'ios',
+      kind: 'phone',
+      brand: 'Apple',
+      model: 'iPhone 16 Pro',
+      os_version: '18.6',
+      app_version: '0.1.0',
+      push_blocker: 'permission_pending',
+    };
+    const claim = async () =>
+      hub.app.inject({
+        method: 'POST',
+        url: `/api/v1/auth/pairings/${pairing.id}/claim`,
+        payload: { code: pairing.code, device },
+      });
+    const first = await claim();
+    expect(first.statusCode, first.body).toBe(201);
+    const body = first.json() as { app_token: string; device: Json };
+    expect(body.device).toMatchObject({
+      name: 'iPhone',
+      model: 'iPhone 16 Pro',
+      os_version: '18.6',
+      app_version: '0.1.0',
+      push_blocker: 'permission_pending',
+    });
+    expect(typeof body.device.paired_at).toBe('string');
+    const id = body.device.id as string;
+
+    // At the next launch the phone reports again: a new iOS, a new build, permission given.
+    const reported = await authed(hub, body.app_token, {
+      method: 'PATCH',
+      url: `/api/v1/devices/${id}`,
+      payload: { os_version: '26.0', app_version: '0.2.0', push_blocker: 'none' },
+    });
+    expect(reported.statusCode, reported.body).toBe(200);
+    expect(reported.json()).toMatchObject({
+      name: 'iPhone',
+      model: 'iPhone 16 Pro',
+      os_version: '26.0',
+      app_version: '0.2.0',
+      push_blocker: 'none',
+    });
+
+    // The person names it on the hub; the phone pairing again with its generic name keeps it.
+    await authed(hub, hub.token, {
+      method: 'PATCH',
+      url: `/api/v1/devices/${id}`,
+      payload: { name: 'آيفون العمل' },
+    });
+    const again = await authed(hub, hub.token, {
+      method: 'POST',
+      url: '/api/v1/auth/pairings',
+      payload: { ttl_seconds: 120 },
+    });
+    const second = again.json() as { id: string; code: string };
+    const repaired = await hub.app.inject({
+      method: 'POST',
+      url: `/api/v1/auth/pairings/${second.id}/claim`,
+      payload: { code: second.code, device: { ...device, os_version: '26.1' } },
+    });
+    expect(repaired.statusCode, repaired.body).toBe(201);
+    expect((repaired.json() as { device: Json }).device).toMatchObject({
+      id,
+      name: 'آيفون العمل',
+      os_version: '26.1',
+    });
+
+    // An app older than these fields sends none of them; the row keeps what it knew.
+    const bare = await authed(hub, (repaired.json() as { app_token: string }).app_token, {
+      method: 'PATCH',
+      url: `/api/v1/devices/${id}`,
+      payload: { app_version: '0.2.1' },
+    });
+    expect(bare.json()).toMatchObject({ os_version: '26.1', push_blocker: 'permission_pending' });
+  });
+
+  it("keeps a renamed browser's name when it registers again, and refuses an unknown blocker", async () => {
+    const hub = await hubWith();
+    const first = await registerBrowser(hub);
+    expect(first).toMatchObject({ os_version: null, push_blocker: null });
+    await authed(hub, hub.token, {
+      method: 'PATCH',
+      url: `/api/v1/devices/${first.id as string}`,
+      payload: { name: 'حاسوب المكتب' },
+    });
+    const again = await authed(hub, hub.token, {
+      method: 'POST',
+      url: '/api/v1/devices',
+      payload: { ...browser(), os_version: 'Linux' },
+    });
+    expect(again.json()).toMatchObject({ name: 'حاسوب المكتب', os_version: 'Linux' });
+    const junk = await authed(hub, hub.token, {
+      method: 'PATCH',
+      url: `/api/v1/devices/${first.id as string}`,
+      payload: { push_blocker: 'maybe' },
+    });
+    expect(junk.statusCode).toBe(400);
+  });
+
+  it('counts the calls of the sign-in that registered a device, at most once a minute', async () => {
+    let clock = Date.now();
+    overrideDevices({ now: () => clock });
+    const hub = await hubWith();
+    const mine = await registerBrowser(hub);
+    const db = requireSqlite(hub.app.hub.database);
+    const seen = () =>
+      db
+        .select()
+        .from(devices)
+        .where(eq(devices.id, mine.id as string))
+        .get()!
+        .lastSeenAt!.getTime();
+    const forget = () =>
+      db
+        .update(devices)
+        .set({ lastSeenAt: new Date(0) })
+        .where(eq(devices.id, mine.id as string))
+        .run();
+    const call = (token = hub.token) =>
+      authed(hub, token, { method: 'GET', url: '/api/v1/notify/notices' });
+
+    // The registration itself was the sign-in's first call of this minute.
+    forget();
+    clock += 30_000;
+    await call();
+    expect(seen()).toBe(0);
+
+    clock += 31_000;
+    await call();
+    expect(seen()).toBe(clock);
+
+    // Another sign-in of the same person is not this browser.
+    forget();
+    clock += 120_000;
+    const login = await hub.app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: { username: 'admin', password: TEST_ADMIN_PASSWORD },
+    });
+    await call((login.json() as { access_token: string }).access_token);
+    expect(seen()).toBe(0);
+  });
+
+  it("writes a paired device's last activity at most once a minute", async () => {
+    let clock = Date.now();
+    overrideDevices({ now: () => clock });
+    const hub = await hubWith();
+    const phone = await pairPhone(hub, 'throttled-phone');
+    const db = requireSqlite(hub.app.hub.database);
+    const seen = () =>
+      db.select().from(devices).where(eq(devices.id, phone.deviceId)).get()!.lastSeenAt!.getTime();
+    clock += 61_000;
+    await authed(hub, phone.appToken, { method: 'GET', url: '/api/v1/devices' });
+    const written = seen();
+    expect(written).toBe(clock);
+    clock += 20_000;
+    await authed(hub, phone.appToken, { method: 'GET', url: '/api/v1/devices' });
+    expect(seen()).toBe(written);
+    clock += 41_000;
+    await authed(hub, phone.appToken, { method: 'GET', url: '/api/v1/devices' });
+    expect(seen()).toBe(clock);
+  });
+
   it("hides one person's devices from another", async () => {
     const hub = await hubWith();
     const mine = await registerBrowser(hub);
@@ -571,7 +744,9 @@ describe('devices: the senders', () => {
       {
         provider: 'apns',
         state: 'not_configured',
-        missing: ['key_id', 'team_id', 'bundle_id', 'private_key'],
+        // The hub knows its own app's bundle id, and offers production.
+        missing: ['key_id', 'team_id', 'private_key'],
+        details: { bundle_id: 'com.twuijri.corehub', environment: 'production' },
       },
     ]);
 
@@ -614,6 +789,37 @@ describe('devices: the senders', () => {
     ).toBe(400);
   });
 
+  it('refuses the wrong file for each sender, saying which it is', async () => {
+    const hub = await hubWith();
+    const put = (provider: string, payload: unknown) =>
+      authed(hub, hub.token, { method: 'PUT', url: `/api/v1/push/senders/${provider}`, payload });
+    const googleServices = JSON.stringify({
+      project_info: { project_id: 'core-hub-66772', project_number: '1' },
+      client: [{ client_info: { android_client_info: { package_name: 'com.twuijri.corehub' } } }],
+    });
+    const app = await put('fcm', { service_account: googleServices });
+    expect(app.statusCode).toBe(400);
+    expect(app.body).toContain('google-services.json');
+    const user = await put('fcm', {
+      service_account: JSON.stringify({ type: 'authorized_user', client_id: 'x' }),
+    });
+    expect(user.statusCode).toBe(400);
+    expect(user.body).toContain('authorized_user');
+
+    // An RSA key parses, but cannot sign an APNs token.
+    const { privateKey: rsa } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const wrongKey = await put('apns', {
+      key_id: 'ABC123DEFG',
+      team_id: 'DEF123GHIJ',
+      private_key: rsa.export({ format: 'pem', type: 'pkcs8' }).toString(),
+    });
+    expect(wrongKey.statusCode).toBe(400);
+    expect(wrongKey.body).toContain('EC P-256');
+    const notAKey = await put('apns', { key_id: 'ABC123DEFG', private_key: 'hello' });
+    expect(notAKey.statusCode).toBe(400);
+    expect(notAKey.body).toContain('.p8');
+  });
+
   it('lets the environment win over Settings', async () => {
     const hub = await hubWith({ COREHUB_APNS_KEY_ID: 'ABC123DEFG' });
     const apns = (
@@ -624,8 +830,8 @@ describe('devices: the senders', () => {
     expect(apns).toMatchObject({
       source: 'environment',
       state: 'not_configured',
-      missing: ['team_id', 'bundle_id', 'private_key'],
-      details: { key_id: 'ABC123DEFG' },
+      missing: ['team_id', 'private_key'],
+      details: { key_id: 'ABC123DEFG', bundle_id: 'com.twuijri.corehub' },
     });
     const refused = await authed(hub, hub.token, {
       method: 'PUT',
@@ -669,7 +875,7 @@ describe('devices: the senders', () => {
       payload: {
         key_id: 'ABC123DEFG',
         team_id: 'DEF123GHIJ',
-        bundle_id: 'com.twuijri.corehub',
+        // No bundle id: the hub's own app's is the default.
         environment: 'sandbox',
         private_key: privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(),
       },

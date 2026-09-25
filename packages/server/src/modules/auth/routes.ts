@@ -13,6 +13,7 @@ import {
   CAPABILITY_KINDS,
   DEVICE_KINDS,
   DEVICE_PLATFORMS,
+  PUSH_BLOCKERS,
   revokeDeviceByToken,
   serializeDevice,
 } from '../devices/index.js';
@@ -232,6 +233,8 @@ const PairingClaim = z.object({
     brand: z.string().max(80).nullable().optional(),
     model: z.string().max(120).nullable().optional(),
     app_version: z.string().max(32).nullable().optional(),
+    os_version: z.string().max(64).nullable().optional(),
+    push_blocker: z.enum(PUSH_BLOCKERS).nullable().optional(),
     capabilities: z.array(z.enum(CAPABILITY_KINDS)).default([]),
   }),
 });
@@ -951,6 +954,8 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
           brand: body.device.brand ?? null,
           model: body.device.model ?? null,
           appVersion: body.device.app_version ?? null,
+          osVersion: body.device.os_version,
+          pushBlocker: body.device.push_blocker,
           capabilities: body.device.capabilities,
           connection: findPairing(db, pairingId)?.connection ?? 'lan',
         },

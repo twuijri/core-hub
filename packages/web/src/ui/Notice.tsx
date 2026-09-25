@@ -14,14 +14,17 @@ export function Notice({
   children,
   role,
   className = '',
+  testId,
 }: {
   tone?: Tone;
   children: ReactNode;
   role?: 'alert' | 'status';
   className?: string;
+  testId?: string;
 }) {
   return (
     <div
+      data-testid={testId}
       role={role ?? (tone === 'danger' ? 'alert' : 'status')}
       className={`rounded-md px-3 py-2 text-sm ${tones[tone]} ${className}`}
     >

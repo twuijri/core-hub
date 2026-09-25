@@ -61,7 +61,7 @@
 |---|---|---|---|
 | `new_chat` | New chat | محادثة جديدة | |
 | `search` | Search | بحث | ورقة بحث، ليست السجل |
-| `device_connections` | Device connections | اتصالات الأجهزة | تبويبا App / Devices |
+| `device_connections` | Device connections | اتصالات الأجهزة | صفحة واحدة: الإقران ثم بطاقات الأجهزة (كانت تبويبين حتى 2026-09-26) |
 | `agent_manager` | Agents | الوكلاء | للمالك والمشرف؛ كانت «مدير الوكلاء / Agent Manager» حتى 2026-09-24 — المدخل والعنوان صارا «الوكلاء» معًا |
 | `back_to_agents` | Back to agents | رجوع إلى الوكلاء | صفّ الرجوع داخل صفحات الوكيل (§٤)؛ ليس وجهة |
 | `models` | Models | النماذج | المزوّدون والصوت هنا |

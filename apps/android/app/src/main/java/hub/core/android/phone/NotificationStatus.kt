@@ -97,6 +97,8 @@ fun NotificationRows() {
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) graph.device.notificationsDenied = true
         tick++
+        // The answer changes what stops push here: the hub's device card hears it at once.
+        graph.reportDevice()
     }
     // Back from the phone's Settings: read the permission again.
     val owner = LocalLifecycleOwner.current
@@ -133,6 +135,7 @@ fun NotificationPermission() {
     val graph = context.graph
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) graph.device.notificationsDenied = true
+        graph.reportDevice()
     }
     LaunchedEffect(Unit) {
         val granted = Notifier(context).allowed()

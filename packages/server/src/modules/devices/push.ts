@@ -15,12 +15,14 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { and, eq } from 'drizzle-orm';
+import { APP_IDS } from '@corehub/contracts';
 import type { ModuleDb } from '../../lib/db.js';
 import { newUlid } from '../../db/ids.js';
 import { devices, pushCredentials } from './schema.js';
 import {
   PUSH_PROVIDERS,
   apnsSender,
+  checkApnsKey,
   fcmSender,
   parseServiceAccount,
   webPushSender,
@@ -289,8 +291,9 @@ export class PushService {
           provider: 'apns',
           state: 'not_configured',
           source: 'none',
-          missing: ['key_id', 'team_id', 'bundle_id', 'private_key'],
-          details: {},
+          missing: ['key_id', 'team_id', 'private_key'],
+          // The app's own bundle id and the production service: what a person would type.
+          details: { bundle_id: APP_IDS.apple, environment: 'production' },
           last_error: null,
         },
         sender: null,
@@ -301,13 +304,13 @@ export class PushService {
       ? {
           key_id: env!.keyId ?? '',
           team_id: env!.teamId ?? '',
-          bundle_id: env!.bundleId ?? '',
+          bundle_id: env!.bundleId || APP_IDS.apple,
           environment: env!.environment ?? 'production',
         }
       : {
           key_id: row!.publicMeta.key_id ?? '',
           team_id: row!.publicMeta.team_id ?? '',
-          bundle_id: row!.publicMeta.bundle_id ?? '',
+          bundle_id: row!.publicMeta.bundle_id || APP_IDS.apple,
           environment: row!.publicMeta.environment ?? 'production',
         };
     const hasKey = envSet ? !!env!.key : !!row!.ciphertext;
@@ -447,16 +450,10 @@ export class PushService {
       }
       if (is(update.private_key)) {
         try {
-          // Parsing proves it is a key before it is stored.
-          apnsSender({
-            keyId: 'x',
-            teamId: 'x',
-            bundleId: 'x',
-            privateKey: update.private_key!,
-            environment: 'production',
-          });
-        } catch {
-          throw new PushConfigError('invalid', 'private_key is not a .p8 (PEM) key');
+          // Parsing and signing a provider token prove it is an APNs key before it is stored.
+          checkApnsKey(update.private_key!);
+        } catch (error) {
+          throw new PushConfigError('invalid', (error as Error).message);
         }
         secret = update.private_key!;
       }
