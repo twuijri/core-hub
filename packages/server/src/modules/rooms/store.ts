@@ -251,6 +251,16 @@ export class RoomsStore {
       .all();
   }
 
+  /** Every seat the room ever had, removed ones included (their runs are still its history). */
+  allSeats(roomId: string): SeatRow[] {
+    return this.db
+      .select()
+      .from(seats)
+      .where(eq(seats.roomId, roomId))
+      .orderBy(asc(seats.position), asc(seats.id))
+      .all();
+  }
+
   seatsOf(roomIds: readonly string[]): Map<string, SeatRow[]> {
     const byRoom = new Map<string, SeatRow[]>();
     if (roomIds.length === 0) return byRoom;
@@ -474,6 +484,7 @@ export class RoomsStore {
       .from(roomHandoffChains)
       .where(eq(roomHandoffChains.roomId, input.room.id))
       .orderBy(desc(roomHandoffChains.id))
+      .limit(10_000)
       .offset(50)
       .all()
       .map((row) => row.id);
@@ -509,6 +520,16 @@ export class RoomsStore {
       .orderBy(desc(roomHandoffChains.id))
       .limit(50)
       .all();
+  }
+
+  /** Chains a restart left active: nobody is left to carry them. */
+  stopActiveChains(): number {
+    const result = this.db
+      .update(roomHandoffChains)
+      .set({ status: 'stopped', stopReason: 'interrupted', updatedAt: new Date() })
+      .where(eq(roomHandoffChains.status, 'active'))
+      .run();
+    return result.changes;
   }
 
   // ------------------------------------------------------------- presets

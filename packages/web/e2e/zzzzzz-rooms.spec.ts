@@ -81,4 +81,51 @@ test.describe('rooms', () => {
       'غرفة التجربة',
     ]);
   });
+
+  test('an agent mentioned in the room answers and hands the next step to another', async ({
+    page,
+  }) => {
+    await login(page);
+    await page.getByTestId('segments').getByText('الغرف').click();
+    await page.getByTestId('new-room').click();
+    const dialog = page.getByTestId('new-room-dialog');
+    await dialog.getByTestId('new-room-name').fill('غرفة الفريق');
+    await dialog.getByTestId('new-room-create').click();
+    await expect(page.getByTestId('room-title')).toHaveText('غرفة الفريق');
+
+    // Two scripted agents, each with a name and a role of its own.
+    for (const [name, role] of [
+      ['المخطِّط', 'يضع الخطة'],
+      ['المبرمج', 'ينفّذ الخطوات'],
+    ]) {
+      await page.getByTestId('room-add-seat').click();
+      const seat = page.getByTestId('seat-dialog');
+      await seat.getByTestId('seat-name').fill(name!);
+      await seat.getByTestId('seat-description').fill(role!);
+      await seat.getByTestId('seat-save').click();
+      await expect(seat).toHaveCount(0);
+    }
+    await expect(page.getByTestId('room-members').getByTestId('room-seat')).toHaveCount(2);
+
+    const input = page.getByTestId('room-input');
+    await input.fill('@المخ');
+    await input.press('Enter');
+    await input.pressSequentially('ضع خطة للصفحة الرئيسية');
+    await input.press('Enter');
+
+    // The planner is seen working, then its reply streams in and passes the turn.
+    await expect(page.getByTestId('room-activity-seat').first()).toContainText('المخطِّط');
+    const planner = page.getByTestId('room-message-agent').first();
+    await expect(planner).toContainText('الخطة: ثلاث خطوات');
+    await page.screenshot({ path: path.join(shots, 'rooms-streaming-ar-light.png') });
+    await expect(planner).toContainText('@المبرمج ابدأ بالخطوة الأولى.');
+    await expect(planner.getByTestId('room-handoff-note')).toContainText('@المبرمج');
+
+    // The coder takes the turn, works with a tool, and answers.
+    const coder = page.getByTestId('room-message-agent').nth(1);
+    await expect(coder).toContainText('أنهيت الخطوة الأولى: الواجهة جاهزة.');
+    await expect(coder).toHaveAttribute('data-status', 'complete');
+    await expect(page.getByTestId('room-activity')).toHaveCount(0);
+    await page.screenshot({ path: path.join(shots, 'rooms-handoff-ar-light.png') });
+  });
 });

@@ -12,7 +12,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/context.js';
 import { useRealtime } from '../realtime/context.js';
 import { ROOM_EVENTS, isEnvelope } from '../realtime/envelope.js';
-import type { Message, Room, RoomDetail, RoomInvitePreview, Seat, SeatConfig } from '../types.js';
+import type {
+  HandoffChain,
+  Message,
+  Room,
+  RoomDetail,
+  RoomInvitePreview,
+  Seat,
+  SeatConfig,
+} from '../types.js';
 import type { Mention } from './mentions.js';
 import {
   applyRoomEvent,
@@ -395,4 +403,58 @@ export function useRoomListEvents(): void {
       for (const name of names) socket.off(name, refresh);
     };
   }, [profile, queryClient, realtime.epoch]);
+}
+
+export function useStopSeat(roomId: string) {
+  const { client } = useAuth();
+  const refresh = useRefresh();
+  return useMutation({
+    mutationFn: async (seatId: string) =>
+      (
+        await client.request('post', '/rooms/{room_id}/seats/{seat_id}/stop', {
+          params: { room_id: roomId, seat_id: seatId },
+        })
+      ).data as unknown as Seat,
+    onSuccess: refresh,
+  });
+}
+
+/** The room's handoff chains, newest first — the stopped one a person may let go on. */
+export function useHandoffs(roomId: string, revision: unknown) {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: ['room-handoffs', profile, roomId, revision],
+    queryFn: async () =>
+      (
+        await client.request('get', '/rooms/{room_id}/handoffs', {
+          params: { room_id: roomId },
+        })
+      ).data as unknown as { items: HandoffChain[] },
+    enabled: !!session,
+  });
+}
+
+export function useContinueHandoff(roomId: string) {
+  const { client } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (chainId: string) =>
+      (
+        await client.request('post', '/rooms/{room_id}/handoffs/{chain_id}/continue', {
+          params: { room_id: roomId, chain_id: chainId },
+        })
+      ).data as unknown as { job_id: string },
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['room-handoffs'] }),
+  });
+}
+
+export function useClearContext(roomId: string) {
+  const { client } = useAuth();
+  const refresh = useRefresh();
+  return useMutation({
+    mutationFn: async () => {
+      await client.request('delete', '/rooms/{room_id}/context', { params: { room_id: roomId } });
+    },
+    onSuccess: refresh,
+  });
 }
