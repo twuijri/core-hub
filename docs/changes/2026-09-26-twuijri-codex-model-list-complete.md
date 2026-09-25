@@ -70,6 +70,9 @@ $ vitest run tests/unit/config.test.ts src/modules/auth/tokens.test.ts src/modul
       Tests  194 passed | 3 skipped (197)
 ```
 
+CI الثاني (التشغيل 36200230483) أخضر كله: الأجزاء الثلاثة لاختبارات الخادم، Playwright، صورة Docker،
+الترحيل على SQLite وPostgreSQL، سطح المكتب، وسجل التغيير.
+
 ## المخاطر والرجوع
 - لم يُجرَّب على حساب حقيقي؛ إن حجب الخادم نموذجًا أحدث من 0.157.0 مستقبلًا، يُرفع الثابت أو يُضبط
   `COREHUB_CODEX_CLIENT_VERSION`.
