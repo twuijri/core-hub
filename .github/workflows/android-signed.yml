@@ -26,7 +26,7 @@ permissions:
 jobs:
   signed:
     name: Signed release APK and AAB
-    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/')  # TEMPORARY
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/') # TEMPORARY
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -97,7 +97,9 @@ jobs:
           "$tools/aapt2" dump resources "$apk" > "$RUNNER_TEMP/resources.txt"
           grep -q 'string/google_app_id' "$RUNNER_TEMP/resources.txt"
           "$tools/apksigner" verify --verbose "$apk" | grep -E '^Verifie[sd]|^Verified using'
-          jarsigner -verify "$aab" | tail -1
+          # jarsigner exits 0 on an unsigned bundle too, so its words are what count.
+          jarsigner -verify "$aab" > "$RUNNER_TEMP/aab-verify.txt" 2>&1 || true
+          grep -m1 'jar verified' "$RUNNER_TEMP/aab-verify.txt"
           {
             echo "Signed APK: $(du -h "$apk" | cut -f1), AAB: $(du -h "$aab" | cut -f1)"
           } | tee -a "$GITHUB_STEP_SUMMARY"

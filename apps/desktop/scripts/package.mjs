@@ -29,8 +29,11 @@ const result = spawnSync(process.execPath, args, {
   cwd: here,
   stdio: 'inherit',
   // Never sign with whatever identity the machine's keychain holds; a signed build names its
-  // certificate in CSC_LINK (electron-builder.config.cjs).
-  env: process.env.CSC_LINK ? process.env : { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: 'false' },
+  // certificate in CSC_LINK or CSC_NAME (electron-builder.config.cjs).
+  env:
+    process.env.CSC_LINK || process.env.CSC_NAME
+      ? process.env
+      : { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: 'false' },
 });
 if (result.status !== 0) process.exit(result.status ?? 1);
 

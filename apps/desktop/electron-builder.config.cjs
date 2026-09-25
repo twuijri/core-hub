@@ -2,11 +2,12 @@
 // after `pnpm build`. Nothing here publishes: `publish: null`, and CI keeps the files as
 // workflow artifacts only.
 //
-// macOS signing (docs/RELEASING.md): only when a Developer ID certificate is given in
-// electron-builder's own CSC_LINK / CSC_KEY_PASSWORD, as the signed-build workflow does; it then
-// notarises when APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID are set too. Without
-// CSC_LINK (a pull request, a fork, a developer's machine) the build stays unsigned, as before.
-const signed = Boolean(process.env.CSC_LINK);
+// macOS signing (docs/RELEASING.md): only when a Developer ID certificate is named through
+// electron-builder's own variables — CSC_LINK / CSC_KEY_PASSWORD, or CSC_NAME with CSC_KEYCHAIN as
+// the signed-build workflow does; it then notarises when APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and
+// APPLE_TEAM_ID are set too. Without them (a pull request, a fork, a developer's machine) the
+// build stays unsigned, as before.
+const signed = Boolean(process.env.CSC_LINK || process.env.CSC_NAME);
 
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
