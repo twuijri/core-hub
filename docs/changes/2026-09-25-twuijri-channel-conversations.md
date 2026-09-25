@@ -137,7 +137,18 @@ TUI ولمحادثة بروفايل آخر؛ ثم لا نداء جديدًا ل�
 الاختبارات الجديدة تفشل على الكود القديم: العمليتان والمخططات لم تكن موجودة، ومجموعة القناة لم
 تكن تحمل غير جلسات المركز.
 
-CI على GitHub: يُملأ بعد الدفع.
+CI على GitHub (طلب الدمج #126، الالتزام `f74c550`) — كله أخضر من الدفعة الأولى:
+
+```
+Docker image builds and answers /health — pass (2m30s)
+Lint, typecheck, contracts, tests, build — pass (13m49s)
+PR adds or updates a change record — pass (11s)
+PR leaves graphify-out/ to the code-map bot — pass (9s)
+Web smoke journeys (Playwright against the real hub) — pass (5m25s)
+db:generate + db:migrate (SQLite and PostgreSQL) — pass (53s)
+```
+
+الدفعة التالية تضيف هذا الدليل إلى السجل فقط.
 
 ## المخاطر والرجوع
 - **خادم Hermes الداخلي يعمل ما دامت القائمة تُستطلع ومخزن Hermes يتغيّر** (~١٣٠–١٧٠ م.ب، ADR 0015).
