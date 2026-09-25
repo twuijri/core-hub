@@ -64,7 +64,10 @@ export interface Dictation {
   state: RecorderState;
   /** The engine the next take would use; null when nothing can listen. */
   engine: Engine | null;
-  /** Whether the speech settings are still being read (the engine is not known yet). */
+  /**
+   * Whether the speech settings or the dictation language are still being read: the engine
+   * or the language is not known yet, so a take would use the wrong one. Nothing starts then.
+   */
   loading: boolean;
   start(): void;
   stop(): void;
@@ -74,10 +77,13 @@ export interface Dictation {
 
 export function useDictation({
   language,
+  languageLoading = false,
   onText,
 }: {
   /** The hint sent to the hub; null lets it detect the language. */
   language: string | null;
+  /** The person's preferences (and so `language`) are still being read. */
+  languageLoading?: boolean;
   onText(text: string): void;
 }): Dictation {
   const { client } = useAuth();
@@ -85,6 +91,7 @@ export function useDictation({
   const speech = useSpeechSettings();
   const [state, dispatch] = useReducer(recorderReducer, IDLE);
   const hubReady = speech.data?.stt?.ready === true;
+  const loading = speech.isLoading || languageLoading;
   const engine = chooseEngine({
     hubReady: hubReady && canRecord(),
     browserSupported: browserRecognizer() !== null,
@@ -218,10 +225,13 @@ export function useDictation({
   }, [language, ui]);
 
   const start = useCallback(() => {
+    // Before the settings are read the engine is unknown and `language` is the UI's, not the
+    // person's: a take now would say "no provider" or listen in the wrong language.
+    if (loading) return;
     if (engine === 'hub') void startHub();
     else if (engine === 'browser') startBrowser();
     else dispatch({ type: 'unavailable' });
-  }, [engine, startHub, startBrowser]);
+  }, [loading, engine, startHub, startBrowser]);
 
   const stop = useCallback(() => {
     const current = live.current;
@@ -242,5 +252,5 @@ export function useDictation({
 
   const dismiss = useCallback(() => dispatch({ type: 'dismiss' }), []);
 
-  return { state, engine, loading: speech.isPending, start, stop, cancel, dismiss };
+  return { state, engine, loading, start, stop, cancel, dismiss };
 }

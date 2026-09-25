@@ -47,6 +47,8 @@ export interface VoicePreferences {
   setDictationLanguage(value: DictationLanguage): void;
   setAutoSpeak(value: boolean): void;
   saving: boolean;
+  /** The preferences are still being read: the dictation language is not known yet. */
+  loading: boolean;
 }
 
 /** The person's voice preferences, written back whole (`auth.setPreferences` is a PUT). */
@@ -67,6 +69,7 @@ export function useVoicePreferences(): VoicePreferences {
     setDictationLanguage: (value) => write({ dictation_language: value }),
     setAutoSpeak: (value) => write({ auto_speak: value }),
     saving: save.isPending,
+    loading: preferences.isLoading,
   };
 }
 

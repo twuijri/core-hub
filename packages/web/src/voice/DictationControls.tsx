@@ -36,8 +36,12 @@ export function useElapsedSeconds(state: RecorderState): number {
 export function MicButton({ dictation, disabled }: { dictation: Dictation; disabled: boolean }) {
   const { t } = useI18n();
   const { state } = dictation;
-  const label =
-    state.phase === 'recording'
+  // Until the speech settings and the dictation language are read, a take would use the wrong
+  // engine or language: the button waits, and says so.
+  const waiting = dictation.loading && pressStarts(state);
+  const label = waiting
+    ? t('common.loading')
+    : state.phase === 'recording'
       ? t('voice.stop_dictation')
       : state.phase === 'transcribing'
         ? t('voice.transcribing')
@@ -52,7 +56,9 @@ export function MicButton({ dictation, disabled }: { dictation: Dictation; disab
         data-phase={state.phase}
         aria-label={label}
         aria-pressed={state.phase === 'recording'}
-        disabled={disabled || state.phase === 'transcribing' || state.phase === 'requesting'}
+        disabled={
+          disabled || waiting || state.phase === 'transcribing' || state.phase === 'requesting'
+        }
         onClick={() => (pressStarts(state) ? dictation.start() : dictation.stop())}
         data-testid="composer-mic"
       >

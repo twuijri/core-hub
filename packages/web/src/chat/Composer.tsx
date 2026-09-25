@@ -231,6 +231,7 @@ export function Composer({
   const voicePreferences = useVoicePreferences();
   const dictation = useDictation({
     language: dictationHint(voicePreferences.dictationLanguage, uiLanguage),
+    languageLoading: voicePreferences.loading,
     onText: (words) => {
       setText((current) => (current.trim() ? `${current.replace(/\s+$/, '')} ${words}` : words));
       textarea.current?.focus();
