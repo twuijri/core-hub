@@ -20,8 +20,13 @@ manifest (`docs/clients/navigation.json`). Minimum iOS 17 (proposed — owner to
 | `CoreHub/Generated` | `Tokens.swift`, `Product.swift` — generated, committed |
 | `CoreHub/Phone` | local notices, dictation, spoken replies, This device's choices |
 | `CoreHub/Share`, `CoreHubShare` | the share extension and the inbox it leaves shared text in |
+| `CoreHub/Demo` | the demo hub for screenshots and UI tests (`-UITestDemo YES`), Debug builds only |
 | `CoreHubTests` | XCTest |
+| `CoreHubUITests` | XCUITest: the App Store screenshots (scheme `CoreHubScreenshots`) |
+| `fastlane/metadata` | the App Store listing in English and Arabic (fastlane `deliver` layout) |
 | `scripts/generate-swift.mjs` | writes `Generated/*` and `Resources/*.lproj/InfoPlist.strings` |
+| `scripts/demo-fixtures.mjs` | writes `Demo/DemoFixtures.swift`, checked against the contract |
+| `scripts/store-metadata.mjs` | holds the listing to App Store Connect's limits |
 
 ## Build
 
@@ -48,6 +53,15 @@ run by hand or by a release tag, never on a pull request — how it signs and wh
 the Apple consoles: `docs/RELEASING.md`. The app icon (`CoreHub/Resources/Assets.xcassets/AppIcon`,
 named by `ASSETCATALOG_COMPILER_APPICON_NAME` in `project.yml`) is generated from the Core Hub mark
 by `pnpm icons:build` at the repository root; never edit its PNGs by hand.
+
+## App Store
+
+The listing, the screenshots and how they are uploaded (never submitted): `docs/store/apple/README.md`.
+The screenshots come from `StoreScreenshots` against the app's demo hub: launched with
+`-UITestDemo YES` (and `-UITestDemoOpen /tasks`, `-corehub.language ar`, `-corehub.theme dark` to
+choose the page, language and theme), a Debug build signs in to a hub inside the app that answers
+from `Demo/DemoFixtures.swift` and never touches the network. A Release build has none of it
+(`#if DEBUG`). The submission steps are the owner's: `docs/RELEASING.md`, "App Store submission".
 
 ## Notifications — push, and the fallback
 

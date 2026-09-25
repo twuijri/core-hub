@@ -344,6 +344,17 @@ its approval.
   registration failed), and registers again when it comes to the front. New icons come from Lucide
   (`scripts/icons/lucide-mobile.mjs`, pinned `lucide-static`). Unit and Compose UI tests (Robolectric)
   on Android, XCTest on the iOS simulator; **not yet tried on the owner's phones or hub**.
+- **App Store listing for the iPhone and iPad app** (since 2026-09-26, owner's decision of
+  2026-09-25; `docs/store/apple/README.md`): the listing in English and Arabic
+  (`apps/ios/fastlane/metadata`, name «كور هب» in Arabic), held to App Store Connect's limits by
+  `apps/ios/scripts/store-metadata.mjs` in CI; a privacy policy (`docs/privacy.md`,
+  `docs/privacy.ar.md`) with the App Privacy answer «Data Not Collected» and a proposed age rating;
+  review notes (`docs/store/apple/review-notes.md`) and the owner's submission steps
+  (`docs/RELEASING.md`). Screenshots come from an XCUITest run (`ios-screenshots.yml`, by hand)
+  against a demo hub inside Debug builds (`-UITestDemo YES`, answers checked against the contract),
+  at iPhone 6.9" 1320 × 2868 and iPad 13" 2064 × 2752 in both languages — **28 taken and looked at
+  in a run on the branch**. Uploading the listing and screenshots (fastlane deliver, never a build or
+  a submission) is behind an `upload` switch and **has not been run**; nothing has been submitted.
 
 ## Name
 Since 2026-09-24 the product is **Core Hub** («كور هب», ADR 0017): packages `@corehub/*`, the

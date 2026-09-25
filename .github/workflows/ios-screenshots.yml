@@ -23,10 +23,6 @@ on:
       version:
         description: 'App Store version the listing belongs to; empty = the root package.json version'
         required: false
-  # TEMPORARY (removed before the pull request): proves the screenshot job on this branch, since a
-  # workflow_dispatch workflow cannot be run before it is on main. Never uploads (see `upload`).
-  push:
-    branches: [feat/app-store-prep]
 
 concurrency:
   group: ios-screenshots-${{ github.ref }}
