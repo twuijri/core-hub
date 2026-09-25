@@ -6,6 +6,11 @@ local.properties
 *.iml
 .kotlin/
 captures/
+# Firebase configuration: written from a CI secret for signed builds, never committed.
+google-services.json
+# Release keystores are CI secrets.
+*.jks
+*.keystore
 
 # The repository's root .gitignore drops every `data/` folder (a hub's local data); the app's
 # `data` source packages are code, not data.

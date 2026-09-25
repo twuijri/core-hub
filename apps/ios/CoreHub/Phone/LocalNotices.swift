@@ -156,7 +156,7 @@ enum NoticeRouting {
 
 /// The background look at the hub's notices (Info.plist `BGTaskSchedulerPermittedIdentifiers`).
 enum NoticeRefresh {
-    static let identifier = "io.github.twuijri.corehub.notices"
+    static let identifier = "com.twuijri.corehub.notices"
 
     /// Asks iOS to wake the app in about 15 minutes; iOS decides when, or whether.
     static func schedule() {

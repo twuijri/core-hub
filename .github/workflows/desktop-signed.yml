@@ -1,0 +1,120 @@
+name: Desktop signed macOS build
+
+# The macOS installer signed with the Developer ID certificate and notarised by Apple
+# (docs/RELEASING.md), through electron-builder's own variables: CSC_NAME / CSC_KEYCHAIN for the
+# certificate, APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID for notarisation. The
+# unsigned installers of desktop.yml (pull requests) do not change. Never on a pull request:
+# only when the owner runs it by hand or pushes a release tag. It publishes nothing; the dmg
+# becomes a workflow artifact only on a tag or when asked (the repository is public).
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to stamp (e.g. 0.1.0-alpha.17); empty keeps 0.0.0'
+        required: false
+      keep_artifacts:
+        description: 'Keep the signed dmg as a workflow artifact (anyone can download it)'
+        type: boolean
+        default: false
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: desktop-signed-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  mac:
+    name: Signed and notarised macOS dmg
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      COREHUB_VERSION: ${{ inputs.version || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse tags that are not on main
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo '::error::Release tags must point at a commit on main.'
+            exit 1
+          fi
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @corehub/desktop electron:install
+      - run: pnpm build
+      # The Developer ID certificate goes into a temporary keychain of this job's own, named to
+      # electron-builder by CSC_KEYCHAIN and CSC_NAME (its SHA-1): electron-builder 26's own
+      # CSC_LINK import unlocks its keychain with the certificate's password and fails. Secrets
+      # become files in the runner's temp folder and never reach the log.
+      - name: Import the Developer ID certificate into a temporary keychain
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$MAC_CSC_LINK" || { echo '::error::MAC_CSC_LINK is not set'; exit 1; }
+          umask 077
+          keychain="$RUNNER_TEMP/corehub-mac-signing.keychain-db"
+          keychain_password=$(openssl rand -hex 24)
+          echo "::add-mask::$keychain_password"
+          printf %s "$MAC_CSC_LINK" | base64 --decode > "$RUNNER_TEMP/corehub-mac.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/corehub-mac.p12" -k "$keychain" -f pkcs12 \
+            -P "$MAC_CSC_KEY_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/corehub-mac.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          # The identity's SHA-1 and name are public (they are in every app it signs).
+          identity=$(security find-identity -v -p codesigning "$keychain" | grep -m1 '"Developer ID Application' || true)
+          test -n "$identity" || { echo '::error::MAC_CSC_LINK holds no Developer ID Application identity'; exit 1; }
+          echo "$identity"
+          echo "CSC_NAME=$(echo "$identity" | awk '{print $2}')" >> "$GITHUB_ENV"
+          echo "CSC_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+      - name: Package, sign and notarise
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          for name in APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            test -n "${!name}" || { echo "::error::The secret behind $name is not set"; exit 1; }
+          done
+          pnpm --filter @corehub/desktop package --mac
+      - name: Check the signature, the notarisation and the app id
+        run: |
+          set -euo pipefail
+          app=$(ls -d apps/desktop/release/mac*/*.app | head -1)
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = com.twuijri.corehub
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv "$app" 2>&1 | grep -E '^(Identifier|TeamIdentifier|Authority|Runtime Version)='
+          spctl --assess --type execute --verbose=2 "$app"
+          xcrun stapler validate "$app"
+          dmg=$(ls apps/desktop/release/*.dmg | head -1)
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg" || true
+          echo "Signed dmg: $(du -h "$dmg" | cut -f1)" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' || inputs.keep_artifacts
+        with:
+          name: corehub-desktop-macOS-signed
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/sizes.md
+          retention-days: 14
+          if-no-files-found: error
+      - name: Remove the keychain
+        if: always()
+        run: |
+          if [ -n "${CSC_KEYCHAIN:-}" ]; then security delete-keychain "$CSC_KEYCHAIN" || true; fi
+          rm -f "$RUNNER_TEMP/corehub-mac.p12"

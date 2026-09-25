@@ -1,10 +1,17 @@
 // Installers for the desktop app (ADR 0020). Built by `pnpm --filter @corehub/desktop package`
 // after `pnpm build`. Nothing here publishes: `publish: null`, and CI keeps the files as
-// workflow artifacts only. Code signing and notarisation are not configured yet — the owner
-// decides (docs/changes/2026-09-25-twuijri-desktop-packaging.md, TODO).
+// workflow artifacts only.
+//
+// macOS signing (docs/RELEASING.md): only when a Developer ID certificate is named through
+// electron-builder's own variables — CSC_LINK / CSC_KEY_PASSWORD, or CSC_NAME with CSC_KEYCHAIN as
+// the signed-build workflow does; it then notarises when APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and
+// APPLE_TEAM_ID are set too. Without them (a pull request, a fork, a developer's machine) the
+// build stays unsigned, as before.
+const signed = Boolean(process.env.CSC_LINK || process.env.CSC_NAME);
+
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
-  appId: 'io.github.twuijri.corehub',
+  appId: 'com.twuijri.corehub',
   productName: 'Core Hub',
   executableName: 'corehub',
   copyright: 'Copyright © twuijri. Apache-2.0.',
@@ -26,6 +33,7 @@ module.exports = {
   npmRebuild: false,
   nodeGypRebuild: false,
   publish: null,
+  forceCodeSigning: signed,
   protocols: [{ name: 'Core Hub', schemes: ['corehub'] }],
   linux: {
     target: ['AppImage', 'deb'],
@@ -43,8 +51,10 @@ module.exports = {
     target: [{ target: 'dmg', arch: ['arm64'] }],
     category: 'public.app-category.productivity',
     icon: 'assets/icon.png',
-    // TODO(owner): Developer ID signing and notarisation. Unsigned builds open with a warning.
-    identity: null,
+    // Unsigned builds open with a Gatekeeper warning; a signed one fails loudly rather than
+    // falling back to unsigned.
+    identity: signed ? undefined : null,
+    hardenedRuntime: true,
   },
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],

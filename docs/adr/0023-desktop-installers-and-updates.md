@@ -27,7 +27,9 @@ silent auto-update without his decision.
    owner's step.
 5. **Code signing is a TODO for the owner**: no Apple Developer ID / notarisation and no
    Windows Authenticode certificate are configured. Unsigned builds open with a Gatekeeper /
-   SmartScreen warning.
+   SmartScreen warning. *Update 2026-09-26:* macOS is signed with Developer ID and notarised by
+   `.github/workflows/desktop-signed.yml` (by hand or a release tag, `docs/RELEASING.md`); the
+   `appId` is `com.twuijri.corehub`. Pull-request builds and Windows stay unsigned.
 6. **The update check** reads `api.github.com/repos/twuijri/core-hub/releases` (no token,
    nothing sent but the app's version in the User-Agent), on its own at most once a day
    (a switch in This device turns that off) and whenever the person presses "Check now". A

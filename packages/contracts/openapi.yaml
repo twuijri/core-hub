@@ -13300,7 +13300,7 @@ paths:
               enabled: true
               key_id: ABC123DEFG
               team_id: DEF123GHIJ
-              bundle_id: hub.core.ios
+              bundle_id: com.twuijri.corehub
               environment: production
               private_key: "-----BEGIN PRIVATE KEY-----\n…\n-----END PRIVATE KEY-----"
       x-rt-events: []
@@ -13319,7 +13319,7 @@ paths:
                 details:
                   key_id: ABC123DEFG
                   team_id: DEF123GHIJ
-                  bundle_id: hub.core.ios
+                  bundle_id: com.twuijri.corehub
                   environment: production
                   private_key: '[stored]'
                 devices: 0
