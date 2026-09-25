@@ -62,7 +62,9 @@ export function usePendingActions(): {
   const isAdmin = canOpen('agent_manager', user?.role ?? 'member');
   const agents = useAgents();
   const channelAgent = isAdmin
-    ? installedAgents(agents.data ?? []).find((agent) => agent.capabilities.includes('channels'))
+    ? installedAgents(agents.data ?? []).find((agent) =>
+        (agent.capabilities ?? []).includes('channels'),
+      )
     : undefined;
   const pairing = useQuery({
     queryKey: pendingKeys.pairing(profile, channelAgent?.id ?? ''),

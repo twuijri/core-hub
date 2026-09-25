@@ -120,6 +120,14 @@ CI الأول بعد الدمج: كل الوظائف خضراء (ومنها Play
 (server) vitest run tests/unit/status.test.ts   Tests  1 passed (1)
 ```
 
+الجولة الثانية: سقطت `tests/tasks-schedules-profiles.test.tsx` لأن وكلاء تلك الاختبارات بلا
+`capabilities` والشريط يقرأ `agent.capabilities.includes(...)`. صار `(agent.capabilities ?? [])`،
+وشُغّلت مجموعة الويب كاملة محليًّا:
+
+```
+(web) vitest run   Test Files  56 passed (56)   Tests  624 passed (624)
+```
+
 CI: يُحدَّث بعد الدفع.
 
 ## المخاطر والرجوع
