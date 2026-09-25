@@ -114,14 +114,26 @@ struct ThisDeviceExtras: View {
                     Task {
                         _ = await LocalNotices.shared.requestPermission()
                         notifications = await LocalNotices.shared.status()
+                        await PushCenter.shared.start(app: app)
                     }
                 }
             }
         } header: {
             Text(l10n("device.notifications"))
         } footer: {
-            Text(l10n("device.notifications_note"))
+            Text(l10n(ThisDeviceExtras.pushNote(PushCenter.shared.state)))
         }
         .task { notifications = await LocalNotices.shared.status() }
+    }
+
+    /// What This device says about push, by its state (PushCenter).
+    nonisolated static func pushNote(_ state: PushState) -> String {
+        switch state {
+        case .active: return "device.push_active"
+        case .idle: return "device.push_idle"
+        case .notAllowed: return "device.push_not_allowed"
+        case .noSender: return "device.push_no_sender"
+        case .failed: return "device.push_failed"
+        }
     }
 }

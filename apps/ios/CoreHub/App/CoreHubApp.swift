@@ -2,6 +2,8 @@ import SwiftUI
 
 @main
 struct CoreHubApp: App {
+    /// The APNs token and notification taps from before the first screen (Phone/Push.swift).
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var app = AppModel()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -19,11 +21,12 @@ struct CoreHubApp: App {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { app.becameActive() }
-            if phase == .background, app.device.backgroundChecks { NoticeRefresh.schedule() }
+            // The background look only while push is not carrying the notices already.
+            if phase == .background, app.device.backgroundChecks, !PushCenter.shared.isActive { NoticeRefresh.schedule() }
         }
         .backgroundTask(.appRefresh(NoticeRefresh.identifier)) {
             await LocalNotices.shared.catchUp(app: app)
-            await MainActor.run { NoticeRefresh.schedule() }
+            await MainActor.run { if !PushCenter.shared.isActive { NoticeRefresh.schedule() } }
         }
     }
 }

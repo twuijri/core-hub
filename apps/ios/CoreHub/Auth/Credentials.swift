@@ -27,6 +27,9 @@ struct Credentials: Codable, Equatable {
     /// The profiles the person may enter (from `User.profiles`).
     var profiles: [String]
     var defaultProfile: String
+    /// This phone's row in the hub's device list, once known: from the pairing claim, or from
+    /// `devices.register` for a password sign-in (PushCenter). The APNs token is registered on it.
+    var deviceID: String? = nil
 
     /// Whether the access token should be refreshed before the next request.
     func needsRefresh(now: Date = Date(), margin: TimeInterval = 30) -> Bool {

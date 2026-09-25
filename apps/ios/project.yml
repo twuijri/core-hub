@@ -31,12 +31,15 @@ targets:
     dependencies:
       - package: CoreHubClient
       - target: CoreHubShare
-    # The App Group the share extension leaves shared text in (ShareInbox.swift); it takes
-    # effect once the app is signed with the owner's team (README.md).
+    # The App Group the share extension leaves shared text in (ShareInbox.swift), and push
+    # (Phone/Push.swift): APNs production for a Release (App Store, TestFlight) build, the
+    # sandbox for a Debug build from Xcode. Both take effect once the app is signed with the
+    # owner's team (README.md); the simulator build in CI is not signed.
     entitlements:
       path: CoreHub/CoreHub.entitlements
       properties:
         com.apple.security.application-groups: [group.com.twuijri.corehub]
+        aps-environment: $(COREHUB_APS_ENVIRONMENT)
     info:
       path: CoreHub/Info.plist
       properties:
@@ -81,9 +84,12 @@ targets:
         TARGETED_DEVICE_FAMILY: '1,2'
         GENERATE_INFOPLIST_FILE: NO
       configs:
+        Debug:
+          COREHUB_APS_ENVIRONMENT: development
         # Empty unless the signed CI build names the profile (.github/workflows/ios-signed.yml).
         Release:
           PROVISIONING_PROFILE_SPECIFIER: $(COREHUB_APP_PROFILE)
+          COREHUB_APS_ENVIRONMENT: production
   CoreHubShare:
     type: app-extension
     platform: iOS
