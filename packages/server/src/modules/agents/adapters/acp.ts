@@ -258,6 +258,7 @@ export class AcpSession implements AgentSession {
           id: String(update.toolCallId ?? ''),
           title: String(update.title ?? update.kind ?? 'tool'),
           kind: String(update.kind ?? 'other'),
+          input: acpToolInput(update),
           raw: update,
         });
         return;
@@ -504,4 +505,27 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
       return session;
     },
   };
+}
+
+/**
+ * What an ACP tool call was given, as the hub records it: the agent's `rawInput`, plus the
+ * files the call touches — ACP's `locations` and the paths of its `diff` content — as
+ * `locations`, so the chat can open those files (decision §47). `{}` when neither is there.
+ */
+export function acpToolInput(update: Record<string, unknown>): Record<string, unknown> {
+  const raw = update.rawInput;
+  const input: Record<string, unknown> =
+    raw && typeof raw === 'object' && !Array.isArray(raw) ? { ...(raw as object) } : {};
+  const paths = new Set<string>();
+  for (const location of Array.isArray(update.locations) ? update.locations : []) {
+    const value = (location as { path?: unknown } | null)?.path;
+    if (typeof value === 'string' && value !== '') paths.add(value);
+  }
+  for (const block of Array.isArray(update.content) ? update.content : []) {
+    const item = block as { type?: unknown; path?: unknown } | null;
+    if (item?.type === 'diff' && typeof item.path === 'string' && item.path !== '')
+      paths.add(item.path);
+  }
+  if (paths.size > 0 && !('locations' in input)) input.locations = [...paths];
+  return input;
 }

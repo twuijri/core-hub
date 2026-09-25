@@ -160,7 +160,7 @@ describe('ACP adapter: a turn', () => {
       { type: 'reasoning.delta', text: 'thinking' },
       { type: 'message.delta', text: 'Hello' },
       { type: 'message.delta', text: ' world' },
-      { type: 'tool.started', id: 'tc1', title: 'read file', kind: 'read', raw: expect.anything() },
+      { type: 'tool.started', id: 'tc1', title: 'read file', kind: 'read', input: {}, raw: expect.anything() },
       {
         type: 'tool.completed',
         id: 'tc1',
