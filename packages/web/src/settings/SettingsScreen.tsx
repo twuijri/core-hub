@@ -26,6 +26,7 @@ import { SkillsUsagePage } from './usage/SkillsUsagePage.js';
 import { UsagePage } from './usage/UsagePage.js';
 import { ThemeTool } from './ThemeTool.js';
 import { FilesTool } from '../workspace-files/FilesTool.js';
+import { ThisDeviceTab } from './ThisDeviceTab.js';
 
 /**
  * Which section draws which destination.
@@ -49,6 +50,8 @@ const SECTIONS: Record<string, () => ReactElement> = {
   theme: () => <ThemeTool />,
   webhooks: () => <WebhooksTab />,
   privacy: () => <PrivacyTab />,
+  // Desktop and phones only: the web surface has no route to it (navigation.json).
+  this_device: () => <ThisDeviceTab />,
   // The audit module's reports: Usage and Skills usage are their own pages (decision §50).
   usage: () => <UsagePage />,
   skills_usage: () => <SkillsUsagePage />,

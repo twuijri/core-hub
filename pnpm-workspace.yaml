@@ -5,8 +5,11 @@ packages:
 # pnpm >= 10 blocks dependency install scripts unless listed here.
 # better-sqlite3 needs its native binding; esbuild only validates its binary.
 # openapi-generator-cli downloads its jar lazily on first run, no install script needed.
+# electron's postinstall downloads a ~100 MB runtime; only the desktop jobs need it, and they fetch
+# it on demand (`pnpm --filter @corehub/desktop electron:install`), so every other install stays lean.
 allowBuilds:
   better-sqlite3: true
   esbuild: true
   argon2: true
   '@openapitools/openapi-generator-cli': false
+  electron: false

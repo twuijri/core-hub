@@ -14,6 +14,7 @@ import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/context.js';
 import { useRealtime } from '../realtime/context.js';
+import { notifyDesktop } from '../desktop/effects.js';
 
 export const NOTICE_KINDS = [
   'run_completed',
@@ -165,10 +166,15 @@ export function useNoticeStream(): void {
     const refresh = () => {
       void queryClient.invalidateQueries({ queryKey: ['notices'] });
     };
-    connection.on('notice.created', refresh);
+    // In the desktop app a new notice is also shown by the OS (a no-op in a browser).
+    const created = (envelope: unknown) => {
+      refresh();
+      notifyDesktop(envelope);
+    };
+    connection.on('notice.created', created);
     connection.on('notice.updated', refresh);
     return () => {
-      connection.off('notice.created', refresh);
+      connection.off('notice.created', created);
       connection.off('notice.updated', refresh);
     };
   }, [socket, queryClient, session]);

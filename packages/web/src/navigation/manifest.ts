@@ -1,6 +1,7 @@
 // The navigation contract, read from the repository (docs/clients/README.md: never a second
 // hand-maintained copy). Vite bundles the JSON at build time.
 import manifest from '../../../../docs/clients/navigation.json' with { type: 'json' };
+import { desktopBridge } from '../desktop/desktop.js';
 
 export type Surface = 'web' | 'desktop' | 'android' | 'ios';
 export type EntryKind =
@@ -57,7 +58,33 @@ export interface NavigationManifest {
 }
 
 export const navigation = manifest as unknown as NavigationManifest;
-export const SURFACE: Surface = 'web';
+
+/**
+ * Which surface this bundle is drawing. The desktop app wraps this very client and says
+ * so through its bridge (`desktop/desktop.ts`); everywhere else it is the web.
+ */
+export function detectSurface(): Surface {
+  return desktopBridge() ? 'desktop' : 'web';
+}
+export const SURFACE: Surface = detectSurface();
+
+/**
+ * A surface's routes. A surface that draws this same client (the desktop app) names the one
+ * it `$extends` and lists only what it adds; destinations that are not on it are dropped.
+ */
+export function surfaceRoutesOf(surface: Surface): Record<string, string> {
+  const own = navigation.surfaceRoutes[surface] ?? {};
+  const base = own.$extends ? surfaceRoutesOf(own.$extends as Surface) : {};
+  const merged: Record<string, string> = {};
+  for (const [id, route] of Object.entries({ ...base, ...own })) {
+    if (id.startsWith('$')) continue;
+    const destination = navigation.destinations.find((d) => d.id === id);
+    if (destination?.surfaces && !destination.surfaces.includes(surface)) continue;
+    merged[id] = route;
+  }
+  return merged;
+}
+const ROUTES = surfaceRoutesOf(SURFACE);
 
 export const destinationsById: ReadonlyMap<string, Destination> = new Map(
   navigation.destinations.map((d) => [d.id, d]),
@@ -71,10 +98,10 @@ export function onThisSurface(destination: Destination): boolean {
 export const webDestinations: readonly Destination[] =
   navigation.destinations.filter(onThisSurface);
 
-/** The URL of a destination on the web (from `surfaceRoutes.web` in the manifest). */
+/** The URL of a destination on this surface (from `surfaceRoutes` in the manifest). */
 export function routeOf(id: string): string {
-  const route = navigation.surfaceRoutes.web?.[id];
-  if (!route) throw new Error(`navigation.json has no web route for "${id}"`);
+  const route = ROUTES[id];
+  if (!route) throw new Error(`navigation.json has no ${SURFACE} route for "${id}"`);
   return route;
 }
 
@@ -83,7 +110,8 @@ export function routeOf(id: string): string {
  * navigation entry by design: nothing links to them from a signed-in session.
  */
 export function preAuthRouteOf(id: string): string {
-  const route = navigation.preAuth?.[id]?.routes.web;
+  const routes = navigation.preAuth?.[id]?.routes;
+  const route = routes?.[SURFACE] ?? routes?.web;
   if (!route) throw new Error(`navigation.json has no web route for pre-auth screen "${id}"`);
   return route;
 }
@@ -133,7 +161,7 @@ export function agentRoute(id: string, agentId: string): string {
  */
 export function agentPageFromPath(pathname: string): { id: string; agentId: string } | null {
   for (const id of navigation.agentLevel) {
-    const route = navigation.surfaceRoutes.web?.[id];
+    const route = ROUTES[id];
     if (!route) continue;
     const [before, after] = route.split(':agentId');
     if (before === undefined || after === undefined || !pathname.startsWith(before)) continue;

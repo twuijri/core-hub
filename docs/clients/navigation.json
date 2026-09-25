@@ -673,6 +673,11 @@
       "agent_plugins": "/agents/:agentId/plugins",
       "agent_settings": "/agents/:agentId/settings",
       "global_agent": "/global-agent"
+    },
+    "desktop": {
+      "$comment": "The desktop app draws the web client (ADR 0009, ADR 0020), so it takes every web route that exists on the desktop and adds its own. `$extends` names the surface whose routes are inherited; nav:check resolves it the same way the client does.",
+      "$extends": "web",
+      "this_device": "/settings/this-device"
     }
   },
   "agentShell": {

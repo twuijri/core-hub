@@ -117,23 +117,32 @@ function Inbox() {
   );
 }
 
+/**
+ * Where a notice leads. One that points at a conversation opens it; one that points nowhere
+ * is a record, and clicking it only marks it read. The desktop app's OS notifications open
+ * the same place (`desktop/effects.ts`).
+ */
+export function noticeTarget(notice: {
+  resource: { kind: string; id: string } | null;
+  profile?: string | null;
+}): string | null {
+  if (notice.resource?.kind === 'session')
+    return routeOf('chat').replace(/:sessionId\??/, notice.resource.id);
+  // A workflow waiting for a person opens its run, where it is answered.
+  if (notice.resource?.kind === 'workflow_run')
+    return `${routeOf('schedules')}?${new URLSearchParams({
+      workflow_run: notice.resource.id,
+      ...(notice.profile ? { profile: notice.profile } : {}),
+    }).toString()}`;
+  return null;
+}
+
 function NoticeRowItem({ notice, language }: { notice: NoticeRow; language: string }) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const mark = useMarkNotice();
   const unread = notice.read_at === null;
-  // A notice that points at a conversation opens it; one that points nowhere is a record,
-  // and clicking it only marks it read.
-  const target =
-    notice.resource?.kind === 'session'
-      ? routeOf('chat').replace(':sessionId', notice.resource.id)
-      : // A workflow waiting for a person opens its run, where it is answered.
-        notice.resource?.kind === 'workflow_run'
-        ? `${routeOf('schedules')}?${new URLSearchParams({
-            workflow_run: notice.resource.id,
-            ...(notice.profile ? { profile: notice.profile } : {}),
-          }).toString()}`
-        : null;
+  const target = noticeTarget(notice);
 
   return (
     <li>

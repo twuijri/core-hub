@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "sourceMap": false,
+    "types": ["node"]
+  },
+  "include": [
+    "src/main/**/*.ts",
+    "src/shared/**/*.ts",
+    "src/i18n/*.json",
+    "tests/**/*.ts",
+    "scripts/*.mjs",
+    "*.ts"
+  ]
+}

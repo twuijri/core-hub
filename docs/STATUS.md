@@ -187,7 +187,21 @@ its approval.
   or recent chat of the profile opens with it in the composer. No terminal, no commands.
 - **Terminal** (`packages/cli`): the reference client — `setup`, login, pairing,
   agents, models, sessions, an interactive `chat` with resume and approvals.
-- Desktop, Android and iOS: not started (ADR 0007, ADR 0009).
+- **Desktop** (`apps/desktop`, Electron — ADR 0020, proposed): since 2026-09-25 **remote
+  mode** works. A first-run screen (Arabic/English, RTL) offers remote or local; remote takes
+  the hub's address (checked against `meta.get` before anything is saved) or a pairing link
+  (`corehub://pair?…`, the web's pairing card now shows it) and then loads the **bundled** web
+  client from the app's own loopback origin, which forwards `/api` and `/rt` (HTTP, SSE and
+  WebSocket) to the hub. Each hub has its own storage partition. Window size and place are
+  remembered, one instance runs, `corehub://open/…` links open a page, new notices are shown
+  by the OS and the unread count is the dock/taskbar badge, a tray keeps the app running
+  (where the desktop has one), and the menus are in the app's language. The web client is the
+  `desktop` surface there and gets **This device** (hub connection, change connection, app
+  version, keep-in-tray). Not yet: local mode (the first-run card says so), the local helper,
+  installers and the update check, voice (the page says so). Tests: unit tests of the main
+  process logic and the loopback proxy, and a smoke test (Electron under Xvfb) that connects,
+  signs in, streams a chat reply and pairs a second computer against the real hub.
+- Android and iOS: not started (ADR 0007).
 
 ## Name
 Since 2026-09-24 the product is **Core Hub** («كور هب», ADR 0017): packages `@corehub/*`, the
