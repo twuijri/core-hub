@@ -15,6 +15,11 @@ import hub.core.android.phone.DeviceSettings
 import hub.core.android.phone.NoticeTracker
 import hub.core.android.phone.NoticeWorker
 import hub.core.android.phone.Notifier
+import hub.core.android.phone.PushManager
+import hub.core.android.phone.PushRegistrar
+import hub.core.android.phone.PushState
+import hub.core.android.phone.thisPhone
+import hub.core.android.data.hubCall
 import hub.core.android.phone.Speaker
 import hub.core.android.realtime.DEVICES_NAMESPACE
 import hub.core.android.realtime.Realtime
@@ -23,6 +28,7 @@ import hub.core.client.model.Notice
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -89,6 +95,14 @@ class AppGraph(context: Context) {
     private val notifier = Notifier(context)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /** FCM: registered with the hub while someone is signed in, when this build has Firebase. */
+    val push = PushManager(
+        context,
+        PushRegistrar(store, { apis(it) }) { thisPhone(store.deviceKey) },
+        { prefs.effectiveLanguage.tag },
+        scope,
+    )
+
     /** True while a screen of the app is visible. */
     fun inForeground(): Boolean = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
 
@@ -101,14 +115,9 @@ class AppGraph(context: Context) {
                 val notice = e.payload["notice"]?.let {
                     runCatching { Serializer.kotlinxSerializationJson.decodeFromJsonElement(Notice.serializer(), it) }.getOrNull()
                 } ?: return@collect
-                if (!inForeground()) notifier.post(notice)
+                // With push active the hub's push shows it (the same notification slot, AppGraph.push).
+                if (!inForeground() && !push.active) notifier.post(notice)
                 device.noticesSeenAt = NoticeTracker.seenAfter(listOf(notice), device.noticesSeenAt)
-            }
-        }
-        // The background check runs while someone is signed in and This device allows it.
-        scope.launch {
-            store.session.map { it != null }.distinctUntilChanged().collect { signedIn ->
-                runCatching { NoticeWorker.schedule(context, signedIn && device.choices.value.backgroundNotices) }
             }
         }
     }
@@ -137,6 +146,40 @@ class AppGraph(context: Context) {
 
     /** An API with no credentials, for sign-in, first-run setup and claiming a pairing. */
     fun anonymous(hub: String) = HubApis(hub, http.plain)
+
+    /**
+     * Ends the session on this phone. Push goes first, while the token still works, so the hub
+     * stops pushing here; then the hub's sign-out when [logout] (moving to another hub by a new
+     * pairing only forgets this one).
+     */
+    suspend fun signOut(logout: Boolean = true) {
+        val session = store.current ?: return
+        push.signOut(session)
+        if (logout) hubCall { apis(session).auth.authLogout() }
+        realtime.close()
+        store.save(null)
+    }
+
+    init {
+        // Push is registered for each sign-in (and again at each launch); a sign-out the hub
+        // decided (a revoked device, an expired session) deletes the FCM token.
+        scope.launch {
+            store.session.map { s -> s?.let { it.hub to it.user.id } }.distinctUntilChanged().collect { who ->
+                if (who != null) push.refresh() else push.forget()
+            }
+        }
+        // The background check runs while someone is signed in, This device allows it, and push
+        // is not already carrying the notices.
+        scope.launch {
+            combine(
+                store.session.map { it != null },
+                device.choices.map { it.backgroundNotices },
+                push.state,
+            ) { signedIn, background, state -> signedIn && background && state != PushState.ACTIVE }
+                .distinctUntilChanged()
+                .collect { on -> runCatching { NoticeWorker.schedule(context, on) } }
+        }
+    }
 }
 
 class CoreHubApp : Application() {

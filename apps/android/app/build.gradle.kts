@@ -9,8 +9,10 @@ plugins {
 
 // Firebase (FCM) reads its project from app/google-services.json, which is never committed: the
 // signed-build workflow writes it from a secret. A pull request, a fork or a local build has no
-// file and builds without the plugin.
-if (file("google-services.json").exists()) apply(plugin = "com.google.gms.google-services")
+// file and builds without the plugin; Firebase Messaging is still linked, never starts, and the
+// app says push is not in this build and keeps polling (BuildConfig.FIREBASE, PushManager).
+val hasFirebase = file("google-services.json").exists()
+if (hasFirebase) apply(plugin = "com.google.gms.google-services")
 
 val repoRoot = rootProject.file("../..")
 
@@ -259,6 +261,7 @@ android {
         versionCode = providers.environmentVariable("COREHUB_ANDROID_VERSION_CODE").orNull?.toIntOrNull() ?: 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("boolean", "FIREBASE", hasFirebase.toString())
     }
 
     // A signed release needs the keystore (docs/RELEASING.md): CI writes it from the repository's
@@ -333,6 +336,8 @@ dependencies {
     implementation(libs.commonmark)
     implementation(libs.commonmark.tables)
     implementation(libs.commonmark.strikethrough)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

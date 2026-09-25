@@ -52,6 +52,11 @@ data class StoredSession(
     val user: StoredUser,
     /** The profile the top selector is on: always one concrete profile (ADR 0016). */
     val profile: String,
+    /**
+     * This phone's row in the hub's device list, once known: from the pairing claim, or from
+     * `devices.register` for a password sign-in (PushRegistrar). Push registers against it.
+     */
+    val deviceId: String? = null,
 )
 
 /** The one place the session lives; [session] is what the UI observes. */
