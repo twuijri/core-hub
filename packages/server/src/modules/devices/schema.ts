@@ -4,7 +4,9 @@
  *
  * Global: devices (a device belongs to a user, not to a workspace), push_credentials
  * (one row per push sender for the whole hub; moved here from notify, same table).
- * Scoped: device_commands (a command is requested from inside a workspace).
+ * Scoped: device_requests (a capability is asked of a device from inside a workspace; the
+ * contract's `DeviceRequest`, DECISIONS §14 and §74). It replaced `device_commands`, a
+ * design that was never written to.
  *
  * Column names follow the contract's `Device` / `DeviceRegistration` schemas
  * (packages/contracts/openapi.yaml): a device carries the stable `device_key`
@@ -13,9 +15,8 @@
  *
  * Cross-module id columns: devices.app_token_id -> auth.app_tokens,
  * devices.push_session_id -> auth.app_tokens,
- * device_commands.run_id -> sessions.runs, device_commands.requested_by_id
- * -> auth.users / agents.agents / schedules.workflow_runs,
- * device_commands.result_attachment_id -> knowledge.attachments.
+ * device_requests.session_id -> sessions.sessions, device_requests.run_id -> sessions.runs,
+ * device_requests.job_id -> audit.jobs.
  */
 import { check, index, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import {
@@ -49,27 +50,23 @@ export const CAPABILITY_KINDS = [
   'reminders',
   'health',
 ] as const;
-export const DEVICE_COMMAND_KINDS = [
-  'capture_photo',
-  'record_audio',
-  'read_clipboard',
-  'write_clipboard',
-  'open_url',
-  'locate',
-  'speak',
-  'show_notification',
-  'custom',
-] as const;
-export const DEVICE_COMMAND_STATUSES = [
-  'queued',
-  'sent',
-  'acked',
-  'completed',
+/** The contract's `DeviceRequestStatus`; `pending` is the only one that is not final. */
+export const DEVICE_REQUEST_STATUSES = [
+  'pending',
+  'fulfilled',
+  'denied',
   'failed',
   'expired',
   'cancelled',
 ] as const;
-export const DEVICE_REQUESTERS = ['user', 'agent', 'workflow'] as const;
+/** The contract's `DeviceRequestError.code`: one list for every platform (DECISIONS §14). */
+export const DEVICE_REQUEST_ERROR_CODES = [
+  'permission_denied',
+  'unavailable',
+  'timeout',
+  'cancelled',
+  'failed',
+] as const;
 
 export type DevicePlatform = (typeof DEVICE_PLATFORMS)[number];
 export type DeviceKind = (typeof DEVICE_KINDS)[number];
@@ -131,34 +128,36 @@ export const devices = sqliteTable(
   ],
 );
 
-export const deviceCommands = sqliteTable(
-  'device_commands',
+export type DeviceRequestStatus = (typeof DEVICE_REQUEST_STATUSES)[number];
+export type DeviceRequestErrorCode = (typeof DEVICE_REQUEST_ERROR_CODES)[number];
+
+export const deviceRequests = sqliteTable(
+  'device_requests',
   {
     ...scopedColumns(),
     deviceId: ulid('device_id')
       .notNull()
       .references(() => devices.id, { onDelete: 'cascade' }),
-    kind: text('kind', { enum: DEVICE_COMMAND_KINDS }).notNull(),
-    payload: json<Record<string, unknown>>('payload').notNull().default(EMPTY_OBJECT),
-    status: text('status', { enum: DEVICE_COMMAND_STATUSES }).notNull().default('queued'),
-    requestedByKind: text('requested_by_kind', { enum: DEVICE_REQUESTERS }).notNull(),
-    requestedById: ulid('requested_by_id'),
-    /** The agent run waiting on this command, if any. */
+    capability: text('capability', { enum: CAPABILITY_KINDS }).notNull(),
+    /** Shown to the person in the device's consent sheet. */
+    purpose: text('purpose'),
+    params: json<Record<string, unknown>>('params').notNull().default(EMPTY_OBJECT),
+    sessionId: ulid('session_id'),
     runId: ulid('run_id'),
-    result: json<Record<string, unknown>>('result'),
-    /** Photo / recording produced by the device (knowledge module). */
-    resultAttachmentId: ulid('result_attachment_id'),
-    error: text('error'),
-    sentAt: timestampMs('sent_at'),
-    completedAt: timestampMs('completed_at'),
+    /** The `device_request` job the requester follows (audit). */
+    jobId: ulid('job_id').notNull(),
+    status: text('status', { enum: DEVICE_REQUEST_STATUSES }).notNull().default('pending'),
     expiresAt: timestampMs('expires_at').notNull(),
+    /** What the device sent back; a location stays only here, never in the job. */
+    result: json<Record<string, unknown>>('result'),
+    error: json<{ code: DeviceRequestErrorCode; message: string | null }>('error'),
+    answeredAt: timestampMs('answered_at'),
   },
   (t) => [
-    index('device_commands_device_pending_idx').on(t.deviceId, t.status, t.createdAt),
-    index('device_commands_run_idx').on(t.runId),
-    check('device_commands_kind_check', inList(t.kind, DEVICE_COMMAND_KINDS)),
-    check('device_commands_status_check', inList(t.status, DEVICE_COMMAND_STATUSES)),
-    check('device_commands_requester_check', inList(t.requestedByKind, DEVICE_REQUESTERS)),
+    index('device_requests_device_status_idx').on(t.deviceId, t.status, t.createdAt),
+    index('device_requests_workspace_owner_idx').on(t.workspace, t.ownerId, t.createdAt),
+    check('device_requests_capability_check', inList(t.capability, CAPABILITY_KINDS)),
+    check('device_requests_status_check', inList(t.status, DEVICE_REQUEST_STATUSES)),
   ],
 );
 

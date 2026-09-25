@@ -20,7 +20,7 @@
 طلب المالك المهمة ضمن ليلة ٢٠٢٦-٠٩-٢٦ (#144)، ومنها صراحةً: إزالة النوعين القديمين إن لم يبقَ من يستعملهما،
 العقد أولًا. ما يلي **مقترح — ينتظر تأكيد المالك**:
 
-1. **التسجيل مربوط بجلسته** (بلا تغيير في العقد): عمود جديد `devices.push_session_id` (ترحيل `0022`) يحفظ صف
+1. **التسجيل مربوط بجلسته** (بلا تغيير في العقد): عمود جديد `devices.push_session_id` (ترحيل `0023`) يحفظ صف
    `auth.app_tokens` الذي سجّل الرمز — جلسة كلمة المرور، أو رمز الاقتران للهاتف المقترن. `devices.registerPush`
    يكتبه لـ FCM وAPNs.
 2. **كل طريق ينهي الجلسة من المركز يمسح رمزها فورًا**: الخروج (`auth.logout`)، إلغاء رمز (`revokeAppToken`)،
@@ -50,29 +50,29 @@
    ظاهرة فقط: الجهاز (المعالج والأنوية، الذاكرة، الحِمل)، عملية الهب (المعالج، RSS والكومة، تأخّر حلقة
    الأحداث، مدة التشغيل ونسخة Node)، كل عملية Hermes بحالتها، ونشاط كل بروفايل؛ رقم لم يقسه المركز «—» لا صفر؛
    فشل القياس يُبقي آخر قياس ومعه السبب. بلا الرسوم الصغيرة (`history`).
-8. **إزالة `logs` و`performance` من `audit.getReport`** (DECISIONS **§74**): لا يطلبهما بعد الآن الويب ولا
+8. **إزالة `logs` و`performance` من `audit.getReport`** (DECISIONS **§75**): لا يطلبهما بعد الآن الويب ولا
    الواجهة الطرفية ولا سطح المكتب ولا أيّ من التطبيقين (بحثت في المستودع كله)، والتطبيقات تكلّم مراكز من
    نسختها. فأُزيل النوعان من العقد مع `q` و`level`، وصار `X-Hub-Profile` هو معامل `Profile` الإلزامي (النوعان
    الباقيان `usage`/`skills` لبروفايل دائمًا)، وتوقّف معاين الأداء الذي يكتب صفًا كل دقيقة، وأُسقط جدول
-   `performance_snapshots` (ترحيل `0023`). سجل التدقيق وأحداث المهام باقية كما هي. صفحة «الاستخدام» في iOS
+   `performance_snapshots` (ترحيل `0024`). سجل التدقيق وأحداث المهام باقية كما هي. صفحة «الاستخدام» في iOS
    هي المستدعي الوحيد الباقي، وتمرّر بروفايلها كما كانت.
 9. أسماء الملفات `LiveTools` (لا `HubTools`) لأن في العقد مخططًا اسمه `HubTools` (أدوات الهب لوكلائه).
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 - `audit.getReport` (`GET /audit/reports/{kind}`): `kind` = `[usage, skills]` (كان معهما `logs` و`performance`)،
   و`AuditReport.kind` مثله؛ حُذف `q` و`level`؛ `X-Hub-Profile` صار `$ref: Profile` الإلزامي؛ الوصف محدَّث.
-  DECISIONS §74. أُعيد توليد عملاء TypeScript وKotlin وSwift (غير مرفوعة، تُولَّد في البناء).
+  DECISIONS §75. أُعيد توليد عملاء TypeScript وKotlin وSwift (غير مرفوعة، تُولَّد في البناء).
 - الجزء ١ بلا تغيير في العقد.
 
 ## الملفات والتأثير
-- الخادم — الدفع: `modules/devices/schema.ts` (`push_session_id`)، `drizzle/0022_device_push_session.sql`
+- الخادم — الدفع: `modules/devices/schema.ts` (`push_session_id`)، `drizzle/0023_device_push_session.sql`
   (+ اللقطة والسجل)، `modules/devices/index.ts` (`endPushForSessions`، `endPushForOwners`، المنفذ
   `sessionLive`، `registerPush` يكتب الجلسة)، `modules/devices/push.ts` (فحص الجلسة قبل الإرسال)،
   `modules/devices/senders.ts` (FCM `INVALID_ARGUMENT` للرمز)، `modules/auth/users.ts` (`tokenLive`،
   `revokeToken`، `revokeOtherSessions`، `updateUser`، `deleteUser`)، `modules/auth/pairing.ts`،
   `modules/auth/setup.ts`، `modules/auth/index.ts`، `modules/index.ts` (المنفذ).
 - الخادم — التقارير: `modules/audit/reports.ts` (usage فقط)، `modules/audit/index.ts` (المسار، بلا معاين)،
-  `modules/audit/schema.ts` (بلا الجدول)، `drizzle/0023_drop_performance_snapshots.sql` (+ اللقطة والسجل).
+  `modules/audit/schema.ts` (بلا الجدول)، `drizzle/0024_drop_performance_snapshots.sql` (+ اللقطة والسجل).
 - الاختبارات: `tests/unit/devices-push.test.ts` (٧ حالات جديدة)، `modules/devices/push.test.ts`،
   `modules/devices/testing/fake-push.ts` (FCM `INVALID_ARGUMENT`)، `modules/auth/setup-window.test.ts`،
   `modules/audit/audit.test.ts`، `modules/audit/reports.test.ts` (حُذفت اختبارات النوعين).
@@ -81,12 +81,12 @@
   `res/values{,-ar}/strings.xml` (٤٠ نصًا)، `test/.../tools/LiveToolsTest.kt` (جديد).
 - iOS: `CoreHub/Settings/LiveTools.swift` (جديد)، `Settings/SettingsScreen.swift`، `Settings/ManagementPages.swift`
   (`AuditPage` للاستخدام فقط)، `i18n/{ar,en}.json` (٤١ مفتاحًا)، `CoreHubTests/LiveToolsTests.swift` (جديد).
-- العقد والوثائق: `packages/contracts/openapi.yaml`، `docs/contracts/DECISIONS.md` (§74)، `docs/domain/audit.md`،
+- العقد والوثائق: `packages/contracts/openapi.yaml`، `docs/contracts/DECISIONS.md` (§75)، `docs/domain/audit.md`،
   `docs/domain/README.md`، `docs/STATUS.md`، هذا السجل، وسطر في `2026-09-26-twuijri-night-pr.md`.
 - لم تُلمس ملفات الأيقونات ولا الموارد ولا `project.yml` (مهمة الأيقونات الموازية).
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-محليًا عبر `mj-run`، بعد دمج `origin/night/2026-09-26` (`dcfaffe`) في الفرع:
+محليًا عبر `mj-run`، بعد دمج `origin/night/2026-09-26` (`e91cf33`، ومعه طلبات قدرات الجهاز وترحيلها `0022`) في الفرع:
 ```
 $ pnpm contracts:lint                → contracts:lint  OK   (Your API description is valid.)
 $ pnpm --filter @corehub/contracts generate   (JDK 17)  → contracts:generate:native  OK
@@ -94,10 +94,12 @@ $ pnpm contracts:check-clients       → check-clients  OK — 581 client file(s
 $ pnpm i18n:check                    → ios: 325 keys, ar/en in parity · i18n:check  OK
 $ pnpm nav:check                     → nav:check  OK — 37 destinations … routes for web, ios, android, desktop
 $ pnpm lint                          → All matched files use Prettier code style!   (exit 0)
+$ pnpm change-record:check           → change-record  OK — 9 record(s) valid
 $ pnpm typecheck                     → exit 0
-$ vitest run tests/unit/devices-push.test.ts src/modules/devices src/modules/auth src/modules/audit
- Test Files  18 passed | 1 skipped (19)
-      Tests  133 passed | 1 skipped (134)
+$ pnpm db:generate                   → No schema changes, nothing to migrate
+$ vitest run tests/unit/devices-push.test.ts tests/unit/device-requests.test.ts src/modules/devices src/modules/auth src/modules/audit
+ Test Files  19 passed | 1 skipped (20)
+      Tests  138 passed | 1 skipped (139)
 $ vitest run --project contract tests/contract/{audit,devices,auth,perf-logs}.contract.test.ts tests/contract/contract.test.ts
  Test Files  5 passed (5)
       Tests  329 passed (329)
@@ -124,10 +126,18 @@ hub.core.android.ui.StringsParityTest tests=2 fail=0 err=0
 («leaves a browser’s subscription with the browser» ينجح على القديم والجديد: يثبّت أن سلوك المتصفح لم يتغيّر.)
 اختبارات أندرويد وiOS الجديدة تسقط على القديم لأن الأصناف غير موجودة.
 
-لا Xcode محليًا: iOS من CI فقط — انظر «التسليم».
+لا Xcode محليًا، فشُغّل سير عمل iOS يدويًا على فرع المهمة (`workflow_dispatch`، عند `f811428` بعد تغيير العقد):
+```
+iOS 36160236585 — success
+  ✓ Generate the Swift client (CoreHubClient) in 39s
+  ✓ Build and test on the iOS simulator in 7m22s
+  ** TEST SUCCEEDED **   Executed 70 tests, with 0 failures
+  Test Case '-[CoreHubTests.LiveToolsTests testANewFilterIsANewPageAndErrorsOnlySendsNoLevel]' passed
+  … وحالات LiveToolsTests الثماني كلها passed
+```
 
 ## المخاطر والرجوع
-- **الرجوع**: revert للفرع. الترحيل `0022` يضيف عمودًا فارغًا (لا يضر بنسخة أقدم)؛ `0023` يسقط جدول عيّنات
+- **الرجوع**: revert للفرع. الترحيل `0023` يضيف عمودًا فارغًا (لا يضر بنسخة أقدم)؛ `0024` يسقط جدول عيّنات
   الأداء — الرجوع لا يعيد العيّنات القديمة (لم يكن يقرؤها أحد سوى النوع المحذوف).
 - الأجهزة المسجّلة قبل هذا بلا `push_session_id`: جهاز مقترن يرجع إلى رمز اقترانه؛ هاتف دخل بكلمة المرور قبل
   هذا يبقى تسجيله حتى يسجّل التطبيق رمزه من جديد (كل تشغيل في iOS) أو يُحذف من الويب. بيانات التجربة تُمسح

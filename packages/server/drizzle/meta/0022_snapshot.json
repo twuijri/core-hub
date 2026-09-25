@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8a1f6791-5abf-422a-9d93-ea2eaff0331c",
+  "id": "f59f131c-6935-45ae-9d8b-3d7cd510b1db",
   "prevId": "bba3689e-8b9d-4b9d-a483-18d7c6c703b4",
   "tables": {
     "app_tokens": {
@@ -7693,8 +7693,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "device_commands": {
-      "name": "device_commands",
+    "device_requests": {
+      "name": "device_requests",
       "columns": {
         "id": {
           "name": "id",
@@ -7738,38 +7738,30 @@
           "notNull": true,
           "autoincrement": false
         },
-        "kind": {
-          "name": "kind",
+        "capability": {
+          "name": "capability",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "payload": {
-          "name": "payload",
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "params": {
+          "name": "params",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": "'{}'"
         },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'queued'"
-        },
-        "requested_by_kind": {
-          "name": "requested_by_kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "requested_by_id": {
-          "name": "requested_by_id",
+        "session_id": {
+          "name": "session_id",
           "type": "text(26)",
           "primaryKey": false,
           "notNull": false,
@@ -7782,16 +7774,31 @@
           "notNull": false,
           "autoincrement": false
         },
+        "job_id": {
+          "name": "job_id",
+          "type": "text(26)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "result": {
           "name": "result",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "result_attachment_id": {
-          "name": "result_attachment_id",
-          "type": "text(26)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -7803,31 +7810,17 @@
           "notNull": false,
           "autoincrement": false
         },
-        "sent_at": {
-          "name": "sent_at",
+        "answered_at": {
+          "name": "answered_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
-          "autoincrement": false
-        },
-        "completed_at": {
-          "name": "completed_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
           "autoincrement": false
         }
       },
       "indexes": {
-        "device_commands_device_pending_idx": {
-          "name": "device_commands_device_pending_idx",
+        "device_requests_device_status_idx": {
+          "name": "device_requests_device_status_idx",
           "columns": [
             "device_id",
             "status",
@@ -7835,18 +7828,20 @@
           ],
           "isUnique": false
         },
-        "device_commands_run_idx": {
-          "name": "device_commands_run_idx",
+        "device_requests_workspace_owner_idx": {
+          "name": "device_requests_workspace_owner_idx",
           "columns": [
-            "run_id"
+            "workspace",
+            "owner_id",
+            "created_at"
           ],
           "isUnique": false
         }
       },
       "foreignKeys": {
-        "device_commands_device_id_devices_id_fk": {
-          "name": "device_commands_device_id_devices_id_fk",
-          "tableFrom": "device_commands",
+        "device_requests_device_id_devices_id_fk": {
+          "name": "device_requests_device_id_devices_id_fk",
+          "tableFrom": "device_requests",
           "tableTo": "devices",
           "columnsFrom": [
             "device_id"
@@ -7861,17 +7856,13 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
-        "device_commands_kind_check": {
-          "name": "device_commands_kind_check",
-          "value": "\"device_commands\".\"kind\" in ('capture_photo', 'record_audio', 'read_clipboard', 'write_clipboard', 'open_url', 'locate', 'speak', 'show_notification', 'custom')"
+        "device_requests_capability_check": {
+          "name": "device_requests_capability_check",
+          "value": "\"device_requests\".\"capability\" in ('location', 'camera', 'microphone', 'notifications', 'clipboard', 'screen', 'files', 'apps', 'calendar', 'reminders', 'health')"
         },
-        "device_commands_status_check": {
-          "name": "device_commands_status_check",
-          "value": "\"device_commands\".\"status\" in ('queued', 'sent', 'acked', 'completed', 'failed', 'expired', 'cancelled')"
-        },
-        "device_commands_requester_check": {
-          "name": "device_commands_requester_check",
-          "value": "\"device_commands\".\"requested_by_kind\" in ('user', 'agent', 'workflow')"
+        "device_requests_status_check": {
+          "name": "device_requests_status_check",
+          "value": "\"device_requests\".\"status\" in ('pending', 'fulfilled', 'denied', 'failed', 'expired', 'cancelled')"
         }
       }
     },
@@ -7996,13 +7987,6 @@
         "push_registered_at": {
           "name": "push_registered_at",
           "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "push_session_id": {
-          "name": "push_session_id",
-          "type": "text(26)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

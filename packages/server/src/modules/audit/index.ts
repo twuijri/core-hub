@@ -6,7 +6,7 @@
  * `AuditService` / `JobRunner` other modules import from here.
  *
  * Also implemented (Phase 4): `audit.getReport` for `usage` and `skills` (its `logs` and
- * `performance` kinds went with contract decision §74), and the typed Usage and Skills usage screens `audit.getUsage` /
+ * `performance` kinds went with contract decision §75), and the typed Usage and Skills usage screens `audit.getUsage` /
  * `audit.getSkillUsage` (contract decision §50, `analytics.ts`). Skill use is recorded from
  * the version that added it (`skill_uses`); the reports say from when. And the live screens
  * (contract decision §51): `audit.getLivePerformance` (`live.ts`, measured when asked) and

@@ -252,7 +252,7 @@ describe('audit: the report route', () => {
     }
   });
 
-  it('has no Logs or Performance report any more: those screens read the live endpoints (§74)', async () => {
+  it('has no Logs or Performance report any more: those screens read the live endpoints (§75)', async () => {
     const hub = await signedInHub();
     try {
       for (const kind of ['logs', 'performance']) {

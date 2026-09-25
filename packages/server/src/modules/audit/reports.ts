@@ -14,7 +14,7 @@
  * - **skills**: built by `analytics.ts` from `skill_uses` (contract decision §50) and answered
  *   by the route itself, so `build` has nothing to say about it.
  *
- * `logs` and `performance` were here until contract decision §74: the Logs and Performance
+ * `logs` and `performance` were here until contract decision §75: the Logs and Performance
  * screens of every client read the live `audit.listLogLines` and `audit.getLivePerformance`
  * (§51), and nothing asked for the old ones any more.
  */

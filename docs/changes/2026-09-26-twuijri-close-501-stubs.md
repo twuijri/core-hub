@@ -107,16 +107,45 @@ devices.createPeerInvite	POST /peer-invites
 5. حيث لا يدير المركز هرمز: `409` ‏`hermes_not_supervised`؛ وكيل غير هرمز: `journey_is_hermes_only`؛ بروفايل لا يملكه
    هرمز: `hermes_profile_absent`؛ خادم هرمز لا يجيب: `503` ‏`hermes_api_unavailable`.
 
+### المجموعة ٢ — طلبات قدرات الجهاز (`/device-requests`)
+ليس في هرمز ما يُرصد هنا؛ المرجع العقد نفسه (§14 والأحداث `request.created` / `request.completed`) وADR 0022. ولم يُكتب
+أحد قطّ في جدول `device_commands` الذي صمّمته `docs/domain/devices.md` لهذا الغرض، وشكله لا يطابق العقد (أنواع أوامر
+وحالات مختلفة).
+
+**القرار (مقترح — للمالك أن يؤكّد؛ DECISIONS §74):**
+1. **لا يَسأل الجهازَ إلا صاحبُه**: جلسته في الويب، أو رمز له بنطاق `device`. جهاز غيره — ولو كان السائل مشرفًا —
+   `404`: لا يسأل مشرفٌ هاتفَ شخص آخر عن موقعه. رمز التشغيل (أدوات المركز لوكلائه) له `read`/`write` فقط، فلا يسأل
+   الوكيل بعد — ذلك مجموعة `devices` في أدوات MCP، غير مبنية.
+2. **جهاز واحد يسمع**: `request.created` إلى مقابس الجهاز المعني فقط (تنضم إلى غرفة `device:<id>` على `/rt/devices`)،
+   و`request.completed` إلى الشخص (ومقابس الجهاز من ضمنها). الجهاز يلحق بما فاته عبر `listRequests?status=pending`.
+3. **قدرة لم يعلنها الجهاز أو أطفأها يرفضها المركز فورًا** (`denied` برمز `unavailable`) دون إزعاج الجهاز.
+4. **يجيب الجهاز المعني وحده، مرة واحدة**: غيره `403`، وطلب لم يعد معلّقًا `409 request_not_pending`. `fulfilled` يجب
+   أن يحمل شكل قدرته (الموقع: `latitude`، `longitude`، `accuracy_m`، `captured_at`) وإلا `400`.
+5. **المهمة (`device_request`) تتبع الطلب**: تنجح بالتلبية، وتفشل بالرفض أو الفشل أو انقضاء `timeout_ms` (الافتراضي
+   ٣٠ ثانية، فيصير الطلب `expired` برمز `timeout`)، وتُلغى بإلغائه. **لا تحمل المهمة إلا `{request_id, status}`**: كل
+   أعضاء البروفايل يرون مهامه، فالموقع يبقى في الطلب الذي لا يقرؤه إلا صاحبه والجهاز.
+6. **الجدول `device_requests`** (الترحيل `0022`) بشكل العقد، ويحذف `device_commands` الذي لم يُكتب فيه شيء.
+7. أُزيل `message.created` من أحداث `respondRequest`: لا شيء يكتب الجواب في محادثة بعد.
+
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 - **المجموعة ١:** `agents.getJourney` صار له وصف، ومثال من هرمز الحقيقي، وردّا `409` و`503`. المخطط `Journey`: `kind`
   ‏`skill | memory`، والحقول المطلوبة الجديدة `state` و`agent_created` و`memory_source` و`learned_at`، ووصف للمعرّفات
   وللعناقيد. تغيير متوافق: العملية كانت ‎501‎ ولا عميل يقرؤها. DECISIONS §73.
+- **المجموعة ٢:** أوصاف `devices.listRequests` و`createRequest` و`respondRequest` تقول الآن من يسأل ومن يجيب وماذا تحمل
+  المهمة ومتى `403`/`404`/`409`/`400`؛ وحُذف `message.created` من `x-rt-events` لـ`respondRequest`. لا مخطط تغيّر.
+  DECISIONS §74.
 
 ## الملفات والتأثير
 - **المجموعة ١:** `packages/server/src/modules/agents/hermes-journey.ts` (جديد: السؤال والتحويل)،
   `…/agents/index.ts` (المسار وتعليق الوحدة)، `…/agents/journey.routes.test.ts` (جديد)،
   `…/agents/hermes-journey.real.test.ts` (جديد، يعمل مع `COREHUB_HERMES_IMAGE`)، `packages/contracts/openapi.yaml`،
   `docs/contracts/DECISIONS.md` (§73)، `docs/STATUS.md` (296 من 315؛ سطر `agents` 51 من 59).
+- **المجموعة ٢:** `packages/server/src/modules/devices/requests.ts` (جديد: الخدمة، المؤقتات، المهمة، الأحداث)،
+  `…/devices/index.ts` (المسارات الأربعة، غرفة الجهاز، منفذان جديدان)، `…/devices/schema.ts` (`device_requests` بدل
+  `device_commands`)، `packages/server/drizzle/0022_device_requests.sql` ولقطته وسجلّه، `packages/server/src/modules/index.ts`
+  (يُعير `jobRunnerFor` ولغة الشخص)، `packages/server/src/i18n/{ar,en}.json` (خمس جمل)،
+  `packages/server/tests/unit/device-requests.test.ts` (جديد)، `packages/contracts/openapi.yaml`، `docs/domain/devices.md`
+  و`docs/domain/README.md`، `docs/contracts/DECISIONS.md` (§74)، `docs/STATUS.md` (300 من 315؛ `devices` 16 من 23).
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 كلها عبر `mj-run`، محليًا، على ما مسّته كل مجموعة فقط؛ الحزم الكاملة يشغّلها CI على #144.
@@ -153,6 +182,40 @@ All matched files use Prettier code style!
 $ pnpm contracts:check-clients
 check-clients  OK — 576 client file(s) scanned, 222 contract path(s) known.
 ```
+CI على #144 بعد دمج المجموعة ١ (الرأس `dcfaffe`): ١٧ فحصًا كلها ناجحة (`SUCCESS: 17`).
+
+**المجموعة ٢ (طلبات الجهاز):**
+```
+$ npx vitest run --project unit tests/unit/device-requests.test.ts tests/unit/devices-push.test.ts \
+    tests/unit/status.test.ts src/modules/devices
+ Test Files  5 passed (5)
+      Tests  33 passed (33)
+
+# الاختبار الجديد على الشيفرة القديمة (git stash): العمليات الأربع ‎501‎
+     × asks the phone, only the phone hears it, it answers, and the job succeeds 1101ms
+     × a decline fails the job with the fixed code 730ms
+     × declines at once a capability the phone never offered 692ms
+     × expires an unanswered request with `timeout` 678ms
+     × nobody asks, reads or lists somebody else's phone 764ms
+      Tests  5 failed (5)
+
+$ npx vitest run --project contract tests/contract/contract.test.ts tests/contract/devices.contract.test.ts
+ Test Files  2 passed (2)
+      Tests  317 passed (317)
+
+$ DATA_DIR=$(mktemp -d) pnpm db:migrate
+{"level":30,...,"msg":"db: migrations applied (sqlite)"}
+$ DATA_DIR=$(mktemp -d) npx drizzle-kit generate      # بعد دمج خطوتي التوليد في 0022
+No schema changes, nothing to migrate 😴
+
+$ pnpm contracts:lint            → contracts:lint  OK
+$ pnpm --filter @corehub/server typecheck   # بلا أخطاء
+$ pnpm lint                      → All matched files use Prettier code style!
+$ pnpm i18n:check                → i18n:check  OK
+```
+توليد الترحيل: drizzle-kit يسأل تفاعليًا «إعادة تسمية أم جدول جديد؟» حين يختفي جدول ويظهر آخر، فوُلّد على خطوتين (حذف
+`device_commands` ثم إنشاء `device_requests`) ودُمجتا يدويًا في `0022` بلقطة الخطوة الثانية؛ التوليد بعدها لا يجد فرقًا.
+
 الاختبار الحقيقي شغّل `hermes serve` من الصورة في حاوية باسم `corehub-journey-real-…` وأزالها؛ `docker ps -a` بعده لا يُظهر
 شيئًا منها.
 
@@ -160,6 +223,10 @@ check-clients  OK — 576 client file(s) scanned, 222 contract path(s) known.
 - **المجموعة ١:** قراءة فقط، ولا تكتب شيئًا في بيت هرمز. تبدأ خادم هرمز الداخلي عند أول طلب (كالاقتران وتجربة MCP)؛
   يتوقف وحده بعد عشر دقائق من الخمول. الرجوع: حذف المسار يعيده ‎501‎. إن غيّر هرمز شكل `/api/learning/graph` في نسخة
   لاحقة، يسقط ما لا يُفهم بدل أن يُخمَّن، ويكشفه الاختبار الحقيقي.
+- **المجموعة ٢:** ترحيل يحذف جدولًا (`device_commands`) لم يُكتب فيه شيء قطّ، وينشئ `device_requests`. الرجوع: ترحيل
+  عكسي بسيط. حدود معروفة: مركز يُعاد تشغيله وطلبٌ معلّق تبقى مهمته `running` (مشغّل المهام لا يستعيد بعد إعادة التشغيل)،
+  والطلب نفسه ينتهي عند أول قراءة. لا إشعار دفع يوقظ جهازًا غير متصل؛ يرى الطلب حين يتصل. الموقع لا يدخل المهمة
+  ولا حدثًا يصل إلى غير صاحبه وجهازه.
 
 ## التسليم والخطوة التالية
 الجرد مكتوب؛ المجموعة الأولى قيد البناء.

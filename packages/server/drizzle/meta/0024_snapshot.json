@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "08c1d092-9a32-4616-a09d-71afd8788461",
-  "prevId": "f59f131c-6935-45ae-9d8b-3d7cd510b1db",
+  "id": "734365a9-c7c4-48f9-8de8-68eb92c18905",
+  "prevId": "08c1d092-9a32-4616-a09d-71afd8788461",
   "tables": {
     "app_tokens": {
       "name": "app_tokens",
@@ -9831,119 +9831,6 @@
           "value": "\"jobs\".\"status\" in ('queued', 'running', 'cancelling', 'succeeded', 'failed', 'cancelled')"
         }
       }
-    },
-    "performance_snapshots": {
-      "name": "performance_snapshots",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text(26)",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "owner_id": {
-          "name": "owner_id",
-          "type": "text(26)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "captured_at": {
-          "name": "captured_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "cpu_percent": {
-          "name": "cpu_percent",
-          "type": "real",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "memory_bytes": {
-          "name": "memory_bytes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "disk_free_bytes": {
-          "name": "disk_free_bytes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "db_bytes": {
-          "name": "db_bytes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "active_runs": {
-          "name": "active_runs",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "queued_jobs": {
-          "name": "queued_jobs",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "connected_clients": {
-          "name": "connected_clients",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "data": {
-          "name": "data",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'{}'"
-        }
-      },
-      "indexes": {
-        "performance_snapshots_time_idx": {
-          "name": "performance_snapshots_time_idx",
-          "columns": [
-            "captured_at"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
     "skill_uses": {
       "name": "skill_uses",
