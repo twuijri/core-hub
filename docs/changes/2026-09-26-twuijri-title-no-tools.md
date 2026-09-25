@@ -119,7 +119,12 @@ All matched files use Prettier code style!
 $ pnpm typecheck
 exit=0
 ```
-CI على #144: يُملأ بعد الدفع.
+CI على #144 عند الالتزام `f04da52` (الدمج في `night/2026-09-26`) — كل الفحوص الـ17 نجحت، ومنها وحدات الخادم
+بشظاياها الثلاث، ورحلات Playwright، وبناء أندرويد، ومحاكي iOS، وتوليد عميل Swift:
+```
+$ gh pr checks 144 --repo twuijri/core-hub | awk -F'\t' '{print $2}' | sort | uniq -c
+     17 pass
+```
 
 ## المخاطر والرجوع
 - **انتظار بناء الوكيل:** الجلسة المؤقتة تنتظر `session.info`؛ إن ضاع الحدث (سباق نظري لو وصل قبل أن نربط الجلسة)
