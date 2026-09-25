@@ -110,6 +110,7 @@ import { updatesModule } from './updates/index.js';
 import {
   auditFor,
   auditModule,
+  jobRunnerFor,
   registerAnalyticsSources,
   registerBackgroundSource,
   registerLiveSources,
@@ -140,6 +141,9 @@ export const devicesModule = createDevicesModule({
   emitToUser,
   checkAddress: (url, allowPrivate) => checkAddress(url, allowPrivate),
   sealer: (app) => dataKeyRingFor(app),
+  jobs: (app) => jobRunnerFor(app),
+  userLanguage: (app, userId) =>
+    findUser(requireSqlite(app.hub.database), userId)?.locale === 'en' ? 'en' : 'ar',
 });
 
 /** A notice that passed the person's push switch and quiet hours goes to their devices. */

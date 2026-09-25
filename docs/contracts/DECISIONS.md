@@ -2212,3 +2212,36 @@ section, and the data is there).
 Rejected: running `hermes journey --json` (Rich's console printer, and a Python start per
 request); the hub computing a graph from its own run history (Hermes already has the answer, and
 the numbers would disagree with Hermes's own screens).
+
+## 74. A capability request reaches one device, is answered once, and its result stays in the request
+
+The four `/device-requests` operations were 501; §14 had fixed their shape (a job, fixed error
+codes, one location shape) and ADR 0022 sends a hub on a server through them to reach the
+person's own computer. What they now do, proposed — owner to confirm:
+
+- **Only the device's own person may ask it**: their web session, or a token of theirs with the
+  `device` scope (a run token has only `read`/`write`, so an agent cannot ask yet — that is the
+  MCP `devices` group, not built). Anyone else's device, an admin's included, is `404`: an admin
+  may not ask someone's phone where it is.
+- **One device hears it**: `request.created` goes only to the addressed device's sockets (they
+  join `device:<id>` on `/rt/devices`); `request.completed` goes to the person, whose sockets
+  include the device's. A device catches up with `listRequests?status=pending`.
+- **A capability the device did not declare, or switched off, is declined by the hub** at once
+  (`denied`, `unavailable`); the device is not bothered.
+- **Answered once, by that device only** (its own token; anyone else `403`); a request that is
+  no longer pending is `409 request_not_pending`. `fulfilled` must carry its capability's shape
+  (`location`: `latitude`, `longitude`, `accuracy_m`, `captured_at`), else `400`.
+- **The job follows the request**: `succeeded` when fulfilled, `failed` when declined
+  (`forbidden`), failed, or unanswered by `expires_at` (`timeout_ms`, default 30 s; the request
+  becomes `expired`/`timeout`), `cancelled` with the job. **The job carries only
+  `{request_id, status}`**: every member of the profile sees its jobs, so a location stays in the
+  request, which only the person and the device read.
+- **The table is `device_requests`** (migration `0022`), the contract's shape; it replaces
+  `device_commands`, a design that was never written to.
+- `message.created` is no longer listed on `respondRequest`: nothing writes the answer into a
+  conversation yet. When an agent can ask (the MCP `devices` group), the answer goes back to it
+  as the tool's result.
+
+Known limit: a hub that restarts while a request is pending leaves that request's job
+`running` (the runner has no restart recovery); the request itself still expires on its next
+read. No push wakes a device that is not connected; it sees the request when it next connects.

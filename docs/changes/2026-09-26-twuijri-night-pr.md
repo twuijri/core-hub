@@ -18,6 +18,7 @@
 - تسمية المحادثة بلا أدوات عبر `llm.oneshot` في هرمز (ولا جلسة في سجله)، وحذف `AuditReport` الميت في الويب — `fix/title-no-tools-audit-cleanup` — `docs/changes/2026-09-26-twuijri-title-no-tools.md`
 - أيقونات التطبيقات من شعار كور هب: iOS (`AppIcon` مع الداكن والملوّن)، أندرويد (التكيفية والإشعار)، سطح المكتب (`.icns` و`.ico` ولينكس والصينية) و`apple-touch-icon` — `feat/app-icons` — `docs/changes/2026-09-26-twuijri-app-icons.md`
 - جرد ردود ‎501‎ (٢٠ عملية: ٦ تُبنى، ٥ تنتظر قرار المالك، ٩ مرشّحة للحذف) ورحلة الوكيل `agents.getJourney` من رسم التعلّم في هرمز نفسه — `feat/close-501-stubs` — `docs/changes/2026-09-26-twuijri-close-501-stubs.md`
+- طلبات قدرات الجهاز (`/device-requests`): يسأل الشخص جهازه، يسمع الجهاز وحده ويجيب مرة، والمهمة تتبعه بلا الموقع؛ جدول `device_requests` (الترحيل `0022`) — `feat/close-501-stubs` — `docs/changes/2026-09-26-twuijri-close-501-stubs.md`
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 انظر سجل كل مهمة.

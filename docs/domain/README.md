@@ -173,7 +173,7 @@ id everywhere else. The referencing module asks the owner through its public
 | `schedules` | schedule, schedule_run, workflow, workflow_run, node_run | agent, model, run, approval, task |
 | `knowledge` | knowledge_note, journal_entry, attachment | project, task, agent, run |
 | `models` | provider, model, model_default, secret | — |
-| `devices` | device, device_command, push_credential | app_token, run, user/agent/workflow_run (requester), attachment |
+| `devices` | device, device_request, push_credential | app_token, user (requester), session, run, job |
 | `notify` | notification, notification_delivery, notification_preference, webhook, webhook_delivery | device, secret, any entity (deep link) |
 | `updates` | release_channel, release, channel_subscription | device |
 | `audit` | audit_event, usage_record, performance_snapshot, job, job_event | run, session, agent, provider, device, any entity |
@@ -311,7 +311,7 @@ stateDiagram-v2
 ```
 
 Smaller machines are documented with their module: `handoff`,
-`schedule_run`, `device_command`, `notification_delivery`,
+`schedule_run`, `device_request`, `notification_delivery`,
 `webhook_delivery`, `plugin` install state and `plugin_binding` status.
 
 ## Archive and delete

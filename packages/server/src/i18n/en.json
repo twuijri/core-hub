@@ -227,5 +227,14 @@
       "failed": "{task} “{title}” is blocked: {reason}",
       "cancelled": "{task} “{title}” was stopped."
     }
+  },
+  "devices": {
+    "request": {
+      "capability_off": "This device does not offer “{capability}”, or it is switched off there.",
+      "timeout": "The device did not answer in time.",
+      "denied": "The device declined the request.",
+      "failed": "The device could not do what was asked.",
+      "cancelled": "The request was cancelled."
+    }
   }
 }
