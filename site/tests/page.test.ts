@@ -45,12 +45,12 @@ describe('languages', () => {
 });
 
 describe('the built page', () => {
-  const html = renderPage(template, STRINGS.ar);
+  const html = renderPage(template, STRINGS.en);
 
-  it('is Arabic and right-to-left before any script runs, with no placeholder left', () => {
-    expect(html).toMatch(/<html lang="ar" dir="rtl">/);
+  it('is English and left-to-right before any script runs, with no placeholder left', () => {
+    expect(html).toMatch(/<html lang="en" dir="ltr">/);
     expect(html).not.toMatch(/\{\{|<!--icon:/);
-    expect(html).toContain(`<h1 data-i18n="hero.title">${STRINGS.ar['hero.title']}</h1>`);
+    expect(html).toContain(`<h1 data-i18n="hero.title">${STRINGS.en['hero.title']}</h1>`);
     expect(html).toContain('<svg class="icon" aria-hidden="true"');
   });
 

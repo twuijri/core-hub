@@ -76,7 +76,7 @@ function build() {
   mkdirSync(dist, { recursive: true });
 
   const template = readFileSync(path.join(src, 'index.html'), 'utf8');
-  writeFileSync(path.join(dist, 'index.html'), renderPage(template, STRINGS.ar));
+  writeFileSync(path.join(dist, 'index.html'), renderPage(template, STRINGS.en));
   for (const file of ['styles.css', 'app.js', 'config.js', 'i18n.js', 'releases.js'])
     copyFileSync(path.join(src, file), path.join(dist, file));
   copyFileSync(tokensCss(), path.join(dist, 'tokens.css'));
