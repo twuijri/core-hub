@@ -99,6 +99,8 @@ data class SubscribeAck(val ok: Boolean, val replayed: Int = 0, val truncated: B
  */
 class Realtime(private val http: OkHttpClient) {
     private val sockets = mutableMapOf<String, Socket>()
+    /** Namespaces subscribed to with `{}`: subscribed again on every (re)connect. */
+    private val wholeNamespaces = mutableSetOf<String>()
     private var connectedAs: String? = null
     private val _events = MutableSharedFlow<Envelope>(extraBufferCapacity = 512)
     val events: SharedFlow<Envelope> = _events.asSharedFlow()
@@ -147,6 +149,7 @@ class Realtime(private val http: OkHttpClient) {
         val socket = IO.socket(URI.create(session.hub + namespace), options)
         var everConnected = false
         socket.on(Socket.EVENT_CONNECT) {
+            if (synchronized(this) { namespace in wholeNamespaces }) socket.emit("subscribe", JSONObject())
             if (namespace == SESSIONS_NAMESPACE) {
                 _connected.value = true
                 if (everConnected) _reconnects.value += 1
@@ -184,9 +187,16 @@ class Realtime(private val http: OkHttpClient) {
         synchronized(this) { sockets[SESSIONS_NAMESPACE] }?.emit("unsubscribe", JSONObject().put("session_id", sessionId))
     }
 
-    /** `subscribe {}` on `/rt/tasks` or `/rt/schedules`: every event of the profiles joined. */
+    /**
+     * `subscribe {}` on `/rt/tasks` or `/rt/schedules`: every event of the profiles joined, now
+     * and after every reconnect.
+     */
     fun subscribeAll(namespace: String) {
-        synchronized(this) { sockets[namespace] }?.emit("subscribe", JSONObject())
+        val socket = synchronized(this) {
+            wholeNamespaces += namespace
+            sockets[namespace]
+        }
+        if (socket?.connected() == true) socket.emit("subscribe", JSONObject())
     }
 
     @Synchronized

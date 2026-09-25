@@ -47,6 +47,30 @@ abstract class GenerateSharedSources : DefaultTask() {
             )
         }
         out.resolve("Terms.kt").writeText(termsKotlin(terms.keys))
+        @Suppress("UNCHECKED_CAST")
+        val surfaces = nav["surfaceRoutes"] as Map<String, Map<String, String>>
+        @Suppress("UNCHECKED_CAST")
+        val preAuth = (nav["preAuth"] as Map<String, Any?>).filterKeys { !it.startsWith("$") }
+            .mapValues { (_, v) -> ((v as Map<String, Any?>)["routes"] as Map<String, String>)["android"] }
+        out.resolve("SurfaceRoutes.kt").writeText(
+            buildString {
+                appendLine("// Generated from docs/clients/navigation.json by :app:generateSharedSources. Do not edit.")
+                appendLine("package hub.core.android.generated")
+                appendLine()
+                appendLine("/** Each destination's path per surface (`surfaceRoutes`) and the Android pre-auth screens. */")
+                appendLine("object SurfaceRoutes {")
+                for (surface in listOf("web", "android")) {
+                    appendLine("    val $surface: Map<String, String> = mapOf(")
+                    surfaces[surface].orEmpty().filterKeys { !it.startsWith("$") }
+                        .forEach { (id, path) -> appendLine("        \"$id\" to \"$path\",") }
+                    appendLine("    )")
+                }
+                appendLine("    val preAuthAndroid: Map<String, String> = mapOf(")
+                preAuth.forEach { (id, path) -> if (path != null) appendLine("        \"$id\" to \"$path\",") }
+                appendLine("    )")
+                appendLine("}")
+            },
+        )
     }
 
     private fun xml(text: String) = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
