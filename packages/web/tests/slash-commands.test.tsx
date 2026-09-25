@@ -161,12 +161,22 @@ describe('the / menu in the composer', () => {
 
   it('Enter on a command that needs no words carries it out and empties the composer', async () => {
     const user = userEvent.setup();
-    const onCommand = vi.fn(async () => undefined);
+    let finish: () => void = () => {};
+    const onCommand = vi.fn(
+      () =>
+        new Promise<undefined>((resolve) => {
+          finish = () => resolve(undefined);
+        }),
+    );
     const onSend = vi.fn(async () => {});
     renderComposer({ commands: availableCommands(HERMES), onCommand, onSend });
     await user.type(input(), '/comp');
     await user.keyboard('{Enter}');
     await waitFor(() => expect(onCommand).toHaveBeenCalledWith('compress', ''));
+    // The menu and the typed word leave at once, while the command is still carried out.
+    expect(screen.queryByTestId('slash-menu')).not.toBeInTheDocument();
+    expect(input().value).toBe('');
+    finish();
     expect(onSend).not.toHaveBeenCalled();
     await waitFor(() => expect(input().value).toBe(''));
   });
@@ -224,9 +234,7 @@ describe('the / menu in the composer', () => {
     await user.type(input(), '/zzz');
     expect(screen.getByText(/No command matches/)).toBeInTheDocument();
     await user.keyboard('{Enter}');
-    await waitFor(() =>
-      expect(onSend).toHaveBeenLastCalledWith([{ type: 'text', text: '/zzz' }]),
-    );
+    await waitFor(() => expect(onSend).toHaveBeenLastCalledWith([{ type: 'text', text: '/zzz' }]));
     expect(onCommand).not.toHaveBeenCalled();
   });
 

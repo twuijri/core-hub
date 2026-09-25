@@ -246,7 +246,8 @@ export function Composer({
   const commandWord = commands.length > 0 ? slashQuery(text) : null;
   const skillWord = commands.some((command) => command.id === 'skill') ? skillQuery(text) : null;
   const menu = useMemo((): { title: string; items: SlashMenuItem[] } | null => {
-    if (disabled || dismissed === text) return null;
+    // Closed while a picked command is being carried out: the text is still in the box.
+    if (disabled || sending || dismissed === text) return null;
     if (skillWord !== null) {
       const found = filterCommands(
         skills.map((skill) => ({ ...skill, name: skill.key, label: skill.name })),
@@ -272,7 +273,7 @@ export function Composer({
         description: describe(command),
       })),
     };
-  }, [disabled, dismissed, text, skillWord, commandWord, commands, skills, t]);
+  }, [disabled, sending, dismissed, text, skillWord, commandWord, commands, skills, t]);
   const menuSize = menu?.items.length ?? 0;
   useEffect(() => setActive(0), [commandWord, skillWord]);
   const activeIndex = Math.min(active, Math.max(0, menuSize - 1));
@@ -283,11 +284,16 @@ export function Composer({
     textarea.current?.focus();
   };
 
-  /** A `hub` or `action` command: carried out, or handed back as text to send. */
-  const runCommand = async (id: SlashCommandId, arg: string) => {
+  /**
+   * A `hub` or `action` command: carried out, or handed back as text to send. `typed` is
+   * what was in the box when the command was picked from the menu: it leaves at once, and
+   * comes back only if the command fails.
+   */
+  const runCommand = async (id: SlashCommandId, arg: string, typed?: string) => {
     if (!onCommand) return;
     setSending(true);
     setError(null);
+    if (typed !== undefined) setText('');
     try {
       const instead = await onCommand(id, arg);
       if (typeof instead === 'string' && instead.trim() !== '') {
@@ -295,6 +301,7 @@ export function Composer({
       }
       clearComposer();
     } catch (err) {
+      if (typed !== undefined) setText(typed);
       setError(describeError(err, t));
     } finally {
       setSending(false);
@@ -315,7 +322,7 @@ export function Composer({
     if (command.argument !== 'required' && command.kind !== 'message') {
       // Picked from the menu, `/compress` and `/model` act at once; typed with words after
       // them (`/compress the API`), Enter carries the words.
-      void runCommand(command.id, '');
+      void runCommand(command.id, '', text);
       return;
     }
     // A command that needs words waits for them; `/skill ` opens the skills.

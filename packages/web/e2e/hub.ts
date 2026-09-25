@@ -32,6 +32,8 @@ import { agentsServiceFor } from '../../server/src/modules/agents/index.js';
 import { HermesRefusal, type HermesTask } from '../../server/src/modules/tasks/hermes-kanban.js';
 import type {
   AgentAskRequest,
+  AgentCompressRequest,
+  AgentCompressResult,
   AgentEvent,
   AgentRunAccepted,
   AgentRunInput,
@@ -241,6 +243,16 @@ function scriptFor(prompt: string): Step[] {
       { type: 'completed' },
     ];
   }
+  if (/املأ السياق|fill the context/i.test(prompt)) {
+    // A long conversation (journey 32): the agent reports a window three quarters full, as
+    // Hermes does with every finished turn, so the meter has its count to show.
+    return [
+      { type: 'message_delta', text: 'قرأت كل الملفات؛ السياق ممتلئ تقريبًا.' },
+      { type: 'context', usedTokens: 150_000, windowTokens: 200_000 },
+      { type: 'usage', inputTokens: 149_000, outputTokens: 1_000 },
+      { type: 'completed' },
+    ];
+  }
   if (/slow|بطيء/i.test(prompt)) {
     // The pause has to outlast creating the session, navigating and hydrating the screen,
     // or the journey would be racing the script instead of testing the resume.
@@ -350,6 +362,29 @@ class ScriptedRunner implements AgentRunner {
     live.queue = [];
     live.closed = true;
     live.wake?.();
+  }
+
+  /**
+   * `/compress` (journey 32, decision §50): long enough that the progress is seen, then the
+   * window as a real Hermes reports it after compressing — much emptier.
+   */
+  async compress(request: AgentCompressRequest): Promise<AgentCompressResult> {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return {
+      agentSessionRef: request.agentSessionRef ?? `e2e-${request.sessionId}`,
+      status: 'compressed',
+      beforeTokens: 150_000,
+      afterTokens: 24_000,
+      beforeMessages: 40,
+      afterMessages: 6,
+      context: { usedTokens: 24_000, windowTokens: 200_000, estimated: false },
+      message: 'Compressed: 40 → 6 messages',
+    };
+  }
+
+  /** `/steer` into a running scripted turn: taken, as Hermes takes it. */
+  async steer(): Promise<'queued' | 'rejected'> {
+    return 'queued';
   }
 
   /**
