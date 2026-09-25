@@ -166,7 +166,15 @@ $ pnpm build                          # exit 0
 الاختبارات الجديدة تفشل على `main`: الوحدة `skill-library.ts` والمساران وحقل `library` غير موجودة فيه.
 لقطات الرحلة 15 غير المرتبطة (القنوات، MCP، الذاكرة) أُرجعت.
 
-CI: (يُكمل بعد الدفع.)
+CI على طلب الدمج #142 (الالتزام `bf1b70b`، التشغيلان 36124932526 و36124932538) — كله أخضر:
+```
+Docker image builds and answers /health	pass	2m54s
+Lint, typecheck, contracts, tests, build	pass	18m15s
+PR adds or updates a change record	pass	12s
+PR leaves graphify-out/ to the code-map bot	pass	7s
+Web smoke journeys (Playwright against the real hub)	pass	5m27s
+db:generate + db:migrate (SQLite and PostgreSQL)	pass	56s
+```
 
 ## المخاطر والرجوع
 - **الكتابة في منزل هرمز:** البذر لا يكتب إلا داخل `skills/core-hub/` وملف البيان، ولا يستبدل إلا ملفًا بصمته
