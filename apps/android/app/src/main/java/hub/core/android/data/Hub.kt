@@ -61,6 +61,8 @@ data class HubError(
     val text: String?,
     /** `details.reason`, where the hub names why (e.g. `no_speech` for a silent recording). */
     val reason: String? = null,
+    /** `details.max_bytes` of a `413`: the most the hub takes. */
+    val maxBytes: Long? = null,
 ) : Exception(text ?: code) {
     val offline: Boolean get() = status == 0
 
@@ -78,12 +80,17 @@ data class HubError(
             return ((obj?.get("details") as? JsonObject)?.get("reason") as? JsonPrimitive)?.contentOrNull
         }
 
+        fun maxBytesOf(body: String?): Long? {
+            val obj = body?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
+            return ((obj?.get("details") as? JsonObject)?.get("max_bytes") as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
+        }
+
         fun from(error: Throwable): HubError = when (error) {
             is HubError -> error
             is ClientException -> {
                 val body = (error.response as? ClientError<*>)?.body as? String
                 val (code, text) = bodyFields(body)
-                HubError(error.statusCode, code, text, reasonOf(body))
+                HubError(error.statusCode, code, text, reasonOf(body), maxBytesOf(body))
             }
             is ServerException -> {
                 val (code, text) = bodyFields((error.response as? ServerError<*>)?.body as? String)

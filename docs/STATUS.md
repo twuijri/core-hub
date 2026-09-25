@@ -339,10 +339,13 @@ its approval.
   puts the keyboard away, the drawer puts it away before it moves (and its footer rides above the
   keyboard of its own search), the latest message stays above the keyboard as it opens; the drawer,
   sign-in and new chat draw the real Core Hub mark. The composer's «+» attaches a photo from the
-  library, a camera photo (made ≤ 2048 px, JPEG 0.8) or a file, uploaded at once with
-  `sessions.uploadAttachment` (≤ 25 MB, a clear error above it), shown as chips with a preview and
-  ×, and sent as image / file blocks; a message's files show as names under it. Voice follows
-  «Voice: Core Hub / This phone» (This device; Core Hub by default): the profile's hub STT
+  library, a camera photo or a file, uploaded at once (`sessions.uploadAttachment` up to 25 MB, the
+  resumable `sessions.startUpload` flow above it, up to the contract's 50 MB; a clear error above
+  that or on the hub's `413`), shown as chips with a preview and ×, and sent as image / file blocks;
+  a message's files show as names under it. Since 2026-09-26 (second pass) photos go «Compressed»
+  (≤ 2048 px, JPEG 0.8, as an image) or at «Original quality» (the untouched file, as a file), the
+  choice in the «+» menu and remembered. Voice follows «Voice: Core Hub / This phone» (This device;
+  This phone by default since the second pass): the profile's hub STT
   (`models.transcribe`, a recorded m4a take) and TTS (`models.synthesize`, in parts of ≤ 2 000
   characters) when `models.getSpeech` says they are ready, the phone's recognizer and voice
   otherwise. Notifications: the app asks while the system has not asked yet (once a launch, in

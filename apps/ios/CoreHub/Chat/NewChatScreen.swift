@@ -99,7 +99,7 @@ struct NewChatScreen: View {
 
     private func start() {
         guard let agent = chosen else { return }
-        let message = OutgoingMessage(text: draft, attachments: tray?.attachments ?? [])
+        let message = tray?.message(draft) ?? OutgoingMessage(text: draft)
         let profile = app.currentProfile
         let key = ULID.make()
         creating = true

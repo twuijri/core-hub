@@ -269,4 +269,7 @@
     <string name="push_label">Notifications</string>
     <string name="notices_off">Notifications are off for Core Hub</string>
     <string name="notices_open_settings">Open Settings</string>
+    <string name="attach_photo_quality">Photos</string>
+    <string name="attach_compressed">Compressed</string>
+    <string name="attach_original">Original quality</string>
 </resources>

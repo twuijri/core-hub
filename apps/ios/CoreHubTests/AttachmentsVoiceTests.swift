@@ -105,9 +105,12 @@ final class AttachmentTests: XCTestCase {
     }
 
     func testTheHubsTooLargeAnswerReadsAsTheLimit() throws {
-        let body = try JSONSerialization.data(withJSONObject: ["error": "Payload too large", "code": "payload_too_large"])
+        let body = try JSONSerialization.data(withJSONObject: [
+            "error": "Payload too large", "code": "payload_too_large", "details": ["max_bytes": 52_428_800],
+        ])
         let failure = HubFailure(ErrorResponse.error(413, body, nil, URLError(.unknown)))
         XCTAssertEqual(failure.status, 413)
+        XCTAssertEqual(failure.maxBytes, 52_428_800, "the hub's own figure")
         let l10n = L10n(.en)
         XCTAssertTrue(l10n.has("attachments.too_large"))
         XCTAssertTrue(l10n("attachments.too_large", ["size": "25 MB"]).contains("25 MB"))
@@ -119,6 +122,152 @@ final class AttachmentTests: XCTestCase {
             try await Task.sleep(nanoseconds: 10_000_000)
         }
         XCTFail("timed out", file: file, line: line)
+    }
+}
+
+/// Original quality and the hub's own limit (docs/changes/2026-09-26-twuijri-mobile-polish-2.md).
+@MainActor
+final class PhotoQualityTests: XCTestCase {
+    private func attachment(_ id: String, kind: Attachment.Kind) -> Attachment {
+        Attachment(
+            id: id, profile: "work", ownerId: "01J8QK3ZR2W7M5N4P6T8V9X0HM", createdAt: Fixture.date,
+            updatedAt: Fixture.date, name: "photo.heic", mime: "image/heic", sizeBytes: 4_000_000, kind: kind,
+            url: "/api/v1/attachments/\(id)/content", purpose: .message, sha256: String(repeating: "0", count: 64)
+        )
+    }
+
+    func testAnOriginalPhotoGoesAsAFileAndACompressedOneAsAnImage() {
+        let original = attachment("01J8QK3ZR2W7M5N4P6T8V9X0AA", kind: .image)
+        let compressed = attachment("01J8QK3ZR2W7M5N4P6T8V9X0AB", kind: .image)
+        let blocks = OutgoingMessage(text: "", attachments: [original, compressed], asFiles: [original.id]).blocks
+        guard case .typeFileBlock(let file) = blocks[0] else { return XCTFail("the original goes as a file") }
+        XCTAssertEqual(file.attachmentId, original.id)
+        XCTAssertEqual(file.mime, "image/heic")
+        guard case .typeImageBlock = blocks[1] else { return XCTFail("the compressed one as an image") }
+    }
+
+    func testTheTrayMarksOriginalPhotosAndTheirBytesAreUntouched() async throws {
+        let uploaded = attachment("01J8QK3ZR2W7M5N4P6T8V9X0AC", kind: .image)
+        var sent: Data?
+        var names: [String] = []
+        let tray = AttachmentTray(
+            upload: { file, _ in
+                sent = try Data(contentsOf: file)
+                names.append(file.lastPathComponent)
+                return uploaded
+            },
+            discard: { _ in }, describe: { _ in "failed" }, tooLarge: { _ in "too large" }
+        )
+        let bytes = Data((0..<4096).map { UInt8($0 % 251) })
+        tray.addOriginalPhoto(bytes, type: .heic, profile: "work")
+        for _ in 0..<200 where tray.uploading { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(sent, bytes, "not re-encoded, not resized")
+        XCTAssertTrue(names.first?.hasSuffix(".heic") ?? false)
+        XCTAssertEqual(tray.asFiles, [uploaded.id])
+        XCTAssertEqual(tray.message("hi").asFiles, [uploaded.id])
+    }
+
+    func testCompressedIsTheDefaultAndTheChoiceIsRemembered() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "photo-quality-\(UUID().uuidString)"))
+        XCTAssertEqual(DeviceSettings(defaults: defaults).photoQuality, .compressed)
+        DeviceSettings(defaults: defaults).photoQuality = .original
+        XCTAssertEqual(DeviceSettings(defaults: defaults).photoQuality, .original)
+        for language in [AppLanguage.ar, .en] {
+            for key in ["attachments.photo_quality", "attachments.compressed", "attachments.original"] {
+                XCTAssertTrue(L10n(language).has(key), "\(key) in \(language)")
+            }
+        }
+        XCTAssertEqual(L10n(.ar)("attachments.original"), "بالجودة الأصلية")
+    }
+
+    func testThePhoneKeepsTheContractsAttachmentLimit() throws {
+        // UploadStart.size_bytes.maximum in openapi.yaml: the contract has no call that reports it.
+        let yaml = try XCTUnwrap(String(data: Fixture.repositoryFile("openapi", "yaml"), encoding: .utf8))
+        let start = try XCTUnwrap(yaml.range(of: "\n    UploadStart:\n"))
+        let section = yaml[start.upperBound...].prefix(600)
+        let maximum = try XCTUnwrap(section.range(of: #"maximum: (\d+)"#, options: .regularExpression))
+        let value = Int(section[maximum].split(separator: " ").last ?? "")
+        XCTAssertEqual(value, AttachmentRules.maxBytes)
+        XCTAssertGreaterThan(AttachmentRules.maxBytes, AttachmentRules.maxOneShotBytes)
+    }
+
+    func testFilesOverTheOneRequestLimitGoInChunks() async throws {
+        let backend = FakeUploads(chunkBytes: 10 * 1024 * 1024)
+        let small = FileManager.default.temporaryDirectory.appendingPathComponent("small-\(UUID().uuidString).pdf")
+        try Data(count: 1024).write(to: small)
+        _ = try await AttachmentUploader(backend: backend).upload(small, profile: "work")
+        XCTAssertEqual(backend.calls, ["oneShot"])
+
+        let big = FileManager.default.temporaryDirectory.appendingPathComponent("big-\(UUID().uuidString).heic")
+        let size = AttachmentRules.maxOneShotBytes + 3
+        try Data(count: size).write(to: big)
+        backend.calls = []
+        _ = try await AttachmentUploader(backend: backend).upload(big, profile: "work")
+        XCTAssertEqual(backend.calls, ["start", "chunk@0", "chunk@10485760", "chunk@20971520", "complete"])
+        XCTAssertEqual(backend.started?.sizeBytes, size)
+        XCTAssertEqual(backend.started?.mime, "image/heic")
+        XCTAssertEqual(backend.received, size)
+
+        backend.calls = []
+        backend.failChunks = true
+        do {
+            _ = try await AttachmentUploader(backend: backend).upload(big, profile: "work")
+            XCTFail("a failed chunk fails the upload")
+        } catch {}
+        XCTAssertEqual(backend.calls.last, "abort", "the open upload is let go")
+    }
+}
+
+private final class FakeUploads: AttachmentBackend {
+    let chunkBytes: Int
+    var calls: [String] = []
+    var started: UploadStart?
+    var received = 0
+    var failChunks = false
+
+    init(chunkBytes: Int) { self.chunkBytes = chunkBytes }
+
+    private func attachment() -> Attachment {
+        Attachment(
+            id: "01J8QK3ZR2W7M5N4P6T8V9X0AD", profile: "work", ownerId: "01J8QK3ZR2W7M5N4P6T8V9X0HM",
+            createdAt: Fixture.date, updatedAt: Fixture.date, name: "f", mime: "application/pdf", sizeBytes: 1,
+            kind: .file, url: "/x", purpose: .message, sha256: String(repeating: "0", count: 64)
+        )
+    }
+
+    private func upload(_ next: Int) -> Upload {
+        Upload(id: "01J8QK3ZR2W7M5N4P6T8V9X0WP", name: "f", mime: "m", sizeBytes: started?.sizeBytes ?? 0,
+               chunkBytes: chunkBytes, nextOffset: next, expiresAt: Fixture.date)
+    }
+
+    func oneShot(_ file: URL, profile: String) async throws -> Attachment {
+        calls.append("oneShot")
+        return attachment()
+    }
+
+    func start(_ start: UploadStart, profile: String) async throws -> Upload {
+        calls.append("start")
+        started = start
+        received = 0
+        return upload(0)
+    }
+
+    func chunk(_ uploadID: String, offset: Int, body: URL, profile: String) async throws -> Upload {
+        calls.append("chunk@\(offset)")
+        if failChunks { throw URLError(.networkConnectionLost) }
+        let bytes = try Data(contentsOf: body).count
+        XCTAssertLessThanOrEqual(bytes, chunkBytes)
+        received += bytes
+        return upload(offset + bytes)
+    }
+
+    func complete(_ uploadID: String, profile: String) async throws -> Attachment {
+        calls.append("complete")
+        return attachment()
+    }
+
+    func abort(_ uploadID: String, profile: String) async {
+        calls.append("abort")
     }
 }
 
@@ -149,12 +298,19 @@ final class VoiceSourceTests: XCTestCase {
         XCTAssertEqual(VoiceRoute.choose(.phone, hubReady: true), .phone, "the person chose this phone")
     }
 
-    func testCoreHubIsTheDefaultAndTheChoiceIsKept() throws {
+    func testThisPhoneIsTheDefaultAndAChoiceIsKept() throws {
+        // Owner, 2026-09-26: «خل الأساسي حق الجوال ويقدر يغير المستخدم».
         let defaults = try XCTUnwrap(UserDefaults(suiteName: "voice-source-\(UUID().uuidString)"))
         let settings = DeviceSettings(defaults: defaults)
-        XCTAssertEqual(settings.voiceSource, .hub)
-        settings.voiceSource = .phone
+        XCTAssertEqual(settings.voiceSource, .phone)
+        // Changing another choice does not pin the voice: an install that never chose keeps
+        // following the default.
+        settings.spokenReplies = true
+        settings.voiceInput = false
+        XCTAssertNil(defaults.string(forKey: DeviceSettings.Keys.voiceSource))
         XCTAssertEqual(DeviceSettings(defaults: defaults).voiceSource, .phone)
+        settings.voiceSource = .hub
+        XCTAssertEqual(DeviceSettings(defaults: defaults).voiceSource, .hub)
         for language in [AppLanguage.ar, .en] {
             for key in ["device.voice_source", "device.voice_hub", "device.voice_phone", "voice.no_speech", "voice.transcribing"] {
                 XCTAssertTrue(L10n(language).has(key), "\(key) in \(language)")
