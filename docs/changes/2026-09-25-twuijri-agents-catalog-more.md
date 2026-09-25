@@ -13,7 +13,7 @@ Qwen Code وGoose وKimi. والهدف الثاني: الوكلاء تُثبَّ
   المختبرة، والواجهة تقول «أحدث من النسخة المختبرة».
 
 ## القرار والموافقات
-المالك نائم؛ كل قرار هنا **مقترح — ينتظر تأكيد المالك** (DECISIONS §59).
+المالك نائم؛ كل قرار هنا **مقترح — ينتظر تأكيد المالك** (DECISIONS §68).
 
 **ما أُضيف** (تحقّقت من كل واحد على السجل نفسه وبتثبيت فعلي بأمر المركز ذاته
 `npm install --global --prefix <dir> --no-fund --no-audit …` في مجلد مؤقت، ثم أرسلت `initialize` بـ ACP
@@ -81,7 +81,7 @@ Qwen Code وGoose وKimi. والهدف الثاني: الوكلاء تُثبَّ
 - `agents.upgrade` و`agents.checkUpdate`: أوصاف تقول إن التحديث إصدار دقيق، ونتيجة الفحص صارت
   `{ latest_version, pinned_version, update_available }`، وسجلّ لا يرد يُفشل المهمة.
 - `events/common.schema.json` و`events/jobs/agent.updated.schema.json`: الحقلان نفسهما.
-- DECISIONS §59 (مقترح).
+- DECISIONS §68 (مقترح).
 
 ## الملفات والتأثير
 - `packages/server/src/modules/agents/catalog/{qwen-code,kimi-code,pi}.ts` (جديدة)، `catalog/index.ts`
@@ -98,7 +98,7 @@ Qwen Code وGoose وKimi. والهدف الثاني: الوكلاء تُثبَّ
   التلميح).
 - الاختبارات: `update-policy.test.ts` (جديد، 22)، `agents.test.ts` (الحارس والكتالوج وفحص غير المثبَّت)،
   `web/tests/agent-versions.test.tsx` (جديد)، `web/tests/agent-chips.test.tsx` (العلامات).
-- الوثائق: `docs/domain/agents.md` (§Updates)، `docs/STATUS.md`، `THIRD-PARTY-NOTICES.md`، DECISIONS §59.
+- الوثائق: `docs/domain/agents.md` (§Updates)، `docs/STATUS.md`، `THIRD-PARTY-NOTICES.md`، DECISIONS §68.
 - الصورة لا تتغير: الوكلاء يُثبَّتون عند الطلب في مجلد البيانات. الشبكة: المركز يسأل `registry.npmjs.org`
   كل ست ساعات عن الوكلاء المثبَّتين فقط (لا شيء إن لم يُثبَّت شيء).
 
@@ -175,7 +175,7 @@ PR adds or updates a change record | pass | 10s
 PR leaves graphify-out/ to the code-map bot | pass | 10s
 ```
   (التشغيل الأول فشل في رحلة Playwright 6 فقط، بسبب عدد الرقائق؛ صُحّحت.)
-- للمالك: تأكيد DECISIONS §59 (الـ pin خط أساس مختبر، التحديث بإصدار دقيق، التلقائي عند الخمول ومطفأ
+- للمالك: تأكيد DECISIONS §68 (الـ pin خط أساس مختبر، التحديث بإصدار دقيق، التلقائي عند الخمول ومطفأ
   افتراضيًا، الإمساك 15 دقيقة، قائمة الرخص المقبولة)، وإضافة Qwen Code وKimi Code وPi، ورفض Grok Build
   وDeepSeek Harness وGoose مؤقتًا.
 - لاحقًا: وصفة «تنزيل بمجموع تحقق» (تفتح Goose وGrok Build)، وصنف اعتماد Moonshot لـ Kimi، ودور حقيقي

@@ -15,7 +15,7 @@
  *
  * The version comes from the catalog entry's pin, never from `latest`: what a fresh install
  * gets is what the owner reviewed. An update may name a newer exact version the registry
- * published (`update-policy.ts`, DECISIONS §59); the pin stays the tested baseline. Every command is an argv array (AGENTS.md hard rules), and a
+ * published (`update-policy.ts`, DECISIONS §68); the pin stays the tested baseline. Every command is an argv array (AGENTS.md hard rules), and a
  * failure is thrown carrying npm's own message so the job ends `job.failed` — never a
  * success with an empty result.
  */

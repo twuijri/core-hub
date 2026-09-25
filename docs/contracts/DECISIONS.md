@@ -1025,7 +1025,7 @@ Rejected: a new `source` field on `SessionCreate` (a client could then make any 
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
 
-## 59. Catalog agents are checked against the registry every six hours; the pin stays the tested baseline
+## 68. Catalog agents are checked against the registry every six hours; the pin stays the tested baseline
 
 ADR 0006 made the catalog's pin the only version the hub installs, and `latest_version` was
 that pin, so "update available" could only ever mean "older than the pin". A curated catalog
