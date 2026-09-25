@@ -195,12 +195,7 @@ describe('dictation', () => {
   });
 
   it('falls back to the browser’s recognizer when the hub has no provider, and says so', async () => {
-    let recognizer: {
-      onstart: (() => void) | null;
-      onresult: ((event: unknown) => void) | null;
-      onend: (() => void) | null;
-      lang: string;
-    } | null = null;
+    const made: { lang: string }[] = [];
     class FakeRecognition {
       lang = '';
       continuous = false;
@@ -209,10 +204,8 @@ describe('dictation', () => {
       onresult: ((event: unknown) => void) | null = null;
       onerror: ((event: unknown) => void) | null = null;
       onend: (() => void) | null = null;
-      constructor() {
-        recognizer = this;
-      }
       start() {
+        made.push(this);
         this.onstart?.();
       }
       stop() {
@@ -231,7 +224,7 @@ describe('dictation', () => {
     fireEvent.click(mic());
     await waitFor(() => expect(screen.getByTestId('dictation-browser')).toBeInTheDocument());
     // The preference said Arabic; the recognizer needs a full tag.
-    expect(recognizer!.lang).toBe('ar-SA');
+    expect(made[0]?.lang).toBe('ar-SA');
     fireEvent.click(mic());
     await waitFor(() => expect(input().value).toBe('hello there'));
     expect(sent).toHaveLength(0);
