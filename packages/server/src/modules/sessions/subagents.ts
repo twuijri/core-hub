@@ -106,6 +106,9 @@ export class SubagentBook {
     const isNew = !record;
     if (!record) {
       if (signal.phase === 'completed' && this.storedFinished(scope, sessionId, signal.id)) return;
+      // Two reported in the same millisecond keep the order they were reported in: every
+      // ordering by `startedAt` (the panel, the trajectory) is then the agent's own.
+      const latest = Math.max(0, ...[...records.values()].map((other) => other.startedAt));
       record = {
         id: signal.id,
         sessionId,
@@ -115,7 +118,7 @@ export class SubagentBook {
         goal: clip(signal.goal, GOAL_MAX) ?? '',
         model: signal.model ?? null,
         status: 'running',
-        startedAt: now,
+        startedAt: Math.max(now, latest + 1),
         finishedAt: null,
         toolCount: signal.toolCount === undefined ? null : signal.toolCount,
         lastTool: null,
