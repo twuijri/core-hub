@@ -1,6 +1,7 @@
 // Settings (destination `settings`) on a phone: the list is the page itself (NAVIGATION.md §٢),
 // its first row goes back to the chats, and each page opened from it shows the way back.
 import SwiftUI
+import UserNotifications
 
 struct SettingsScreen: View {
     let backToChats: () -> Void
@@ -83,7 +84,43 @@ struct SettingsPage: View {
     }
 }
 
-/// What part 3 adds to This device (voice input, dictation, spoken replies).
+/// This phone's own choices: voice input, the dictation language, spoken replies, and whether
+/// the system lets Core Hub show notices.
 struct ThisDeviceExtras: View {
-    var body: some View { EmptyView() }
+    @Environment(AppModel.self) private var app
+    @Environment(\.l10n) private var l10n
+    @State private var notifications: UNAuthorizationStatus = .notDetermined
+
+    var body: some View {
+        @Bindable var device = app.device
+        Section(l10n("device.voice")) {
+            Toggle(l10n("device.voice_input"), isOn: $device.voiceInput)
+            Picker(l10n("device.dictation_language"), selection: $device.dictationLanguage) {
+                Text(l10n("device.dictation_app")).tag(DeviceSettings.DictationLanguage.app)
+                Text(l10n("shell.language_ar")).tag(DeviceSettings.DictationLanguage.ar)
+                Text(l10n("shell.language_en")).tag(DeviceSettings.DictationLanguage.en)
+            }
+            Toggle(l10n("device.spoken_replies"), isOn: $device.spokenReplies)
+        }
+        Section {
+            switch notifications {
+            case .authorized, .provisional, .ephemeral:
+                FactRow(label: l10n("device.notifications"), value: l10n("device.notifications_allowed"))
+            case .denied:
+                FactRow(label: l10n("device.notifications"), value: l10n("device.notifications_denied"))
+            default:
+                Button(l10n("device.notifications_ask")) {
+                    Task {
+                        _ = await LocalNotices.shared.requestPermission()
+                        notifications = await LocalNotices.shared.status()
+                    }
+                }
+            }
+        } header: {
+            Text(l10n("device.notifications"))
+        } footer: {
+            Text(l10n("device.notifications_note"))
+        }
+        .task { notifications = await LocalNotices.shared.status() }
+    }
 }

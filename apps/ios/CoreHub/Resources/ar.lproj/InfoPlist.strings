@@ -3,3 +3,5 @@ CFBundleDisplayName = "كور هب";
 CFBundleName = "كور هب";
 NSCameraUsageDescription = "يستخدم كور هب الكاميرا لمسح رمز الاقتران الذي يعرضه مركزك في الويب.";
 NSLocalNetworkUsageDescription = "يتصل كور هب بمركزك على شبكتك المحلية.";
+NSMicrophoneUsageDescription = "يستمع كور هب وأنت تملي رسالة.";
+NSSpeechRecognitionUsageDescription = "يحوّل كور هب ما تمليه إلى نص.";

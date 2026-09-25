@@ -164,6 +164,10 @@ final class ChatModel {
               let event = SessionEvent.decode(envelope) else { return }
         if hydrated {
             state.apply(event, seq: envelope.seq, profile: envelope.profile)
+            if case .runCompleted(let run, let message) = event, run.sessionId == sessionID,
+               app?.device.spokenReplies == true {
+                Speaker.shared.speak(message.text)
+            }
         } else {
             buffer.append((event, envelope))
         }

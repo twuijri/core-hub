@@ -26,6 +26,13 @@ targets:
       - path: CoreHub
     dependencies:
       - package: CoreHubClient
+      - target: CoreHubShare
+    # The App Group the share extension leaves shared text in (ShareInbox.swift); it takes
+    # effect once the app is signed with the owner's team (README.md).
+    entitlements:
+      path: CoreHub/CoreHub.entitlements
+      properties:
+        com.apple.security.application-groups: [group.io.github.twuijri.corehub]
     info:
       path: CoreHub/Info.plist
       properties:
@@ -51,6 +58,8 @@ targets:
             CFBundleURLSchemes: [corehub]
         NSCameraUsageDescription: Core Hub uses the camera to scan the pairing code your hub shows on the web.
         NSLocalNetworkUsageDescription: Core Hub connects to your hub on your local network.
+        NSMicrophoneUsageDescription: Core Hub listens while you dictate a message.
+        NSSpeechRecognitionUsageDescription: Core Hub turns what you dictate into text.
         # A self-hosted hub is often reached over plain http on a LAN or a VPN address
         # (proposed — owner to confirm; README.md).
         NSAppTransportSecurity:
@@ -62,6 +71,37 @@ targets:
         PRODUCT_NAME: CoreHub
         TARGETED_DEVICE_FAMILY: '1,2'
         GENERATE_INFOPLIST_FILE: NO
+  CoreHubShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: CoreHubShare
+      # The extension reads the same strings and product name as the app, and writes the
+      # inbox the app reads.
+      - path: CoreHub/i18n
+      - path: CoreHub/Share/ShareInbox.swift
+      - path: CoreHub/Generated/Product.swift
+    entitlements:
+      path: CoreHubShare/CoreHubShare.entitlements
+      properties:
+        com.apple.security.application-groups: [group.io.github.twuijri.corehub]
+    info:
+      path: CoreHubShare/Info.plist
+      properties:
+        CFBundleDisplayName: Core Hub
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.twuijri.corehub.share
+        PRODUCT_NAME: CoreHubShare
+        GENERATE_INFOPLIST_FILE: NO
+        APPLICATION_EXTENSION_API_ONLY: YES
   CoreHubTests:
     type: bundle.unit-test
     platform: iOS

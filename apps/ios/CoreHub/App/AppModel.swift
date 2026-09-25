@@ -47,6 +47,10 @@ final class AppModel {
     let keeper: TokenKeeper
     let api: HubAPI
     let realtime: RealtimeClient
+    /// This phone's own voice and reading choices («This device»).
+    let device = DeviceSettings()
+    /// Text shared from another app, waiting to become a new chat.
+    var pendingDraft: String?
     private let defaults: UserDefaults
     @ObservationIgnored private var sessionsNamespace: RealtimeNamespace?
     /// A link that opened the app before it knew whether anyone was signed in.
@@ -203,6 +207,8 @@ final class AppModel {
         notice = nil
         enterSignedIn()
         await refreshAccount()
+        // Asked once, right after the person chose this phone (proposed — owner to confirm).
+        _ = await LocalNotices.shared.requestPermission()
     }
 
     private func enterSignedIn() {
@@ -214,6 +220,13 @@ final class AppModel {
         sessionsNamespace = realtime.namespace("/rt/sessions") { [weak self] in
             await self?.handshake(all: true) ?? [:]
         }
+        LocalNotices.shared.start(app: self)
+        takeShared()
+    }
+
+    /// Text the share extension left for the app becomes a new chat's draft.
+    func takeShared() {
+        if let text = ShareInbox.take(from: ShareInbox.defaults()) { pendingDraft = text }
     }
 
     /// The profile the app opens on: the one used last if still allowed, else the person's
@@ -288,6 +301,8 @@ final class AppModel {
     }
 
     private func clearSession() async {
+        LocalNotices.shared.stop()
+        Speaker.shared.stop()
         realtime.stop()
         sessionsNamespace = nil
         await keeper.set(nil)
@@ -353,6 +368,7 @@ final class AppModel {
     func becameActive() {
         guard phase == .signedIn else { return }
         realtime.resume()
+        takeShared()
         Task {
             if let stored = await keeper.credentials, stored.needsRenewal() { _ = await keeper.refresh() }
         }

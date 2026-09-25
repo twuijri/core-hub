@@ -23,6 +23,8 @@ struct ShellView: View {
     /// The first message of a chat made from the draft, handed to its conversation once.
     @State private var firstMessages = FirstMessages()
     @State private var searching = false
+    /// A shared text waiting in the new chat's composer.
+    @State private var seed: String?
 
     var body: some View {
         GeometryReader { geometry in
@@ -53,14 +55,24 @@ struct ShellView: View {
         .onAppear {
             if sessionList == nil { sessionList = SessionListModel(app: app) }
             takeLink()
+            takeDraft()
         }
         .onChange(of: app.pendingRoute) { _, _ in takeLink() }
+        .onChange(of: app.pendingDraft) { _, _ in takeDraft() }
         .sheet(isPresented: $searching) {
             SearchScreen(
                 openChat: { session in navigate(.chat(sessionID: session.id, profile: session.profile)) },
                 openGlobalAgent: { navigate(.destination(.globalAgent)) }
             )
         }
+    }
+
+    /// Text shared from another app opens a new chat with it in the composer.
+    private func takeDraft() {
+        guard let draft = app.pendingDraft else { return }
+        app.pendingDraft = nil
+        seed = draft
+        navigate(.newChat)
     }
 
     /// A `corehub://open/…` link the app was opened with.
@@ -105,10 +117,12 @@ struct ShellView: View {
     private var content: some View {
         switch main {
         case .newChat:
-            NewChatScreen { sessionID, profile, text in
+            NewChatScreen(opened: { sessionID, profile, text in
                 firstMessages.put(sessionID, text)
+                seed = nil
                 main = .chat(sessionID: sessionID, profile: profile)
-            }
+            }, seed: seed)
+            .id(seed ?? "")
         case .chat(let sessionID, let profile):
             ChatScreen(model: ChatModel(
                 app: app,
