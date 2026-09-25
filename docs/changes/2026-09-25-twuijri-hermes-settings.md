@@ -141,7 +141,7 @@ $ COREHUB_E2E_PORT=8841 COREHUB_E2E_SETUP_PORT=8842 PLAYWRIGHT_CHANNEL=chrome pl
   ✓  1 [chromium] › e2e/zzzzzz-hermes-settings.spec.ts:31:1 › 45. Hermes's settings: max turns and the proxy saved to Hermes's files and read back after a reload (1.1s)
   1 passed (7.4s)
 $ pnpm change-record:check
-(ناتجه أدناه في «التسليم»)
+change-record  OK — 1 record(s) valid
 ```
 فحص هرمز الحقيقي: صورة `core-hub:channeldeps` (هرمز 2026.9.14) بلا شبكة، بمستخدم المضيف، وحاوية لكل
 استدعاء تُحذف بعده (`--rm`، ولا حاويات متبقية). ما يُثبته: كل قيمة يكتبها المركز يقرؤها **محمّل هرمز نفسه**
