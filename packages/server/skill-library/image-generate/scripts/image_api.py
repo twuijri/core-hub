@@ -17,9 +17,13 @@ Protocols (COREHUB_IMAGE_PROVIDER):
   gemini      Google's own API: `imagen-*` through :predict, Gemini image models through
               :generateContent.
   openai      `compatible` at api.openai.com.
+  codex       A ChatGPT subscription signed in through Hermes: the Codex backend's
+              /responses with its `image_generation` tool (gpt-image-2), carried by a chat
+              model the subscription serves. No key is written: the token is Hermes's, asked
+              for at the moment of drawing (and refreshed by Hermes), never printed or stored.
 
 Environment, written by Core Hub (names only are ever printed, never values):
-  COREHUB_IMAGE_PROVIDER   compatible | chat | gemini | openai
+  COREHUB_IMAGE_PROVIDER   compatible | chat | gemini | openai | codex
   COREHUB_IMAGE_BASE_URL   the provider's address
   COREHUB_IMAGE_MODEL      the model id
   COREHUB_IMAGE_API_KEY    the provider's key (absent for an endpoint that takes none)
@@ -44,10 +48,11 @@ import uuid
 from pathlib import Path
 from typing import Callable, Mapping
 
-PROVIDERS = ("compatible", "chat", "gemini", "openai")
+PROVIDERS = ("compatible", "chat", "gemini", "openai", "codex")
 DEFAULT_BASE = {
     "openai": "https://api.openai.com/v1",
     "gemini": "https://generativelanguage.googleapis.com/v1beta",
+    "codex": "https://chatgpt.com/backend-api/codex",
 }
 ENV = {
     "provider": "COREHUB_IMAGE_PROVIDER",
@@ -62,6 +67,18 @@ NOT_CHOSEN = (
 )
 # The Images API families that take `background: transparent` (OpenAI's gpt-image).
 TRANSPARENT_CAPABLE = re.compile(r"(^|[/:._-])(gpt-image|chatgpt-image)", re.I)
+# The chat model that carries the `image_generation` tool on the Codex backend.
+CODEX_HOST = os.environ.get("COREHUB_IMAGE_CODEX_HOST", "gpt-5.5")
+CODEX_INSTRUCTIONS = (
+    "Fulfil the request by calling the image_generation tool exactly once. "
+    "Do not answer with text instead of an image."
+)
+# The backend's own sizes for gpt-image; a ratio is mapped onto the nearest.
+CODEX_SIZES = {"1:1": "1024x1024", "16:9": "1536x1024", "3:2": "1536x1024", "9:16": "1024x1536", "2:3": "1024x1536"}
+NOT_IN_PLAN = (
+    "The ChatGPT plan signed in to Core Hub did not allow image generation (it needs a paid "
+    "plan with Codex). خطة ChatGPT المسجّل دخولها في Core Hub لا تسمح بتوليد الصور."
+)
 
 
 class Refusal(Exception):
@@ -323,6 +340,171 @@ def chat_call(cfg: dict, prompt: str, n: int, aspect: str | None, sources: list[
     return images, note
 
 
+def codex_credentials(force: bool = False) -> tuple[str, str | None, dict]:
+    """The subscription's access token, from Hermes's own store in this Hermes home (Hermes
+    refreshes it when it is about to expire, or on `force`), the base URL Hermes would use, and
+    the identity headers Hermes sends the Codex backend. Never printed or stored."""
+    try:
+        from hermes_cli.auth import resolve_codex_runtime_credentials
+    except Exception:  # noqa: BLE001 - not inside Hermes's Python
+        raise Refusal(
+            "codex_unavailable",
+            "images through the ChatGPT subscription need Hermes's Python (run inside Core Hub's Hermes)",
+        )
+    try:
+        creds = resolve_codex_runtime_credentials(force_refresh=force, refresh_if_expiring=True)
+    except Exception as error:  # noqa: BLE001 - Hermes's own words, never the token
+        raise Refusal(
+            "codex_not_signed_in",
+            "the ChatGPT subscription is not signed in (Core Hub → Models → Providers → Sign in): "
+            + str(error)[:300],
+        )
+    token = str(creds.get("api_key") or "").strip()
+    if not token:
+        raise Refusal("codex_not_signed_in", "the ChatGPT subscription has no usable sign-in")
+    headers: dict = {}
+    base = str(creds.get("base_url") or "").strip() or None
+    try:
+        from agent.codex_headers import codex_cloudflare_headers
+
+        headers.update(codex_cloudflare_headers(token, base_url=base or DEFAULT_BASE["codex"]))
+    except Exception:  # noqa: BLE001 - older Hermes: the account id is enough
+        pass
+    account = codex_account(token)
+    if account and not any(name.lower() == "chatgpt-account-id" for name in headers):
+        headers["ChatGPT-Account-ID"] = account
+    return token, base, headers
+
+
+def codex_account(token: str) -> str | None:
+    """The ChatGPT account id in the token's claims, which the backend wants as a header."""
+    try:
+        part = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
+        value = (claims.get("https://api.openai.com/auth") or {}).get("chatgpt_account_id")
+        return value if isinstance(value, str) and value else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def sse_events(raw: bytes):
+    """The JSON payloads of a server-sent event stream (`data:` lines, blank-line separated)."""
+    lines: list[str] = []
+    for line in raw.decode("utf-8", "replace").splitlines() + [""]:
+        if line.startswith("data:"):
+            lines.append(line[5:].lstrip())
+        elif line == "" and lines:
+            text = "\n".join(lines).strip()
+            lines = []
+            if text and text != "[DONE]":
+                try:
+                    yield json.loads(text)
+                except ValueError:
+                    continue
+
+
+def codex_results(value, found: list[str]) -> None:
+    """Every finished `image_generation_call` result (base64) in a payload, in order. A
+    progressive partial frame is never taken for a picture."""
+    if isinstance(value, dict):
+        if value.get("type") == "image_generation_call" and isinstance(value.get("result"), str) and value["result"]:
+            if value["result"] not in found:
+                found.append(value["result"])
+        for child in value.values():
+            codex_results(child, found)
+    elif isinstance(value, list):
+        for child in value:
+            codex_results(child, found)
+
+
+def codex_refusal(status: int, detail: str) -> Refusal:
+    """The backend's answer as a refusal; a plan without images gets its own code."""
+    message = detail
+    try:
+        body = json.loads(detail)
+        error = body.get("error") if isinstance(body, dict) else None
+        if isinstance(error, dict) and error.get("message"):
+            message = str(error["message"])
+        elif isinstance(body, dict) and body.get("detail"):
+            message = str(body["detail"])
+    except ValueError:
+        pass
+    lowered = message.lower()
+    if status in (402, 403) or any(word in lowered for word in ("plan", "entitle", "not available", "upgrade")):
+        if "tool choice" not in lowered:
+            return Refusal("image_not_in_plan", NOT_IN_PLAN, status=status, detail=message[:500])
+    if status == 429:
+        return Refusal("usage_limit", "the ChatGPT plan's Codex usage limit was reached; try later", status=status, detail=message[:500])
+    return Refusal("api_error", f"the Codex backend answered HTTP {status}", status=status, detail=message[:500])
+
+
+def codex_draw(cfg: dict, prompt: str, sources: list[Path], size: str | None, background: str | None) -> list[bytes]:
+    """One picture through the subscription: a streamed /responses call with the
+    image_generation tool; 401 once more with a token Hermes refreshes."""
+    content: list = [{"type": "input_text", "text": prompt}]
+    content += [{"type": "input_image", "image_url": data_uri(path)} for path in sources]
+    tool: dict = {"type": "image_generation", "model": cfg["model"], "output_format": "png"}
+    if size:
+        tool["size"] = size
+    if background:
+        tool["background"] = background
+    payload = {
+        "model": CODEX_HOST,
+        "instructions": CODEX_INSTRUCTIONS,
+        "input": [{"type": "message", "role": "user", "content": content}],
+        # No `tool_choice`: the backend reads it as a function name and refuses a hosted tool;
+        # the instructions are what ask for the call.
+        "tools": [tool],
+        "store": False,
+        "stream": True,
+    }
+    body = json.dumps(payload).encode("utf-8")
+    for attempt in (0, 1):
+        token, base, identity = codex_credentials(force=attempt == 1)
+        url = (cfg.get("base") or base or DEFAULT_BASE["codex"]).rstrip("/") + "/responses"
+        headers = {
+            **identity,
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+        }
+        request = urllib.request.Request(url, data=body, method="POST", headers=headers)
+        try:
+            with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+                raw = response.read()
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", "replace")[:2000]
+            if error.code == 401 and attempt == 0:
+                continue
+            raise codex_refusal(error.code, detail)
+        except urllib.error.URLError as error:
+            raise Refusal("api_unreachable", f"could not reach the Codex backend: {error.reason}")
+        found: list[str] = []
+        failed = None
+        for event in sse_events(raw):
+            codex_results(event, found)
+            if event.get("type") in ("response.failed", "error"):
+                failed = event
+        if found:
+            return [base64.b64decode(found[-1])]
+        if failed is not None:
+            error = (failed.get("response") or {}).get("error") or failed.get("error") or failed
+            raise codex_refusal(400, json.dumps({"error": error}) if isinstance(error, dict) else str(error))
+        raise Refusal("no_image", "the Codex backend answered without an image")
+    raise Refusal("api_error", "the Codex backend refused the refreshed sign-in (HTTP 401)", status=401)
+
+
+def codex_call(cfg: dict, command: str, prompt: str, sources: list[Path], n: int, size: str | None, aspect: str | None, background: str | None) -> tuple[list[bytes], str | None]:
+    if command == "vary":
+        prompt = prompt or "Create a variation of this image: same subject, style and palette, new composition."
+    if not size and aspect:
+        size = CODEX_SIZES.get(aspect.replace(" ", ""))
+    images: list[bytes] = []
+    for _ in range(max(1, min(n, 4))):
+        images.extend(codex_draw(cfg, prompt, sources, size, background))
+    return images, None
+
+
 def check_images(paths: list[str]) -> list[Path]:
     found = []
     for name in paths:
@@ -372,6 +554,8 @@ def call(
     """One request to the chosen model: `generate`, `edit` or `vary`. The library entry the
     Hermes backend uses; `run` below is the command line around it."""
     n = max(1, min(n, 4))
+    if cfg["provider"] == "codex":
+        return codex_call(cfg, command, prompt, sources, n, size, aspect, background)
     if cfg["provider"] in ("gemini", "chat"):
         if command == "vary":
             prompt = prompt or "Create a variation of this image: same subject, style and palette, new composition."
@@ -417,7 +601,7 @@ def remove_background(cfg: dict, source: Path, out: Path, colour: str, size: str
     """Cut the subject out with the image model's edit endpoint. A gpt-image model is asked
     for transparency outright; any other model puts the subject on a flat colour, which the
     bundled, model-free `image-convert transparent-bg` then clears."""
-    transparent_capable = cfg["provider"] == "compatible" and bool(TRANSPARENT_CAPABLE.search(cfg["model"]))
+    transparent_capable = cfg["provider"] in ("compatible", "codex") and bool(TRANSPARENT_CAPABLE.search(cfg["model"]))
     images, note = call(
         cfg,
         "edit",

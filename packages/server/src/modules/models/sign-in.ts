@@ -14,6 +14,7 @@
  * contract's `ProviderSignIn`, both pure enough to test against a scripted server.
  */
 import { HubError } from '../../lib/errors.js';
+import { liveModels, type HermesPythonRun } from './live-models.js';
 
 /** What starting a sign-in gave back: the code to show and where to enter it. */
 export interface SignInStarted {
@@ -37,10 +38,33 @@ export interface SignInPoll {
 export interface SignInRuntime {
   start(provider: string, profile: string | null): Promise<SignInStarted>;
   poll(provider: string, session: string, profile: string | null): Promise<SignInPoll>;
-  /** The model ids the runtime lists for a signed-in provider; `null` when it lists none. */
-  models(provider: string, profile: string | null): Promise<string[] | null>;
+  /**
+   * The model ids of a signed-in provider (decision §83): the provider's own list for the
+   * account when it can be asked, else the runtime's list, marked `fallback` with the reason.
+   * `models` is empty when neither gave any.
+   */
+  models(provider: string, profile: string | null): Promise<SignInModels>;
   /** Forget the provider's credential in that profile. Best effort. */
   signOut(provider: string, profile: string | null): Promise<void>;
+}
+
+/** A signed-in provider's models and where they came from (decision §83). */
+export interface SignInModels {
+  models: string[];
+  source: 'provider' | 'fallback';
+  /** Why the provider itself could not be asked, when `source` is `fallback`. */
+  reason: string | null;
+}
+
+/**
+ * How the live list is asked (decision §83): Hermes's own Python, in the Hermes home of the
+ * profile the provider was signed in to. Either may be missing — no supervised Hermes, or a
+ * test — and then only Hermes's list is left, marked `fallback`.
+ */
+export interface LiveListing {
+  python(): HermesPythonRun | null;
+  /** The Hermes home of a profile; `null` for the root. */
+  home(profile: string | null): string | null;
 }
 
 /** The one call the runtime is made of: Hermes's server, JSON in and out. */
@@ -88,7 +112,26 @@ export function signInError(error: unknown): HubError {
 }
 
 /** The sign-in runtime over Hermes's server (ADR 0015). */
-export function hermesSignInRuntime(request: DashboardRequest): SignInRuntime {
+export function hermesSignInRuntime(
+  request: DashboardRequest,
+  live: LiveListing | null = null,
+): SignInRuntime {
+  /** What Hermes's own picker lists for the provider — its live call or its remembered list. */
+  const hermesList = async (provider: string, profile: string | null): Promise<string[]> => {
+    let body: { providers?: Array<{ slug?: unknown; models?: unknown }> };
+    try {
+      body = await request(
+        'GET',
+        `/api/model/options${profileQuery(profile, { refresh: 'true' })}`,
+      );
+    } catch (error) {
+      throw signInError(error);
+    }
+    const row = (body.providers ?? []).find((each) => each.slug === provider);
+    if (!row || !Array.isArray(row.models)) return [];
+    return row.models.filter((model): model is string => typeof model === 'string' && !!model);
+  };
+
   return {
     async start(provider, profile) {
       let body: Record<string, unknown>;
@@ -139,18 +182,21 @@ export function hermesSignInRuntime(request: DashboardRequest): SignInRuntime {
     },
 
     async models(provider, profile) {
-      let body: { providers?: Array<{ slug?: unknown; models?: unknown }> };
-      try {
-        body = await request(
-          'GET',
-          `/api/model/options${profileQuery(profile, { refresh: 'true' })}`,
-        );
-      } catch (error) {
-        throw signInError(error);
+      const python = live?.python() ?? null;
+      const home = live?.home(profile) ?? null;
+      let reason = 'Hermes’s Python is not available to ask the provider';
+      if (python && home) {
+        const asked = await liveModels(python, home, provider);
+        if (asked.ok) {
+          return {
+            models: asked.models.map((model) => model.id),
+            source: 'provider',
+            reason: null,
+          };
+        }
+        reason = asked.reason;
       }
-      const row = (body.providers ?? []).find((each) => each.slug === provider);
-      if (!row || !Array.isArray(row.models)) return null;
-      return row.models.filter((model): model is string => typeof model === 'string' && !!model);
+      return { models: await hermesList(provider, profile), source: 'fallback', reason };
     },
 
     async signOut(provider, profile) {

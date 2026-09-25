@@ -1,7 +1,7 @@
 ---
 name: image-generate
 description: Generate an image from a text prompt, in any language.
-version: 1.1.0
+version: 1.2.0
 author: twuijri (Core Hub)
 license: Apache-2.0
 platforms: [linux, macos, windows]
@@ -16,7 +16,7 @@ required_environment_variables:
     prompt: Set by Core Hub from Models → Images
     optional: true
   - name: COREHUB_IMAGE_API_KEY
-    prompt: Set by Core Hub from the chosen provider's key
+    prompt: Set by Core Hub from the chosen provider's key (absent for the ChatGPT subscription)
     optional: true
 metadata:
   hermes:
@@ -56,6 +56,12 @@ choice is inherited when this profile made none). Core Hub then:
 If none is chosen, the script answers `image_model_not_chosen`: tell the person, in their
 language, to choose an image model in Core Hub → Models → Images («اختر نموذج صور في النماذج ←
 الصور»). Do not ask them for a key and do not invent a result.
+
+With the ChatGPT subscription's image model (`COREHUB_IMAGE_PROVIDER=codex`) there is no key at
+all: the script asks Hermes for the signed-in account's token when it draws. It answers
+`image_not_in_plan` when the plan does not include images, `usage_limit` when the plan's Codex
+limit is used up, and `codex_not_signed_in` when the sign-in lapsed — say which, in the person's
+language, and never ask for a key.
 
 ## How to Run
 

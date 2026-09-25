@@ -402,6 +402,21 @@ function ProviderCard({
         </Notice>
       )}
       {provider.catalogue.error && <Notice tone="danger">{provider.catalogue.error}</Notice>}
+      {/* Where the list came from (decision §83): the provider itself, or a list kept in code. */}
+      {provider.catalogue.source === 'fallback' && (
+        <Notice tone="warning">
+          <span data-testid="catalogue-fallback">
+            {t('models.catalogue.fallback', {
+              reason: provider.catalogue.fallback_reason ?? '—',
+            })}
+          </span>
+        </Notice>
+      )}
+      {signIn && provider.catalogue.source === 'provider' && (
+        <p className="text-xs text-muted" data-testid="catalogue-from-account">
+          {t('models.catalogue.from_account', { provider: provider.label })}
+        </p>
+      )}
 
       {provider.models.length > 0 && (
         <ul className="flex flex-wrap gap-1" data-testid="model-chips">
@@ -805,12 +820,29 @@ function ImagesTab({ onProviders }: { onProviders(): void }) {
   if (defaults.isError) return <Notice tone="danger">{describeError(defaults.error, t)}</Notice>;
   if (catalogue.isError) return <Notice tone="danger">{describeError(catalogue.error, t)}</Notice>;
 
-  // A provider signed in through Hermes holds no key the hub could hand the image tools.
-  const drawing = new Set(
-    (providers.data ?? [])
-      .filter((provider) => provider.kind === 'llm' && provider.auth.kind !== 'oauth')
-      .map((provider) => provider.id),
+  // The providers the hub can draw with (decisions §72, §84): a key or none, or the ChatGPT
+  // subscription, whose token Hermes keeps. A hub older than `draws_images` said it by the key.
+  const drawingProviders = (providers.data ?? []).filter(
+    (provider) =>
+      provider.kind === 'llm' && (provider.draws_images ?? provider.auth.kind !== 'oauth'),
   );
+  const drawing = new Set(drawingProviders.map((provider) => provider.id));
+  const subscriptions = new Map(
+    drawingProviders
+      .filter((provider) => provider.auth.kind === 'oauth')
+      .map((provider) => [provider.id, provider.label]),
+  );
+  // The subscription's image model is not a model the provider lists: say what it is.
+  const imageOption = (model: Model) => {
+    const option = modelOption(model, refValue(model));
+    const via = subscriptions.get(model.provider_id);
+    return via && !model.alias
+      ? {
+          ...option,
+          label: t('models.images.via_subscription', { provider: via, model: model.model }),
+        }
+      : option;
+  };
   const images = (catalogue.data ?? []).filter(
     (model) => model.capabilities.includes('image_output') && drawing.has(model.provider_id),
   );
@@ -844,7 +876,7 @@ function ImagesTab({ onProviders }: { onProviders(): void }) {
             placeholder={t('models.defaults.none')}
             testId="image-model"
             recent={recent}
-            options={images.map((model) => modelOption(model, refValue(model)))}
+            options={images.map(imageOption)}
             disabled={save.isPending}
           />
           {inherited && (

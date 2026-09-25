@@ -17,6 +17,7 @@
  * agent starts with and the default model an agent inherits, so the `agents` module never
  * asks a person for a key (ADR 0010 §Propagation).
  */
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
@@ -40,6 +41,7 @@ import { auditFor, jobRunnerFor } from '../audit/index.js';
 import {
   agentRunnerFor,
   hermesDashboardFor,
+  hermesPythonRunner,
   hermesRuntimeFor,
   namedHermesProfiles,
   registerAgentModelsPort,
@@ -239,7 +241,23 @@ function contextOf(app: FastifyInstance): ModelsService {
       if (own.signIn !== undefined) return own.signIn;
       const dashboard = hermesDashboardFor(app);
       return dashboard
-        ? hermesSignInRuntime((method, route, body) => dashboard.request(method, route, body))
+        ? hermesSignInRuntime((method, route, body) => dashboard.request(method, route, body), {
+            // The provider's own list is asked from Hermes's Python, in the home the provider
+            // was signed in to (decision §83); the token stays in that process.
+            python: () => {
+              const { mode, home } = runtime.status();
+              const command = runtime.executable();
+              if (mode !== 'managed' || !home || !command) return null;
+              const python = path.join(path.dirname(command), 'python');
+              if (!existsSync(python)) return null;
+              return hermesPythonRunner({ python, env: () => runtime.cliEnv(), timeoutMs: 45_000 });
+            },
+            home: (profile) => {
+              const home = runtime.status().home;
+              if (!home) return null;
+              return profile ? path.join(home, 'profiles', profile) : home;
+            },
+          })
         : null;
     },
   });

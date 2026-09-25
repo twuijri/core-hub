@@ -254,7 +254,13 @@ describe('signing in to a provider by device code (decision §55)', () => {
     };
     const row = listed.items.find((item) => item.id === provider.id);
     expect(row?.auth.signed_in).toBe(true);
-    expect(row?.models.map((model) => model.model).sort()).toEqual(['gpt-5.5', 'gpt-5.5-mini']);
+    // Without Hermes's Python to ask the account (decision §83) Hermes's own list is used, and
+    // the subscription's image model rides along (§84).
+    expect(row?.models.map((model) => model.model).sort()).toEqual([
+      'gpt-5.5',
+      'gpt-5.5-mini',
+      'gpt-image-2',
+    ]);
 
     // A pasted code is not how this sign-in finishes.
     const pasted = await authed(h, h.token, {

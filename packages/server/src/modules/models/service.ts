@@ -53,6 +53,7 @@ import { parseEnv } from './dotenv.js';
 import { AUXILIARY_TASKS, isAuxiliaryKey, roleForAdapter } from './defaults.js';
 import { writeHermesImagePlugin } from './hermes-image-plugin.js';
 import {
+  CODEX_IMAGES,
   IMAGE_ENV_NAMES,
   imageEnvOf,
   imageProtocolOf,
@@ -1309,12 +1310,23 @@ export class ModelsService {
           row.id,
           result.models,
         );
+        // Where the list came from (decision §83): a key provider's adapter always asks the
+        // provider itself; a signed-in provider says whether it could.
+        const origin = result as { source?: unknown; reason?: unknown };
+        const source: 'provider' | 'fallback' =
+          origin.source === 'fallback' ? 'fallback' : 'provider';
+        const fallbackReason = typeof origin.reason === 'string' ? origin.reason : null;
         this.db
           .update(providers)
           .set({
             catalogueStatus: 'ready',
             catalogueError: null,
             catalogueRefreshedAt: finishedAt,
+            capabilities: {
+              ...this.loadProvider(scope, row.id).capabilities,
+              catalogueSource: source,
+              catalogueFallbackReason: source === 'fallback' ? fallbackReason : null,
+            },
             updatedAt: finishedAt,
           })
           .where(eq(providers.id, row.id))
@@ -1597,12 +1609,22 @@ export class ModelsService {
     }
   }
 
-  /** The models Hermes lists for a provider signed in through it. */
+  /**
+   * The models of a provider signed in through Hermes (decision §83): the provider's own list
+   * for the account, else Hermes's, marked `fallback`. The ChatGPT subscription also offers its
+   * one way to draw (§84), `gpt-image-2` through the chat model, for the Images role.
+   */
   private async signedInModels(
     scope: WorkspaceScope,
     row: ProviderRow,
   ): Promise<
-    { supported: true; models: DiscoveredModel[] } | { supported: false; reason: string }
+    | {
+        supported: true;
+        models: DiscoveredModel[];
+        source: 'provider' | 'fallback';
+        reason: string | null;
+      }
+    | { supported: false; reason: string }
   > {
     const entry = this.entryOf(row);
     const runtime = this.options.signIn?.() ?? null;
@@ -1610,14 +1632,30 @@ export class ModelsService {
       return { supported: false, reason: 'Hermes is not supervised by this hub' };
     }
     try {
-      const ids = await runtime.models(entry.hermesProvider, this.signInProfileOf(scope, row));
-      if (!ids || ids.length === 0) {
-        return { supported: false, reason: `Hermes lists no models for ${row.label}` };
+      const listed = await runtime.models(entry.hermesProvider, this.signInProfileOf(scope, row));
+      if (listed.models.length === 0) {
+        return {
+          supported: false,
+          reason: listed.reason ?? `Hermes lists no models for ${row.label}`,
+        };
       }
-      return {
-        supported: true,
-        models: ids.map((key) => ({ key, label: key, kind: 'chat' as const })),
-      };
+      const models: DiscoveredModel[] = listed.models.map((key) => ({
+        key,
+        label: key,
+        kind: 'chat' as const,
+      }));
+      if (
+        entry.hermesProvider === CODEX_IMAGES.hermesProvider &&
+        !listed.models.includes(CODEX_IMAGES.model)
+      ) {
+        models.push({
+          key: CODEX_IMAGES.model,
+          label: `${CODEX_IMAGES.model} via ChatGPT (through ${CODEX_IMAGES.host})`,
+          kind: 'chat',
+          capabilities: ['image_output'],
+        });
+      }
+      return { supported: true, models, source: listed.source, reason: listed.reason };
     } catch (error) {
       return {
         supported: false,
@@ -2885,9 +2923,21 @@ export class ModelsService {
 
   // -------------------------------------------------------------------- helpers
 
+  /**
+   * Whether the hub can draw with this provider's image models (decisions §72, §84): a chat
+   * provider it holds the key of or that needs none, or the ChatGPT subscription signed in
+   * through Hermes, whose `image_generation` tool `image_api.py` reaches with Hermes's token.
+   */
+  private drawsImages(row: ProviderRow): boolean {
+    if (row.kind !== 'llm') return false;
+    if (row.authKind !== 'oauth') return true;
+    return this.entryOf(row)?.hermesProvider === CODEX_IMAGES.hermesProvider;
+  }
+
   private present(scope: WorkspaceScope, row: ProviderRow): ContractProvider {
     const entry = this.entryOf(row);
     return serializeProvider(row, {
+      drawsImages: this.drawsImages(row),
       // A shared row is stored under the default profile; an own row is the asking one's.
       profile: row.shared ? this.hub(scope).slug : scope.slug,
       models: this.store.modelsOf(row.id),
@@ -3018,11 +3068,16 @@ export class ModelsService {
     if (!ref) return null;
     const row = this.effectiveFor(workspace, ref.provider_id);
     if (!row || row.archivedAt || !row.enabled || row.kind !== 'llm') return null;
-    if (row.authKind === 'oauth') return null;
+    if (!this.drawsImages(row)) return null;
     const entry = this.entryOf(row);
-    const protocol = imageProtocolOf(entry?.protocol ?? 'openai', ref.model);
+    const protocol = imageProtocolOf(entry?.protocol ?? 'openai', ref.model, entry?.hermesProvider);
     const base = row.baseUrl ?? entry?.baseUrl;
     if (!protocol || !base) return null;
+    if (protocol === 'codex') {
+      // The subscription's token is Hermes's, and `image_api.py` asks Hermes for it at the
+      // moment it draws (decision §84): no key is written, and none passes through the hub.
+      return { protocol, baseUrl: base.replace(/\/+$/, ''), model: ref.model, apiKey: null };
+    }
     const key = row.apiKeySecretId
       ? this.options.secrets.reveal(row.workspace, row.apiKeySecretId)
       : null;
@@ -3113,8 +3168,9 @@ export class ModelsService {
   /**
    * A model that can be the profile's image model (decision §72): a model that draws, on a
    * chat provider the hub can speak to for pictures with a key it holds (or that needs none).
-   * A provider signed in through Hermes is refused — its credential is Hermes's, and the
-   * skills and the image backend need one the hub can hand them.
+   * A provider signed in through Hermes is refused — its credential is Hermes's — except the
+   * ChatGPT subscription, whose one image model `image_api.py` draws with by asking Hermes for
+   * the token itself (§84).
    */
   private requireImageModel(scope: WorkspaceScope, ref: ModelRefInput): ModelRow {
     const row = this.requireModel(scope, ref);
@@ -3125,12 +3181,13 @@ export class ModelsService {
       throw refuse('not an image model: choose one that answers with images');
     }
     if (provider.kind !== 'llm') throw refuse('image models come from chat providers');
-    if (provider.authKind === 'oauth') {
+    if (!this.drawsImages(provider)) {
       throw refuse(
         'a provider signed in through Hermes cannot draw for the hub; add one with a key',
       );
     }
-    if (!imageProtocolOf(this.entryOf(provider)?.protocol ?? 'openai', row.modelKey)) {
+    const entry = this.entryOf(provider);
+    if (!imageProtocolOf(entry?.protocol ?? 'openai', row.modelKey, entry?.hermesProvider)) {
       throw refuse('this provider cannot draw images for the hub');
     }
     return row;

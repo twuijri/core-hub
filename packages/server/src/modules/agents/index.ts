@@ -247,6 +247,8 @@ export {
   type HermesCompression,
 } from './hermes-compression.js';
 export { profileHome } from './profile-home.js';
+// The models module asks a signed-in provider's own model list from Hermes's Python (§83).
+export { hermesPythonRunner } from './hermes-pending-writes.js';
 export {
   HermesProfileError,
   PROFILE_ARCHIVE_TIMEOUT_MS,

@@ -1,7 +1,7 @@
 ---
 name: image-edit
 description: Edit an image, vary it, or cut out its background.
-version: 1.1.0
+version: 1.2.0
 author: twuijri (Core Hub)
 license: Apache-2.0
 platforms: [linux, macos, windows]
@@ -16,7 +16,7 @@ required_environment_variables:
     prompt: Set by Core Hub from Models → Images
     optional: true
   - name: COREHUB_IMAGE_API_KEY
-    prompt: Set by Core Hub from the chosen provider's key
+    prompt: Set by Core Hub from the chosen provider's key (absent for the ChatGPT subscription)
     optional: true
 metadata:
   hermes:
