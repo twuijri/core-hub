@@ -82,10 +82,15 @@ fun VoiceButton(profile: String, onText: (String) -> Unit) {
     val prompt = stringResource(R.string.voice_prompt)
     val noSpeech = stringResource(R.string.voice_no_speech)
     val micDenied = stringResource(R.string.voice_mic_denied)
+    val noRecognizer = stringResource(R.string.voice_unavailable)
     DisposableEffect(Unit) { onDispose { recording?.discard() } }
 
     fun onPhone() {
-        if (!available) return
+        if (!available) {
+            // Core Hub was chosen but the hub cannot listen for this profile, and the phone has no recognizer.
+            Toast.makeText(context, noRecognizer, Toast.LENGTH_LONG).show()
+            return
+        }
         try {
             launcher.launch(dictationIntent(DictationLanguage.tag(choices.dictation, graph.prefs.effectiveLanguage), prompt))
         } catch (_: ActivityNotFoundException) {
@@ -203,8 +208,8 @@ class Speaker(private val context: Context) {
         val media = runCatching {
             MediaPlayer().apply {
                 setDataSource(file.absolutePath)
-                setOnCompletionListener { if (cont.isActive) cont.resume(Unit) }
-                setOnErrorListener { _, _, _ -> if (cont.isActive) cont.resume(Unit); true }
+                setOnCompletionListener { done(it); if (cont.isActive) cont.resume(Unit) }
+                setOnErrorListener { mp, _, _ -> done(mp); if (cont.isActive) cont.resume(Unit); true }
                 prepare()
                 start()
             }
@@ -214,6 +219,12 @@ class Speaker(private val context: Context) {
         }
         player = media
         cont.invokeOnCancellation { runCatching { media.stop() } }
+    }
+
+    /** A part finished: its player is let go. */
+    private fun done(media: MediaPlayer) {
+        if (player === media) player = null
+        media.release()
     }
 
     private fun onPhone(text: String, rtl: Boolean) {
