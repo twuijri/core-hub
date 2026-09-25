@@ -131,7 +131,9 @@ test('23. the agent tools ask Hermes: an MCP test, a skill pack imported, WhatsA
 
   // ---- Channels: WhatsApp linked by QR.
   await openAgentPage(page, 'القنوات', /\/channels$/);
-  await page.getByTestId('channel-pair-whatsapp').click();
+  await page.getByTestId('platform-picker-open').click();
+  await page.getByTestId('platform-picker-search').fill('واتساب');
+  await page.getByTestId('platform-option-whatsapp').click();
   const qr = page.getByTestId('channel-pair-qr');
   await expect(qr).toHaveAttribute('data-qr', 'https://wa.me/e2e#first-code');
   await expect(qr.locator('svg')).toBeVisible();

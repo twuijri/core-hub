@@ -2,11 +2,11 @@
  * Telegram on the Channels page (the owner, 2026-09-24: «ابي تربط التليجرام … لانه ما سويت الا
  * واتساب وانا احتاج تليجرام»):
  *
- * - "Link Telegram" explains @BotFather in plain steps, takes the token (hidden) and optional
+ * - «ربط منصة» → Telegram explains @BotFather in plain steps, takes the token (hidden) and optional
  *   user ids that skip approval, and sends them to the hub in the selected profile;
  * - a token the hub (Telegram) refuses is said in words, with Telegram's own reason;
- * - linked, the row names the bot (@username), the page says how to start (open t.me/<bot>, send
- *   a message, approve below), and Unlink asks first.
+ * - linked, the row names the bot (@username), its card says how to start (open t.me/<bot>, send
+ *   a message, approve below) while somebody waits, and Unlink asks first.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
@@ -15,6 +15,7 @@ import type { Agent } from '../src/types.js';
 import ar from '../src/i18n/ar.json' with { type: 'json' };
 import en from '../src/i18n/en.json' with { type: 'json' };
 import { TELEGRAM_OPTIONS } from '../../server/src/modules/agents/telegram-settings.js';
+import { catalogOf } from './helpers/channel-catalog.js';
 
 class FakeSocket {
   connected = false;
@@ -208,6 +209,7 @@ function hub(options: { linked?: boolean; refuse?: boolean } = {}) {
         items: [{ id: '01J8QK3ZR2W7M5N4P6T8V9X0P1', slug: 'manger', name: 'Manger' }],
       });
     if (path.endsWith('/meta')) return json({ name: 'Core Hub', server_version: '0.0.0' });
+    if (path.endsWith('/channel-platforms')) return json({ items: catalogOf() });
     if (path.endsWith('/channels') && method === 'GET') {
       return json({
         items: linked ? [telegram()] : [],
@@ -286,7 +288,8 @@ describe('Link Telegram', () => {
   it('explains BotFather, sends the token and the allowed ids in the profile, and names the bot', async () => {
     const { fetchImpl, sent } = hub();
     mount(`/agents/${HERMES}/channels`, fetchImpl);
-    fireEvent.click(await screen.findByTestId('telegram-link-open'));
+    fireEvent.click(await screen.findByTestId('platform-picker-open'));
+    fireEvent.click(await screen.findByTestId('platform-option-telegram'));
     const steps = await screen.findByTestId('telegram-steps');
     expect(steps.textContent).toContain('BotFather');
     expect(steps.textContent).toContain('/newbot');
@@ -313,7 +316,7 @@ describe('Link Telegram', () => {
     });
     fireEvent.click(screen.getByTestId('telegram-link-close'));
 
-    // The row names the bot; the page says how to start, with the bot one click away.
+    // The row names the bot; its card says how to start, with the bot one click away.
     await waitFor(() =>
       expect(screen.getByTestId('channel-account-telegram').textContent).toContain(
         '@office_helper_bot',
@@ -321,17 +324,25 @@ describe('Link Telegram', () => {
     );
     const open = screen.getByTestId('telegram-bot-link') as HTMLAnchorElement;
     expect(open.href).toBe('https://t.me/office_helper_bot');
-    expect(screen.queryByTestId('telegram-link-open')).toBeNull();
+    expect(screen.getByTestId('channel-list').contains(open)).toBe(true);
+    // Linked, the picker marks it instead of offering it again.
+    fireEvent.click(screen.getByTestId('platform-picker-open'));
+    expect(screen.getByTestId('platform-option-linked-telegram')).toBeTruthy();
+    expect((screen.getByTestId('platform-option-telegram') as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    fireEvent.keyDown(screen.getByTestId('platform-picker'), { key: 'Escape' });
     // A Telegram stranger waiting for approval is listed like any other.
-    expect((await screen.findByTestId('pairing-request-cccccccccccccccc')).textContent).toContain(
-      'telegram',
+    expect((await screen.findByTestId('pairing-request-cccccccccccccccc')).textContent).toMatch(
+      /تيليجرام|Telegram/,
     );
   });
 
   it('says in words why Telegram refused the token', async () => {
     const { fetchImpl } = hub({ refuse: true });
     mount(`/agents/${HERMES}/channels`, fetchImpl);
-    fireEvent.click(await screen.findByTestId('telegram-link-open'));
+    fireEvent.click(await screen.findByTestId('platform-picker-open'));
+    fireEvent.click(await screen.findByTestId('platform-option-telegram'));
     fireEvent.change(await screen.findByTestId('telegram-token'), { target: { value: TOKEN } });
     fireEvent.click(screen.getByTestId('telegram-link-submit'));
     const error = await screen.findByTestId('telegram-link-error');
@@ -345,7 +356,9 @@ describe('Link Telegram', () => {
     fireEvent.click(await screen.findByTestId('channel-unlink-telegram'));
     expect(sent.some((entry) => entry.path.endsWith('/unlink'))).toBe(false);
     fireEvent.click(await screen.findByTestId('confirm-yes'));
-    await screen.findByTestId('telegram-link-open');
+    // Unlinked, it leaves the list: the page is empty again, and says what happened.
+    await screen.findByTestId('channels-empty');
+    expect(screen.getByTestId('channel-unlinked')).toBeTruthy();
     expect(sent.find((entry) => entry.path.endsWith('/channels/telegram/unlink'))).toMatchObject({
       method: 'POST',
       profile: 'manger',

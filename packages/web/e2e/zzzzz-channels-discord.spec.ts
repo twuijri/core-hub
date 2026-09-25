@@ -2,11 +2,13 @@
  * Journey 41: more messaging platforms linked from the web like Telegram — Discord, against the
  * real hub, with Discord's `/users/@me` scripted (`e2e/hub.ts`):
  *
- * - «منصات أخرى» offers «ربط ديسكورد»; its dialog explains the developer portal in plain steps;
+ * - «ربط منصة» offers Discord among every platform; its dialog explains the developer portal in
+ *   plain steps;
  * - a token Discord refuses is said in Discord's words; the right one links the bot, named;
  * - Discord's own settings: «في القنوات: الرد عند الإشارة فقط» switched off and a channel allowed,
  *   saved together and read back after a reload;
- * - Unlink, behind a confirm, forgets the bot and brings «ربط ديسكورد» back.
+ * - linked, its "how to start" is in its own card; Unlink, behind a confirm, forgets the bot and
+ *   the row leaves the list.
  */
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -41,10 +43,14 @@ test('41. Discord linked like Telegram: the steps, the bot named, its settings, 
   await login(page);
   await openChannels(page);
 
-  // ---- The catalog offers it; the dialog explains the developer portal.
-  const open = page.getByTestId('platform-link-discord');
-  await expect(open).toHaveText('ربط ديسكورد');
-  await expect(page.getByTestId('platform-generic')).toContainText('Signal');
+  // ---- The picker offers it among every platform; the dialog explains the developer portal.
+  await page.getByTestId('platform-picker-open').click();
+  const picker = page.getByTestId('platform-picker');
+  await expect(picker.getByTestId('platform-picker-popular')).toContainText('ديسكورد');
+  await expect(picker.getByTestId('platform-picker-more')).toContainText('iMessage via Photon');
+  await shot(page, 'agent-channels-picker-ar-light');
+  const open = page.getByTestId('platform-option-discord');
+  await expect(open).toContainText('ديسكورد');
   await open.click();
   const dialog = page.getByTestId('platform-link');
   await expect(dialog).toContainText('ربط ديسكورد');
@@ -69,8 +75,10 @@ test('41. Discord linked like Telegram: the steps, the bot named, its settings, 
   await expect(page.getByTestId('channel-link-discord')).toHaveText('مربوط');
   await expect(page.getByTestId('channel-account-discord')).toContainText('@corehub_discord');
   await expect(page.getByTestId('channel-account-discord')).toContainText('مساعد ديسكورد');
-  await expect(page.getByTestId('platform-how-discord')).toBeVisible();
-  await expect(page.getByTestId('platform-link-discord')).toHaveCount(0);
+  // Discord answers only its allowlist: its "how to start" waits behind the card's button.
+  await page.getByTestId('channel-guide-discord').click();
+  await expect(page.getByTestId('channel-list').getByTestId('platform-how-discord')).toBeVisible();
+  await expect(page.getByTestId('platform-catalog')).toHaveCount(0);
   await shot(page, 'agent-channels-discord-linked-ar-light');
 
   // ---- Discord's own settings, saved together and read back.
@@ -97,6 +105,7 @@ test('41. Discord linked like Telegram: the steps, the bot named, its settings, 
   await page.getByTestId('channel-unlink-discord').click();
   await expect(page.getByTestId('confirm-dialog')).toContainText('ديسكورد');
   await page.getByTestId('confirm-yes').click();
-  await expect(page.getByTestId('channel-link-discord')).toHaveText('غير مربوط');
-  await expect(page.getByTestId('platform-link-discord')).toBeVisible();
+  await expect(page.getByTestId('channel-unlinked')).toContainText('ديسكورد');
+  await expect(page.getByTestId('channel-link-discord')).toHaveCount(0);
+  await expect(page.getByTestId('platform-picker-open')).toBeVisible();
 });
