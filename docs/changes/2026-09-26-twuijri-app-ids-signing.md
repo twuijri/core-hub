@@ -106,6 +106,10 @@ Android signed build 36146405111 (after the stricter AAB check) — success
   package: name='com.twuijri.corehub' versionCode='5'   jar verified.   artifacts: 0
 ```
 
+CI على #144 بعد الدمج في فرع الليلة (`8f1235f`): كل الفحوص ناجحة (١٧)، ومنها الوظائف غير الموقّعة
+«Android build, unit tests, lint» و«Build and test on the iOS simulator» و«Installers (macos/ubuntu/windows)»؛
+ولم يعمل أي من سير العمل الموقّعة على طلب الدمج.
+
 التشغيل المؤقت: لتسجيل سير العمل الجديدة كي تُشغَّل يدويًا من هذا الفرع (GitHub يرفض `workflow_dispatch`
 لملف غير موجود في الفرع الافتراضي) أُضيف مؤقتًا مشغّل `push` لهذا الفرع مع شرط يتخطى الوظيفة (ظهرت
 التشغيلات «skipped»)، ثم أُزيل قبل الدمج في فرع الليلة.
