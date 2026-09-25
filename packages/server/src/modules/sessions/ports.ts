@@ -134,6 +134,11 @@ export interface AgentRunRequest {
   files: AgentFileExchange | null;
   /** Tool names the user already approved for the rest of this session. */
   allowedTools: string[];
+  /**
+   * The person the run acts for (the session's owner). The hub's own tools act as this
+   * person, in this workspace only (contract decision §67); absent, they refuse.
+   */
+  userId?: string | null;
 }
 
 export interface AgentRunAccepted {

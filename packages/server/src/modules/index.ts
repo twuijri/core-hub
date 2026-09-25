@@ -49,6 +49,7 @@ import {
   hermesRuntimeFor,
   installedSkillNames,
   registerAgentAttachments,
+  registerHubToolsNotify,
 } from './agents/index.js';
 import {
   ChannelSourceRefusal,
@@ -192,6 +193,20 @@ registerAgentAttachments((app) => ({
   materialise: (workspace, ids, directory) =>
     attachmentsPort(app).materialise(workspace, ids, directory),
 }));
+
+/**
+ * `notifications.notify`, a tool of the hub's own (contract decision §67): `agents` serves
+ * the tool, `notify` owns the inbox. A notice to the run's owner, in the run's profile.
+ */
+registerHubToolsNotify((app) => {
+  const notifier = createNotifier(requireSqlite(app.hub.database), () => app.hub.io);
+  return (input) =>
+    notifier.announce(
+      { userId: input.userId, workspace: input.workspaceId, profile: input.profile },
+      { kind: 'system', title: input.title, body: input.body },
+      null,
+    );
+});
 
 /**
  * The Tasks board reflects Hermes's own kanban (owner decision, 2026-09-23). `agents`

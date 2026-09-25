@@ -1875,3 +1875,60 @@ specify; the RFC's own test vector is the proof); keeping push credentials only 
 environment (ARCHITECTURE invariant 5: the rest is set from the UI); ntfy in this change — it
 needs a new `push_provider` value and so a migration, while every open PR is racing for
 `0016`; it is the next step if the owner wants a no-Google Android path.
+
+## 67. The hub serves its own tools to its agents over MCP, as the person whose run it is
+
+An agent in Core Hub could not drive the hub: it did not see the board, could not schedule, read
+its profile's conversations or tell the person anything. The hub now offers itself to its agents
+as an MCP server, in groups — `tasks`, `schedules`, `conversations`, `notifications`,
+`workflows`, `files` — switched per profile on the agent's MCP page ("Core Hub tools").
+Proposed here — owner to confirm:
+
+- **Streamable HTTP on the hub's own port, not a stdio command.** `agents.hubMcp`
+  (`POST /api/v1/hub-mcp`) takes one JSON-RPC message and answers it as `application/json`
+  (a notification: `202`, no body). Hermes runs beside the hub (ADR 0008), reaches it on the
+  loopback, and already speaks HTTP MCP with headers; a `corehub mcp` stdio command would need
+  Node and the CLI in every agent's environment and a process per connection, and would still
+  have to call the hub's HTTP API to act. No session id, no server stream: the hub pushes
+  nothing, and every call stands on its own.
+- **Written into the profile, marked as the hub's.** Switching it on writes one block named
+  `corehub` into the profile's Hermes `config.yaml` (`url`, `headers.Authorization: Bearer
+  ${COREHUB_MCP_TOKEN}`, a comment above it saying whose it is) and a fresh key into the
+  profile's `.env`; Hermes fills the header from that profile's own `.env`, so the key is never
+  in the config a profile export carries. The block is put back at every boot if it drifted
+  (a new key when the old one is gone), removed when switched off (the key then stops working),
+  and the generic MCP routes refuse to edit or delete it (`409`, `details.reason = mcp_managed`).
+  A coding agent over ACP gets the same server in `session/new` when it says it can reach an
+  HTTP MCP server (`agentCapabilities.mcpCapabilities.http`).
+- **The key names the profile; the live run names the person.** Hermes keeps one MCP
+  connection per profile and says nothing on a call about which conversation made it, so no
+  per-conversation token can ride on the wire. Instead every run the hub starts opens a lease
+  and mints a **run token** for its owner, revoked when the run ends; `initialize` and
+  `tools/list` need only the key, `tools/call` needs a live run in the key's profile and goes
+  through the hub's own routes with that run's token — the same validation and permission
+  checks as REST. With runs of several people live at once, the run whose agent just announced
+  a call to one of the hub's tools (`mcp__corehub__…`, or through Hermes's `tool_call` bridge)
+  decides; still unclear after two seconds, the call is refused (`hub_tools_run_ambiguous`)
+  rather than guessed. No live run (a message arriving from a channel, the hub's title question)
+  is refused too (`hub_tools_no_live_run`). A refusal is a tool result with `isError: true` and
+  the hub's code, never an HTTP error, so the agent reads why.
+- **That person, that profile, never an admin.** A run token enters only its run's profile
+  (a header naming another, or `profiles=all`, reaches no further), holds the scopes `read` and
+  `write`, and its role is `member` whatever the person's — every admin-only route refuses it.
+  The person is re-read on every call: disabled, or no longer a member of the profile, and it
+  stops. `notifications.notify` (no REST operation) writes only to the run owner's inbox; the
+  `files` tools stay under `${DATA_DIR}/workspaces/<profile>` and follow no link out of it.
+- **Off by default; on, read only.** Nothing is offered until an admin switches it on. On, every
+  group reads and none writes; each group's writes (create/move/assign/comment a task, create,
+  pause or run a schedule, notify, run a workflow, write a file) are a second switch. A group
+  switched off is refused at the call at once; Hermes's tool list follows when its next
+  conversation starts (the hub retires the TUI gateway so the next one reads the block afresh).
+- **The last calls are shown, not audited.** The newest 200 calls per profile are kept (tool,
+  outcome, the hub's code, the person and conversation acted for); the card shows 20.
+
+Rejected: a static per-profile key acting as the admin who switched it on (an agent would act
+beyond the person whose conversation it is); a key per conversation in the header (Hermes shares
+one connection per profile, so it would be the first conversation's for all); acting as the
+least-privileged of several live people (right permissions, wrong name on everything it made);
+the `browser`, `devices` and `usage` groups the observer mentioned as possible (no operation to
+map them onto yet — a later group, not a gap in this one).

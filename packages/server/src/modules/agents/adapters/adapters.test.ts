@@ -15,7 +15,11 @@ import type { AgentEvent, AgentTarget } from './types.js';
  * without a real CLI, which is what makes the protocol code testable at all.
  */
 function fakeAgent(
-  options: { protocolVersion?: number; updates?: Record<string, unknown>[] } = {},
+  options: {
+    protocolVersion?: number;
+    updates?: Record<string, unknown>[];
+    capabilities?: Record<string, unknown>;
+  } = {},
 ) {
   const sent: Record<string, unknown>[] = [];
   let onMessage: (message: Record<string, unknown>) => void = () => {};
@@ -34,7 +38,7 @@ function fakeAgent(
           id,
           result: {
             protocolVersion: options.protocolVersion ?? 1,
-            agentCapabilities: { loadSession: true },
+            agentCapabilities: options.capabilities ?? { loadSession: true },
             authMethods: [],
           },
         });
@@ -133,6 +137,31 @@ describe('ACP adapter: the handshake', () => {
       method: 'session/new',
       params: { cwd: '/work', mcpServers: [] },
     });
+  });
+
+  it("hands the hub's own tools to an agent that reaches HTTP MCP servers, and to no other", async () => {
+    const hub = {
+      type: 'http' as const,
+      name: 'corehub',
+      url: 'http://127.0.0.1:8080/api/v1/hub-mcp',
+      headers: [{ name: 'Authorization', value: 'Bearer hub_mcp_x' }],
+    };
+    const able = fakeAgent({ capabilities: { mcpCapabilities: { http: true } } });
+    await AcpSession.connect(able.transport, {
+      cwd: '/work',
+      clientName: 'corehub',
+      clientVersion: '1.0.0',
+      mcpServers: [hub],
+    });
+    expect(able.sent[1]).toMatchObject({ method: 'session/new', params: { mcpServers: [hub] } });
+    const unable = fakeAgent();
+    await AcpSession.connect(unable.transport, {
+      cwd: '/work',
+      clientName: 'corehub',
+      clientVersion: '1.0.0',
+      mcpServers: [hub],
+    });
+    expect(unable.sent[1]).toMatchObject({ method: 'session/new', params: { mcpServers: [] } });
   });
 
   it('refuses an agent that speaks a different major protocol version', async () => {

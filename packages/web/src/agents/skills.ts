@@ -211,6 +211,86 @@ export function useDeleteMcpServer(agentId: string | undefined) {
   });
 }
 
+// ------------------------------------------------------- the hub's own tools
+//
+// Core Hub offers itself to the agent as an MCP server (contract decision §67). The card on
+// the MCP page reads and switches it per profile; the block it writes is tested like any
+// other server, by name.
+
+export type HubToolGroupId =
+  'tasks' | 'schedules' | 'conversations' | 'notifications' | 'workflows' | 'files';
+
+export interface HubToolGroup {
+  id: HubToolGroupId;
+  enabled: boolean;
+  allow_writes: boolean;
+  tools: Array<{ name: string; access: 'read' | 'write' }>;
+}
+
+export interface HubToolCall {
+  id: string;
+  tool: string;
+  ok: boolean;
+  error_code: string | null;
+  user_id: string | null;
+  session_id: string | null;
+  duration_ms: number;
+  created_at: string;
+}
+
+export interface HubTools {
+  enabled: boolean;
+  available: boolean;
+  unavailable_reason: 'runtime_absent' | 'hermes_profile_absent' | null;
+  server_name: string;
+  url: string | null;
+  groups: HubToolGroup[];
+  recent_calls: HubToolCall[];
+  updated_at: string | null;
+}
+
+export interface HubToolsPatch {
+  enabled?: boolean;
+  groups?: Array<{ id: HubToolGroupId; enabled?: boolean; allow_writes?: boolean }>;
+}
+
+export const hubToolKeys = {
+  get: (profile: string, agentId: string) => ['agent-hub-tools', profile, agentId] as const,
+};
+
+export function useHubTools(agentId: string | undefined) {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: hubToolKeys.get(profile, agentId ?? ''),
+    queryFn: async () =>
+      (
+        await client.request('get', '/agents/{agent_id}/hub-tools', {
+          params: { agent_id: agentId ?? '' },
+        })
+      ).data as unknown as HubTools,
+    enabled: !!session && !!agentId,
+  });
+}
+
+export function useUpdateHubTools(agentId: string | undefined) {
+  const { client, profile } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (patch: HubToolsPatch) =>
+      (
+        await client.request('patch', '/agents/{agent_id}/hub-tools', {
+          params: { agent_id: agentId ?? '' },
+          body: patch as never,
+        })
+      ).data as unknown as HubTools,
+    onSuccess: (next) => {
+      queryClient.setQueryData(hubToolKeys.get(profile, agentId ?? ''), next);
+      // The block is a server in the same file; the list below leaves it out by name.
+      void queryClient.invalidateQueries({ queryKey: mcpKeys.list(profile, agentId ?? '') });
+    },
+  });
+}
+
 // ---------------------------------------------------------------- memory
 
 export interface MemoryItem {

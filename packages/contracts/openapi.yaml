@@ -5758,6 +5758,135 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  # ---------------------------------------------------------------- the hub's own tools
+  /agents/{agent_id}/hub-tools:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+    get:
+      operationId: agents.getHubTools
+      tags: [agents]
+      summary: The hub's own tools offered to the agent in this profile
+      description: >-
+        Core Hub serves itself to its agents as an MCP server (`agents.hubMcp`), in groups
+        (tasks, schedules, conversations, notifications, workflows, files). This is whether
+        the profile in `X-Hub-Profile` offers them, which groups are on, whether each group
+        may write, and the last calls made. Only for Hermes: another agent answers
+        `409 state_invalid` with `details.reason = skills_are_hermes_only`. `available` is
+        false (with `unavailable_reason`) where the hub has no Hermes home to write the
+        server into. Off until an admin switches it on (contract decision §67).
+      x-rt-events: []
+      responses:
+        '200':
+          description: The settings, the tools each group carries and the recent calls.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HubTools'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    patch:
+      operationId: agents.updateHubTools
+      tags: [agents]
+      summary: Switch the hub's tools on or off, and choose the groups (admin)
+      description: >-
+        Switching on writes one MCP server block named `corehub` into the profile's Hermes
+        `config.yaml` (marked as the hub's, kept in sync at every boot) and a fresh key into
+        the profile's `.env`; switching off removes both and the key stops working. The key
+        only identifies the profile: a call acts as the person whose run is live in that
+        profile, never as an admin (contract decision §67). Groups not named keep their
+        state. Hermes reads its MCP servers when a conversation's gateway starts, so the hub
+        starts a new one for the next conversation.
+      x-roles: [owner, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HubToolsPatch'
+            example:
+              enabled: true
+              groups:
+                - id: tasks
+                  enabled: true
+                  allow_writes: true
+      x-rt-events: []
+      responses:
+        '200':
+          description: The settings as stored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HubTools'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /hub-mcp:
+    post:
+      operationId: agents.hubMcp
+      tags: [agents]
+      summary: The hub's MCP server (Streamable HTTP, JSON responses)
+      description: >-
+        What an agent's MCP client talks to — not a client API. One JSON-RPC 2.0 message per
+        request (`initialize`, `notifications/initialized`, `ping`, `tools/list`,
+        `tools/call`); a notification answers `202` with no body. The bearer is the profile's
+        hub-tools key (written into the profile's `.env` as `COREHUB_MCP_TOKEN` by
+        `agents.updateHubTools`), not a person's token. `initialize` and `tools/list` need
+        only the key; `tools/call` also needs a run of the hub's that is live in that
+        profile, and acts as the person who owns it, with that person's permissions in that
+        profile only and never an admin's, through the same checks as the REST API. A tool
+        refused this way is a JSON-RPC result with `isError: true` and the hub's error code,
+        not an HTTP error (contract decision §67).
+      security: []
+      x-scope: global
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonRpcMessage'
+            example:
+              jsonrpc: '2.0'
+              id: 1
+              method: tools/list
+      x-rt-events: []
+      responses:
+        '200':
+          description: The JSON-RPC response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonRpcMessage'
+              example:
+                jsonrpc: '2.0'
+                id: 1
+                result:
+                  tools:
+                    - name: tasks.create
+                      description: Create a task on the profile's board.
+                      inputSchema:
+                        type: object
+                        required: [title]
+                        properties:
+                          title:
+                            type: string
+        '202':
+          description: A notification was accepted; there is nothing to answer.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   # ---------------------------------------------------------------- memory
   /agents/{agent_id}/memory:
     parameters:
@@ -18696,6 +18825,178 @@ components:
           type: [string, 'null']
         duration_ms:
           type: integer
+    HubToolGroupId:
+      type: string
+      description: A group of the hub's own tools (contract decision §67).
+      enum: [tasks, schedules, conversations, notifications, workflows, files]
+    HubTool:
+      type: object
+      required: [name, access]
+      properties:
+        name:
+          type: string
+          description: The MCP tool name, e.g. `tasks.create` (Hermes shows it as `mcp__corehub__tasks_create`).
+        access:
+          type: string
+          enum: [read, write]
+          description: A `write` tool is offered only while its group has `allow_writes`.
+    HubToolGroup:
+      type: object
+      required: [id, enabled, allow_writes, tools]
+      properties:
+        id:
+          $ref: '#/components/schemas/HubToolGroupId'
+        enabled:
+          type: boolean
+        allow_writes:
+          type: boolean
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/HubTool'
+    HubToolCall:
+      type: object
+      required: [id, tool, ok, error_code, user_id, session_id, duration_ms, created_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Ulid'
+        tool:
+          type: string
+        ok:
+          type: boolean
+        error_code:
+          type: [string, 'null']
+          description: The hub's error code when the call was refused or failed.
+        user_id:
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+          description: The person whose run the call acted for; `null` when no run was live.
+        session_id:
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+        duration_ms:
+          type: integer
+          minimum: 0
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+    HubTools:
+      type: object
+      required:
+        [enabled, available, unavailable_reason, server_name, url, groups, recent_calls, updated_at]
+      properties:
+        enabled:
+          type: boolean
+        available:
+          type: boolean
+          description: Whether the hub has this profile's Hermes home to write the server into.
+        unavailable_reason:
+          type: [string, 'null']
+          enum: [runtime_absent, hermes_profile_absent, null]
+        server_name:
+          type: string
+          description: The block's name in `config.yaml`; `agents.testMcpServer` tests it.
+        url:
+          type: [string, 'null']
+          description: Where Hermes reaches the hub's MCP server.
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/HubToolGroup'
+        recent_calls:
+          type: array
+          description: The last calls made in this profile, newest first (at most 20).
+          items:
+            $ref: '#/components/schemas/HubToolCall'
+        updated_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+      example:
+        enabled: true
+        available: true
+        unavailable_reason: null
+        server_name: corehub
+        url: http://127.0.0.1:8080/api/v1/hub-mcp
+        groups:
+          - id: tasks
+            enabled: true
+            allow_writes: true
+            tools:
+              - name: tasks.list
+                access: read
+              - name: tasks.create
+                access: write
+          - id: files
+            enabled: true
+            allow_writes: false
+            tools:
+              - name: files.list
+                access: read
+              - name: files.write
+                access: write
+        recent_calls:
+          - id: 01J9ZS5WQ0C2F9M4XK7T3B8R6N
+            tool: tasks.create
+            ok: true
+            error_code: null
+            user_id: 01J9ZRX1QW3M8K2T6B4N5C7D9E
+            session_id: 01J9ZS2B6D8F0H2J4K6M8N0P2Q
+            duration_ms: 42
+            created_at: '2026-09-25T08:00:00Z'
+        updated_at: '2026-09-25T07:55:00Z'
+    HubToolsPatch:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        groups:
+          type: array
+          items:
+            type: object
+            required: [id]
+            properties:
+              id:
+                $ref: '#/components/schemas/HubToolGroupId'
+              enabled:
+                type: boolean
+              allow_writes:
+                type: boolean
+      example:
+        enabled: true
+        groups:
+          - id: tasks
+            enabled: true
+            allow_writes: true
+    JsonRpcMessage:
+      type: object
+      description: One JSON-RPC 2.0 message, as MCP uses them.
+      required: [jsonrpc]
+      properties:
+        jsonrpc:
+          type: string
+          const: '2.0'
+        id:
+          type: [string, integer, 'null']
+        method:
+          type: string
+        params:
+          type: object
+          additionalProperties: true
+        result:
+          type: object
+          additionalProperties: true
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: integer
+            message:
+              type: string
+            data: {}
+      additionalProperties: true
     MemoryItem:
       type: object
       required: [id, kind, title, content, tags, revision, updated_at]

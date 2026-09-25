@@ -47,6 +47,7 @@ import type {
   RunnerToolKind,
 } from './ports.js';
 import type { AgentsService } from './service.js';
+import type { RunLeases } from './hub-tools/leases.js';
 
 /**
  * How long a question waits for the person (owner decision, 2026-09-23: five minutes, as in
@@ -77,12 +78,16 @@ interface LiveRun {
   decisions: Map<string, DecisionMap>;
   /** Questions the agent asked in this run and still waits on (`question.asked`). */
   questions: Set<string>;
+  /** Tools in flight, by id, so an end can be matched to what started. */
+  tools: Map<string, { name: string; input: unknown }>;
 }
 
 export interface AgentRunnerDeps {
   service: AgentsService;
   adapters: AdapterSet;
   log: FastifyBaseLogger;
+  /** Who each live run acts for, for the hub's own tools (`hub-tools/leases.ts`). */
+  leases?: RunLeases;
 }
 
 export class AgentRunner implements AgentRunnerPort {
@@ -122,8 +127,17 @@ export class AgentRunner implements AgentRunnerPort {
       interruptRequested: false,
       decisions: new Map(),
       questions: new Set(),
+      tools: new Map(),
     };
     this.runs.set(request.runId, run);
+    // From here until the run ends, a call to the hub's own tools from this profile may act
+    // for the run's owner (contract decision §67).
+    this.deps.leases?.open({
+      runId: request.runId,
+      sessionId: request.sessionId,
+      workspaceId: request.workspace,
+      userId: request.userId ?? null,
+    });
 
     // The turn: events are pumped from the session stream while `send()` drives the agent.
     // Neither is awaited here — the engine consumes `stream()` and `send()` resolves on the
@@ -421,6 +435,16 @@ export class AgentRunner implements AgentRunnerPort {
   }
 
   private translate(run: LiveRun, event: AgentEvent): RunnerEvent[] {
+    if (event.type === 'tool.started') {
+      const started = { name: event.name ?? event.title, input: event.input };
+      this.deps.leases?.toolStarted(run.runId, started.name, started.input);
+      run.tools.set(event.id, started);
+    }
+    if (event.type === 'tool.completed' || event.type === 'tool.failed') {
+      const started = run.tools.get(event.id);
+      this.deps.leases?.toolEnded(run.runId, started?.name, started?.input);
+      run.tools.delete(event.id);
+    }
     if (event.type === 'question.asked') {
       run.questions.add(event.id);
       return [
@@ -465,6 +489,7 @@ export class AgentRunner implements AgentRunnerPort {
     run.ended = true;
     for (const waiter of run.waiting.splice(0)) waiter({ value: undefined as never, done: true });
     this.runs.delete(run.runId);
+    this.deps.leases?.close(run.runId);
     // A session whose process died is not reusable; forget it so the next turn opens a
     // fresh one (an ACP child, or the Hermes TUI gateway). Hermes's HTTP sessions stay.
     if (isClosed(run.live.session)) {
