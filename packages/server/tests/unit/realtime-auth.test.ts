@@ -205,7 +205,9 @@ describe('realtime: the handshake', () => {
   it('admits a signed-in person on every namespace', async () => {
     for (const namespace of NAMESPACES) {
       const { refused } = await open(namespace, { token: hub.token, profile: 'default' });
-      expect(refused, namespace).toBeNull();
+      // The web terminal is the one exception: the owner's, and off on this hub (§60).
+      if (namespace === REALTIME_NAMESPACES.terminal) expect(refused?.message).toBe('forbidden');
+      else expect(refused, namespace).toBeNull();
     }
   });
 
@@ -220,7 +222,10 @@ describe('realtime: the handshake', () => {
         const { refused } = await open(namespace, { token: mem.token, profile });
         expect(refused?.message, `${namespace} ${profile}`).toBe('profile_not_found');
       }
-      expect((await open(namespace, { token: mem.token, profile: 'alpha' })).refused).toBeNull();
+      const { refused } = await open(namespace, { token: mem.token, profile: 'alpha' });
+      // A member never reaches the owner's web terminal, whatever the profile (§60).
+      if (namespace === REALTIME_NAMESPACES.terminal) expect(refused?.message).toBe('forbidden');
+      else expect(refused).toBeNull();
     }
   });
 });

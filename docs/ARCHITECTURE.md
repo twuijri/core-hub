@@ -42,6 +42,7 @@ surface. A module owns its tables, its routes, its events and its tests.
 | `updates` | release channels for the clients, in-app update source | our test track |
 | `audit` | usage, costs, logs, performance snapshots | clawboard stats, Multica audit |
 | `plugins` | Docker/MCP based extensions and skills exposure | clawboard plugins, ACP skills |
+| `terminal` | the owner's web terminal: PTY sessions on the hub's host, off unless `COREHUB_WEB_TERMINAL=1` (DECISIONS §60) | — |
 
 Composition lives in `packages/server/src/app/` (routes mount order, sockets,
 DB, config). No module imports `app`.

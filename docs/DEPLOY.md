@@ -35,8 +35,10 @@ sets:
 | `COREHUB_SETUP_OPEN_MINUTES` | Optional. Minutes after the hub starts, while it has no owner, in which setup is open without the token. Default `60`; `0` = token only (§2). |
 | `COREHUB_RESET_OWNER` | Optional, recovery only. `1` disables the owner on the next boot and reopens setup (§2). Remove it afterwards. |
 | `COREHUB_TASK_AUTO_START_MAX` | Optional. How many task runs the hub starts **by itself** (a task's "Start automatically") at once in one profile; the rest wait their turn. Default `2`. A person's "Assign and start" is never held back by it. |
+| `COREHUB_WEB_TERMINAL` | Optional, **off by default**. `1` gives the owner — and only the owner — a shell on this host from Settings → Terminal (§3c). Read the risk first. |
+| `COREHUB_WEB_TERMINAL_IDLE_MINUTES` | Optional. A web terminal nobody types in closes after this many minutes. Default `15`. |
 
-These seven are the whole configuration (ARCHITECTURE invariant 5). There is
+These nine are the whole configuration (ARCHITECTURE invariant 5). There is
 no variable for model provider keys either — they are added once on the Models
 screen and the hub carries them to every agent (§3).
 
@@ -246,6 +248,42 @@ hub's code in `/app` and Hermes's in `/opt/hermes` belong to root. An agent cann
 the hub or Hermes, by mistake or because a page it read told it to; a change to either
 comes with a new image. Recreating the container drops nothing you need — every file that
 is written lives in `/data`.
+
+## 3c. The owner's web terminal (off by default)
+
+Settings → Terminal («الطرفية») is a shell on the hub's host, in the browser. It exists only when
+the stack sets it, and only the **owner** account sees it — not admins, not members (owner,
+2026-09-25). To turn it on, add to the hub's environment and recreate the container:
+
+```yaml
+    environment:
+      COREHUB_WEB_TERMINAL: '1'
+      # COREHUB_WEB_TERMINAL_IDLE_MINUTES: '15'
+```
+
+Turn it off by removing the line: the page and the entry disappear, and the hub refuses every
+attempt, even the owner's.
+
+**The risk, plainly.** Whoever signs in as the owner from a browser gets a shell as the hub's own
+user (`hub`, uid 10001 — never root) with everything that user can reach:
+
+- all of `/data`: the database (users, conversations, audit log), the JWT signing key, the
+  encrypted provider keys and the key that decrypts them, Hermes's home and its `.env`, every
+  profile's files and every coding agent's home;
+- the network the container is on, and whatever it can reach;
+- the processes the hub runs — Hermes's gateways, agents — and their environment (the same user
+  can read `/proc/<pid>/environ`).
+
+It cannot change the hub's or Hermes's code (`/app` and `/opt/hermes` are root's and read-only;
+`scripts/image-sealed-check.mjs` checks it from a terminal shell), cannot become root, and cannot
+reach the host outside the container unless the stack mounted something into it (a Docker
+socket, a host folder). So the owner's password is now as valuable as a shell on the server:
+use a long one, keep the hub behind HTTPS, and leave the terminal off when you do not need it.
+
+What limits it: the owner only, and only from a signed-in browser (an app token — a paired phone,
+an integration — is refused); three terminals at once; each closes after the idle timeout; and
+every start and end is written to the audit log (Settings → Logs, `terminal.opened` /
+`terminal.closed`: who, when, in which folder, why it ended). What is typed is not recorded.
 
 ## 4. Smoke checklist
 

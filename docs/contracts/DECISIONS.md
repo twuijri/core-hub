@@ -1069,3 +1069,42 @@ Rejected: running a repository task in the session's own folder when git refuses
 would work on an empty folder and look successful); a per-project limit (the owner asked per
 profile); a migration to make `worktrees.path` unique only among live rows — a task's removed
 worktree row is reused instead, which also keeps one history per task.
+
+## 60. The web terminal is the owner's, off by default, and every session is audited
+
+The owner asked for a terminal in the web and said who it is for (2026-09-25): «الا خله للمشرف
+الرئيسي بس» — the one account with role `owner`; not admins, not members. What the contract now
+has (`terminal.get`, `/rt/terminal`, `terminal.output`, `terminal.exited`):
+
+- **Off unless `COREHUB_WEB_TERMINAL=1`.** `GET /terminal` answers `403 forbidden` with
+  `details.reason: terminal_disabled` — to the owner too — and every `/rt/terminal` handshake is
+  refused the same way. A client shows the Terminal entry only on a `200`.
+- **The owner, from a browser.** `x-roles: [owner]`: an admin or a member gets `403`
+  (`required_role: owner`) and never connects. The owner's own app tokens (a paired phone, an
+  integration) are refused too (`reason: web_session_required`): a leaked integration token must
+  not be a shell. The handshake is authenticated like every namespace (the realtime auth scope of
+  2026-09-24), and a role change or sign-out drops the socket.
+- **A session is a shell on the hub's host, as the hub's own user,** in
+  `DATA_DIR/workspaces/<profile>` of the profile the page is in, on a real PTY (`node-pty`) —
+  or, where its binary does not load, a plain shell over pipes, which `pty: false` says. It
+  inherits only a short list of variables (PATH, HOME, locale, Hermes's own), not the hub's
+  environment. The image stays sealed: `/app` and `/opt/hermes` are read-only to that user.
+- **It belongs to the owner, not the socket.** A reload or a dropped connection attaches again
+  (`attach`, with the recent output to repaint), until nobody has typed for
+  `COREHUB_WEB_TERMINAL_IDLE_MINUTES` (15) — output alone is not activity. At most three run at
+  once; the fourth `open` is `conflict` with `reason: terminal_limit`.
+- **Typing goes over the socket** (`input`, `resize`), the one exception to "mutations over HTTP"
+  besides `typing`: a keystroke is not an action with an idempotency key.
+- **Every start and end is in the audit log**: `terminal.opened` (who, the folder, the shell, the
+  address) and `terminal.closed` (why: `closed`, `exited`, `idle`, `shutdown`; how long), which the
+  Logs report lists. What is typed is not recorded.
+
+Proposed, owner to confirm: the idle timeout as an environment variable; refusing app tokens;
+three sessions hub-wide (there is one owner); not recording keystrokes (a password typed into
+`sudo` or a `.env` would land in the database).
+
+Rejected: letting admins in behind a second switch (the owner said the main owner only); a
+session per socket (a reload would kill the running command); running the shell as another,
+weaker user — the image has one unprivileged user, and a second one would need root to switch to.
+
+Number taken while 36 PRs are being integrated: this may need renumbering.

@@ -16,9 +16,9 @@
     "db:migrate": "node scripts/db.mjs migrate"
   },
   "dependencies": {
-    "@corehub/contracts": "workspace:*",
     "@fastify/multipart": "^10.1.1",
     "@fastify/static": "^10.1.4",
+    "@corehub/contracts": "workspace:*",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "argon2": "0.45.1",
