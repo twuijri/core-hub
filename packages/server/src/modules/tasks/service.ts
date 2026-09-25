@@ -831,7 +831,11 @@ export class TasksService {
     this.db
       .update(tasks)
       // Stopped from the chat is a stop like the board's: back in `ready`, not started again.
-      .set(outcome.status === 'cancelled' ? { currentRunId: null, autoStart: false } : { currentRunId: null })
+      .set(
+        outcome.status === 'cancelled'
+          ? { currentRunId: null, autoStart: false }
+          : { currentRunId: null },
+      )
       .where(eq(tasks.id, id))
       .run();
     return { row: this.task(scope, id), from: current.status };

@@ -5,10 +5,15 @@
  * opens, an edit is made on Hermes first and the dialog shows what Hermes kept, and a
  * comment is said on Hermes's card in the person's name. When Hermes says no, its sentence
  * is shown as Hermes wrote it (`describeTaskError`).
+ *
+ * For the hub's own task it also holds "Start automatically" (`auto_start`, a switch that
+ * takes effect when flipped) and, when the task has one, its git worktree: where it is, its
+ * branch, how it stands — git's own message when git refused — and Remove (the branch stays).
  */
 import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n/context.js';
 import {
+  Badge,
   Button,
   Dialog,
   Field,
@@ -17,9 +22,19 @@ import {
   Notice,
   Select,
   Skeleton,
+  Switch,
   Textarea,
+  useConfirm,
+  type BadgeTone,
 } from '../ui/index.js';
-import { useAddComment, useTaskDetail, useUpdateTask, type Task } from './queries.js';
+import {
+  useAddComment,
+  useRemoveWorktree,
+  useTaskDetail,
+  useUpdateTask,
+  type Task,
+  type Worktree,
+} from './queries.js';
 import { describeTaskError } from './errors.js';
 
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
@@ -30,6 +45,9 @@ export function TaskDialog({ task, onClose }: { task: Task | null; onClose(): vo
   const detail = useTaskDetail(ref);
   const update = useUpdateTask();
   const comment = useAddComment();
+  const toggle = useUpdateTask();
+  const removeWorktree = useRemoveWorktree();
+  const { ask, dialog } = useConfirm();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<string>('normal');
@@ -50,6 +68,8 @@ export function TaskDialog({ task, onClose }: { task: Task | null; onClose(): vo
     setSaid('');
     update.reset();
     comment.reset();
+    toggle.reset();
+    removeWorktree.reset();
   }, [task?.id]);
 
   const patch: Record<string, unknown> = {};
@@ -76,6 +96,25 @@ export function TaskDialog({ task, onClose }: { task: Task | null; onClose(): vo
   };
 
   const comments = detail.data?.comments ?? [];
+  const worktree = shown?.worktree ?? null;
+  const autoStart = shown?.auto_start === true;
+  const flipAutoStart = (next: boolean) => {
+    if (!task) return;
+    toggle.mutate(
+      { id: task.id, profile: task.profile, patch: { auto_start: next } },
+      { onSuccess: () => void detail.refetch() },
+    );
+  };
+  const askRemove = () => {
+    if (!task || !worktree) return;
+    void ask({
+      title: t('tasks.worktree.confirm_remove'),
+      body: t('tasks.worktree.confirm_remove_body', { branch: worktree.branch }),
+      confirmLabel: t('tasks.worktree.remove'),
+    }).then((sure) => {
+      if (sure) removeWorktree.mutate({ id: task.id, profile: task.profile });
+    });
+  };
 
   return (
     <Dialog
@@ -142,6 +181,30 @@ export function TaskDialog({ task, onClose }: { task: Task | null; onClose(): vo
         </div>
         {update.isError && <Notice tone="danger">{describeTaskError(update.error, t)}</Notice>}
 
+        {!fromHermes && (
+          <Switch
+            checked={autoStart}
+            onChange={flipAutoStart}
+            disabled={toggle.isPending || !shown}
+            label={t('tasks.auto_start.label')}
+            hint={t('tasks.auto_start.hint')}
+            testId="task-auto-start"
+          />
+        )}
+        {toggle.isError && <Notice tone="danger">{describeTaskError(toggle.error, t)}</Notice>}
+
+        {worktree && (
+          <WorktreeSection
+            worktree={worktree}
+            running={shown?.status === 'running'}
+            removing={removeWorktree.isPending}
+            onRemove={askRemove}
+          />
+        )}
+        {removeWorktree.isError && (
+          <Notice tone="danger">{describeTaskError(removeWorktree.error, t)}</Notice>
+        )}
+
         <section aria-label={t('tasks.details.comments')} className="flex flex-col gap-2">
           <h3 className="text-sm font-medium">{t('tasks.details.comments')}</h3>
           {detail.isPending ? (
@@ -189,6 +252,86 @@ export function TaskDialog({ task, onClose }: { task: Task | null; onClose(): vo
           {comment.isError && <Notice tone="danger">{describeTaskError(comment.error, t)}</Notice>}
         </section>
       </div>
+      {dialog}
     </Dialog>
+  );
+}
+
+const WORKTREE_TONE: Record<Worktree['status'], BadgeTone> = {
+  creating: 'neutral',
+  ready: 'success',
+  dirty: 'warning',
+  merged: 'neutral',
+  removed: 'neutral',
+  error: 'danger',
+};
+
+/** Where the task's work is on disk, on which branch, and how it stands. */
+function WorktreeSection({
+  worktree,
+  running,
+  removing,
+  onRemove,
+}: {
+  worktree: Worktree;
+  running: boolean;
+  removing: boolean;
+  onRemove(): void;
+}) {
+  const { t } = useI18n();
+  return (
+    <section
+      aria-label={t('tasks.worktree.title')}
+      className="task-worktree flex flex-col gap-1"
+      data-testid="task-worktree"
+      data-status={worktree.status}
+    >
+      <div className="flex items-center gap-2">
+        <h3 className="text-sm font-medium">{t('tasks.worktree.title')}</h3>
+        <Badge tone={WORKTREE_TONE[worktree.status]} testId="task-worktree-status">
+          {t(`tasks.worktree.status.${worktree.status}`)}
+        </Badge>
+      </div>
+      <dl className="task-worktree-facts">
+        <dt className="text-xs text-muted">{t('tasks.worktree.branch')}</dt>
+        <dd className="text-sm" dir="ltr" data-testid="task-worktree-branch">
+          {worktree.branch}
+        </dd>
+        <dt className="text-xs text-muted">{t('tasks.worktree.path')}</dt>
+        <dd className="text-sm break-all" dir="ltr" data-testid="task-worktree-path">
+          {worktree.path}
+        </dd>
+        {(worktree.status === 'ready' || worktree.status === 'dirty') && (
+          <>
+            <dt className="text-xs text-muted">{t('tasks.worktree.changes')}</dt>
+            <dd className="text-sm">
+              {t('tasks.worktree.counts', {
+                files: worktree.changed_files,
+                ahead: worktree.ahead,
+                base: worktree.base_branch,
+              })}
+            </dd>
+          </>
+        )}
+      </dl>
+      {worktree.error && (
+        <pre className="task-worktree-error" dir="ltr" data-testid="task-worktree-error">
+          {worktree.error}
+        </pre>
+      )}
+      <span>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={running}
+          loading={removing}
+          onClick={onRemove}
+          data-testid="task-worktree-remove"
+          {...(running ? { title: t('tasks.worktree.running') } : {})}
+        >
+          {t('tasks.worktree.remove')}
+        </Button>
+      </span>
+    </section>
   );
 }

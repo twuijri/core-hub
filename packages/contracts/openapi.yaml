@@ -6961,7 +6961,7 @@ paths:
                     status: active
                     color: '#4a90d9'
                     repo_url: https://github.com/twuijri/core-hub
-                    working_dir: /home/agent/projects/corehub
+                    working_dir: /data/workspaces/work/core-hub
                     default_branch: main
                     default_agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
                     report_room_id: 01J8QK3ZR2W7M5N4P6T8V9X0RM
@@ -6989,6 +6989,12 @@ paths:
       operationId: tasks.createProject
       tags: [tasks]
       summary: Create a project
+      description: >-
+        A `working_dir` is checked before the project is made (see `Project.working_dir`): one that
+        is outside the profile's folder, missing, reached through a symbolic link or not a git work
+        tree is `400 validation_failed` with `details.field: working_dir` and `details.reason`
+        (`outside_root`, `not_found`, `symlink`, `not_a_git_repo`) and git's own words in
+        `details.message`.
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -7002,7 +7008,7 @@ paths:
               description: 'الخادم والعملاء'
               color: '#4a90d9'
               repo_url: https://github.com/twuijri/core-hub
-              working_dir: /home/agent/projects/corehub
+              working_dir: /data/workspaces/work/core-hub
               default_branch: main
               default_agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
               report_room_id: null
@@ -7026,7 +7032,7 @@ paths:
                 status: active
                 color: '#4a90d9'
                 repo_url: https://github.com/twuijri/core-hub
-                working_dir: /home/agent/projects/corehub
+                working_dir: /data/workspaces/work/core-hub
                 default_branch: main
                 default_agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
                 report_room_id: null
@@ -7069,7 +7075,7 @@ paths:
                 status: active
                 color: '#4a90d9'
                 repo_url: https://github.com/twuijri/core-hub
-                working_dir: /home/agent/projects/corehub
+                working_dir: /data/workspaces/work/core-hub
                 default_branch: main
                 default_agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
                 report_room_id: 01J8QK3ZR2W7M5N4P6T8V9X0RM
@@ -7086,6 +7092,9 @@ paths:
       operationId: tasks.updateProject
       tags: [tasks]
       summary: Edit a project
+      description: >-
+        `working_dir` is checked as on create (`400 validation_failed`, `details.field:
+        working_dir`); an empty string or `null` clears it. Worktrees already made are not moved.
       requestBody:
         required: true
         content:
@@ -7113,7 +7122,7 @@ paths:
                 status: active
                 color: '#4a90d9'
                 repo_url: https://github.com/twuijri/core-hub
-                working_dir: /home/agent/projects/corehub
+                working_dir: /data/workspaces/work/core-hub
                 default_branch: main
                 default_agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
                 report_room_id: 01J8QK3ZR2W7M5N4P6T8V9X0RM
@@ -7132,7 +7141,8 @@ paths:
       operationId: tasks.deleteProject
       tags: [tasks]
       summary: Delete a project and its tasks (worktrees are removed)
-      x-rt-events: [project.deleted, run.cancelled]
+      description: Every live worktree of the project's tasks is removed first; the branches stay.
+      x-rt-events: [project.deleted, run.cancelled, worktree.updated]
       responses:
         '204':
           description: Deleted.
@@ -7378,7 +7388,7 @@ paths:
                 - title: 'تبويب الحساب الحالي'
                 - title: 'تبويب العرض'
               attachment_ids: []
-      x-rt-events: [task.created]
+      x-rt-events: [task.created, task.moved, worktree.updated, session.created, run.queued]
       responses:
         '201':
           description: The task.
@@ -7445,7 +7455,7 @@ paths:
               task_ids: [01J8QK3ZR2W7M5N4P6T8V9X0TK]
               patch:
                 archived: true
-      x-rt-events: [task.updated, task.moved]
+      x-rt-events: [task.updated, task.moved, worktree.updated]
       responses:
         '200':
           description: Per-item outcome.
@@ -7476,7 +7486,7 @@ paths:
           schema:
             type: string
             maxLength: 2800
-      x-rt-events: [task.deleted]
+      x-rt-events: [task.deleted, worktree.updated]
       responses:
         '200':
           description: Per-item outcome.
@@ -7536,8 +7546,8 @@ paths:
                   done: 1
                 depends_on: []
                 worktree:
-                  path: /home/agent/worktrees/corehub/task-01J8QK3ZR2W7M5N4P6T8V9X0TK
-                  branch: task/settings-page
+                  path: /data/workspaces/work/worktrees/core-12-settings-page
+                  branch: task/core-12-settings-page
                   base_branch: main
                   status: ready
                   ahead: 3
@@ -7631,7 +7641,7 @@ paths:
             example:
               priority: urgent
               tags: [mobile, android, release]
-      x-rt-events: [task.updated]
+      x-rt-events: [task.updated, task.moved, worktree.updated, session.created, run.queued]
       responses:
         '200':
           description: The task.
@@ -7688,7 +7698,7 @@ paths:
       operationId: tasks.deleteTask
       tags: [tasks]
       summary: Delete a task (its worktree is removed, its session kept)
-      x-rt-events: [task.deleted, run.cancelled]
+      x-rt-events: [task.deleted, run.cancelled, worktree.updated]
       responses:
         '204':
           description: Deleted.
@@ -7720,7 +7730,8 @@ paths:
               status: blocked
               reason: 'بانتظار مفتاح المزوّد'
               after_task_id: null
-      x-rt-events: [task.moved, task.updated, run.cancelled]
+      x-rt-events:
+        [task.moved, task.updated, run.cancelled, worktree.updated, session.created, run.queued]
       responses:
         '200':
           description: The task.
@@ -7785,6 +7796,10 @@ paths:
         With `start: true` the task moves to `running`, a worktree is created if the project has a
         repository, a task session is opened and a run is queued whose progress the assignee reports
         into the project's `report_room_id` when set. Reassigning a running task interrupts the run.
+        The session works in the task's worktree. When git refuses to make it the task does not
+        start and nothing about it changes: `409 conflict` with `details.reason: worktree_failed`
+        and git's own words in `details.message` (also kept on the worktree, `status: error`).
+        Without `start`, a task with `auto_start` starts on its own (see `Task.auto_start`).
       requestBody:
         required: true
         content:
@@ -8147,8 +8162,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Worktree'
               example:
-                path: /home/agent/worktrees/corehub/task-01J8QK3ZR2W7M5N4P6T8V9X0TK
-                branch: task/settings-page
+                path: /data/workspaces/work/worktrees/core-12-settings-page
+                branch: task/core-12-settings-page
                 base_branch: main
                 status: ready
                 ahead: 3
@@ -8164,6 +8179,11 @@ paths:
       operationId: tasks.createWorktree
       tags: [tasks]
       summary: Create (or recreate) the worktree without starting a run
+      description: >-
+        `409 conflict` before any job when the project has no repository (`details.reason:
+        no_repository`) or the task already has a live worktree (`worktree_exists`). A worktree
+        removed earlier comes back on the same branch, which git kept. The job fails with git's
+        own message when git refuses; the worktree then reads `status: error`.
       requestBody:
         required: false
         content:
@@ -8197,6 +8217,11 @@ paths:
       operationId: tasks.deleteWorktree
       tags: [tasks]
       summary: Remove the worktree (the branch is kept)
+      description: >-
+        `409 conflict` with `details.reason: task_running` while the task's run is working in it —
+        stop the task first. A folder already deleted by hand is forgotten by git (`git worktree
+        prune`). When git refuses, the job fails with git's message and the worktree reads
+        `status: error`.
       x-rt-events: [job.queued, job.completed, worktree.updated]
       responses:
         '202':
@@ -16026,9 +16051,17 @@ components:
               type: [string, 'null']
             working_dir:
               type: [string, 'null']
-              description: Repository checkout on the hub host; worktrees are created beside it.
+              description: >-
+                The project's git repository on the hub host: an absolute path inside the profile's
+                own folder (`${DATA_DIR}/workspaces/<profile>`, the folder its sessions work in). A
+                relative path is taken from that folder when written. When set, starting one of the
+                project's tasks makes the task a git worktree of this repository, under
+                `${DATA_DIR}/workspaces/<profile>/worktrees/`, and its run works there.
             default_branch:
               type: [string, 'null']
+              description: >-
+                The branch a task's worktree branches from. When `working_dir` is written without
+                it, it becomes the branch checked out in the repository.
             default_agent_id:
               oneOf:
                 - $ref: '#/components/schemas/Ulid'
@@ -16093,6 +16126,11 @@ components:
           type: string
     Worktree:
       type: object
+      description: >-
+        A task's own git worktree of its project's repository, on a branch named from the task
+        (`task/<short id>-<slug of the title>`). Made when the task is started (or by
+        `tasks.createWorktree`); removed — the branch kept — when the task is deleted or archived,
+        or by `tasks.deleteWorktree`. A removed worktree reads as `null` on the task.
       required: [path, branch, base_branch, status, ahead, behind, changed_files, error, updated_at]
       properties:
         path:
@@ -16103,6 +16141,10 @@ components:
           type: string
         status:
           type: string
+          description: >-
+            `creating` while git makes it; `ready`, or `dirty` when it has uncommitted changes;
+            `error` when git refused (to make it or to remove it) — `error` then holds git's own
+            message. `merged` and `removed` are reserved.
           enum: [creating, ready, dirty, merged, removed, error]
         ahead:
           type: integer
@@ -16166,7 +16208,13 @@ components:
                 - type: 'null'
             auto_start:
               type: boolean
-              description: Start a run as soon as the task is `ready` and assigned.
+              description: >-
+                Start a run on its own as soon as the task is `ready` and given to an agent (created
+                so, assigned, moved to `ready`, or switched on while so) — at most
+                `COREHUB_TASK_AUTO_START_MAX` (2) runs started this way at once per profile; the rest
+                wait their turn, top of the column first. Stopping the task (from the board or the
+                chat) switches it off, so a stopped task does not start again by itself. A task that
+                cannot start goes to `blocked` with the reason.
             position:
               type: string
               description: Fractional index within the column; the server keeps it, clients never compute it.
@@ -16394,6 +16442,7 @@ components:
         auto_start:
           type: boolean
           default: false
+          description: See `Task.auto_start`.
         due_at:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'

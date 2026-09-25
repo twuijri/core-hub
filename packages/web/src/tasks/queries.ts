@@ -43,8 +43,25 @@ export interface Project {
   name: string;
   status: string;
   color: string | null;
+  /** The project's git repository, inside the profile's folder; tasks get worktrees of it. */
   working_dir: string | null;
+  /** The branch a task's worktree branches from. */
+  default_branch?: string | null;
   counts: { total: number; by_status: Record<string, number> };
+}
+
+/** A task's own git worktree (contract `Worktree`). */
+export interface Worktree {
+  path: string;
+  branch: string;
+  base_branch: string;
+  status: 'creating' | 'ready' | 'dirty' | 'merged' | 'removed' | 'error';
+  ahead: number;
+  behind: number;
+  changed_files: number;
+  /** git's own message when it refused. */
+  error: string | null;
+  updated_at: string;
 }
 
 export interface Task {
@@ -70,6 +87,10 @@ export interface Task {
   /** The agent's last words when its run ended — what the card shows in Review. */
   latest_summary?: string | null;
   last_run?: { id: string | null } | null;
+  /** Start a run on its own once the task is ready and given to an agent. */
+  auto_start?: boolean;
+  /** The task's git worktree, when its project has a repository and it was made. */
+  worktree?: Worktree | null;
 }
 
 /** What `tasks.assignTask` answers: real ids when the task started, `null` when it did not. */
@@ -215,6 +236,29 @@ export function useCreateProject() {
   return useMutation({
     mutationFn: async (body: { name: string; working_dir?: string | null }) =>
       (await client.request('post', '/projects', { body })).data as unknown as Project,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: taskKeys.projects(profile) }),
+  });
+}
+
+/** Edit a project of the profile the person is in — its repository and base branch. */
+export function useUpdateProject() {
+  const { client, profile } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...body
+    }: {
+      id: string;
+      working_dir?: string | null;
+      default_branch?: string | null;
+    }) =>
+      (
+        await client.request('patch', '/projects/{project_id}', {
+          params: { project_id: id },
+          body,
+        })
+      ).data as unknown as Project,
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: taskKeys.projects(profile) }),
   });
 }
@@ -382,6 +426,25 @@ export function useAssignTask() {
   });
 }
 
+/**
+ * Remove the task's worktree; git keeps its branch. The hub answers with a job, so the
+ * details are asked again once the job had time to run (and on `worktree.updated`).
+ */
+export function useRemoveWorktree() {
+  const { client } = useAuth();
+  const refresh = useInvalidateBoard();
+  return useMutation({
+    mutationFn: async ({ id, profile }: TaskRef) =>
+      (
+        await client.request('delete', '/tasks/{task_id}/worktree', {
+          params: { task_id: id },
+          ...inWorkspace(profile),
+        })
+      ).data as unknown as { job_id: string },
+    onSuccess: refresh,
+  });
+}
+
 /** Stop the task's run; it stays with its agent and waits in `ready`. */
 export function useStopTask() {
   const { client } = useAuth();
@@ -428,6 +491,8 @@ export function useTaskEvents(): void {
     const handler = (raw: unknown) => {
       if (!isEnvelope(raw)) return;
       void queryClient.invalidateQueries({ queryKey: ['task-columns'] });
+      // An open task's details show its worktree, which changes on its own time (git).
+      void queryClient.invalidateQueries({ queryKey: ['task'] });
     };
     for (const name of TASK_EVENTS) socket.on(name, handler);
     if (!socket.connected) socket.connect();

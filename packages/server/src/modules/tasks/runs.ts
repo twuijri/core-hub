@@ -225,7 +225,9 @@ export class TaskRuns {
     const service = new TasksService(this.db());
     let count = 0;
     for (const [taskId, entry] of this.auto) {
-      const row = service.many({ workspace: entry.workspace, profile: '', userId: '' }, [taskId])[0];
+      const row = service.many({ workspace: entry.workspace, profile: '', userId: '' }, [
+        taskId,
+      ])[0];
       if (!row || row.status !== 'running' || row.currentRunId !== entry.runId) {
         this.auto.delete(taskId);
         continue;

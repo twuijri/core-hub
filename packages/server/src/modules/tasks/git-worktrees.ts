@@ -77,7 +77,11 @@ export function profileRoot(dataDir: string, profile: string): string {
 
 export type RepoCheck =
   | { ok: true; path: string; branch: string | null }
-  | { ok: false; reason: 'outside_root' | 'not_found' | 'symlink' | 'not_a_git_repo'; message: string };
+  | {
+      ok: false;
+      reason: 'outside_root' | 'not_found' | 'symlink' | 'not_a_git_repo';
+      message: string;
+    };
 
 /**
  * A project's repository path, checked: inside the profile's folder (a relative path is
@@ -87,7 +91,11 @@ export type RepoCheck =
 export async function checkRepository(git: Git, root: string, asked: string): Promise<RepoCheck> {
   const raw = asked.trim();
   const target = path.resolve(root, raw);
-  if (raw === '' || raw.includes('\0') || (target !== root && !target.startsWith(root + path.sep))) {
+  if (
+    raw === '' ||
+    raw.includes('\0') ||
+    (target !== root && !target.startsWith(root + path.sep))
+  ) {
     return { ok: false, reason: 'outside_root', message: `must be inside ${root}` };
   }
   let walked = root;
@@ -108,7 +116,11 @@ export async function checkRepository(git: Git, root: string, asked: string): Pr
   }
   const inside = await git(['-C', target, 'rev-parse', '--is-inside-work-tree']);
   if (!inside.ok || inside.stdout.trim() !== 'true') {
-    return { ok: false, reason: 'not_a_git_repo', message: inside.message || 'not a git work tree' };
+    return {
+      ok: false,
+      reason: 'not_a_git_repo',
+      message: inside.message || 'not a git work tree',
+    };
   }
   const head = await git(['-C', target, 'symbolic-ref', '--quiet', '--short', 'HEAD']);
   return { ok: true, path: target, branch: head.ok ? head.stdout.trim() || null : null };

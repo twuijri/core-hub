@@ -11,8 +11,17 @@ export function describeTaskError(
   t: (key: string, p?: Record<string, string | number>) => string,
 ): string {
   if (error instanceof HubApiError) {
-    const details = (error.body as { details?: { reason?: string; message?: string } } | undefined)
-      ?.details;
+    const details = (
+      error.body as { details?: { reason?: string; message?: string; field?: string } } | undefined
+    )?.details;
+    // A repository path the hub refused, and why — with git's words when git said something.
+    if (details?.field === 'working_dir' && details.reason) {
+      return t(`tasks.repo.invalid.${details.reason}`, { message: details.message ?? '' });
+    }
+    if (details?.reason === 'worktree_failed')
+      return t('tasks.worktree.failed', { message: details.message ?? '' });
+    if (details?.reason === 'task_running') return t('tasks.worktree.running');
+    if (details?.reason === 'no_repository') return t('tasks.worktree.no_repository');
     if (details?.reason === 'hermes_refused')
       return t('tasks.hermes.refused', { message: details.message ?? '' });
     if (details?.reason === 'hermes_owns_text') return t('tasks.hermes.owns_text');

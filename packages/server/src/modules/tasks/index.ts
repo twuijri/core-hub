@@ -327,7 +327,8 @@ async function makeWorktree(
         branch: row.branch,
         base: baseRef,
       });
-      if (!added.ok) return service.settleWorktree(row.id, { status: 'failed', error: added.message });
+      if (!added.ok)
+        return service.settleWorktree(row.id, { status: 'failed', error: added.message });
     }
     const stats = await worktreeStats(git, { path: row.path, base: baseRef });
     return service.settleWorktree(row.id, {
@@ -377,7 +378,7 @@ async function releaseWorktree(
   profile: string,
   row: WorktreeRow,
 ): Promise<{ ok: boolean; message: string }> {
-  let repo: string | null = null;
+  let repo: string | null;
   try {
     repo =
       service.project({ workspace: row.workspace, profile, userId: '' }, row.projectId).localPath ??
@@ -1733,7 +1734,10 @@ export const tasksModule = defineModule({
           });
         }
         const live = service.worktreeOf(id);
-        if (live && (live.status === 'ready' || live.status === 'dirty' || live.status === 'creating')) {
+        if (
+          live &&
+          (live.status === 'ready' || live.status === 'dirty' || live.status === 'creating')
+        ) {
           throw new HubError('conflict', { details: { reason: 'worktree_exists', task_id: id } });
         }
         const job = jobRunnerFor(request.server).start(

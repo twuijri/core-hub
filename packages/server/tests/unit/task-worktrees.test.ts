@@ -437,7 +437,9 @@ describe('tasks: auto_start', () => {
       expect(runner.started).toHaveLength(0);
       const after = await getTask(hub, task.id);
       expect(after.status).toBe('blocked');
-      expect(String(after.blocked_reason)).toMatch(/^(The task could not start automatically|تعذّر بدء المهمة تلقائيًا): /);
+      expect(String(after.blocked_reason)).toMatch(
+        /^(The task could not start automatically|تعذّر بدء المهمة تلقائيًا): /,
+      );
     } finally {
       await hub.close();
     }
