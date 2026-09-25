@@ -469,6 +469,8 @@ export interface ChannelPlatform {
   exclusive: boolean;
   packages: 'image' | 'first_use' | 'none';
   inbound: boolean;
+  /** An outside program the platform needs that the image does not carry (Raft, Buzz). */
+  program: string | null;
   docs_url: string | null;
 }
 

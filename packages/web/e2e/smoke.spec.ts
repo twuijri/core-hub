@@ -1134,10 +1134,12 @@ test.describe('web smoke journeys', () => {
     await expect(docs.getByRole('listitem')).toHaveCount(3);
     await shot(page, 'agent-memory-ar-light');
 
-    // Channels: the fields come from the agent's own file, not from a form we wrote.
+    // Channels: nothing linked yet — a short explanation and the one «ربط منصة» button.
     await page.getByTestId('agent-sections').getByRole('link', { name: 'القنوات' }).click();
     await expect(page).toHaveURL(/\/channels$/);
-    await expect(page.getByText('لا قنوات')).toBeVisible();
+    const empty = page.getByTestId('channels-empty');
+    await expect(empty).toContainText('لا منصة مربوطة بعد');
+    await expect(empty.getByTestId('platform-picker-open')).toHaveText('ربط منصة');
     await shot(page, 'agent-channels-ar-light');
   });
 

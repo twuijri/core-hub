@@ -19,7 +19,12 @@
  * - **packages**: `tools/lazy_deps.py` lists what Hermes downloads the first time a platform runs.
  *   Telegram's, Discord's and Slack's are in the image (`packages/server/Dockerfile`); Matrix's are
  *   not — they did not fit in the image-size budget (the change record has the numbers);
- *   Mattermost and Email need nothing beyond Hermes (aiohttp, the standard library).
+ *   Mattermost and Email need nothing beyond Hermes (aiohttp, the standard library). Photon's
+ *   Node bridge is installed with npm the first time it starts (`plugins/platforms/photon`);
+ * - **programs**: Raft and Buzz run a command-line program of their own (`raft agent bridge`, the
+ *   `buzz` CLI) that Hermes does not install and the image does not carry — said up front;
+ * - **exclusive**: the adapters that take Hermes's platform lock on their identity
+ *   (`_acquire_platform_lock`): one identity answers from one profile only.
  *
  * `full` platforms get a dialog, a check with the platform, a named linked state and settings;
  * `generic` ones get a form of their declared variables, stored unchecked.
@@ -64,6 +69,11 @@ export interface PlatformSpec {
   packages: 'image' | 'first_use' | 'none';
   /** Receives on a webhook: needs an address the internet can reach. */
   inbound: boolean;
+  /**
+   * An outside program Hermes runs for the platform that neither Hermes nor the image carries
+   * (it must be installed on the server first); null when Hermes needs nothing outside itself.
+   */
+  program: string | null;
   docsUrl: string | null;
   settings: readonly OptionSpec[] | null;
 }
@@ -321,9 +331,15 @@ const EMAIL_OPTIONS: readonly OptionSpec[] = [
 // ------------------------------------------------------------------ the catalog
 
 const full = (
-  spec: Omit<PlatformSpec, 'support' | 'login' | 'validates'> &
+  spec: Omit<PlatformSpec, 'support' | 'login' | 'validates' | 'program'> &
     Partial<Pick<PlatformSpec, 'login'>>,
-): PlatformSpec => ({ support: 'full', login: 'credentials', validates: true, ...spec });
+): PlatformSpec => ({
+  support: 'full',
+  login: 'credentials',
+  validates: true,
+  program: null,
+  ...spec,
+});
 
 const generic = (
   spec: Pick<PlatformSpec, 'platform' | 'label' | 'credentials'> &
@@ -339,6 +355,7 @@ const generic = (
   exclusive: false,
   packages: 'none',
   inbound: false,
+  program: null,
   docsUrl: null,
   settings: null,
   ...spec,
@@ -376,6 +393,7 @@ export const PLATFORMS: readonly PlatformSpec[] = [
     exclusive: true,
     packages: 'image',
     inbound: false,
+    program: null,
     docsUrl: null,
     settings: null,
   },
@@ -517,6 +535,7 @@ export const PLATFORMS: readonly PlatformSpec[] = [
     label: 'QQ',
     credentials: [field('QQ_APP_ID', 'text'), secret('QQ_CLIENT_SECRET')],
     allowedUsers: allow('QQ_ALLOWED_USERS'),
+    exclusive: true,
   }),
   generic({
     platform: 'line',
@@ -527,6 +546,7 @@ export const PLATFORMS: readonly PlatformSpec[] = [
       field('LINE_PUBLIC_URL', 'url', false, HTTP_URL),
     ],
     allowedUsers: allow('LINE_ALLOWED_USERS'),
+    exclusive: true,
     inbound: true,
     docsUrl: 'https://developers.line.biz/console/',
   }),
@@ -583,7 +603,7 @@ export const PLATFORMS: readonly PlatformSpec[] = [
   }),
   generic({
     platform: 'bluebubbles',
-    label: 'BlueBubbles (iMessage)',
+    label: 'iMessage via BlueBubbles',
     credentials: [
       field('BLUEBUBBLES_SERVER_URL', 'url', true, HTTP_URL),
       secret('BLUEBUBBLES_PASSWORD'),
@@ -609,6 +629,56 @@ export const PLATFORMS: readonly PlatformSpec[] = [
     label: 'SimpleX Chat',
     credentials: [field('SIMPLEX_WS_URL', 'url', true, /^wss?:\/\/\S+$/i)],
     allowedUsers: allow('SIMPLEX_ALLOWED_USERS'),
+  }),
+  generic({
+    platform: 'photon',
+    label: 'iMessage via Photon',
+    credentials: [field('PHOTON_PROJECT_ID', 'text'), secret('PHOTON_PROJECT_SECRET')],
+    allowedUsers: allow('PHOTON_ALLOWED_USERS'),
+    // The Node bridge's packages (npm) come down the first time the gateway starts.
+    packages: 'first_use',
+    docsUrl: 'https://app.photon.codes/',
+  }),
+  generic({
+    platform: 'wecom_callback',
+    label: 'WeCom Callback',
+    credentials: [
+      field('WECOM_CALLBACK_CORP_ID', 'text'),
+      secret('WECOM_CALLBACK_CORP_SECRET'),
+      field('WECOM_CALLBACK_AGENT_ID', 'text'),
+      secret('WECOM_CALLBACK_TOKEN'),
+      secret('WECOM_CALLBACK_ENCODING_AES_KEY'),
+      field('WECOM_CALLBACK_PORT', 'number', false, PORT),
+    ],
+    allowedUsers: allow('WECOM_CALLBACK_ALLOWED_USERS'),
+    packages: 'first_use',
+    inbound: true,
+  }),
+  generic({
+    platform: 'yuanbao',
+    label: 'Yuanbao',
+    credentials: [
+      field('YUANBAO_APP_ID', 'text'),
+      secret('YUANBAO_APP_SECRET'),
+      field('YUANBAO_BOT_ID', 'text', false),
+    ],
+    // Yuanbao keeps its own access list (`dm_allow_from`), read from this variable.
+    allowedUsers: allow('YUANBAO_DM_ALLOW_FROM'),
+    exclusive: true,
+  }),
+  generic({
+    platform: 'raft',
+    label: 'Raft',
+    credentials: [field('RAFT_PROFILE', 'text', true, /^[^\s,]{1,100}$/)],
+    program: 'raft',
+  }),
+  generic({
+    platform: 'buzz',
+    label: 'Buzz',
+    credentials: [field('BUZZ_RELAY_URL', 'url', true, HTTP_URL), secret('BUZZ_PRIVATE_KEY')],
+    allowedUsers: allow('BUZZ_ALLOWED_USERS'),
+    exclusive: true,
+    program: 'buzz',
   }),
 ];
 

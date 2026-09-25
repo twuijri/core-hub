@@ -9,7 +9,7 @@
  *   warning about a personal number;
  * - «طلبات بانتظار الموافقة» lists two senders; one is approved and moves to the approved list,
  *   the other is turned down; the approved one is revoked behind a confirm;
- * - Unlink, behind a confirm, forgets the phone and brings Pair by QR back.
+ * - Unlink, behind a confirm, forgets the phone and the row leaves the list.
  *
  * It runs after journey 23 (`zz-agent-tools`), which links WhatsApp; run on its own, it links
  * it first.
@@ -47,8 +47,8 @@ test('30. a linked WhatsApp: how to use it, the senders waiting for approval, an
   await openChannels(page);
 
   const linkBadge = page.getByTestId('channel-link-whatsapp');
-  // The list has loaded once the approvals section is drawn below it.
-  await expect(page.getByTestId('pairing-section')).toBeVisible();
+  // The page has loaded once «ربط منصة» is drawn (over the list, or in the empty state).
+  await expect(page.getByTestId('platform-picker-open')).toBeVisible();
   if (
     !(await page
       .getByTestId('channel-unlink-whatsapp')
@@ -56,7 +56,8 @@ test('30. a linked WhatsApp: how to use it, the senders waiting for approval, an
       .catch(() => false))
   ) {
     // Run on its own: link it the way journey 23 does.
-    await page.getByTestId('channel-pair-whatsapp').click();
+    await page.getByTestId('platform-picker-open').click();
+    await page.getByTestId('platform-option-whatsapp').click();
     await expect(page.getByTestId('channel-pair-done')).toContainText('مكتب المركز', {
       timeout: 30_000,
     });
@@ -69,7 +70,8 @@ test('30. a linked WhatsApp: how to use it, the senders waiting for approval, an
   await expect(page.getByTestId('channel-account-whatsapp')).toContainText('+966500000000');
   await expect(page.getByTestId('channel-login-whatsapp')).toHaveCount(0);
   await expect(page.getByTestId('channel-pair-whatsapp')).toHaveCount(0);
-  const how = page.getByTestId('channel-how-to-use');
+  // How to use it, in WhatsApp's own card while somebody waits.
+  const how = page.getByTestId('channel-list').getByTestId('channel-how-to-use');
   await expect(how).toContainText('من حساب واتساب آخر');
   await expect(how).toContainText('طلبات بانتظار الموافقة');
   await expect(page.getByTestId('channel-personal-warning')).toContainText('رقمك الشخصي');
@@ -80,7 +82,7 @@ test('30. a linked WhatsApp: how to use it, the senders waiting for approval, an
   const sara = page.getByTestId('pairing-request-3f9a1c0e7b2d4a55');
   await expect(sara).toContainText('سارة');
   await expect(sara).toContainText('966500000001@s.whatsapp.net');
-  await expect(sara).toContainText('whatsapp');
+  await expect(sara).toContainText('واتساب');
   await expect(page.getByTestId('pairing-request-8c21d0f4a9e3b716')).toContainText('بلا اسم');
   await shot(page, 'agent-channels-pairing-ar-light');
 
@@ -95,13 +97,13 @@ test('30. a linked WhatsApp: how to use it, the senders waiting for approval, an
   await page.getByTestId('confirm-yes').click();
   await expect(page.getByTestId('pairing-approved-none')).toBeVisible();
 
-  // ---- Unlink, behind a confirm; Pair by QR comes back.
+  // ---- Unlink, behind a confirm; the row leaves the list.
   await page.getByTestId('channel-unlink-whatsapp').click();
   await expect(page.getByTestId('confirm-dialog')).toContainText('الأجهزة المرتبطة');
   await page.getByTestId('confirm-yes').click();
-  await expect(linkBadge).toHaveText('غير مربوط');
-  await expect(page.getByTestId('channel-login-whatsapp')).toBeVisible();
-  await expect(page.getByTestId('channel-pair-whatsapp')).toBeVisible();
+  await expect(page.getByTestId('channel-unlinked')).toContainText('الأجهزة المرتبطة');
+  await expect(linkBadge).toHaveCount(0);
   await expect(page.getByTestId('channel-how-to-use')).toHaveCount(0);
+  await expect(page.getByTestId('platform-picker-open')).toBeVisible();
   await shot(page, 'agent-channels-unlinked-ar-light');
 });
