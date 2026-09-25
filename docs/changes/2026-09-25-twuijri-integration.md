@@ -177,6 +177,38 @@
 - لم أغيّر سلوك أي ميزة؛ الإضافة الوحيدة بقرار مني هي `subagents: 'none'` للكتالوجات الثلاثة (مقترح —
   ينتظر تأكيد المالك)، ومسار خطوة سير عمل أوقفها حدّ = `null`.
 
+### إصلاحات CI بعد الدفع الأول (دفعة واحدة)
+أول تشغيل لـCI على الطلب فشل في ثلاث وظائف؛ كلها من الجمع لا من طلب بعينه:
+11. **الوظيفة الرئيسية ألغيت عند 35 دقيقة** أثناء `pnpm test`: اختبارات الخادم وحدها تجاوزت 32 دقيقة
+   (139 من 198 ملفًا)، واختباران تجاوزا مهلة 30 ث تحت الحمل. السبب المقيس: كل هب اختبار يحلّل
+   `openapi.yaml` (نحو 24 ألف سطر بعد الجمع) خمس مرات عند الإقلاع (الخادم و`audit` و`notify` و`updates`)،
+   فصار إقلاع الهب ~2.9 ث منها ~1.9 ث تحليل YAML (ملف تعريف CPU). الإصلاح في
+   `packages/contracts/src/document.ts`: `loadOpenApiDocument` يحلّل الملف مرة ما دام لم يتغيّر
+   (المسار + `mtime` + الحجم) ويعيد لكل مستدعٍ نسخة مستقلة (`structuredClone`)، فلا يتغيّر سلوك أي مستدعٍ.
+   إقلاع الهب صار ~0.6 ث. وفي `ci.yml`: اختبارات وحدة الخادم انتقلت إلى وظيفة `server-tests` بثلاث
+   شرائح (`vitest --shard=N/3`)، والوظيفة الأصلية صار اسمها «Lint, typecheck, contracts, client tests,
+   build» ومهلتها 60 دقيقة وتشغّل اختبارات كل الحزم عدا الخادم، والفحص الإلزامي «Lint, typecheck,
+   contracts, tests, build» صار وظيفة `gate` تحتاج الاثنتين وتعمل دائمًا (`if: always()`) وتفشل ما لم
+   تنجحا معًا، فلا يتحوّل فشلٌ إلى «تخطٍّ» يُحسب نجاحًا. مهلة Playwright (7.5 من 35 دقيقة) بقيت.
+12. **Android** (`client:compileKotlin`): `PendingWriteApplied.applied` (`type: boolean, const: true`) صار
+   `enum class Applied(val value: Boolean) { TRUE("true") }` فلا يُترجم. وبعده ظهرت في الاختبارات ثلاثة
+   أخطاء: (أ) `LivePerformance.host.memory_total_bytes: 16777216000` لا يسعه `Int` في Kotlin؛ (ب) مثال
+   `Agent` في `ChatsListTest` ينقصه `pinned_version` و`newer_than_tested` و`subagents` الإلزامية الجديدة؛
+   (ج) `logs` صارت `roles: ["admin"]` في `navigation.json` ولم يعرف `Screens.adminOnly` ذلك.
+   الإصلاح في `scripts/kotlin-openapi.mjs` (نسخة Kotlin من العقد فقط، والمصدر لا يتغيّر): `plainBooleans`
+   يُسقط تثبيت القيمة عن كل `boolean` فيبقى `Boolean`؛ `wideByteCounts` يجعل كل `integer` باسم `*_bytes`
+   `int64` (`Long`)؛ `dropWebhooks` (انظر 13). وأُكمل مثال الاختبار، وأُضيفت `logs` إلى `adminOnly`.
+13. **iOS** («Generate the Swift client»): `Tokens.swift` قديم (أدوار `chart-1..6` الجديدة في
+   `tokens.json`) — أعيد توليده. ولأن محاكي iOS لم يعمل قط على الجمع، راجعتُ ما سيبنيه: (أ) نفس الثابت
+   المنطقي صار `enum Applied: Bool` — لا يُترجم في Swift، ويعالجه `plainBooleans` نفسه؛ (ب) قسم `webhooks`
+   في العقد (`webhook.hubEvent` بوسم `notify`) ولّد `NotifyAPI` حلّ محلّ الملف الذي فيه عمليات
+   `notify.*` كلها («Duplicate file path» في سجل المولّد)، فيسقط استدعاء `NotifyAPI.notifyListWebhooks`
+   وغيره في Android وiOS. `dropWebhooks` يُسقط `webhooks` من نسختي Kotlin وSwift (العميل لا يستدعيها؛
+   نماذجها تبقى في `components`)؛ (ج) `logs` لغير المشرف كما في Android؛ (د) اختبار iOS يطابق كل
+   `terms` بمفاتيح `nav.*`، و`terminal` (#141) لم يكن فيها — أُضيف بالعربية والإنجليزية بنص البيان.
+   وقارنتُ عميل Swift المولّد بعميل آخر فرع iOS نجح في CI (`feat/ios-app-phone`): لا دالة ولا نموذج
+   حُذف، وكل معامل أو حقل جديد في ما يستعمله التطبيق اختياري، ولا حالة enum جديدة في `switch` شامل.
+
 ## الفحوص (الأوامر ونواتجها الفعلية)
 كلها محليًا على رأس الفرع بعد دمج الطلبات الـ38 وكل الإصلاحات، عبر `mj-run` (سقف 10 ج.ب)، واحدًا
 واحدًا؛ الاختبارات بـ`VITEST_MAX_WORKERS=3` (بستة عمّال تجاوز خادم الاختبار السقف)، وPlaywright بعامل واحد.
@@ -210,9 +242,32 @@ $ drizzle-kit generate           → No schema changes, nothing to migrate
 ```
 - Postgres: `db:migrate` مع `DATABASE_URL` لا يطبّق شيئًا (لا مجلد `drizzle/pg` في `main` ولا في أي طلب)
   ويقول ذلك؛ وظيفة CI «db:generate + db:migrate (SQLite and PostgreSQL)» تتحقق منه.
-- Android وiOS: لا تُبنى محليًا (لا JDK/Xcode)؛ مسارات `android.yml` و`ios.yml` تتغيّر في هذا الطلب
+- Android وiOS (الدفعة الأولى): لم يُبنيا محليًا؛ مسارات `android.yml` و`ios.yml` تتغيّر في هذا الطلب
   (`apps/android/**`، `apps/ios/**`، `docs/clients/navigation.json`) فتعمل على الطلب؛ نتيجتها في CI.
 - نتيجة CI على الطلب: تُضاف بعد انتهائها.
+
+فحوص إصلاحات CI (11–13)، محليًا عبر `mj-run`، JDK 17 من `~/.local/opt/jdk17` وAndroid SDK محلي:
+```
+$ pnpm --filter @corehub/contracts generate:native   → contracts:generate:native  OK   (لا «Duplicate file path»)
+  NotifyAPI.swift: 28 دالة notify* · Kotlin: 0 enum class بقيمة Boolean · LivePerformanceHost.memoryTotalBytes: kotlin.Long
+$ node apps/ios/scripts/generate-swift.mjs --check  → generate-swift  OK — every generated file matches its source
+$ (apps/android) ./gradlew --no-daemon --max-workers=2 assembleDebug test lint
+                                     → BUILD SUCCESSFUL in 38s · unit tests 66, skipped 2, failures 0, errors 0
+  (قبل الإصلاح: ContractExamplesTest وNavigationParityTest وChatsListTest فشلت)
+إقلاع هب اختبار (testHub): قبل 2950 / 2916 / 2779 ms — بعد 1014 / 648 / 624 / 601 ms
+$ vitest run --project unit devices-push models-api agents setup-window
+                                     → Test Files  4 passed (4) · Tests 84 passed | 1 skipped (85) · 31.98s
+  (في CI قبلها: devices-push 132 ث، models-api 397 ث، agents وsetup-window تجاوزا 30 ث)
+$ pnpm --filter @corehub/contracts test → Test Files 7 passed (7) · Tests 38 passed (38)
+$ pnpm lint                          → All matched files use Prettier code style! (exit 0)
+$ pnpm typecheck                     → exit 0
+$ pnpm i18n:check                    → i18n:check  ios: 280 keys, ar/en in parity · OK
+$ pnpm nav:check                     → nav:check  OK — 37 destinations … routes for web, ios, android, desktop
+$ pnpm contracts:lint                → contracts:lint  OK
+$ pnpm contracts:check-clients       → check-clients  OK — 570 client file(s) scanned, 222 contract path(s) known.
+```
+- iOS لا يُبنى محليًا (لا Xcode)؛ محاكاة اختبارات التكافؤ في iOS (الوجهات، `adminOnly`، القوائم، المسارات،
+  مفاتيح `nav.*`) بسكربت Python على المصادر لم تجد فرقًا بعد الإصلاح. النتيجة الفعلية في CI.
 
 ## المخاطر والرجوع
 - إصلاحا 9 و10 يمسّان كود `main`/#114 لا كود الجمع وحده؛ كلاهما صغير ومحدد (انظر أعلاه).

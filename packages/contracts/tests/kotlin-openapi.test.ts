@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error — a plain ESM script without types
-import { admitsNull, prepareForKotlin } from '../scripts/kotlin-openapi.mjs';
+import {
+  admitsNull,
+  plainBooleans,
+  prepareForKotlin,
+  wideByteCounts,
+} from '../scripts/kotlin-openapi.mjs';
 // @ts-expect-error — a plain ESM script without types
 import { loadDocument } from '../scripts/lib.mjs';
 
@@ -118,6 +123,50 @@ describe('prepareForKotlin', () => {
       enum: ['message', 'avatar'],
     });
     expect(d.components.schemas.Purpose.default).toBe('message');
+  });
+
+  it('drops a boolean pinned to one value, keeping it a plain boolean', () => {
+    const node = {
+      properties: {
+        applied: { type: 'boolean', const: true },
+        on: { type: ['boolean', 'null'], enum: [true, null] },
+        kind: { type: 'string', enum: ['memory', 'skills'] },
+      },
+    };
+    plainBooleans(node);
+    expect(node.properties.applied).toEqual({ type: 'boolean' });
+    expect(node.properties.on).toEqual({ type: ['boolean', 'null'] });
+    expect(node.properties.kind).toEqual({ type: 'string', enum: ['memory', 'skills'] });
+  });
+
+  it('widens every integer byte count to int64, leaving other integers alone', () => {
+    const node = {
+      properties: {
+        memory_total_bytes: { type: 'integer', minimum: 0 },
+        rss_bytes: { type: ['integer', 'null'] },
+        pid: { type: 'integer' },
+        label_bytes: { type: 'string' },
+      },
+    };
+    wideByteCounts(node);
+    expect(node.properties.memory_total_bytes).toEqual({
+      type: 'integer',
+      minimum: 0,
+      format: 'int64',
+    });
+    expect(node.properties.rss_bytes).toEqual({ type: ['integer', 'null'], format: 'int64' });
+    expect(node.properties.pid).toEqual({ type: 'integer' });
+    expect(node.properties.label_bytes).toEqual({ type: 'string' });
+  });
+
+  it('leaves the webhooks out and pins no boolean in the real contract', () => {
+    const real = loadDocument();
+    expect(real.webhooks).toBeDefined();
+    const prepared = prepareForKotlin(structuredClone(real));
+    expect(prepared.webhooks).toBeUndefined();
+    expect(prepared.components.schemas.PendingWriteApplied.properties.applied).toEqual({
+      type: 'boolean',
+    });
   });
 
   it('leaves the source document untouched when given a copy, and covers the real contract', () => {
