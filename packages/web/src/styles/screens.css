@@ -1101,3 +1101,70 @@ button.files-name:focus-visible {
   border: 1px solid var(--ch-color-border);
   border-radius: var(--ch-radius-md);
 }
+
+/* ------------------------------------------------------------------ rooms
+   A room is a conversation with several speakers: the person's own messages keep the
+   right-hand side, everyone else — people and agents — the left, each named. The members
+   panel sits at the inline end on a wide screen and is a sheet on a narrow one. */
+.room-panel {
+  flex: 0 0 16rem;
+  flex-direction: column;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding-inline-start: var(--ch-space-4);
+  border-inline-start: 1px solid var(--ch-color-border);
+}
+.room-member {
+  display: flex;
+  align-items: center;
+  gap: var(--ch-space-2);
+  padding-block: var(--ch-space-1);
+  min-inline-size: 0;
+}
+.room-presence {
+  inline-size: 8px;
+  block-size: 8px;
+  flex: 0 0 auto;
+  border-radius: var(--ch-radius-full);
+  background: var(--ch-color-text-faint);
+  opacity: 0.5;
+}
+.room-presence.is-online {
+  background: var(--ch-color-success-soft-text);
+  opacity: 1;
+}
+/* Another person's words: a bubble on the left, quieter than the person's own. */
+.msg-bubble.room-other {
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text);
+}
+.room-activity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ch-space-2);
+  inline-size: 100%;
+  max-inline-size: var(--ch-layout-composer-max);
+  margin-inline: auto;
+}
+.room-mentions {
+  list-style: none;
+  margin: 0 0 var(--ch-space-2);
+  padding: var(--ch-space-1);
+  border-radius: var(--ch-radius-lg);
+  max-block-size: 14rem;
+  overflow-y: auto;
+}
+.room-mention {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ch-space-2);
+  padding: var(--ch-space-1) var(--ch-space-2);
+  border-radius: var(--ch-radius-md);
+  cursor: pointer;
+}
+.room-mention[data-active='true'] {
+  background: var(--ch-color-accent-soft);
+  color: var(--ch-color-accent-soft-text);
+}

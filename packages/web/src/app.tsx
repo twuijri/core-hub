@@ -1,12 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HubApiError } from '@corehub/contracts';
 import { useMemo, type ReactNode } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router';
 import { AuthProvider, useAuth } from './auth/context.js';
 import { SessionStore } from './auth/store.js';
 import { ThemeProvider, useTheme } from './design/theme.js';
 import { I18nProvider } from './i18n/context.js';
-import { canOpen, legacyRedirect, navigation } from './navigation/manifest.js';
+import { canOpen, legacyRedirect, navigation, routeOf } from './navigation/manifest.js';
 import { HOME_PATH, LOGIN_PATH, SETUP_PATH, routes } from './navigation/routes.js';
 import { RealtimeProvider } from './realtime/context.js';
 import { LoginScreen } from './screens/LoginScreen.js';
@@ -40,6 +40,17 @@ function LegacyRedirect() {
   const location = useLocation();
   const pathname = legacyRedirect(location.pathname) ?? HOME_PATH;
   return <Navigate to={{ pathname, search: location.search, hash: location.hash }} replace />;
+}
+
+/**
+ * A room's join link (`<hub>/join/<code>`, DECISIONS §23) is not a destination: it opens the
+ * Rooms section with the join dialog holding the code, after sign-in like any other page.
+ */
+export const JOIN_PATH = '/join/:code';
+function JoinLink() {
+  const { code = '' } = useParams();
+  const rooms = routeOf('rooms').split('/:')[0] ?? '/rooms';
+  return <Navigate to={`${rooms}?join=${encodeURIComponent(code)}`} replace />;
 }
 
 const LEGACY_PREFIXES = Object.keys(navigation.legacyRoutes?.web ?? {}).filter(
@@ -91,6 +102,14 @@ export function App({ store, baseUrl, fetchImpl, router }: AppProps) {
           }
         />
       ))}
+      <Route
+        path={JOIN_PATH}
+        element={
+          <RequireAuth>
+            <JoinLink />
+          </RequireAuth>
+        }
+      />
       {LEGACY_PREFIXES.map((from) => (
         <Route key={from} path={`${from}/*`} element={<LegacyRedirect />} />
       ))}

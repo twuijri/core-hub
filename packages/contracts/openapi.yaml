@@ -7057,9 +7057,17 @@ paths:
       operationId: rooms.list
       tags: [rooms]
       summary: List rooms (the Group Chat segment)
-      description: Sorted by `last_active_at desc`. Each row embeds its seats so avatars and counts render without a second call.
+      description: |
+        The rooms the caller is a member of, sorted by `last_active_at desc`. Each row embeds its
+        seats so avatars and counts render without a second call. Archived rooms are left out
+        unless `archived=true`, which lists only them.
       parameters:
         - $ref: '#/components/parameters/Profile'
+        - name: archived
+          in: query
+          schema:
+            type: boolean
+            default: false
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       x-rt-events: []
@@ -7089,6 +7097,8 @@ paths:
                     invite_code: 7KQ2M9XW
                     can_manage: true
                     can_mention_all: true
+                    lead_seat_id: 01J8QK3ZR2W7M5N4P6T8V9X0ST
+                    archived_at: null
                     member_count: 2
                     total_tokens: 48210
                     summary_policy:
@@ -7181,6 +7191,8 @@ paths:
                   invite_code: 7KQ2M9XW
                   can_manage: true
                   can_mention_all: true
+                  lead_seat_id: null
+                  archived_at: null
                   member_count: 1
                   total_tokens: 0
                   summary_policy:
@@ -7230,6 +7242,8 @@ paths:
                 invite_code: 7KQ2M9XW
                 can_manage: true
                 can_mention_all: true
+                lead_seat_id: 01J8QK3ZR2W7M5N4P6T8V9X0ST
+                archived_at: null
                 member_count: 2
                 total_tokens: 48210
                 summary_policy:
@@ -7345,6 +7359,8 @@ paths:
                 invite_code: 7KQ2M9XW
                 can_manage: true
                 can_mention_all: true
+                lead_seat_id: null
+                archived_at: null
                 member_count: 2
                 total_tokens: 48210
                 summary_policy:
@@ -7417,6 +7433,8 @@ paths:
                 invite_code: 3HXK7RQ2
                 can_manage: true
                 can_mention_all: true
+                lead_seat_id: null
+                archived_at: null
                 member_count: 1
                 total_tokens: 0
                 summary_policy:
@@ -7535,6 +7553,8 @@ paths:
                 invite_code: 7KQ2M9XW
                 can_manage: false
                 can_mention_all: true
+                lead_seat_id: null
+                archived_at: null
                 member_count: 3
                 total_tokens: 48210
                 summary_policy:
@@ -7860,9 +7880,11 @@ paths:
       tags: [rooms]
       summary: Post into a room and trigger the mentioned seats
       description: |
-        Mentions are structured (`mentions`), never parsed from text. With no mention the room's
-        routing rule applies (every seat when `can_mention_all`, else nobody). Each triggered seat
-        gets a run; the runs are returned so the client can show the queue at once.
+        Mentions are structured (`mentions`), never parsed from text. `@all` (`kind: all`)
+        addresses every seat and is refused (`400`) unless `can_mention_all`. With no mention the
+        room's lead seat answers (`lead_seat_id`), or nobody when it has none (DECISIONS §69).
+        Each triggered seat gets a run; the runs are returned so the client can show the queue at
+        once. An archived room refuses new messages with `409 state_invalid`.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -7917,6 +7939,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/RateLimited'
   /rooms/{room_id}/runs:
@@ -19798,6 +19822,8 @@ components:
               handoff,
               seats,
               last_active_at,
+              lead_seat_id,
+              archived_at,
             ]
           properties:
             name:
@@ -19813,6 +19839,19 @@ components:
               description: Whether the caller may edit the room.
             can_mention_all:
               type: boolean
+              description: Whether a person may address every seat at once with `@all`.
+            lead_seat_id:
+              oneOf:
+                - $ref: '#/components/schemas/Ulid'
+                - type: 'null'
+              description: |
+                The seat that answers a message that mentions nobody (DECISIONS §69). The first
+                seat added becomes the lead; `null` means such a message is only read.
+            archived_at:
+              oneOf:
+                - $ref: '#/components/schemas/Timestamp'
+                - type: 'null'
+              description: Set while the room is archived; an archived room refuses new messages.
             member_count:
               type: integer
             total_tokens:
@@ -19942,6 +19981,9 @@ components:
           $ref: '#/components/schemas/SummaryPolicy'
         handoff:
           $ref: '#/components/schemas/HandoffPolicy'
+        can_mention_all:
+          type: boolean
+          default: true
     RoomCreated:
       type: object
       required: [room, seat_results]
@@ -19977,6 +20019,16 @@ components:
           $ref: '#/components/schemas/SummaryPolicy'
         handoff:
           $ref: '#/components/schemas/HandoffPolicy'
+        can_mention_all:
+          type: boolean
+        lead_seat_id:
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+          description: A seat of this room, or `null` for no default responder.
+        archived:
+          type: boolean
+          description: Archive (`true`) or bring back (`false`) the room.
     RoomInvite:
       type: object
       required: [invite_code, join_url]

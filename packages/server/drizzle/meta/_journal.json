@@ -141,6 +141,13 @@
       "when": 1790332158927,
       "tag": "0019_hub_tools",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1790332372287,
+      "tag": "0020_rooms",
+      "breakpoints": true
     }
   ]
 }

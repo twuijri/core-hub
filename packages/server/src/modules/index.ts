@@ -61,12 +61,13 @@ import {
   runActivity,
   sessionActivityFor,
   sessionBackgroundFor,
+  seatSessionsFor,
   sessionRunsFor,
   sessionTurnsFor,
   workflowApprovalsFor,
   type ChannelSource,
 } from './sessions/index.js';
-import { roomsModule } from './rooms/index.js';
+import { registerRoomPorts, roomsModule } from './rooms/index.js';
 import {
   HermesApiUnavailable,
   HermesRefusal,
@@ -662,6 +663,26 @@ registerLiveSources((app) => ({
  */
 registerBackgroundSource((app) => sessionBackgroundFor(app));
 registerBackgroundSource((app) => workflowBackgroundFor(app));
+
+/**
+ * A room's seats are conversations in `sessions`, its agents are `agents`', its people are
+ * `auth`'s (DECISIONS §69). The three meet here, so `rooms` imports none of them for what
+ * they do.
+ */
+registerRoomPorts((app) => ({
+  seats: seatSessionsFor(app),
+  person(userId) {
+    const user = findUser(requireSqlite(app.hub.database), userId);
+    if (!user) return null;
+    return { name: user.displayName?.trim() || user.username, seed: user.username };
+  },
+  enterable(userId) {
+    const db = requireSqlite(app.hub.database);
+    const user = findUser(db, userId);
+    if (!user) return [];
+    return listWorkspacesFor(db, user).map((row) => ({ id: row.id, slug: row.slug }));
+  },
+}));
 
 export const modules: readonly HubModule[] = [
   authModule,

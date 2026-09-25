@@ -516,6 +516,29 @@ export class SessionsStore {
     return pageOf(rows, limit, (row) => encodeCursor(row.createdAt.getTime(), row.id));
   }
 
+  /** `listRuns` over several sessions at once (a room's seats), newest first. */
+  runsOfSessions(
+    workspace: string,
+    sessionIds: readonly string[],
+    status: string | undefined,
+    cursor: string | undefined,
+    limit: number,
+  ): Page<RunRow> {
+    if (sessionIds.length === 0) return { items: [], nextCursor: null };
+    const where: SQL[] = [eq(runs.workspace, workspace), inArray(runs.sessionId, [...sessionIds])];
+    if (status) where.push(inArray(runs.status, internalStatuses(status)));
+    const position = decodeCursor(cursor);
+    if (position) where.push(lt(runs.id, position.id));
+    const rows = this.db
+      .select()
+      .from(runs)
+      .where(and(...where))
+      .orderBy(desc(runs.id))
+      .limit(limit + 1)
+      .all();
+    return pageOf(rows, limit, (row) => encodeCursor(row.createdAt.getTime(), row.id));
+  }
+
   /** Every run of a session, oldest first (the trajectory reads them all). */
   allRuns(workspace: string, sessionId: string): RunRow[] {
     return this.db

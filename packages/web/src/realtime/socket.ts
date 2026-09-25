@@ -10,6 +10,7 @@ export const NAMESPACES = {
   jobs: '/rt/jobs',
   tasks: '/rt/tasks',
   schedules: '/rt/schedules',
+  rooms: '/rt/rooms',
 } as const;
 export type NamespaceName = keyof typeof NAMESPACES;
 
