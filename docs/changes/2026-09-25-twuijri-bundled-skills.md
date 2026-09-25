@@ -39,7 +39,7 @@
 النموذج (`agent/skill_utils.py` §SKILL_PROMPT_DESC_LIMIT). العربية في الوسوم (`metadata.hermes.tags`)
 وفي متن كل مهارة (سطر عربي، وعبارات الطلب بالعربية في «When to Use»).
 
-**التثبيت (DECISIONS §60):**
+**التثبيت (DECISIONS §71):**
 - في فئة `skills/core-hub/<skill>/` في كل بروفايل؛ هرمز يسردها بفئتها (`hermes skills list`: المصدر `local`).
 - **متى:** عند كل إقلاع لكل بروفايل (`default` وكل مسمّى)، وفور إنشاء بروفايل أو نسخه أو استيراده عبر الهب
   — **حين يشغّل الهب هرمز بنفسه** (`managed`، وهو الحال في الصورة). مع بوابة هرمز خارجية لا يكتب الهب في منزلها
@@ -69,7 +69,7 @@ Debian يعيد ضبط PATH لغير الجذر فيسقط `/opt/hermes/.venv/bi
 `COREHUB_IMAGE_API_KEY` مسارًا بديلًا للمفتاح (أو أن يكتبه الهب تلقائيًا من مزوّد مشترك في خطوة لاحقة)؛
 التثبيت التلقائي فقط حين يشغّل الهب هرمز؛ المفتاح في صفحة المهارات لا في الإعدادات؛ غلاف `python3` في الصورة.
 
-**ترقيم:** DECISIONS §60 ورحلة e2e رقم 31 أخذتهما لأن §55–§59 محجوزة في طلبات مفتوحة (#131، #133، #135،
+**ترقيم:** DECISIONS §71 ورحلة e2e رقم 31 أخذتهما لأن §55–§59 محجوزة في طلبات مفتوحة (#131، #133، #135،
 #134/#136، #140). طلب الدمج التجميعي الجاري قد يحتاج إعادة ترقيم لهما.
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
@@ -78,7 +78,7 @@ Debian يعيد ضبط PATH لغير الجذر فيسقط `/opt/hermes/.venv/bi
 - جديد: `agents.updateSkillLibrary` (`PATCH /agents/{agent_id}/skill-library`، `SkillLibraryPatch {enabled}`،
   للمديرين) و`agents.restoreSkill` (`POST /agents/{agent_id}/skills/{skill_key}/restore`، للمديرين، `409` بسبب
   `skill_not_library` أو `skill_library_off`).
-- `docs/contracts/DECISIONS.md` §60. العدد: 266 عملية (كانت 264)، 208 منفّذة.
+- `docs/contracts/DECISIONS.md` §71. العدد: 266 عملية (كانت 264)، 208 منفّذة.
 
 ## الملفات والتأثير
 - المكتبة: `packages/server/skill-library/` (12 مجلد مهارة + `DESCRIPTION.md`؛ 9 سكربتات بايثون، قوالب، مرجع).
@@ -92,7 +92,7 @@ Debian يعيد ضبط PATH لغير الجذر فيسقط `/opt/hermes/.venv/bi
   `tests/unit/skill-library.real.test.ts` (2، بصورة)، `web/tests/skill-library.test.tsx` (3)،
   `web/e2e/zzzz-skill-library.spec.ts` (الرحلة 31)، لقطتان: `agent-skills-ar-light.png` (تغيّرت: البطاقة)
   و`agent-skills-library-ar-light.png` (جديدة).
-- الوثائق: `docs/STATUS.md` (208 من 266، سطر agents)، `docs/contracts/DECISIONS.md` §60.
+- الوثائق: `docs/STATUS.md` (208 من 266، سطر agents)، `docs/contracts/DECISIONS.md` §71.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 كل الأوامر عبر `mj-run`، محليًا ما يمسّه التغيير فقط.
@@ -191,4 +191,4 @@ db:generate + db:migrate (SQLite and PostgreSQL)	pass	56s
   عربيًا لكل مهارة في الواجهة.
 - لاحقًا: أن يكتب الهب `COREHUB_IMAGE_*` في `.env` البروفايل من مزوّد مشترك يدعم الصور (ADR 0010)، فيعمل
   المسار البديل بلا خطوة يدوية؛ وضبط `image_gen.provider` في هرمز من الواجهة.
-- إعادة ترقيم §60 والرحلة 31 إن احتاج الدمج التجميعي.
+- إعادة ترقيم §71 والرحلة 31 إن احتاج الدمج التجميعي.

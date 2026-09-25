@@ -1,5 +1,5 @@
 /**
- * Seeding Core Hub's skill library into a profile's home (`skill-library.ts`, decision §60):
+ * Seeding Core Hub's skill library into a profile's home (`skill-library.ts`, decision §71):
  * first install, an upgrade that changes, adds and drops files, a person's edit kept through every
  * later seed until Restore, a deleted skill not brought back, a folder the hub never wrote left
  * alone, and the per-profile switch.

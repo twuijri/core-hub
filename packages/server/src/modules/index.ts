@@ -274,7 +274,7 @@ onProfileCreated((app, { profile, source, actorId }) => {
 });
 
 /**
- * Core Hub's skill library in a profile just made (decision §60), before its first turn rather
+ * Core Hub's skill library in a profile just made (decision §71), before its first turn rather
  * than at the next boot. A copy or an import brings its source's manifest, so its choice (on or
  * off) and its edited skills come with it.
  */

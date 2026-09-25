@@ -341,7 +341,7 @@ export function migrateMemoryOfEveryProfile(
 }
 
 /**
- * Core Hub's skill library into every profile Hermes has (`skill-library.ts`, decision §60): at
+ * Core Hub's skill library into every profile Hermes has (`skill-library.ts`, decision §71): at
  * boot, so an upgraded image updates the skills it wrote and a profile made outside the hub gets
  * them too. A profile switched off, and every skill the person edited, are left as they are.
  * Called only when the hub runs Hermes itself (`managed`).
@@ -588,7 +588,7 @@ function toSkill(
   pinned: readonly string[],
   library?: LibraryStatus,
 ): Record<string, unknown> {
-  // One of Core Hub's own (§60): in the library's category folder and recorded by its manifest.
+  // One of Core Hub's own (§71): in the library's category folder and recorded by its manifest.
   const state =
     skill.category === LIBRARY_CATEGORY && !skill.bundled
       ? (library?.skills.get(skill.key) ?? null)
@@ -909,7 +909,7 @@ export const agentsModule = defineModule({
     });
 
     /**
-     * Core Hub's skill library in this profile (§60): on by default; off removes the library's
+     * Core Hub's skill library in this profile (§71): on by default; off removes the library's
      * skills that are still as the hub wrote them and leaves the edited ones as the person's.
      */
     defineRoute(app, deps, {

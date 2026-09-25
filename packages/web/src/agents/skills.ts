@@ -22,7 +22,7 @@ export interface Skill {
   library?: 'current' | 'edited' | null;
 }
 
-/** Core Hub's own skill library in the selected profile (decision §60). */
+/** Core Hub's own skill library in the selected profile (decision §71). */
 export interface SkillLibrary {
   enabled: boolean;
   available: number;

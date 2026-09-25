@@ -1,5 +1,5 @@
 /**
- * A lint of the skills Core Hub ships (`packages/server/skill-library/`, decision §60), and the
+ * A lint of the skills Core Hub ships (`packages/server/skill-library/`, decision §71), and the
  * helper scripts run for real where a Python 3 is available:
  *
  * - every skill folder has a `SKILL.md` whose front matter is valid YAML, names the folder, has a

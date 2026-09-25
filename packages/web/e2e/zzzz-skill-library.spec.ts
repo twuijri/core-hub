@@ -1,5 +1,5 @@
 /**
- * Journey 31: Core Hub's own skill library on the Skills page (decision §60), against the real hub.
+ * Journey 31: Core Hub's own skill library on the Skills page (decision §71), against the real hub.
  *
  * The e2e hub talks to a scripted external Hermes, so nothing is installed at boot (only a Hermes
  * the hub runs itself is seeded): the card says the library is not installed yet and offers

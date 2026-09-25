@@ -1,5 +1,5 @@
 /**
- * Core Hub's skill library against **the real Hermes** from the image (decision §60):
+ * Core Hub's skill library against **the real Hermes** from the image (decision §71):
  *
  * 1. The hub seeds the library into `default` and into a profile Hermes itself made (`hermes
  *    profile create`, which also seeds Hermes's own built-in skills); `hermes skills list` then

@@ -4222,7 +4222,7 @@ paths:
         Hermes seeded from its own bundle (named in `skills/.bundled_manifest`) is `source:
         builtin` and read-only here: it can be read and pinned, not written, switched or
         deleted (`409 conflict`, `details.reason = skill_bundled`). A skill's `key` is its
-        folder's name wherever the folder is. Core Hub's own skills (decision §60) live in the
+        folder's name wherever the folder is. Core Hub's own skills (decision §71) live in the
         `core-hub` category, are `source: library` with `library` saying whether the person
         edited them, and `library` in the answer describes the library in this profile.
       x-rt-events: []
@@ -4495,7 +4495,7 @@ paths:
       tags: [agents]
       summary: Put a Core Hub library skill back as the library ships it (admin)
       description: >-
-        Rewrites every file of one of Core Hub's own skills (`source: library`, decision §60)
+        Rewrites every file of one of Core Hub's own skills (`source: library`, decision §71)
         in the profile in `X-Hub-Profile` exactly as the library ships it, over the person's
         edits — the only operation that writes over an edit. A switched-off skill stays off.
         A skill the library does not ship is `409 conflict` with `details.reason =
@@ -4539,7 +4539,7 @@ paths:
       summary: Switch Core Hub's skill library on or off in a profile (admin)
       description: >-
         Core Hub installs its own skills into every Hermes profile's `skills/core-hub/`
-        (decision §60), on by default. `enabled: false` removes the library's skills that are
+        (decision §71), on by default. `enabled: false` removes the library's skills that are
         still exactly as the hub wrote them and leaves the ones the person edited, as theirs;
         the hub then stops installing and updating the library in this profile. `enabled:
         true` installs the whole library again. The choice is kept in the profile
@@ -15167,7 +15167,7 @@ components:
       type: string
       description: >-
         `builtin`: seeded by the agent from its own bundle (Hermes's `skills/.bundled_manifest`)
-        and read-only through the hub; `library`: one of Core Hub's own skills (decision §60),
+        and read-only through the hub; `library`: one of Core Hub's own skills (decision §71),
         installed and kept up to date by the hub until the person edits it; `external`:
         installed from a pack that names itself; `user`: written by a person.
       enum: [builtin, user, external, library]
@@ -15205,7 +15205,7 @@ components:
             for every other skill.
     SkillLibrary:
       type: object
-      description: Core Hub's own skill library in one profile (decision §60).
+      description: Core Hub's own skill library in one profile (decision §71).
       required: [enabled, available, installed, edited]
       properties:
         enabled:

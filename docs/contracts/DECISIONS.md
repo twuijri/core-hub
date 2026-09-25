@@ -1070,7 +1070,7 @@ would work on an empty folder and look successful); a per-project limit (the own
 profile); a migration to make `worktrees.path` unique only among live rows — a task's removed
 worktree row is reused instead, which also keeps one history per task.
 
-## 60. Core Hub ships its own skill library, installed into every profile and never written over an edit
+## 71. Core Hub ships its own skill library, installed into every profile and never written over an edit
 
 Bundled skills (2026-09-25). The owner: «اهم المهارات الرئيسية ولزم يكون فيه شي خاص بالصور».
 Core Hub carries a library of its own skills (`packages/server/skill-library/`, Apache-2.0, part of

@@ -1,5 +1,5 @@
 /**
- * Core Hub's own skill library (contract decision §60): the skills that ship with the hub in
+ * Core Hub's own skill library (contract decision §71): the skills that ship with the hub in
  * `packages/server/skill-library/`, installed into every Hermes profile's
  * `skills/core-hub/<skill>/` — a category folder, which is how Hermes lists them (#91).
  *

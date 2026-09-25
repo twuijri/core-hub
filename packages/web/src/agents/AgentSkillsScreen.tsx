@@ -18,7 +18,7 @@
  * them to read, lets them be pinned — and offers no switch, save or delete for them, because
  * the hub rewriting one would quietly fork Hermes's copy.
  *
- * **Core Hub's own library is theirs to adapt** (decision §60). The skills the hub ships sit in
+ * **Core Hub's own library is theirs to adapt** (decision §71). The skills the hub ships sit in
  * the `core-hub` category with a «Core Hub library» badge. They are ordinary skills — opened,
  * edited, switched, deleted — and the hub keeps them up to date only while they are as it wrote
  * them: an edited one says so and offers Restore. The library itself is switched off or on per

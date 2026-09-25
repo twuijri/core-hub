@@ -1,5 +1,5 @@
 /**
- * Core Hub's own skill library on the Skills page (decision §60): its card says how many of its
+ * Core Hub's own skill library on the Skills page (decision §71): its card says how many of its
  * skills the profile has and switches it off (after asking) or on; its skills carry the «Core Hub
  * library» badge; an edited one says so and offers Restore, which asks first; a profile the hub
  * never installed it in offers Install.

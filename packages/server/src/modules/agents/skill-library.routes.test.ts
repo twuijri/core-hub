@@ -1,5 +1,5 @@
 /**
- * Core Hub's skill library through the hub's own routes (decision §60): listed as `source:
+ * Core Hub's skill library through the hub's own routes (decision §71): listed as `source:
  * library` in the `core-hub` category with the library's summary, an edit marked and restored,
  * the per-profile switch, and the refusals. Plus the boot-time seed over every profile Hermes has.
  */
