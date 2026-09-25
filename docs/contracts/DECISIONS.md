@@ -2180,3 +2180,35 @@ service, so cli-proxy-api and custom endpoints would not work); a second copy of
 protocols inside the backend (two implementations drift); keeping `OPENAI_API_KEY`/`GEMINI_API_KEY`
 as fallbacks in the skills (Hermes hides them from the terminal, and they would draw with a model
 nobody chose).
+
+## 73. The Journey is Hermes's own learning graph, read in the selected profile
+
+`agents.getJourney` was a 501 with a schema for "skills and tools it has used". Hermes already
+draws this: its learning graph (`agent/learning_graph.py`), shown by `hermes journey`, its TUI's
+`/journey` and its desktop panel, served by its own server as
+`GET /api/learning/graph?profile=` (ADR 0015). The hub reads that and renames the fields;
+Hermes decides every node, edge and cluster.
+
+- **What a node is**: a skill of the profile that the agent wrote or has used (Hermes leaves out
+  its bundled skills and ones nobody used), or one entry of `MEMORY.md` / `USER.md`. So `kind` is
+  `skill | memory` — `tool` and `plugin` were never returned and are gone from the enum (no
+  implementation or client ever used them). Added, all Hermes's: `state` (its curator's
+  `active | stale | archived`), `agent_created`, `memory_source` (`memory | user`; Hermes calls
+  `USER.md` `profile`, the hub's memory model calls it `user`, §12) and `learned_at` (Hermes's
+  epoch seconds as ISO time).
+- **Ids are Hermes's**, unchanged (a skill's name, `memory:<memory|profile>:<n>`), so a later
+  edit or delete can name a node the way Hermes's own `/api/learning/node` does.
+- **Only where the hub supervises Hermes**, like plugins and pairing: `409 state_invalid`
+  `hermes_not_supervised` elsewhere, `journey_is_hermes_only` for another agent,
+  `hermes_profile_absent` for a profile Hermes does not have, `503 hermes_api_unavailable` when
+  Hermes's server does not answer.
+
+Proposed — owner to confirm: read only. Hermes can also edit and delete a node (a skill is
+archived, a memory entry removed); the hub's memory and skills pages already do both, so no
+second way is added here. No web page yet: `navigation.json` has no Journey destination, so
+drawing the graph is a navigation decision for the owner (Hermes declares the `journey`
+section, and the data is there).
+
+Rejected: running `hermes journey --json` (Rich's console printer, and a Python start per
+request); the hub computing a graph from its own run history (Hermes already has the answer, and
+the numbers would disagree with Hermes's own screens).

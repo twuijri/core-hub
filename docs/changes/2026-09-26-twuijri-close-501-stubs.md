@@ -81,17 +81,85 @@ devices.createPeerInvite	POST /peer-invites
 ### ترتيب البناء
 ١) رحلة الوكيل (الأقرب إلى هرمز الحقيقي وأصغرها)، ٢) طلبات قدرات الجهاز، ٣) صورة الوكيل. بعدها أتوقف.
 
+### المجموعة ١ — رحلة الوكيل (`agents.getJourney`)
+**ما رأيته في هرمز** (ADR 0012؛ مصدره MIT في الصورة `core-hub:morechannels` تحت `/opt/hermes/src`، الوسم v2026.9.14):
+- هرمز يبني «رسم التعلّم» في `agent/learning_graph.py` ويعرضه بثلاث طرق: `hermes journey` في الطرفية (وأسماؤه
+  البديلة `learning` و`memory-graph`)، وطبقة `/journey` في واجهته النصية، ولوحة تطبيقه المكتبي التي تقرؤه من خادمه:
+  `GET /api/learning/graph?profile=<name>` (`hermes_cli/web_routers/status.py`)، يُبنى تحت بيت ذلك البروفايل. وللخادم
+  أيضًا `GET/PUT/DELETE /api/learning/node` لقراءة عقدة وتحريرها وحذفها.
+- شغّلت `hermes -p work journey --json` على بيت مؤقت فيه ثلاث مهارات في بروفايل `work` وملف `skills/.usage.json`
+  وذاكرتان في `memories/MEMORY.md`. النتيجة: العقد هي **مهارات البروفايل التي كتبها الوكيل** (`created_by: agent`)
+  **أو استعملها** (`use_count > 0`) فقط — المهارة التي لم يستعملها أحد غابت، ومهارات هرمز المشحونة معه لا تدخل —
+  و**كل مدخل ذاكرة** عقدةٌ بمعرّف `memory:<memory|profile>:<n>`. لكل مهارة فئتها وعدد استعمالها و`pinned` وحالتها عند
+  «القيّم» (`active | stale | archived`) و`timestamp` بالثواني منذ ١٩٧٠. الروابط: `related_skills` المعلنة، وكل ذاكرة
+  إلى أربع مهارات على الأكثر تشاركها كلمات. والعناقيد: عدد العقد في كل فئة، الأكبر أولًا.
+- اختبار الخادم الحقيقي كشف أمرين لم يظهرا من القراءة وحدها: رقم `n` في معرّف الذاكرة **يعدّ الملفين معًا**
+  (`MEMORY.md` أولًا، فأول مدخل في `USER.md` بعد ذاكرتين هو `memory:profile:2`)، وهرمز يربط الذاكرة بالمهارات
+  **بالحروف اللاتينية والأرقام فقط**، فالذاكرة العربية لا ترتبط بشيء ما لم تذكر اسم مهارة.
+
+**القرار (مقترح — للمالك أن يؤكّد؛ DECISIONS §73):**
+1. `agents.getJourney` يسأل خادم هرمز (ADR 0015) في البروفايل المختار ويعيد تسمية الحقول فقط؛ لا يحسب المركز شيئًا.
+2. العقد: `kind` صار `skill | memory` (القيمتان `tool` و`plugin` لم يُرجعهما شيء قطّ ولا عميل يستعملهما)، وأُضيفت
+   حقول هرمز: `state`، `agent_created`، `memory_source` (`memory | user` — هرمز يسمّي `USER.md` ‏`profile`، ونموذج
+   الذاكرة عندنا يسمّيه `user`، §12)، `learned_at`. المعرّفات تمرّ كما هي.
+3. قراءة فقط: التحرير والحذف موجودان في صفحتَي الذاكرة والمهارات.
+4. **لا صفحة ويب**: لا وجهة للرحلة في `navigation.json` (هرمز يعلن القسم، والبيانات جاهزة) — رسمها قرار تنقّل للمالك.
+5. حيث لا يدير المركز هرمز: `409` ‏`hermes_not_supervised`؛ وكيل غير هرمز: `journey_is_hermes_only`؛ بروفايل لا يملكه
+   هرمز: `hermes_profile_absent`؛ خادم هرمز لا يجيب: `503` ‏`hermes_api_unavailable`.
+
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
-يُحدَّث مع كل مجموعة.
+- **المجموعة ١:** `agents.getJourney` صار له وصف، ومثال من هرمز الحقيقي، وردّا `409` و`503`. المخطط `Journey`: `kind`
+  ‏`skill | memory`، والحقول المطلوبة الجديدة `state` و`agent_created` و`memory_source` و`learned_at`، ووصف للمعرّفات
+  وللعناقيد. تغيير متوافق: العملية كانت ‎501‎ ولا عميل يقرؤها. DECISIONS §73.
 
 ## الملفات والتأثير
-يُحدَّث مع كل مجموعة.
+- **المجموعة ١:** `packages/server/src/modules/agents/hermes-journey.ts` (جديد: السؤال والتحويل)،
+  `…/agents/index.ts` (المسار وتعليق الوحدة)، `…/agents/journey.routes.test.ts` (جديد)،
+  `…/agents/hermes-journey.real.test.ts` (جديد، يعمل مع `COREHUB_HERMES_IMAGE`)، `packages/contracts/openapi.yaml`،
+  `docs/contracts/DECISIONS.md` (§73)، `docs/STATUS.md` (296 من 315؛ سطر `agents` 51 من 59).
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-تُلصق مع كل مجموعة.
+كلها عبر `mj-run`، محليًا، على ما مسّته كل مجموعة فقط؛ الحزم الكاملة يشغّلها CI على #144.
+
+**المجموعة ١ (الرحلة):**
+```
+$ pnpm contracts:lint
+Woohoo! Your API description is valid. 🎉
+contracts:lint  validating 96 event schema file(s)
+contracts:lint  OK
+
+$ COREHUB_HERMES_IMAGE=core-hub:morechannels npx vitest run \
+    src/modules/agents/hermes-journey.real.test.ts src/modules/agents/journey.routes.test.ts
+ Test Files  2 passed (2)
+      Tests  7 passed (7)
+
+# الاختبار نفسه على الشيفرة القديمة (git stash للتعديلات المتتبَّعة، أي بلا المسار): المسار يجيب 501
+     × asks Hermes's server in the selected profile and answers the graph (no longer 501) 1042ms
+     × names the reason when this hub does not supervise Hermes 767ms
+     × is 503 when Hermes does not answer, and 409 for an agent that is not Hermes 707ms
+      Tests  3 failed | 2 passed (5)
+
+$ npx vitest run --project unit tests/unit/status.test.ts src/modules/agents/journey.routes.test.ts
+ Test Files  2 passed (2)
+      Tests  6 passed (6)
+
+$ npx vitest run --project contract tests/contract/contract.test.ts
+ Test Files  1 passed (1)
+      Tests  316 passed (316)
+
+$ pnpm --filter @corehub/server typecheck      # بلا أخطاء
+$ pnpm lint
+All matched files use Prettier code style!
+$ pnpm contracts:check-clients
+check-clients  OK — 576 client file(s) scanned, 222 contract path(s) known.
+```
+الاختبار الحقيقي شغّل `hermes serve` من الصورة في حاوية باسم `corehub-journey-real-…` وأزالها؛ `docker ps -a` بعده لا يُظهر
+شيئًا منها.
 
 ## المخاطر والرجوع
-يُحدَّث مع كل مجموعة.
+- **المجموعة ١:** قراءة فقط، ولا تكتب شيئًا في بيت هرمز. تبدأ خادم هرمز الداخلي عند أول طلب (كالاقتران وتجربة MCP)؛
+  يتوقف وحده بعد عشر دقائق من الخمول. الرجوع: حذف المسار يعيده ‎501‎. إن غيّر هرمز شكل `/api/learning/graph` في نسخة
+  لاحقة، يسقط ما لا يُفهم بدل أن يُخمَّن، ويكشفه الاختبار الحقيقي.
 
 ## التسليم والخطوة التالية
 الجرد مكتوب؛ المجموعة الأولى قيد البناء.
