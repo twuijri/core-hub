@@ -77,7 +77,15 @@ $ vitest (web) tests/rooms.test.tsx tests/navigation.parity.test.tsx tests/sessi
 $ pnpm build && PLAYWRIGHT_CHANNEL=chrome playwright test zzzzzz-rooms.spec.ts
   1 passed (9.3s)
 ```
-CI: يُكمَّل بعد الدفع.
+CI على #135 (التشغيل 36106538540) — كلها خضراء:
+```
+Lint, typecheck, contracts, tests, build	pass	14m25s
+Web smoke journeys (Playwright against the real hub)	pass	5m16s
+db:generate + db:migrate (SQLite and PostgreSQL)	pass	1m2s
+Docker image builds and answers /health	pass	2m44s
+PR adds or updates a change record	pass	15s
+PR leaves graphify-out/ to the code-map bot	pass	9s
+```
 
 ## المخاطر والرجوع
 - الترحيل 0017 يضيف أعمدة وجدولين فقط، ولا يلمس بيانات (لم تكن هناك غرف). إن دُمج قبله
