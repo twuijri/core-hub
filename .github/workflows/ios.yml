@@ -1,0 +1,80 @@
+name: iOS
+
+# The iOS client (apps/ios): generate the Swift client from the contract on Linux, then build
+# and test the app on a macOS runner's simulator. Nothing is signed or published here
+# (apps/ios/README.md, "Signing").
+on:
+  pull_request:
+    paths:
+      - 'apps/ios/**'
+      - 'packages/contracts/openapi.yaml'
+      - 'packages/contracts/openapi-generator/swift.yaml'
+      - 'packages/ui-tokens/tokens.json'
+      - 'docs/clients/navigation.json'
+      - '.github/workflows/ios.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/ios/**'
+      - 'packages/contracts/openapi.yaml'
+      - 'packages/contracts/openapi-generator/swift.yaml'
+      - 'packages/ui-tokens/tokens.json'
+      - 'docs/clients/navigation.json'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  swift-client:
+    name: Generate the Swift client (CoreHubClient)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: pnpm install --frozen-lockfile --filter @corehub/contracts
+      - run: pnpm --filter @corehub/contracts generate:native
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corehub-swift-client
+          path: packages/contracts/generated/swift
+          retention-days: 3
+
+  build-test:
+    name: Build and test on the iOS simulator
+    needs: swift-client
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: corehub-swift-client
+          path: packages/contracts/generated/swift
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          xcrun simctl list runtimes
+      - name: The generated client builds for the simulator
+        working-directory: packages/contracts/generated/swift
+        run: |
+          set -o pipefail
+          ls
+          cat Package.swift
+          find . -name '*.swift' | head -40
+          xcodebuild -scheme CoreHubClient -destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation build | tail -60
