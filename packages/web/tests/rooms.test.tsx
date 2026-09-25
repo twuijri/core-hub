@@ -1,4 +1,4 @@
-// Rooms on the web (DECISIONS §57): the mention rules the composer sends by, the transcript
+// Rooms on the web (DECISIONS §69): the mention rules the composer sends by, the transcript
 // the socket feeds, and the composer's `@` list.
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';

@@ -414,7 +414,7 @@ registerTaskRunner((app) => {
         origin: { kind: 'task', id: input.taskId },
       });
       // A task's progress goes into its project's room, when the project names one (ROADMAP
-      // Phase 1, DECISIONS §57): when its run starts, and how it ended.
+      // Phase 1, DECISIONS §69): when its run starts, and how it ended.
       const report = taskReporter(app, scope, input.taskId, input.agentId);
       report?.('started');
       if (report) {
@@ -503,7 +503,7 @@ registerTaskNames((app) => (kind, id) => {
 
 /**
  * A room's seats are conversations in `sessions`, its agents are `agents`', its people are
- * `auth`'s (DECISIONS §57). The three meet here, so `rooms` imports none of them for what
+ * `auth`'s (DECISIONS §69). The three meet here, so `rooms` imports none of them for what
  * they do.
  */
 registerRoomPorts((app) => ({

@@ -770,7 +770,7 @@ export class SessionsService {
   }
 
   /**
-   * A room seat's own conversation (`rooms`, DECISIONS §57): opened once when the seat is
+   * A room seat's own conversation (`rooms`, DECISIONS §69): opened once when the seat is
    * added, then every turn the seat takes runs in it, so the agent keeps what it said
    * before. Source `room`, origin the seat, so it stays out of the chats list and its runs
    * name the seat. An agent that is not installed is refused before anything is written.

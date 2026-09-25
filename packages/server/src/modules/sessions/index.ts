@@ -235,7 +235,7 @@ export function sessionRunsFor(app: FastifyInstance): SessionRuns | null {
 }
 
 /**
- * A room's seats (`rooms`, DECISIONS §57): each seat has one session of its own, opened when
+ * A room's seats (`rooms`, DECISIONS §69): each seat has one session of its own, opened when
  * the seat is added, and every turn it takes is a run in it. `listen` hears the sessions'
  * streams so the room can re-emit them on `/rt/rooms` with the room's ids set.
  */

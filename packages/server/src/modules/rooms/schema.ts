@@ -82,7 +82,7 @@ export const rooms = sqliteTable(
     lastMessageAt: timestampMs('last_message_at'),
     settings: json<RoomSettings>('settings').notNull().default(EMPTY_OBJECT),
     archivedAt: timestampMs('archived_at'),
-    // Since migration 0017 (DECISIONS §57): the contract's room.
+    // Since migration 0020 (DECISIONS §69): the contract's room.
     workingDir: text('working_dir'),
     /** Upper-case code of `[A-Z2-9]`; the public link is `<hub>/join/<code>`. */
     inviteCode: text('invite_code', { length: 12 }),
@@ -151,7 +151,7 @@ export const seats = sqliteTable(
     joinedAt: timestampMs('joined_at').notNull(),
     leftAt: timestampMs('left_at'),
     lastSpokeAt: timestampMs('last_spoke_at'),
-    // Since migration 0017: the contract's `SeatConfig` (alias is its `name`, persona its
+    // Since migration 0020: the contract's `SeatConfig` (alias is its `name`, persona its
     // `instructions`).
     description: text('description'),
     model: text('model'),
@@ -193,14 +193,14 @@ export const roomMessages = sqliteTable(
     handoffId: ulid('handoff_id').references((): AnySQLiteColumn => handoffs.id, {
       onDelete: 'set null',
     }),
-    // Since migration 0017: what the contract's `Message` needs of a room message.
+    // Since migration 0020: what the contract's `Message` needs of a room message.
     /** `complete | streaming | failed | interrupted`. */
     status: text('status', { length: 16 }).notNull().default('complete'),
     /** The author's name when it was written: a seat or a person may leave. */
     authorName: text('author_name'),
-    /** The seat's session for a seat's reply; the room's id otherwise (DECISIONS §57). */
+    /** The seat's session for a seat's reply; the room's id otherwise (DECISIONS §69). */
     sessionId: ulid('session_id'),
-    /** `mentions` holds the contract's `Mention` objects since 0017. */
+    /** `mentions` holds the contract's `Mention` objects since 0020. */
     mentionList: json<StoredMention[]>('mention_list').notNull().default(EMPTY_ARRAY),
     handoff: json<StoredHandoff>('handoff'),
     reasoning: text('reasoning'),
@@ -253,7 +253,7 @@ export const handoffs = sqliteTable(
 export const HANDOFF_CHAIN_STATUSES = ['active', 'stopped', 'completed', 'failed'] as const;
 
 /**
- * One run of agents passing the turn to each other (contract `HandoffChain`, DECISIONS §57).
+ * One run of agents passing the turn to each other (contract `HandoffChain`, DECISIONS §69).
  * A chain starts when a seat's reply to a person mentions another seat; every further pass
  * adds one to `depth`. The guard stops it at `max_depth` or when a pass repeats one the
  * chain already made (`visited`).

@@ -1,5 +1,5 @@
 /**
- * The Rooms section's reads, writes and live stream (contract tag `rooms`, DECISIONS §57).
+ * The Rooms section's reads, writes and live stream (contract tag `rooms`, DECISIONS §69).
  *
  * A room is its members': the list is the rooms the person is in, in the profile they are
  * in. The room's screen is one document (`rooms.get`: seats, members, live runs, handoff

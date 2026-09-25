@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rooms against a real Hermes (DECISIONS §57): one throwaway container of the hub image, the
+# Rooms against a real Hermes (DECISIONS §69): one throwaway container of the hub image, the
 # scripted upstream (`fake-provider.mjs --script rooms`) as its model, and a room with two
 # Hermes seats. A person mentions the planner; Hermes answers through its real TUI gateway,
 # the reply mentions the coder, the room hands it the turn, the coder answers; then the room's

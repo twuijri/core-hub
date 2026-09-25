@@ -105,7 +105,7 @@ export function toMemory(row: RoomRow): Record<string, unknown> {
 /**
  * A room message as the contract's one `Message` (DECISIONS §1). A person's and the hub's
  * messages carry the room's id as `session_id` — a room is not a session; a seat's reply
- * carries its seat's session, where the run that wrote it lives (DECISIONS §57).
+ * carries its seat's session, where the run that wrote it lives (DECISIONS §69).
  */
 export function toRoomMessage(
   row: RoomMessageRow,

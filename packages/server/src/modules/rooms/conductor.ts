@@ -1,5 +1,5 @@
 /**
- * Agents in the room (DECISIONS §57, part 2): who takes a turn, what it is told, how its reply
+ * Agents in the room (DECISIONS §69, part 2): who takes a turn, what it is told, how its reply
  * reaches the room while it is being written, and when the turn passes to another agent.
  *
  * - **A turn** is a run in the seat's own conversation (`sessions`), started with the room as

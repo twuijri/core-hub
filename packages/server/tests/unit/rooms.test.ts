@@ -1,5 +1,5 @@
 /**
- * Rooms, part 1 (DECISIONS §57): who is in a room, who may do what, invite codes, seats and
+ * Rooms, part 1 (DECISIONS §69): who is in a room, who may do what, invite codes, seats and
  * the transcript — through the real routes, with `sessions` composed on a scripted runner so
  * a seat's conversation is real.
  */

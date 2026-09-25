@@ -1,5 +1,5 @@
 /**
- * The room's rolling summary (contract `RoomMemory`, DECISIONS §57 part 3).
+ * The room's rolling summary (contract `RoomMemory`, DECISIONS §69 part 3).
  *
  * A seat is shown only the newest messages it has not seen (`context.ts`); what came before
  * reaches it as this summary, which every seat turn carries. It is rewritten **every N

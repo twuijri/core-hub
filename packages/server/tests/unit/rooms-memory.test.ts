@@ -1,5 +1,5 @@
 /**
- * Rooms, part 3 (DECISIONS §57): the rolling summary — by hand, on request, every N messages,
+ * Rooms, part 3 (DECISIONS §69): the rolling summary — by hand, on request, every N messages,
  * written by the lead agent or by the hub when the agent cannot — and a task's progress
  * reported into its project's room (ROADMAP Phase 1).
  */
