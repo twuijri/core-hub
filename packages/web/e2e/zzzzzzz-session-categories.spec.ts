@@ -27,6 +27,7 @@ async function login(page: Page) {
 
 test('32. a category is made, a chat moved into it, and its collapse survives a reload', async ({
   page,
+  request,
 }, testInfo) => {
   // A retry runs against the same hub, where the first attempt's «عملاء» already exists and a
   // second one of that name is refused (§53): each attempt makes its own.
@@ -93,19 +94,27 @@ test('32. a category is made, a chat moved into it, and its collapse survives a 
   await again.getByTestId('session-group-toggle').click();
   await expect(again.locator(`a[href*="${sessionId}"]`)).toHaveCount(1);
 
-  // Drag works too: a second chat, picked up by its grip and dropped on the header.
-  await page.getByRole('link', { name: 'محادثة جديدة' }).first().click();
-  await expect(async () => {
-    await page.getByTestId('composer-input').fill('عرض سعر للعميل الثاني');
-    await expect(page.getByTestId('send')).toBeEnabled({ timeout: 1_000 });
-  }).toPass();
-  await page.getByTestId('send').click();
-  await expect(page).toHaveURL(/\/chat\/[0-9A-Z]{26}(\?profile=[a-z0-9-]+)?$/);
-  const secondId = /\/chat\/([0-9A-Z]{26})/.exec(page.url())?.[1] ?? '';
+  // Drag works too: a second chat — made through the API, so the journey does not race the
+  // composer a second time — picked up by its grip and dropped on the header.
+  const signedIn = await request.post('/api/v1/auth/login', {
+    data: { username: 'admin', password: PASSWORD },
+  });
+  const token = ((await signedIn.json()) as { access_token: string }).access_token;
+  const headers = { authorization: `Bearer ${token}`, 'x-hub-profile': 'default' };
+  const firstChat = (await (
+    await request.get(`/api/v1/sessions/${sessionId}`, { headers })
+  ).json()) as { agent_id: string };
+  const made = await request.post('/api/v1/sessions', {
+    headers,
+    data: { agent_id: firstChat.agent_id, title: 'عرض سعر للعميل الثاني' },
+  });
+  expect(made.status()).toBe(201);
+  const secondId = ((await made.json()) as { id: string }).id;
   const second = page
     .getByTestId('session-list')
     .getByTestId('session-row')
     .filter({ has: page.locator(`a[href*="${secondId}"]`) });
+  await expect(second).toHaveCount(1);
   await second.hover();
   const grip = second.locator('.session-grip');
   const from = await grip.boundingBox();
