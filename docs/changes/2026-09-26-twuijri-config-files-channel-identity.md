@@ -116,7 +116,9 @@ OpenCode: حزمته لم تكن على القرص فلم أتحقق، فلا ي
   `packages/web/tests/navigation.parity.test.tsx` (مسار بشرطة).
 - **التنقّل:** `docs/clients/navigation.json` (الوجهة `agent_config_files`، المصطلح، المسار)،
   `docs/clients/NAVIGATION.md`؛ واختبارا تطابق أندرويد وiOS يحترمان `surfaces` في `agentLevel`
-  (`apps/android/…/NavigationParityTest.kt`، `apps/ios/CoreHubTests/NavigationParityTests.swift`) — سطر لكلٍّ.
+  (`apps/android/…/NavigationParityTest.kt`، `apps/ios/CoreHubTests/NavigationParityTests.swift`) — سطر لكلٍّ؛
+  ومصطلح `config_files` في `apps/ios/CoreHub/i18n/{ar,en}.json` (iOS يطابق كل مصطلحات الملف ولو لم تكن الوجهة فيه،
+  كما `terminal`).
 - **الوثائق:** `docs/contracts/DECISIONS.md` (§78، §79، §80)، `docs/STATUS.md`، `docs/domain/{agents,auth}.md`،
   `docs/DEPLOY.md` (`/data/home/`، النسخ الاحتياطية).
 
@@ -183,6 +185,13 @@ $ DATA_DIR=$(mktemp -d) npx drizzle-kit generate   → No schema changes, nothin
 $ pnpm build                     → exit 0 (web built; desktop build: apps/desktop/dist/hub ready)
 ```
 لم أشغّل محليًا: حزم الخادم والويب ورحلات Playwright كاملة، وبناء الصورة، وأندرويد وiOS — يشغّلها CI على طلب الدمج.
+
+**CI على #148** (الرأس `24b67caf` قبل إصلاح iOS): ١٥ فحصًا ناجحًا وفشل واحد — «Build and test on the iOS simulator»:
+```
+PresentationTests.swift:89: error: -[CoreHubTests.L10nTests testEveryNavigationTermIsTheManifestsWord] :
+XCTAssertEqual failed: ("Optional("nav.config_files")") is not equal to ("Optional("Config files")") - en nav.config_files
+```
+iOS يطلب كل مصطلح في `navigation.json` في قاموسه؛ أُضيف `config_files` بالعربية والإنجليزية.
 
 ## المخاطر والرجوع
 - **`HOME=/data/home` في الصورة** (مقترح): ما يكتبه وكلاء البرمجة في بيتهم صار يبقى بين الترقيات، وصدفة الطرفية
