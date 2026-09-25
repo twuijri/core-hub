@@ -14,7 +14,7 @@
  * contract's `ProviderSignIn`, both pure enough to test against a scripted server.
  */
 import { HubError } from '../../lib/errors.js';
-import { liveModels, type HermesPythonRun } from './live-models.js';
+import { CODEX_CLIENT_VERSION, liveModels, type HermesPythonRun } from './live-models.js';
 
 /** What starting a sign-in gave back: the code to show and where to enter it. */
 export interface SignInStarted {
@@ -65,6 +65,8 @@ export interface LiveListing {
   python(): HermesPythonRun | null;
   /** The Hermes home of a profile; `null` for the root. */
   home(profile: string | null): string | null;
+  /** The Codex CLI version the ChatGPT subscription's list is asked as (decision §83). */
+  clientVersion?(): string;
 }
 
 /** The one call the runtime is made of: Hermes's server, JSON in and out. */
@@ -186,7 +188,12 @@ export function hermesSignInRuntime(
       const home = live?.home(profile) ?? null;
       let reason = 'Hermes’s Python is not available to ask the provider';
       if (python && home) {
-        const asked = await liveModels(python, home, provider);
+        const asked = await liveModels(
+          python,
+          home,
+          provider,
+          live?.clientVersion?.() ?? CODEX_CLIENT_VERSION,
+        );
         if (asked.ok) {
           return {
             models: asked.models.map((model) => model.id),

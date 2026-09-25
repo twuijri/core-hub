@@ -52,7 +52,7 @@ export type LiveModels = { ok: true; models: LiveModel[] } | { ok: false; reason
 export const CODEX_CLIENT_VERSION = '0.157.0';
 
 /** The version sent, as the hub's environment may override it. */
-export function codexClientVersion(env: NodeJS.ProcessEnv = process.env): string {
+export function codexClientVersion(env: NodeJS.ProcessEnv): string {
   const override = (env.COREHUB_CODEX_CLIENT_VERSION ?? '').trim();
   return /^\d+\.\d+\.\d+$/.test(override) ? override : CODEX_CLIENT_VERSION;
 }
@@ -195,7 +195,7 @@ export async function liveModels(
   run: HermesPythonRun,
   home: string,
   hermesProvider: string,
-  clientVersion: string = codexClientVersion(),
+  clientVersion: string = CODEX_CLIENT_VERSION,
 ): Promise<LiveModels> {
   let answer: { code: number; stdout: string; stderr: string };
   try {

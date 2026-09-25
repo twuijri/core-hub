@@ -59,6 +59,17 @@ $ COREHUB_HERMES_IMAGE=core-hub:morechannels vitest run --maxWorkers=1 --reporte
 على الكود القديم يفشل (كان يرسل `0.0.0` ثابتًا، ولا يوجد `CODEX_CLIENT_VERSION`).
 حاويتا الاختبار الحقيقي بـ `--rm`؛ لم تبقَ حاوية.
 
+أول CI (التشغيل 36199485661) فشل في جزأين من اختبارات الخادم:
+- `tests/unit/config.test.ts`: قاعدة «ملف الإعداد وحده يقرأ `process.env`» — كان `live-models.ts` يقرأ
+  `COREHUB_CODEX_CLIENT_VERSION` مباشرة. أُصلح: القيمة تأتي من `hub.config.hostEnv` عبر
+  `LiveListing.clientVersion()`.
+- `src/modules/auth/tokens.test.ts` (انتهاء صلاحية رمز): لا علاقة له بالتغيير، ونجح محليًا — تذبذب توقيت.
+```
+$ vitest run tests/unit/config.test.ts src/modules/auth/tokens.test.ts src/modules/models/
+ Test Files  14 passed | 1 skipped (15)
+      Tests  194 passed | 3 skipped (197)
+```
+
 ## المخاطر والرجوع
 - لم يُجرَّب على حساب حقيقي؛ إن حجب الخادم نموذجًا أحدث من 0.157.0 مستقبلًا، يُرفع الثابت أو يُضبط
   `COREHUB_CODEX_CLIENT_VERSION`.
