@@ -81,10 +81,10 @@ export function AgentSettingsScreen() {
  * Updates, for an agent the hub installed rather than one it ships.
  *
  * Three things and no more (owner, 2026-09-22): ask the registry whether there is a newer
- * version, take it, and decide whether to take it automatically. Since 2026-09-25 the card
- * also names the tested version and says when a version is past it (`versionNotes`). An agent whose adapter
+ * version, take it, and decide whether to take it automatically. An agent whose adapter
  * says it cannot update itself does not get the switch — `auto_update_supported` is the
- * adapter's answer, not ours to guess.
+ * adapter's answer, not ours to guess. Since 2026-09-25 the card also names the tested
+ * version and says when a version is past it (`versionNotes`).
  */
 function UpdatesCard({ agent }: { agent: Agent }) {
   const { t } = useI18n();
