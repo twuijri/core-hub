@@ -4,6 +4,23 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Notices from the hub, shown while no screen of the app is open (Android 13+ asks). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Self-update: hand an APK the hub published (and whose SHA-256 matched) to the installer. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- Voice input uses the phone's own speech recognizer. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <!-- A hub on the home network is often plain http (http://192.168.1.10:8787), so cleartext is
@@ -35,6 +52,12 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="corehub" />
             </intent-filter>
+            <!-- «Share to Core Hub»: shared text becomes a new chat's draft. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
 
         <!-- The QR scanner follows the phone's orientation instead of forcing landscape. -->
@@ -42,5 +65,14 @@
             android:name="com.journeyapps.barcodescanner.CaptureActivity"
             android:screenOrientation="fullSensor"
             tools:replace="android:screenOrientation" />
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.updates"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/update_paths" />
+        </provider>
     </application>
 </manifest>

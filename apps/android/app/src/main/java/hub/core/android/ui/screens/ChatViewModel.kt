@@ -68,7 +68,14 @@ class ChatViewModel(
         } else {
             viewModelScope.launch {
                 graph.realtime.events.collect { envelope ->
+                    val before = _ui.value.chat
                     _ui.update { it.copy(chat = ChatReducer.apply(it.chat, envelope, System.currentTimeMillis())) }
+                    // This device → spoken replies: read the finished reply aloud while it is on screen.
+                    if (envelope.event == "run.completed" && before.running && !_ui.value.chat.running &&
+                        graph.device.choices.value.spokenReplies && graph.inForeground()
+                    ) {
+                        _ui.value.chat.messages.lastOrNull { it.role == MessageRole.ASSISTANT }?.text?.let(graph.speaker::speak)
+                    }
                 }
             }
             viewModelScope.launch {

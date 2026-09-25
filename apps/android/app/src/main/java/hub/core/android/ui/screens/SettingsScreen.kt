@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.dp
 import hub.core.android.AppLanguage
 import hub.core.android.BuildConfig
 import hub.core.android.R
-import hub.core.android.data.TokenKind
 import hub.core.android.data.hubCall
 import hub.core.android.generated.Product
 import hub.core.android.graph
@@ -272,24 +271,5 @@ private fun OnTheWebPage(destination: String) {
                 Text(stringResource(R.string.on_the_web_open))
             }
         }
-    }
-}
-
-/** This device, part 2: the hub this phone talks to and how it signed in. Part 3 adds voice and more. */
-@Composable
-fun ThisDeviceBasics(shell: ShellViewModel) {
-    val session by shell.session.collectAsState()
-    val s = session ?: return
-    val connectionTitle = stringResource(R.string.device_connection)
-    LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        header(connectionTitle)
-        item {
-            ListRow(
-                s.hub,
-                stringResource(if (s.kind == TokenKind.APP) R.string.device_paired else R.string.device_signed_in) +
-                    (s.expiresAt?.let { " · " + stringResource(R.string.device_until, localTime(java.time.Instant.ofEpochMilli(it).atOffset(java.time.ZoneOffset.UTC))) } ?: ""),
-            )
-        }
-        item { OutlinedButton(onClick = shell::signOut, modifier = Modifier.fillMaxWidth()) { Text(term("sign_out")) } }
     }
 }
