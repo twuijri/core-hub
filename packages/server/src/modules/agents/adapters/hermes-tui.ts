@@ -530,7 +530,7 @@ export class HermesTuiSession implements AgentSession {
       });
     } catch (error) {
       const why = error instanceof Error ? error.message : String(error);
-      throw new Error(`/${command.typed}: ${why}`);
+      throw new Error(`/${command.typed}: ${why}`, { cause: error });
     }
     const kind = String(result.type ?? '');
     const message = text(result.message);
@@ -897,7 +897,7 @@ export function agentCommandOf(
   const arg = (match[2] ?? '').trim();
   if (!(HERMES_COMMANDS as readonly string[]).includes(word)) return null;
   if (word !== 'skill') return { name: word, arg, typed: word };
-  const [skill = '', ...rest] = arg.split(/\s+/);
+  const [skill = ''] = arg.split(/\s+/);
   if (!SKILL_NAME.test(skill)) return null;
   return { name: skill, arg: arg.slice(skill.length).trim(), typed: `skill ${skill}` };
 }
