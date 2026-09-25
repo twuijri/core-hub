@@ -1,9 +1,9 @@
 /**
- * "Continue in Core Hub" (contract decision §58): what a channel conversation becomes when a
+ * "Continue in Core Hub" (contract decision §62): what a channel conversation becomes when a
  * person carries it into a hub chat — the transcript as a Markdown file, and the first
  * message's short summary, both in the person's language.
  *
- * Pure: the conversation comes in as `sessions.listChannelMessages` reads it (§55); nothing
+ * Pure: the conversation comes in as `sessions.listChannelMessages` reads it (§61); nothing
  * here reads Hermes or writes a row. The summary is facts the hub has (the channel, the other
  * party, how many messages, over what time) — not a model's summary, which would cost a turn
  * and could be wrong; the agent reads the whole transcript in the first turn anyway.

@@ -128,7 +128,7 @@ export class SessionsService {
   readonly store: SessionsStore;
   readonly audit: AuditService;
   readonly engine: RunEngine;
-  /** The profile's categories (contract decision §54, `categories.ts`). */
+  /** The profile's categories (contract decision §60, `categories.ts`). */
   readonly categories: SessionCategories;
 
   constructor(
@@ -220,7 +220,7 @@ export class SessionsService {
   }
 
   /**
-   * "Continue in Core Hub" (`sessions.continueChannelConversation`, contract decision §58):
+   * "Continue in Core Hub" (`sessions.continueChannelConversation`, contract decision §62):
    * a channel conversation, read from Hermes (`read`), becomes an ordinary chat in this
    * profile with `agent_id`. The transcript is kept as the caller's attachment, and the chat's
    * first message — the summary, the person's note and the transcript — is **answered, not
@@ -370,7 +370,7 @@ export class SessionsService {
     patch: SessionPatchInput,
   ): Promise<Record<string, unknown>> {
     const row = this.requireSession(scope, sessionId);
-    // A category of this profile, or `404` — never a silent drop (contract decision §54).
+    // A category of this profile, or `404` — never a silent drop (contract decision §60).
     if (patch.category_id) this.categories.require(scope.workspace, patch.category_id);
     const changes: Partial<SessionRow> = {};
     /**

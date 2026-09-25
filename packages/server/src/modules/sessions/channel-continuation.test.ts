@@ -1,5 +1,5 @@
 /**
- * "Continue in Core Hub" (contract decision §58): a Telegram conversation Hermes keeps becomes
+ * "Continue in Core Hub" (contract decision §62): a Telegram conversation Hermes keeps becomes
  * an ordinary hub chat in the same profile, with the transcript as the caller's attachment and
  * a first message for the client to send.
  *

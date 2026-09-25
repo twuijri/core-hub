@@ -779,7 +779,7 @@ const profileArchives = fakeProfileRuntime((profile) => [
 registerProfileTransfer((app) => profileTransferPorts(app, profileArchives.runtime));
 
 /**
- * Hermes's channel conversations, scripted (contract decision §55): one Telegram conversation
+ * Hermes's channel conversations, scripted (contract decision §61): one Telegram conversation
  * in the default profile, as Hermes's server would list it. Off until a journey turns it on
  * (`/__e2e/channels`) — every other journey sees a hub with no Hermes to read, as before, so
  * their lists and screenshots do not change.
@@ -834,7 +834,7 @@ const sessions = createSessionsModule({
   agents: { find: async (_workspace, agentId) => fakeHermes(agentId) },
   runner: new ScriptedRunner(),
   // The real file store, as the composition root wires it: a chat's attachments, and the
-  // transcript "Continue in Core Hub" keeps (§58).
+  // transcript "Continue in Core Hub" keeps (§62).
   attachments: attachmentsPort,
   // The real wiring, not a stub: the journeys then prove that a finished run actually
   // reaches the inbox, which is the only claim worth making about notifications. The

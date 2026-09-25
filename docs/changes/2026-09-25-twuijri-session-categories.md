@@ -12,7 +12,7 @@
 - البحث وفلتر «كل البروفايلات» (ADR 0016) يبقيان يعملان مع المجموعات.
 
 ## القرار والموافقات
-المالك نائم؛ القرارات التالية **مقترحة — المالك يؤكد**، ومكتوبة في DECISIONS §54
+المالك نائم؛ القرارات التالية **مقترحة — المالك يؤكد**، ومكتوبة في DECISIONS §60
 (الأرقام حتى §53 مأخوذة في `main` وفي الطلبات المفتوحة #105–#119؛ #119 أخذ §53):
 - **التصنيف للبروفايل لا للشخص.** التعليمات قالت «لكل شخص في كل بروفايل ما لم يقل العقد غير
   ذلك»، والعقد يقول غير ذلك: وصف `listCategories` كان «All categories of the workspace»،
@@ -61,11 +61,11 @@
 - `sessions.updateCategory`: وصف معنى `position`، و`409` موثّق جديد.
 - `sessions.deleteCategory`: وصف (المحادثات تبقى وتُعلَن).
 - `SessionCreate.category_id` و`SessionPatch.category_id`: وصف (`404` لغير تصنيفات البروفايل).
-- لا عمليات جديدة ولا مخططات جديدة ولا أحداث جديدة. DECISIONS §54.
+- لا عمليات جديدة ولا مخططات جديدة ولا أحداث جديدة. DECISIONS §60.
 
 ## الملفات والتأثير
 الخادم (`packages/server`):
-- `modules/sessions/schema.ts` + `drizzle/0016_session_categories.sql`: جدول `session_categories`
+- `modules/sessions/schema.ts` + `drizzle/0018_session_categories.sql`: جدول `session_categories`
   (فهرس فريد `(workspace, name_key)`، وفهرس `(workspace, position)`).
 - `modules/sessions/categories.ts` (جديد): قواعد التصنيف كلها — القائمة (وعبر البروفايلات)،
   الإنشاء، التعديل، إعادة الترقيم، الحذف، والعدّ.
@@ -87,7 +87,7 @@
 - اختبارات: `tests/session-categories.test.tsx` (جديد)، و`e2e/zzzzzzz-session-categories.spec.ts`
   (جديد) مع لقطة `e2e/shots/session-categories-ar-light.png`.
 
-الوثائق: `docs/contracts/DECISIONS.md` §54، `docs/domain/sessions.md` (جدول `session_category`)،
+الوثائق: `docs/contracts/DECISIONS.md` §60، `docs/domain/sessions.md` (جدول `session_category`)،
 `docs/STATUS.md` (صف sessions ٣٢ من ٣٢، والعدد ٢١٠ من ٢٦٤).
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
@@ -141,10 +141,10 @@ Web smoke journeys (Playwright against the real hub) — pass (5m14s)
 db:generate + db:migrate (SQLite and PostgreSQL) — pass (1m1s)
 ```
 
-- الدفعة الأخيرة غيّرت رقم القرار فقط (§53 → §54، لأن #119 المفتوح قبله أخذ §53).
+- الدفعة الأخيرة غيّرت رقم القرار فقط (§53 → §60، لأن #119 المفتوح قبله أخذ §53).
 
 ## المخاطر والرجوع
-- رقم الترحيل `0016` يأخذه أيضًا #108 (`0016_usage_analytics`) و#110 (`0016_run_file_changes`):
+- رقم الترحيل `0018` يأخذه أيضًا #108 (`0016_usage_analytics`) و#110 (`0016_run_file_changes`):
   من يُدمج بعد الآخر يعيد توليد ترحيله برقم تالٍ (`pnpm db:generate`). الجدول جديد ولا يمس
   جداول أخرى.
 - `SessionList.tsx` و`service.ts` و`routes.ts` تلمسها طلبات مفتوحة أخرى؛ التعديل هنا محصور
@@ -153,7 +153,7 @@ db:generate + db:migrate (SQLite and PostgreSQL) — pass (1m1s)
   يُتجاهل في العرض (يظهر كمحادثة بلا تصنيف).
 
 ## التسليم والخطوة التالية
-- طلب الدمج مفتوح للمراجعة؛ المالك يؤكد قرارات §54 (خاصة: التصنيف للبروفايل لا للشخص).
+- طلب الدمج مفتوح للمراجعة؛ المالك يؤكد قرارات §60 (خاصة: التصنيف للبروفايل لا للشخص).
 - الخطوة التالية المقترحة: مجموعة «القنوات» للقراءة فقط من جلسات Hermes (العمليتان
   والمصدر موصوفان أعلاه)، وإثباتها على Hermes الحقيقي في اختبار `*.real.test.ts`.
 - لاحقًا: اختيار لون التصنيف في الواجهة.

@@ -2,11 +2,11 @@
 // reordering (dnd-kit; the keyboard sensor gives every drag a keyboard equivalent: focus the
 // grip, Space to pick up, arrows to move, Space to drop).
 //
-// In groups (contract decision §54): the profile's categories first, each collapsible, then a
+// In groups (contract decision §60): the profile's categories first, each collapsible, then a
 // group per messaging channel a conversation came from, then the chats in no group. A chat is
 // dropped on a category's header, or moved from its menu («نقل إلى تصنيف»). Which groups are
 // collapsed is the viewer's own, remembered in this browser (`groups.ts`). A channel's group also
-// holds the conversations Hermes keeps for it (Telegram, WhatsApp…; contract decision §55): they
+// holds the conversations Hermes keeps for it (Telegram, WhatsApp…; contract decision §61): they
 // are read-only, so they open as a transcript and are never dragged, pinned or moved.
 //
 // Assembled from the kit (`src/ui/`): the field, the segmented scope, the row buttons, the
@@ -811,7 +811,7 @@ function GroupHeader({
 
 /**
  * «نقل إلى تصنيف»: the categories of the chat's own profile — another profile's cannot hold
- * it (decision §54) — plus "No category", and a new one made on the spot.
+ * it (decision §60) — plus "No category", and a new one made on the spot.
  */
 function MoveDialog({
   session,
@@ -1096,7 +1096,7 @@ function SessionRow({
 }
 
 /**
- * A conversation Hermes keeps for a channel (contract decision §55): the other party (or
+ * A conversation Hermes keeps for a channel (contract decision §61): the other party (or
  * Hermes's title), its latest message, and its profile when several are shown. Read-only — it
  * opens as a transcript, and has no menu: nothing the hub could do to it would reach Hermes.
  */

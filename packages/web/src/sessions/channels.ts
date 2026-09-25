@@ -1,5 +1,5 @@
 // Conversations on Telegram, WhatsApp and the other channels, read from Hermes (contract
-// decision §55). They are not the hub's sessions: the hub cannot write to them, so they are
+// decision §61). They are not the hub's sessions: the hub cannot write to them, so they are
 // listed beside the chats, in their channel's group, and open as a read-only transcript.
 //
 // Hermes announces nothing when a channel message arrives, so the list asks again every

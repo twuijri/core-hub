@@ -93,7 +93,7 @@ export function ChatScreen() {
   // The conversation is opened in its own profile (ADR 0016): a list across profiles puts
   // it in the address, and everything inside — the transcript, the models, the agents —
   // asks that profile. The person's own profile and the top selector do not move.
-  // A Telegram or WhatsApp conversation (`?source=channel`) is Hermes's, read-only (§55).
+  // A Telegram or WhatsApp conversation (`?source=channel`) is Hermes's, read-only (§61).
   return (
     <ProfileScope profile={readProfileParam(params) ?? homeProfile}>
       {isChannelAddress(params) ? (

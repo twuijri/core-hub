@@ -3091,7 +3091,7 @@ paths:
       description: >-
         A category belongs to its profile and is shared by everyone who may enter it, as
         the profile's conversations are; `owner_id` is who made it. `session_count` counts
-        the conversations in it that are not archived (contract decision §54).
+        the conversations in it that are not archived (contract decision §60).
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: profiles
@@ -3141,7 +3141,7 @@ paths:
         `name` is required. The new category goes last, or at `position` when given (the
         others move down to make room). `409 conflict` when the profile already has a
         category of that name (compared trimmed, ignoring case) or already has 100
-        (contract decision §54).
+        (contract decision §60).
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -3194,7 +3194,7 @@ paths:
       description: >-
         `position` moves the category to that place in the profile's order (past the end
         is the end) and renumbers the others, so positions are always `0…n-1`. A name
-        another category of the profile has is `409 conflict` (contract decision §54).
+        another category of the profile has is `409 conflict` (contract decision §60).
       requestBody:
         required: true
         content:
@@ -3260,7 +3260,7 @@ paths:
         archived ones are left out. With `profiles=all` every profile the caller may enter is
         read (ADR 0016), each item naming its `profile`, and the whole list is ordered by
         `last_message_at`. The hub keeps what it read for a short while and asks Hermes again
-        only when Hermes's store has been written since (contract decision §55); clients poll
+        only when Hermes's store has been written since (contract decision §61); clients poll
         this every 30–60 s while the list is on screen, since Hermes announces nothing.
 
         Where the hub cannot read them — it does not supervise Hermes, a profile has no Hermes
@@ -3402,7 +3402,7 @@ paths:
       tags: [sessions]
       summary: Continue a channel conversation as a chat in the hub
       description: |
-        "Continue in Core Hub" (contract decision §58): a channel conversation is read-only
+        "Continue in Core Hub" (contract decision §62): a channel conversation is read-only
         here, so going on with it in the hub is a new, ordinary chat in the same profile
         (`X-Hub-Profile`) with the agent given, whose context is the conversation.
 
@@ -14099,7 +14099,7 @@ components:
             - type: 'null'
           description: >-
             A category of this session's profile (`sessions.listCategories`); another
-            profile's, or none, is `404` (contract decision §54).
+            profile's, or none, is `404` (contract decision §60).
     GlobalAgentOpen:
       type: object
       required: [agent_id]
@@ -14129,7 +14129,7 @@ components:
             - type: 'null'
           description: >-
             Moves the session into a category of its own profile; `null` takes it out. A
-            category the profile does not have is `404` (contract decision §54).
+            category the profile does not have is `404` (contract decision §60).
         model:
           type: [string, 'null']
         provider:
@@ -14248,7 +14248,7 @@ components:
       type: object
       description: |
         A conversation held on a messaging channel, read from Hermes's session store (contract
-        decision §55). Not a `Session`: the hub does not own it and cannot write to it.
+        decision §61). Not a `Session`: the hub does not own it and cannot write to it.
       required:
         [
           id,

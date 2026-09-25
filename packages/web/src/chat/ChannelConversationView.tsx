@@ -1,8 +1,8 @@
-// A conversation held on Telegram, WhatsApp… as Hermes keeps it (contract decision §55), in
+// A conversation held on Telegram, WhatsApp… as Hermes keeps it (contract decision §61), in
 // the chat screen's own look — the person on the channel on one side, the agent's replies on the
 // other — but read-only: the hub cannot write to it, so where the composer would be there is the
 // banner saying where the reply is made. It is read again every half minute while open.
-// "Continue in Core Hub" (§58) carries it into a new hub chat with the transcript attached.
+// "Continue in Core Hub" (§62) carries it into a new hub chat with the transcript attached.
 import { describeError } from '../auth/client.js';
 import { useAuth } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';

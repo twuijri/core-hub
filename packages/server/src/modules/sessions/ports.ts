@@ -108,7 +108,7 @@ export interface AttachmentsPort {
   ): Promise<Omit<AttachmentSummary, 'url'>>;
   /**
    * Keep bytes the hub itself wrote as an attachment of the caller — a channel
-   * conversation's transcript for "Continue in Core Hub" (contract decision §58).
+   * conversation's transcript for "Continue in Core Hub" (contract decision §62).
    */
   store(
     scope: { workspace: string; userId: string },

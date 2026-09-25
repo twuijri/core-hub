@@ -1,6 +1,6 @@
-// The chats list in groups (contract decision §54): the profile's categories first, in their
+// The chats list in groups (contract decision §60): the profile's categories first, in their
 // order, then one group per messaging channel a conversation came from (Telegram, WhatsApp…) —
-// holding the channel conversations Hermes keeps too (§55) — then everything else. Pure functions only — the list component renders what these return,
+// holding the channel conversations Hermes keeps too (§61) — then everything else. Pure functions only — the list component renders what these return,
 // and the tests read them directly.
 import { derived } from '@corehub/contracts';
 import type { Schemas, Session } from '../types.js';
@@ -22,7 +22,7 @@ export interface SessionGroup {
   items: Session[];
   /**
    * For `kind: channel`: the conversations Hermes keeps for that channel (contract decision
-   * §55), read-only, most recent first, after any hub session of the same channel.
+   * §61), read-only, most recent first, after any hub session of the same channel.
    */
   conversations?: ChannelConversation[];
 }
@@ -147,7 +147,7 @@ export type DropOutcome =
  * What dropping `session` on `target` means. Into a category of the session's own profile: a
  * move. Onto the chats in no group, from a category: out of it. Within its own group: the
  * manual order. A channel group is where a conversation came from, so nothing is moved into
- * one, and a category of another profile never takes it (decision §54).
+ * one, and a category of another profile never takes it (decision §60).
  */
 export function dropOutcome(
   session: Session,

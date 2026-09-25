@@ -1,5 +1,5 @@
 /**
- * 33. Telegram conversations in the chats list (contract decision §55), against the real hub
+ * 33. Telegram conversations in the chats list (contract decision §61), against the real hub
  *     with a scripted Hermes behind it: a conversation Hermes keeps for Telegram shows under
  *     «تيليجرام», and opens as a read-only transcript — the person's message and the agent's
  *     reply, and in the composer's place the banner «محادثة من تيليجرام — للقراءة فقط؛ الرد
@@ -65,7 +65,7 @@ test('33. a Telegram conversation shows under «تيليجرام» and opens rea
     await page.reload();
     await expect(page.getByTestId('channel-readonly')).toBeVisible();
 
-    // «أكمل في كور هب» (§58): a new chat in this profile whose first message carries the
+    // «أكمل في كور هب» (§62): a new chat in this profile whose first message carries the
     // summary, the note and the transcript, sent by the chat once it listens.
     await page.getByTestId('channel-continue').click();
     await page.getByTestId('channel-continue-note').fill('جهّز له ردًّا.');

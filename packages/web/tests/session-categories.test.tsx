@@ -1,5 +1,5 @@
 /**
- * The chats list in groups (contract decision §54): categories above the loose chats, a group
+ * The chats list in groups (contract decision §60): categories above the loose chats, a group
  * per messaging channel, each collapsible — remembered by this browser — and a chat moved into
  * a category from its menu («نقل إلى تصنيف»), or by dropping it on the category's header.
  *

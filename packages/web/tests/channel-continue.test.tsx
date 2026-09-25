@@ -1,5 +1,5 @@
 /**
- * "Continue in Core Hub" (contract decision §58): from a Telegram conversation's read-only view,
+ * "Continue in Core Hub" (contract decision §62): from a Telegram conversation's read-only view,
  * a person carries it into a new hub chat in the same profile. Asserted by what they see and by
  * the requests sent: the profile's Hermes is the agent, the note goes with the request, the app
  * opens the new chat, and the chat sends the first message the hub answered — once it is

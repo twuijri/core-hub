@@ -1,4 +1,4 @@
-// `pnpm contract:test`: channel conversations (contract decision §55) driven through the
+// `pnpm contract:test`: channel conversations (contract decision §61) driven through the
 // generated TypeScript client against a scripted Hermes — the list of one profile and of every
 // profile, one conversation's messages, and the failures (`404` for what is not a channel
 // conversation, `503` when Hermes cannot be asked, `unavailable` when the hub does not supervise
@@ -178,7 +178,7 @@ describe.skipIf(!doc)('contract: channel conversations', () => {
       params: { conversation_id: 'no_such_conversation' },
     });
 
-    // "Continue in Core Hub" (§58): a chat and its first message, as the contract says.
+    // "Continue in Core Hub" (§62): a chat and its first message, as the contract says.
     const continued = await call('sessions.continueChannelConversation', 201, {
       params: { conversation_id: CONVERSATION },
       body: { agent_id: AGENT, note: null },

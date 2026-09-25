@@ -1,5 +1,5 @@
 /**
- * "Continue in Core Hub" (contract decision §58): a channel conversation is read-only in the
+ * "Continue in Core Hub" (contract decision §62): a channel conversation is read-only in the
  * hub, so going on with it here is a new chat in the same profile, with the conversation
  * attached for the agent to read.
  *
