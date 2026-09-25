@@ -221,7 +221,7 @@ export function runGit(
       child = spawn('git', ['-c', 'core.fsmonitor=false', '-c', 'core.quotepath=false', ...args], {
         cwd,
         env: {
-          ...process.env,
+          ...inheritedEnv(),
           GIT_TERMINAL_PROMPT: '0',
           GIT_OPTIONAL_LOCKS: '0',
           LC_ALL: 'C',
@@ -264,6 +264,19 @@ export function runGit(
     child.stdin.on('error', () => undefined);
     child.stdin.end(options.input ?? '');
   });
+}
+
+/**
+ * The hub's environment without git's own variables: a `GIT_DIR` or `GIT_INDEX_FILE` the hub
+ * happened to inherit (a hook, a test run from one) would point every call at another
+ * repository or index.
+ */
+function inheritedEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (!key.startsWith('GIT_')) env[key] = value;
+  }
+  return env;
 }
 
 function split0(buffer: Buffer): string[] {
