@@ -287,6 +287,13 @@ export const IconFolder = (p: IconProps) => (
     <path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.5.7L11.5 7H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
   </Svg>
 );
+/** A page with a folded corner: one file (the Files page). */
+export const IconFile = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+    <path d="M14 3v5h5" />
+  </Svg>
+);
 export const IconTasks = (p: IconProps) => (
   <Svg {...p}>
     <path d="m3.5 7 1.8 1.8L8.5 5.5" />

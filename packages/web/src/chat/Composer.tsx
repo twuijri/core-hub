@@ -22,6 +22,7 @@
  */
 import {
   useCallback,
+  useEffect,
   useId,
   useRef,
   useState,
@@ -31,6 +32,8 @@ import {
 } from 'react';
 import { describeError } from '../auth/client.js';
 import { blocksFor as toContentBlocks, useUploadAttachment } from '../attachments/queries.js';
+import { takeHandOff } from '../attachments/handoff.js';
+import { useAuth } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';
 import type { Attachment, ContentBlock } from '../types.js';
 import {
@@ -155,6 +158,23 @@ export function Composer({
   const { upload: uploadAttachment } = useUploadAttachment();
   const [text, setText] = useState('');
   const [pending, setPending] = useState<Pending[]>([]);
+  const { profile } = useAuth();
+  // Files the Files page handed over ("Attach to chat"): already on the hub, so they join
+  // the tray as finished uploads. A stand-in `File` carries the name the chip shows.
+  useEffect(() => {
+    const handed = takeHandOff(profile);
+    if (handed.length === 0) return;
+    setPending((current) => [
+      ...current,
+      ...handed.map((attachment) => ({
+        key: `handoff-${attachment.id}`,
+        file: new File([], attachment.name, { type: attachment.mime }),
+        status: 'done' as const,
+        attachment,
+        progress: 1,
+      })),
+    ]);
+  }, [profile]);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);

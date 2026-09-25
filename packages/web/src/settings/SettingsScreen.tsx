@@ -22,6 +22,7 @@ import { PluginsTab } from './PluginsTab.js';
 import { PrivacyTab } from './PrivacyTab.js';
 import { UpdatesTab } from './UpdatesTab.js';
 import { ThemeTool } from './ThemeTool.js';
+import { FilesTool } from '../workspace-files/FilesTool.js';
 
 /**
  * Which section draws which destination.
@@ -50,6 +51,8 @@ const SECTIONS: Record<string, () => ReactElement> = {
   usage: () => <AuditReport kind="usage" />,
   logs: () => <AuditReport kind="logs" />,
   performance: () => <AuditReport kind="performance" />,
+  // The selected profile's working folder (DECISIONS §56).
+  files: () => <FilesTool />,
 };
 
 export function SettingsScreen({ id }: { id: string }) {

@@ -361,6 +361,9 @@ importers:
       '@tanstack/react-virtual':
         specifier: ^3.14.13
         version: 3.14.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      lowlight:
+        specifier: ^3.3.0
+        version: 3.3.0
       qrcode-generator:
         specifier: ^2.0.4
         version: 2.0.4
