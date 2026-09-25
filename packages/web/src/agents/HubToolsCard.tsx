@@ -32,7 +32,8 @@ export function HubToolsCard({ agentId }: { agentId: string | undefined }) {
   const update = useUpdateHubTools(agentId);
   const probe = useTestMcpServer(agentId);
   const product = t('app.name');
-  const data = settings.data;
+  // A hub older than the card answers something else here; the card then shows nothing.
+  const data = Array.isArray(settings.data?.groups) ? settings.data : undefined;
 
   return (
     <Card testId="hub-tools" data-enabled={data?.enabled || undefined}>
