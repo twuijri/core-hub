@@ -403,12 +403,14 @@ function SkillLibraryCard({
         media={<IconSpark size={18} />}
         title={t('skills.library.title')}
         subtitle={
-          library.enabled
-            ? t('skills.library.summary_on', {
-                installed: String(library.installed),
-                available: String(library.available),
-              })
-            : t('skills.library.summary_off')
+          library.enabled && library.installed === 0
+            ? t('skills.library.summary_none', { available: String(library.available) })
+            : library.enabled
+              ? t('skills.library.summary_on', {
+                  installed: String(library.installed),
+                  available: String(library.available),
+                })
+              : t('skills.library.summary_off')
         }
         actions={
           <span className="flex items-center gap-2">

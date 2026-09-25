@@ -1293,6 +1293,7 @@
       "restore_body": "Your changes to this skill are replaced by the version Core Hub ships. A skill you switched off stays off.",
       "restored": "{name} is back to the library's version.",
       "summary_on": "{installed} of {available} skills in this profile — images, documents, data, research, translation, slides and schedules. Kept up to date until you edit one.",
+      "summary_none": "Not installed in this profile yet: {available} skills — images, documents, data, research, translation, slides and schedules.",
       "summary_off": "Off in this profile. Switch it on to install Core Hub's skills again.",
       "install": "Install",
       "switch": "Core Hub library in this profile",
