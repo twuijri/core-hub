@@ -998,3 +998,29 @@ of ADR 0011 is required again. What changes in the contract:
 Rejected: a `setup_mode` enum (`open` / `token`) — the two booleans and the end time say the
 same and the time is what the screen counts down; the server's remaining seconds instead of an
 end time — it goes stale the moment it is sent.
+
+## 46. The global agent is one standing conversation per person per profile
+
+The navigation map has had a `Global agent` destination since the start — no menu entry,
+reached from search and from the pending-actions bar — and the contract already named the
+source (`Session.source = global_agent`) and refused archiving it, but nothing could make such
+a session. The docs said what it is not (a chat in the list) and where it is reached from; they
+did not say how many there are or who owns one. Proposed here — owner to confirm:
+
+- **One per person per profile.** `sessions.openGlobalAgent` (`POST /sessions/global-agent`,
+  body `{agent_id}`) returns the caller's own global-agent conversation in the header's profile,
+  `200`, or makes it with `agent_id` the first time, `201` (`session.created`). An existing one is
+  returned whatever agent it was made with; `agent_id` is then ignored. Two first opens at once
+  land on the same conversation (the older is kept, the younger removed).
+- **Not in the chats list, never archived.** Clients leave `source: global_agent` out of the
+  chats list; search still finds it and opens its page. `sessions.update` / `bulkUpdate` with
+  `archived: true` on it is `409 state_invalid` (`details.field = archived`,
+  `details.reason = global_agent`): with no list row, an archived one could not be restored.
+  Deleting is allowed; the next open makes a new one. A fork of it is an ordinary `chat`.
+- **What it can do is its agent's.** The hub gives it no powers across profiles: it runs in its
+  profile like any conversation, with that profile's agent, tools and approvals. A wider
+  "acts across profiles" agent would need its own ADR.
+
+Rejected: a new `source` field on `SessionCreate` (a client could then make any number of
+them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
+the way in (the list is the profile's, not the person's, so it would hand one person another's).

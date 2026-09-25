@@ -304,6 +304,24 @@
     "waiting": "Waiting on you",
     "answer_hint": "Type your answer… (Enter to send, Shift+Enter for a new line)"
   },
+  "pending": {
+    "open": "Waiting for you",
+    "open_count": "Waiting for you: {count}",
+    "title": "Waiting for you",
+    "close": "Close",
+    "none": "Nothing is waiting for you.",
+    "none_body": "Approvals, questions from agents and workflow steps that need you show here.",
+    "open_item": "Open where it is",
+    "workflow_step": "Workflow step",
+    "pairing": "{name} wants to message the agent on {platform}",
+    "pairing_hint": "Approve or deny the sender on the agent's channels page.",
+    "global_agent": "Ask the global agent"
+  },
+  "global_agent": {
+    "intro": "One standing conversation with your agent in this profile, outside the chats list. Reach it from search and from the bar of things waiting for you.",
+    "opening": "Opening the global agent…",
+    "no_agent": "No agent is installed in this profile yet, so there is no one to talk to."
+  },
   "tool": {
     "status": {
       "running": "running",

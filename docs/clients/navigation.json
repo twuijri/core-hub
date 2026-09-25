@@ -532,7 +532,7 @@
         "reachedFrom": ["search"]
       },
       "roles": ["member"],
-      "note": "No menu entry; reached from search results and the pending-actions bar."
+      "note": "No menu entry; reached from search results and the pending-actions bar (a top-bar button, not a destination). The person's one standing conversation in the profile, left out of the chats list (DECISIONS §46)."
     }
   ],
   "rail": ["new_chat", "search", "agent_manager", "tasks", "schedules"],

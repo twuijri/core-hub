@@ -192,6 +192,27 @@ export class SessionsService {
     return payload;
   }
 
+  /**
+   * `sessions.openGlobalAgent` (contract decision §46): the caller's own global-agent
+   * conversation in this workspace, made with `agent_id` the first time. Two first opens at
+   * once may both create one; the store always answers the oldest, so the younger is
+   * removed at once and both callers land on the same conversation.
+   */
+  async openGlobalAgent(
+    scope: EngineScope,
+    input: { agent_id: string },
+  ): Promise<{ session: Record<string, unknown>; created: boolean }> {
+    const existing = this.store.findGlobalAgent(scope.workspace, scope.userId);
+    if (existing) return { session: this.sessionOf(scope, existing), created: false };
+    const session = await this.create(scope, input, { source: 'global_agent' });
+    const first = this.store.findGlobalAgent(scope.workspace, scope.userId);
+    if (first && first.id !== session.id) {
+      await this.remove(scope, session.id as string);
+      return { session: this.sessionOf(scope, first), created: false };
+    }
+    return { session, created: true };
+  }
+
   list(
     scope: EngineScope,
     filters: SessionFilters,
@@ -294,6 +315,13 @@ export class SessionsService {
       renameAgain = typed === null;
     }
     if (patch.pinned !== undefined) changes.pinned = patch.pinned;
+    // The global agent is reached from search and the pending-actions bar, not from the
+    // list, so an archived one would have nowhere to be restored from (§46).
+    if (patch.archived === true && row.source === 'global_agent') {
+      throw new HubError('state_invalid', {
+        details: { field: 'archived', reason: 'global_agent' },
+      });
+    }
     if (patch.archived !== undefined) changes.archivedAt = patch.archived ? new Date() : null;
     if (patch.model !== undefined) changes.modelLabel = patch.model;
     if (patch.provider !== undefined) changes.provider = patch.provider;
@@ -434,7 +462,8 @@ export class SessionsService {
       ownerId: scope.userId,
       agentId: agent?.id ?? source.agentId,
       title: input.title ?? source.title,
-      source: source.source,
+      // A fork is a new chat: the person keeps one global agent (§46).
+      source: source.source === 'global_agent' ? 'chat' : source.source,
       // A new agent brings its own default model unless the caller named one; the same
       // agent keeps whatever the source was running on.
       modelLabel: input.model ?? (agent ? agent.defaultModel : source.modelLabel),

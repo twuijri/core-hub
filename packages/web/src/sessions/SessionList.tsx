@@ -149,7 +149,9 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
   const [chosen, setChosen] = useState<ReadonlySet<string> | null>(null);
 
   const items = useMemo(() => {
-    const all = sessions.data?.items ?? [];
+    // The global agent is not a chat in the list: search and the pending-actions bar lead
+    // to its own page (NAVIGATION §4, contract decision §46).
+    const all = (sessions.data?.items ?? []).filter((s) => s.source !== 'global_agent');
     const needle = filter.trim().toLowerCase();
     const filtered = needle
       ? all.filter(
