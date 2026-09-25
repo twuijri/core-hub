@@ -320,6 +320,8 @@ describe('update policy: a run asked for during an update waits for it', () => {
       loadAgent: () => ({ id: 'agent-1', installState: state, adapterKind: 'acp' }),
       settled: () => settled,
       selectionFor: () => ({ model: null, provider: null, providerId: null }),
+      fallbacksFor: () => [],
+      providerSlugOf: () => null,
       targetFor: () => ({ sessionRef: null }),
     };
     const runner = new AgentRunner({
@@ -345,6 +347,8 @@ describe('update policy: a run asked for during an update waits for it', () => {
     const service = {
       loadAgent: () => ({ id: 'agent-1', installState: 'installed', adapterKind: 'acp' }),
       selectionFor: () => ({ model: null, provider: null, providerId: null }),
+      fallbacksFor: () => [],
+      providerSlugOf: () => null,
       targetFor: () => ({ sessionRef: null }),
     };
     const runner = new AgentRunner({

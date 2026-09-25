@@ -259,7 +259,8 @@ describe('Hermes settings round trip (.env)', () => {
     expect(text).toContain('OPENAI_API_KEY=sk-test');
     expect(text).toContain('HTTPS_PROXY=http://proxy.local:3128');
     expect(text).toContain('HTTP_PROXY=socks5://proxy.local:1080');
-    expect(text).toContain('NO_PROXY=localhost, 127.0.0.1,.internal');
+    // A value with spaces is written quoted, the way Hermes's dotenv reads it (`profile-env.ts`).
+    expect(text).toContain('NO_PROXY="localhost, 127.0.0.1,.internal"');
     // The other spelling Hermes also reads would have kept the old one alive.
     expect(text).not.toContain('https_proxy=');
     expect(field(dir, 'network', 'https_proxy').value).toBe('http://proxy.local:3128');

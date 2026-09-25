@@ -212,6 +212,8 @@ describe('hub tools: the runner opens a lease for the life of a run', () => {
     const service = {
       loadAgent: () => ({ id: 'agent-1', installState: 'installed', adapterKind: 'hermes' }),
       selectionFor: () => ({ model: null, provider: null, providerId: null }),
+      fallbacksFor: () => [],
+      providerSlugOf: () => null,
       targetFor: () => ({}),
     };
     const leases = new RunLeases();
