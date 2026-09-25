@@ -29,16 +29,24 @@ export function useSubagents(sessionId: string) {
 
   const query = useQuery({
     queryKey: key,
-    queryFn: async () =>
-      (
+    queryFn: async (): Promise<SubagentList> => {
+      const data = (
         await client.request('get', '/sessions/{session_id}/subagents', {
           params: { session_id: sessionId },
         })
-      ).data as unknown as SubagentList,
+      ).data as unknown as Partial<SubagentList> | null;
+      // Read defensively: an answer without a list is a conversation with no subagents.
+      return {
+        support: data?.support ?? 'none',
+        items: Array.isArray(data?.items) ? data.items : [],
+      };
+    },
     enabled: !!session,
     retry: false,
     refetchInterval: (current) =>
-      current.state.data?.items.some((item) => item.status === 'running') ? RUNNING_POLL_MS : false,
+      (current.state.data?.items ?? []).some((item) => item.status === 'running')
+        ? RUNNING_POLL_MS
+        : false,
   });
 
   useEffect(() => {
