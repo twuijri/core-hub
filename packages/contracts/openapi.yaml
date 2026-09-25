@@ -50,7 +50,7 @@ tags:
   - name: updates
     description: Release channels and update checks for the clients. Global, admin-managed.
   - name: knowledge
-    description: 'Phase 4 stub: journal, notes and files. One endpoint reserved so clients can be generated against it.'
+    description: "Journal, notes and files, and the profile's working files (`/workspace-files`, owner and admin)."
   - name: audit
     description: 'Phase 4 stub: usage, costs, logs and performance reports. One endpoint reserved.'
   - name: plugins
@@ -12205,6 +12205,457 @@ paths:
           $ref: '#/components/responses/NotFound'
         '501':
           $ref: '#/components/responses/NotImplemented'
+  # ================================================ knowledge: profile files
+  /workspace-files:
+    get:
+      operationId: knowledge.listWorkspaceFiles
+      tags: [knowledge]
+      summary: One folder of the profile's working files (owner and admin)
+      description: |
+        The profile's working folder is `${DATA_DIR}/workspaces/<profile>`: the folders a
+        conversation or a task works in live under it. This lists one folder of it, folders
+        first then by name. Every `path` in this family is relative to that root, written
+        with `/`, and `''` is the root itself; an absolute path, a `..` that climbs out, a NUL
+        byte, or a symlink that leads outside the root is `400 validation_failed`
+        (`details.reason`: `absolute`, `outside_root`, `invalid`, `symlink_outside`). Nothing
+        here reaches the hub's keys, Hermes's home or any other profile. Links inside the root
+        are listed as what they point at, with `link: true`; a link that leads out is listed
+        as `kind: link` and cannot be opened. At most 5000 entries are returned
+        (`truncated`). Contract decision §56.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - $ref: '#/components/parameters/WorkspaceFilePath'
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The folder and what is directly in it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceFolder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: knowledge.deleteWorkspaceFile
+      tags: [knowledge]
+      summary: Delete a file or a folder with everything in it (owner and admin)
+      description: |
+        A folder goes with its contents. A symlink is removed as a link; what it points at is
+        never touched. The root itself cannot be deleted (`400 validation_failed`,
+        `details.reason = root`). Recorded in the audit log (`workspace_file.deleted`).
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - $ref: '#/components/parameters/WorkspaceFilePath'
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '204':
+          description: Deleted.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /workspace-files/content:
+    get:
+      operationId: knowledge.downloadWorkspaceFile
+      tags: [knowledge]
+      summary: The bytes of one file (owner and admin)
+      description: |
+        Streams the file with its media type and an `ETag`. `disposition=inline` lets a
+        client show an image or a PDF; `attachment` (the default) saves it under its name.
+        A folder is `400 validation_failed` (`details.reason = not_a_file`); use
+        `knowledge.downloadWorkspaceFolder` for a folder.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - $ref: '#/components/parameters/WorkspaceFilePath'
+        - name: disposition
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [inline, attachment]
+            default: attachment
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The whole file.
+          headers:
+            ETag:
+              description: Changes whenever the file's size or modification time does.
+              schema:
+                type: string
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /workspace-files/archive:
+    get:
+      operationId: knowledge.downloadWorkspaceFolder
+      tags: [knowledge]
+      summary: A folder as a zip (owner and admin)
+      description: |
+        The folder and everything under it, as one zip named after the folder (the root is
+        named after the profile). Symlinks are left out, never followed. Capped at
+        `WorkspaceFileLimits.max_archive_bytes` of file bytes and
+        `max_archive_entries` entries: a bigger folder is `413 payload_too_large` before a
+        byte is sent, with `details.max_bytes` / `details.max_entries`.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - $ref: '#/components/parameters/WorkspaceFilePath'
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The zip.
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+  /workspace-files/text:
+    get:
+      operationId: knowledge.readWorkspaceText
+      tags: [knowledge]
+      summary: A plain-text file, to edit (owner and admin)
+      description: |
+        The file as UTF-8 text with the `etag` a save must send back. Larger than
+        `WorkspaceFileLimits.max_edit_bytes` is `413 payload_too_large`; a file that is not
+        UTF-8 text (a NUL byte, invalid UTF-8) is `415 unsupported_media_type` — download it
+        instead.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - $ref: '#/components/parameters/WorkspaceFilePath'
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The text.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceText'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+    put:
+      operationId: knowledge.writeWorkspaceText
+      tags: [knowledge]
+      summary: Save a plain-text file (owner and admin)
+      description: |
+        `etag` is the one `readWorkspaceText` (or the previous save) answered: when the file
+        changed on disk since — an agent wrote it, another tab saved it — the save is
+        `409 conflict` with `details.reason = changed` and the current `details.etag`, and
+        nothing is written. `etag: null` creates a new file and is `409`
+        (`details.reason = exists`) when one is already there. Content over
+        `max_edit_bytes` is `413`. Writing through a symlink is refused. Recorded in the audit
+        log (`workspace_file.written`).
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkspaceTextWrite'
+            example:
+              path: notes/plan.md
+              content: "# Plan\n\n- ship the files page\n"
+              etag: '"9f86d081884c7d65"'
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: Saved; the new `etag`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceText'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+  /workspace-files/upload:
+    post:
+      operationId: knowledge.uploadWorkspaceFile
+      tags: [knowledge]
+      summary: Put one file into a folder (owner and admin)
+      description: |
+        Multipart, one `file` part, into the folder `path` names (created when missing). At
+        most `WorkspaceFileLimits.max_upload_bytes` (`413`). A file of that name already
+        there is `409 conflict` (`details.reason = exists`) unless `overwrite=true`; a folder
+        or a symlink of that name is never replaced. Recorded in the audit log
+        (`workspace_file.uploaded`).
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - $ref: '#/components/parameters/WorkspaceFilePath'
+        - name: overwrite
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+            encoding:
+              file:
+                contentType: '*/*'
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '201':
+          description: The file as it now is.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceFileEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+  /workspace-files/folders:
+    post:
+      operationId: knowledge.createWorkspaceFolder
+      tags: [knowledge]
+      summary: Make a new folder (owner and admin)
+      description: |
+        Missing parents are made too. Anything already at `path` is `409 conflict`
+        (`details.reason = exists`). Recorded in the audit log (`workspace_file.folder_created`).
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkspacePathBody'
+            example:
+              path: reports/2026
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '201':
+          description: The new folder.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceFileEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /workspace-files/move:
+    post:
+      operationId: knowledge.moveWorkspaceFile
+      tags: [knowledge]
+      summary: Rename or move a file or folder (owner and admin)
+      description: |
+        Rename is a move inside the same folder. The destination must not exist
+        (`409 conflict`, `details.reason = exists`) and its folder must (`404`). A folder
+        cannot move into itself (`400 validation_failed`, `details.reason = into_itself`); the
+        root cannot move (`details.reason = root`). A symlink moves as a link. Recorded in the
+        audit log (`workspace_file.moved`).
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkspaceFileTransfer'
+            example:
+              from: notes/plan.md
+              to: notes/plan-v2.md
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The entry at its new place.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceFileEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /workspace-files/copy:
+    post:
+      operationId: knowledge.copyWorkspaceFile
+      tags: [knowledge]
+      summary: Copy a file or folder (owner and admin)
+      description: |
+        Same rules as a move for the destination. A folder is copied with everything under
+        it except symlinks, which are left out; over `max_archive_bytes` or
+        `max_archive_entries` is `413 payload_too_large` and nothing is left half-copied.
+        Recorded in the audit log (`workspace_file.copied`).
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkspaceFileTransfer'
+            example:
+              from: notes/plan.md
+              to: archive/plan.md
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '201':
+          description: The copy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceFileEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+  /workspace-files/attach:
+    post:
+      operationId: knowledge.attachWorkspaceFile
+      tags: [knowledge]
+      summary: Make an attachment of a profile file, to send in a conversation (owner and admin)
+      description: |
+        Copies the file's bytes into the file registry as an ordinary attachment of this
+        profile (`purpose: message`), which a client then puts in a message the way it puts
+        an upload (`sessions.createRun` content blocks). The working file stays where it is;
+        later edits to it do not change the attachment. At most
+        `WorkspaceFileLimits.max_upload_bytes` (`413`). Recorded in the audit log
+        (`workspace_file.attached`).
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkspacePathBody'
+            example:
+              path: reports/summary.pdf
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '201':
+          description: The new attachment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attachment'
+              example:
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0AT
+                profile: work
+                owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                created_at: '2026-09-25T10:14:50Z'
+                updated_at: '2026-09-25T10:14:50Z'
+                name: summary.pdf
+                mime: application/pdf
+                size_bytes: 183422
+                kind: file
+                url: /api/v1/attachments/01J8QK3ZR2W7M5N4P6T8V9X0AT/content
+                purpose: message
+                width: null
+                height: null
+                duration_ms: null
+                sha256: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
   /audit/reports/{kind}:
     parameters:
       - name: kind
@@ -12317,6 +12768,18 @@ components:
         device or an integration. Socket.IO handshakes pass the same token as
         `auth.token`.
   parameters:
+    WorkspaceFilePath:
+      name: path
+      in: query
+      required: false
+      description: |
+        A path inside the profile's working folder, relative to it, `/`-separated; empty or
+        absent is the root. Absolute paths and paths that climb out are refused.
+      schema:
+        type: string
+        maxLength: 4096
+        default: ''
+      example: notes/plan.md
     Profile:
       name: X-Hub-Profile
       in: header
@@ -12510,6 +12973,17 @@ components:
       schema:
         type: string
   responses:
+    UnsupportedMediaType:
+      description: The body or the file is not of a kind this operation takes (`unsupported_media_type`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: 'هذا الملف ليس نصًا يمكن تحريره'
+            code: unsupported_media_type
+            details:
+              reason: binary
     BadRequest:
       description: Malformed request or failed validation (`bad_request`, `validation_failed`, `profile_required`).
       content:
@@ -18491,6 +18965,176 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/Ulid'
+    WorkspaceFileEntry:
+      type: object
+      description: |
+        One entry of a profile's working folder (`knowledge.listWorkspaceFiles`). `kind: link`
+        is a symlink that leads outside the root or nowhere: listed, never opened.
+      required: [name, path, kind, link, size_bytes, modified_at, mime, editable]
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+          description: Relative to the root, `/`-separated.
+        kind:
+          type: string
+          enum: [file, directory, link]
+        link:
+          type: boolean
+          description: A symlink (inside the root when `kind` is `file` or `directory`).
+        size_bytes:
+          type: [integer, 'null']
+          minimum: 0
+          description: Null for a folder and for a link that cannot be opened.
+        modified_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        mime:
+          type: [string, 'null']
+          description: A guess from the name, for a file; null otherwise.
+        editable:
+          type: boolean
+          description: A file small enough and of a text-like name to open in the editor.
+      example:
+        name: plan.md
+        path: notes/plan.md
+        kind: file
+        link: false
+        size_bytes: 1834
+        modified_at: '2026-09-25T08:12:00Z'
+        mime: text/markdown
+        editable: true
+    WorkspaceFileLimits:
+      type: object
+      description: The caps this hub applies to the profile's working files.
+      required: [max_upload_bytes, max_edit_bytes, max_archive_bytes, max_archive_entries]
+      properties:
+        max_upload_bytes:
+          type: integer
+        max_edit_bytes:
+          type: integer
+        max_archive_bytes:
+          type: integer
+        max_archive_entries:
+          type: integer
+      example:
+        max_upload_bytes: 26214400
+        max_edit_bytes: 1048576
+        max_archive_bytes: 209715200
+        max_archive_entries: 20000
+    WorkspaceFolder:
+      type: object
+      required: [profile, path, entries, truncated, limits]
+      properties:
+        profile:
+          $ref: '#/components/schemas/ProfileSlug'
+        path:
+          type: string
+          description: The folder listed, relative to the root (`''` for the root).
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceFileEntry'
+        truncated:
+          type: boolean
+          description: True when the folder holds more than the 5000 entries listed.
+        limits:
+          $ref: '#/components/schemas/WorkspaceFileLimits'
+      example:
+        profile: work
+        path: notes
+        entries:
+          - name: drafts
+            path: notes/drafts
+            kind: directory
+            link: false
+            size_bytes: null
+            modified_at: '2026-09-25T08:00:00Z'
+            mime: null
+            editable: false
+          - name: plan.md
+            path: notes/plan.md
+            kind: file
+            link: false
+            size_bytes: 1834
+            modified_at: '2026-09-25T08:12:00Z'
+            mime: text/markdown
+            editable: true
+        truncated: false
+        limits:
+          max_upload_bytes: 26214400
+          max_edit_bytes: 1048576
+          max_archive_bytes: 209715200
+          max_archive_entries: 20000
+    WorkspaceText:
+      type: object
+      required: [path, content, etag, size_bytes, modified_at]
+      properties:
+        path:
+          type: string
+        content:
+          type: string
+        etag:
+          type: string
+          description: Send it back with the next save; it changes when the bytes do.
+        size_bytes:
+          type: integer
+          minimum: 0
+        modified_at:
+          $ref: '#/components/schemas/Timestamp'
+      example:
+        path: notes/plan.md
+        content: "# Plan\n"
+        etag: '"9f86d081884c7d65"'
+        size_bytes: 7
+        modified_at: '2026-09-25T08:12:00Z'
+    WorkspaceTextWrite:
+      type: object
+      required: [path, content, etag]
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        content:
+          type: string
+        etag:
+          type: [string, 'null']
+          description: The `etag` last read; null to create a new file.
+      example:
+        path: notes/plan.md
+        content: "# Plan\n"
+        etag: '"9f86d081884c7d65"'
+    WorkspacePathBody:
+      type: object
+      required: [path]
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+          minLength: 1
+          maxLength: 4096
+      example:
+        path: reports/2026
+    WorkspaceFileTransfer:
+      type: object
+      required: [from, to]
+      additionalProperties: false
+      properties:
+        from:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        to:
+          type: string
+          minLength: 1
+          maxLength: 4096
+      example:
+        from: notes/plan.md
+        to: notes/plan-v2.md
     AuditReport:
       type: object
       required: [kind, period, generated_at, data]
