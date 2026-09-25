@@ -137,7 +137,15 @@ $ PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwright test e2e/
 $ vitest run tests/unit/task-worktrees.test.ts
       Tests  10 failed (10)
 ```
-نتيجة CI على الـPR تُضاف أدناه.
+CI على PR #105 للإيداع `d7a353b` (آخر إيداع قبل هذا السطر)، كلها نجحت:
+```
+Lint, typecheck, contracts, tests, build                 pass  13m20s
+Web smoke journeys (Playwright against the real hub)     pass  5m10s
+Docker image builds and answers /health                  pass  2m30s
+db:generate + db:migrate (SQLite and PostgreSQL)         pass  1m4s
+PR adds or updates a change record                       pass  13s
+PR leaves graphify-out/ to the code-map bot              pass  10s
+```
 
 ## المخاطر والرجوع
 - **العدّ والطابور في الذاكرة**: يعيشان ما دامت العملية؛ إعادة التشغيل تُنهي التشغيلات فيبدأ العدّ
