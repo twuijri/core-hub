@@ -46,6 +46,11 @@ export type ScriptStep = AgentEvent | { type: 'await_input' };
 export interface FakeRunnerOptions {
   /** Events for the next run, in order. */
   script?: ScriptStep[];
+  /**
+   * Events for a run chosen from what it was asked — several agents in one test (a room's
+   * seats) each playing their own part. Wins over `script` when it answers a script.
+   */
+  scriptFor?(request: AgentRunRequest, prompt: string): ScriptStep[] | null;
   /** Throw instead of accepting the turn (tests the `starting -> failed` arrow). */
   failOnStart?: Error;
   /** Do not end the stream on `interrupt()`; used to test the timeout arrow. */
@@ -109,8 +114,11 @@ export class FakeAgentRunner implements AgentRunner {
     if (this.options.failOnStart) throw this.options.failOnStart;
     this.started.push(request);
     await this.options.onStart?.(request);
+    const prompt = request.prompt
+      .map((block) => (block.type === 'text' ? block.text : ''))
+      .join('');
     this.channels.set(request.runId, {
-      queue: [...this.script],
+      queue: [...(this.options.scriptFor?.(request, prompt) ?? this.script)],
       waiting: [],
       pending: [],
       closed: false,

@@ -270,10 +270,11 @@ describe('rooms: the transcript', () => {
   it('stores a message with its mentions and pages back through the room', async () => {
     const { room } = await newRoom('نقاش', [seat('أ'), seat('ب')]);
     const seats = room.seats as Array<Json & { id: string }>;
+    // Nobody leads here, so a message that mentions nobody wakes nobody.
+    await call(tokens.owner!, 'PATCH', `/rooms/${room.id}`, { lead_seat_id: null });
     for (let i = 1; i <= 3; i += 1) {
       const res = await call(tokens.owner!, 'POST', `/rooms/${room.id}/messages`, {
         content: [{ type: 'text', text: `رسالة ${i}` }],
-        mentions: i === 2 ? [{ kind: 'seat', seat_id: seats[1]!.id }] : [],
       });
       expect(res.status).toBe(202);
       expect(res.body).toMatchObject({ message_id: expect.any(String), runs: [] });
@@ -284,7 +285,6 @@ describe('rooms: the transcript', () => {
       [2, 'user', { type: 'text', text: 'رسالة 2' }],
       [3, 'user', { type: 'text', text: 'رسالة 3' }],
     ]);
-    expect(items[0]!.mentions).toEqual([{ kind: 'seat', seat_id: seats[1]!.id }]);
     expect(items[0]).toMatchObject({
       room_id: room.id,
       session_id: room.id,
@@ -298,6 +298,15 @@ describe('rooms: the transcript', () => {
     );
     expect((older.body.items as Json[]).map((m) => m.seq)).toEqual([1]);
     expect(older.body.has_more).toBe(false);
+
+    const mentioned = await call(tokens.owner!, 'POST', `/rooms/${room.id}/messages`, {
+      content: [{ type: 'text', text: '@ب رأيك؟' }],
+      mentions: [{ kind: 'seat', seat_id: seats[1]!.id }],
+    });
+    const stored = (
+      (await call(tokens.owner!, 'GET', `/rooms/${room.id}/messages`)).body.items as Json[]
+    ).find((m) => m.id === mentioned.body.message_id);
+    expect(stored!.mentions).toEqual([{ kind: 'seat', seat_id: seats[1]!.id }]);
   });
 
   it('refuses a mention of a seat not in the room, and @all when the room says no', async () => {

@@ -50,6 +50,39 @@ export const E2E_PASSWORD = 'e2e-owner-password';
 type Step = AgentEvent | { type: 'delay'; ms: number } | { type: 'await_input' };
 
 function scriptFor(prompt: string): Step[] {
+  // Rooms (zzzzzz-rooms): a seat's turn opens with who it is. The planner answers in two
+  // streamed parts and hands the next step to the coder, who works with a tool and finishes.
+  if (prompt.startsWith('You are @المخطِّط,')) {
+    return [
+      { type: 'reasoning_delta', text: 'أرتّب الخطوات…' },
+      { type: 'delay', ms: 900 },
+      { type: 'message_delta', text: 'الخطة: ثلاث خطوات، نبدأ بالواجهة. ' },
+      { type: 'delay', ms: 900 },
+      { type: 'message_delta', text: '@المبرمج ابدأ بالخطوة الأولى.' },
+      { type: 'usage', inputTokens: 30, outputTokens: 12 },
+      { type: 'completed' },
+    ];
+  }
+  if (prompt.startsWith('You are @المبرمج,')) {
+    return [
+      { type: 'delay', ms: 600 },
+      {
+        type: 'tool_started',
+        ref: 'r1',
+        name: 'write_file',
+        kind: 'file_write',
+        title: 'ui/Home.tsx',
+      },
+      { type: 'delay', ms: 900 },
+      { type: 'tool_completed', ref: 'r1', output: 'written', exitCode: 0 },
+      { type: 'message_delta', text: 'أنهيت الخطوة الأولى: الواجهة جاهزة.' },
+      { type: 'usage', inputTokens: 25, outputTokens: 9 },
+      { type: 'completed' },
+    ];
+  }
+  if (prompt.startsWith('You are @')) {
+    return [{ type: 'message_delta', text: 'حاضر.' }, { type: 'completed' }];
+  }
   if (/ملخص الجدولة/.test(prompt)) {
     // A schedule's own run (journey 28): a short answer the history previews and the
     // conversation shows.

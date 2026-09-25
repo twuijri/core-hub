@@ -416,6 +416,12 @@ export class RoomsService {
     return trimmed;
   }
 
+  /** A seat as the contract shows it, with what it is doing now. */
+  seatOf(roomId: string, seatId: string): Json {
+    const seat = this.requireSeat(roomId, seatId);
+    return toSeat(seat, this.live.seatStatus(seat.id));
+  }
+
   async addSeat(scope: RoomScope, roomId: string, config: SeatConfigInput): Promise<Json> {
     this.requireManager(scope, roomId);
     const seat = await this.insertSeat(scope, roomId, config, { announce: true });
@@ -636,6 +642,49 @@ export class RoomsService {
       message: this.messageOf(scope, message),
     });
     return { room, message, targets: [...targets.values()] };
+  }
+
+  // ---------------------------------------------------------------- context
+
+  /**
+   * `rooms.clearContext`: the messages stay, the agents forget. Each seat gets a fresh
+   * conversation (the old one is archived) and is shown nothing before this point again; the
+   * summary and the token count start over.
+   */
+  async clearContext(scope: RoomScope, roomId: string): Promise<void> {
+    const room = this.requireManager(scope, roomId);
+    const seats = this.ports.seats;
+    for (const seat of this.store.seats(room.id)) {
+      if (seats) {
+        const sessionId = await seats.open(scope, {
+          agentId: seat.agentId,
+          seatId: seat.id,
+          title: `${room.name} · ${seat.alias}`,
+          model: seat.model ?? null,
+          provider: seat.provider ?? null,
+          reasoningEffort: seat.reasoningEffort ?? null,
+          workingDir: room.workingDir ?? null,
+        });
+        await seats.configure(scope, seat.sessionId, { archived: true }).catch(() => {});
+        this.store.updateSeat(room.id, seat.id, { sessionId, seenSeq: room.messageCount });
+      } else {
+        this.store.updateSeat(room.id, seat.id, { seenSeq: room.messageCount });
+      }
+    }
+    this.store.updateRoom(scope.workspace, room.id, {
+      contextFromSeq: room.messageCount,
+      totalTokens: 0,
+      memory: null,
+      memoryStatus: 'idle',
+      memoryError: null,
+      memoryTurnCount: 0,
+      memoryUptoSeq: room.messageCount,
+      memoryUpdatedAt: new Date(),
+    });
+    this.realtime.toRoom(scope.profile, room.id, 'room.cleared', {
+      room_id: room.id,
+      total_tokens: 0,
+    });
   }
 
   // --------------------------------------------------------------- presets

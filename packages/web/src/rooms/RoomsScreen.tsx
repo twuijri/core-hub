@@ -28,10 +28,14 @@ import {
   Notice,
   Sheet,
   SkeletonText,
+  Switch,
+  Field,
+  Input,
   useConfirm,
   usePrompt,
 } from '../ui/index.js';
 import {
+  IconStop,
   IconArchive,
   IconCopy,
   IconMore,
@@ -43,6 +47,10 @@ import {
 import { RoomComposer } from './RoomComposer.js';
 import { SeatDialog } from './SeatDialog.js';
 import {
+  useClearContext,
+  useContinueHandoff,
+  useHandoffs,
+  useStopSeat,
   useDeleteRoom,
   usePostMessage,
   useRemoveMember,
@@ -154,6 +162,7 @@ function RoomView({ roomId }: { roomId: string }) {
             ))}
             <div ref={bottom} />
           </div>
+          {detail && <HandoffBar room={detail} revision={stream.state.messages.length} />}
           <Activity state={stream.state} seats={seats} />
           <RoomComposer
             seats={seats.map((seat) => ({ id: seat.id, name: seat.name }))}
@@ -343,6 +352,8 @@ function RoomHeader({
   const prompt = usePrompt();
   const confirm = useConfirm();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const clear = useClearContext(room?.id ?? '');
   if (!room) return <SkeletonText lines={1} label={t('common.loading')} />;
   const own = room.members.find((member) => member.user_id === session?.user.id);
 
@@ -361,6 +372,14 @@ function RoomHeader({
       body: t('rooms.delete_body', { name: room.name }),
     });
     if (yes) remove.mutate(room.id, { onSuccess: onGone });
+  };
+  const forget = async () => {
+    const yes = await confirm.ask({
+      title: t('rooms.clear.title'),
+      body: t('rooms.clear.body'),
+      confirmLabel: t('rooms.clear.confirm'),
+    });
+    if (yes) clear.mutate();
   };
   const leaveRoom = async () => {
     if (!own) return;
@@ -418,6 +437,10 @@ function RoomHeader({
           {room.can_manage ? (
             <>
               <MenuItem onSelect={() => void rename()}>{t('rooms.rename')}</MenuItem>
+              <MenuItem onSelect={() => setSettingsOpen(true)}>
+                {t('rooms.settings.title')}
+              </MenuItem>
+              <MenuItem onSelect={() => void forget()}>{t('rooms.clear.menu')}</MenuItem>
               <MenuItem
                 icon={room.archived_at ? <IconUnarchive size={14} /> : <IconArchive size={14} />}
                 onSelect={() => update.mutate({ archived: !room.archived_at })}
@@ -448,6 +471,7 @@ function RoomHeader({
       {prompt.dialog}
       {confirm.dialog}
       <InviteDialog room={room} open={inviteOpen} onClose={() => setInviteOpen(false)} />
+      <RoomSettingsDialog room={room} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }
@@ -519,6 +543,7 @@ function MembersPanel({ room }: { room: RoomDetail }) {
   const { t } = useI18n();
   const { session } = useAuth();
   const removeSeat = useRemoveSeat(room.id);
+  const stop = useStopSeat(room.id);
   const removeMember = useRemoveMember(room.id);
   const update = useUpdateRoom(room.id);
   const confirm = useConfirm();
@@ -574,6 +599,18 @@ function MembersPanel({ room }: { room: RoomDetail }) {
                     .join(' · ')}
                 </span>
               </span>
+              {seat.status !== 'idle' && seat.status !== 'offline' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  iconOnly
+                  aria-label={t('rooms.members.stop', { name: seat.name })}
+                  tooltip={t('rooms.members.stop', { name: seat.name })}
+                  icon={<IconStop size={14} />}
+                  onClick={() => stop.mutate(seat.id)}
+                  data-testid="room-seat-stop"
+                />
+              )}
               {room.can_manage && (
                 <Menu
                   tooltip={t('common.more')}
@@ -662,5 +699,133 @@ function MembersPanel({ room }: { room: RoomDetail }) {
         }}
       />
     </div>
+  );
+}
+
+/**
+ * Agents passing the turn: the chain going on now, and the last one the guard stopped, with
+ * the one more round a person may give it.
+ */
+function HandoffBar({ room, revision }: { room: RoomDetail; revision: number }) {
+  const { t } = useI18n();
+  const chains = useHandoffs(
+    room.id,
+    `${revision}:${room.handoff_chains.map((c) => c.status).join()}`,
+  );
+  const more = useContinueHandoff(room.id);
+  const name = (id: string) => room.seats.find((seat) => seat.id === id)?.name ?? '?';
+  const active = room.handoff_chains[0];
+  // Only the newest chain: an older stopped one was overtaken by what the room did since.
+  const newest = chains.data?.items[0];
+  const stopped =
+    newest && newest.status === 'stopped' && !newest.continue_used ? newest : undefined;
+  if (!active && !stopped) return null;
+  return (
+    <div className="room-activity mb-2" data-testid="room-handoff">
+      {active && (
+        <span className="text-xs text-muted" data-testid="room-handoff-active">
+          {t('rooms.handoff.active', {
+            from: name(active.from_seat_id),
+            to: name(active.to_seat_id),
+            depth: active.depth,
+          })}
+        </span>
+      )}
+      {!active && stopped && (
+        <Notice tone="warning">
+          {t(`rooms.handoff.stopped_${stopped.stop_reason ?? 'interrupted'}`, {
+            from: name(stopped.from_seat_id),
+            to: name(stopped.to_seat_id),
+          })}{' '}
+          {stopped.stop_reason !== 'interrupted' && (
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={more.isPending}
+              onClick={() => more.mutate(stopped.id)}
+              data-testid="room-handoff-continue"
+            >
+              {t('rooms.handoff.continue')}
+            </Button>
+          )}
+        </Notice>
+      )}
+    </div>
+  );
+}
+
+/** How the room behaves: `@all`, and whether and how far agents pass the turn. */
+function RoomSettingsDialog({
+  room,
+  open,
+  onClose,
+}: {
+  room: RoomDetail;
+  open: boolean;
+  onClose(): void;
+}) {
+  const { t } = useI18n();
+  const update = useUpdateRoom(room.id);
+  const [all, setAll] = useState(room.can_mention_all);
+  const [handoff, setHandoff] = useState(room.handoff.enabled);
+  const [depth, setDepth] = useState(String(room.handoff.max_depth ?? ''));
+  useEffect(() => {
+    if (!open) return;
+    setAll(room.can_mention_all);
+    setHandoff(room.handoff.enabled);
+    setDepth(String(room.handoff.max_depth ?? ''));
+    update.reset();
+  }, [open]);
+  const parsed = depth.trim() === '' ? null : Number(depth);
+  const valid = parsed === null || (Number.isInteger(parsed) && parsed >= 1 && parsed <= 20);
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => !next && onClose()}
+      title={t('rooms.settings.title')}
+      closeLabel={t('common.cancel')}
+      testId="room-settings-dialog"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="primary"
+            disabled={!valid}
+            loading={update.isPending}
+            onClick={() =>
+              update.mutate(
+                { can_mention_all: all, handoff: { enabled: handoff, max_depth: parsed } },
+                { onSuccess: onClose },
+              )
+            }
+            data-testid="room-settings-save"
+          >
+            {t('common.save')}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <Switch checked={all} onChange={setAll} label={t('rooms.settings.mention_all')} />
+        <Switch checked={handoff} onChange={setHandoff} label={t('rooms.settings.handoff')} />
+        <Field label={t('rooms.settings.max_depth')} hint={t('rooms.settings.max_depth_hint')}>
+          {(props) => (
+            <Input
+              {...props}
+              dir="ltr"
+              inputMode="numeric"
+              value={depth}
+              disabled={!handoff}
+              invalid={!valid}
+              onChange={(event) => setDepth(event.target.value)}
+              data-testid="room-settings-depth"
+            />
+          )}
+        </Field>
+        {update.isError && <Notice tone="danger">{describeError(update.error, t)}</Notice>}
+      </div>
+    </Dialog>
   );
 }

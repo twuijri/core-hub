@@ -1739,7 +1739,8 @@
       "online": "In the room",
       "offline": "Away",
       "remove": "Remove",
-      "default_model": "the agent's own model"
+      "default_model": "the agent's own model",
+      "stop": "Stop @{name}"
     },
     "seat": {
       "add": "Add agent",
@@ -1757,6 +1758,27 @@
       "remove": "Remove",
       "remove_title": "Remove this agent from the room?",
       "remove_body": "@{name} leaves the room; what it said stays."
+    },
+    "handoff": {
+      "active": "@{from} passed the turn to @{to} (pass {depth})",
+      "stopped_max_depth": "Stopped passing the turn: @{from} → @{to} would go past the room's limit.",
+      "stopped_loop_detected": "Stopped passing the turn: @{from} → @{to} would repeat a pass already made.",
+      "stopped_interrupted": "Passing the turn was stopped at @{from} → @{to}.",
+      "stopped_error": "Passing the turn stopped: @{to} could not answer.",
+      "continue": "One more round"
+    },
+    "clear": {
+      "menu": "Clear the context",
+      "title": "Clear the room's context?",
+      "body": "The messages stay, but the agents forget them: each starts a fresh conversation, and the summary and token count start over.",
+      "confirm": "Clear"
+    },
+    "settings": {
+      "title": "Room settings",
+      "mention_all": "Allow @all (every agent at once)",
+      "handoff": "Agents may pass the turn to each other",
+      "max_depth": "Most passes in a row",
+      "max_depth_hint": "1–20; empty for no limit. A pass repeated in the same run always stops."
     }
   }
 }

@@ -18,6 +18,7 @@ import {
 import { modules as defaultModules } from '../../src/modules/index.js';
 import { principalScopeResolver } from '../../src/modules/auth/index.js';
 import { createSessionsModule } from '../../src/modules/sessions/index.js';
+import { conductorFor } from '../../src/modules/rooms/index.js';
 import {
   FakeAgentDirectory,
   FakeAgentRunner,
@@ -95,6 +96,29 @@ describe.skipIf(!doc)('contract: rooms', () => {
       agents: new FakeAgentDirectory([fakeHermes(AGENT)]),
       runner: new FakeAgentRunner({
         script: [{ type: 'message_delta', text: 'تم.' }, { type: 'completed' }],
+        // In the handoff room, one seat passes to the other and back until the cap stops it.
+        scriptFor(_request, prompt) {
+          if (prompt.startsWith('You are @أ,'))
+            return [
+              { type: 'reasoning_delta', text: 'أفكّر' },
+              {
+                type: 'tool_started',
+                ref: 't1',
+                name: 'read_file',
+                kind: 'shell',
+                title: 'plan.md',
+              },
+              { type: 'tool_completed', ref: 't1', output: 'ok', exitCode: 0 },
+              { type: 'message_delta', text: 'إليك يا @ب' },
+              { type: 'usage', inputTokens: 3, outputTokens: 2 },
+              { type: 'completed' },
+            ];
+          if (prompt.startsWith('You are @ب,'))
+            return [{ type: 'message_delta', text: 'وإليك يا @أ' }, { type: 'completed' }];
+          if (prompt.startsWith('You are @البطيء,'))
+            return [{ type: 'message_delta', text: 'أعمل' }, { type: 'await_input' }];
+          return null;
+        },
       }),
       agentTimeoutMs: 5_000,
       scopes: principalScopeResolver,
@@ -216,6 +240,60 @@ describe.skipIf(!doc)('contract: rooms', () => {
     await call('rooms.deleteSeatPreset', 204, { params: { preset_id: String(preset.id) } });
     await call('rooms.deleteSeatPreset', 404, { params: { preset_id: String(preset.id) } });
 
+    // Part 2: agents answer, pass the turn, stop at the cap, go one more round, stop, forget.
+    const talk = await call('rooms.create', 201, {
+      body: {
+        name: 'غرفة التسليم',
+        seats: [
+          { agent_id: AGENT, name: 'أ' },
+          { agent_id: AGENT, name: 'ب' },
+          { agent_id: AGENT, name: 'البطيء' },
+        ],
+        handoff: { enabled: true, max_depth: 1 },
+      },
+    });
+    const talkRoom = talk.room as Json & { id: string; seats: Array<Json & { id: string }> };
+    const [a, , slow] = talkRoom.seats;
+    const accepted = await call('rooms.postMessage', 202, {
+      params: { room_id: talkRoom.id },
+      body: {
+        content: [{ type: 'text', text: '@أ ابدأ' }],
+        mentions: [{ kind: 'seat', seat_id: a!.id }],
+      },
+    });
+    expect((accepted.runs as Json[]).length).toBe(1);
+    await conductorFor(hub.app).idle();
+    const chains = await call('rooms.listHandoffs', 200, { params: { room_id: talkRoom.id } });
+    const chain = (chains.items as Json[])[0]!;
+    expect(chain).toMatchObject({ status: 'stopped', stop_reason: 'max_depth' });
+    await call('rooms.continueHandoff', 202, {
+      params: { room_id: talkRoom.id, chain_id: String(chain.id) },
+    });
+    await conductorFor(hub.app).idle();
+    await call('rooms.continueHandoff', 409, {
+      params: { room_id: talkRoom.id, chain_id: String(chain.id) },
+    });
+    await call('rooms.continueHandoff', 404, {
+      params: { room_id: talkRoom.id, chain_id: '01KAGENTNAWAY0000000000000' },
+    });
+    await call('rooms.postMessage', 202, {
+      params: { room_id: talkRoom.id },
+      body: {
+        content: [{ type: 'text', text: '@البطيء' }],
+        mentions: [{ kind: 'seat', seat_id: slow!.id }],
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await call('rooms.get', 200, { params: { room_id: talkRoom.id } });
+    await call('rooms.stopSeat', 200, { params: { room_id: talkRoom.id, seat_id: slow!.id } });
+    await call('rooms.stopSeat', 404, {
+      params: { room_id: talkRoom.id, seat_id: '01KAGENTNAWAY0000000000000' },
+    });
+    await conductorFor(hub.app).idle();
+    await call('rooms.listRuns', 200, { params: { room_id: talkRoom.id } });
+    await call('rooms.listRuns', 404, { params: { room_id: '01KAGENTNAWAY0000000000000' } });
+    await call('rooms.clearContext', 204, { params: { room_id: talkRoom.id } });
+
     const names = envelopes.map((e) => e.event);
     for (const event of [
       'room.created',
@@ -225,6 +303,14 @@ describe.skipIf(!doc)('contract: rooms', () => {
       'seat.updated',
       'seat.removed',
       'message.created',
+      'message.delta',
+      'reasoning.delta',
+      'tool.started',
+      'tool.completed',
+      'run.completed',
+      'run.cancelled',
+      'handoff.updated',
+      'room.cleared',
     ]) {
       expect(names).toContain(event);
     }

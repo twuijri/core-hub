@@ -1058,3 +1058,26 @@ Proposed — owner to confirm (rooms were "later"; built on the owner's «كمل
   room's id as `session_id` (a room is not a session), a seat's reply its seat's session.
 - **The web** draws the person's own messages on the right and everyone else — people and
   agents — on the left, each named, because in a room "the other side" is several speakers.
+- **Agents in the room (part 2).** A turn is a run in the seat's own conversation, and its
+  prompt is the room as that seat has **not** seen it: who it is, its role and instructions,
+  the other agents and people, how to pass the turn, the room's summary, and the messages
+  after its last turn from anyone but itself — at most the newest 30 and about 12,000
+  characters, saying how many older ones were left out (the seat's conversation already holds
+  what it was shown and said before). The reply is a room message opened at once
+  (`status: streaming`, so the room shows who is about to answer) and filled from the seat
+  session's stream, re-emitted on `/rt/rooms` against that message (`message.delta`,
+  `reasoning.delta`, `tool.*`, `approval.*`; `run.*` with `room_id` set). `Seat.status` says
+  `queued`, `thinking`, `running` or `waiting_approval` while it works.
+- **Handoffs.** An agent writes text, not structured mentions, so its reply is read for
+  `@Name` of another seat — whole names, longest first, never inside code, never itself — and
+  the first one found takes the next turn when the room allows handoffs. A chain starts with
+  the first pass after a person's message; `depth` counts the passes made. The guard stops it
+  (`status: stopped`) at a loop — the same pass (from → to) twice in one chain — or when the
+  next pass would exceed `max_depth` (`null` = no cap; the default is 3). A stopped chain may
+  go one more round, once (`continueHandoff`, `409` after that). A chain completes when a reply
+  passes nothing on and fails when a turn fails.
+- **Stop and forget.** `stopSeat` cancels the seat's running and queued turns and stops its
+  chains as `interrupted`; the reply says `interrupted`. `clearContext` keeps the messages,
+  gives every seat a fresh conversation (the old one archived) that is shown nothing before
+  this point, and resets the summary and `total_tokens`. A restart closes replies it left
+  streaming and stops chains it left active.
