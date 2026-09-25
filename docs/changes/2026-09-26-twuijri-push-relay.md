@@ -126,7 +126,13 @@ $ pnpm db:generate                   → No schema changes, nothing to migrate
 تنظيف الرموز الميتة (APNs 410، FCM UNREGISTERED) وإبقاء غيرها (BadDeviceToken، INVALID_ARGUMENT للرسالة)،
 وأن D1 والسجلات لا تحوي رمزًا ولا نصًا ولا سرًّا ولا عنوان IP.
 
-CI: يُحدَّث بعد فتح الطلب.
+CI على #150 عند `6dbb1108` (قبل هذا الإصلاح): كل الفحوص ناجحة إلا «Server unit tests (shard 2/3)»:
+```
+FAIL  tests/unit/status.test.ts > implements at least as many operations as docs/STATUS.md claims
+AssertionError: the contract grew or shrank: update docs/STATUS.md: expected 315 to be 316
+```
+أُصلح بتحديث السطر الأول من `docs/STATUS.md` (302 من 316)، ونجح `status.test.ts` محليًا. النتيجة التالية
+تُضاف أدناه.
 
 ## المخاطر والرجوع
 - **الرجوع**: revert للفرع. الترحيل `0025` يضيف جدولًا فقط؛ نسخة أقدم تتجاهله.
