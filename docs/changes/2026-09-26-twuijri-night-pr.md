@@ -21,6 +21,7 @@
 - طلبات قدرات الجهاز (`/device-requests`): يسأل الشخص جهازه، يسمع الجهاز وحده ويجيب مرة، والمهمة تتبعه بلا الموقع؛ جدول `device_requests` (الترحيل `0022`) — `feat/close-501-stubs` — `docs/changes/2026-09-26-twuijri-close-501-stubs.md`
 - تسجيل الدفع يُمسح حين ينهي المركز الجلسة التي سجّلته (وFCM يقول إن الرمز غير صالح)، وسجلات الجوال وأداؤه من المسارين الحيين، وإزالة نوعي `logs`/`performance` من `audit.getReport` (§75) — `feat/push-cleanup-mobile-logs` — `docs/changes/2026-09-26-twuijri-push-cleanup-mobile-logs.md`
 - صورة الوكيل: `agents.update` يحفظ صورة PNG/JPEG و`agents.getAvatar` يعيدها (ملف بجانب صور الأشخاص، بلا ترحيل) — `feat/close-501-stubs` — `docs/changes/2026-09-26-twuijri-close-501-stubs.md`
+- نسخة واحدة 1.1.0 لكل المخرجات من `package.json` الجذر، و`pnpm version:check`، وأرقام البناء الموقّعة = رقم التشغيل + 100 — `chore/one-version-1.1.0` — `docs/changes/2026-09-26-twuijri-one-version.md`
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 انظر سجل كل مهمة.

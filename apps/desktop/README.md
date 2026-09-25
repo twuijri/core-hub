@@ -14,7 +14,8 @@ pnpm --filter @corehub/desktop package              # this platform's installers
 ```
 
 Installers (ADR 0023): AppImage + deb on Linux, dmg on macOS, NSIS on Windows, unsigned on
-pull requests. `COREHUB_VERSION` stamps the version. CI builds all three in
+pull requests. `COREHUB_VERSION` stamps the version; without it the app carries the root
+`package.json` version, like every Core Hub deliverable (`docs/RELEASING.md`). CI builds all three in
 `.github/workflows/desktop.yml` as artifacts; nothing is published. The macOS dmg signed with
 Developer ID and notarised comes from `.github/workflows/desktop-signed.yml` (by hand or a release
 tag; `docs/RELEASING.md`): packaging signs only when `CSC_LINK` is set. Windows signing is not set

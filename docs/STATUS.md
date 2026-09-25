@@ -326,6 +326,16 @@ provider blocks `majlis-*` (moved to `corehub-*` with every reference to them at
 archives with `majlis-providers.json` — proven by unit and integration tests, not yet on the
 owner's test stack.
 
+## Version
+Since 2026-09-26 every deliverable carries **one version, 1.1.0**, the root `package.json`'s
+(owner: «خل كل النسخ تبدا من 1.1.0»): the hub's `/health` and `/meta` (the root version when the
+image stamps none), the web client, the image label, the desktop app, the Android `versionName`
+(read by Gradle) and the iOS `MARKETING_VERSION`. `pnpm version:check` fails in CI on any copy
+that differs, and on a `v*` tag that does not match. Signed Android/iOS builds are numbered run
+number + 100, above the old app's 63; a manual preview image reports `1.1.0-preview.<run>`. Not
+yet seen on a signed build or a published image: no signed workflow or release has run since
+(docs/RELEASING.md).
+
 ## First run
 A hub with no owner is **open to the first comer for an hour** after the process
 starts (ADR 0019, `COREHUB_SETUP_OPEN_MINUTES`, `0` = token only): `/setup` in the

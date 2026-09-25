@@ -4,6 +4,40 @@ Who does what: building is automatic; **publishing is the owner's step** (TEAM-R
 signed builds below produce files; nothing here uploads to a store, makes a GitHub release or
 pushes a tag, except TestFlight when the owner ticks it on a manual run.
 
+## One version (owner, 2026-09-26)
+
+Every Core Hub deliverable carries **one version**: the root `package.json` `version`, starting
+at **1.1.0** — the hub (`/api/v1/health`, `/api/v1/meta`, the image's
+`org.opencontainers.image.version`), the web client's printed version, the desktop app, the
+Android `versionName` and the iOS `CFBundleShortVersionString`. It starts at 1.1.0 because the
+old fork's apps used the same ids and reached 1.0.2 on TestFlight; the new ones must be newer.
+
+Where it lives:
+
+| Deliverable | Reads it from |
+|---|---|
+| Hub | `COREHUB_VERSION` when the image stamps it, else the root `package.json` (the server's own `package.json` in the desktop app's embedded hub) |
+| Web client | `COREHUB_VERSION` at build time, else the root `package.json` (`packages/web/vite.config.ts`) |
+| Image | `ARG COREHUB_VERSION` in `packages/server/Dockerfile` (default = the root version); `release.yml` passes the tag's version, or `<version>-preview.<run>` for a manual run |
+| Desktop | `COREHUB_VERSION` (a tag, or the `version` input), else the root `package.json` (`apps/desktop/scripts/package.mjs`) |
+| Android `versionName` | the root `package.json`, read by Gradle (`apps/android/app/build.gradle.kts`) |
+| iOS `MARKETING_VERSION` | `apps/ios/project.yml` — a copy, because XcodeGen cannot read JSON |
+
+The root version is a plain `X.Y.Z` (the App Store takes nothing else). **`pnpm version:check`**
+(`scripts/version-check.mjs`, run in CI's "Lint, typecheck, contracts, client tests, build" job)
+fails when a workspace `package.json`, the iOS `MARKETING_VERSION` or the Dockerfile default
+differs from it, when Android's `versionName` is written out instead of read, and — on a `v*`
+tag (the release and signed workflows run it there) — when the tag says another version.
+
+To release: bump the root `package.json` only, run `pnpm version:check --write` (it copies the
+version into every place above that keeps a copy), commit through a pull request, and once it is
+on `main` tag that commit `vX.Y.Z` (the owner's step).
+
+**Build numbers.** The signed workflows set Android's `versionCode` and iOS's
+`CURRENT_PROJECT_VERSION` (`CFBundleVersion`) to the workflow's run number **+ 100**, computed in
+a step (GitHub expressions cannot add), so every build is newer than the last and newer than the
+old app's builds under the same ids (up to 63). A local or pull-request build is 1.
+
 ## App identity (owner, 2026-09-25)
 
 | Platform | Identifier |
@@ -48,7 +82,7 @@ Android job keeps no Gradle cache.
 ### Android
 
 The keystore (`ANDROID_TEST_*`) is a test key, not a Play upload key. `versionCode` is the
-workflow's run number (`COREHUB_ANDROID_VERSION_CODE`), so each build is newer than the last.
+workflow's run number + 100 (`COREHUB_ANDROID_VERSION_CODE`, see One version above).
 `GOOGLE_SERVICES_JSON` is the file Firebase gives for the Android app (as JSON, or base64); the
 Google Services plugin refuses a file without a client for `com.twuijri.corehub`. Only a build
 with that file has push: after sign-in the app takes an FCM token and registers it with the hub
@@ -74,7 +108,8 @@ export `COREHUB_ANDROID_KEYSTORE` (a path), `COREHUB_ANDROID_KEYSTORE_PASSWORD`,
 3. `xcodebuild archive` (manual signing, those profiles) and `xcodebuild -exportArchive`
    (`app-store-connect`) run with `-allowProvisioningUpdates` and the same key
    (`-authenticationKeyPath/ID/IssuerID`), so Xcode can fetch anything missing itself.
-   `CFBundleVersion` is the workflow's run number.
+   `CFBundleVersion` is the workflow's run number + 100; `CFBundleShortVersionString` is
+   `project.yml`'s `MARKETING_VERSION` (the root version) unless a manual run gives `version`.
 4. The job checks both bundle ids, the entitlements (the App Group, and `aps-environment`
    `production`, which push needs) and the signature.
 5. `upload_testflight` (a manual run only, off by default) uploads with `xcrun altool` and the
