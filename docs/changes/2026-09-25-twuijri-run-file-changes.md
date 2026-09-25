@@ -59,6 +59,7 @@
 - `modules/sessions/run-changes.ts` (جديد): `startChangeTracking` بطريقتيه (`GitTracker`,
   `SnapshotTracker`)، `runGit` (spawn بمصفوفة، مهلة، حد مخرجات)، والحدود `CHANGE_CAPS`.
 - `modules/sessions/line-diff.ts` (جديد): فرق الأسطر (Myers) والكتل الموحّدة و`isBinary`.
+- `modules/sessions/index.ts` و`service.ts`: بيئة المضيف من الإعداد إلى المحرك.
 - `modules/sessions/engine.ts`: `trackChanges` قبل `runner.start`، `touch` عند بدء أداة تسمّي ملفًا
   (`fileRefsOf` من #106)، `recordChanges` في `finalise` قبل الحدث النهائي.
 - `schema.ts` (`runFileChanges`, `runs.changes`)، `store.ts` (`saveRunChanges`, `runFileChangesOf`,
@@ -124,7 +125,17 @@ $ PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwright test e2e/
 الاختبارات الجديدة تفشل على الكود القديم: تستورد `run-changes.ts` و`line-diff.ts` و`src/files/changes.ts`
 و`RunChangesCard`/`DiffView` غير الموجودة، والعمليات الثلاث كانت `501`، ولا بطاقة `run-changes` في الصفحة.
 
-**CI على هذا الطلب**: تُلصق نتيجته هنا بعد اكتماله.
+**CI على #110**: الدفعة الأولى فشلت في `tests/unit/config.test.ts` («config.ts وحده يقرأ `process.env`»):
+كان `run-changes.ts` يقرأ `process.env` ليحذف متغيرات `GIT_*`. صار يأخذ بيئة المضيف من الإعداد
+(`hub.config.hostEnv.inherited` ← `SessionsService` ← `RunEngine`) ويحذف منها `GIT_*`. بعدها كلها خضراء:
+```
+Docker image builds and answers /health                 pass
+Lint, typecheck, contracts, tests, build                pass
+PR adds or updates a change record                      pass
+PR leaves graphify-out/ to the code-map bot             pass
+Web smoke journeys (Playwright against the real hub)    pass
+db:generate + db:migrate (SQLite and PostgreSQL)        pass
+```
 
 ## المخاطر والرجوع
 - **لم يُجرَّب على Hermes حقيقي ولا على مستودع كبير**: في مستودع كبير يضيف `git add -A` على نسخة الفهرس
