@@ -128,7 +128,16 @@ check-clients  OK — 291 client file(s) scanned, 177 contract path(s) known.
 $ pnpm i18n:check       → i18n:check  OK
 $ pnpm nav:check        → nav:check  OK — 34 destinations, 2 pre-auth screens (login, setup), 39 terms, ar/en complete, routes for web
 ```
-CI: يُضاف ناتجه بعد الدفع.
+CI على PR #109 (الالتزام `bf1cbc3`، قبل هذا السطر):
+```
+Lint, typecheck, contracts, tests, build                pass  11m32s
+Web smoke journeys (Playwright against the real hub)    pass  4m9s
+Docker image builds and answers /health                 pass  2m29s
+db:generate + db:migrate (SQLite and PostgreSQL)        pass  56s
+PR adds or updates a change record                      pass  9s
+PR leaves graphify-out/ to the code-map bot             pass  10s
+```
+`main` لم يتحرّك منذ تفرّع الفرع (`beb539e`)، فلا دمج مطلوب.
 
 ## المخاطر والرجوع
 - **عرض التشغيل يرسم الرسم المحفوظ الآن**، لا لقطة الرسم التي عمل بها التشغيل (العقد لا يعيدها).
