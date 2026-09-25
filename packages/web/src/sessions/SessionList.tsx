@@ -2,6 +2,11 @@
 // reordering (dnd-kit; the keyboard sensor gives every drag a keyboard equivalent: focus the
 // grip, Space to pick up, arrows to move, Space to drop).
 //
+// In groups (contract decision §60): the profile's categories first, each collapsible, then a
+// group per messaging channel a conversation came from, then the chats in no group. A chat is
+// dropped on a category's header, or moved from its menu («نقل إلى تصنيف»). Which groups are
+// collapsed is the viewer's own, remembered in this browser (`groups.ts`).
+//
 // Assembled from the kit (`src/ui/`): the field, the segmented scope, the row buttons, the
 // empty state and the right-click menu are all components, not markup written here.
 import {
@@ -9,8 +14,11 @@ import {
   KeyboardSensor,
   PointerSensor,
   closestCenter,
+  pointerWithin,
+  useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
 } from '@dnd-kit/core';
 import {
@@ -20,12 +28,14 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { NavLink, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useDeleteSession, useProfiles, useUpdateSession } from '../hub/queries.js';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
+import type { Translator } from '../i18n/index.js';
 import { routeOf } from '../navigation/manifest.js';
 import { chatHref } from '../chat/anchor.js';
 import { ProfileBadge } from '../shell/ProfileBadge.js';
@@ -33,7 +43,9 @@ import { ALL_PROFILES, useManyProfiles, useProfileInLink } from '../shell/profil
 import type { Session } from '../types.js';
 import {
   IconArchive,
+  IconChevron,
   IconClose,
+  IconFolder,
   IconGrip,
   IconMore,
   IconPin,
@@ -48,6 +60,7 @@ import {
   Button,
   Checkbox,
   ContextMenu,
+  Dialog,
   ContextMenuItem,
   ContextMenuSeparator,
   EmptyState,
@@ -64,8 +77,37 @@ import {
   useConfirm,
   usePrompt,
 } from '../ui/index.js';
-import { arrange, move, readOrder, writeOrder } from './order.js';
+import { move, readOrder, writeOrder } from './order.js';
 import { useLiveSessions } from './useSessionList.js';
+import {
+  categoryKeys,
+  useCategories,
+  useCreateCategory,
+  useDeleteCategory,
+  useUpdateCategory,
+} from './categories.js';
+import {
+  dropGroup,
+  dropOutcome,
+  groupSessions,
+  readCollapsed,
+  toggled,
+  unknownCategories,
+  writeCollapsed,
+  type SessionCategory,
+  type SessionGroup,
+} from './groups.js';
+
+const storage = () => (typeof localStorage === 'undefined' ? null : localStorage);
+
+/**
+ * A category's header wins over the rows around it while the pointer is on it, so a chat
+ * can be dropped *into* a group; anywhere else the nearest row decides, as before.
+ */
+const onHeaderFirst: CollisionDetection = (args) => {
+  const header = pointerWithin(args).find((hit) => String(hit.id).startsWith('group:'));
+  return header ? [header] : closestCenter(args);
+};
 
 export function sessionTitle(session: Pick<Session, 'title'>, t: (k: string) => string): string {
   return session.title ?? t('sessions.untitled');
@@ -106,7 +148,7 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
   // The list gathers every profile the person may enter unless its own filter narrows it to
   // one (ADR 0016). The filter is the list's, not the top selector's: neither moves the
   // other. A badge says which profile a row is from once there are several on screen.
-  const { listFilter, setListFilter } = useAuth();
+  const { listFilter, setListFilter, profile: ownProfile } = useAuth();
   const profiles = useProfiles().data ?? [];
   const manyProfiles = useManyProfiles();
   // A filter naming a profile the person can no longer enter falls back to all of them.
@@ -148,11 +190,22 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
    */
   const [chosen, setChosen] = useState<ReadonlySet<string> | null>(null);
 
-  const items = useMemo(() => {
+  const categories = useCategories(allProfiles ? { allProfiles: true } : { profile: narrowed });
+  const categoryList = useMemo(() => categories.data ?? [], [categories.data]);
+  const createCategory = useCreateCategory();
+  const updateCategory = useUpdateCategory();
+  const deleteCategory = useDeleteCategory();
+  const queryClient = useQueryClient();
+  /** Where "New category" makes one: the profile the list is narrowed to, else the person's. */
+  const newCategoryProfile = narrowed ?? ownProfile;
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => readCollapsed(storage()));
+  const [moving, setMoving] = useState<Session | null>(null);
+  const needle = filter.trim().toLowerCase();
+
+  const groups = useMemo(() => {
     // The global agent is not a chat in the list: search and the pending-actions bar lead
     // to its own page (NAVIGATION §4, contract decision §46).
     const all = (sessions.data?.items ?? []).filter((s) => s.source !== 'global_agent');
-    const needle = filter.trim().toLowerCase();
     const filtered = needle
       ? all.filter(
           (s) =>
@@ -160,8 +213,26 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
             (s.preview ?? '').toLowerCase().includes(needle),
         )
       : all;
-    return arrange(filtered, manual);
-  }, [sessions.data, filter, manual]);
+    return groupSessions(filtered, categoryList, {
+      manual,
+      // Folders with nothing in them are where a chat is dropped — but not while a filter
+      // is typed or the archive is on screen, where they would only be noise.
+      keepEmpty: !needle && scope !== 'archived',
+    });
+  }, [sessions.data, needle, manual, categoryList, scope]);
+  /** While a filter is typed every match shows, collapsed or not: hiding a hit helps nobody. */
+  const isOpen = (group: SessionGroup) =>
+    group.kind === 'rest' || !!needle || !collapsed.has(group.key);
+  const items = useMemo(() => groups.flatMap((group) => group.items), [groups]);
+
+  // A chat filed under a category this list has not loaded (someone else just made it): ask
+  // again rather than show it among the loose chats for good.
+  const missing = unknownCategories(sessions.data?.items ?? [], categoryList).join(',');
+  useEffect(() => {
+    if (missing && !categories.isFetching)
+      void queryClient.invalidateQueries({ queryKey: categoryKeys.all });
+    // `isFetching` is left out on purpose: re-asking once per new id is enough.
+  }, [missing, queryClient]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -170,14 +241,92 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
+    const dragged = items.find((s) => s.id === String(active.id));
+    if (!dragged) return;
+    const source = groups.find((g) => g.items.some((s) => s.id === dragged.id)) ?? null;
+    const outcome = dropOutcome(dragged, source, dropGroup(String(over.id), groups));
+    if (outcome.kind === 'move') {
+      void moveTo(dragged, outcome.categoryId);
+      return;
+    }
+    if (outcome.kind !== 'reorder' || String(over.id).startsWith('group:')) return;
     const ids = items.map((s) => s.id);
     const next = move(ids, ids.indexOf(String(active.id)), ids.indexOf(String(over.id)));
     setManual(next);
-    writeOrder(typeof localStorage === 'undefined' ? null : localStorage, orderScope, next);
+    writeOrder(storage(), orderScope, next);
   };
 
+  /** Into a category of the chat's own profile, or out of any (`null`). */
+  const moveTo = async (session: Session, categoryId: string | null) => {
+    if ((session.category_id ?? null) === categoryId) return;
+    await update.mutateAsync({
+      id: session.id,
+      patch: { category_id: categoryId },
+      profile: session.profile,
+    });
+    void queryClient.invalidateQueries({ queryKey: categoryKeys.all });
+  };
+
+  const toggleGroup = (key: string) =>
+    setCollapsed((current) => {
+      const next = toggled(current, key);
+      writeCollapsed(storage(), next);
+      return next;
+    });
+
+  /** "New category": its name typed into our own dialog, made in `profile`. */
+  const onNewCategory = async (profile: string): Promise<SessionCategory | null> => {
+    const name = await askName({
+      title: t('sessions.categories.new'),
+      label: t('sessions.categories.new_label'),
+      confirmLabel: t('sessions.categories.create'),
+      ...(manyProfiles
+        ? {
+            description: t('sessions.categories.new_in_profile', {
+              profile: profiles.find((p) => p.slug === profile)?.name ?? profile,
+            }),
+          }
+        : {}),
+    });
+    if (name === null || !name.trim()) return null;
+    return createCategory.mutateAsync({ name: name.trim(), profile });
+  };
+
+  const onRenameCategory = async (category: SessionCategory) => {
+    const name = await askName({
+      title: t('sessions.categories.rename'),
+      label: t('sessions.categories.new_label'),
+      initialValue: category.name,
+      confirmLabel: t('common.save'),
+    });
+    if (name === null || !name.trim() || name.trim() === category.name) return;
+    updateCategory.mutate({
+      id: category.id,
+      patch: { name: name.trim() },
+      profile: category.profile,
+    });
+  };
+
+  const onDeleteCategory = async (category: SessionCategory) => {
+    const sure = await ask({
+      title: t('sessions.categories.confirm_delete', { name: category.name }),
+      body: t('sessions.categories.confirm_delete_body'),
+      confirmLabel: t('sessions.categories.delete'),
+    });
+    if (!sure) return;
+    deleteCategory.mutate({ id: category.id, profile: category.profile });
+  };
+
+  /** The last place in the category's own profile, for "Move down". */
+  const lastPosition = (category: SessionCategory) =>
+    categoryList.filter((c) => c.profile === category.profile).length - 1;
+
   const selecting = chosen !== null;
-  const visibleIds = useMemo(() => items.map((s) => s.id), [items]);
+  // Only rows on screen: a collapsed group's chats cannot be ticked by "all".
+  const visibleIds = useMemo(
+    () => groups.filter(isOpen).flatMap((group) => group.items.map((s) => s.id)),
+    [groups, collapsed, needle],
+  );
   // Only what is on screen counts: a filtered list means the person is looking at a slice,
   // and "all" has to mean the slice they can see.
   const selectedHere = visibleIds.filter((id) => chosen?.has(id));
@@ -272,15 +421,29 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
           testId="session-profile-filter"
         />
       )}
-      <Input
-        type="search"
-        inputSize="sm"
-        icon={<IconSearch size={14} />}
-        placeholder={t('sessions.filter')}
-        aria-label={t('sessions.filter')}
-        value={filter}
-        onChange={(event) => setFilter(event.target.value)}
-      />
+      <div className="flex items-center gap-1">
+        <div className="min-w-0 flex-1">
+          <Input
+            type="search"
+            inputSize="sm"
+            icon={<IconSearch size={14} />}
+            placeholder={t('sessions.filter')}
+            aria-label={t('sessions.filter')}
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+          />
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          iconOnly
+          tooltip={t('sessions.categories.new')}
+          aria-label={t('sessions.categories.new')}
+          icon={<IconFolder size={14} />}
+          onClick={() => void onNewCategory(newCategoryProfile)}
+          data-testid="session-category-new"
+        />
+      </div>
       {selecting ? (
         /* The bar the selection brings with it: what is ticked, all or none, and the two
            things worth doing to many conversations at once. It stands where the scope row
@@ -369,44 +532,303 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
       {(update.isError || remove.isError) && (
         <Notice tone="danger">{describeError(update.error ?? remove.error, t)}</Notice>
       )}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-        <SortableContext items={items.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-          <ul className="flex flex-col gap-0.5" aria-label={t('nav.chat')}>
-            {items.map((session) => (
-              <SessionRow
-                key={session.id}
-                session={session}
-                active={session.id === sessionId}
-                onOpen={onOpen}
-                onRename={() => void onRename(session)}
-                onRetitle={() => onRetitle(session)}
-                showProfile={showProfile}
-                onPin={() =>
-                  update.mutate({
-                    id: session.id,
-                    patch: { pinned: !session.pinned },
-                    profile: session.profile,
-                  })
+      {(createCategory.isError || updateCategory.isError || deleteCategory.isError) && (
+        <Notice tone="danger">
+          {describeError(createCategory.error ?? updateCategory.error ?? deleteCategory.error, t)}
+        </Notice>
+      )}
+      <DndContext sensors={sensors} collisionDetection={onHeaderFirst} onDragEnd={onDragEnd}>
+        {groups.map((group) => {
+          const rows = (
+            <SortableContext
+              items={group.items.map((s) => s.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <ul
+                className="flex flex-col gap-0.5"
+                aria-label={group.kind === 'rest' ? t('nav.chat') : groupName(group, t)}
+              >
+                {group.items.map((session) => (
+                  <SessionRow
+                    key={session.id}
+                    session={session}
+                    active={session.id === sessionId}
+                    onOpen={onOpen}
+                    onRename={() => void onRename(session)}
+                    onRetitle={() => onRetitle(session)}
+                    onMove={() => setMoving(session)}
+                    showProfile={showProfile}
+                    onPin={() =>
+                      update.mutate({
+                        id: session.id,
+                        patch: { pinned: !session.pinned },
+                        profile: session.profile,
+                      })
+                    }
+                    onArchive={() =>
+                      update.mutate({
+                        id: session.id,
+                        patch: { archived: !session.archived },
+                        profile: session.profile,
+                      })
+                    }
+                    onDelete={() => void onDelete(session)}
+                    onSelectMode={() => setChosen(new Set([session.id]))}
+                    selected={chosen === null ? null : chosen.has(session.id)}
+                    onToggle={() => toggleOne(session.id)}
+                  />
+                ))}
+              </ul>
+            </SortableContext>
+          );
+          if (group.kind === 'rest') return <div key={group.key}>{rows}</div>;
+          const open = isOpen(group);
+          const category = group.category;
+          return (
+            <section
+              key={group.key}
+              className="session-group"
+              data-testid="session-group"
+              data-group={group.key}
+            >
+              <GroupHeader
+                group={group}
+                name={groupName(group, t)}
+                open={open}
+                onToggle={() => toggleGroup(group.key)}
+                showProfile={showProfile && !!category}
+                menu={
+                  category ? (
+                    <>
+                      <MenuItem
+                        icon={<IconGrip size={14} />}
+                        onSelect={() => void onRenameCategory(category)}
+                      >
+                        {t('sessions.categories.rename')}
+                      </MenuItem>
+                      {category.position > 0 && (
+                        <MenuItem
+                          icon={<IconChevron size={14} className="session-group-up" />}
+                          onSelect={() =>
+                            updateCategory.mutate({
+                              id: category.id,
+                              patch: { position: category.position - 1 },
+                              profile: category.profile,
+                            })
+                          }
+                        >
+                          {t('sessions.categories.move_up')}
+                        </MenuItem>
+                      )}
+                      {category.position < lastPosition(category) && (
+                        <MenuItem
+                          icon={<IconChevron size={14} />}
+                          onSelect={() =>
+                            updateCategory.mutate({
+                              id: category.id,
+                              patch: { position: category.position + 1 },
+                              profile: category.profile,
+                            })
+                          }
+                        >
+                          {t('sessions.categories.move_down')}
+                        </MenuItem>
+                      )}
+                      <MenuSeparator />
+                      <MenuItem
+                        icon={<IconTrash size={14} />}
+                        tone="danger"
+                        onSelect={() => void onDeleteCategory(category)}
+                      >
+                        {t('sessions.categories.delete')}
+                      </MenuItem>
+                    </>
+                  ) : null
                 }
-                onArchive={() =>
-                  update.mutate({
-                    id: session.id,
-                    patch: { archived: !session.archived },
-                    profile: session.profile,
-                  })
-                }
-                onDelete={() => void onDelete(session)}
-                onSelectMode={() => setChosen(new Set([session.id]))}
-                selected={chosen === null ? null : chosen.has(session.id)}
-                onToggle={() => toggleOne(session.id)}
               />
-            ))}
-          </ul>
-        </SortableContext>
+              {open && rows}
+              {open && group.items.length === 0 && (
+                <p className="session-group-empty">{t('sessions.categories.empty_group')}</p>
+              )}
+            </section>
+          );
+        })}
       </DndContext>
+      <MoveDialog
+        session={moving}
+        categories={moving ? categoryList.filter((c) => c.profile === moving.profile) : []}
+        profileName={
+          moving ? (profiles.find((p) => p.slug === moving.profile)?.name ?? moving.profile) : ''
+        }
+        onClose={() => setMoving(null)}
+        onChoose={(categoryId) => {
+          const session = moving;
+          setMoving(null);
+          if (session) void moveTo(session, categoryId);
+        }}
+        onNew={async () => {
+          const session = moving;
+          setMoving(null);
+          if (!session) return;
+          const made = await onNewCategory(session.profile);
+          if (made) await moveTo(session, made.id);
+        }}
+      />
       {dialog}
       {nameDialog}
     </div>
+  );
+}
+
+/** A group's title: the category's own name, or the channel's in the reader's language. */
+function groupName(group: SessionGroup, t: Translator): string {
+  if (group.category) return group.category.name;
+  if (group.channel === 'telegram' || group.channel === 'whatsapp')
+    return t(`sessions.channels.${group.channel}`);
+  return t('sessions.channels.other', { name: group.channel ?? '' });
+}
+
+/**
+ * A group's header: the button that opens and closes it (its name, how many chats are on
+ * screen), the profile it belongs to when several are shown, and — for a category — its menu.
+ * A category's header is also where a dragged chat is dropped.
+ */
+function GroupHeader({
+  group,
+  name,
+  open,
+  onToggle,
+  showProfile,
+  menu,
+}: {
+  group: SessionGroup;
+  name: string;
+  open: boolean;
+  onToggle(): void;
+  showProfile: boolean;
+  menu: ReactNode;
+}) {
+  const { t } = useI18n();
+  const { setNodeRef, isOver } = useDroppable({
+    id: `group:${group.key}`,
+    disabled: group.kind !== 'category',
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      className="session-group-head"
+      data-over={isOver ? 'true' : undefined}
+      data-testid="session-group-head"
+    >
+      <button
+        type="button"
+        className="session-group-toggle"
+        aria-expanded={open}
+        onClick={onToggle}
+        data-testid="session-group-toggle"
+      >
+        <IconChevron size={12} className="session-group-chevron" />
+        <span className="min-w-0 truncate" dir="auto">
+          {name}
+        </span>
+        <span
+          className="session-group-count"
+          aria-label={t('sessions.categories.count', { count: group.items.length })}
+        >
+          {group.items.length}
+        </span>
+      </button>
+      {showProfile && group.category && (
+        <ProfileBadge profile={group.category.profile} testId="session-group-profile" />
+      )}
+      {menu && (
+        <Menu
+          align="end"
+          testId="session-group-menu"
+          tooltip={t('common.more')}
+          trigger={
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              aria-label={t('sessions.categories.more', { name })}
+              icon={<IconMore size={14} />}
+              data-testid="session-group-more"
+            />
+          }
+        >
+          {menu}
+        </Menu>
+      )}
+    </div>
+  );
+}
+
+/**
+ * «نقل إلى تصنيف»: the categories of the chat's own profile — another profile's cannot hold
+ * it (decision §60) — plus "No category", and a new one made on the spot.
+ */
+function MoveDialog({
+  session,
+  categories,
+  profileName,
+  onClose,
+  onChoose,
+  onNew,
+}: {
+  session: Session | null;
+  categories: readonly SessionCategory[];
+  profileName: string;
+  onClose(): void;
+  onChoose(categoryId: string | null): void;
+  onNew(): void;
+}) {
+  const { t } = useI18n();
+  const current = session?.category_id ?? null;
+  const option = (id: string | null, label: string) => (
+    <Button
+      key={id ?? 'none'}
+      variant={current === id ? 'secondary' : 'ghost'}
+      size="sm"
+      onClick={() => onChoose(id)}
+      aria-pressed={current === id}
+      data-testid="move-category-option"
+      data-category-id={id ?? 'none'}
+    >
+      <span className="min-w-0 truncate" dir="auto">
+        {label}
+      </span>
+      {current === id && <Badge tone="neutral">{t('sessions.categories.current')}</Badge>}
+    </Button>
+  );
+  return (
+    <Dialog
+      open={session !== null}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={t('sessions.categories.move_title', {
+        title: session ? sessionTitle(session, t) : '',
+      })}
+      description={t('sessions.categories.move_hint', { profile: profileName })}
+      size="sm"
+      closeLabel={t('common.cancel')}
+      testId="move-category-dialog"
+    >
+      <div className="flex flex-col gap-1">
+        {categories.map((category) => option(category.id, category.name))}
+        {option(null, t('sessions.categories.none'))}
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={<IconFolder size={14} />}
+          onClick={onNew}
+          data-testid="move-category-new"
+        >
+          {t('sessions.categories.new_and_move')}
+        </Button>
+      </div>
+    </Dialog>
   );
 }
 
@@ -417,6 +839,7 @@ function SessionRow({
   onOpen,
   onRename,
   onRetitle,
+  onMove,
   onPin,
   onArchive,
   onDelete,
@@ -431,6 +854,8 @@ function SessionRow({
   onOpen?: (() => void) | undefined;
   onRename: () => void;
   onRetitle: () => void;
+  /** «نقل إلى تصنيف»: opens the list's move dialog for this chat. */
+  onMove: () => void;
   onPin: () => void;
   onArchive: () => void;
   onDelete: () => void;
@@ -578,6 +1003,9 @@ function SessionRow({
                 {t('sessions.retitle')}
               </MenuItem>
               <MenuSeparator />
+              <MenuItem icon={<IconFolder size={14} />} onSelect={onMove}>
+                {t('sessions.categories.move_to')}
+              </MenuItem>
               <MenuItem icon={<IconSelect size={14} />} onSelect={onSelectMode}>
                 {t('sessions.select')}
               </MenuItem>
@@ -608,6 +1036,9 @@ function SessionRow({
         {archiveLabel}
       </ContextMenuItem>
       <ContextMenuSeparator />
+      <ContextMenuItem icon={<IconFolder size={14} />} onSelect={onMove}>
+        {t('sessions.categories.move_to')}
+      </ContextMenuItem>
       <ContextMenuItem icon={<IconSelect size={14} />} onSelect={onSelectMode}>
         {t('sessions.select')}
       </ContextMenuItem>

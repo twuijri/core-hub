@@ -154,6 +154,74 @@
   opacity: 1;
 }
 
+/* ------------------------------------------ groups of the session list (decision §60) */
+.session-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.session-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--ch-space-1);
+  border-radius: var(--ch-control-item-radius);
+  transition: background-color var(--ch-motion-fast) var(--ch-motion-ease);
+}
+.session-group-head:hover {
+  background: var(--ch-color-surface-2);
+}
+/* A chat held over a category's header lands in it: say so before it is let go. */
+.session-group-head[data-over='true'] {
+  background: var(--ch-color-accent-soft);
+  outline: 1px dashed var(--ch-color-accent);
+}
+.session-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--ch-space-1);
+  flex: 1;
+  min-inline-size: 0;
+  padding-block: var(--ch-space-1);
+  padding-inline: var(--ch-space-1);
+  font-size: var(--ch-font-size-xs);
+  font-weight: 600;
+  color: var(--ch-color-text-muted);
+  text-align: start;
+}
+.session-group-chevron {
+  flex: 0 0 auto;
+  transition: transform var(--ch-motion-fast) var(--ch-motion-ease);
+}
+/* Closed, the chevron points along the reading direction; open, it points down. */
+.session-group-toggle[aria-expanded='false'] .session-group-chevron {
+  transform: rotate(-90deg);
+}
+:root[dir='rtl'] .session-group-toggle[aria-expanded='false'] .session-group-chevron {
+  transform: rotate(90deg);
+}
+.session-group-up {
+  transform: rotate(180deg);
+}
+.session-group-count {
+  color: var(--ch-color-text-faint);
+  font-weight: 400;
+}
+.session-group-empty {
+  padding-block: var(--ch-space-1);
+  padding-inline: var(--ch-space-5);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-faint);
+}
+.session-group-head .ch-btn {
+  opacity: 0;
+  transition: opacity var(--ch-motion-fast) var(--ch-motion-ease);
+}
+.session-group-head:hover .ch-btn,
+.session-group-head:focus-within .ch-btn,
+.session-group-head .ch-btn[data-state='open'] {
+  opacity: 1;
+}
+
 /* ------------------------------------------------------------------- settings */
 .settings-tile {
   display: inline-grid;

@@ -47,13 +47,28 @@ the only place that converts:
 | preview | text(300)? | first 300 chars of the newest message |
 | pinned | bool | |
 | parent_session_id | ulid? | set by `sessions.fork`; no FK, the parent may be purged |
-| category_id | ulid? | `session_categories` is a later phase; the column exists because the contract does |
+| category_id | ulid? → session_category | the category it is filed under (contract decision §60); no FK — deleting a category clears it on every session and announces each |
 | notify | bool | push a notice when a run here finishes |
 | metadata | json<SessionMetadata> | skills picked, non-private adapter data |
 | archived_at | ms? | |
 
 Indexes: (workspace, archived_at, last_message_at) for the list;
 (workspace, agent_id); (origin_kind, origin_id).
+
+## session_category (scoped)
+
+A folder of the profile's chats list (contract decision §60): the profile's, shared by
+everyone who may enter it, like its sessions. Whether a group is collapsed is the viewer's
+and never stored here.
+
+| column | type | meaning |
+|---|---|---|
+| name | text(60) | as typed, trimmed |
+| name_key | text(60) | `name` trimmed and lower-cased; unique per workspace |
+| color | text(7)? | `#rrggbb`, or null |
+| position | int | display order within the workspace, always `0…n-1` |
+
+Indexes: unique (workspace, name_key); (workspace, position). At most 100 per workspace.
 
 ## message (scoped)
 

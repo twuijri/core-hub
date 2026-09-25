@@ -11,10 +11,6 @@
  * Operations of this module that are deliberately **not** here stay `501`
  * through the app's contract stubs:
  *
- * - `sessions.listCategories` / `createCategory` / `updateCategory` /
- *   `deleteCategory` — `session_categories` has no table in the domain model
- *   yet (docs/domain/sessions.md owns session, message, run, tool_call,
- *   approval only).
  * - every attachment operation (`uploadAttachment`, `getAttachment`,
  *   `downloadAttachment`, `deleteAttachment`, `startUpload`, `uploadChunk`,
  *   `abortUpload`, `completeUpload`) — they are declared on this module's tag
@@ -85,6 +81,16 @@ const runSteer = z.object({ text: z.string().trim().min(1).max(8000) });
 const approvalResponse = z.object({
   decision: z.enum(['approve_once', 'approve_session', 'approve_always', 'deny']).nullish(),
   answer: z.string().max(4000).nullish(),
+});
+
+const categoryName = z.string().trim().min(1).max(60);
+const categoryInput = z.object({
+  name: categoryName.optional(),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, 'must be #rrggbb')
+    .nullish(),
+  position: z.number().int().min(0).optional(),
 });
 
 const listQuery = z.object({
@@ -498,6 +504,45 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     const approval_id = pathId(request.params, 'approval_id', 'approval');
     const body = parse(approvalResponse, request.body);
     return deps.service(request).respondApproval(scope, approval_id, body);
+  });
+
+  // ----------------------------------------------------------- categories
+  // Contract decision §60: the profile's folders of its chats list (`categories.ts`).
+
+  app.get('/session-categories', async (request) => {
+    const scope = await scopeOf(request);
+    const query = parse(z.object({ profiles: z.enum(['all']).optional() }), request.query, 'query');
+    const categories = deps.service(request).categories;
+    if (query.profiles === 'all') {
+      // Which profiles "all" means is `auth`'s rule (ADR 0016), as for `/sessions`.
+      const enterable = deps.scopes.enterable ? await deps.scopes.enterable(request) : null;
+      return categories.listAcross(
+        enterable
+          ? enterable.map((entry) => ({ ...entry, workspace: entry.workspaceId }))
+          : [scope],
+      );
+    }
+    return categories.list(scope);
+  });
+
+  app.post('/session-categories', async (request, reply) => {
+    const scope = await scopeOf(request);
+    const body = parse(categoryInput.extend({ name: categoryName }), request.body);
+    return reply.status(201).send(deps.service(request).categories.create(scope, body));
+  });
+
+  app.patch('/session-categories/:category_id', async (request) => {
+    const scope = await scopeOf(request);
+    const category_id = pathId(request.params, 'category_id', 'session_category');
+    const body = parse(categoryInput, request.body);
+    return deps.service(request).categories.update(scope, category_id, body);
+  });
+
+  app.delete('/session-categories/:category_id', async (request, reply) => {
+    const scope = await scopeOf(request);
+    const category_id = pathId(request.params, 'category_id', 'session_category');
+    deps.service(request).deleteCategory(scope, category_id);
+    return reply.status(204).send();
   });
 }
 

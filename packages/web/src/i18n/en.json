@@ -182,7 +182,33 @@
     "select_none": "Clear selection",
     "select_one": "Select {title}",
     "selected_count": "{count} selected",
-    "confirm_delete_many": "Delete {count} conversations?"
+    "confirm_delete_many": "Delete {count} conversations?",
+    "categories": {
+      "new": "New category",
+      "new_label": "Category name",
+      "new_in_profile": "It is made in the profile {profile}, and everyone who can enter that profile sees it.",
+      "create": "Create",
+      "rename": "Rename category",
+      "move_up": "Move up",
+      "move_down": "Move down",
+      "delete": "Delete category",
+      "confirm_delete": "Delete the category \"{name}\"?",
+      "confirm_delete_body": "Its chats stay: they go back to the list without a category.",
+      "more": "More for {name}",
+      "count": "{count} chats",
+      "move_to": "Move to category",
+      "move_title": "Move \"{title}\" to a category",
+      "move_hint": "Categories of the profile {profile}.",
+      "none": "No category",
+      "current": "Current",
+      "new_and_move": "New category…",
+      "empty_group": "Drag a chat here, or use its menu."
+    },
+    "channels": {
+      "telegram": "Telegram",
+      "whatsapp": "WhatsApp",
+      "other": "Channels: {name}"
+    }
   },
   "search": {
     "placeholder": "Search titles and messages…",

@@ -183,7 +183,7 @@ export function useUpdateSession() {
       profile,
     }: {
       id: string;
-      patch: Partial<Pick<Session, 'title' | 'pinned' | 'archived'>>;
+      patch: Partial<Pick<Session, 'title' | 'pinned' | 'archived' | 'category_id'>>;
       profile?: string | undefined;
     }) =>
       (

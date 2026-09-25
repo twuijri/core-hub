@@ -3775,12 +3775,24 @@ paths:
       operationId: sessions.listCategories
       tags: [sessions]
       summary: List session categories
+      description: >-
+        A category belongs to its profile and is shared by everyone who may enter it, as
+        the profile's conversations are; `owner_id` is who made it. `session_count` counts
+        the conversations in it that are not archived (contract decision §60).
       parameters:
         - $ref: '#/components/parameters/Profile'
+        - name: profiles
+          in: query
+          description: >-
+            `all` lists the categories of every profile the caller may enter (ADR 0016),
+            each profile's in its own display order. Absent, the header's profile alone.
+          schema:
+            type: string
+            enum: [all]
       x-rt-events: []
       responses:
         '200':
-          description: All categories of the workspace, in display order (not paged; max 100).
+          description: All categories of the profile, in display order (not paged; max 100 per profile).
           content:
             application/json:
               schema:
@@ -3812,6 +3824,11 @@ paths:
       operationId: sessions.createCategory
       tags: [sessions]
       summary: Create a category
+      description: >-
+        `name` is required. The new category goes last, or at `position` when given (the
+        others move down to make room). `409 conflict` when the profile already has a
+        category of that name (compared trimmed, ignoring case) or already has 100
+        (contract decision §60).
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -3861,6 +3878,10 @@ paths:
       operationId: sessions.updateCategory
       tags: [sessions]
       summary: Rename, recolour or reorder a category
+      description: >-
+        `position` moves the category to that place in the profile's order (past the end
+        is the end) and renumbers the others, so positions are always `0…n-1`. A name
+        another category of the profile has is `409 conflict` (contract decision §60).
       requestBody:
         required: true
         content:
@@ -3893,10 +3914,15 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
     delete:
       operationId: sessions.deleteCategory
       tags: [sessions]
       summary: Delete a category (its sessions become uncategorized)
+      description: >-
+        Every session in it, archived ones included, is left without a category and
+        announced with `session.updated`; the categories after it move up one place.
       x-rt-events: [session.updated]
       responses:
         '204':
@@ -15412,6 +15438,9 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Ulid'
             - type: 'null'
+          description: >-
+            A category of this session's profile (`sessions.listCategories`); another
+            profile's, or none, is `404` (contract decision §60).
     GlobalAgentOpen:
       type: object
       required: [agent_id]
@@ -15439,6 +15468,9 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Ulid'
             - type: 'null'
+          description: >-
+            Moves the session into a category of its own profile; `null` takes it out. A
+            category the profile does not have is `404` (contract decision §60).
         model:
           type: [string, 'null']
         provider:
