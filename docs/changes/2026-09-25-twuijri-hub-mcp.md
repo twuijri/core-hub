@@ -111,7 +111,26 @@ $ COREHUB_HERMES_IMAGE=core-hub:channeldeps vitest run src/modules/agents/hub-to
 النموذج الأداة فيه — وهذا هو المقصود. واختبار Hermes نفسه (`/api/mcp/servers/corehub/test`) سرد
 الأدوات المعروضة ولم يسرد `files.write` المقفلة.
 
-CI على GitHub: (يُضاف بعد الدفع)
+بعد أول دفع أُلغيت مهمة «Lint, typecheck, contracts, tests, build» عند حدّها (20 دقيقة) أثناء
+اختبارات الخادم — لا فشل اختبار؛ اختبارات المسارات الجديدة كانت تقلع خادمًا لكل اختبار (85 ث على
+CI)، فصارت خادمًا واحدًا لكل `describe`:
+
+```
+$ vitest run src/modules/agents/hub-tools/hub-tools.routes.test.ts
+      Tests  10 passed (10)
+   Duration  9.79s
+```
+
+CI على GitHub (PR #134، الالتزام `c02066a`):
+
+```
+Docker image builds and answers /health                 pass  2m20s
+Lint, typecheck, contracts, tests, build                pass  13m30s
+PR adds or updates a change record                      pass  7s
+PR leaves graphify-out/ to the code-map bot             pass  7s
+Web smoke journeys (Playwright against the real hub)    pass  4m33s
+db:generate + db:migrate (SQLite and PostgreSQL)        pass  55s
+```
 
 ## المخاطر والرجوع
 - **الترحيل `0016`** قد يتصادم رقمه مع فروع مفتوحة أخرى تضيف ترحيلًا؛ عند الدمج يُعاد توليده
