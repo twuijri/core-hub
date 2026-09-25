@@ -257,6 +257,13 @@ export const IconAlert = (p: IconProps) => (
     <path d="M12 9v4M12 17h.01" />
   </Svg>
 );
+/** What is waiting for the person: a tray with something in it. */
+export const IconInbox = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 13 6.5 5.5A2 2 0 0 1 8.4 4h7.2a2 2 0 0 1 1.9 1.5L20 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+    <path d="M4 13h4.5l1 2h5l1-2H20" />
+  </Svg>
+);
 export const IconShield = (p: IconProps) => (
   <Svg {...p}>
     <path d="M12 3 5 6v6c0 4 3 7.3 7 9 4-1.7 7-5 7-9V6l-7-3z" />

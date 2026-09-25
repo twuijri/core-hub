@@ -18,7 +18,7 @@ Legend: **reads** = data the screen shows · **acts** = what the person can do
 | Sign-in / QR pairing | `meta.get` (compatibility, `setup_required`) | `auth.claimPairing` (scan), `auth.login` (fallback), `auth.refresh` (silent renew), `auth.logout` | — |
 | Drawer footer: profile chip, model chip, connection dot, version, sign out | `auth.getMe`, `auth.listProfiles`, `models.getDefaults`, `models.listCatalogue`, `meta.get`, `meta.health` (connection dot, polled when no socket is open) | switch profile (header change + refetch), `auth.updateProfile` (default model, admin), `auth.logout` | socket connect state |
 | Workspace switching | `auth.listProfiles` | change `X-Hub-Profile`, reconnect sockets | all namespaces re-subscribe |
-| Pending-actions bar (approvals anywhere) | `sessions.listApprovals` | `sessions.respondApproval` | `approval.requested`, `approval.resolved` |
+| Pending-actions bar (approvals, questions and workflow gates anywhere; senders waiting to pair, for admins) | `sessions.listApprovals` (once per profile the person may enter), `agents.listPairing` (admins, the profile they are in) | `sessions.respondApproval`, open the item where it lives, open Global Agent | `approval.requested`, `approval.resolved` |
 | Notices (bell) and push | `notify.listNotices`, `notify.getPreferences` | `notify.updateNotice`, `notify.markAllRead`, `notify.setPreferences`, `devices.registerPush` / `devices.unregisterPush` | `notice.created`, `notice.updated` |
 | Attachments (composer `+` sheet, media cards, downloads) | `sessions.getAttachment`, `sessions.downloadAttachment` (Range) | `sessions.uploadAttachment`, `sessions.startUpload`, `sessions.uploadChunk`, `sessions.completeUpload`, `sessions.abortUpload`, `sessions.deleteAttachment` | — |
 | Voice (mic, speak) | `models.getSpeech` (`stt.ready`, `tts.ready`) | `models.transcribe`, `models.synthesize` | — |
@@ -99,7 +99,7 @@ Legend: **reads** = data the screen shows · **acts** = what the person can do
 
 | # | Destination | Reads | Acts | Events |
 |---|---|---|---|---|
-| 36 | `globalAgent` — Global Agent (from a search hit) | `sessions.list` (`source=global_agent`) then the Conversation row | Conversation row (archive is refused with `409 state_invalid`) | as Conversation |
+| 36 | `globalAgent` — Global Agent (from a search hit or the pending-actions bar) | `sessions.openGlobalAgent` (the caller's own conversation in the profile, made on first open), then the Conversation row | Conversation row (archive is refused with `409 state_invalid`) | as Conversation |
 | 37 | `files` — Files (from a profile card's "Edit config": the workspace's Hermes config files) | `agents.listConfigFiles`, `agents.getConfigFile` (for the profile's `hermes` agent) | `agents.putConfigFile` | `agent.updated` |
 
 ## Operations not reached from a phone screen

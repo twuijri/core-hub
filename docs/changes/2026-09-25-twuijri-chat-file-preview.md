@@ -8,8 +8,8 @@
 والكود والنص وCSV وXLSX وDOCX وPPTX، وما سواها معلوماته وزر تنزيل.
 
 ## القرار والموافقات
-موافقة المالك على الهدف: كلامه أعلاه، وهو أولويته في هذه الدفعة. قرار العقد: DECISIONS §48
-(§46 يطالب به طلبا دمج مفتوحان #104 و#105، فأُخذ §48 لتفادي التصادم؛ §47 يبقى لمن يُدمج منهما ثانيًا).
+موافقة المالك على الهدف: كلامه أعلاه، وهو أولويته في هذه الدفعة. قرار العقد: DECISIONS §48 (§46 للوكيل العام #104 المدموج، و#105 المفتوح رقّم قراره §46 أيضًا
+فينتقل إلى §47 حين يُدمج؛ فأُخذ §48 لتفادي التصادم).
 
 قرارات منتج جديدة — **مقترحة، والمالك يؤكد**:
 - **الحد هو مجلد عمل الجلسة، لا البروفايل**: المحادثة تقرأ مجلدها وحده. جلسة المهمة تعمل في مجلد
@@ -69,8 +69,8 @@
 - `e2e/hub.ts` (سيناريو «اكتب الملفات» وخطوة `write`)، `e2e/zzzzzz-chat-files.spec.ts` (الرحلة ٣٢)،
   `e2e/shots/32-chat-files-*.png`، `tests/file-preview.test.tsx`.
 
-الوثائق: `docs/contracts/DECISIONS.md` §48، `docs/contracts/COVERAGE.md`، `docs/STATUS.md` (٢٠٧ من
-٢٦٥)، `THIRD-PARTY-NOTICES.md` (fflate).
+الوثائق: `docs/contracts/DECISIONS.md` §48، `docs/contracts/COVERAGE.md`، `docs/STATUS.md` (٢٠٨ من
+٢٦٦ بعد دمج #104)، `THIRD-PARTY-NOTICES.md` (fflate).
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 محليًا ما يمسّه التغيير فقط (قاعدة السرعة)؛ الحزم الكاملة يشغّلها CI:
@@ -114,7 +114,18 @@ $ PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwright test e2e/
 الاختبارات الجديدة تفشل على الكود القديم: تستورد `files.ts` و`src/files/*` غير الموجودة، والمساران
 كانا `404`/`501`، واختبار ACP كان يتوقع استدعاءً بلا `input`.
 
-**CI**: النتيجة في طلب الدمج (تُحدَّث هنا بعد اخضراره).
+**CI على #106**، الدفعة الأولى — كلها خضراء:
+```
+Docker image builds and answers /health                 pass
+Lint, typecheck, contracts, tests, build                pass
+PR adds or updates a change record                      pass
+PR leaves graphify-out/ to the code-map bot             pass
+Web smoke journeys (Playwright against the real hub)    pass
+db:generate + db:migrate (SQLite and PostgreSQL)        pass
+```
+ثم دُمج `main` (#104 الوكيل العام: تعارض في `ChatScreen.tsx` حُلّ بإعادة تطبيق هذا التغيير على
+نسخة `main`، وفي `STATUS.md` (٢٠٨ من ٢٦٦) و`DECISIONS.md` (§46 ثم §48)). نتيجة CI بعد الدمج في
+طلب الدمج.
 
 ## المخاطر والرجوع
 - **لم يُجرَّب على Hermes حقيقي**: مسارات أدوات Hermes تُقرأ من وسائطه أو من سطر المعاينة لأدوات

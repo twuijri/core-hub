@@ -3,14 +3,14 @@ import { Link } from 'react-router';
 import { useSessions } from '../hub/queries.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
-import { routeOf, termKey } from '../navigation/manifest.js';
+import { termKey } from '../navigation/manifest.js';
 import { sessionTitle } from '../sessions/SessionList.js';
 import { AppShell } from '../shell/AppShell.js';
 import { CardHeader, EmptyState, Notice, Skeleton, SkeletonGroup, cardClass } from '../ui/index.js';
 import { Input } from '../ui/index.js';
 import { IconSearch } from '../ui/icons.js';
 import { highlightParts, matchRanges } from '../ui/combobox-filter.js';
-import { chatHref, HIT_CLASS } from '../chat/anchor.js';
+import { chatHref, globalAgentHref, HIT_CLASS } from '../chat/anchor.js';
 import { ProfileBadge } from '../shell/ProfileBadge.js';
 import { useManyProfiles, useProfileInLink } from '../shell/profiles.js';
 
@@ -92,7 +92,7 @@ export function SearchScreen() {
             <Link
               to={
                 session.source === 'global_agent'
-                  ? routeOf('global_agent')
+                  ? globalAgentHref(inLink(session.profile))
                   : chatHref(session.id, session.match?.message_id, q, inLink(session.profile))
               }
               className={cardClass('flat', 'sm', true)}

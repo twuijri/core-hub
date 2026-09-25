@@ -108,7 +108,20 @@ export function ChatScreen() {
 type AnchorPhase = 'loading' | 'shown' | 'released' | 'missing';
 type OpenAnchor = Anchor & { sessionId: string; phase: AnchorPhase };
 
-function OpenSession({ sessionId }: { sessionId: string }) {
+/**
+ * One open conversation. `title` replaces the conversation's own name in the top bar: the
+ * global agent's page (screens/GlobalAgentScreen.tsx) is this conversation under its own name.
+ */
+export function OpenSession({
+  sessionId,
+  title: pageTitle,
+  intro,
+}: {
+  sessionId: string;
+  title?: string;
+  /** A line said above an empty conversation: what this page is, before anything is in it. */
+  intro?: string;
+}) {
   const { t, language } = useI18n();
   const { client, profile } = useAuth();
   const manyProfiles = useManyProfiles();
@@ -366,7 +379,7 @@ function OpenSession({ sessionId }: { sessionId: string }) {
       null,
   );
 
-  const title = state.session ? sessionTitle(state.session, t) : t(termKey('chat'));
+  const title = pageTitle ?? (state.session ? sessionTitle(state.session, t) : t(termKey('chat')));
   const showReasoning = preferences.data?.show_reasoning ?? true;
   const failedRun = Object.values(state.runs).find((r) => r.status === 'failed' && r.error);
   // Only asked for once a run has failed for want of a provider, and then asked fresh:
@@ -433,6 +446,11 @@ function OpenSession({ sessionId }: { sessionId: string }) {
                 </div>
               )}
             </div>
+            {intro && messageCount === 0 && (
+              <p className="mb-3 text-sm text-muted" data-testid="chat-intro">
+                {intro}
+              </p>
+            )}
             <TabPanel value="trajectory" testId="trajectory-panel">
               {view === 'trajectory' && messageCount > 0 && (
                 <TrajectoryView sessionId={sessionId} revision={revision} />

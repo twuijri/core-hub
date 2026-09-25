@@ -200,6 +200,13 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     return deps.service(request).workingDirs(scope);
   });
 
+  app.post('/sessions/global-agent', async (request, reply) => {
+    const scope = await scopeOf(request);
+    const body = parse(z.object({ agent_id: ulid }), request.body);
+    const opened = await deps.service(request).openGlobalAgent(scope, body);
+    return reply.status(opened.created ? 201 : 200).send(opened.session);
+  });
+
   app.get('/sessions/:session_id', async (request) => {
     const scope = await scopeOf(request);
     const session_id = pathId(request.params, 'session_id', 'session');
