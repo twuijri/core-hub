@@ -37,7 +37,8 @@
 لا شيء. يُستخدم حدث `notice.created` على `/rt/devices` كما هو في `events/devices`.
 
 ## الملفات والتأثير
-- `apps/ios/CoreHub/Phone/LocalNotices.swift` (جديد): `/rt/devices` ← إشعار محلي، والتوجيه عند الضغط.
+- `apps/ios/CoreHub/Phone/LocalNotices.swift` (جديد): `/rt/devices` ← إشعار محلي، النظرة في الخلفية
+  (`BGAppRefreshTask`، و`UIBackgroundModes: fetch` في `project.yml`)، ومنع التكرار، والتوجيه عند الضغط.
 - `apps/ios/CoreHub/Phone/Voice.swift` (جديد): إعدادات الجهاز، الإملاء، القراءة بصوت.
 - `apps/ios/CoreHub/Share/ShareInbox.swift` و`apps/ios/CoreHubShare/ShareViewController.swift`
   (جديدان) وهدف `CoreHubShare` في `project.yml` (امتداد مشاركة يُضمَّن في التطبيق، وApp Group للهدفين).
@@ -45,7 +46,7 @@
   (المحادثة الظاهرة)، `Chat/NewChatScreen.swift` و`Shell/ShellView.swift` (مسودة من المشاركة)،
   `Settings/SettingsScreen.swift` («هذا الجهاز»)، `App/AppModel.swift`.
 - `project.yml`: أذونات الميكروفون والتعرّف على الكلام؛ `scripts/generate-swift.mjs` يكتب نصّيهما
-  بالعربية والإنجليزية في `InfoPlist.strings`؛ `i18n/{ar,en}.json` (276 مفتاحًا).
+  بالعربية والإنجليزية في `InfoPlist.strings`؛ `i18n/{ar,en}.json` (277 مفتاحًا).
 - `apps/ios/README.md` (الإشعارات، الـApp Group في خطوات التوقيع)، `docs/STATUS.md`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
@@ -57,13 +58,13 @@ All matched files use Prettier code style!
 $ pnpm contracts:check-clients
 check-clients  OK — 327 client file(s) scanned, 176 contract path(s) known.
 $ pnpm i18n:check
-i18n:check  ios: 276 keys, ar/en in parity
+i18n:check  ios: 277 keys, ar/en in parity
 i18n:check  OK
 $ node apps/ios/scripts/generate-swift.mjs --check
 generate-swift  OK — every generated file matches its source
 ```
 
-على GitHub Actions (`iOS`، التشغيل 36095100212):
+على GitHub Actions (`iOS`، التشغيل 36095100212؛ وبعد إضافة النظرة في الخلفية التشغيل 36095875410: `Executed 53 tests, with 0 failures`):
 
 ```
 Test Case '-[CoreHubTests.PhoneTests testANoticeLeadsToItsConversationInItsProfile]' passed (0.005 seconds).
