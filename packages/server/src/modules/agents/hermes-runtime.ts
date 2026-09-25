@@ -348,6 +348,21 @@ export class HermesRuntime {
   }
 
   /**
+   * Hermes's own settings in `profile` changed (the Settings page, contract decision §56).
+   * Hermes reads them when it builds a session's agent, so the TUI gateway is retired the way a
+   * key change retires it: the next message in any conversation opens a fresh one that reads
+   * them, and a turn already running finishes on the values it started with. A named profile's
+   * messaging gateway is restarted to match now (the channel rule); the default profile's carries
+   * the API server and Hermes's schedulers and waits for Restart, as a channel change there does.
+   */
+  settingsChanged(profile: string): Promise<void> {
+    if (this.mode !== 'managed') return Promise.resolve();
+    if (this.tui) this.retireTui(this.tui);
+    this.tui = null;
+    return this.profileGateways.channelsChanged(profile);
+  }
+
+  /**
    * The Hermes TUI gateway conversations go through (ADR 0013): one `python -m
    * tui_gateway.entry` child, started on first use with this Hermes's home and the shared
    * provider keys, and started again after it exits. `null` when there is no Hermes

@@ -281,6 +281,8 @@ export interface AgentSession {
 export interface SettingsChoice {
   value: string;
   label: string;
+  /** The label in both UI languages, when the adapter has it. */
+  labels?: { ar: string; en: string };
 }
 
 /** The contract's `SettingsField`. */
@@ -293,6 +295,12 @@ export interface SettingsField {
   min: number | null;
   max: number | null;
   hint: string | null;
+  /** What it does, in both languages. */
+  help?: { ar: string; en: string } | null;
+  /** The agent's own default, used while `value` is `null`. */
+  default?: unknown;
+  /** The default in words, where the value alone would mislead. */
+  default_text?: { ar: string; en: string } | null;
 }
 
 /** The contract's `SettingsSection`. */
@@ -300,6 +308,9 @@ export interface SettingsSection {
   key: string;
   title: { ar: string; en: string };
   restart_required: boolean;
+  /** When a saved value takes effect. */
+  applies?: 'next_message' | 'restart';
+  note?: { ar: string; en: string } | null;
   fields: SettingsField[];
 }
 

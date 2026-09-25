@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -16,6 +16,10 @@ import { agentsModule, agentsServiceFor } from './index.js';
 import { agentStatus, serializeAgent } from './serialize.js';
 import { CATALOG, HERMES_ENTRY, INSTALLABLE, assertCatalogIsWellFormed } from './catalog/index.js';
 import { parseVersion } from './adapters/host.js';
+
+/** A gateway that answers its health probe, so the runtime is `external` and has a home. */
+const healthy: typeof fetch = async () =>
+  new Response('{"status":"ok"}', { status: 200, headers: { 'content-type': 'application/json' } });
 
 const rowBase = {
   id: '01J8QK3ZR2W7M5N4P6T8V9X0AG',
@@ -201,7 +205,7 @@ describe('agents: the registry a hub boots with', () => {
     }
   });
 
-  it('reads one agent and its adapter-declared settings form', async () => {
+  it('reads one agent, and no Hermes settings where there is no Hermes home', async () => {
     const hub = await signedInHub();
     try {
       const items = (
@@ -217,17 +221,13 @@ describe('agents: the registry a hub boots with', () => {
       });
       expect(one.json()).toMatchObject({ slug: 'hermes', kind: 'hermes', vendor: 'Nous Research' });
 
+      // No Hermes home on this hub: its settings are its files, so there is nothing to read.
       const settings = await authed(hub, hub.token, {
         method: 'GET',
         url: `/api/v1/agents/${hermes.id}/settings`,
       });
-      const sections = (settings.json() as { sections: { key: string }[] }).sections;
-      expect(sections.map((section) => section.key)).toEqual([
-        'agent',
-        'memory',
-        'session',
-        'gateway',
-      ]);
+      expect(settings.statusCode).toBe(409);
+      expect(settings.json()).toMatchObject({ details: { reason: 'runtime_absent' } });
     } finally {
       await hub.close();
     }
@@ -250,7 +250,7 @@ describe('agents: the registry a hub boots with', () => {
 
 describe('agents: per-workspace settings', () => {
   it('disables an agent for this workspace only and stores a settings value', async () => {
-    const hub = await signedInHub();
+    const hub = await signedInHub({}, { agents: { adapterOptions: { hermes: { fetchImpl: healthy } } } });
     try {
       const items = (
         (await authed(hub, hub.token, { method: 'GET', url: '/api/v1/agents' })).json() as {
@@ -258,6 +258,7 @@ describe('agents: per-workspace settings', () => {
         }
       ).items;
       const hermes = items.find((item) => item.slug === 'hermes')!;
+      mkdirSync(path.join(hub.dataDir, 'hermes'), { recursive: true });
 
       const disabled = await authed(hub, hub.token, {
         method: 'PATCH',
@@ -269,21 +270,25 @@ describe('agents: per-workspace settings', () => {
       const saved = await authed(hub, hub.token, {
         method: 'PATCH',
         url: `/api/v1/agents/${hermes.id}/settings`,
-        payload: { section: 'session', values: { approvals_mode: 'always' } },
+        payload: { section: 'approvals', values: { approvals_mode: 'manual' } },
       });
-      expect(saved.statusCode).toBe(200);
+      expect(saved.statusCode, saved.body).toBe(200);
       expect(saved.json()).toMatchObject({ restart_job_id: null });
       const field = (
         saved.json() as { section: { fields: { key: string; value: unknown }[] } }
       ).section.fields.find((item) => item.key === 'approvals_mode');
-      expect(field?.value).toBe('always');
+      expect(field?.value).toBe('manual');
+      // Hermes's own key, in its own file — not a row of the hub's.
+      expect(readFileSync(path.join(hub.dataDir, 'hermes', 'config.yaml'), 'utf8')).toContain(
+        'mode: manual',
+      );
     } finally {
       await hub.close();
     }
   });
 
-  it('refuses a field the adapter never declared', async () => {
-    const hub = await signedInHub();
+  it('refuses a field Hermes does not have', async () => {
+    const hub = await signedInHub({}, { agents: { adapterOptions: { hermes: { fetchImpl: healthy } } } });
     try {
       const items = (
         (await authed(hub, hub.token, { method: 'GET', url: '/api/v1/agents' })).json() as {
@@ -291,13 +296,17 @@ describe('agents: per-workspace settings', () => {
         }
       ).items;
       const hermes = items.find((item) => item.slug === 'hermes')!;
+      mkdirSync(path.join(hub.dataDir, 'hermes'), { recursive: true });
       const response = await authed(hub, hub.token, {
         method: 'PATCH',
         url: `/api/v1/agents/${hermes.id}/settings`,
-        payload: { section: 'session', values: { made_up: true } },
+        payload: { section: 'agent', values: { made_up: true } },
       });
-      expect(response.statusCode).toBe(409);
-      expect(response.json()).toMatchObject({ code: 'state_invalid' });
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        code: 'validation_failed',
+        details: { field: 'values.made_up', reason: 'setting_unknown' },
+      });
     } finally {
       await hub.close();
     }
