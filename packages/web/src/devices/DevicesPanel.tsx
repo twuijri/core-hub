@@ -73,7 +73,7 @@ function DeviceRow({ device }: { device: Device }) {
   const unlink = useUnlinkDevice();
   const test = useTestPush();
   const { ask: askName, dialog: nameDialog } = usePrompt();
-  const { ask: confirm, dialog: confirmDialog } = useConfirm();
+  const { ask: askRevoke, dialog: confirmDialog } = useConfirm();
   const [error, setError] = useState<unknown>(null);
   const [tested, setTested] = useState<{ ok: boolean; error: string | null } | null>(null);
   const thisBrowser =
@@ -98,7 +98,7 @@ function DeviceRow({ device }: { device: Device }) {
     rename.mutate({ id: device.id, name }, { onError: setError });
   };
   const onRevoke = async () => {
-    const yes = await confirm({
+    const yes = await askRevoke({
       title: t('devices.revoke_title', { name: device.name }),
       body: t('devices.revoke_body'),
       confirmLabel: t('devices.revoke'),
