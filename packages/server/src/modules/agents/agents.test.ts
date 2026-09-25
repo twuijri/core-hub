@@ -250,7 +250,10 @@ describe('agents: the registry a hub boots with', () => {
 
 describe('agents: per-workspace settings', () => {
   it('disables an agent for this workspace only and stores a settings value', async () => {
-    const hub = await signedInHub({}, { agents: { adapterOptions: { hermes: { fetchImpl: healthy } } } });
+    const hub = await signedInHub(
+      {},
+      { agents: { adapterOptions: { hermes: { fetchImpl: healthy } } } },
+    );
     try {
       const items = (
         (await authed(hub, hub.token, { method: 'GET', url: '/api/v1/agents' })).json() as {
@@ -288,7 +291,10 @@ describe('agents: per-workspace settings', () => {
   });
 
   it('refuses a field Hermes does not have', async () => {
-    const hub = await signedInHub({}, { agents: { adapterOptions: { hermes: { fetchImpl: healthy } } } });
+    const hub = await signedInHub(
+      {},
+      { agents: { adapterOptions: { hermes: { fetchImpl: healthy } } } },
+    );
     try {
       const items = (
         (await authed(hub, hub.token, { method: 'GET', url: '/api/v1/agents' })).json() as {

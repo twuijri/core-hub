@@ -95,7 +95,13 @@ const ROUND_TRIPS: Array<{
     at: ['memory', 'user_char_limit'],
     file: 2000,
   },
-  { section: 'approvals', key: 'approvals_mode', input: 'off', at: ['approvals', 'mode'], file: 'off' },
+  {
+    section: 'approvals',
+    key: 'approvals_mode',
+    input: 'off',
+    at: ['approvals', 'mode'],
+    file: 'off',
+  },
   {
     section: 'approvals',
     key: 'memory_write_approval',
@@ -114,26 +120,23 @@ const ROUND_TRIPS: Array<{
 ];
 
 describe('Hermes settings round trip (config.yaml)', () => {
-  it.each(ROUND_TRIPS.map((trip) => [`${trip.key} = ${JSON.stringify(trip.input)}`, trip] as const))(
-    '%s',
-    (_label, trip) => {
-      const dir = home();
-      const section = writeHermesSettings(dir, true, trip.section, { [trip.key]: trip.input });
-      const parsed = parse(config(dir)) as Record<string, Record<string, unknown>>;
-      let node: unknown = parsed;
-      for (const step of trip.at) node = (node as Record<string, unknown>)[step];
-      expect(node).toEqual(trip.file);
-      expect(section.fields.find((f) => f.key === trip.key)?.value).toEqual(
-        trip.shown ?? trip.input,
-      );
-      // And back to Hermes's default: the key is gone, the value is `null`.
-      writeHermesSettings(dir, true, trip.section, { [trip.key]: null });
-      let after: unknown = parse(config(dir)) ?? {};
-      for (const step of trip.at) after = (after as Record<string, unknown> | undefined)?.[step];
-      expect(after).toBeUndefined();
-      expect(field(dir, trip.section, trip.key).value).toBeNull();
-    },
-  );
+  it.each(
+    ROUND_TRIPS.map((trip) => [`${trip.key} = ${JSON.stringify(trip.input)}`, trip] as const),
+  )('%s', (_label, trip) => {
+    const dir = home();
+    const section = writeHermesSettings(dir, true, trip.section, { [trip.key]: trip.input });
+    const parsed = parse(config(dir)) as Record<string, Record<string, unknown>>;
+    let node: unknown = parsed;
+    for (const step of trip.at) node = (node as Record<string, unknown>)[step];
+    expect(node).toEqual(trip.file);
+    expect(section.fields.find((f) => f.key === trip.key)?.value).toEqual(trip.shown ?? trip.input);
+    // And back to Hermes's default: the key is gone, the value is `null`.
+    writeHermesSettings(dir, true, trip.section, { [trip.key]: null });
+    let after: unknown = parse(config(dir)) ?? {};
+    for (const step of trip.at) after = (after as Record<string, unknown> | undefined)?.[step];
+    expect(after).toBeUndefined();
+    expect(field(dir, trip.section, trip.key).value).toBeNull();
+  });
 
   it("shows Hermes's defaults while nothing is written", () => {
     const sections = readHermesSettings(home(), true);
@@ -279,7 +282,9 @@ describe('Hermes settings round trip (.env)', () => {
       readHermesSettings(dir, isDefault).find((s) => s.key === 'network')!;
     expect(note(true)).toMatchObject({ applies: 'restart', restart_required: true });
     expect(note(true).note?.en).toContain('every Core Hub conversation');
-    expect(note(false).note?.en).toContain("Core Hub's conversations use the default profile's proxy");
+    expect(note(false).note?.en).toContain(
+      "Core Hub's conversations use the default profile's proxy",
+    );
     expect(note(true).note?.en).toContain('not Core Hub itself');
   });
 });

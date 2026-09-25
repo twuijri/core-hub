@@ -833,7 +833,11 @@ export const agentsModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'agents.listPendingWrites',
       handler: (request, { params }) => {
-        const { home } = toolHome(request, params.agent_id as string, 'pending_writes_are_hermes_only');
+        const { home } = toolHome(
+          request,
+          params.agent_id as string,
+          'pending_writes_are_hermes_only',
+        );
         return { items: listPendingWrites(home) };
       },
     });
@@ -849,7 +853,8 @@ export const agentsModule = defineModule({
         try {
           if (!python) {
             // Checked after the record, so a write that is not there is still a 404.
-            if (!pendingWriteExists(home, kind, id)) throw new PendingWriteError('pending_not_found');
+            if (!pendingWriteExists(home, kind, id))
+              throw new PendingWriteError('pending_not_found');
             throw new HubError('state_invalid', {
               details: { agent_id: agentId, reason: 'hermes_not_supervised' },
             });

@@ -126,9 +126,7 @@ describe.skipIf(!image)('Hermes settings (real Hermes; set COREHUB_HERMES_IMAGE)
       no_proxy: 'localhost,.internal',
     });
     writeHermesSettings(home, true, 'privacy', { redact_pii: true });
-    expect(readFileSync(path.join(home, 'config.yaml'), 'utf8')).toContain(
-      '# written by a person',
-    );
+    expect(readFileSync(path.join(home, 'config.yaml'), 'utf8')).toContain('# written by a person');
 
     const read = await hermes(`
 import json, os

@@ -212,7 +212,7 @@ export const HERMES_SETTING_OPTIONS: readonly OptionSpec[] = [
     label: { ar: 'مستوى التفكير الافتراضي', en: 'Default reasoning effort' },
     help: {
       ar: 'ما يستخدمه الوكيل حين لا تختار المحادثة مستوى من شريط الكتابة، لنماذج التفكير.',
-      en: "What the agent uses when a conversation does not pick one in the composer, for models that reason.",
+      en: 'What the agent uses when a conversation does not pick one in the composer, for models that reason.',
     },
     fallback: null,
     defaultText: { ar: 'افتراضي النموذج', en: "The model's own" },
@@ -556,7 +556,10 @@ function validate(spec: OptionSpec, input: unknown): Value | null {
       return typeof input === 'boolean' ? input : refuse('boolean_expected');
     case 'integer': {
       if (typeof input !== 'number' || !Number.isInteger(input)) return refuse('integer_expected');
-      if ((spec.min !== undefined && input < spec.min) || (spec.max !== undefined && input > spec.max))
+      if (
+        (spec.min !== undefined && input < spec.min) ||
+        (spec.max !== undefined && input > spec.max)
+      )
         return refuse('out_of_range');
       // A run time limit of 0 is "no limit", which is what an absent key already means.
       if (spec.key === 'run_budget_seconds' && input === 0) return null;
