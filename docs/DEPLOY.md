@@ -39,6 +39,20 @@ These six are the whole configuration (ARCHITECTURE invariant 5). There is
 no variable for model provider keys either — they are added once on the Models
 screen and the hub carries them to every agent (§3).
 
+**Push to phones (optional).** Browsers and the desktop app get notifications with nothing
+to set: the hub makes its own Web Push keys in `/data/keys/vapid.json`. Android (FCM) and
+iPhone (APNs) need the owner's credentials, entered in Device connections → Devices → Push
+senders, or — if you prefer them in the stack — these variables, which then win over Settings
+(add them to the `environment:` of the service yourself; the reference file leaves them out):
+
+| Variable | Meaning |
+|---|---|
+| `COREHUB_FCM_SERVICE_ACCOUNT` | The Firebase service-account JSON, or a path to the file inside the container. |
+| `COREHUB_APNS_KEY_ID`, `COREHUB_APNS_TEAM_ID`, `COREHUB_APNS_BUNDLE_ID` | The APNs key's id, the Apple team id, the iOS app's bundle id. |
+| `COREHUB_APNS_KEY` | The `.p8` key's contents, or a path to it. |
+| `COREHUB_APNS_ENVIRONMENT` | `production` (default) or `sandbox` for development builds. |
+| `COREHUB_PUSH_CONTACT` | A `mailto:` or `https:` contact push services may use (VAPID `sub`). |
+
 Upgrading is `docker compose pull && docker compose up -d`; the volume is
 untouched.
 
