@@ -176,7 +176,22 @@ live: run ended; failure=stream ended unexpectedly; messages=[(user, مرحبا)
 في `~/.hermes` ولا `/opt/hermes` (فُحص بالتاريخ). الاختبار صار يختار الوكيل `direct` افتراضيًا حتى لا
 يلمس أي Hermes.
 
-CI: يُضاف بعد الدفع.
+CI على #122 (بعد إصلاح حزمة `data` التي كان `.gitignore` الجذري يُسقطها — أول تشغيلين فشلا:
+`setup-android` لم يجد الحزمة `tools`، ثم `Unresolved reference 'data'` لأن المجلد لم يُودَع):
+
+```
+Android build, unit tests, lint                       pass   (run 36094166484, BUILD SUCCESSFUL in 5m 2s)
+  Debug APK: 14M (14671143 bytes) · artifact corehub-android-debug-apk (14,130,143 bytes zipped)
+Lint, typecheck, contracts, tests, build              pass
+Web smoke journeys (Playwright against the real hub)  pass
+Docker image builds and answers /health               pass
+db:generate + db:migrate (SQLite and PostgreSQL)      pass
+PR adds or updates a change record                    pass
+PR leaves graphify-out/ to the code-map bot           pass
+```
+
+نسخة الإصدار (R8 وتقليص الموارد، غير موقّعة) بُنيت محليًا مرة للقياس: `app-release-unsigned.apk`
+‏2,564,370 بايت (٢٫٦ م.ب). لم تُشغَّل على جهاز.
 
 ## المخاطر والرجوع
 - حجم الـAPK التجريبي ١٤ م.ب لأنه بلا تصغير؛ نسخة الإصدار مفعّل فيها R8 وتقليص الموارد ولم تُبنَ هنا.
