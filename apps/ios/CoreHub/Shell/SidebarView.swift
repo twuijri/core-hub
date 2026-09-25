@@ -28,8 +28,7 @@ struct SidebarView: View {
                     if segment == .chat {
                         SessionListView(model: sessionList, selected: selectedSession, open: openSession)
                     } else {
-                        NoticeView(text: l10n("placeholder.body"), tone: .info)
-                            .accessibilityIdentifier("screen.rooms")
+                        RoomsList()
                     }
                 }
                 .padding(.horizontal, Space.s3)

@@ -13,7 +13,9 @@ manifest (`docs/clients/navigation.json`). Minimum iOS 17 (proposed — owner to
 | `CoreHub/Hub` | calls through the generated `CoreHubClient`, token refresh, one error type |
 | `CoreHub/Realtime` | Socket.IO v5 over `URLSessionWebSocketTask` (no third-party library) |
 | `CoreHub/Chat`, `CoreHub/Sessions` | the conversation, the chats list |
-| `CoreHub/Navigation`, `CoreHub/Shell`, `CoreHub/Settings` | the registry, the drawer, settings |
+| `CoreHub/Screens` | search, global agent, Agents and an agent's pages, Tasks, Schedules, Rooms |
+| `CoreHub/Navigation` | the registry and `surfaceRoutes.ios` (`Routes.swift`), checked by `NavigationParityTests` |
+| `CoreHub/Shell`, `CoreHub/Settings` | the drawer, Settings and its pages |
 | `CoreHub/i18n` | `ar.json` / `en.json` (checked by `pnpm i18n:check`) |
 | `CoreHub/Generated` | `Tokens.swift`, `Product.swift` — generated, committed |
 | `CoreHubTests` | XCTest |

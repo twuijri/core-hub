@@ -47,7 +47,12 @@
     "loading": "Loading…",
     "back": "Back",
     "copy": "Copy",
-    "error_title": "Something went wrong"
+    "error_title": "Something went wrong",
+    "empty": "Nothing here yet.",
+    "off": "Off",
+    "on": "On",
+    "save": "Save",
+    "saved": "Saved."
   },
   "errors": {
     "connection": "Cannot reach the hub. Check its address and your network.",
@@ -69,7 +74,6 @@
     "pair": "Pair this phone",
     "pairing": "Pairing…",
     "invalid_url": "Enter the hub address, starting with http:// or https://",
-    "setup_required": "This hub has no owner yet. Finish first-run setup in a browser, then sign in here.",
     "pairing_invalid": "This is not a Core Hub pairing code.",
     "pairing_expired": "This pairing code has expired. Make a new one on the web: Settings → Device connections.",
     "scanner_hint": "On the web, open Settings → Device connections → App, and point the camera at the code.",
@@ -151,10 +155,171 @@
   "settings": {
     "back_to_chats": "Back to chats",
     "management": "Management",
-    "tools": "Tools"
+    "tools": "Tools",
+    "global_note": "This page is the whole hub's, not one profile's."
   },
   "permissions": {
     "camera": "Core Hub uses the camera to scan the pairing code your hub shows on the web.",
     "local_network": "Core Hub connects to your hub on your local network."
+  },
+  "about": {
+    "app_version": "App version",
+    "contract_version": "Contract version",
+    "hub": "Hub",
+    "server_version": "Hub version",
+    "source": "Source"
+  },
+  "account": {
+    "change_password": "Change password",
+    "current_password": "Current password",
+    "display_name": "Display name",
+    "new_password": "New password (8 characters or more)",
+    "password": "Password",
+    "password_changed": "Password changed.",
+    "role": "Role",
+    "role_owner": "Owner",
+    "role_admin": "Admin",
+    "role_member": "Member"
+  },
+  "agents": {
+    "gone": "This agent is not in this profile any more.",
+    "limited": "Limited",
+    "page_of": "{page} · {agent}",
+    "restart": "Restart",
+    "version": "Version {version}",
+    "status_available": "Available",
+    "status_not_installed": "Not installed",
+    "status_installing": "Installing",
+    "status_updating": "Updating",
+    "status_error": "Error",
+    "status_limited": "Limited",
+    "status_disabled": "Disabled"
+  },
+  "audit": {
+    "period": "Period"
+  },
+  "channels": {
+    "link_on_web": "Linking a channel (WhatsApp by QR, a Telegram bot) is done on the web; its state shows here.",
+    "status_online": "Online",
+    "status_offline": "Offline",
+    "status_error": "Error",
+    "status_unknown": "Unknown"
+  },
+  "device": {
+    "connection": "Hub connection",
+    "how": "Signed in by",
+    "paired": "Pairing this phone",
+    "password": "Username and password",
+    "realtime": "Live connection",
+    "signed_in_as": "Signed in as"
+  },
+  "devices": {
+    "expires": "Expires {time}",
+    "make_pairing": "Show a pairing code",
+    "new_pairing": "Make a new code",
+    "pair_hint": "Scan this code from the Core Hub app on another phone to sign it in as you.",
+    "qr": "Pairing QR code",
+    "tab_app": "App",
+    "tab_devices": "Devices"
+  },
+  "display": {
+    "busy_input": "Sending while the agent works",
+    "busy_interrupt": "Interrupt",
+    "busy_next": "Next in line",
+    "busy_queue": "Queue",
+    "compact": "Compact conversation",
+    "link_browser": "Browser",
+    "link_in_app": "In the app",
+    "link_target": "Open links in",
+    "show_reasoning": "Show reasoning",
+    "show_tool_calls": "Show tool calls",
+    "text_scale": "Text size {percent}%"
+  },
+  "knowledge": {
+    "kind_journal": "Journal",
+    "kind_note": "Note",
+    "kind_file": "File"
+  },
+  "mcp": {
+    "connected": "Connected",
+    "not_connected": "Not connected",
+    "test": "Test",
+    "test_failed": "The test failed.",
+    "test_ok": "Works: {count} tools.",
+    "tools": "{count} tools"
+  },
+  "models": {
+    "count": "{count} models",
+    "default": "Default model",
+    "edit_on_web": "Providers and keys are added and changed on the web.",
+    "providers": "Providers"
+  },
+  "notifications": {
+    "inbox": "Inbox · {count} unread",
+    "on_approval": "When an agent waits for me",
+    "on_complete": "When a reply finishes",
+    "sound": "Sound when a reply finishes"
+  },
+  "privacy": {
+    "app_tokens": "App tokens and paired devices",
+    "last_used": "Last used {time}",
+    "revoke": "Revoke"
+  },
+  "rooms": {
+    "empty": "No rooms yet.",
+    "members": "{count} members"
+  },
+  "schedules": {
+    "empty": "No schedules yet.",
+    "next": "Next run {time}",
+    "run_now": "Run now",
+    "started": "Started.",
+    "state_scheduled": "Scheduled",
+    "state_running": "Running",
+    "state_paused": "Paused",
+    "state_exhausted": "Finished"
+  },
+  "setup": {
+    "open": "This hub has no owner yet and is open to set up now. Make the owner account.",
+    "submit": "Create the owner",
+    "token": "Setup token",
+    "token_needed": "This hub has no owner yet. Its setup token is in setup-token.txt in the hub's data folder and in its log."
+  },
+  "tasks": {
+    "empty": "No tasks yet.",
+    "move": "Move to",
+    "open_chat": "Open its conversation",
+    "priority_low": "Low",
+    "priority_normal": "Normal",
+    "priority_high": "High",
+    "priority_urgent": "Urgent",
+    "status_triage": "Triage",
+    "status_todo": "To do",
+    "status_ready": "Ready",
+    "status_scheduled": "Scheduled",
+    "status_running": "Running",
+    "status_blocked": "Blocked",
+    "status_review": "Review",
+    "status_done": "Done",
+    "status_archived": "Archived"
+  },
+  "updates": {
+    "available": "Available",
+    "check": "Check again",
+    "not_configured": "This hub has no update channel set up.",
+    "up_to_date": "This app is up to date."
+  },
+  "users": {
+    "disabled": "Disabled"
+  },
+  "webhooks": {
+    "test": "Send a test",
+    "test_sent": "Test sent."
+  },
+  "workspaces": {
+    "create": "Create",
+    "name": "Name",
+    "new": "New profile",
+    "slug": "Id (letters, digits, dashes)"
   }
 }

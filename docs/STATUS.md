@@ -244,18 +244,27 @@ its approval.
   spoken replies; and This device in full: the hub connection, voice input and dictation language,
   spoken replies, notifications, and self-update from the hub's `updates` channel (SHA-256 checked,
   handed to Android's installer).
-- **iOS** (`apps/ios`, SwiftUI, iOS 17+; part 1 of 3 since 2026-09-25): pairing by the web's
+- **iOS** (`apps/ios`, SwiftUI, iOS 17+; parts 1–2 of 3 since 2026-09-25): pairing by the web's
   QR code, its pasted text or a `corehub://pair` link, or the hub's address with a username and
-  password; tokens in the Keychain, refreshed once on `token_expired` and before expiry, a
-  paired phone's app token renewed daily. The drawer carries the rail, Chat | Rooms, the chats
-  list (its own «All profiles» filter, a badge per profile, active / archived / all, search) and
-  the footer (language, theme, connection, version, sign-out); the profile selector sits in the
-  drawer's header. A conversation streams over `/rt/sessions` (our own Socket.IO v5 framing,
-  resumed with `after_seq`), with Markdown, tool cards, reasoning, the thinking line with its
-  seconds, approvals and the agent's questions, in Arabic (RTL) and English. Built and unit-tested
-  on a macOS runner's simulator; **never run on a device or against the owner's hub**, and
-  nothing is signed. Every other destination shows its real title and says it arrives in the
-  next part.
+  password, and first-run setup when the hub has no owner; tokens in the Keychain, refreshed once
+  on `token_expired` and before expiry, a paired phone's app token renewed daily. The drawer
+  carries the rail, Chat | Rooms, the chats list (its own «All profiles» filter, a badge per
+  profile, active / archived / all, search) and the footer (language, theme, connection, version,
+  sign-out); the profile selector sits in the drawer's header. A conversation streams over
+  `/rt/sessions` (our own Socket.IO v5 framing, resumed with `after_seq`), with Markdown, tool
+  cards, reasoning, the thinking line with its seconds, approvals and the agent's questions, in
+  Arabic (RTL) and English. **Every destination has its page** (part 2): search across every
+  profile, the global agent, the Agents cards with each agent's Skills (on/off), MCP (test),
+  Memory (edit), Jobs (run now), Channels (state; linking stays on the web), Plugins (on/off) and
+  Settings (toggles; the rest read-only), Tasks and Schedules across every profile with badges
+  (move a task, run a schedule now), Rooms (the hub's own answer: `rooms` is 501), and every
+  Settings tab, management page and tool — account (name, password), users, webhooks (test),
+  display, notifications and the inbox, privacy (revoke tokens), this device, about, models
+  (read), device connections (a pairing QR for another phone), knowledge, logs / usage /
+  performance, theme, profiles (create), updates, plugins. `corehub://open/<path>` links open the
+  page they name. The navigation parity test (`NavigationParityTests`) holds the app to
+  `navigation.json`, whose `surfaceRoutes.ios` it reads. Built and unit-tested on a macOS runner's
+  simulator; **never run on a device or against the owner's hub**, and nothing is signed.
 
 ## Name
 Since 2026-09-24 the product is **Core Hub** («كور هب», ADR 0017): packages `@corehub/*`, the

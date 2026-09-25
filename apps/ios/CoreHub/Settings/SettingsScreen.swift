@@ -47,13 +47,43 @@ struct SettingsScreen: View {
     }
 }
 
-/// A page under Settings. Part 1 of the phone app builds the chat; these pages arrive in the
-/// next part and meanwhile say so under their real titles.
+/// A page under Settings, with its title; the way back is the navigation bar's.
 struct SettingsPage: View {
     let destination: DestinationID
+    @Environment(\.l10n) private var l10n
 
     var body: some View {
-        PlaceholderScreen(destination: destination)
-            .navigationBarTitleDisplayMode(.inline)
+        Group {
+            switch destination {
+            case .account: AccountPage()
+            case .users: UsersPage()
+            case .webhooks: WebhooksPage()
+            case .display: DisplayPage()
+            case .notifications: NotificationsPage()
+            case .privacy: PrivacyPage()
+            case .thisDevice: ThisDevicePage()
+            case .about: AboutPage()
+            case .models: ModelsPage()
+            case .deviceConnections: DeviceConnectionsPage()
+            case .knowledge: KnowledgePage()
+            case .logs: AuditPage(kind: .logs)
+            case .usage: AuditPage(kind: .usage)
+            case .performance: AuditPage(kind: .performance)
+            case .theme: ThemePage()
+            case .workspaces: WorkspacesPage()
+            case .updates: UpdatesPage()
+            case .plugins: HubPluginsPage()
+            default: PlaceholderScreen(destination: destination)
+            }
+        }
+        .navigationTitle(l10n(destination.titleKey))
+        .navigationBarTitleDisplayMode(.inline)
+        .background(Tone.bg)
+        .accessibilityIdentifier("screen.\(destination.rawValue)")
     }
+}
+
+/// What part 3 adds to This device (voice input, dictation, spoken replies).
+struct ThisDeviceExtras: View {
+    var body: some View { EmptyView() }
 }
