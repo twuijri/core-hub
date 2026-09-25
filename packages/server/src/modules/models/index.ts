@@ -8,7 +8,7 @@
  * `models.setDefaults`, `models.listEnsembles`, `models.createEnsemble`,
  * `models.updateEnsemble`, `models.deleteEnsemble`, `models.getSpeech`,
  * `models.updateSpeech`, `models.listVoices`, `models.synthesize`, and — through Hermes's
- * own server, where the hub supervises Hermes (contract decision §50) —
+ * own server, where the hub supervises Hermes (contract decision §55) —
  * `models.startProviderSignIn`, `models.getProviderSignIn`, `models.completeProviderSignIn`.
  *
  * Still documented 501 stubs, with the reason:
@@ -144,7 +144,7 @@ export interface ModelsOverrides {
    */
   restartDelayMs?: number;
   /**
-   * The runtime that performs provider sign-ins (contract decision §50). Tests hand a scripted
+   * The runtime that performs provider sign-ins (contract decision §55). Tests hand a scripted
    * one; absent, it is Hermes's own server where the hub supervises Hermes.
    */
   signIn?: SignInRuntime | null;
@@ -219,7 +219,7 @@ function contextOf(app: FastifyInstance): ModelsService {
     ...(own.fetchImpl ? { fetchImpl: own.fetchImpl } : {}),
     ...(own.restartDelayMs === undefined ? {} : { restartDelayMs: own.restartDelayMs }),
     // Hermes signs in to a provider account through its own server (ADR 0015), which only a
-    // hub that supervises Hermes runs (decision §50).
+    // hub that supervises Hermes runs (decision §55).
     signIn: () => {
       if (own.signIn !== undefined) return own.signIn;
       const dashboard = hermesDashboardFor(app);
@@ -635,7 +635,7 @@ export const modelsModule = defineModule({
       },
     });
 
-    // ---------------------------------------------- provider sign-in (§50)
+    // ---------------------------------------------- provider sign-in (§55)
 
     defineRoute(app, deps, {
       operationId: 'models.startProviderSignIn',

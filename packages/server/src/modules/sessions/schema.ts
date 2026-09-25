@@ -117,7 +117,7 @@ export type MessagePart =
 
 /**
  * `runs.timing`: epoch milliseconds and offsets into the run's text and reasoning — and, since
- * contract decision §49, the models the run moved past (`fallback`), which is what the hub saw
+ * contract decision §54, the models the run moved past (`fallback`), which is what the hub saw
  * of the run the same way its turns are.
  */
 export interface RunTiming {

@@ -1,5 +1,5 @@
 /**
- * The chat model's fallback chain on the Defaults tab (contract decision §49): an ordered
+ * The chat model's fallback chain on the Defaults tab (contract decision §54): an ordered
  * list the person adds to, reorders and removes from. The order is the order the hub tries
  * them in when the chat model's provider fails, so it is shown numbered and moved one place
  * at a time with buttons that say which model they move — a list of three or four does not

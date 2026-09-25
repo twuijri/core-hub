@@ -1,5 +1,5 @@
 /**
- * 34. The owner's outage of 2026-09-25, as a journey (contract decision §49).
+ * 34. The owner's outage of 2026-09-25, as a journey (contract decision §54).
  *
  * A proxy whose chat model answers `503 auth_unavailable`, and a second model on it that
  * works. The person puts the second one in the fallback chain on the Models page's Defaults

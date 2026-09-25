@@ -374,7 +374,7 @@ export function OpenSession({
 
   const title = pageTitle ?? (state.session ? sessionTitle(state.session, t) : t(termKey('chat')));
   const showReasoning = preferences.data?.show_reasoning ?? true;
-  // Finished runs too, so a turn still says which model answered it after a reload (§49).
+  // Finished runs too, so a turn still says which model answered it after a reload (§54).
   const runHistory = useRunHistory(sessionId, state.runs);
   const failedRun = Object.values(state.runs).find((r) => r.status === 'failed' && r.error);
   // Only asked for once a run has failed for want of a provider, and then asked fresh:

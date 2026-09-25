@@ -763,7 +763,7 @@ export class AgentsService {
   }
 
   /**
-   * Where a turn on `selection` moves on to when its model fails (contract decision §49): the
+   * Where a turn on `selection` moves on to when its model fails (contract decision §54): the
    * profile's chain, without the model the turn already runs on. Empty when the provider
    * store cannot answer — a turn is never stopped for want of a fallback.
    */

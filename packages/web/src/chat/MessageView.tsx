@@ -29,7 +29,7 @@ import { reasoningWorthShowing, sideOf, thoughtSeconds, type Turn } from './turn
 import { failedNames, failureReasons, fallbackOf } from './fallback.js';
 
 /**
- * The turn moved down the fallback chain (contract decision §49): which model answered, which
+ * The turn moved down the fallback chain (contract decision §54): which model answered, which
  * failed before it, and why — under the reply, where its words are, never hidden in a menu.
  */
 function FallbackNote({ run }: { run: Run | undefined }) {

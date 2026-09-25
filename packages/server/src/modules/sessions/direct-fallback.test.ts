@@ -1,5 +1,5 @@
 /**
- * The fallback chain on the **direct** agent (contract decision §49), over the real routes,
+ * The fallback chain on the **direct** agent (contract decision §54), over the real routes,
  * the real registry and the real `models` store — only the provider's HTTP endpoint is
  * scripted.
  *
@@ -156,7 +156,7 @@ async function runToEnd(h: TestHub & { token: string }, sessionId: string): Prom
   throw new Error('the run did not end');
 }
 
-describe('the fallback chain on the direct agent (decision §49)', () => {
+describe('the fallback chain on the direct agent (decision §54)', () => {
   it('moves on from a 503 auth_unavailable and says which model answered', async () => {
     const { h, chats, slug, sessionId } = await setUp('primary', ['backup']);
     const run = await runToEnd(h, sessionId);

@@ -1,5 +1,5 @@
 /**
- * Signing in to a provider account by device code (contract decision §50), on the provider's
+ * Signing in to a provider account by device code (contract decision §55), on the provider's
  * card: the code Hermes was given and the page to enter it on, then a quiet wait while the hub
  * polls, and the outcome in words — signed in, declined, ran out, or did not finish with the
  * runtime's own reason. Nothing here holds a token: Hermes keeps the credential.

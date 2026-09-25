@@ -722,7 +722,7 @@
                   "type": "null"
                 }
               ],
-              "description": "`null` when the chosen model answered (absent from hubs before decision §49). When set, the turn moved down the fallback chain and `model` / `provider` name the model that actually answered — or, when the run then failed, the last one tried."
+              "description": "`null` when the chosen model answered (absent from hubs before decision §54). When set, the turn moved down the fallback chain and `model` / `provider` name the model that actually answered — or, when the run then failed, the last one tried."
             },
             "started_at": {
               "oneOf": [
@@ -750,7 +750,7 @@
     },
     "RunFallback": {
       "type": "object",
-      "description": "What a turn went through before the model that answered it (decision §49): each model of the chain that failed with an error another model could get past, in the order tried, starting with the one that was chosen.",
+      "description": "What a turn went through before the model that answered it (decision §54): each model of the chain that failed with an error another model could get past, in the order tried, starting with the one that was chosen.",
       "required": ["failed"],
       "properties": {
         "failed": {

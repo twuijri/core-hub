@@ -198,7 +198,7 @@ export type AgentEvent =
   | { type: 'context'; usedTokens: number; windowTokens?: number | null }
   | {
       /**
-       * The turn moved down the fallback chain (contract decision §49): the models in
+       * The turn moved down the fallback chain (contract decision §54): the models in
        * `failed` refused it, in order, with an error another model could get past, and
        * `answered` is the one that took it — or, when the run then failed, the last tried.
        * `provider` is the hub's provider slug, when known.

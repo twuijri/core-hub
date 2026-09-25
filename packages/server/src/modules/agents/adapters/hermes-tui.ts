@@ -389,7 +389,7 @@ export class HermesTuiSession implements AgentSession {
 
   /**
    * The turn in flight, as the hub asked for it: the model and provider it named, and the
-   * fallback chain (contract decision §49), so a switch Hermes makes can be said in the hub's
+   * fallback chain (contract decision §54), so a switch Hermes makes can be said in the hub's
    * names. `notes` are Hermes's own "Model fallback" lines from this turn.
    */
   private asked: {
@@ -632,7 +632,7 @@ export class HermesTuiSession implements AgentSession {
         return;
       }
       case 'status.update': {
-        // Hermes says so when it moves down its `fallback_providers` (contract decision §49).
+        // Hermes says so when it moves down its `fallback_providers` (contract decision §54).
         const note = parseFallbackNote(text(payload.text));
         if (note && this.turn) this.asked.notes.push(note);
         return;
@@ -700,7 +700,7 @@ export class HermesTuiSession implements AgentSession {
 
   /**
    * Whether Hermes answered this turn on another model than the one asked for, said in the
-   * hub's names (contract decision §49). Hermes's own notes say what failed and why; without
+   * hub's names (contract decision §54). Hermes's own notes say what failed and why; without
    * them, a model in the usage that is not the one asked for says it all the same.
    */
   private fallbackOf(reported: string | null): AgentEvent | null {

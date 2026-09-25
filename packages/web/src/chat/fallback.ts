@@ -1,5 +1,5 @@
 /**
- * Which model answered a turn, and what it took over from (contract decision §49), in the
+ * Which model answered a turn, and what it took over from (contract decision §54), in the
  * words the chat and the trajectory show. Pure, so the wording rules are tested on their own.
  */
 import type { Run, RunFallback } from '../types.js';

@@ -554,7 +554,7 @@ describe('Hermes over the TUI gateway', () => {
   });
 });
 
-describe('Hermes moving down its fallback chain (contract decision §49)', () => {
+describe('Hermes moving down its fallback chain (contract decision §54)', () => {
   const chain = [
     { providerId: 'P2', provider: 'openai-codex', slug: 'openai-codex', model: 'gpt-5.5' },
   ];

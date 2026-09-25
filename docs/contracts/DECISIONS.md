@@ -1025,7 +1025,7 @@ Rejected: a new `source` field on `SessionCreate` (a client could then make any 
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
 
-## 49. A turn moves down the profile's fallback chain when the provider, not the request, failed
+## 54. A turn moves down the profile's fallback chain when the provider, not the request, failed
 
 `ModelDefaults.fallbacks` was declared from the start ("tried in order when the chosen model
 fails") and stored, but nothing tried it: a `503 auth_unavailable` from the owner's proxy ended
@@ -1057,7 +1057,7 @@ Rejected: a new `run.fallback` realtime event (the switch happens before the fir
 `run.completed` already carries the run); retrying the same model first (Hermes already does;
 the direct agent's providers answer an outage for longer than a retry waits).
 
-## 50. A provider signed in to by device code is signed in through Hermes, where Hermes can
+## 55. A provider signed in to by device code is signed in through Hermes, where Hermes can
 
 `models.startProviderSignIn` / `getProviderSignIn` / `completeProviderSignIn` were declared and
 answered `501` because no provider in the catalogue used a sign-in. Hermes can sign in to four

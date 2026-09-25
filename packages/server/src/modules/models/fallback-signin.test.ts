@@ -1,5 +1,5 @@
 /**
- * The two halves of this change the models module owns (contract decisions §49, §50):
+ * The two halves of this change the models module owns (contract decisions §54, §55):
  *
  * - **the fallback chain**: which provider failures another model could get past, and the
  *   chain as Hermes is told it (`fallback_providers` in `config.yaml`);
@@ -32,7 +32,7 @@ afterEach(async () => {
   hub = undefined;
 });
 
-describe('which failures move a turn down the chain (decision §49)', () => {
+describe('which failures move a turn down the chain (decision §54)', () => {
   const failure = (
     reason: Parameters<typeof retryableFailure>[0]['reason'],
     status: number | null,
@@ -61,7 +61,7 @@ describe('which failures move a turn down the chain (decision §49)', () => {
   });
 });
 
-describe("the chain in Hermes's config.yaml (decision §49)", () => {
+describe("the chain in Hermes's config.yaml (decision §54)", () => {
   function home(config: string): string {
     const dir = mkdtempSync(path.join(tmpdir(), 'corehub-fallback-'));
     homes.push(dir);
@@ -193,7 +193,7 @@ async function addCodex(h: TestHub & { token: string }) {
   return created.json() as { id: string; auth: { kind: string; signed_in: boolean } };
 }
 
-describe('signing in to a provider by device code (decision §50)', () => {
+describe('signing in to a provider by device code (decision §55)', () => {
   it('offers the sign-in only for the providers Hermes can sign in to', async () => {
     const h = await hubWith(fakeHermesServer().runtime);
     const presets = (

@@ -281,7 +281,7 @@ export class AgentRunner implements AgentRunnerPort {
             model: selection.model,
             modelProvider: selection.provider,
             modelProviderId: selection.providerId,
-            // A title is worth the same fallback a turn gets (contract decision §49).
+            // A title is worth the same fallback a turn gets (contract decision §54).
             fallbacks: service.fallbacksFor(request.workspace, selection),
           }),
           collect,

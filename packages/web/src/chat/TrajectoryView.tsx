@@ -410,7 +410,7 @@ function StepRow({
           )}
         </span>
         {step.fallback && step.fallback.failed.length > 0 && (
-          // The turn was answered by a fallback model (contract decision §49).
+          // The turn was answered by a fallback model (contract decision §54).
           <Badge tone="warning" testId="trajectory-fallback">
             {t('trajectory.fallback', { failed: failedNames(step.fallback, language) })}
           </Badge>

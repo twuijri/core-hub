@@ -2399,7 +2399,7 @@
                   "type": "null"
                 }
               ],
-              "description": "`null` when the chosen model answered (absent from hubs before decision §49). When set, the turn moved down the fallback chain and `model` / `provider` name the model that actually answered — or, when the run then failed, the last one tried."
+              "description": "`null` when the chosen model answered (absent from hubs before decision §54). When set, the turn moved down the fallback chain and `model` / `provider` name the model that actually answered — or, when the run then failed, the last one tried."
             },
             "started_at": {
               "oneOf": [
@@ -6525,7 +6525,7 @@
     },
     "ProviderSignIn": {
       "type": "object",
-      "description": "One sign-in to a provider account by device code (decision §50): the person opens `verification_url`, enters `user_code`, and the client polls `models.getProviderSignIn` until `status` is no longer `pending`. On `approved` the credential is stored where the provider's scope says — the shared provider's in the `default` profile, a profile's own provider's in that profile — and the provider's `auth.signed_in` is true.",
+      "description": "One sign-in to a provider account by device code (decision §55): the person opens `verification_url`, enters `user_code`, and the client polls `models.getProviderSignIn` until `status` is no longer `pending`. On `approved` the credential is stored where the provider's scope says — the shared provider's in the `default` profile, a profile's own provider's in that profile — and the provider's `auth.signed_in` is true.",
       "required": [
         "id",
         "status",
@@ -6586,7 +6586,7 @@
         },
         "fallbacks": {
           "type": "array",
-          "description": "Tried in order when the chosen model fails with an error another model could get past (decision §49): the provider unavailable (a 5xx, `auth_unavailable`), rate limited (429), timed out or unreachable. Never after another 4xx, and never once the model has started answering. It follows the chat model: inherited with it, and used by every agent of the profile after the model that agent runs on.",
+          "description": "Tried in order when the chosen model fails with an error another model could get past (decision §54): the provider unavailable (a 5xx, `auth_unavailable`), rate limited (429), timed out or unreachable. Never after another 4xx, and never once the model has started answering. It follows the chat model: inherited with it, and used by every agent of the profile after the model that agent runs on.",
           "items": {
             "$ref": "#/$defs/ModelRef"
           }
@@ -8025,7 +8025,7 @@
     },
     "RunFallback": {
       "type": "object",
-      "description": "What a turn went through before the model that answered it (decision §49): each model of the chain that failed with an error another model could get past, in the order tried, starting with the one that was chosen.",
+      "description": "What a turn went through before the model that answered it (decision §54): each model of the chain that failed with an error another model could get past, in the order tried, starting with the one that was chosen.",
       "required": ["failed"],
       "properties": {
         "failed": {

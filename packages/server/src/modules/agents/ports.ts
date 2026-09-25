@@ -79,7 +79,7 @@ export interface AgentModelsPort {
    */
   directChat(workspace: string, request: DirectChatRequest): AsyncIterable<DirectChatEvent>;
   /**
-   * The profile's chat fallback chain (contract decision §49), in every name a turn needs:
+   * The profile's chat fallback chain (contract decision §54), in every name a turn needs:
    * the provider row, the name the runtime knows it by, the hub's slug, and the model.
    */
   fallbackChain?(
@@ -127,7 +127,7 @@ export interface DirectChatRequest {
   reasoningEffort?: string | null;
   /** Aborting it closes the provider socket; the stream then ends as `cancelled`. */
   signal?: AbortSignal;
-  /** Where to move on to when this model fails (contract decision §49); in order. */
+  /** Where to move on to when this model fails (contract decision §54); in order. */
   fallbacks?: readonly { providerId: string; model: string }[];
 }
 
@@ -148,7 +148,7 @@ export type DirectChatEvent =
     }
   | { type: 'completed' }
   | {
-      /** The turn moved down the fallback chain (contract decision §49); see `RunnerEvent`. */
+      /** The turn moved down the fallback chain (contract decision §54); see `RunnerEvent`. */
       type: 'fallback';
       failed: RunnerFallbackAttempt[];
       answered: { model: string; provider: string | null };
@@ -294,7 +294,7 @@ export type RunnerEvent =
   | { type: 'context'; usedTokens: number; windowTokens?: number | null }
   | {
       /**
-       * The turn moved down the fallback chain (contract decision §49): the models in
+       * The turn moved down the fallback chain (contract decision §54): the models in
        * `failed` refused it, in order, with an error another model could get past, and
        * `answered` is the one that took it — or, when the run then failed, the last tried.
        * `provider` is the hub's provider slug, when known.

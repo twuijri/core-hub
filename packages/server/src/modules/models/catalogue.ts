@@ -48,7 +48,7 @@ export const CREDENTIAL_FAMILIES = [
   'lmstudio',
   'litellm',
   'custom',
-  // Signed in to through Hermes (contract decision §50): no key, one account each.
+  // Signed in to through Hermes (contract decision §55): no key, one account each.
   'nous',
   'openai-codex',
   'xai-oauth',
@@ -147,7 +147,7 @@ export interface ProviderCatalogueEntry {
   /** Documentation link shown next to the key field, so nobody has to search for it. */
   keysUrl: string | null;
   /**
-   * Used by signing in to an account rather than with a key (contract decision §50): Hermes
+   * Used by signing in to an account rather than with a key (contract decision §55): Hermes
    * performs the device-code sign-in for its provider `hermesProvider` and keeps the
    * credential. Only a provider Hermes can sign in to from its own server says so.
    */
@@ -446,7 +446,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     settings: { model: 'eleven_multilingual_v2', language: null, voice: null },
     keysUrl: 'https://elevenlabs.io/app/settings/api-keys',
   },
-  // Signed in to through Hermes (contract decision §50): Hermes's own device-code sign-in
+  // Signed in to through Hermes (contract decision §55): Hermes's own device-code sign-in
   // for its provider `nous` (MIT source `hermes_cli/web_routers/oauth.py`). No key, and
   // no request from the hub itself: the `direct` agent refuses it by name.
   {
@@ -467,7 +467,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     keysUrl: 'https://portal.nousresearch.com',
     signIn: true,
   },
-  // Signed in to through Hermes (contract decision §50): Hermes's own device-code sign-in
+  // Signed in to through Hermes (contract decision §55): Hermes's own device-code sign-in
   // for its provider `openai-codex` (MIT source `hermes_cli/web_routers/oauth.py`). No key, and
   // no request from the hub itself: the `direct` agent refuses it by name.
   {
@@ -488,7 +488,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     keysUrl: 'https://developers.openai.com/codex',
     signIn: true,
   },
-  // Signed in to through Hermes (contract decision §50): Hermes's own device-code sign-in
+  // Signed in to through Hermes (contract decision §55): Hermes's own device-code sign-in
   // for its provider `xai-oauth` (MIT source `hermes_cli/web_routers/oauth.py`). No key, and
   // no request from the hub itself: the `direct` agent refuses it by name.
   {
@@ -509,7 +509,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     keysUrl: 'https://hermes-agent.nousresearch.com/docs/guides/xai-grok-oauth',
     signIn: true,
   },
-  // Signed in to through Hermes (contract decision §50): Hermes's own device-code sign-in
+  // Signed in to through Hermes (contract decision §55): Hermes's own device-code sign-in
   // for its provider `minimax-oauth` (MIT source `hermes_cli/web_routers/oauth.py`). No key, and
   // no request from the hub itself: the `direct` agent refuses it by name.
   {
@@ -701,7 +701,7 @@ export function assertCatalogueIsWellFormed(
         throw new Error(`provider catalogue: "${entry.slug}" has no usable base URL`);
       }
     }
-    // A sign-in is Hermes's (decision §50): its own provider, no key the hub could hold.
+    // A sign-in is Hermes's (decision §55): its own provider, no key the hub could hold.
     if (entry.signIn && (entry.hermesRoute !== 'builtin' || entry.keyRequirement !== 'optional')) {
       throw new Error(
         `provider catalogue: "${entry.slug}" signs in through Hermes, so it is Hermes's own ` +

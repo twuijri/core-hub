@@ -357,7 +357,7 @@ export class DirectSession implements AgentSession {
           ? { reasoningEffort: prompt.reasoningEffort }
           : {}),
         signal: controller.signal,
-        // The profile's chain (contract decision §49). The models module walks it: it knows
+        // The profile's chain (contract decision §54). The models module walks it: it knows
         // which provider errors another model could get past, and this file sees no provider.
         ...(prompt.fallbacks && prompt.fallbacks.length > 0
           ? {

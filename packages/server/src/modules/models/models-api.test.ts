@@ -926,7 +926,7 @@ describe('models: speech', () => {
     }
   });
 
-  it('refuses a sign-in for a provider used with a key (decision §50)', async () => {
+  it('refuses a sign-in for a provider used with a key (decision §55)', async () => {
     const hub = await signedInHub();
     try {
       const anthropic = await addProvider(hub, 'anthropic', { api_key: 'sk-ant-for-signin' });

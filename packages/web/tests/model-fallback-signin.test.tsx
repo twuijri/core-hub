@@ -1,6 +1,6 @@
 /**
- * The fallback chain and the provider sign-in, as the web shows them (contract decisions §49,
- * §50): the ordered list on the Defaults tab, the note a turn carries when a fallback model
+ * The fallback chain and the provider sign-in, as the web shows them (contract decisions §54,
+ * §55): the ordered list on the Defaults tab, the note a turn carries when a fallback model
  * answered it, and the device-code sign-in on a provider's card — code, link, a wait, and
  * the outcome.
  */

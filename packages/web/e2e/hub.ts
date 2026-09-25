@@ -59,7 +59,7 @@ type Step =
 
 function scriptFor(prompt: string, workspace = ''): Step[] {
   if (/احتياطي|fallback/i.test(prompt)) {
-    // Journey 34 (contract decision §49): the turn is the models module's own — the profile's
+    // Journey 34 (contract decision §54): the turn is the models module's own — the profile's
     // chat model, its fallback chain as the Defaults tab saved it, and the provider's HTTP
     // (the scripted proxy below, whose first model is down with `auth_unavailable`).
     return [{ type: 'direct', workspace, text: prompt }];
@@ -292,7 +292,7 @@ interface Live {
 
 /**
  * One turn on the models module's direct path, as the `direct` agent makes it: the profile's
- * chat model, then its fallback chain (contract decision §49) — every step real but the
+ * chat model, then its fallback chain (contract decision §54) — every step real but the
  * provider's HTTP, which is `scriptedProvider` below.
  */
 async function* directTurn(workspace: string, text: string): AsyncIterable<AgentEvent> {

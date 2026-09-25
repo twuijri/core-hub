@@ -103,7 +103,7 @@ export function AddProviderDialog({
 
   const usingPreset = mode === 'preset' && preset !== undefined;
   const keyOptional = usingPreset ? preset.key === 'optional' : true;
-  // Used by signing in to an account, through Hermes (contract decision §50): no key to type
+  // Used by signing in to an account, through Hermes (contract decision §55): no key to type
   // and no model list to fetch until the sign-in is approved on the card.
   const signInPreset = usingPreset && preset.sign_in;
   const canSubmit =

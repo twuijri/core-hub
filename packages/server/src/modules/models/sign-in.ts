@@ -1,5 +1,5 @@
 /**
- * Signing in to a provider account by device code (contract decision §50).
+ * Signing in to a provider account by device code (contract decision §55).
  *
  * Hermes can sign in to four providers from its own server — Nous Portal, a ChatGPT/Codex
  * subscription, xAI Grok and MiniMax — by the flow every device-code sign-in shares: it asks
@@ -166,7 +166,7 @@ export function hermesSignInRuntime(request: DashboardRequest): SignInRuntime {
 export type SignInStatus = 'pending' | 'approved' | 'denied' | 'expired' | 'failed';
 
 /**
- * Hermes's state as the contract's (decision §50). A code that ran out — Hermes's `timeout`, a
+ * Hermes's state as the contract's (decision §55). A code that ran out — Hermes's `timeout`, a
  * sign-in Hermes no longer knows, or the clock past `expires_at` — is `expired`; the person
  * saying no is `denied`; everything else that ended without a credential is `failed`.
  */

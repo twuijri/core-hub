@@ -192,7 +192,7 @@ export interface ModelsServiceOptions {
    */
   profileWorkspace?: (profile: string) => string | null;
   /**
-   * The runtime that signs in to a provider account (contract decision §50): Hermes's server,
+   * The runtime that signs in to a provider account (contract decision §55): Hermes's server,
    * where the hub supervises Hermes. `null` (or absent) elsewhere — the sign-in is then refused
    * with the reason rather than started somewhere its credential could not be used.
    */
@@ -464,7 +464,7 @@ export class ModelsService {
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
   private restartPending = false;
   private readonly restartDelayMs: number;
-  /** Sign-ins in flight (contract decision §50); process memory, as Hermes's own are. */
+  /** Sign-ins in flight (contract decision §55); process memory, as Hermes's own are. */
   private readonly signIns = new Map<string, SignInRecord>();
 
   constructor(private readonly options: ModelsServiceOptions) {
@@ -1143,7 +1143,7 @@ export class ModelsService {
   async testProvider(scope: WorkspaceScope, id: string): Promise<TestOutcome> {
     const row = this.loadProvider(scope, id);
     if (row.authKind === 'oauth') {
-      // Signed in through Hermes (decision §50): the hub holds no credential to try, and
+      // Signed in through Hermes (decision §55): the hub holds no credential to try, and
       // what it knows is whether the sign-in was approved.
       const ok = row.status === 'ok';
       return {
@@ -1448,12 +1448,12 @@ export class ModelsService {
     });
   }
 
-  // ------------------------------------------------------------ sign-in (§50)
+  // ------------------------------------------------------------ sign-in (§55)
 
   /**
    * Starts Hermes's device-code sign-in for a provider that is used by signing in
    * (`auth.kind = oauth`), in the Hermes profile its scope says: a shared provider's in the
-   * root (the `default` profile), a profile's own in that profile (decision §50).
+   * root (the `default` profile), a profile's own in that profile (decision §55).
    */
   async startSignIn(
     scope: WorkspaceScope,
@@ -1532,7 +1532,7 @@ export class ModelsService {
     return signInView(record);
   }
 
-  /** A pasted code: none of the sign-ins the hub offers takes one (decision §50). */
+  /** A pasted code: none of the sign-ins the hub offers takes one (decision §55). */
   completeSignIn(
     scope: WorkspaceScope,
     providerId: string,
@@ -1699,7 +1699,7 @@ export class ModelsService {
         const model = this.requireModel(scope, body.default);
         this.requireExpressible(scope, model.providerId);
         // A new chat model keeps the chain unless one is sent with it: choosing a model on a
-        // provider card must not quietly throw the fallbacks away (decision §49).
+        // provider card must not quietly throw the fallbacks away (decision §54).
         const fallbacks = chainOf(
           body.fallbacks !== undefined
             ? body.fallbacks.map((ref) => this.requireModel(scope, ref).id)
@@ -2178,7 +2178,7 @@ export class ModelsService {
       hermesProviders,
       hermesModel: chat.choice,
       hermesModelBlocked: chat.blocked,
-      // Owned where the model selection is (contract decision §49).
+      // Owned where the model selection is (contract decision §54).
       hermesFallbacks: chat.choice
         ? this.fallbackChain(workspace).flatMap((member) =>
             member.provider ? [{ provider: member.provider, model: member.model }] : [],
@@ -2328,7 +2328,7 @@ export class ModelsService {
    * a run loop that will one day forget to.
    */
   async *chat(workspace: string, request: DirectChatRequest): AsyncIterable<DirectChatEvent> {
-    // The chosen model first, then the chain, each model once (contract decision §49).
+    // The chosen model first, then the chain, each model once (contract decision §54).
     const seen = new Set<string>();
     const chain: { providerId: string; model: string }[] = [];
     for (const target of [
@@ -2397,7 +2397,7 @@ export class ModelsService {
 
   /**
    * One model's attempt at the turn. A failure says whether another model could get past it
-   * (`retryable`, contract decision §49): the provider was unavailable (a 5xx, or its words
+   * (`retryable`, contract decision §54): the provider was unavailable (a 5xx, or its words
    * say `auth_unavailable`), rate limited, timed out or unreachable. A request it refused as
    * invalid — any other 4xx — would be refused by the next model too, and a refused key is the
    * person's to fix, not something to hide behind another provider.
@@ -2419,7 +2419,7 @@ export class ModelsService {
       return;
     }
     if (provider.authKind === 'oauth') {
-      // Signed in through Hermes (decision §50): the credential is Hermes's, not the hub's.
+      // Signed in through Hermes (decision §55): the credential is Hermes's, not the hub's.
       yield {
         type: 'failed',
         code: 'provider_not_configured',
@@ -2467,7 +2467,7 @@ export class ModelsService {
   }
 
   /**
-   * The chat fallback chain in effect for a profile (contract decision §49): its own, or the
+   * The chat fallback chain in effect for a profile (contract decision §54): its own, or the
    * default profile's together with the chat model it inherits (§37), each member resolved to
    * the provider of that slug this profile uses. Members this profile cannot reach are left
    * out rather than tried.
@@ -2640,7 +2640,7 @@ export class ModelsService {
       const mine = this.state(workspace);
       // A messaging gateway also needs the model: it names none (`prepareGateway`).
       // The fallback chain too: Hermes reads it from the profile's own file when the
-      // conversation starts (contract decision §49), where a turn names only its model.
+      // conversation starts (contract decision §54), where a turn names only its model.
       const written = options.model
         ? writeHermesRoute(profileHome, mine)
         : writeHermesProviders(profileHome, mine.hermesProviders, mine.hermesFallbacks ?? null);
@@ -3034,7 +3034,7 @@ export interface DirectChatRequest {
   model: string;
   /**
    * The models to move on to, in order, when this one fails with an error another model
-   * could get past (contract decision §49). Absent or empty: no fallback.
+   * could get past (contract decision §54). Absent or empty: no fallback.
    */
   fallbacks?: readonly { providerId: string; model: string }[];
   messages: ChatMessage[];
@@ -3060,7 +3060,7 @@ export type DirectChatEvent =
   | { type: 'completed' }
   | {
       /**
-       * The turn moved down the fallback chain (contract decision §49), said before the first
+       * The turn moved down the fallback chain (contract decision §54), said before the first
        * word of `answered` — or, when every member failed, just before the last failure.
        */
       type: 'fallback';
@@ -3071,7 +3071,7 @@ export type DirectChatEvent =
 
 /**
  * A fallback chain as stored: in the order given, each model once, and never the model it
- * falls back from — trying it again would only repeat the failure (contract decision §49).
+ * falls back from — trying it again would only repeat the failure (contract decision §54).
  */
 function chainOf(ids: readonly string[], primary: string): string[] {
   const seen = new Set<string>([primary]);
@@ -3093,7 +3093,7 @@ type AttemptEvent =
   | { type: 'failed'; code: string; message: string; retryable: boolean };
 
 /**
- * Whether another model could get past this failure (contract decision §49): the provider
+ * Whether another model could get past this failure (contract decision §54): the provider
  * unreachable or timed out, rate limiting, failing on its side, or saying in its own words
  * that it has no credential to serve with (`auth_unavailable`, the owner's 2026-09-25 outage,
  * which one proxy sends as a 503 and another inside a stream). Every other 4xx is the request

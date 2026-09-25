@@ -152,7 +152,7 @@ export function serializeProvider(
       // A provider that needs no key is always "signed in"; one that does is signed in
       // exactly when a key is stored.
       // A provider signed in to through Hermes is signed in once that sign-in was approved
-      // (decision §50); the hub holds no key for it.
+      // (decision §55); the hub holds no key for it.
       signed_in:
         row.authKind === 'none'
           ? true

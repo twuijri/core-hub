@@ -9935,7 +9935,7 @@ paths:
       description: >-
         Only for a provider whose `auth.kind` is `oauth` (its preset says `sign_in: true`);
         any other is `409 state_invalid` with `details.reason = sign_in_unsupported`. The agent
-        runtime performs the sign-in and keeps the credential (decision §50), so where the hub
+        runtime performs the sign-in and keeps the credential (decision §55), so where the hub
         does not supervise Hermes this is `409 state_invalid` with
         `details.reason = hermes_not_supervised`, and `503` while Hermes's server cannot be
         reached. A sign-in is kept for as long as its code is valid.
@@ -14371,7 +14371,7 @@ components:
             - $ref: '#/components/schemas/RunFallback'
             - type: 'null'
           description: >-
-            On the first `turn` of a run that moved down the fallback chain (decision §49): the
+            On the first `turn` of a run that moved down the fallback chain (decision §54): the
             models that failed before `model` answered. `null` otherwise.
     TrajectoryMetrics:
       type: object
@@ -14471,7 +14471,7 @@ components:
     RunFallback:
       type: object
       description: >-
-        What a turn went through before the model that answered it (decision §49): each model
+        What a turn went through before the model that answered it (decision §54): each model
         of the chain that failed with an error another model could get past, in the order
         tried, starting with the one that was chosen.
       required: [failed]
@@ -14590,7 +14590,7 @@ components:
                 - $ref: '#/components/schemas/RunFallback'
                 - type: 'null'
               description: >-
-                `null` when the chosen model answered (absent from hubs before decision §49).
+                `null` when the chosen model answered (absent from hubs before decision §54).
                 When set, the turn moved down the fallback chain and `model` / `provider` name
                 the model that actually answered — or, when the run then failed, the last one
                 tried.
@@ -17524,7 +17524,7 @@ components:
           type: boolean
           description: >-
             The provider is used by signing in to an account rather than with an API key: after
-            adding it, `models.startProviderSignIn` shows a code and a link (decision §50).
+            adding it, `models.startProviderSignIn` shows a code and a link (decision §55).
             Only the providers whose sign-in the agent runtime can complete on the hub's behalf
             say `true`; `key` is then `optional` and a client does not ask for one.
     ProviderHost:
@@ -17631,7 +17631,7 @@ components:
     ProviderSignIn:
       type: object
       description: >-
-        One sign-in to a provider account by device code (decision §50): the person opens
+        One sign-in to a provider account by device code (decision §55): the person opens
         `verification_url`, enters `user_code`, and the client polls `models.getProviderSignIn`
         until `status` is no longer `pending`. On `approved` the credential is stored where the
         provider's scope says — the shared provider's in the `default` profile, a profile's own
@@ -17720,7 +17720,7 @@ components:
           type: array
           description: >-
             Tried in order when the chosen model fails with an error another model could get
-            past (decision §49): the provider unavailable (a 5xx, `auth_unavailable`), rate
+            past (decision §54): the provider unavailable (a 5xx, `auth_unavailable`), rate
             limited (429), timed out or unreachable. Never after another 4xx, and never once the
             model has started answering. It follows the chat model: inherited with it, and used
             by every agent of the profile after the model that agent runs on.

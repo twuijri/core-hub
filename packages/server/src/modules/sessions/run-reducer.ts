@@ -138,7 +138,7 @@ export interface RunState {
   /** Tool names approved for the rest of the session ("always" / "for this session"). */
   rememberedTools: string[];
   /**
-   * The run moved down the fallback chain (contract decision §49): what failed, and the model
+   * The run moved down the fallback chain (contract decision §54): what failed, and the model
    * that took the turn. `null` while the chosen model is the one running.
    */
   fallback: {

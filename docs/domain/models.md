@@ -173,7 +173,7 @@ with a key"; `reason` is an i18n key, never a sentence in one language.
 - Resolve for a run: session.model → agent_settings.default_model_id →
   model_default(role for the agent's kind) → its fallbacks; each step checks
   `enabled` and `archived_at`.
-- **The fallback chain** (contract decision §49): the chat model's `fallback_model_ids`, its
+- **The fallback chain** (contract decision §54): the chat model's `fallback_model_ids`, its
   own or the default profile's with it, are what a turn moves down when its model fails with an
   error another model could get past — a 5xx or `auth_unavailable`, 429, 408 or no answer, the
   provider unreachable — and never after another 4xx or once the model has started answering.
@@ -181,7 +181,7 @@ with a key"; `reason` is an i18n key, never a sentence in one language.
   `fallback_providers` in the profile's `config.yaml` (next section) and Hermes walks it. The run
   then names the model that answered (`Run.model`) and what failed before it (`Run.fallback`,
   kept in `runs.timing`).
-- **Signing in to a provider** (decision §50): the four presets Hermes can sign in to by device
+- **Signing in to a provider** (decision §55): the four presets Hermes can sign in to by device
   code (`nous`, `openai-codex`, `xai-oauth`, `minimax-oauth`) are `auth_kind = oauth`. Hermes's
   server does the sign-in in the Hermes profile the provider's scope says and keeps the
   credential; the hub holds the sign-in in memory while its code is valid, marks the provider
@@ -191,7 +191,7 @@ with a key"; `reason` is an i18n key, never a sentence in one language.
 
 ## Propagation (ADR 0010)
 
-- **The fallback chain** (decision §49): wherever the hub owns a profile's model selection (it
+- **The fallback chain** (decision §54): wherever the hub owns a profile's model selection (it
   has a chat model), it owns `fallback_providers` too — the chain as `provider` + `model` pairs
   in Hermes's own names, written only when the pairs differ, emptied when the chain is; a named
   profile gets its chain before each of its turns with its endpoints.

@@ -317,7 +317,7 @@ function ProviderCard({
   const stored = provider.api_key !== null;
   // `auth.kind: none` is "no key required" — never "no key accepted" (contract §26).
   const keyRequired = provider.auth.kind === 'api_key';
-  // Used by signing in to an account, through Hermes (contract decision §50).
+  // Used by signing in to an account, through Hermes (contract decision §55).
   const signIn = provider.auth.kind === 'oauth';
   const warn = needsLoopbackWarning(provider.base_url ?? '', host);
 
@@ -812,7 +812,7 @@ function DefaultsTab() {
         disabled={save.isPending}
         onChange={(fallbacks) =>
           // A chain is the profile's own with its chat model: an inherited model is saved
-          // with it, so the chain has a model of this profile's to fall back from (§37, §49).
+          // with it, so the chain has a model of this profile's to fall back from (§37, §54).
           save.mutate(
             inherited.has('default') && defaults.data.default
               ? { default: defaults.data.default, fallbacks }

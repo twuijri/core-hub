@@ -595,7 +595,7 @@ export class RunEngine {
         }
 
         case 'fallback': {
-          // The run is now the model that took it (contract decision §49): `Run.model` and
+          // The run is now the model that took it (contract decision §54): `Run.model` and
           // `Run.provider` name it, and `Run.fallback` what failed before it.
           if (!state.fallback) break;
           const { answered, failed } = state.fallback;

@@ -81,7 +81,7 @@ export interface PropagationState {
   /** Why `hermesModel` is null, when the owner did choose a default. */
   hermesModelBlocked: string | null;
   /**
-   * The chat fallback chain in Hermes's vocabulary (contract decision §49), for its
+   * The chat fallback chain in Hermes's vocabulary (contract decision §54), for its
    * `fallback_providers`. `null` leaves the key alone — the hub owns it only where it owns the
    * model selection, so it is null whenever `hermesModel` is. Members Hermes cannot be told
    * about are left out. Absent means null.
@@ -354,7 +354,7 @@ function applyModel(
 }
 
 /**
- * `fallback_providers`: the chain Hermes walks when the model fails (contract decision §49),
+ * `fallback_providers`: the chain Hermes walks when the model fails (contract decision §54),
  * each entry the `provider` + `model` pair Hermes's own `hermes fallback` writes (MIT source
  * `hermes_cli/fallback_cmd.py`). Rewritten only when the pairs differ, so an entry somebody
  * gave more keys by hand keeps them while it still names the same model. `null` leaves the key

@@ -1,5 +1,5 @@
 /**
- * The fallback chain in the real Hermes (contract decision §49).
+ * The fallback chain in the real Hermes (contract decision §54).
  *
  * The owner's outage of 2026-09-25 against Hermes itself: an OpenAI-compatible endpoint on
  * this machine answers its first model with `503 auth_unavailable` and its second one

@@ -1,6 +1,6 @@
 /**
  * The session's finished runs, for what a turn says about itself after a reload — which model
- * answered it and what that model took over from (contract decision §49). The session's own
+ * answered it and what that model took over from (contract decision §54). The session's own
  * detail carries only its live runs; the history is one page of `sessions.listRuns`, read once
  * per conversation. Live runs, which the socket keeps current, win over the page.
  */

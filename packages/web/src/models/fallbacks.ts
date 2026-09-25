@@ -1,5 +1,5 @@
 /**
- * The chat model's fallback chain as the Defaults tab edits it (contract decision §49): an
+ * The chat model's fallback chain as the Defaults tab edits it (contract decision §54): an
  * ordered list of models, tried in turn when the one before them fails with an error another
  * model could get past. Pure, so the order rules are tested without a screen.
  */

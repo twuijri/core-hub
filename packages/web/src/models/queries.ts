@@ -272,14 +272,14 @@ export function useSaveDefaults() {
   return useModelsMutation(
     async (body: {
       default?: ModelRef | null;
-      /** The chat model's fallback chain, in order (contract decision §49). */
+      /** The chat model's fallback chain, in order (contract decision §54). */
       fallbacks?: ModelRef[];
       assignments?: Record<string, ModelRef | null>;
     }) => (await client.request('put', '/models/defaults', { body })).data as ModelDefaults,
   );
 }
 
-/** Starts a device-code sign-in for a provider used by signing in (contract decision §50). */
+/** Starts a device-code sign-in for a provider used by signing in (contract decision §55). */
 export function useStartSignIn() {
   const { client } = useAuth();
   return useMutation({

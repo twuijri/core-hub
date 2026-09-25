@@ -187,7 +187,7 @@ export type AgentEvent =
   | { type: 'context'; usedTokens: number; windowTokens?: number | null }
   | {
       /**
-       * The turn moved down the fallback chain (contract decision §49): the models in
+       * The turn moved down the fallback chain (contract decision §54): the models in
        * `failed` refused it, in order, with an error another model could get past, and
        * `answered` is the one that took it — or, when the run then failed, the last tried.
        * `provider` is the hub's provider slug, when known.
@@ -275,7 +275,7 @@ export interface PromptInput {
   modelProviderSlug?: string | null;
   /**
    * The profile's fallback chain for this turn, without the model above (contract decision
-   * §49). Hermes reads its own copy from `config.yaml` and uses this only to name what it
+   * §54). Hermes reads its own copy from `config.yaml` and uses this only to name what it
    * switched to; the `builtin` adapter hands it to the models module, which walks it.
    */
   fallbacks?: readonly FallbackModel[];
@@ -294,7 +294,7 @@ export interface FallbackAttempt {
 }
 
 /**
- * One model the turn may move on to when the chosen one fails (contract decision §49), in
+ * One model the turn may move on to when the chosen one fails (contract decision §54), in
  * every vocabulary an adapter might need: the hub's row id (the `builtin` adapter makes the
  * request itself), the runtime's name for the provider (Hermes), and the hub's slug.
  */
