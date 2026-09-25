@@ -120,6 +120,23 @@ const pictures = {
   },
   /** The bare mark, for small sizes and the tray. */
   bare: (size, fg = ACCENT) => svg({ size, fg, markWidth: size * (15 / 16) }),
+  /**
+   * The wide Microsoft Store tile: the rounded tile, as tall as the picture's
+   * shorter side allows, centred on transparency (Windows fills the rest with the manifest's
+   * background colour).
+   */
+  wide: (width, height) => {
+    const size = Math.min(width, height);
+    const square = pictures.tile(size);
+    const x = (width - size) / 2;
+    const y = (height - size) / 2;
+    return square
+      .replace(
+        /^<svg [^>]*>/,
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><g transform="translate(${x} ${y})">`,
+      )
+      .replace(/<\/svg>$/, '</g></svg>');
+  },
 };
 
 // ------------------------------------------------------------------ encoders
@@ -336,6 +353,32 @@ put(`${desk}/tray-32.png`, png(rasterize(pictures.bare(32))));
 // macOS template images: black and alpha only; the menu bar recolours them.
 put(`${desk}/trayTemplate.png`, png(rasterize(pictures.bare(16, BLACK))));
 put(`${desk}/trayTemplate@2x.png`, png(rasterize(pictures.bare(32, BLACK))));
+
+// Microsoft Store (MSIX, electron-builder's appx target reads assets/appx): each tile at 100, 200
+// and 400 % scale, and the taskbar/Start icon at the target sizes Windows asks for, plated (on the
+// tile) and unplated (the same picture; the tile already carries its own background). The names
+// are the ones electron-builder puts in the manifest; makepri picks the scale.
+const appx = `${desk}/appx`;
+const storeTiles = {
+  StoreLogo: [50, 50],
+  Square44x44Logo: [44, 44],
+  SmallTile: [71, 71],
+  Square150x150Logo: [150, 150],
+  LargeTile: [310, 310],
+  Wide310x150Logo: [310, 150],
+};
+for (const [name, [w, h]] of Object.entries(storeTiles)) {
+  for (const scale of [100, 200, 400]) {
+    const width = (w * scale) / 100;
+    const height = (h * scale) / 100;
+    const picture = width === height ? pictures.tile(width) : pictures.wide(width, height);
+    put(`${appx}/${name}.scale-${scale}.png`, png(rasterize(picture)));
+  }
+}
+for (const n of [16, 24, 32, 48, 256]) {
+  put(`${appx}/Square44x44Logo.targetsize-${n}.png`, png(tile(n)));
+  put(`${appx}/Square44x44Logo.targetsize-${n}_altform-unplated.png`, png(tile(n)));
+}
 
 // Web: the home-screen icon iOS Safari uses (the favicon itself stays inline in index.html).
 put(

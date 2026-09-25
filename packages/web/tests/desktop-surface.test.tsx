@@ -433,6 +433,28 @@ describe('desktop updates', () => {
     await userEvent.click(await screen.findByTestId('updates-auto'));
     expect(bridge.updates.setAuto).toHaveBeenCalledWith(false);
   });
+
+  it('in the Microsoft Store build, says the Store updates it and offers no check', async () => {
+    const bridge = fakeBridge();
+    const store = {
+      channel: 'store' as const,
+      auto: false,
+      last: null,
+      releasesPage: 'https://apps.microsoft.com/detail/9MT62R5V3P5N',
+    };
+    bridge.updates.get.mockImplementation(async () => store);
+    withBridge(bridge);
+    mountThisDevice();
+    expect((await screen.findByTestId('updates-store')).textContent).toBe(
+      'Updates come from the Microsoft Store.',
+    );
+    expect(screen.getByText('Open in the Microsoft Store').getAttribute('href')).toBe(
+      store.releasesPage,
+    );
+    expect(screen.queryByTestId('updates-check')).toBeNull();
+    expect(screen.queryByTestId('updates-auto')).toBeNull();
+    expect(bridge.updates.check).not.toHaveBeenCalled();
+  });
 });
 
 describe('pairing link for a computer', () => {

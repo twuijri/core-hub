@@ -1,11 +1,22 @@
 // The update check: which release is newer, which installer fits, and what GitHub said.
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { checkForUpdate, RELEASES_URL } from '../../src/main/updates.js';
+import {
+  appChannel,
+  checkForUpdate,
+  RELEASES_URL,
+  STORE_UPDATES_MESSAGE,
+} from '../../src/main/updates.js';
 import {
   assetFor,
   checkIsDue,
+  checksGitHub,
   compareVersions,
   pickUpdate,
+  STORE_PAGE,
+  updateChannel,
   type GitHubRelease,
 } from '../../src/shared/updates.js';
 
@@ -157,5 +168,53 @@ describe('asking GitHub', () => {
         fetchImpl: offline,
       }),
     ).toMatchObject({ status: 'failed', message: 'fetch failed' });
+  });
+});
+
+describe('the Microsoft Store build', () => {
+  it('is the store channel when packaging stamped it, inside any MSIX, or when asked', () => {
+    expect(updateChannel({})).toBe('github');
+    expect(updateChannel({ metadata: 'store' })).toBe('store');
+    expect(updateChannel({ metadata: 'github', windowsStore: true })).toBe('store');
+    expect(updateChannel({ env: 'Store' })).toBe('store');
+    expect(updateChannel({ metadata: 'something', windowsStore: false, env: '' })).toBe('github');
+    expect(checksGitHub('github')).toBe(true);
+    expect(checksGitHub('store')).toBe(false);
+    expect(STORE_PAGE).toBe('https://apps.microsoft.com/detail/9MT62R5V3P5N');
+  });
+
+  it('reads the stamp from the packaged package.json', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'corehub-channel-'));
+    try {
+      expect(appChannel(dir, {})).toBe('github');
+      writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ version: '1.1.0' }));
+      expect(appChannel(dir, {})).toBe('github');
+      expect(appChannel(dir, { COREHUB_CHANNEL: 'store' })).toBe('store');
+      writeFileSync(
+        path.join(dir, 'package.json'),
+        JSON.stringify({ version: '1.1.0', corehubChannel: 'store' }),
+      );
+      expect(appChannel(dir, {})).toBe('store');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('never asks GitHub: the Store updates it', async () => {
+    let asked = 0;
+    const fetchImpl = (async () => {
+      asked += 1;
+      return new Response(JSON.stringify([release('v9.0.0')]));
+    }) as unknown as typeof fetch;
+    const result = await checkForUpdate({
+      current: '1.1.0',
+      platform: 'win32',
+      arch: 'x64',
+      channel: 'store',
+      fetchImpl,
+    });
+    expect(asked).toBe(0);
+    expect(result).toMatchObject({ status: 'failed', message: STORE_UPDATES_MESSAGE });
+    expect(STORE_UPDATES_MESSAGE).toBe('Updates come from the Microsoft Store');
   });
 });

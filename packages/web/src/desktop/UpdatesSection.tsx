@@ -2,7 +2,7 @@
  * Updates, inside This device (ADR 0023): the app's version, whether it looks for a new one
  * once a day, and — when there is one — a link to its installer. The app never downloads or
  * installs anything by itself; the person clicks Download and installs it as they installed
- * this one.
+ * this one. The Microsoft Store build (`channel: 'store'`) only says the Store updates it.
  */
 import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n/context.js';
@@ -26,6 +26,25 @@ export function UpdatesSection({ bridge, version }: { bridge: DesktopBridge; ver
   }, [bridge]);
 
   if (!state) return null;
+  if (state.channel === 'store')
+    return (
+      <section
+        className="flex flex-col gap-3"
+        aria-labelledby="updates-heading"
+        data-testid="desktop-updates"
+      >
+        <h3 id="updates-heading" className="text-sm font-semibold">
+          {t('desktop_updates.title')}
+        </h3>
+        <p className="text-sm">{t('desktop_updates.current', { version: `⁨${version}⁩` })}</p>
+        <Notice>
+          <span data-testid="updates-store">{t('desktop_updates.from_store')}</span>{' '}
+          <a href={state.releasesPage} target="_blank" rel="noreferrer" className="text-link">
+            {t('desktop_updates.store_page')}
+          </a>
+        </Notice>
+      </section>
+    );
   const last = state.last;
   const when = last
     ? new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', {
