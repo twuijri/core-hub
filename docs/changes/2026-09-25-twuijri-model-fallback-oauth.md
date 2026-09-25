@@ -159,7 +159,9 @@ $ vitest run tests/models-screen tests/model-fallback-signin tests/composer     
 مسارات تسجيل الدخول كانت `501`). تسجيل الدخول لم يُجرَّب مع Hermes حقيقي: `start` يطلب خادم
 OpenAI/Nous/xAI/MiniMax الحقيقي؛ جُرِّب مع خادم Hermes مكتوب يؤدّي تدفّق رمز الجهاز.
 
-CI: (يُضاف بعد الدفع)
+CI: التشغيل الثالث (36086904932) أخضر كله — lint/typecheck/contracts/tests/build، وPlaywright
+كاملة على المركز الحقيقي، وصورة Docker تجيب `/health`، وdb:generate/migrate (SQLite وPostgreSQL)،
+وسجل التغيير، وgraphify. `main` لم يتحرك منذ فتح الفرع (آخره beb539e)، فلا دمج مطلوب.
 
 ## المخاطر والرجوع
 - **ملكية `fallback_providers`**: حيث للبروفايل نموذج محادثة في المركز، يكتب المركز السلسلة —
