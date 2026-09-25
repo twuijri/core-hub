@@ -14,11 +14,24 @@ export interface Skill {
   description: string | null;
   enabled: boolean;
   pinned: boolean;
-  source: 'builtin' | 'user' | 'external';
+  source: 'builtin' | 'user' | 'external' | 'library';
   use_count: number;
   updated_at: string | null;
   content: string | null;
+  /** A Core Hub library skill (`source: library`): as shipped, or edited by the person. */
+  library?: 'current' | 'edited' | null;
 }
+
+/** Core Hub's own skill library in the selected profile (decision §60). */
+export interface SkillLibrary {
+  enabled: boolean;
+  available: number;
+  installed: number;
+  edited: number;
+}
+
+/** The category folder the library lives in. */
+export const LIBRARY_CATEGORY = 'core-hub';
 
 export interface SkillCategory {
   key: string;
@@ -42,7 +55,11 @@ export function useSkills(agentId: string | undefined) {
         await client.request('get', '/agents/{agent_id}/skills', {
           params: { agent_id: agentId ?? '' },
         })
-      ).data as unknown as { categories: SkillCategory[]; home: string | null },
+      ).data as unknown as {
+        categories: SkillCategory[];
+        home: string | null;
+        library?: SkillLibrary;
+      },
     enabled: !!session && !!agentId,
   });
 }
@@ -113,6 +130,41 @@ export function useDeleteSkill(agentId: string | undefined) {
         })
       ).data,
     onSuccess: invalidate,
+  });
+}
+
+/** Switch Core Hub's library on (installing it) or off in the selected profile. */
+export function useSetSkillLibrary(agentId: string | undefined) {
+  const { client } = useAuth();
+  const invalidate = useSkillInvalidation(agentId);
+  return useMutation({
+    mutationFn: async (enabled: boolean) =>
+      (
+        await client.request('patch', '/agents/{agent_id}/skill-library', {
+          params: { agent_id: agentId ?? '' },
+          body: { enabled } as never,
+        })
+      ).data as unknown as SkillLibrary,
+    onSuccess: invalidate,
+  });
+}
+
+/** Put a library skill back as Core Hub ships it, over the person's edits. */
+export function useRestoreSkill(agentId: string | undefined) {
+  const { client, profile } = useAuth();
+  const queryClient = useQueryClient();
+  const invalidate = useSkillInvalidation(agentId);
+  return useMutation({
+    mutationFn: async (key: string) =>
+      (
+        await client.request('post', '/agents/{agent_id}/skills/{skill_key}/restore', {
+          params: { agent_id: agentId ?? '', skill_key: key },
+        })
+      ).data as unknown as Skill,
+    onSuccess: (_skill, key) => {
+      invalidate();
+      void queryClient.invalidateQueries({ queryKey: skillKeys.one(profile, agentId ?? '', key) });
+    },
   });
 }
 

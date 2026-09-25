@@ -18,6 +18,12 @@
  * them to read, lets them be pinned — and offers no switch, save or delete for them, because
  * the hub rewriting one would quietly fork Hermes's copy.
  *
+ * **Core Hub's own library is theirs to adapt** (decision §60). The skills the hub ships sit in
+ * the `core-hub` category with a «Core Hub library» badge. They are ordinary skills — opened,
+ * edited, switched, deleted — and the hub keeps them up to date only while they are as it wrote
+ * them: an edited one says so and offers Restore. The library itself is switched off or on per
+ * profile from the card above the list.
+ *
  * **Import takes a pack as it is.** A `SKILL.md`, or a zip of one skill or several, lands in
  * this profile's folder byte for byte; a pack Hermes could not read is refused whole, with
  * the skill and the file named, and nothing half-installed.
@@ -31,6 +37,8 @@ import { AppShell } from '../shell/AppShell.js';
 import {
   Badge,
   Button,
+  Card,
+  CardHeader,
   Dialog,
   EmptyState,
   Input,
@@ -41,16 +49,21 @@ import {
   Textarea,
   Tooltip,
   useConfirm,
+  useToast,
 } from '../ui/index.js';
 import { IconPin, IconSearch, IconSpark, IconTrash } from '../ui/icons.js';
 import {
+  LIBRARY_CATEGORY,
   useDeleteSkill,
   useImportSkills,
   usePatchSkill,
+  useRestoreSkill,
   useSaveSkill,
+  useSetSkillLibrary,
   useSkill,
   useSkills,
   type Skill,
+  type SkillLibrary,
 } from './skills.js';
 import { describeToolError } from './toolErrors.js';
 
@@ -141,6 +154,10 @@ export function AgentSkillsScreen() {
           </div>
         )}
 
+        {skills.data?.library && (
+          <SkillLibraryCard agentId={agentId} library={skills.data.library} />
+        )}
+
         {skills.isPending && (
           <SkeletonGroup label={t('common.loading')}>
             <Skeleton height="4rem" radius="md" />
@@ -177,7 +194,11 @@ export function AgentSkillsScreen() {
                   data-category={category.key}
                 >
                   <h2 className="text-sm font-semibold text-muted">
-                    {category.key === 'user' ? t('skills.category_user') : category.name}
+                    {category.key === 'user'
+                      ? t('skills.category_user')
+                      : category.key === LIBRARY_CATEGORY
+                        ? t('skills.library.title')
+                        : category.name}
                   </h2>
                   {category.description && (
                     <p className="text-xs text-muted" dir="auto">
@@ -219,11 +240,16 @@ function SkillRow({
   const { t } = useI18n();
   const patch = usePatchSkill(agentId);
   const remove = useDeleteSkill(agentId);
+  const restore = useRestoreSkill(agentId);
+  const toast = useToast();
   const { ask, dialog } = useConfirm();
   // The server marks an unreadable file by putting the reason where the description goes.
   const broken = (skill.description ?? '').startsWith('[');
   // Hermes's own: readable and pinnable, never switched, rewritten or deleted from here.
   const builtin = skill.source === 'builtin';
+  // Core Hub's own: kept up to date by the hub until the person edits it.
+  const library = skill.source === 'library';
+  const edited = library && skill.library === 'edited';
 
   return (
     <div
@@ -232,6 +258,7 @@ function SkillRow({
       data-testid="skill-row"
       data-skill={skill.key}
       data-source={skill.source}
+      data-library={skill.library ?? undefined}
     >
       <Switch
         checked={skill.enabled}
@@ -261,6 +288,22 @@ function SkillRow({
               </span>
             </Tooltip>
           )}
+          {library && (
+            <Tooltip label={t('skills.library.hint')}>
+              <span>
+                <Badge tone="accent" testId={`skill-library-${skill.key}`}>
+                  {t('skills.library.title')}
+                </Badge>
+              </span>
+            </Tooltip>
+          )}
+          {edited && (
+            <Tooltip label={t('skills.library.edited_hint')}>
+              <span>
+                <Badge tone="warning">{t('skills.library.edited')}</Badge>
+              </span>
+            </Tooltip>
+          )}
         </span>
         {skill.description && !broken && (
           <span className="skill-description" dir="auto">
@@ -269,6 +312,33 @@ function SkillRow({
         )}
       </button>
       <span className="flex items-center gap-1">
+        {edited && (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={restore.isPending}
+            data-testid={`skill-restore-${skill.key}`}
+            onClick={() => {
+              void ask({
+                title: t('skills.library.restore_title', { name: skill.name }),
+                body: t('skills.library.restore_body'),
+                confirmLabel: t('skills.library.restore'),
+              }).then((yes) => {
+                if (!yes) return;
+                restore.mutate(skill.key, {
+                  onSuccess: () =>
+                    toast({
+                      title: t('skills.library.restored', { name: skill.name }),
+                      tone: 'success',
+                    }),
+                  onError: (error) => toast({ title: describeToolError(error, t), tone: 'danger' }),
+                });
+              });
+            }}
+          >
+            {t('skills.library.restore')}
+          </Button>
+        )}
         <Button
           size="sm"
           variant="ghost"
@@ -304,6 +374,89 @@ function SkillRow({
   );
 }
 
+/**
+ * Core Hub's library in this profile: how many of its skills are here, how many the person
+ * edited, and the switch. Off removes the untouched ones (after asking) and leaves the edited
+ * ones as the person's; on installs the whole library. A profile the hub never installed it in
+ * (a Hermes it does not run itself) offers to install it.
+ */
+function SkillLibraryCard({
+  agentId,
+  library,
+}: {
+  agentId: string | undefined;
+  library: SkillLibrary;
+}) {
+  const { t } = useI18n();
+  const set = useSetSkillLibrary(agentId);
+  const { ask, dialog } = useConfirm();
+  const missing = library.enabled && library.installed < library.available;
+
+  return (
+    <Card
+      padding="sm"
+      testId="skill-library"
+      data-enabled={library.enabled || undefined}
+      as="section"
+    >
+      <CardHeader
+        media={<IconSpark size={18} />}
+        title={t('skills.library.title')}
+        subtitle={
+          library.enabled
+            ? t('skills.library.summary_on', {
+                installed: String(library.installed),
+                available: String(library.available),
+              })
+            : t('skills.library.summary_off')
+        }
+        actions={
+          <span className="flex items-center gap-2">
+            {library.edited > 0 && (
+              <Badge tone="warning">
+                {t('skills.library.edited_count', { count: String(library.edited) })}
+              </Badge>
+            )}
+            {missing && (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={set.isPending}
+                data-testid="skill-library-install"
+                onClick={() => set.mutate(true)}
+              >
+                {t('skills.library.install')}
+              </Button>
+            )}
+            <Switch
+              checked={library.enabled}
+              disabled={set.isPending}
+              label={t('skills.library.switch')}
+              labelHidden
+              testId="skill-library-toggle"
+              onChange={(next) => {
+                if (next) {
+                  set.mutate(true);
+                  return;
+                }
+                void ask({
+                  title: t('skills.library.off_title'),
+                  body: t('skills.library.off_body'),
+                  confirmLabel: t('skills.library.off_confirm'),
+                }).then((yes) => {
+                  if (yes) set.mutate(false);
+                });
+              }}
+            />
+          </span>
+        }
+      />
+      {set.isError && <Notice tone="danger">{describeToolError(set.error, t)}</Notice>}
+      {dialog}
+    </Card>
+  );
+}
+
 const TEMPLATE = `---
 name: 
 description: 
@@ -328,6 +481,7 @@ function SkillEditor({
   const content = draft ?? existing.data?.content ?? (skillKey === '' ? TEMPLATE : '');
   const creating = skillKey === '';
   const readOnly = existing.data?.source === 'builtin';
+  const fromLibrary = existing.data?.source === 'library';
   const badKey = key !== '' && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(key);
 
   return (
@@ -336,7 +490,13 @@ function SkillEditor({
       size="lg"
       onOpenChange={(open) => !open && onClose()}
       title={creating ? t('skills.new') : skillKey}
-      description={readOnly ? t('skills.builtin_hint') : t('skills.editor_note')}
+      description={
+        readOnly
+          ? t('skills.builtin_hint')
+          : fromLibrary
+            ? t('skills.library.editor_note')
+            : t('skills.editor_note')
+      }
       closeLabel={t('common.cancel')}
       testId="skill-editor"
       footer={

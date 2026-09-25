@@ -88,6 +88,10 @@ export function describeToolError(
         });
       case 'skill_bundled':
         return t('skills.bundled_refused');
+      case 'skill_not_library':
+        return t('skills.library.not_library');
+      case 'skill_library_off':
+        return t('skills.library.off_refused');
       case 'plugin_bundled':
         return t('agent_plugins.bundled_refused');
       case 'memory_too_long':
