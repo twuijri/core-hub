@@ -65,6 +65,8 @@ export class Conductor implements RoomLive {
     private readonly realtime: RoomsRealtime,
     private readonly people: (userId: string) => string | null,
     private readonly log: FastifyBaseLogger,
+    /** A seat finished a reply: the room's summary may be due (`memory.ts`). */
+    private readonly onReplied: (scope: EngineScope, roomId: string) => void = () => {},
   ) {}
 
   // ------------------------------------------------------------- RoomLive
@@ -376,6 +378,7 @@ export class Conductor implements RoomLive {
         room: this.roomSummary(scope, fresh),
       });
     }
+    if (status === 'complete') this.onReplied(scope, room.id);
     await this.afterReply(scope, fresh, seat, message, live.chainId, status);
   }
 

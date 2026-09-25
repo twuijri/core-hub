@@ -31,6 +31,7 @@ import {
   Switch,
   Field,
   Input,
+  Select,
   useConfirm,
   usePrompt,
 } from '../ui/index.js';
@@ -46,7 +47,11 @@ import {
 } from '../ui/icons.js';
 import { RoomComposer } from './RoomComposer.js';
 import { SeatDialog } from './SeatDialog.js';
+import { useProjects } from '../tasks/queries.js';
 import {
+  useLinkProject,
+  usePutMemory,
+  useRefreshMemory,
   useClearContext,
   useContinueHandoff,
   useHandoffs,
@@ -683,6 +688,7 @@ function MembersPanel({ room }: { room: RoomDetail }) {
           ))}
         </ul>
       </section>
+      <MemorySection room={room} />
       {(removeSeat.isError || removeMember.isError || update.isError) && (
         <Notice tone="danger">
           {describeError(removeSeat.error ?? removeMember.error ?? update.error, t)}
@@ -766,6 +772,13 @@ function RoomSettingsDialog({
 }) {
   const { t } = useI18n();
   const update = useUpdateRoom(room.id);
+  const link = useLinkProject();
+  const projects = useProjects();
+  const linked =
+    projects.data?.items.find(
+      (project) => (project as { report_room_id?: string | null }).report_room_id === room.id,
+    )?.id ?? null;
+  const [project, setProject] = useState<string | null>(linked);
   const [all, setAll] = useState(room.can_mention_all);
   const [handoff, setHandoff] = useState(room.handoff.enabled);
   const [depth, setDepth] = useState(String(room.handoff.max_depth ?? ''));
@@ -774,8 +787,20 @@ function RoomSettingsDialog({
     setAll(room.can_mention_all);
     setHandoff(room.handoff.enabled);
     setDepth(String(room.handoff.max_depth ?? ''));
+    setProject(linked);
     update.reset();
-  }, [open]);
+  }, [open, linked]);
+  const save = async () => {
+    await update.mutateAsync({
+      can_mention_all: all,
+      handoff: { enabled: handoff, max_depth: parsed },
+    });
+    if (project !== linked) {
+      if (linked) await link.mutateAsync({ projectId: linked, roomId: null });
+      if (project) await link.mutateAsync({ projectId: project, roomId: room.id });
+    }
+    onClose();
+  };
   const parsed = depth.trim() === '' ? null : Number(depth);
   const valid = parsed === null || (Number.isInteger(parsed) && parsed >= 1 && parsed <= 20);
   return (
@@ -793,13 +818,8 @@ function RoomSettingsDialog({
           <Button
             variant="primary"
             disabled={!valid}
-            loading={update.isPending}
-            onClick={() =>
-              update.mutate(
-                { can_mention_all: all, handoff: { enabled: handoff, max_depth: parsed } },
-                { onSuccess: onClose },
-              )
-            }
+            loading={update.isPending || link.isPending}
+            onClick={() => void save().catch(() => {})}
             data-testid="room-settings-save"
           >
             {t('common.save')}
@@ -824,8 +844,78 @@ function RoomSettingsDialog({
             />
           )}
         </Field>
-        {update.isError && <Notice tone="danger">{describeError(update.error, t)}</Notice>}
+        <Select
+          value={project}
+          onValueChange={setProject}
+          options={(projects.data?.items ?? []).map((row) => ({ value: row.id, label: row.name }))}
+          label={t('rooms.settings.project')}
+          placeholder={t('rooms.settings.project_none')}
+          testId="room-settings-project"
+        />
+        <p className="text-xs text-muted">{t('rooms.settings.project_hint')}</p>
+        {(update.isError || link.isError) && (
+          <Notice tone="danger">{describeError(update.error ?? link.error, t)}</Notice>
+        )}
       </div>
     </Dialog>
+  );
+}
+
+/**
+ * The room's summary: what agents are told of what came before the messages they are shown.
+ * The manager may have it rewritten now or write it by hand.
+ */
+function MemorySection({ room }: { room: RoomDetail }) {
+  const { t } = useI18n();
+  const refresh = useRefreshMemory(room.id);
+  const put = usePutMemory(room.id);
+  const prompt = usePrompt();
+  const memory = room.memory;
+  const edit = async () => {
+    const summary = await prompt.ask({
+      title: t('rooms.memory.edit'),
+      label: t('rooms.memory.title'),
+      initialValue: memory.summary ?? '',
+      confirmLabel: t('common.save'),
+    });
+    if (summary !== null) put.mutate(summary);
+  };
+  return (
+    <section className="flex flex-col gap-2" data-testid="room-memory">
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-semibold">{t('rooms.memory.title')}</h2>
+        {memory.status === 'summarizing' && <Badge tone="info">{t('rooms.memory.working')}</Badge>}
+        {memory.status === 'error' && <Badge tone="danger">{t('rooms.memory.failed')}</Badge>}
+      </div>
+      <p
+        className="whitespace-pre-wrap text-xs text-muted"
+        dir="auto"
+        data-testid="room-memory-text"
+      >
+        {memory.summary ?? t('rooms.memory.none')}
+      </p>
+      {memory.error && <p className="text-xs text-danger-soft-text">{memory.error}</p>}
+      {room.can_manage && (
+        <div className="flex gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            loading={refresh.isPending}
+            disabled={memory.status === 'summarizing'}
+            onClick={() => refresh.mutate()}
+            data-testid="room-memory-refresh"
+          >
+            {t('rooms.memory.refresh')}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => void edit()}>
+            {t('rooms.memory.edit')}
+          </Button>
+        </div>
+      )}
+      {(refresh.isError || put.isError) && (
+        <Notice tone="danger">{describeError(refresh.error ?? put.error, t)}</Notice>
+      )}
+      {prompt.dialog}
+    </section>
   );
 }

@@ -18,6 +18,7 @@ import { HubError } from '../../lib/errors.js';
 import { defineModule, REALTIME_NAMESPACES } from '../../lib/module.js';
 import { clampLimit } from '../../lib/pagination.js';
 import { defineRoute } from '../../lib/route.js';
+import { jobRunnerFor } from '../audit/index.js';
 import { requireRole, requireUser, requireWorkspace } from '../auth/index.js';
 import { Conductor } from './conductor.js';
 import { roomsRealtimeFor } from './realtime.js';
@@ -78,6 +79,7 @@ export function conductorFor(app: FastifyInstance): Conductor {
     roomsRealtimeFor(app.hub.io),
     (userId) => portsOf(app).person(userId)?.name ?? null,
     app.log,
+    (scope, roomId) => summariseWhenDue(app, scope, roomId),
   );
   conductors.set(app.hub.io, created);
   return created;
@@ -91,6 +93,41 @@ export function roomsServiceFor(app: FastifyInstance): RoomsService {
     roomsRealtimeFor(app.hub.io),
     conductorFor(app),
   );
+}
+
+/**
+ * Rewrite a room's summary as a job (`rooms.run`), so `/rt/jobs` says when it is done. The
+ * job answers at once; the summary follows on `memory.updated`.
+ */
+function startSummary(app: FastifyInstance, scope: RoomScope, roomId: string): { job_id: string } {
+  const job = jobRunnerFor(app).start(
+    {
+      workspace: scope.workspace,
+      ownerId: scope.userId,
+      kind: 'rooms.run',
+      entityKind: 'room',
+      entityId: roomId,
+      input: { summary: true },
+    },
+    async () => {
+      const memory = await roomsServiceFor(app).refreshMemory(scope, roomId);
+      return { memory };
+    },
+  );
+  return { job_id: job.id };
+}
+
+/** After a reply: the summary is due when `every_turns` messages are not covered by it yet. */
+function summariseWhenDue(app: FastifyInstance, scope: RoomScope, roomId: string): void {
+  try {
+    const service = roomsServiceFor(app);
+    const room = service.store.getRoom(scope.workspace, roomId);
+    if (!room || room.summaryEveryTurns <= 0 || room.memoryStatus === 'summarizing') return;
+    if (service.uncovered(room).length < room.summaryEveryTurns) return;
+    startSummary(app, scope, roomId);
+  } catch (error) {
+    app.log.warn({ err: error, roomId }, 'rooms: could not start the summary');
+  }
 }
 
 /** The contract's `Run` of each live id, with the room's ids set. */
@@ -370,6 +407,31 @@ export const roomsModule = defineModule({
         await conductorFor(request.server).stopRoom(scope, room(params));
         await service(request).clearContext(scope, room(params));
         return null;
+      },
+    });
+    defineRoute(app, deps, {
+      operationId: 'rooms.getMemory',
+      handler: (request, { params }) => service(request).memoryOf(scopeOf(request), room(params)),
+    });
+    defineRoute(app, deps, {
+      operationId: 'rooms.putMemory',
+      handler: (request, { params, body }) =>
+        service(request).putMemory(
+          scopeOf(request),
+          room(params),
+          String((body as { summary: string }).summary),
+        ),
+    });
+    defineRoute(app, deps, {
+      operationId: 'rooms.refreshMemory',
+      status: 202,
+      handler: (request, { params }) => {
+        const scope = scopeOf(request);
+        const found = service(request).requireManager(scope, room(params));
+        if (found.memoryStatus === 'summarizing') {
+          throw new HubError('state_invalid', { details: { reason: 'already_summarizing' } });
+        }
+        return startSummary(request.server, scope, found.id);
       },
     });
     defineRoute(app, deps, {

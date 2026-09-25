@@ -458,3 +458,51 @@ export function useClearContext(roomId: string) {
     onSuccess: refresh,
   });
 }
+
+export function usePutMemory(roomId: string) {
+  const { client } = useAuth();
+  const refresh = useRefresh();
+  return useMutation({
+    mutationFn: async (summary: string) =>
+      (
+        await client.request('put', '/rooms/{room_id}/memory', {
+          params: { room_id: roomId },
+          body: { summary },
+        })
+      ).data,
+    onSuccess: refresh,
+  });
+}
+
+export function useRefreshMemory(roomId: string) {
+  const { client } = useAuth();
+  const refresh = useRefresh();
+  return useMutation({
+    mutationFn: async () =>
+      (
+        await client.request('post', '/rooms/{room_id}/memory/refresh', {
+          params: { room_id: roomId },
+        })
+      ).data as unknown as { job_id: string },
+    onSuccess: refresh,
+  });
+}
+
+/**
+ * Which project reports its tasks' progress into this room (`Project.report_room_id`), and
+ * the way to change it: one project at a time is linked from the room's settings.
+ */
+export function useLinkProject() {
+  const { client } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { projectId: string; roomId: string | null }) =>
+      (
+        await client.request('patch', '/projects/{project_id}', {
+          params: { project_id: input.projectId },
+          body: { report_room_id: input.roomId },
+        })
+      ).data,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['projects'] }),
+  });
+}

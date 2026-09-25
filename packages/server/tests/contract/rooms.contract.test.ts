@@ -24,7 +24,7 @@ import {
   FakeAgentRunner,
   fakeHermes,
 } from '../../src/modules/sessions/testing/fake-runner.js';
-import { testHub, type TestHub } from '../unit/helpers.js';
+import { drainJobs, testHub, type TestHub } from '../unit/helpers.js';
 import { ajvFor, operationsById, responseSchema } from './schema.js';
 
 const doc = loadOpenApiDocument();
@@ -292,6 +292,15 @@ describe.skipIf(!doc)('contract: rooms', () => {
     await conductorFor(hub.app).idle();
     await call('rooms.listRuns', 200, { params: { room_id: talkRoom.id } });
     await call('rooms.listRuns', 404, { params: { room_id: '01KAGENTNAWAY0000000000000' } });
+    // Part 3: the summary, by hand and on request.
+    await call('rooms.getMemory', 200, { params: { room_id: talkRoom.id } });
+    await call('rooms.putMemory', 200, {
+      params: { room_id: talkRoom.id },
+      body: { summary: 'اتفقنا على الخطة.' },
+    });
+    await call('rooms.refreshMemory', 202, { params: { room_id: talkRoom.id } });
+    await drainJobs(hub.app);
+    await call('rooms.getMemory', 404, { params: { room_id: '01KAGENTNAWAY0000000000000' } });
     await call('rooms.clearContext', 204, { params: { room_id: talkRoom.id } });
 
     const names = envelopes.map((e) => e.event);
@@ -311,6 +320,7 @@ describe.skipIf(!doc)('contract: rooms', () => {
       'run.cancelled',
       'handoff.updated',
       'room.cleared',
+      'memory.updated',
     ]) {
       expect(names).toContain(event);
     }

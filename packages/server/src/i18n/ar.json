@@ -212,5 +212,14 @@
     "plugins": {
       "duplicate": "يذكر هرمز أكثر من إضافة بهذا الاسم؛ المعروضة هي التي تنفّذ عليها أوامره."
     }
+  },
+  "rooms": {
+    "report": {
+      "started": "بدأ {agent} العمل على المهمة {task} «{title}».",
+      "succeeded": "أنهى {agent} المهمة {task} «{title}»: {summary}",
+      "succeeded_plain": "أنهى {agent} المهمة {task} «{title}».",
+      "failed": "تعثّرت المهمة {task} «{title}»: {reason}",
+      "cancelled": "أُوقفت المهمة {task} «{title}»."
+    }
   }
 }
