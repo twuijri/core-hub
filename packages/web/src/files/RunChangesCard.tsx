@@ -9,6 +9,7 @@
  */
 import { useState } from 'react';
 import { useI18n } from '../i18n/context.js';
+import { directionOf } from '../i18n/index.js';
 import type { RunChanges, RunFileChange } from '../types.js';
 import { pluralOf } from './changes.js';
 import { useOpenDiff } from './context.js';
@@ -27,6 +28,9 @@ export function RunChangesCard({ changes }: { changes: RunChanges }) {
   return (
     <section
       className="run-changes"
+      // The transcript row is fixed left-to-right (the sides are physical); the card's
+      // words follow the page, and its paths and counts isolate themselves.
+      dir={directionOf(language)}
       aria-label={t('changes.label')}
       data-testid="run-changes"
       data-run-id={changes.run_id}
