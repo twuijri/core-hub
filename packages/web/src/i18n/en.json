@@ -488,7 +488,11 @@
     "check_update": "Check for updates",
     "update_now": "Update now",
     "auto_update": "Update automatically",
-    "auto_update_hint": "Takes a new version as soon as it ships, without asking.",
+    "auto_update_hint": "The hub looks for a newer version every six hours and installs it only while the agent is idle; a run started during the update waits for it. Off by default.",
+    "version_tested": "Tested version: {version}",
+    "newer_than_tested": "Newer than the tested version",
+    "newer_than_tested_hint": "This version is past the one Core Hub was tested with ({version}). It should work; if something breaks, say so.",
+    "update_available_untested": "Update available: {version} — newer than the tested version",
     "tools": {
       "not_supervised": "This hub does not run Hermes itself, so it cannot ask Hermes to do this.",
       "refused": "Hermes refused: {message}",

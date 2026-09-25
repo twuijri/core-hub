@@ -52,8 +52,8 @@ A registry entry: something the hub can start or talk to.
 | command | json<string[]> | argv to start it; never a shell string |
 | executable_path | text? | resolved binary |
 | package_name | text(200)? | npm package the hub installs (from the catalog recipe) |
-| latest_version | text(64)? | the catalog's pinned version — what "up to date" means |
-| auto_update | bool | only for agents the hub installs |
+| latest_version | text(64)? | the newest stable version known: the registry's answer to the last check, never older than the catalog's pin (the tested baseline) |
+| auto_update | bool | only for agents the hub installs; off by default; taken only while idle (§Updates) |
 | checked_at | ms? | last version check |
 | endpoint | text? | Hermes gateway URL |
 | version | text(64)? | last probed version |
@@ -109,6 +109,23 @@ Indexes: unique (workspace, agent_id).
 - Agents screen: every agent with adapter kind, version, install state, the
   live job (audit) and the per-workspace settings.
 - Install / update: create a job, set `install_state`, stream `job.progress`.
+
+## Updates (proposed 2026-09-25 — owner to confirm; DECISIONS, `update-policy.ts`)
+
+- The catalog's pin is the **tested baseline**: a fresh install takes exactly it, and the
+  contract exposes it as `install.pinned_version`.
+- Every six hours (and on `check-update`) the hub asks the registry — npm's `latest`
+  dist-tag, or PyPI's JSON — for the newest **stable** version of each agent it installed,
+  without installing anything, and records it as `latest_version`. An unreachable registry
+  fails `check-update` and is logged by the periodic check; it never reads as "up to date".
+- An update installs that **exact** version (`package@x.y.z`), never the moving `latest`
+  tag; a companion package (Pi's `pi-acp`) moves to its own newest release with it. A
+  version past the pin is `newer_than_tested`, and clients say «أحدث من النسخة المختبرة».
+- `auto_update` (per agent, off by default) takes an available update only while no run of
+  the agent is in flight; a busy agent is tried again ten minutes later. While any update
+  runs (`install_state = updating`), a turn asked for waits for it (at most 15 minutes)
+  instead of starting on a CLI being replaced; afterwards the agent's open sessions are
+  closed so the next turn starts the new CLI and resumes by its stored ref.
 - Settings form: the adapter's declared settings schema (from code) + the
   `agent_settings` row; secrets shown as `[stored]`.
 

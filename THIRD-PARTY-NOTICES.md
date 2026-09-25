@@ -5,11 +5,12 @@ their original notice.
 
 ## lobe-icons — the agents' marks
 
-`packages/web/src/ui/brand/marks.tsx` carries the path data of five marks — Hermes Agent,
-Claude Code, Codex, Gemini CLI and opencode — taken from
+`packages/web/src/ui/brand/marks.tsx` carries the path data of eight marks — Hermes Agent,
+Claude Code, Codex, Gemini CLI, opencode, and since 2026-09-25 Qwen Code (`qwen.svg`), Kimi
+Code (`kimi.svg`) and Pi (`pi.svg`, lobe-icons' "Pi Agent", https://pi.dev) — taken from
 [`@lobehub/icons-static-svg`](https://github.com/lobehub/lobe-icons) `1.95.1` (verified
-2026-09-22). Five files out of nine hundred are copied in rather than depended on, so the
-client carries the marks it shows and not a 2.4 MB package. They are redrawn into our own
+2026-09-22 and again 2026-09-25). Eight files out of nine hundred are copied in rather than
+depended on, so the client carries the marks it shows and not a 2.4 MB package. They are redrawn into our own
 `Mark` wrapper (one `viewBox`, `currentColor`, a `size` prop) and stripped of their
 `<title>` elements, because the control around them already names the agent.
 
@@ -33,9 +34,9 @@ MIT License · Copyright (c) 2023 LobeHub
 > OTHER DEALINGS IN THE SOFTWARE.
 
 **Trademarks.** The marks themselves belong to their owners — Anthropic, OpenAI, Google,
-SST and Nous Research. Core Hub shows each one only to identify the agent it names, which is
+SST, Nous Research, Alibaba Cloud's Qwen team, Moonshot AI and Earendil. Core Hub shows each one only to identify the agent it names, which is
 what a trademark is for. Core Hub is not affiliated with, endorsed by, or a product of any
-of them. The sixth mark, for our own `direct` agent, is drawn by us.
+of them. The ninth mark, for our own `direct` agent, is drawn by us.
 
 ## fflate — reading Office files in the web client
 

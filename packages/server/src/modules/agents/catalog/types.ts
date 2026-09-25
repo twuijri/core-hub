@@ -18,8 +18,18 @@ export type InstallRecipe =
       kind: 'npm';
       /** npm package name; installed into `${DATA_DIR}/agents/<id>` with `--prefix`. */
       package: string;
-      /** **Pinned.** The hub installs this exact version, never `latest`. */
+      /**
+       * **Pinned.** The version the owner tested: a fresh install takes exactly this, never
+       * `latest`. An update may later take a newer exact version the registry names
+       * (`update-policy.ts`), and the pin stays the tested baseline the UI compares against.
+       */
       version: string;
+      /**
+       * Other packages installed into the same prefix, each pinned the same way — for an
+       * agent whose ACP side is a separate adapter that drives the CLI (Pi: `pi-acp` drives
+       * `pi`). They share the agent's directory, so removing the agent removes them too.
+       */
+      companions?: readonly { package: string; version: string }[];
     }
   | {
       /** Shipped inside the image (Hermes). The hub never installs or removes it. */
@@ -32,6 +42,12 @@ export type HealthCheck =
       /** Run the binary with these arguments and expect exit 0. */
       kind: 'command';
       args: string[];
+      /**
+       * Another executable in the agent's own `bin` directory to run instead of `binary` —
+       * for an entry whose protocol binary prints no version (Pi's `pi-acp` adapter), so
+       * the check asks the CLI it drives.
+       */
+      binary?: string;
     }
   | {
       /** GET this path on the agent's endpoint and expect a 2xx. */
@@ -93,6 +109,15 @@ export interface CatalogEntry {
 /** The pinned version an entry should be at, or null when the hub does not install it. */
 export function pinnedVersion(entry: CatalogEntry): string | null {
   return entry.install.kind === 'npm' ? entry.install.version : null;
+}
+
+/** Every package an entry installs, the agent's own first, each at its pin. */
+export function pinnedPackages(entry: CatalogEntry): { package: string; version: string }[] {
+  if (entry.install.kind !== 'npm') return [];
+  return [
+    { package: entry.install.package, version: entry.install.version },
+    ...(entry.install.companions ?? []).map((companion) => ({ ...companion })),
+  ];
 }
 
 /** True when the hub is allowed to install and remove this entry. */

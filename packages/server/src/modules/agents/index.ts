@@ -43,6 +43,7 @@ import { defineRoute } from '../../lib/route.js';
 import { levelOfHermesLine } from '../../lib/log-ring.js';
 import { t } from '../../i18n/index.js';
 import {
+  defaultWorkspace,
   findWorkspace,
   ownerUser,
   registerWorkspaceStatsProvider,
@@ -107,6 +108,11 @@ import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './insta
 import type { AgentDirectoryPort, AgentInfo, AgentModelsPort, AgentRunnerPort } from './ports.js';
 import { AgentRunner } from './runner.js';
 import { subagentSupport } from './serialize.js';
+import {
+  AgentUpdateChecker,
+  createPackageRegistry,
+  type PackageRegistry,
+} from './update-policy.js';
 import { AgentsService, type AgentPatchInput } from './service.js';
 import {
   ChannelError,
@@ -177,6 +183,13 @@ export {
   pinnedVersion,
 } from './catalog/index.js';
 export type { CatalogEntry, HealthCheck, InstallRecipe } from './catalog/index.js';
+export {
+  AgentUpdateChecker,
+  compareVersions,
+  createPackageRegistry,
+  isStableVersion,
+} from './update-policy.js';
+export type { PackageRegistry, UpdateCheckReport } from './update-policy.js';
 export type {
   AgentDirectoryPort,
   AgentInfo,
@@ -282,6 +295,16 @@ export interface AgentsOverrides {
    * for the tests and the e2e hub.
    */
   channelProbe?: ProbeOptions;
+  /**
+   * The update policy's seams (`update-policy.ts`): a scripted registry, and the periodic
+   * check's timing — `intervalMs: null` keeps the timer from being armed at all.
+   */
+  updates?: {
+    registry?: PackageRegistry;
+    intervalMs?: number | null;
+    idleRetryMs?: number;
+    firstCheckMs?: number;
+  };
 }
 
 /** Platforms linked by pasting a bot token (`agents.linkChannel`). */
@@ -357,6 +380,10 @@ interface AgentsContext {
   leases: RunLeases;
   /** The hub's own tools: settings, the profile block, the MCP endpoint (§67). */
   hubTools: HubToolsService;
+  /** The six-hourly registry check and the idle-only auto-update. */
+  updates: AgentUpdateChecker;
+  /** Whether `updates` should arm its timer when the hub is ready. */
+  updatesArmed: boolean;
   runtime: HermesRuntime;
   dashboard: HermesDashboard;
   /** Hermes's API for the agent tools, or `null` where the hub does not supervise Hermes. */
@@ -553,6 +580,8 @@ function contextOf(app: FastifyInstance): AgentsContext {
       },
       host,
     });
+  // Asked, never installed from: `update-policy.ts`.
+  const registry = own.updates?.registry ?? createPackageRegistry();
   const service = new AgentsService({
     db: requireSqlite(hub.database),
     log: app.log,
@@ -572,9 +601,26 @@ function contextOf(app: FastifyInstance): AgentsContext {
     // Hermes's card shows every messaging gateway the hub runs (the default one and each
     // named profile's).
     gateways: () => runtime.gateways().map(toMessagingGateway),
+    registry,
+    // An auto-update is filed under, and announced in, the hub's default workspace.
+    systemScope: () => {
+      const row = defaultWorkspace(requireSqlite(hub.database));
+      return row ? { id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault } : null;
+    },
   });
   const leases = new RunLeases();
   const runner = new AgentRunner({ service, adapters, log: app.log, leases });
+  // An agent installed again or updated: its open sessions run the old CLI.
+  service.onSettled((agentId) => runner.retireSessionsOf(agentId));
+  const updates = new AgentUpdateChecker({
+    store: service,
+    activity: runner,
+    registry,
+    log: app.log,
+    ...(typeof own.updates?.intervalMs === 'number' ? { intervalMs: own.updates.intervalMs } : {}),
+    ...(own.updates?.idleRetryMs !== undefined ? { idleRetryMs: own.updates.idleRetryMs } : {}),
+    ...(own.updates?.firstCheckMs !== undefined ? { firstCheckMs: own.updates.firstCheckMs } : {}),
+  });
   // Hermes's own web server as an internal API (ADR 0015): nothing runs until a caller
   // asks, and only where `runtime` is managed (`hermesDashboardFor`).
   const dashboard = new HermesDashboard({
@@ -612,6 +658,8 @@ function contextOf(app: FastifyInstance): AgentsContext {
     runner,
     leases,
     hubTools,
+    updates,
+    updatesArmed: own.updates?.intervalMs !== null,
     runtime,
     dashboard,
     hermesApi: () =>
@@ -721,6 +769,11 @@ export function runLeasesFor(app: FastifyInstance): RunLeases {
 /** The live turns, for anything that must not interrupt one (`models` recycles Hermes). */
 export function agentRunnerFor(app: FastifyInstance): AgentRunner {
   return contextOf(app).runner;
+}
+
+/** The registry check and idle-only auto-update (`update-policy.ts`), for the tests. */
+export function agentUpdatesFor(app: FastifyInstance): AgentUpdateChecker {
+  return contextOf(app).updates;
 }
 
 const scopeOf = (request: FastifyRequest): WorkspaceScope => {
@@ -839,12 +892,14 @@ export const agentsModule = defineModule({
       migrateMemoryOfEveryProfile(ctx.runtime.status().home, app.log);
       // The hub's own tools go back into every profile that has them on (§67).
       ctx.hubTools.syncAll();
+      if (ctx.updatesArmed) ctx.updates.start();
     });
     // Again once the port is known for certain (a hub on port 0 learns it only now).
     app.addHook('onListen', async () => {
       ctx.hubTools.syncAll();
     });
     app.addHook('onClose', async () => {
+      ctx.updates.stop();
       await ctx.runner.closeAll();
       await ctx.dashboard.close();
       await ctx.runtime.stop();

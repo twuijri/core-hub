@@ -3447,6 +3447,8 @@
         "version",
         "latest_version",
         "update_available",
+        "pinned_version",
+        "newer_than_tested",
         "auto_update",
         "auto_update_supported",
         "checked_at",
@@ -3495,6 +3497,14 @@
         },
         "update_available": {
           "type": "boolean"
+        },
+        "pinned_version": {
+          "type": ["string", "null"],
+          "description": "The catalog's pin for the package the hub installs — the version the owner tested."
+        },
+        "newer_than_tested": {
+          "type": "boolean",
+          "description": "The hub installed this agent and its version is past pinned_version."
         },
         "auto_update": {
           "type": "boolean"

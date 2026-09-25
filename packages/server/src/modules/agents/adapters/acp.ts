@@ -27,6 +27,7 @@
  */
 import { PRODUCT, derived } from '@corehub/contracts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import path from 'node:path';
 import { createInterface } from 'node:readline';
 import type { AgentCapability } from '../schema.js';
 import { entriesFor, type CatalogEntry } from '../catalog/index.js';
@@ -490,6 +491,25 @@ export interface AcpAdapterOptions {
   connect?: (target: AgentTarget) => Promise<AcpTransport>;
 }
 
+/**
+ * What an ACP child starts with: the hub's environment, the agent's own variables, and its
+ * own directory first on `PATH`. An adapter that drives a second CLI (Pi's `pi-acp` runs
+ * `pi`) then finds the one installed beside it (`catalog/pi.ts`) rather than whatever
+ * else the host has on its PATH.
+ */
+export function agentEnvironment(
+  inherited: NodeJS.ProcessEnv,
+  target: Pick<AgentTarget, 'executablePath' | 'env'>,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...inherited, ...(target.env ?? {}) };
+  if (target.executablePath && path.isAbsolute(target.executablePath)) {
+    const own = path.dirname(target.executablePath);
+    const rest = (env.PATH ?? '').split(path.delimiter).filter((dir) => dir && dir !== own);
+    env.PATH = [own, ...rest].join(path.delimiter);
+  }
+  return env;
+}
+
 export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
   const host = options.host;
   const catalog = options.catalog ?? entriesFor('acp');
@@ -503,7 +523,7 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
     if (!command) throw new Error(`agent ${target.slug} has no command`);
     const child = spawn(target.executablePath ?? command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...(host.inherited ?? {}), ...(target.env ?? {}) },
+      env: agentEnvironment(host.inherited ?? {}, target),
       ...(target.cwd ? { cwd: target.cwd } : {}),
     }) as ChildProcessWithoutNullStreams;
     return childProcessTransport(child);

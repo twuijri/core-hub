@@ -14,7 +14,15 @@ import {
 } from '../../../tests/unit/helpers.js';
 import { agentsModule, agentsServiceFor } from './index.js';
 import { agentStatus, serializeAgent } from './serialize.js';
-import { CATALOG, HERMES_ENTRY, INSTALLABLE, assertCatalogIsWellFormed } from './catalog/index.js';
+import {
+  ACCEPTED_LICENCES,
+  CATALOG,
+  HERMES_ENTRY,
+  INSTALLABLE,
+  assertCatalogIsWellFormed,
+  pinnedPackages,
+  type CatalogEntry,
+} from './catalog/index.js';
 import { parseVersion } from './adapters/host.js';
 
 /** A gateway that answers its health probe, so the runtime is `external` and has a home. */
@@ -443,7 +451,7 @@ describe('agents: install as a job (invariant 4)', () => {
     }
   });
 
-  it('check-update compares what is installed against the catalog’s pin', async () => {
+  it('check-update on an agent the hub has not installed reports the pin and asks no registry', async () => {
     const installer = fakeInstaller();
     const hub = await signedInHub({}, { agents: { installer } });
     try {
@@ -463,16 +471,16 @@ describe('agents: install as a job (invariant 4)', () => {
         method: 'GET',
         url: `/api/v1/jobs/${(accepted.json() as { job_id: string }).job_id}`,
       });
-      // "Up to date" means the catalog's pin, not whatever npm publishes today. The fake
-      // installer reports 1.2.3 on disk while the catalog pins something else, so the
-      // hub says an update is available — to the pinned version, not to `latest`.
+      // The pin is the floor of "latest"; with nothing installed there is nothing to update
+      // and nothing to ask the registry about (the test registry would fail the job).
       const pinned = INSTALLABLE.find((entry) => entry.id === 'gemini-cli')!;
       const version = pinned.install.kind === 'npm' ? pinned.install.version : null;
       expect(job.json()).toMatchObject({
         kind: 'check_update',
         status: 'succeeded',
-        result: { latest_version: version, update_available: true },
+        result: { latest_version: version, pinned_version: version, update_available: false },
       });
+      expect(installer.calls).not.toContain('health:gemini-cli');
     } finally {
       await hub.close();
     }
@@ -539,10 +547,35 @@ describe('agents: reconciling the table with the data volume (ADR 0006)', () => 
 describe('agents: the curated catalog (ADR 0006)', () => {
   it('is well formed: unique ids, an exact version pin and a licence on every entry', () => {
     expect(() => assertCatalogIsWellFormed()).not.toThrow();
+    const ids = CATALOG.map((entry) => entry.id);
+    expect(new Set(ids).size).toBe(ids.length);
     for (const entry of INSTALLABLE) {
       expect(entry.install.kind).toBe('npm');
-      expect(entry.licence).toBeTruthy();
+      expect(ACCEPTED_LICENCES).toContain(entry.licence);
+      for (const pin of pinnedPackages(entry)) expect(pin.version).toMatch(/^\d+\.\d+\.\d+$/);
     }
+  });
+
+  it('carries the coding agents verified on 2026-09-25, each at its exact pin', () => {
+    const pins = Object.fromEntries(
+      INSTALLABLE.map((entry) => [
+        entry.id,
+        pinnedPackages(entry).map((pin) => `${pin.package}@${pin.version}`),
+      ]),
+    );
+    expect(pins).toMatchObject({
+      'qwen-code': ['@qwen-code/qwen-code@0.24.5'],
+      'kimi-code': ['@moonshot-ai/kimi-code@2.1.1'],
+      pi: ['@earendil-works/pi-coding-agent@0.87.1', 'pi-acp@0.0.34'],
+    });
+    const byId = (id: string) => CATALOG.find((entry) => entry.id === id)!;
+    expect(byId('qwen-code')).toMatchObject({ binary: 'qwen', protocolArgs: ['--acp'] });
+    expect(byId('kimi-code')).toMatchObject({ binary: 'kimi', protocolArgs: ['acp'] });
+    // Pi's ACP side is its adapter; the health check asks the CLI it drives.
+    expect(byId('pi')).toMatchObject({
+      binary: 'pi-acp',
+      health: { kind: 'command', binary: 'pi' },
+    });
   });
 
   it('ships Hermes as bundled, so no job can install or remove it', () => {
@@ -550,12 +583,51 @@ describe('agents: the curated catalog (ADR 0006)', () => {
     expect(INSTALLABLE.map((entry) => entry.id)).not.toContain('hermes');
   });
 
-  it('rejects a catalog that pins a range instead of a version', () => {
+  const npmEntry = (id: string, version: string, extra: Partial<CatalogEntry> = {}) =>
+    ({
+      ...HERMES_ENTRY,
+      id,
+      adapter: 'acp',
+      install: { kind: 'npm', package: `pkg-${id}`, version },
+      ...extra,
+    }) as CatalogEntry;
+
+  it('rejects a catalog that pins a range, a tag or a pre-release instead of a version', () => {
+    for (const version of ['^1.0.0', 'latest', '0.1.5-rc.3', '1.2']) {
+      expect(() => assertCatalogIsWellFormed([npmEntry('x1', version)])).toThrow(
+        /pin an exact version/,
+      );
+    }
     expect(() =>
       assertCatalogIsWellFormed([
-        { ...HERMES_ENTRY, install: { kind: 'npm', package: 'x', version: '^1.0.0' } },
+        npmEntry('x1', '1.0.0', {
+          install: {
+            kind: 'npm',
+            package: 'a',
+            version: '1.0.0',
+            companions: [{ package: 'b', version: '~1.0.0' }],
+          },
+        }),
       ]),
-    ).toThrow(/pin an exact version/);
+    ).toThrow(/pin an exact version of b/);
+  });
+
+  it('rejects a duplicate id, a package named twice, and a licence the hub does not accept', () => {
+    expect(() =>
+      assertCatalogIsWellFormed([npmEntry('x1', '1.0.0'), npmEntry('x1', '1.0.1')]),
+    ).toThrow(/duplicate id/);
+    expect(() =>
+      assertCatalogIsWellFormed([
+        npmEntry('x1', '1.0.0'),
+        npmEntry('x2', '1.0.0', { install: { kind: 'npm', package: 'pkg-x1', version: '2.0.0' } }),
+      ]),
+    ).toThrow(/named twice/);
+    expect(() =>
+      assertCatalogIsWellFormed([npmEntry('x1', '1.0.0', { licence: 'AGPL-3.0-only' })]),
+    ).toThrow(/does not accept/);
+    expect(() => assertCatalogIsWellFormed([npmEntry('x1', '1.0.0', { binary: '' })])).toThrow(
+      /names no binary/,
+    );
   });
 });
 

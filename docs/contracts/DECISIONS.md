@@ -1932,3 +1932,37 @@ one connection per profile, so it would be the first conversation's for all); ac
 least-privileged of several live people (right permissions, wrong name on everything it made);
 the `browser`, `devices` and `usage` groups the observer mentioned as possible (no operation to
 map them onto yet — a later group, not a gap in this one).
+
+## 68. Catalog agents are checked against the registry every six hours; the pin stays the tested baseline
+
+ADR 0006 made the catalog's pin the only version the hub installs, and `latest_version` was
+that pin, so "update available" could only ever mean "older than the pin". A curated catalog
+that moves only when a pull request moves it leaves every installed agent months behind its
+own fixes. Proposed here — owner to confirm:
+
+- **The pin is the tested baseline.** A fresh install still takes exactly the catalog's pin.
+  `AgentInstall.pinned_version` (new, required) names it; `null` for Hermes and the hub's own
+  agent.
+- **The registry is asked, never installed from on its own.** Every six hours, and on
+  `agents.checkUpdate`, the hub reads the newest stable version of each agent it installed —
+  npm's `latest` dist-tag or PyPI's JSON; a pre-release someone tagged `latest` is not
+  offered — and records it as `latest_version`, never older than the pin.
+  `update_available` compares versions numerically. `checkUpdate`'s result gains
+  `pinned_version`; an unreachable registry fails the job (`service_unavailable`) instead of
+  answering "up to date".
+- **An update installs an exact version.** `agents.upgrade` installs `latest_version` as
+  `package@x.y.z`, never the moving tag; an agent with a companion package (Pi's ACP adapter)
+  moves it to its own newest release. `AgentInstall.newer_than_tested` (new, required) is true
+  when the hub-installed version is past the pin, and clients say «أحدث من النسخة المختبرة» /
+  "Newer than the tested version".
+- **Auto-update is per agent, off by default** (the existing `auto_update`). It takes an
+  update only while no run of the agent is in flight, retrying a busy agent ten minutes
+  later; it is filed as a job under the default profile and audited as `system`. While any
+  update runs, a turn asked for waits for it (at most 15 minutes) instead of starting on a CLI
+  being replaced, and the agent's open sessions are closed afterwards so the next turn starts
+  the new CLI.
+
+Rejected: installing `latest` on every install (a new release would reach every box untested,
+the day it ships); a global switch (the per-agent `auto_update` already exists and an agent
+that breaks on updates should not hold the others back); pausing new runs by refusing them
+(`409`) during an update (a person would have to retry by hand what a short wait answers).
