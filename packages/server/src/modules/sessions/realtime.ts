@@ -50,6 +50,7 @@ export type SessionEventName =
   | 'approval.requested'
   | 'approval.resolved'
   | 'context.updated'
+  | 'context.compression'
   | 'subagent.started'
   | 'subagent.updated'
   | 'subagent.completed';

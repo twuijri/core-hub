@@ -33,6 +33,14 @@ export const hermes: CatalogEntry = {
     'jobs',
     'tasks',
     'plugins',
+    // Its TUI gateway's own commands (decision §57): `session.compress`, `session.steer`,
+    // and `command.dispatch` for `/goal`, `/plan`, `/learn` and a skill by name.
+    'compress',
+    'steer',
+    'goals',
+    'plans',
+    'learn',
+    'skill_commands',
   ],
   sections: [
     'jobs',

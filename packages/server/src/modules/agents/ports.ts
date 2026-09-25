@@ -293,7 +293,8 @@ export type RunnerEvent =
       costMicroUsd?: number;
       costSource?: 'provider' | 'estimated' | 'unknown';
     }
-  | { type: 'context'; usedTokens: number; windowTokens?: number | null }
+  | { type: 'context'; usedTokens: number; windowTokens?: number | null; estimated?: boolean }
+  | { type: 'compression'; phase: 'started' | 'finished' }
   | {
       /**
        * The turn moved down the fallback chain (contract decision §54): the models in
@@ -330,8 +331,37 @@ export interface RunnerAskRequest {
   timeoutMs: number;
 }
 
+/**
+ * Compress one conversation's context between turns (`modules/sessions/ports.ts`
+ * §AgentCompressRequest): the same conversation a run of this session would open.
+ */
+export interface RunnerCompressRequest {
+  sessionId: string;
+  workspace: string;
+  agentId: string;
+  agentSessionRef: string | null;
+  workingDir: string | null;
+  model: string | null;
+  provider: string | null;
+  reasoningEffort: string | null;
+  focus: string | null;
+}
+
+export interface RunnerCompressResult {
+  agentSessionRef: string | null;
+  status: 'compressed' | 'unchanged' | 'skipped';
+  beforeTokens: number | null;
+  afterTokens: number | null;
+  beforeMessages: number | null;
+  afterMessages: number | null;
+  context: { usedTokens: number; windowTokens: number | null; estimated: boolean } | null;
+  message: string | null;
+}
+
 export interface AgentRunnerPort {
   start(request: RunnerRunRequest): Promise<RunnerRunAccepted>;
+  compress(request: RunnerCompressRequest): Promise<RunnerCompressResult>;
+  steer(runId: string, text: string): Promise<'queued' | 'rejected'>;
   stream(runId: string): AsyncIterable<RunnerEvent>;
   send(runId: string, input: RunnerRunInput): Promise<void>;
   interrupt(runId: string): Promise<void>;

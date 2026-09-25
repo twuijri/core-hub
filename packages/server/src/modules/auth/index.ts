@@ -123,6 +123,7 @@ export {
   RUNTIME_DEFAULT_PROFILE,
   registerProfileMirror,
   type ProfileMirror,
+  type RuntimeCompression,
   type ProfileOrigin,
 } from './profile-mirror.js';
 export {

@@ -1446,3 +1446,50 @@ Rejected: one run-level list (it would lose a subagent that outlives its turn); 
 Code's subagent tools from "whatever ran while one Task was open" (parallel Tasks would be
 mis-attributed); a new table for subagents (the conversation already has a place for adapter
 data, and a migration would collide with the open usage-analytics one).
+
+## 57. The composer's `/` commands are the agent's own; compression is a session operation with a meter
+
+An observer report said the older product had slash commands and a context meter. Hermes has
+both behind its TUI gateway (MIT, read at tag v2026.9.14, `tui_gateway/methods_tools.py`,
+`methods_session.py`, `session_compression.py`, `hermes_cli/config_defaults.py`), so the hub
+carries Hermes's own mechanisms rather than inventing its own. Proposed here — owner to confirm:
+
+- **A command is offered only when the session's agent can do it.** Six `AgentCapability`
+  values say so: `compress`, `steer`, `goals`, `plans`, `learn`, `skill_commands`. Hermes has
+  all six; no other agent in the catalogue has any. Hub shortcuts (`/new`, `/fork`,
+  `/archive`, `/model`, `/clear-screen`) need no capability: they are the client calling
+  operations it already had. Any other `/text` is an ordinary message (`role: command`, §1).
+- **`/goal`, `/plan`, `/learn` and `/skill <name>` are messages.** The hub stores them like any
+  message and the adapter hands them to Hermes's `command.dispatch`; what Hermes answers — a
+  prompt to run (`send`, `skill`) or a line of output (`exec`) — becomes the run's turn. The
+  transcript shows what the person typed, never the expanded prompt Hermes builds (Hermes's own
+  rule: "UIs render `display`, never `message`"). No new operation was needed.
+- **`sessions.compress`** (`POST /sessions/{id}/compress`, optional `{focus}`) is Hermes's
+  `session.compress`: only between turns (`409 already_running` otherwise), answers
+  `SessionCompression` with Hermes's before/after counts. It runs on the session's turn chain,
+  so a message sent meanwhile waits for it instead of racing it.
+- **`sessions.steerRun`** (`POST /sessions/{id}/runs/{run_id}/steer`, `{text}`) is Hermes's
+  `session.steer`: the text reaches the agent after its next tool call, the run is not
+  interrupted and nothing is added to the transcript. `rejected` tells the client to send the
+  text as an ordinary message — Hermes's own fallback.
+- **`context.compression`** (`/rt/sessions`) says `started` / `finished` / `failed`, with
+  `trigger: manual` for `sessions.compress` and `auto` when Hermes compresses during a run
+  (its `status.update` of kind `compressing`/`compacting`). `context.updated` follows.
+- **The meter reads Hermes's own count.** `ContextUsage` gains `estimated`. Hermes reports the
+  window it uses and how full it is with every finished turn (`context_used`, `context_max`,
+  `context_estimated`); the hub keeps the last report on the session, so `Session.context` is
+  no longer always `null`. Where an agent reports nothing, a client may still estimate from
+  the last run's input tokens against the catalogue's window — and must label it an estimate.
+- **Automatic compression is the profile's `compression` settings, written to Hermes.**
+  `ProfileSettings.compression` already had Hermes's keys under our names; it now also has
+  `context_length` (`model.context_length`), and where the hub supervises Hermes a read comes
+  from the profile's `config.yaml` and a write goes there (`compression.enabled`, `threshold`,
+  `target_ratio`, `protect_first_n`, `protect_last_n`). Hermes re-reads them at the start of
+  the next turn, so no restart.
+
+Rejected: a hub-side command table the server executes (`POST /sessions/{id}/commands`) —
+it would have to create messages and runs that do not match what the person typed, and would
+duplicate what Hermes already decides; a per-agent `commands` list instead of capabilities —
+one more field to keep in step with the catalogue; putting compression settings on the agent's
+settings form — those values are stored by the hub and never reach Hermes today, which is the
+defect this entry exists to avoid repeating.

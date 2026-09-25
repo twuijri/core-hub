@@ -1034,6 +1034,131 @@ export class SessionsService {
     return this.runOf(scope, this.store.getRun(scope.workspace, row.id) as RunRow);
   }
 
+  // --------------------------------------------------- commands (decision §57)
+
+  /** Sessions being compressed right now: a second request waits for nothing, it is refused. */
+  private readonly compressing = new Set<string>();
+
+  /**
+   * `sessions.compress`: the agent summarises the older part of the conversation now. Only
+   * between turns — a run in flight or waiting in the queue is `409 already_running` — and on
+   * the session's run chain, so a message sent meanwhile starts after it rather than racing
+   * it. `context.compression` brackets it; `context.updated` carries the window after.
+   */
+  async compress(
+    scope: EngineScope,
+    sessionId: string,
+    input: { focus?: string | null | undefined },
+  ): Promise<Record<string, unknown>> {
+    const session = this.requireSession(scope, sessionId);
+    const agent = await this.requireAgent(scope, session.agentId);
+    if (!agent.available) {
+      throw new HubError('agent_unavailable', {
+        details: { agent_id: agent.id, status: agent.unavailableReason ?? 'unavailable' },
+      });
+    }
+    const runner = this.ports.runner;
+    if (!runner.compress) {
+      throw new HubError('state_invalid', {
+        details: { reason: 'command_unsupported', command: 'compress', agent: agent.id },
+      });
+    }
+    if (
+      this.compressing.has(session.id) ||
+      this.store.liveRuns(scope.workspace, session.id).length > 0
+    ) {
+      throw new HubError('already_running', { details: { session_id: session.id } });
+    }
+    this.compressing.add(session.id);
+    const announce = (
+      phase: 'started' | 'finished' | 'failed',
+      facts: { before?: number | null; after?: number | null; message?: string | null } = {},
+    ) =>
+      this.realtime.emitToSession(scope.profile, session.id, 'context.compression', {
+        session_id: session.id,
+        run_id: null,
+        phase,
+        trigger: 'manual',
+        before_tokens: facts.before ?? null,
+        after_tokens: facts.after ?? null,
+        message: facts.message ?? null,
+      });
+    announce('started');
+    let result: Awaited<ReturnType<NonNullable<typeof runner.compress>>>;
+    try {
+      result = await this.engine.exclusive(session.id, () =>
+        (runner.compress as NonNullable<typeof runner.compress>)({
+          sessionId: session.id,
+          workspace: scope.workspace,
+          agentId: agent.id,
+          agentSessionRef: session.agentSessionRef,
+          workingDir: session.workingDir,
+          model: session.modelLabel ?? agent.defaultModel,
+          provider: session.provider ?? agent.defaultProvider,
+          reasoningEffort: session.reasoningEffort ?? null,
+          focus: input.focus?.trim() ? input.focus.trim() : null,
+        }),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : null;
+      announce('failed', { message });
+      // The agent's own failure is `422 agent_error` with its words, not a hub fault.
+      if (error instanceof HubError) throw error;
+      throw new HubError('agent_error', { details: { agent_id: agent.id, reason: message } });
+    } finally {
+      this.compressing.delete(session.id);
+    }
+    if (result.agentSessionRef && result.agentSessionRef !== session.agentSessionRef) {
+      this.store.updateSession(scope.workspace, session.id, {
+        agentSessionRef: result.agentSessionRef,
+      });
+    }
+    announce('finished', {
+      before: result.beforeTokens,
+      after: result.afterTokens,
+      message: result.message,
+    });
+    if (result.context) this.engine.recordContext(scope, session.id, result.context);
+    return {
+      status: result.status,
+      before_tokens: result.beforeTokens,
+      after_tokens: result.afterTokens,
+      before_messages: result.beforeMessages,
+      after_messages: result.afterMessages,
+      context: result.context
+        ? {
+            used_tokens: result.context.usedTokens,
+            window_tokens: result.context.windowTokens,
+            ...(result.context.estimated ? { estimated: true } : {}),
+          }
+        : null,
+      message: result.message,
+    };
+  }
+
+  /**
+   * `sessions.steerRun`: guidance into the run in flight, read by the agent after its next
+   * tool call. Nothing is written to the transcript and the run is not interrupted.
+   */
+  async steerRun(
+    scope: EngineScope,
+    sessionId: string,
+    runId: string,
+    text: string,
+  ): Promise<{ status: 'queued' | 'rejected' }> {
+    const row = this.requireRun(scope, sessionId, runId);
+    if (isTerminalStatus(row.status) || !this.engine.isActive(row.id)) {
+      throw new HubError('state_invalid', { details: { from: row.status, allowed: [] } });
+    }
+    const runner = this.ports.runner;
+    if (!runner.steer) {
+      throw new HubError('state_invalid', {
+        details: { reason: 'command_unsupported', command: 'steer', agent: row.agentId },
+      });
+    }
+    return { status: await runner.steer(row.id, text) };
+  }
+
   // ------------------------------------------------------------ approvals
 
   listApprovals(

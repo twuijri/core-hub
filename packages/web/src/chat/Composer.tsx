@@ -22,7 +22,9 @@
  */
 import {
   useCallback,
+  useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type DragEvent,
@@ -53,6 +55,23 @@ import { Select } from '../ui/Select.js';
 import type { ComboboxOption } from '../ui/Combobox.js';
 import type { SelectOption } from '../ui/Select.js';
 import { canSend, composerState } from './composer-state.js';
+import {
+  filterCommands,
+  moveActive,
+  parseCommand,
+  skillQuery,
+  slashQuery,
+  type SlashCommand,
+  type SlashCommandId,
+} from './slashCommands.js';
+import { SlashMenu, slashOptionId, type SlashMenuItem } from './SlashMenu.js';
+
+/** A skill offered after `/skill `. */
+export interface SlashSkill {
+  key: string;
+  name: string;
+  description: string;
+}
 
 interface Pending {
   key: string;
@@ -120,6 +139,19 @@ export interface ComposerProps {
   approvalDisabledReason?: string | null;
   /** Three suggestions, shown only while the chat is empty. */
   starters?: readonly string[];
+  /**
+   * The `/` commands the session's agent takes (`slashCommands.ts`, decision §57). Empty:
+   * no menu, and every `/text` is an ordinary message.
+   */
+  commands?: readonly SlashCommand[];
+  /** The skills offered after `/skill `. */
+  skills?: readonly SlashSkill[];
+  /**
+   * Carries out a `hub` or `action` command. Resolves with text to send as an ordinary
+   * message instead — `/steer` with no run to steer — or with nothing once it is done.
+   * Throws to keep the text in the composer and show why.
+   */
+  onCommand?: (id: SlashCommandId, arg: string) => Promise<string | void>;
 }
 
 export const APPROVAL_MODES = ['ask', 'auto_safe', 'auto_all'] as const;
@@ -150,6 +182,9 @@ export function Composer({
   onApprovalMode,
   approvalDisabledReason = null,
   starters = [],
+  commands = [],
+  skills = [],
+  onCommand,
 }: ComposerProps) {
   const { t } = useI18n();
   const { upload: uploadAttachment } = useUploadAttachment();
@@ -201,15 +236,116 @@ export function Composer({
     [uploadAttachment, t],
   );
 
+  /**
+   * The `/` menu: the commands while the command word is typed, the skills while a skill's
+   * name is. Escape closes it for the text it was closed on; typing opens it again.
+   */
+  const menuId = useId();
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  const [active, setActive] = useState(0);
+  const commandWord = commands.length > 0 ? slashQuery(text) : null;
+  const skillWord = commands.some((command) => command.id === 'skill') ? skillQuery(text) : null;
+  const menu = useMemo((): { title: string; items: SlashMenuItem[] } | null => {
+    // Closed while a picked command is being carried out: the text is still in the box.
+    if (disabled || sending || dismissed === text) return null;
+    if (skillWord !== null) {
+      const found = filterCommands(
+        skills.map((skill) => ({ ...skill, name: skill.key, label: skill.name })),
+        skillWord,
+        (skill) => `${skill.label} ${skill.description}`,
+      );
+      return {
+        title: t('slash.skills_title'),
+        items: found.map((skill) => ({
+          key: `skill:${skill.key}`,
+          label: skill.key,
+          description: skill.description || skill.label,
+        })),
+      };
+    }
+    if (commandWord === null) return null;
+    const describe = (command: SlashCommand) => t(`slash.describe.${command.id}`);
+    return {
+      title: t('slash.title'),
+      items: filterCommands(commands, commandWord, describe).map((command) => ({
+        key: command.id,
+        label: `/${command.name}`,
+        description: describe(command),
+      })),
+    };
+  }, [disabled, sending, dismissed, text, skillWord, commandWord, commands, skills, t]);
+  const menuSize = menu?.items.length ?? 0;
+  useEffect(() => setActive(0), [commandWord, skillWord]);
+  const activeIndex = Math.min(active, Math.max(0, menuSize - 1));
+
+  const clearComposer = () => {
+    setText('');
+    setPending((current) => current.filter((p) => p.status === 'error'));
+    textarea.current?.focus();
+  };
+
+  /**
+   * A `hub` or `action` command: carried out, or handed back as text to send. `typed` is
+   * what was in the box when the command was picked from the menu: it leaves at once, and
+   * comes back only if the command fails.
+   */
+  const runCommand = async (id: SlashCommandId, arg: string, typed?: string) => {
+    if (!onCommand) return;
+    setSending(true);
+    setError(null);
+    if (typed !== undefined) setText('');
+    try {
+      const instead = await onCommand(id, arg);
+      if (typeof instead === 'string' && instead.trim() !== '') {
+        await onSend(blocksFor(instead, pending));
+      }
+      clearComposer();
+    } catch (err) {
+      if (typed !== undefined) setText(typed);
+      setError(describeError(err, t));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const pick = (index: number) => {
+    const item = menu?.items[index];
+    if (!item) return;
+    setError(null);
+    if (item.key.startsWith('skill:')) {
+      setText(`/skill ${item.label} `);
+      textarea.current?.focus();
+      return;
+    }
+    const command = commands.find((candidate) => candidate.id === item.key);
+    if (!command) return;
+    if (command.argument !== 'required' && command.kind !== 'message') {
+      // Picked from the menu, `/compress` and `/model` act at once; typed with words after
+      // them (`/compress the API`), Enter carries the words.
+      void runCommand(command.id, '', text);
+      return;
+    }
+    // A command that needs words waits for them; `/skill ` opens the skills.
+    setText(`/${command.name} `);
+    textarea.current?.focus();
+  };
+
   const send = async () => {
     if (!canSend({ ...input, error: false })) return;
+    const parsed = parseCommand(text, commands);
+    if (parsed && parsed.command.kind !== 'message' && onCommand) {
+      if (parsed.command.argument === 'required' && parsed.arg === '') {
+        setError(t('slash.needs_argument', { command: `/${parsed.command.name}` }));
+        return;
+      }
+      await runCommand(parsed.command.id, parsed.arg);
+      return;
+    }
     setSending(true);
     setError(null);
     try {
       await onSend(blocksFor(text, pending));
-      setText('');
-      setPending((current) => current.filter((p) => p.status === 'error'));
-      textarea.current?.focus();
+      clearComposer();
     } catch (err) {
       setError(describeError(err, t));
     } finally {
@@ -218,7 +354,28 @@ export function Composer({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+    const composing = event.nativeEvent.isComposing;
+    if (menu && !composing) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        setActive(moveActive(activeIndex, event.key === 'ArrowDown' ? 1 : -1, menuSize));
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setDismissed(text);
+        return;
+      }
+      if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
+        if (menuSize > 0) {
+          event.preventDefault();
+          pick(activeIndex);
+          return;
+        }
+        // Nothing matches: an unknown `/word` is an ordinary message.
+      }
+    }
+    if (event.key === 'Enter' && !event.shiftKey && !composing) {
       event.preventDefault();
       void send();
     }
@@ -241,6 +398,17 @@ export function Composer({
       {chips}
       {queue}
       {reply}
+      {menu && (
+        <SlashMenu
+          id={menuId}
+          title={menu.title}
+          items={menu.items}
+          active={activeIndex}
+          empty={t('slash.no_match')}
+          onPick={pick}
+          onHover={setActive}
+        />
+      )}
       <form
         className="composer glass"
         data-state={state}
@@ -307,6 +475,17 @@ export function Composer({
             onKeyDown={onKeyDown}
             dir="auto"
             data-testid="composer-input"
+            {...(menu
+              ? {
+                  role: 'combobox',
+                  'aria-expanded': true,
+                  'aria-controls': menuId,
+                  'aria-autocomplete': 'list' as const,
+                  ...(menuSize > 0
+                    ? { 'aria-activedescendant': slashOptionId(menuId, activeIndex) }
+                    : {}),
+                }
+              : {})}
           />
         </div>
 

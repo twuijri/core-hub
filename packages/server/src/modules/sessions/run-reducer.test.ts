@@ -68,7 +68,7 @@ describe('run reducer: the happy path', () => {
     ]);
     expect(state.text).toBe('Hello world');
     expect(state.reasoning).toBe('thinking');
-    expect(state.context).toEqual({ usedTokens: 1200, windowTokens: 128_000 });
+    expect(state.context).toEqual({ usedTokens: 1200, windowTokens: 128_000, estimated: false });
     expect(isTerminal(state.status)).toBe(true);
   });
 

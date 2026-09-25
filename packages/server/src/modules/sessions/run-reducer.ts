@@ -130,7 +130,9 @@ export interface RunState {
   /** The model's turns, in order; the last is open while the model is speaking. */
   turns: ModelTurnState[];
   usage: UsageState[];
-  context: { usedTokens: number; windowTokens: number | null } | null;
+  context: { usedTokens: number; windowTokens: number | null; estimated: boolean } | null;
+  /** The agent is compressing the context inside this run (decision §57). */
+  compressing: boolean;
   interruptRequested: boolean;
   error: { code: string; message: string } | null;
   startedAt: number | null;
@@ -181,6 +183,7 @@ export type RunAction =
   | { type: 'usage'; modelLabel: string }
   | { type: 'fallback' }
   | { type: 'context' }
+  | { type: 'compression'; phase: 'started' | 'finished' }
   | { type: 'finished'; status: TerminalRunStatus };
 
 export interface ReduceContext {
@@ -210,6 +213,7 @@ export function initialRunState(messageId: string): RunState {
     turns: [],
     usage: [],
     context: null,
+    compressing: false,
     interruptRequested: false,
     error: null,
     startedAt: null,
@@ -548,8 +552,18 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
           next.context = {
             usedTokens: event.usedTokens,
             windowTokens: event.windowTokens ?? null,
+            estimated: event.estimated === true,
           };
           actions.push({ type: 'context' });
+          break;
+        }
+
+        case 'compression': {
+          // A repeated phase is the agent restating it; the event goes out once.
+          const compressing = event.phase === 'started';
+          if (next.compressing === compressing) break;
+          next.compressing = compressing;
+          actions.push({ type: 'compression', phase: event.phase });
           break;
         }
 

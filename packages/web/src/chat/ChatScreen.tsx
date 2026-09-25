@@ -42,7 +42,8 @@ import { ApprovalCard } from './ApprovalCard.js';
 import { Composer } from './Composer.js';
 import { starterSuggestions } from './starters.js';
 import { takeFirstMessage } from './firstMessage.js';
-import { ContextRing, contextUse } from './ContextRing.js';
+import { CompressionStatus, ContextRing, contextUse } from './ContextRing.js';
+import { useChatCommands, visibleMessages } from './useChatCommands.js';
 import { MessageQueue } from './MessageQueue.js';
 import { Transcript } from './MessageView.js';
 import { holdsBack, queued, type QueuedMessage } from './outbox.js';
@@ -277,10 +278,27 @@ export function OpenSession({
   const { recent, remember } = useRecentModels();
   const approval = useApprovalMode(agentId);
 
+  const run = activeRun(state);
+  // The composer's `/` commands (decision §57): what this conversation's agent takes.
+  const slash = useChatCommands({
+    sessionId,
+    state,
+    agent: (agents.data ?? []).find((candidate) => candidate.id === agentId),
+    run,
+    models,
+    onModel: (value) => {
+      remember(value);
+      patch.mutate({ model: value });
+    },
+    profileInLink: inLink(profile),
+  });
   // Who spoke, and where each turn begins (turns.ts). Recomputed only when the transcript
   // actually changes, because a streaming reply rewrites the last message every few ms.
-  const turns = useMemo(() => turnsOf(state.messages), [state.messages]);
-  const run = activeRun(state);
+  // `/clear-screen` hides what was on screen until the person asks for it back.
+  const turns = useMemo(
+    () => turnsOf(visibleMessages(state.messages, slash.hiddenThrough)),
+    [state.messages, slash.hiddenThrough],
+  );
   const progress = runProgress(state, run);
   // The oldest question the agent is still waiting on; the next shows once it is answered.
   const question =
@@ -397,6 +415,7 @@ export function OpenSession({
     state.runs,
     (catalogue.data ?? []).find((model) => model.key === state.session?.model)?.context_window ??
       null,
+    state.context,
   );
 
   const title = pageTitle ?? (state.session ? sessionTitle(state.session, t) : t(termKey('chat')));
@@ -562,14 +581,24 @@ export function OpenSession({
                 <p className="max-w-prose text-sm text-muted">{t('chat.empty')}</p>
               </div>
               <div className="chat-stream chat-turns" ref={transcript}>
-                {messageCount > 0 && (state.hasOlder || state.pagedBack) && (
-                  <OlderRow
-                    edgeRef={olderEdge}
-                    hasOlder={state.hasOlder}
-                    failed={stream.olderStatus === 'error'}
-                    onRetry={loadOlderNow}
-                  />
+                {slash.hiddenThrough !== null && (
+                  <div className="chat-older" data-testid="chat-cleared" role="status">
+                    <span>{t('slash.cleared')}</span>{' '}
+                    <button type="button" className="link underline" onClick={slash.showHidden}>
+                      {t('slash.show_cleared')}
+                    </button>
+                  </div>
                 )}
+                {slash.hiddenThrough === null &&
+                  messageCount > 0 &&
+                  (state.hasOlder || state.pagedBack) && (
+                    <OlderRow
+                      edgeRef={olderEdge}
+                      hasOlder={state.hasOlder}
+                      failed={stream.olderStatus === 'error'}
+                      onRetry={loadOlderNow}
+                    />
+                  )}
                 <Transcript
                   turns={turns}
                   showReasoning={showReasoning}
@@ -609,7 +638,11 @@ export function OpenSession({
                 // the word, and the seconds counting up (owner decision, 2026-09-22).
                 // Not while a question is open: the agent is not thinking, it is waiting on the
                 // person, and the card above says so.
-                {...(progress && !question ? { status: <RunStatus progress={progress} /> } : {})}
+                {...(progress && !question
+                  ? { status: <RunStatus progress={progress} /> }
+                  : state.compression?.phase === 'running'
+                    ? { status: <CompressionStatus compression={state.compression} /> }
+                    : {})}
                 {...(question
                   ? { question: <QuestionCard key={question.id} approval={question} /> }
                   : {})}
@@ -627,7 +660,21 @@ export function OpenSession({
                       ),
                     }
                   : {})}
-                {...(contextRing ? { context: <ContextRing use={contextRing} /> } : {})}
+                {...(contextRing
+                  ? {
+                      context: (
+                        <ContextRing
+                          use={contextRing}
+                          compression={state.compression}
+                          onCompress={slash.compress}
+                          compressBlocked={slash.compressBlocked}
+                        />
+                      ),
+                    }
+                  : {})}
+                commands={slash.commands}
+                skills={slash.skills}
+                onCommand={slash.onCommand}
                 {...(replyTo
                   ? {
                       reply: (

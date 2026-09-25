@@ -43,6 +43,7 @@ import {
   runtimeDisplayName,
   runtimeProfileName,
   type ProfileOrigin,
+  type RuntimeCompression,
 } from './profile-mirror.js';
 import { requireRole, requireUser, type Principal } from './principal.js';
 import { requireTransfer, runExport, runImport, type TransferContext } from './profile-transfer.js';
@@ -57,7 +58,14 @@ import {
   updateProfile,
   type HubSettingsPatch,
 } from './profiles.js';
-import { APP_TOKEN_SCOPES, LOCALES, PAIRING_CONNECTIONS, appTokens, workspaces } from './schema.js';
+import {
+  APP_TOKEN_SCOPES,
+  LOCALES,
+  PAIRING_CONNECTIONS,
+  appTokens,
+  workspaces,
+  type WorkspaceHubSettings,
+} from './schema.js';
 import {
   clearSetupToken,
   completeSetup,
@@ -252,6 +260,7 @@ const ProfileSettingsPatch = z.object({
       target_ratio: z.number().min(0).max(1).optional(),
       protect_first: z.number().int().min(0).optional(),
       protect_last: z.number().int().min(0).optional(),
+      context_length: z.number().int().min(1024).nullable().optional(),
     })
     .optional(),
   privacy: z.object({ redact_pii: z.boolean().optional() }).optional(),
@@ -1099,9 +1108,26 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     return noContent(reply);
   });
 
-  route('GET', '/profiles/:profile_id/settings', signedIn, async (request) =>
-    serializeProfileSettings(hubSettingsOf(workspaceFor(request))),
-  );
+  /**
+   * `compression` is Hermes's where the hub supervises it (decision §57): read from the
+   * profile's `config.yaml`, so a value changed there by hand is the value shown here.
+   */
+  const withRuntimeCompression = (row: WorkspaceRow, settings: WorkspaceHubSettings) => {
+    const mirror = profileMirrorFor(app);
+    let runtime: RuntimeCompression | null = null;
+    try {
+      runtime = mirror?.readCompression?.(runtimeProfileName(row)) ?? null;
+    } catch (error) {
+      if (!(error instanceof ProfileMirrorError)) throw error;
+      app.log.warn({ err: error, profile: row.slug }, 'auth: runtime compression unreadable');
+    }
+    return runtime ? { ...settings, compression: runtime } : settings;
+  };
+
+  route('GET', '/profiles/:profile_id/settings', signedIn, async (request) => {
+    const row = workspaceFor(request);
+    return serializeProfileSettings(withRuntimeCompression(row, hubSettingsOf(row)));
+  });
 
   route('PATCH', '/profiles/:profile_id/settings', admin, async (request) => {
     const body = parse(ProfileSettingsPatch, request.body);
@@ -1130,7 +1156,27 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
         ...(body.compression.protect_last !== undefined
           ? { protectLast: body.compression.protect_last }
           : {}),
+        ...(body.compression.context_length !== undefined
+          ? { contextLength: body.compression.context_length }
+          : {}),
       };
+      // Where Hermes reads them, first: a value the runtime refused is not stored as if it
+      // applied (decision §57). The patch merges onto what Hermes has now.
+      const mirror = profileMirrorFor(app);
+      if (mirror?.writeCompression) {
+        const current = withRuntimeCompression(row, hubSettingsOf(row)).compression;
+        const next = { ...current, ...patch.compression };
+        try {
+          mirror.writeCompression(runtimeProfileName(row), next);
+        } catch (error) {
+          if (!(error instanceof ProfileMirrorError)) throw error;
+          throw new HubError('state_invalid', {
+            message: error.message,
+            details: { reason: 'runtime_config_unwritable', section: 'compression' },
+          });
+        }
+        patch.compression = next;
+      }
     }
     if (body.privacy?.redact_pii !== undefined)
       patch.privacy = { redactPii: body.privacy.redact_pii };
@@ -1148,7 +1194,8 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
           : {}),
       };
     }
-    const { settings } = patchProfileSettings(db, row, patch);
+    const { settings: stored } = patchProfileSettings(db, row, patch);
+    const settings = withRuntimeCompression(row, stored);
     audit(
       request,
       'auth.profile_settings_updated',

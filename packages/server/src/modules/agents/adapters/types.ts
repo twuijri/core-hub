@@ -185,7 +185,21 @@ export type AgentEvent =
       costMicroUsd?: number;
       costSource?: 'provider' | 'estimated' | 'unknown';
     }
-  | { type: 'context'; usedTokens: number; windowTokens?: number | null }
+  | {
+      type: 'context';
+      usedTokens: number;
+      windowTokens?: number | null;
+      /** The agent counted roughly rather than taking the provider's report. */
+      estimated?: boolean;
+    }
+  | {
+      /**
+       * The agent is compressing the conversation's context on its own, inside this turn,
+       * because the window was filling up (Hermes: `status.update` of kind `compressing`).
+       */
+      type: 'compression';
+      phase: 'started' | 'finished';
+    }
   | {
       /**
        * The turn moved down the fallback chain (contract decision §54): the models in
@@ -327,6 +341,28 @@ export interface AgentSession {
    * says it delegated.
    */
   readonly subagents?: SubagentControl;
+  /**
+   * Compress the conversation's context now, between turns (decision §57). Absent when the
+   * agent has no such thing; the hub then refuses the command rather than pretend.
+   */
+  compress?(focus: string | null): Promise<CompressOutcome>;
+  /**
+   * Hand the turn in flight a piece of guidance without stopping it: the agent reads it
+   * after its next tool call. `rejected` = not now; the caller sends it as a message.
+   */
+  steer?(text: string): Promise<'queued' | 'rejected'>;
+}
+
+/** What `AgentSession.compress` did, in the contract's `SessionCompression` terms. */
+export interface CompressOutcome {
+  status: 'compressed' | 'unchanged' | 'skipped';
+  beforeTokens: number | null;
+  afterTokens: number | null;
+  beforeMessages: number | null;
+  afterMessages: number | null;
+  context: { usedTokens: number; windowTokens: number | null; estimated: boolean } | null;
+  /** The agent's own words about it, untranslated. */
+  message: string | null;
 }
 
 export interface SettingsChoice {

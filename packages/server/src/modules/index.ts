@@ -32,6 +32,10 @@ import {
   type HermesDashboard,
   createHermesProfileArchives,
   createHermesProfiles,
+  HermesCompressionError,
+  profileHome,
+  readHermesCompression,
+  writeHermesCompression,
   hermesDashboardFor,
   hermesProcessesFor,
   hermesProfileRunner,
@@ -237,6 +241,30 @@ registerProfileMirror((app) => {
         await profiles.setDisplayName(name, displayName);
       } catch (error) {
         throw error instanceof HermesProfileError ? new ProfileMirrorError(error.message) : error;
+      }
+    },
+    // The profile's `compression.*` and `model.context_length` in its own `config.yaml`
+    // (decision §57): the home Hermes binds for that profile's sessions.
+    readCompression(name) {
+      const folder = profileHome(home, { slug: name, isDefault: name === 'default' });
+      if (!folder) return null;
+      try {
+        return readHermesCompression(folder);
+      } catch (error) {
+        throw error instanceof HermesCompressionError
+          ? new ProfileMirrorError(`the config.yaml of Hermes profile "${name}" is not valid YAML`)
+          : error;
+      }
+    },
+    writeCompression(name, settings) {
+      const folder = profileHome(home, { slug: name, isDefault: name === 'default' });
+      if (!folder) throw new ProfileMirrorError(`Hermes has no profile "${name}"`);
+      try {
+        writeHermesCompression(folder, settings);
+      } catch (error) {
+        throw error instanceof HermesCompressionError
+          ? new ProfileMirrorError(`the config.yaml of Hermes profile "${name}" is not valid YAML`)
+          : error;
       }
     },
   };

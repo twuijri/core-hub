@@ -13,6 +13,11 @@ export interface ChatState {
   /** Pending approvals by id. */
   approvals: Record<string, Approval>;
   context: Session['context'];
+  /**
+   * The agent compressing this conversation's context (`context.compression`, decision §57):
+   * `running` between `started` and its end, then the last outcome until the next one.
+   */
+  compression: Compression | null;
   deleted: boolean;
   /**
    * Whether messages older than `messages[0]` exist on the hub (`MessagePage.has_more`).
@@ -23,6 +28,15 @@ export interface ChatState {
   pagedBack: boolean;
 }
 
+export interface Compression {
+  phase: 'running' | 'finished' | 'failed';
+  trigger: 'manual' | 'auto';
+  beforeTokens: number | null;
+  afterTokens: number | null;
+  /** The agent's own words about it, untranslated. */
+  message: string | null;
+}
+
 export function initialChat(): ChatState {
   return {
     lastSeq: 0,
@@ -31,6 +45,7 @@ export function initialChat(): ChatState {
     runs: {},
     approvals: {},
     context: null,
+    compression: null,
     deleted: false,
     hasOlder: false,
     pagedBack: false,
@@ -291,6 +306,21 @@ export function reduce(state: ChatState, envelope: Envelope, sessionId: string):
       return { ...next, deleted: true };
     case 'context.updated':
       return { ...next, context: p.context as Session['context'] };
+    case 'context.compression': {
+      const phase =
+        p.phase === 'started' ? 'running' : p.phase === 'failed' ? 'failed' : 'finished';
+      const count = (value: unknown) => (typeof value === 'number' ? value : null);
+      return {
+        ...next,
+        compression: {
+          phase,
+          trigger: p.trigger === 'auto' ? 'auto' : 'manual',
+          beforeTokens: count(p.before_tokens),
+          afterTokens: count(p.after_tokens),
+          message: typeof p.message === 'string' ? p.message : null,
+        },
+      };
+    }
     default:
       return next;
   }

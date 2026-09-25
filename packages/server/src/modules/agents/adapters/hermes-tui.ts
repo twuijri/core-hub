@@ -39,7 +39,7 @@ import {
   type SubagentControl,
   type SubagentTailText,
 } from './subagents.js';
-import type { AgentEvent, AgentSession, FallbackModel, PromptInput } from './types.js';
+import type { AgentEvent, AgentSession, CompressOutcome, FallbackModel, PromptInput } from './types.js';
 
 type Json = Record<string, unknown>;
 
@@ -432,6 +432,9 @@ export class HermesTuiSession implements AgentSession {
     notes: FallbackNote[];
   } = { model: null, provider: null, slug: null, fallbacks: [], notes: [] };
 
+  /** Hermes said it is compressing inside the turn in flight; `finished` is still owed. */
+  private compressing = false;
+
   /** What this conversation is running on, so a turn that names something else switches. */
   private current: { model: string | null; provider: string | null; effort: string | null } = {
     model: null,
@@ -588,13 +591,95 @@ export class HermesTuiSession implements AgentSession {
     };
     try {
       await this.select(prompt);
-      await this.channel.request('prompt.submit', { session_id: this.liveId, text: prompt.text });
+      const text = await this.commandTurn(prompt);
+      if (text === null) {
+        // The command answered with output of its own: that is the whole turn.
+        this.end('completed');
+      } else {
+        await this.channel.request('prompt.submit', { session_id: this.liveId, text });
+      }
     } catch (error) {
       this.turn = null;
       throw error;
     }
     const stopReason = await done;
     return { stopReason };
+  }
+
+  /**
+   * A message that starts with one of Hermes's own commands (`/goal`, `/plan`, `/learn`,
+   * `/skill <name>`) is Hermes's to carry out, not text for the model (decision §57). Hermes's
+   * `command.dispatch` answers with a prompt to run — the plan prompt, the skill loaded into
+   * the turn — or with output of its own, which is then the turn's whole reply (`null` here).
+   * Anything else goes to the model exactly as typed.
+   *
+   * The command is read from the message's own first text block, so the lines the hub adds
+   * after it (attachments, where to write files) still reach the turn it becomes.
+   */
+  private async commandTurn(prompt: PromptInput): Promise<string | null> {
+    const typed = prompt.blocks?.find((block) => block.type === 'text')?.text ?? prompt.text;
+    const command = agentCommandOf(typed);
+    if (!command) return prompt.text;
+    let result: Json;
+    try {
+      result = await this.channel.request('command.dispatch', {
+        session_id: this.liveId,
+        name: command.name,
+        arg: command.arg,
+      });
+    } catch (error) {
+      const why = error instanceof Error ? error.message : String(error);
+      throw new Error(`/${command.typed}: ${why}`, { cause: error });
+    }
+    const kind = String(result.type ?? '');
+    const message = text(result.message);
+    if ((kind === 'send' || kind === 'skill') && message) {
+      const after = prompt.text.startsWith(typed) ? prompt.text.slice(typed.length) : '';
+      return `${message}${after}`;
+    }
+    const output =
+      text(result.output) ?? text(result.notice) ?? text(result.display) ?? text(result.target);
+    this.queue.push({ type: 'message.delta', text: output?.trim() ? output : `/${command.typed}` });
+    this.queue.push({ type: 'run.completed', stopReason: 'completed' });
+    return null;
+  }
+
+  /**
+   * Hermes's `session.compress` (decision §57): only between turns. Its answer carries the
+   * before/after estimate and the window as it now stands, which is what the meter shows.
+   */
+  async compress(focus: string | null): Promise<CompressOutcome> {
+    if (this.closed) throw new HubError('state_invalid', { message: 'Hermes session is closed' });
+    if (this.turn) throw new HubError('already_running', { details: { session: this.storedId } });
+    let result: Json;
+    try {
+      result = await this.channel.request('session.compress', {
+        session_id: this.liveId,
+        ...(focus?.trim() ? { focus_topic: focus.trim() } : {}),
+      });
+    } catch (error) {
+      if (error instanceof TuiError && error.code === 4009) {
+        throw new HubError('already_running', { details: { session: this.storedId } });
+      }
+      throw error;
+    }
+    return compressOutcomeOf(result);
+  }
+
+  /** Hermes's `session.steer`: read after the next tool call; the turn is not interrupted. */
+  async steer(guidance: string): Promise<'queued' | 'rejected'> {
+    if (this.closed || !this.turn) return 'rejected';
+    try {
+      const result = await this.channel.request('session.steer', {
+        session_id: this.liveId,
+        text: guidance,
+      });
+      return result.status === 'queued' ? 'queued' : 'rejected';
+    } catch (error) {
+      // 4010: the agent is not built yet, so there is nothing to steer — a message instead.
+      if (error instanceof TuiError) return 'rejected';
+      throw error;
+    }
   }
 
   /**
@@ -721,9 +806,23 @@ export class HermesTuiSession implements AgentSession {
         // Hermes says so when it moves down its `fallback_providers` (contract decision §54).
         const note = parseFallbackNote(text(payload.text));
         if (note && this.turn) this.asked.notes.push(note);
+        // Hermes compressing on its own inside a turn (`_status_update`, re-tagged
+        // `compacting` for auto-compaction). A manual compress says the same between turns;
+        // that one is the hub's own call, reported where it is made.
+        if (!this.turn) return;
+        const kind = String(payload.kind ?? '');
+        if (kind === 'compressing' || kind === 'compacting') {
+          if (!this.compressing) {
+            this.compressing = true;
+            this.queue.push({ type: 'compression', phase: 'started' });
+          }
+        } else {
+          this.compressionDone();
+        }
         return;
       }
       case 'message.complete':
+        this.compressionDone();
         this.finish(payload);
         return;
       case 'error': {
@@ -741,10 +840,18 @@ export class HermesTuiSession implements AgentSession {
     }
   }
 
+  private compressionDone(): void {
+    if (!this.compressing) return;
+    this.compressing = false;
+    this.queue.push({ type: 'compression', phase: 'finished' });
+  }
+
   private finish(payload: Json): void {
     const usage = (payload.usage ?? null) as Json | null;
     const fallback = this.fallbackOf(text(usage?.model));
     if (fallback) this.queue.push(fallback);
+    const window = usage ? contextOf(usage) : null;
+    if (window) this.queue.push({ type: 'context', ...window });
     if (usage) {
       const number = (value: unknown) => (typeof value === 'number' ? value : undefined);
       const input = number(usage.input) || number(usage.prompt);
@@ -889,6 +996,7 @@ export class HermesTuiSession implements AgentSession {
   private end(stopReason: string): void {
     const turn = this.turn;
     this.turn = null;
+    this.compressing = false;
     this.openTools.length = 0;
     turn?.resolve(stopReason);
   }
@@ -947,5 +1055,90 @@ export function parseFallbackNote(line: string | null): FallbackNote | null {
     reason: reason ? reason : null,
     to: to as string,
     toProvider: toProvider as string,
+  };
+}
+
+/** The commands Hermes carries out itself, by the word after `/` (decision §57). */
+export const HERMES_COMMANDS = ['goal', 'plan', 'learn', 'skill'] as const;
+const SKILL_NAME = /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/;
+
+/**
+ * `/plan build it` → `{name: 'plan', arg: 'build it'}`; `/skill review the diff` → the skill's
+ * own name, `{name: 'review', arg: 'the diff'}`, which is how Hermes invokes a skill. Anything
+ * else — another `/word`, a `/skill` without a name, plain text — is `null`: a message.
+ */
+export function agentCommandOf(
+  message: string,
+): { name: string; arg: string; typed: string } | null {
+  const match = /^\/([a-z]+)(?:[ \t]+([\s\S]*))?$/.exec(message.trim());
+  if (!match) return null;
+  const word = match[1] as string;
+  const arg = (match[2] ?? '').trim();
+  if (!(HERMES_COMMANDS as readonly string[]).includes(word)) return null;
+  if (word !== 'skill') return { name: word, arg, typed: word };
+  const [skill = ''] = arg.split(/\s+/);
+  if (!SKILL_NAME.test(skill)) return null;
+  const name = skillCommandName(skill);
+  if (!name) return null;
+  return { name, arg: arg.slice(skill.length).trim(), typed: `skill ${skill}` };
+}
+
+/**
+ * The command Hermes registers a skill under (`agent/skill_commands.py` §slugify_skill_name):
+ * lower case, spaces and underscores as hyphens, anything but word characters and hyphens
+ * dropped, hyphens not doubled nor at the ends. The hub lists a skill by its folder, which is
+ * usually its name already; this makes `Code_Review` and `code-review` the same command.
+ */
+export function skillCommandName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/ /g, '-')
+    .replace(/_/g, '-')
+    .replace(/[^\p{L}\p{N}_-]/gu, '')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/** The window Hermes reports with its usage (`context_used` of `context_max`), when it does. */
+function contextOf(
+  usage: Json,
+): { usedTokens: number; windowTokens: number | null; estimated: boolean } | null {
+  const used = usage.context_used;
+  if (typeof used !== 'number' || !Number.isFinite(used) || used < 0) return null;
+  const max = usage.context_max;
+  return {
+    usedTokens: Math.round(used),
+    windowTokens: typeof max === 'number' && max > 0 ? Math.round(max) : null,
+    estimated: usage.context_estimated === true,
+  };
+}
+
+/** Hermes's `session.compress` answer in the contract's terms. */
+export function compressOutcomeOf(result: Json): CompressOutcome {
+  const count = (value: unknown) =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
+  const summary = (result.summary ?? null) as Json | null;
+  const words = [summary?.headline, summary?.token_line, summary?.note, result.message]
+    .map((value) => text(value)?.trim() ?? '')
+    .filter((value) => value !== '');
+  const usage = (result.usage ?? (result.info as Json | undefined)?.usage ?? null) as Json | null;
+  let status: CompressOutcome['status'];
+  if (result.lock_held === true || result.compressed === false) status = 'skipped';
+  else if (
+    result.status === 'aborted' ||
+    summary?.noop === true ||
+    summary?.aborted === true ||
+    count(result.removed) === 0
+  )
+    status = 'unchanged';
+  else status = 'compressed';
+  return {
+    status,
+    beforeTokens: count(result.before_tokens),
+    afterTokens: count(result.after_tokens),
+    beforeMessages: count(result.before_messages),
+    afterMessages: count(result.after_messages),
+    context: usage ? contextOf(usage) : null,
+    message: words.length > 0 ? [...new Set(words)].join('\n') : null,
   };
 }
