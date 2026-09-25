@@ -24,6 +24,35 @@ const arg = (name, fallback) => {
 const port = Number(arg('port', '19099'));
 const acceptedKey = arg('key', 'sk-lab-correct-key');
 const logFile = arg('log', '');
+/**
+ * `--script rooms` (`prove-rooms.sh`): answer as the seat the prompt addresses, so a real
+ * Hermes in a room passes the turn and a summary comes back. Otherwise one fixed answer.
+ */
+const script = arg('script', '');
+
+/** The words of the last user message of a chat request. */
+function lastUser(body) {
+  const messages = Array.isArray(body?.messages) ? body.messages : [];
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const m = messages[i];
+    if (m?.role !== 'user') continue;
+    if (typeof m.content === 'string') return m.content;
+    if (Array.isArray(m.content)) return m.content.map((part) => part?.text ?? '').join('');
+  }
+  return '';
+}
+
+function answerFor(body) {
+  if (script !== 'rooms') return 'the lab endpoint answered';
+  const asked = lastUser(body);
+  if (asked.includes('Update the running summary')) {
+    return 'ملخّص: المخطِّط وضع الخطة، والمبرمج أنهى الخطوة الأولى.';
+  }
+  if (asked.includes('You are @المخطِّط,'))
+    return 'الخطة: نبدأ بالواجهة. @المبرمج ابدأ بالخطوة الأولى.';
+  if (asked.includes('You are @المبرمج,')) return 'أنهيت الخطوة الأولى: الواجهة جاهزة.';
+  return 'حاضر.';
+}
 
 let rejecting = false;
 
@@ -89,12 +118,15 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname === '/v1/chat/completions') {
     let streaming;
+    let body = {};
     try {
-      streaming = JSON.parse(raw || '{}').stream === true;
+      body = JSON.parse(raw || '{}');
+      streaming = body.stream === true;
     } catch {
       streaming = false;
     }
-    const answer = 'the lab endpoint answered';
+    const answer = answerFor(body);
+    if (script === 'rooms') note(`   asked= ${JSON.stringify(lastUser(body).slice(0, 160))}`);
 
     // Hermes asks for a stream. A plain JSON body here reads to it as "empty stream with no
     // finish_reason", which would make this harness prove a bug of its own rather than the

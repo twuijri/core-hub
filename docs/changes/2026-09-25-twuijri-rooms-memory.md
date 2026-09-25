@@ -54,14 +54,39 @@ $ pnpm build && PLAYWRIGHT_CHANNEL=chrome playwright test zzzzzz-rooms.spec.ts
   ✓  2 … an agent mentioned in the room answers and hands the next step to another (4.7s)
   2 passed (13.6s)
 ```
+**فحص على Hermes حقيقي** (صورة المركز مبنية من هذا الفرع، حاوية مؤقتة، ونموذج مكتوب
+بالسيناريو على المضيف: `packages/server/tests/container/prove-rooms.sh`):
+```
+$ docker build -f packages/server/Dockerfile -t core-hub:rooms .   (real 1m21s)
+$ packages/server/tests/container/prove-rooms.sh core-hub:rooms
+waiting for the gateway to answer: up
+=== a room with two Hermes seats ===
+[{"id":"01M3BR4GTQ7WY59ZEFCSCY4XJ1","ok":true,"error":null},{"id":"01M3BR4GV43J53H5RFDNQZBPKH","ok":true,"error":null}]
+=== a person mentions the planner ===
+{"message_id":"01M3BR4GY6BJCQ9RDSS8JWYC6D","runs":[{"seat_id":"01M3BR4GTQ7WY59ZEFCSCY4XJ1","run_id":"01M3BR4GYF8NY7HS6NF2ACXJW0","job_id":"01M3BR4GYFKZ8H9PXSKX06KETK","queue_position":1}]}
+-- the transcript --
+1 user Admin [complete] @المخطِّط ضع خطة للصفحة الرئيسية
+2 assistant المخطِّط [complete] الخطة: نبدأ بالواجهة. @المبرمج ابدأ بالخطوة الأولى.  → handoff depth 1
+3 assistant المبرمج [complete] أنهيت الخطوة الأولى: الواجهة جاهزة.
+-- the handoff chains --
+[{"status":"completed","depth":1,"stop_reason":null}]
+-- the runs --
+succeeded seat=01M3BR4GV43J53H5RFDNQZBPKH room=01M3BR4GTKGNK7C56SZN286DXH error=
+succeeded seat=01M3BR4GTQ7WY59ZEFCSCY4XJ1 room=01M3BR4GTKGNK7C56SZN286DXH error=
+=== the summary, asked of Hermes ===
+{"job_id":"01M3BR4V0DQ3QYP2NYZ58N3Y7K"}
+{"summary":"ملخّص: المخطِّط وضع الخطة، والمبرمج أنهى الخطوة الأولى.","status":"idle","summarized_turn_count":3,"error":null,"updated_at":"2026-09-25T07:40:44Z"}
+```
+الحاوية أُزيلت بعد الفحص، ولم تُلمس حاويات المالك ولا منفذ 8642 على المضيف.
+
 CI: يُكمَّل بعد الدفع.
 
 ## المخاطر والرجوع
-- لم يُجرَّب مع Hermes حقيقي: هل يجيب Hermes على السؤال الواحد بملخّص حسن؟ إن لم يجب فالمركز
-  يكتب ملخّصه.
+- جُرّب مع Hermes حقيقي ونموذج مكتوب بالسيناريو، لا مع مزوّد نماذج حقيقي: جودة الملخّص من
+  نموذج حقيقي لم تُقَس. إن لم يجب الوكيل فالمركز يكتب ملخّصه.
 - التلخيص التلقائي يستهلك رموزًا عند الوكيل كل ٢٠ رسالة افتراضيًا؛ `every_turns: 0` يطفئه.
 - الرجوع: revert يعيد الجزء الثاني (بلا ملخّص ولا تقارير).
 
 ## التسليم والخطوة التالية
-الغرف مكتملة من جهة العقد. يبقى: اختبار على Hermes حقيقي (ثلاث تمريرات بين وكيلين، وملخّص)،
-وربط المرفقات برسائل الغرفة (النص وحده الآن).
+الغرف مكتملة من جهة العقد. يبقى: تجربة المالك على مزوّد نماذج حقيقي، وربط المرفقات برسائل
+الغرفة (النص وحده الآن).
