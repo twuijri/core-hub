@@ -1,21 +1,17 @@
 package hub.core.android.ui.screens
 
-import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import hub.core.android.AppGraph
-import hub.core.android.BuildConfig
 import hub.core.android.data.HubError
 import hub.core.android.data.HubUrl
 import hub.core.android.data.PairingRequest
 import hub.core.android.data.StoredSession
 import hub.core.android.data.StoredUser
 import hub.core.android.data.TokenKind
+import hub.core.android.phone.thisPhone
 import hub.core.android.data.hubCall
 import hub.core.client.api.AuthApi
-import hub.core.client.model.DeviceKind
-import hub.core.client.model.DevicePlatform
-import hub.core.client.model.DeviceRegistration
 import hub.core.client.model.LoginRequest
 import hub.core.client.model.PairingClaim
 import hub.core.client.model.SetupRequest
@@ -121,30 +117,21 @@ class ConnectViewModel(private val graph: AppGraph) : ViewModel() {
         }
         _state.update { it.copy(busy = true, error = null, invalidPairing = false) }
         viewModelScope.launch {
-            val registration = DeviceRegistration(
-                deviceKey = graph.store.deviceKey,
-                name = deviceName.take(80),
-                platform = DevicePlatform.ANDROID,
-                kind = DeviceKind.PHONE,
-                brand = Build.MANUFACTURER,
-                model = Build.MODEL,
-                appVersion = BuildConfig.VERSION_NAME,
-                capabilities = emptyList(),
-            )
+            val registration = thisPhone(graph.store.deviceKey, deviceName)
             hubCall {
                 graph.anonymous(request.hub).auth.authClaimPairing(request.pairingId, PairingClaim(request.code, registration))
             }.onSuccess { result ->
                 graph.store.lastHub = request.hub
                 val now = System.currentTimeMillis()
                 val expires = result.expiresAt?.toInstant()?.toEpochMilli()
-                store(request.hub, TokenKind.APP, result.appToken, null, expires?.minus(now), result.user, ttl = expires?.minus(now))
+                store(request.hub, TokenKind.APP, result.appToken, null, expires?.minus(now), result.user, ttl = expires?.minus(now), deviceId = result.device.id)
             }.onFailure { e -> _state.update { it.copy(busy = false, error = e as HubError) } }
         }
     }
 
     fun rejectPairing() = _state.update { it.copy(invalidPairing = true) }
 
-    private fun store(hub: String, kind: TokenKind, token: String, refresh: String?, lifetimeMs: Long?, user: User, ttl: Long?) {
+    private fun store(hub: String, kind: TokenKind, token: String, refresh: String?, lifetimeMs: Long?, user: User, ttl: Long?, deviceId: String? = null) {
         val stored = StoredUser.from(user)
         val profile = stored.defaultProfile.takeIf { it in stored.profiles } ?: stored.profiles.firstOrNull() ?: stored.defaultProfile
         graph.store.save(
@@ -157,6 +144,7 @@ class ConnectViewModel(private val graph: AppGraph) : ViewModel() {
                 ttlMs = ttl,
                 user = stored,
                 profile = profile,
+                deviceId = deviceId,
             ),
         )
         _state.update { it.copy(busy = false) }

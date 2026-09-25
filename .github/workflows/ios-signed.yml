@@ -213,6 +213,9 @@ jobs:
           for bundle in "$app" "$share"; do
             codesign -d --entitlements - --xml "$bundle" 2>/dev/null | plutil -p - | grep -E 'application-identifier|application-groups|group\.|team-identifier|aps-environment' || true
           done
+          # Push (apps/ios/CoreHub/Phone/Push.swift): an App Store build must carry APNs production.
+          aps=$(codesign -d --entitlements - --xml "$app" 2>/dev/null | plutil -extract aps-environment raw -o - - || true)
+          test "$aps" = production || { echo "::error::aps-environment is '${aps}', expected production"; exit 1; }
           echo "Signed .ipa: $(du -h "$IPA" | cut -f1)" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Upload to TestFlight
         if: github.event_name == 'workflow_dispatch' && inputs.upload_testflight

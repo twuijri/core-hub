@@ -50,8 +50,11 @@ Android job keeps no Gradle cache.
 The keystore (`ANDROID_TEST_*`) is a test key, not a Play upload key. `versionCode` is the
 workflow's run number (`COREHUB_ANDROID_VERSION_CODE`), so each build is newer than the last.
 `GOOGLE_SERVICES_JSON` is the file Firebase gives for the Android app (as JSON, or base64); the
-Google Services plugin refuses a file without a client for `com.twuijri.corehub`. The app does not
-register with FCM yet — that is the next task; the file only makes the build ready.
+Google Services plugin refuses a file without a client for `com.twuijri.corehub`. Only a build
+with that file has push: after sign-in the app takes an FCM token and registers it with the hub
+(`devices.registerPush`), and a tapped push opens the page its notice is about. Any other build
+(a pull request, a fork, a local debug build) links Firebase Messaging but never starts it, says
+on This device that it has no push, and keeps the 15-minute background check.
 
 A developer who wants the same locally: put `google-services.json` in `apps/android/app/`, and
 export `COREHUB_ANDROID_KEYSTORE` (a path), `COREHUB_ANDROID_KEYSTORE_PASSWORD`,
@@ -72,7 +75,8 @@ export `COREHUB_ANDROID_KEYSTORE` (a path), `COREHUB_ANDROID_KEYSTORE_PASSWORD`,
    (`app-store-connect`) run with `-allowProvisioningUpdates` and the same key
    (`-authenticationKeyPath/ID/IssuerID`), so Xcode can fetch anything missing itself.
    `CFBundleVersion` is the workflow's run number.
-4. The job checks both bundle ids, the entitlements (the App Group) and the signature.
+4. The job checks both bundle ids, the entitlements (the App Group, and `aps-environment`
+   `production`, which push needs) and the signature.
 5. `upload_testflight` (a manual run only, off by default) uploads with `xcrun altool` and the
    same key.
 

@@ -73,6 +73,7 @@ fun ThisDevicePage(shell: ShellViewModel) {
     val graph = context.graph
     val session by shell.session.collectAsState()
     val choices by graph.device.choices.collectAsState()
+    val push by graph.push.state.collectAsState()
     val s = session ?: return
     val recognizer = remember { SpeechRecognizer.isRecognitionAvailable(context) }
     var permissionTick by remember { mutableIntStateOf(0) }
@@ -121,7 +122,20 @@ fun ThisDevicePage(shell: ShellViewModel) {
         }
 
         item { Heading(term("notifications")) }
-        item { Notice(stringResource(R.string.notices_no_push), Tone.INFO) }
+        item {
+            Notice(
+                stringResource(
+                    when (push) {
+                        PushState.ACTIVE -> R.string.notices_push_active
+                        PushState.IDLE -> R.string.notices_push_checking
+                        PushState.NOT_IN_BUILD -> R.string.notices_push_not_in_build
+                        PushState.NO_SENDER -> R.string.notices_push_no_sender
+                        PushState.FAILED -> R.string.notices_push_failed
+                    },
+                ),
+                Tone.INFO,
+            )
+        }
         item {
             if (allowed) {
                 ListRow(stringResource(R.string.notices_allowed), null)
@@ -141,8 +155,8 @@ fun ThisDevicePage(shell: ShellViewModel) {
         }
         item {
             SwitchRow(stringResource(R.string.notices_background), stringResource(R.string.notices_background_hint), choices.backgroundNotices) { on ->
+                // AppGraph schedules or stops the check from this choice and the push state.
                 graph.device.update { it.copy(backgroundNotices = on) }
-                NoticeWorker.schedule(context, on)
             }
         }
 

@@ -108,6 +108,7 @@ final class AppModel {
         enterSignedIn()
         if stored.needsRenewal() { _ = await keeper.refresh() }
         await refreshAccount()
+        await PushCenter.shared.start(app: self)
     }
 
     /// Username and password against the hub at `hub`.
@@ -164,10 +165,10 @@ final class AppModel {
         ))
     }
 
-    /// Claims a pairing the web made (Settings → Device connections → App).
-    func pair(_ payload: PairingPayload) async throws {
+    /// How this phone describes itself to the hub: pairing and `devices.register` alike.
+    func thisDevice() -> DeviceRegistration {
         let device = UIDevice.current
-        let registration = DeviceRegistration(
+        return DeviceRegistration(
             deviceKey: DeviceKey.current(defaults: defaults),
             name: device.name,
             platform: .ios,
@@ -177,6 +178,11 @@ final class AppModel {
             appVersion: appVersion,
             capabilities: [.camera, .microphone, .notifications, .clipboard]
         )
+    }
+
+    /// Claims a pairing the web made (Settings → Device connections → App).
+    func pair(_ payload: PairingPayload) async throws {
+        let registration = thisDevice()
         let result = try await api.anonymous(hub: payload.hubURL) {
             try await AuthAPI.authClaimPairing(
                 pairingId: payload.pairingID,
@@ -196,7 +202,8 @@ final class AppModel {
             displayName: result.user.displayName,
             role: result.user.role.rawValue,
             profiles: result.user.profiles,
-            defaultProfile: result.user.defaultProfile
+            defaultProfile: result.user.defaultProfile,
+            deviceID: result.device.id
         )
         await finishSignIn(credentials)
     }
@@ -207,8 +214,10 @@ final class AppModel {
         notice = nil
         enterSignedIn()
         await refreshAccount()
-        // Asked once, right after the person chose this phone (proposed — owner to confirm).
+        // Asked once, right after the person chose this phone (proposed — owner to confirm);
+        // with a yes, the phone registers for push with the hub.
         _ = await LocalNotices.shared.requestPermission()
+        await PushCenter.shared.start(app: self)
     }
 
     private func enterSignedIn() {
@@ -290,6 +299,9 @@ final class AppModel {
 
     func signOut() async {
         if credentials != nil {
+            // Push first, while the token still works, so the hub stops pushing to this phone.
+            let deviceID = await keeper.credentials?.deviceID
+            await PushCenter.shared.signOut(deviceID: deviceID)
             _ = try? await api.call { try await AuthAPI.authLogout(apiConfiguration: $0) }
         }
         await clearSession()
@@ -302,6 +314,7 @@ final class AppModel {
 
     private func clearSession() async {
         LocalNotices.shared.stop()
+        PushCenter.shared.reset()
         Speaker.shared.stop()
         realtime.stop()
         sessionsNamespace = nil

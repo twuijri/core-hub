@@ -48,17 +48,33 @@ run by hand or by a release tag, never on a pull request — how it signs and wh
 the Apple consoles: `docs/RELEASING.md`. An app icon (none yet) is still needed before TestFlight
 accepts a build.
 
-## Notifications — what works and what waits
+## Notifications — push, and the fallback
 
 While Core Hub is open (or just sent to the background, before iOS suspends it) the app listens
 on `/rt/devices` and shows each notice the hub writes — a reply that finished, an agent waiting
-for the person — as a local notification, quiet for the conversation on screen. With the app
-closed, iOS wakes it now and then (`BGAppRefreshTask`, at most every 15 minutes, when iOS
-decides) to read the unread notices and show the new ones; each notice is shown once.
+for the person — as a local notification, quiet for the conversation on screen.
 
-**Real push needs APNs**: the hub's `devices` module (`devicesRegisterPush`) still answers 501,
-and APNs needs the owner's Apple account (a push key or certificate). When both exist, the app
-registers its device token with `devicesRegisterPush`; the rest of the app does not change.
+**Push (APNs, `CoreHub/Phone/Push.swift`).** Right after sign-in the app asks once for
+notifications; with a yes it registers for remote notifications and sends the device token (hex)
+to the hub with `devices.registerPush` (`provider: apns`), on the device the pairing made or — for
+a username-and-password sign-in — on this install registered as a device (`devices.register`, its
+stable `device_key`). It does so again at each launch, since iOS may change the token. A pushed
+notice shows as a normal notification; in front, one the socket already showed is not shown again,
+and a tap opens the conversation, task board or schedule it is about (the push's `resource`).
+Signing out removes the registration first (`devices.unregisterPush`). The app carries the
+`aps-environment` entitlement: `production` in Release (App Store, TestFlight), `development` in
+Debug from Xcode (`COREHUB_APS_ENVIRONMENT` in `project.yml`); the signed workflow checks
+`production`.
+
+**Fallback.** Without push — notifications not allowed, no APNs sender set up on the hub, or an
+error — iOS wakes the app now and then (`BGAppRefreshTask`, at most every 15 minutes, when iOS
+decides) to read the unread notices and show the new ones. While push is active that background
+look is not scheduled. This device says which case holds. Each notice is shown once, whichever
+path saw it first.
+
+What the hub needs for push: an APNs sender in Device connections → Push senders (the `.p8` key,
+Key ID, Team ID `58QWJ228ZE`, bundle id `com.twuijri.corehub`, environment `production` for a
+TestFlight or App Store build, `sandbox` for a Debug build from Xcode).
 
 ## Decisions (proposed — owner to confirm)
 

@@ -181,11 +181,7 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
     }
 
     fun signOut() {
-        val s = graph.store.current ?: return
-        viewModelScope.launch {
-            hubCall { graph.apis(s).auth.authLogout() }
-            graph.realtime.close()
-            graph.store.save(null)
-        }
+        if (graph.store.current == null) return
+        viewModelScope.launch { graph.signOut() }
     }
 }

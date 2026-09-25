@@ -187,7 +187,11 @@
     <string name="voice_language_app">As the app (%1$s)</string>
     <string name="voice_spoken">Spoken replies</string>
     <string name="voice_spoken_hint">Read a finished reply aloud while its chat is on screen.</string>
-    <string name="notices_no_push">The hub cannot push to phones yet. The app shows a notice when the hub announces it while the app runs, and looks for new ones every 15 minutes while it is closed.</string>
+    <string name="notices_push_active">Push is on: the hub sends each notice straight to this phone, even while the app is closed.</string>
+    <string name="notices_push_checking">Setting up push with the hub…</string>
+    <string name="notices_push_not_in_build">This build of the app has no push. It shows a notice when the hub announces it while the app runs, and looks for new ones every 15 minutes while it is closed.</string>
+    <string name="notices_push_no_sender">The hub has no Android push sender yet (Device connections → Push senders). Until it does, the app looks for new notices every 15 minutes while it is closed.</string>
+    <string name="notices_push_failed">Push could not be set up just now. The app looks for new notices every 15 minutes while it is closed, and tries push again at the next launch.</string>
     <string name="notices_allow">Allow notifications</string>
     <string name="notices_allowed">Notifications are allowed.</string>
     <string name="notices_background">Check while the app is closed</string>
