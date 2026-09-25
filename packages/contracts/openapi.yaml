@@ -18802,7 +18802,7 @@ components:
               description: Runs started in the period.
             unreported_runs:
               type: integer
-              description: Runs in the period whose agent reported no usage.
+              description: Runs in the period that reported no usage (every run of a coding agent over ACP; any run of another agent that ended before reporting).
             conversations:
               type: integer
               description: Conversations with at least one run in the period.

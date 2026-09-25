@@ -1152,20 +1152,23 @@
   outline: 2px solid var(--ch-color-focus);
   outline-offset: 2px;
 }
+/* Every day takes its share of the width, so the axis under the plot lines up with it; the
+   bar inside stays thin and centred however few days there are. */
 .ch-chart-col {
   flex: 1 1 0;
   min-inline-size: 1px;
-  max-inline-size: 2.5rem;
   block-size: 100%;
   display: flex;
   align-items: flex-end;
+  justify-content: center;
   border-radius: 4px 4px 0 0;
 }
 .ch-chart-col[data-active='true'] {
-  background: var(--ch-color-surface-2);
+  background: color-mix(in srgb, var(--ch-color-surface-2) 55%, transparent);
 }
 .ch-chart-stack {
   inline-size: 100%;
+  max-inline-size: 2rem;
   display: flex;
   flex-direction: column-reverse;
   gap: 2px;

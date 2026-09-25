@@ -947,7 +947,7 @@
     "only_active_days": "Days without runs are left out.",
     "by_agent": "By agent",
     "no_usage_reported": "Reports no usage",
-    "unreported_notice": "{count} runs by agents that report no usage (such as coding agents) are counted, but have no tokens or cost.",
+    "unreported_notice": "{count} runs reported no usage (coding agents never do): they are counted, but have no tokens or cost.",
     "nothing": "Nothing ran in this period."
   },
   "skills_usage": {

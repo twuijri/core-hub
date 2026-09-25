@@ -55,7 +55,9 @@ export function SkillsUsageBody({
 }) {
   const { t } = useI18n();
   const { totals } = report;
-  const unknown = <span className="text-muted">{t('skills_usage.unknown')}</span>;
+  const unknown = (
+    <span className="text-base font-normal text-muted">{t('skills_usage.unknown')}</span>
+  );
 
   const columns: Array<Column<Row>> = [
     {

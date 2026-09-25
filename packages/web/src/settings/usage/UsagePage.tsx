@@ -96,7 +96,9 @@ export function UsageBody({
   const { t } = useI18n();
   const { totals } = report;
   const estimated = totals.cost_source === 'estimated';
-  const notReported = <span className="text-muted">{t('usage.not_reported')}</span>;
+  const notReported = (
+    <span className="text-base font-normal text-muted">{t('usage.not_reported')}</span>
+  );
   const tokens = (value: number) => t('audit.tokens_n', { count: formats.number(value) });
   const days = activeDays(report);
 
@@ -172,7 +174,7 @@ export function UsageBody({
       )}
 
       <ul
-        className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4"
+        className="grid grid-cols-2 gap-3 md:grid-cols-[repeat(auto-fit,minmax(11rem,1fr))]"
         data-testid="usage-totals"
       >
         <StatCard
