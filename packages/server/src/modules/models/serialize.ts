@@ -1,6 +1,7 @@
 // Rows -> the contract's `Provider`, `Model`, `ModelDefaults`, `Ensemble` and
 // `SpeechSettings`. Pure functions, unit-tested; the one rule they all obey is that a
 // secret leaves as `[stored]` or as `null`, never as itself.
+import { withImageCapability } from './images.js';
 import { iso } from '../../lib/time.js';
 import { MASKED } from './crypto.js';
 import type {
@@ -113,7 +114,9 @@ export function serializeModel(row: ModelRow, providerSlug: string): ContractMod
     preview: row.preview,
     disabled: !row.enabled,
     context_window: row.contextWindow,
-    capabilities: [...row.capabilities],
+    // `image_output` also when only the id says so: a catalogue refreshed before the hub
+    // knew the capability still offers its image models to the Images tab (decision §72).
+    capabilities: withImageCapability(row.modelKey, row.capabilities),
     pricing: serializePricing(row.pricing),
   };
 }

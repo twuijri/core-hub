@@ -11846,7 +11846,7 @@ paths:
     get:
       operationId: models.getDefaults
       tags: [models]
-      summary: The profile's default model, fallback chain and auxiliary-role assignments
+      summary: The profile's default model, fallback chain, image model and auxiliary-role assignments
       description: >-
         The choices in effect for the profile in `X-Hub-Profile`. A role the profile chose
         is its own; a role it left alone is the `default` profile's — the same model on the
@@ -11870,6 +11870,10 @@ paths:
                 fallbacks:
                   - provider_id: 01J8QK3ZR2W7M5N4P6T8V9X0PW
                     model: llama3.1:70b
+                image:
+                  provider_id: 01J8QK3ZR2W7M5N4P6T8V9X0PW
+                  model: gemini-3.1-flash-image
+                inherited: [image]
                 auxiliary:
                   tasks:
                     - key: title
@@ -21708,7 +21712,12 @@ components:
       enum: [chat, embedding, stt, tts]
     ModelCapability:
       type: string
-      enum: [vision, tools, reasoning, audio, streaming]
+      description: >-
+        `image_output`: the model answers with images — a Images-API model (gpt-image, Imagen,
+        FLUX …) or a chat model that draws (`gemini-*-image`). Said by the provider where it says
+        it (OpenRouter's output modalities), else read from the model's id (decision §72). Only
+        such a model can be the profile's image model.
+      enum: [vision, tools, reasoning, audio, streaming, image_output]
     ModelPricing:
       type: object
       required: [input_per_million, output_per_million]
@@ -22108,8 +22117,9 @@ components:
           type: array
           description: >-
             The roles whose value is the `default` profile's, because this profile chose
-            none (decision §37): `default` for the chat model (with its fallbacks), else an
-            auxiliary task key. Always empty in the `default` profile.
+            none (decision §37): `default` for the chat model (with its fallbacks), `image` for
+            the image model (decision §72), else an auxiliary task key. Always empty in the
+            `default` profile.
           items:
             type: string
         default:
@@ -22126,6 +22136,16 @@ components:
             by every agent of the profile after the model that agent runs on.
           items:
             $ref: '#/components/schemas/ModelRef'
+        image:
+          description: >-
+            The model that draws and edits images for this profile (the Models → Images tab,
+            decision §72): a model with `image_output` on one of the profile's chat providers —
+            there are no separate image providers. Hermes's `image_generate` tool and the hub's
+            image skills both use it. Inherited from the `default` profile like the chat model;
+            null when neither chose one.
+          oneOf:
+            - $ref: '#/components/schemas/ModelRef'
+            - type: 'null'
         auxiliary:
           type: object
           required: [tasks, assignments]
@@ -22149,6 +22169,14 @@ components:
       type: object
       properties:
         default:
+          oneOf:
+            - $ref: '#/components/schemas/ModelRef'
+            - type: 'null'
+        image:
+          description: >-
+            The profile's image model (decision §72). It must be a model with `image_output` on
+            a provider the hub holds the key of (or that needs none); `null` goes back to
+            inheriting the `default` profile's.
           oneOf:
             - $ref: '#/components/schemas/ModelRef'
             - type: 'null'

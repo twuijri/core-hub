@@ -57,7 +57,7 @@ interface OpenAiModel {
   name?: unknown;
   context_length?: unknown;
   top_provider?: { context_length?: unknown; max_completion_tokens?: unknown };
-  architecture?: { input_modalities?: unknown; modality?: unknown };
+  architecture?: { input_modalities?: unknown; output_modalities?: unknown; modality?: unknown };
   supported_parameters?: unknown;
   pricing?: { prompt?: unknown; completion?: unknown; input_cache_read?: unknown };
 }
@@ -70,6 +70,9 @@ function enrich(raw: OpenAiModel, model: DiscoveredModel): DiscoveredModel {
   const capabilities: ModelCapability[] = [];
   const modalities = raw.architecture?.input_modalities;
   if (Array.isArray(modalities) && modalities.includes('image')) capabilities.push('vision');
+  // A model that answers with pictures (decision §72): what the Images tab offers.
+  const outputs = raw.architecture?.output_modalities;
+  if (Array.isArray(outputs) && outputs.includes('image')) capabilities.push('image_output');
   const parameters = raw.supported_parameters;
   if (Array.isArray(parameters)) {
     if (parameters.includes('tools')) capabilities.push('tools');

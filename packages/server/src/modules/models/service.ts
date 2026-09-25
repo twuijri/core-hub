@@ -51,6 +51,14 @@ import {
 import { isMask } from './crypto.js';
 import { parseEnv } from './dotenv.js';
 import { AUXILIARY_TASKS, isAuxiliaryKey, roleForAdapter } from './defaults.js';
+import { writeHermesImagePlugin } from './hermes-image-plugin.js';
+import {
+  IMAGE_ENV_NAMES,
+  imageEnvOf,
+  imageProtocolOf,
+  isImageModel,
+  type ImageChoice,
+} from './images.js';
 import {
   agentEnvironment,
   hermesEnvPlan,
@@ -154,6 +162,9 @@ function hermesProcessEnv(state: PropagationState): Record<string, string> {
   for (const credential of state.credentials) {
     for (const name of credential.hermesEnvVars) env[name] = credential.value;
   }
+  // The image model's variables travel the same way (decision §72): the root's in the
+  // process, a profile's own where it differs in its `.env`.
+  for (const [name, value] of Object.entries(state.imageEnv ?? {})) env[name] = value;
   return env;
 }
 
@@ -408,6 +419,8 @@ export interface ModelRefInput {
 
 export interface DefaultsWriteInput {
   default?: ModelRefInput | null;
+  /** The image model (decision §72); null goes back to inheriting the default profile's. */
+  image?: ModelRefInput | null;
   fallbacks?: ModelRefInput[];
   assignments?: Record<string, ModelRefInput | null>;
 }
@@ -1633,11 +1646,13 @@ export class ModelsService {
   /**
    * The profile's model choices, as they are in effect. A role this profile chose is its
    * own; a role it left alone is the default profile's, and `inherited` names it (`default`
-   * for the chat model, else the auxiliary key) so a client can say where it came from
-   * (contract decision §37). In the default profile nothing is inherited.
+   * for the chat model, `image` for the image model, else the auxiliary key) so a client can
+   * say where it came from (contract decision §37). In the default profile nothing is
+   * inherited.
    */
   getDefaults(scope: WorkspaceScope): {
     default: ModelRefInput | null;
+    image: ModelRefInput | null;
     fallbacks: ModelRefInput[];
     auxiliary: {
       tasks: { key: string; label: { ar: string; en: string } }[];
@@ -1648,6 +1663,9 @@ export class ModelsService {
     const inherited: string[] = [];
     const chat = this.effectiveDefault(scope.id, 'chat');
     if (chat?.inherited) inherited.push('default');
+    const image = this.effectiveDefault(scope.id, 'image');
+    const imageRef = image ? this.refOf(scope, image.row.modelId) : null;
+    if (imageRef && image?.inherited) inherited.push('image');
     const assignments: Record<string, ModelRefInput> = {};
     for (const task of AUXILIARY_TASKS) {
       const found = this.effectiveDefault(scope.id, task.key);
@@ -1663,6 +1681,7 @@ export class ModelsService {
     }
     return {
       default: chat ? this.refOf(scope, chat.row.modelId) : null,
+      image: imageRef,
       fallbacks,
       auxiliary: {
         tasks: AUXILIARY_TASKS.map((task) => ({ key: task.key, label: task.label })),
@@ -1736,6 +1755,15 @@ export class ModelsService {
       );
     }
 
+    if (body.image !== undefined) {
+      if (body.image === null) {
+        this.store.clearDefault(scope.id, 'image');
+      } else {
+        const model = this.requireImageModel(scope, body.image);
+        this.store.setDefault({ workspace: scope.id, ownerId: actor.userId }, 'image', model.id, []);
+      }
+    }
+
     for (const [key, ref] of Object.entries(body.assignments ?? {})) {
       if (!isAuxiliaryKey(key)) {
         throw validationFailed({
@@ -1761,7 +1789,12 @@ export class ModelsService {
       entityKind: 'workspace',
       entityId: scope.id,
       summary: 'model defaults updated',
-      data: { roles: Object.keys(body.assignments ?? {}) },
+      data: {
+        roles: [
+          ...(body.image !== undefined ? ['image'] : []),
+          ...Object.keys(body.assignments ?? {}),
+        ],
+      },
     });
     this.propagate(scope, actor);
     return this.getDefaults(scope);
@@ -2253,9 +2286,12 @@ export class ModelsService {
       credentials.push({ family: row.family, envVar, hermesEnvVars, value });
     }
     const chat = this.hermesModelChoice(workspace);
+    const image = this.imageChoice(workspace);
     return {
       credentials,
       hermesProviders,
+      imageEnv: imageEnvOf(image),
+      hermesImage: image !== null,
       hermesModel: chat.choice,
       hermesModelBlocked: chat.blocked,
       // Owned where the model selection is (contract decision §54).
@@ -2292,6 +2328,8 @@ export class ModelsService {
         if (legacy) names.add(legacy);
       }
     }
+    // The image model's variables are the hub's in every `.env` it writes (decision §72).
+    for (const name of IMAGE_ENV_NAMES) names.add(name);
     return [...names].sort();
   }
 
@@ -2602,8 +2640,10 @@ export class ModelsService {
     // same — `hermes model`, `hermes config` and a shell in the container read it.
     const envChanged = this.options.hermes.applyEnvironment?.(hermesProcessEnv(state)) ?? false;
     let result;
+    let plugin: string[];
     try {
       result = writeHermesConfiguration(home, state);
+      plugin = writeHermesImagePlugin(home, state.hermesImage === true);
     } catch (error) {
       this.options.log.warn(
         { err: error, home },
@@ -2612,9 +2652,9 @@ export class ModelsService {
       return;
     }
     this.propagateToProfiles(state);
-    if (!result.dirty && !envChanged) return;
+    if (!result.dirty && !envChanged && plugin.length === 0) return;
     this.lastWriteAt = this.now().getTime();
-    const changed = [...result.env.changed, ...result.config.changed];
+    const changed = [...result.env.changed, ...result.config.changed, ...plugin];
     const removed = [...result.env.removed, ...result.config.removed];
     this.options.log.info(
       // Names only. A value never reaches a log line.
@@ -2660,11 +2700,12 @@ export class ModelsService {
     }
     try {
       const written = writeHermesConfiguration(home, root);
-      if (written.dirty) {
+      const plugin = writeHermesImagePlugin(home, root.hermesImage === true);
+      if (written.dirty || plugin.length > 0) {
         this.options.log.info(
           {
             profile,
-            changed: [...written.env.changed, ...written.config.changed],
+            changed: [...written.env.changed, ...written.config.changed, ...plugin],
             removed: [...written.env.removed, ...written.config.removed],
           },
           'models: a messaging gateway was given its profile providers and model',
@@ -2723,7 +2764,14 @@ export class ModelsService {
       // conversation starts (contract decision §54), where a turn names only its model.
       const written = options.model
         ? writeHermesRoute(profileHome, mine)
-        : writeHermesProviders(profileHome, mine.hermesProviders, mine.hermesFallbacks ?? null);
+        : writeHermesProviders(
+            profileHome,
+            mine.hermesProviders,
+            mine.hermesFallbacks ?? null,
+            mine.hermesImage ?? null,
+          );
+      // The profile's own `image_gen` backend, where Hermes looks for it (decision §72).
+      const plugin = writeHermesImagePlugin(profileHome, mine.hermesImage === true);
       const rootValues = hermesProcessEnv(root);
       const ownValues = hermesProcessEnv(mine);
       const owned = [
@@ -2740,12 +2788,12 @@ export class ModelsService {
         values[name] = ownValues[name] ?? '';
       }
       const env = writeHermesEnv({ file: path.join(profileHome, '.env'), owned, values });
-      if (written.dirty || env.dirty) {
+      if (written.dirty || env.dirty || plugin.length > 0) {
         this.options.log.info(
           // Names only, never a value.
           {
             profile,
-            changed: [...written.changed, ...env.changed],
+            changed: [...written.changed, ...env.changed, ...plugin],
             removed: [...written.removed, ...env.removed],
           },
           'models: Hermes profile made ready for its providers',
@@ -2933,6 +2981,36 @@ export class ModelsService {
   }
 
   /**
+   * The profile's image model, resolved to what its Hermes home needs (decision §72): the
+   * protocol it is spoken to in, the provider's address and key, and the model. Its own
+   * choice, else the default profile's (§37). Null when there is none, or when the provider
+   * it names can no longer draw for the hub (disabled, removed, or signed in through Hermes)
+   * — then the variables are taken out rather than left pointing at something that fails.
+   */
+  private imageChoice(workspace: string): ImageChoice | null {
+    const ref = this.refOfRole(workspace, 'image');
+    if (!ref) return null;
+    const row = this.effectiveFor(workspace, ref.provider_id);
+    if (!row || row.archivedAt || !row.enabled || row.kind !== 'llm') return null;
+    if (row.authKind === 'oauth') return null;
+    const entry = this.entryOf(row);
+    const protocol = imageProtocolOf(entry?.protocol ?? 'openai', ref.model);
+    const base = row.baseUrl ?? entry?.baseUrl;
+    if (!protocol || !base) return null;
+    const key = row.apiKeySecretId
+      ? this.options.secrets.reveal(row.workspace, row.apiKeySecretId)
+      : null;
+    return {
+      protocol,
+      // An OpenAI-compatible endpoint the way Hermes is given it (`…/v1`); Google's own API
+      // as the catalogue names it (`…/v1beta`).
+      baseUrl: protocol === 'gemini' ? base.replace(/\/+$/, '') : hermesBaseUrlOf(base, entry),
+      model: ref.model,
+      apiKey: key || null,
+    };
+  }
+
+  /**
    * The workspace's chat default expressed the way Hermes names a model.
    *
    * `blocked` is the honest half, and it is now a much shorter list than it was: Hermes
@@ -3002,6 +3080,30 @@ export class ModelsService {
         reason: 'the profile has no such model on that provider',
         model: modelKeyOf(provider.slug, ref.model),
       });
+    }
+    return row;
+  }
+
+  /**
+   * A model that can be the profile's image model (decision §72): a model that draws, on a
+   * chat provider the hub can speak to for pictures with a key it holds (or that needs none).
+   * A provider signed in through Hermes is refused — its credential is Hermes's, and the
+   * skills and the image backend need one the hub can hand them.
+   */
+  private requireImageModel(scope: WorkspaceScope, ref: ModelRefInput): ModelRow {
+    const row = this.requireModel(scope, ref);
+    const provider = this.loadProvider(scope, ref.provider_id);
+    const refuse = (reason: string) =>
+      validationFailed({ field: 'image', reason, model: modelKeyOf(provider.slug, ref.model) });
+    if (!isImageModel(row.modelKey, row.capabilities)) {
+      throw refuse('not an image model: choose one that answers with images');
+    }
+    if (provider.kind !== 'llm') throw refuse('image models come from chat providers');
+    if (provider.authKind === 'oauth') {
+      throw refuse('a provider signed in through Hermes cannot draw for the hub; add one with a key');
+    }
+    if (!imageProtocolOf(this.entryOf(provider)?.protocol ?? 'openai', row.modelKey)) {
+      throw refuse('this provider cannot draw images for the hub');
     }
     return row;
   }
