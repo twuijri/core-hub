@@ -1502,7 +1502,7 @@ function ReplyHeaderDialog({
           <div className="flex flex-col gap-1 text-sm">
             <span className="text-muted">{t('channels.reply_header.preview')}</span>
             <div
-              className="rounded-md border border-border p-2"
+              className="rounded-md border border-line p-2"
               data-testid="channel-reply-header-preview"
             >
               <strong dir="auto">{title}</strong>
