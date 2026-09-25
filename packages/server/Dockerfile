@@ -209,6 +209,14 @@ RUN apt-get update \
  && groupadd --gid 10001 hub \
  && useradd --uid 10001 --gid hub --create-home --shell /usr/sbin/nologin hub \
  && mkdir -p /data && chown hub:hub /data
+# `python3` for the scripts skills run (Core Hub's library, decision §60, and Hermes's own —
+# xlsx, pdf, docx …). Hermes's terminal runs a login shell, and Debian's /etc/profile resets PATH
+# for a non-root user, dropping /opt/hermes/.venv/bin: `python3` was "command not found" there
+# (skill-library.real.test.ts). A wrapper, not a symlink, so the venv — and the Pillow in it — is
+# the one that runs; the venv stays read-only to `hub`.
+RUN printf '#!/bin/sh\nexec /opt/hermes/.venv/bin/python3 "$@"\n' > /usr/local/bin/python3 \
+ && chmod 0755 /usr/local/bin/python3 \
+ && ln -s python3 /usr/local/bin/python
 COPY --from=base /usr/local/bin/node /usr/local/bin/node
 COPY --from=base /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
