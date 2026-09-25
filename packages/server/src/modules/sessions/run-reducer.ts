@@ -15,7 +15,13 @@
  * and the realtime events declared in `packages/contracts/events/sessions/`.
  * The reducer names *what happened*; only the engine knows the wire shapes.
  */
-import type { AgentApprovalKind, AgentChoice, AgentEvent, AgentToolKind } from './ports.js';
+import type {
+  AgentApprovalKind,
+  AgentChoice,
+  AgentEvent,
+  AgentFallbackAttempt,
+  AgentToolKind,
+} from './ports.js';
 import type { RUN_STATUSES, TOOL_CALL_STATUSES, APPROVAL_STATUSES } from './schema.js';
 
 export type RunStatus = (typeof RUN_STATUSES)[number];
@@ -131,6 +137,14 @@ export interface RunState {
   finishedAt: number | null;
   /** Tool names approved for the rest of the session ("always" / "for this session"). */
   rememberedTools: string[];
+  /**
+   * The run moved down the fallback chain (contract decision §49): what failed, and the model
+   * that took the turn. `null` while the chosen model is the one running.
+   */
+  fallback: {
+    failed: AgentFallbackAttempt[];
+    answered: { model: string; provider: string | null };
+  } | null;
 }
 
 /** Everything that can move a run. Agent frames arrive wrapped in `agent`. */
@@ -165,6 +179,7 @@ export type RunAction =
   | { type: 'approval_requested'; approvalId: string }
   | { type: 'approval_resolved'; approvalId: string }
   | { type: 'usage'; modelLabel: string }
+  | { type: 'fallback' }
   | { type: 'context' }
   | { type: 'finished'; status: TerminalRunStatus };
 
@@ -200,6 +215,7 @@ export function initialRunState(messageId: string): RunState {
     startedAt: null,
     finishedAt: null,
     rememberedTools: [],
+    fallback: null,
   };
 }
 
@@ -518,6 +534,13 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
           // Adapters report cumulative totals for a turn, so replace, never add.
           next.usage = index >= 0 ? next.usage.with(index, merged) : [...next.usage, merged];
           actions.push({ type: 'usage', modelLabel });
+          break;
+        }
+
+        case 'model_fallback': {
+          // Each report carries every model that failed so far, so it replaces the last.
+          next.fallback = { failed: [...event.failed], answered: event.answered };
+          actions.push({ type: 'fallback' });
           break;
         }
 

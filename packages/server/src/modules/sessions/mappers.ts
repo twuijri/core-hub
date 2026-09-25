@@ -192,6 +192,9 @@ export function toRun(view: RunView, profile: string): Record<string, unknown> {
       ? { error: view.errorMessage ?? row.errorMessage ?? code, code: wireErrorCode(code) }
       : null,
     usage: wireUsage(view.usage),
+    fallback: row.timing?.fallback?.failed.length
+      ? { failed: row.timing.fallback.failed.map((attempt) => ({ ...attempt })) }
+      : null,
     started_at: iso(row.startedAt),
     finished_at: iso(row.finishedAt),
   };

@@ -283,6 +283,12 @@ export const modelsModule = defineModule({
       directChat(workspace, request) {
         return contextOf(app).chat(workspace, request);
       },
+      fallbackChain(workspace) {
+        return contextOf(app).fallbackChain(workspace);
+      },
+      providerSlug(workspace, providerId) {
+        return contextOf(app).providerSlug(workspace, providerId);
+      },
       // A named Hermes profile, just before one of its turns: the endpoints it uses in its
       // config, and in its own `.env` exactly the keys that differ from the root's (§37).
       prepareRuntimeProfile(profileHome) {

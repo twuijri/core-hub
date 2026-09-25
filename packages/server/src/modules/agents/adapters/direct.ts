@@ -244,6 +244,7 @@ export interface DirectModelsPort {
       messages: DirectChatMessage[];
       reasoningEffort?: string | null;
       signal?: AbortSignal;
+      fallbacks?: readonly { providerId: string; model: string }[];
     },
   ): AsyncIterable<DirectChatEvent>;
 }
@@ -356,8 +357,25 @@ export class DirectSession implements AgentSession {
           ? { reasoningEffort: prompt.reasoningEffort }
           : {}),
         signal: controller.signal,
+        // The profile's chain (contract decision §49). The models module walks it: it knows
+        // which provider errors another model could get past, and this file sees no provider.
+        ...(prompt.fallbacks && prompt.fallbacks.length > 0
+          ? {
+              fallbacks: prompt.fallbacks.map((member) => ({
+                providerId: member.providerId,
+                model: member.model,
+              })),
+            }
+          : {}),
       })) {
         switch (event.type) {
+          case 'fallback':
+            this.queue.push({
+              type: 'model.fallback',
+              failed: event.failed.map((attempt) => ({ ...attempt })),
+              answered: { ...event.answered },
+            });
+            break;
           case 'delta':
             answer += event.text;
             this.queue.push({ type: 'message.delta', text: event.text });

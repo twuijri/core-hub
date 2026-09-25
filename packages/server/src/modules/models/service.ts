@@ -1435,7 +1435,10 @@ export class ModelsService {
       } else {
         const model = this.requireModel(scope, body.default);
         this.requireExpressible(scope, model.providerId);
-        const fallbacks = (body.fallbacks ?? []).map((ref) => this.requireModel(scope, ref).id);
+        const fallbacks = chainOf(
+          (body.fallbacks ?? []).map((ref) => this.requireModel(scope, ref).id),
+          model.id,
+        );
         this.store.setDefault(
           { workspace: scope.id, ownerId: actor.userId },
           'chat',
@@ -1451,7 +1454,10 @@ export class ModelsService {
           reason: 'a fallback chain needs a default model to fall back from',
         });
       }
-      const fallbacks = body.fallbacks.map((ref) => this.requireModel(scope, ref).id);
+      const fallbacks = chainOf(
+        body.fallbacks.map((ref) => this.requireModel(scope, ref).id),
+        chat.modelId,
+      );
       this.store.setDefault(
         { workspace: scope.id, ownerId: actor.userId },
         'chat',
@@ -1903,6 +1909,12 @@ export class ModelsService {
       hermesProviders,
       hermesModel: chat.choice,
       hermesModelBlocked: chat.blocked,
+      // Owned where the model selection is (contract decision §49).
+      hermesFallbacks: chat.choice
+        ? this.fallbackChain(workspace).flatMap((member) =>
+            member.provider ? [{ provider: member.provider, model: member.model }] : [],
+          )
+        : null,
       ownedEnv: this.ownedEnvNames(),
     };
   }
@@ -2047,6 +2059,77 @@ export class ModelsService {
    * a run loop that will one day forget to.
    */
   async *chat(workspace: string, request: DirectChatRequest): AsyncIterable<DirectChatEvent> {
+    // The chosen model first, then the chain, each model once (contract decision §49).
+    const seen = new Set<string>();
+    const chain: { providerId: string; model: string }[] = [];
+    for (const target of [
+      { providerId: request.providerId, model: request.model },
+      ...(request.fallbacks ?? []),
+    ]) {
+      const key = `${target.providerId}\u0000${target.model}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      chain.push({ providerId: target.providerId, model: target.model });
+    }
+    const failed: DirectFallbackAttempt[] = [];
+    for (const [index, target] of chain.entries()) {
+      const last = index === chain.length - 1;
+      let started = false;
+      let failure: Extract<AttemptEvent, { type: 'failed' }> | null = null;
+      for await (const event of this.chatOnce(workspace, { ...request, ...target })) {
+        if (event.type === 'failed') {
+          failure = event;
+          break;
+        }
+        if (!started) {
+          started = true;
+          // Said before the first word of the model that took over, so the reader of the
+          // stream knows whose words these are.
+          if (failed.length > 0) {
+            yield { type: 'fallback', failed: [...failed], answered: this.answerOf(workspace, target) };
+          }
+        }
+        yield event;
+      }
+      if (!failure) return;
+      const moveOn =
+        !started && failure.retryable && !last && !request.signal?.aborted;
+      if (!moveOn) {
+        if (failed.length > 0 && !started) {
+          yield { type: 'fallback', failed: [...failed], answered: this.answerOf(workspace, target) };
+        }
+        yield { type: 'failed', code: failure.code, message: failure.message };
+        return;
+      }
+      failed.push({
+        model: target.model,
+        provider: this.answerOf(workspace, target).provider,
+        code: failure.code,
+        error: failure.message,
+      });
+    }
+  }
+
+  /** A chain member as a client names it: the model and its provider's slug. */
+  private answerOf(
+    workspace: string,
+    target: { providerId: string; model: string },
+  ): { model: string; provider: string | null } {
+    const row = this.effectiveFor(workspace, target.providerId);
+    return { model: target.model, provider: row?.slug ?? null };
+  }
+
+  /**
+   * One model's attempt at the turn. A failure says whether another model could get past it
+   * (`retryable`, contract decision §49): the provider was unavailable (a 5xx, or its words
+   * say `auth_unavailable`), rate limited, timed out or unreachable. A request it refused as
+   * invalid — any other 4xx — would be refused by the next model too, and a refused key is the
+   * person's to fix, not something to hide behind another provider.
+   */
+  private async *chatOnce(
+    workspace: string,
+    request: DirectChatRequest,
+  ): AsyncIterable<AttemptEvent> {
     const provider = this.effectiveFor(workspace, request.providerId);
     if (!provider || provider.archivedAt || !provider.enabled) {
       yield {
@@ -2055,6 +2138,17 @@ export class ModelsService {
         message: provider
           ? `the provider "${provider.label}" is disabled`
           : 'the hub has no such provider',
+        retryable: false,
+      };
+      return;
+    }
+    if (provider.authKind === 'oauth') {
+      // Signed in through Hermes (decision §50): the credential is Hermes's, not the hub's.
+      yield {
+        type: 'failed',
+        code: 'provider_not_configured',
+        message: `${provider.label} is signed in through Hermes; only the Hermes agent can use it`,
+        retryable: false,
       };
       return;
     }
@@ -2088,11 +2182,44 @@ export class ModelsService {
           code: DIRECT_ERROR_CODES[event.reason],
           // The provider's own words when it sent any; ours only when it sent none.
           message: event.detail ?? directFailureText(event.reason, provider.label),
+          retryable: retryableFailure(event),
         };
         return;
       }
       yield event;
     }
+  }
+
+  /**
+   * The chat fallback chain in effect for a profile (contract decision §49): its own, or the
+   * default profile's together with the chat model it inherits (§37), each member resolved to
+   * the provider of that slug this profile uses. Members this profile cannot reach are left
+   * out rather than tried.
+   */
+  fallbackChain(
+    workspace: string,
+  ): { providerId: string; provider: string | null; slug: string; model: string }[] {
+    const chat = this.effectiveDefault(workspace, 'chat');
+    const chain: { providerId: string; provider: string | null; slug: string; model: string }[] =
+      [];
+    for (const modelId of chat?.row.fallbackModelIds ?? []) {
+      const ref = this.refOf({ id: workspace }, modelId);
+      if (!ref) continue;
+      const row = this.effectiveFor(workspace, ref.provider_id);
+      if (!row) continue;
+      chain.push({
+        providerId: row.id,
+        provider: this.hermesNameOfProvider(row),
+        slug: row.slug,
+        model: ref.model,
+      });
+    }
+    return chain;
+  }
+
+  /** The slug of one of this profile's providers, for naming the model that answered. */
+  providerSlug(workspace: string, providerId: string): string | null {
+    return this.effectiveFor(workspace, providerId)?.slug ?? null;
   }
 
   /**
@@ -2236,9 +2363,11 @@ export class ModelsService {
       const workspace = this.options.profileWorkspace?.(profile) ?? `hermes-profile:${profile}`;
       const mine = this.state(workspace);
       // A messaging gateway also needs the model: it names none (`prepareGateway`).
+      // The fallback chain too: Hermes reads it from the profile's own file when the
+      // conversation starts (contract decision §49), where a turn names only its model.
       const written = options.model
         ? writeHermesRoute(profileHome, mine)
-        : writeHermesProviders(profileHome, mine.hermesProviders);
+        : writeHermesProviders(profileHome, mine.hermesProviders, mine.hermesFallbacks ?? null);
       const rootValues = hermesProcessEnv(root);
       const ownValues = hermesProcessEnv(mine);
       const owned = [
@@ -2627,6 +2756,11 @@ export interface DirectChatRequest {
   /** A `providers` row id in this workspace, as `resolveModelKey` returned it. */
   providerId: string;
   model: string;
+  /**
+   * The models to move on to, in order, when this one fails with an error another model
+   * could get past (contract decision §49). Absent or empty: no fallback.
+   */
+  fallbacks?: readonly { providerId: string; model: string }[];
   messages: ChatMessage[];
   reasoningEffort?: string | null;
   signal?: AbortSignal;
@@ -2648,7 +2782,59 @@ export type DirectChatEvent =
       costSource?: 'provider' | 'estimated' | 'unknown';
     }
   | { type: 'completed' }
+  | {
+      /**
+       * The turn moved down the fallback chain (contract decision §49), said before the first
+       * word of `answered` — or, when every member failed, just before the last failure.
+       */
+      type: 'fallback';
+      failed: DirectFallbackAttempt[];
+      answered: { model: string; provider: string | null };
+    }
   | { type: 'failed'; code: string; message: string };
+
+/**
+ * A fallback chain as stored: in the order given, each model once, and never the model it
+ * falls back from — trying it again would only repeat the failure (contract decision §49).
+ */
+function chainOf(ids: readonly string[], primary: string): string[] {
+  const seen = new Set<string>([primary]);
+  return ids.filter((id) => (seen.has(id) ? false : (seen.add(id), true)));
+}
+
+/** One member of the chain that failed a turn (contract `RunFallbackAttempt`). */
+export interface DirectFallbackAttempt {
+  model: string;
+  /** The provider's slug. */
+  provider: string | null;
+  code: string | null;
+  error: string | null;
+}
+
+/** One model's attempt, before the chain decides whether to move on. */
+type AttemptEvent =
+  | Exclude<DirectChatEvent, { type: 'failed' } | { type: 'fallback' }>
+  | { type: 'failed'; code: string; message: string; retryable: boolean };
+
+/**
+ * Whether another model could get past this failure (contract decision §49): the provider
+ * unreachable or timed out, rate limiting, failing on its side, or saying in its own words
+ * that it has no credential to serve with (`auth_unavailable`, the owner's 2026-09-25 outage,
+ * which one proxy sends as a 503 and another inside a stream). Every other 4xx is the request
+ * or the key, and the next model would refuse it too.
+ */
+export function retryableFailure(event: {
+  reason: ChatFailureReason;
+  status: number | null;
+  detail: string | null;
+}): boolean {
+  if (event.reason === 'cancelled' || event.reason === 'no_key') return false;
+  if ((event.detail ?? '').toLowerCase().includes('auth_unavailable')) return true;
+  if (event.reason === 'unreachable') return true;
+  const status = event.status;
+  if (status === null) return false;
+  return status === 408 || status === 429 || status >= 500;
+}
 
 /**
  * An adapter's reason for stopping, as one of the contract's `ErrorCode`s.

@@ -37,7 +37,13 @@ import {
   type CatalogEntry,
 } from './catalog/index.js';
 import type { AdapterSet } from './adapters/index.js';
-import type { AdapterKind, AgentProbe, AgentTarget, SettingsSection } from './adapters/types.js';
+import type {
+  AdapterKind,
+  AgentProbe,
+  AgentTarget,
+  FallbackModel,
+  SettingsSection,
+} from './adapters/types.js';
 import type { AgentInstaller } from './installer.js';
 import type { AgentModelsPort } from './ports.js';
 import { agents, agentSettings, agentAdapters } from './schema.js';
@@ -753,6 +759,37 @@ export class AgentsService {
       };
     } catch {
       return { model: fallback.model, provider: null, providerId: fallback.provider_id };
+    }
+  }
+
+  /**
+   * Where a turn on `selection` moves on to when its model fails (contract decision §49): the
+   * profile's chain, without the model the turn already runs on. Empty when the provider
+   * store cannot answer — a turn is never stopped for want of a fallback.
+   */
+  fallbacksFor(workspaceId: string, selection: AgentSelection): FallbackModel[] {
+    const port = this.options.models?.() ?? null;
+    if (!port?.fallbackChain) return [];
+    try {
+      return port
+        .fallbackChain(workspaceId)
+        .filter(
+          (member) =>
+            !(member.providerId === selection.providerId && member.model === selection.model),
+        );
+    } catch {
+      return [];
+    }
+  }
+
+  /** The hub's slug for the provider of a selection, for naming the model that answered. */
+  providerSlugOf(workspaceId: string, selection: AgentSelection): string | null {
+    const port = this.options.models?.() ?? null;
+    if (!port?.providerSlug || !selection.providerId) return null;
+    try {
+      return port.providerSlug(workspaceId, selection.providerId);
+    } catch {
+      return null;
     }
   }
 

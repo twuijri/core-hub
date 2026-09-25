@@ -79,6 +79,15 @@ export interface AgentModelsPort {
    */
   directChat(workspace: string, request: DirectChatRequest): AsyncIterable<DirectChatEvent>;
   /**
+   * The profile's chat fallback chain (contract decision §49), in every name a turn needs:
+   * the provider row, the name the runtime knows it by, the hub's slug, and the model.
+   */
+  fallbackChain?(
+    workspace: string,
+  ): { providerId: string; provider: string | null; slug: string; model: string }[];
+  /** The hub's slug for one of the profile's providers, or null. */
+  providerSlug?(workspace: string, providerId: string): string | null;
+  /**
    * A named Hermes profile is about to run a turn (ADR 0014 stage 3): `models` puts the
    * providers that profile uses where it reads them — the endpoints in its `config.yaml`,
    * and in its own `.env` the keys that differ from the root's: its own provider keys,
@@ -118,6 +127,8 @@ export interface DirectChatRequest {
   reasoningEffort?: string | null;
   /** Aborting it closes the provider socket; the stream then ends as `cancelled`. */
   signal?: AbortSignal;
+  /** Where to move on to when this model fails (contract decision §49); in order. */
+  fallbacks?: readonly { providerId: string; model: string }[];
 }
 
 export type DirectChatEvent =
@@ -136,6 +147,12 @@ export type DirectChatEvent =
       costSource?: 'provider' | 'estimated' | 'unknown';
     }
   | { type: 'completed' }
+  | {
+      /** The turn moved down the fallback chain (contract decision §49); see `RunnerEvent`. */
+      type: 'fallback';
+      failed: RunnerFallbackAttempt[];
+      answered: { model: string; provider: string | null };
+    }
   | {
       /**
        * `code` is one of the contract's `ErrorCode`s, except for `cancelled`, which
@@ -227,6 +244,14 @@ export interface RunnerChoice {
 }
 
 /** The sessions module's `AgentEvent`, restated. */
+/** One model of the fallback chain that failed a turn (contract `RunFallbackAttempt`). */
+export interface RunnerFallbackAttempt {
+  model: string;
+  provider: string | null;
+  code: string | null;
+  error: string | null;
+}
+
 export type RunnerEvent =
   | { type: 'message_delta'; text: string }
   | { type: 'reasoning_delta'; text: string }
@@ -267,6 +292,17 @@ export type RunnerEvent =
       costSource?: 'provider' | 'estimated' | 'unknown';
     }
   | { type: 'context'; usedTokens: number; windowTokens?: number | null }
+  | {
+      /**
+       * The turn moved down the fallback chain (contract decision §49): the models in
+       * `failed` refused it, in order, with an error another model could get past, and
+       * `answered` is the one that took it — or, when the run then failed, the last tried.
+       * `provider` is the hub's provider slug, when known.
+       */
+      type: 'model_fallback';
+      failed: RunnerFallbackAttempt[];
+      answered: { model: string; provider: string | null };
+    }
   | { type: 'completed' }
   | { type: 'failed'; code?: string; message: string };
 
