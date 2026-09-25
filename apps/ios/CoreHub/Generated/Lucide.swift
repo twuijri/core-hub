@@ -3,12 +3,10 @@
 import SwiftUI
 
 enum Lucide: String, CaseIterable {
-    case bellOff = "bell-off"
     case camera = "camera"
     case fileText = "file-text"
     case image = "image"
     case mic = "mic"
-    case micOff = "mic-off"
     case plus = "plus"
     case x = "x"
 }

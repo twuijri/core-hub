@@ -40,7 +40,10 @@ import hub.core.android.R
 import hub.core.android.chat.Turns
 import hub.core.android.graph
 import hub.core.android.phone.VoiceButton
+import hub.core.android.chat.AttachmentTray
 import hub.core.android.ui.components.ApprovalCard
+import hub.core.android.ui.components.AttachButton
+import hub.core.android.ui.components.AttachmentChips
 import hub.core.android.ui.components.Composer
 import hub.core.android.ui.components.EmptyState
 import hub.core.android.ui.components.ErrorNotice
@@ -152,19 +155,27 @@ fun ChatScreen(
             ThinkingIndicator(chat.runStartedAt, chat.currentStep, queued = chat.activeRun?.status == RunStatus.QUEUED)
         }
         val agentName = ui.agents.firstOrNull { it.id == ui.agentId }?.name
+        val files by vm.tray.items.collectAsState()
+        AttachmentChips(files, onRemove = vm.tray::remove)
+        val uploading = files.any { it.state == AttachmentTray.State.Uploading }
+        val ready = files.any { it.state is AttachmentTray.State.Ready }
         Composer(
             text = draft,
             onText = { draft = it },
             placeholder = if (agentName != null) stringResource(R.string.chat_placeholder_agent, agentName) else stringResource(R.string.chat_placeholder),
             running = chat.running,
-            sending = ui.sending || (sessionId == null && ui.agentId == null),
+            sending = ui.sending || uploading || (sessionId == null && ui.agentId == null),
             onSend = {
                 val text = draft
                 draft = ""
                 vm.send(text, onCreated)
             },
             onStop = vm::stop,
-            extra = { VoiceButton { spoken -> draft = if (draft.isBlank()) spoken else "$draft $spoken" } },
+            extra = {
+                AttachButton(vm.tray)
+                VoiceButton(profile) { spoken -> draft = if (draft.isBlank()) spoken else "$draft $spoken" }
+            },
+            hasAttachments = ready,
         )
     }
 }

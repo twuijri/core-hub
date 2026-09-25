@@ -316,6 +316,23 @@ its approval.
   monochrome layer for themed icons) and the notification small icon, a 512 px Play listing icon
   (`apps/android/store`), the desktop `.icns`, `.ico`, Linux PNGs and tray icons, and the web's
   `apple-touch-icon.png`.
+- **Phone polish from the owner's use** (since 2026-09-26, iOS and Android,
+  `docs/changes/2026-09-26-twuijri-mobile-polish.md`): a tap on the conversation or a drag of it
+  puts the keyboard away, the drawer puts it away before it moves (and its footer rides above the
+  keyboard of its own search), the latest message stays above the keyboard as it opens; the drawer,
+  sign-in and new chat draw the real Core Hub mark. The composer's «+» attaches a photo from the
+  library, a camera photo (made ≤ 2048 px, JPEG 0.8) or a file, uploaded at once with
+  `sessions.uploadAttachment` (≤ 25 MB, a clear error above it), shown as chips with a preview and
+  ×, and sent as image / file blocks; a message's files show as names under it. Voice follows
+  «Voice: Core Hub / This phone» (This device; Core Hub by default): the profile's hub STT
+  (`models.transcribe`, a recorded m4a take) and TTS (`models.synthesize`, in parts of ≤ 2 000
+  characters) when `models.getSpeech` says they are ready, the phone's recognizer and voice
+  otherwise. Notifications: the app asks while the system has not asked yet (once a launch, in
+  front, never after a no), shows the push state in plain words (push on, waiting for your
+  permission, off in the phone's settings with a row that opens them, no sender on the hub,
+  registration failed), and registers again when it comes to the front. New icons come from Lucide
+  (`scripts/icons/lucide-mobile.mjs`, pinned `lucide-static`). Unit and Compose UI tests (Robolectric)
+  on Android, XCTest on the iOS simulator; **not yet tried on the owner's phones or hub**.
 
 ## Name
 Since 2026-09-24 the product is **Core Hub** («كور هب», ADR 0017): packages `@corehub/*`, the

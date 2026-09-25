@@ -1,4 +1,4 @@
 {
   "$comment": "The Lucide icons the iOS and Android apps carry. Add a name with: node scripts/icons/lucide-mobile.mjs <name>",
-  "icons": ["bell-off", "camera", "file-text", "image", "mic", "mic-off", "plus", "x"]
+  "icons": ["camera", "file-text", "image", "mic", "plus", "x"]
 }

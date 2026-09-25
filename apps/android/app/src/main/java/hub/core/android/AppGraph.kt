@@ -126,7 +126,7 @@ class AppGraph(context: Context) {
      * The first message of a chat created from the draft, waiting for the conversation screen:
      * it subscribes before it sends, so not one event of the first reply is missed.
      */
-    val outbox = java.util.concurrent.ConcurrentHashMap<String, String>()
+    val outbox = java.util.concurrent.ConcurrentHashMap<String, hub.core.android.chat.Outgoing>()
 
     /** Text another app shared to Core Hub, waiting to become a new chat's draft. */
     val sharedText = MutableStateFlow<String?>(null)
@@ -168,6 +168,17 @@ class AppGraph(context: Context) {
                 if (who != null) push.refresh() else push.forget()
             }
         }
+        // Back in front: push is tried again when it was not set up — the hub may have been given
+        // a sender since, or the network is back (not only at the next cold launch).
+        ProcessLifecycleOwner.get().lifecycle.addObserver(
+            androidx.lifecycle.LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_START && store.current != null &&
+                    hub.core.android.phone.PushStatus.retriesOnForeground(push.state.value)
+                ) {
+                    push.refresh()
+                }
+            },
+        )
         // The background check runs while someone is signed in, This device allows it, and push
         // is not already carrying the notices.
         scope.launch {

@@ -1,12 +1,6 @@
 package hub.core.android.phone
 
-import android.Manifest
-import android.content.Intent
-import android.os.Build
-import android.provider.Settings
 import android.speech.SpeechRecognizer
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,13 +17,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import hub.core.android.AppLanguage
@@ -42,7 +36,6 @@ import hub.core.android.graph
 import hub.core.android.ui.components.ErrorNotice
 import hub.core.android.ui.components.ListRow
 import hub.core.android.ui.components.Notice
-import hub.core.android.ui.components.Tone
 import hub.core.android.ui.screens.ShellViewModel
 import hub.core.android.ui.screens.localTime
 import hub.core.android.ui.screens.term
@@ -73,13 +66,8 @@ fun ThisDevicePage(shell: ShellViewModel) {
     val graph = context.graph
     val session by shell.session.collectAsState()
     val choices by graph.device.choices.collectAsState()
-    val push by graph.push.state.collectAsState()
     val s = session ?: return
     val recognizer = remember { SpeechRecognizer.isRecognitionAvailable(context) }
-    var permissionTick by remember { mutableIntStateOf(0) }
-    val notifier = remember { Notifier(context) }
-    val allowed = remember(permissionTick) { notifier.allowed() }
-    val askPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { permissionTick++ }
 
     LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         item { Heading(stringResource(R.string.device_connection)) }
@@ -93,6 +81,22 @@ fun ThisDevicePage(shell: ShellViewModel) {
         item { OutlinedButton(onClick = shell::signOut, modifier = Modifier.fillMaxWidth()) { Text(term("sign_out")) } }
 
         item { Heading(stringResource(R.string.voice_heading)) }
+        item {
+            Column(Modifier.padding(horizontal = 4.dp)) {
+                Text(stringResource(R.string.voice_source), style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(VoiceSource.HUB to R.string.voice_source_hub, VoiceSource.PHONE to R.string.voice_source_phone).forEach { (v, label) ->
+                        FilterChip(
+                            selected = choices.voiceSource == v,
+                            onClick = { graph.device.update { it.copy(voiceSource = v) } },
+                            label = { Text(stringResource(label)) },
+                            modifier = Modifier.testTag("device.voice_source.${v.name.lowercase()}"),
+                        )
+                    }
+                }
+                Text(stringResource(R.string.voice_source_hint), style = MaterialTheme.typography.bodySmall, color = LocalTokens.current.textMuted)
+            }
+        }
         item {
             SwitchRow(
                 stringResource(R.string.voice_input),
@@ -122,37 +126,7 @@ fun ThisDevicePage(shell: ShellViewModel) {
         }
 
         item { Heading(term("notifications")) }
-        item {
-            Notice(
-                stringResource(
-                    when (push) {
-                        PushState.ACTIVE -> R.string.notices_push_active
-                        PushState.IDLE -> R.string.notices_push_checking
-                        PushState.NOT_IN_BUILD -> R.string.notices_push_not_in_build
-                        PushState.NO_SENDER -> R.string.notices_push_no_sender
-                        PushState.FAILED -> R.string.notices_push_failed
-                    },
-                ),
-                Tone.INFO,
-            )
-        }
-        item {
-            if (allowed) {
-                ListRow(stringResource(R.string.notices_allowed), null)
-            } else {
-                Button(onClick = {
-                    if (Build.VERSION.SDK_INT >= 33 && !graph.device.askedNotifications) {
-                        graph.device.askedNotifications = true
-                        askPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    } else {
-                        context.startActivity(
-                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                        )
-                    }
-                }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.notices_allow)) }
-            }
-        }
+        item { NotificationRows() }
         item {
             SwitchRow(stringResource(R.string.notices_background), stringResource(R.string.notices_background_hint), choices.backgroundNotices) { on ->
                 // AppGraph schedules or stops the check from this choice and the push state.
