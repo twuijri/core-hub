@@ -118,7 +118,18 @@ nav:check  OK — 38 destinations, 2 pre-auth screens (login, setup), 43 terms, 
 (`_effective_reply_prefix`، `_bridge_env`) ودالة `formatOutgoingMessage` من `bridge.js` نفسه (تُشغَّل بـNode الصورة
 على بيئة الجسر) تقول بمَ يبدأ الرد «Hello». لم يُجرَّب بجوّال حقيقي.
 
-CI: يُضاف بعد التشغيل.
+CI على PR #164 (التشغيل 36201622015 وما معه) — كلها ناجحة (15 ناجحة، وواحدة متخطّاة: رفع قائمة App Store):
+```
+Server unit tests (shard 1/3)	pass	3m27s
+Server unit tests (shard 2/3)	pass	4m14s
+Server unit tests (shard 3/3)	pass	2m53s
+Lint, typecheck, contracts, client tests, build	pass	5m59s
+Web smoke journeys (Playwright against the real hub)	pass	5m59s
+Docker image builds and answers /health	pass	3m9s
+Build and test on the iOS simulator	pass	4m45s
+Desktop app smoke (Electron under Xvfb against the real hub)	pass	1m15s
+db:generate + db:migrate (SQLite and PostgreSQL)	pass	1m8s
+```
 
 ## المخاطر والرجوع
 - كل حفظ للعنوان يعيد تشغيل بوابة البروفايل (الافتراضي أيضًا، لحظات)، كأي تغيير في القنوات.
