@@ -896,6 +896,51 @@
         "cancelled": "Cancelled",
         "rejected": "Rejected"
       }
+    },
+    "templates": {
+      "label": "Common schedules",
+      "every_hour": "Every hour",
+      "daily_8": "Every day at 8:00",
+      "weekdays_9": "Weekdays at 9:00",
+      "monday_9": "Every Monday at 9:00",
+      "monthly_1": "First of the month at 9:00",
+      "every_15": "Every 15 minutes"
+    },
+    "preview": {
+      "title": "Next runs ({zone})",
+      "incomplete": "Fill in the time to see when it runs.",
+      "none": "It would not run again.",
+      "cron_invalid": "The hub cannot read this: {message}",
+      "timezone_unknown": "The hub does not know the timezone “{zone}”."
+    },
+    "limits": {
+      "title": "Limits",
+      "edit": "Change this workflow’s limits",
+      "hide": "Hide the limits form",
+      "time": "Time limit",
+      "cost": "Cost limit",
+      "step": "Step timeout",
+      "spent": "Cost so far",
+      "none": "No limit",
+      "not_priced": "No priced turn yet",
+      "form_hint": "For the next runs of this workflow. Leave a field empty for no limit. Time waiting for someone’s approval does not count.",
+      "time_minutes": "Time limit for a run (minutes)",
+      "cost_usd": "Cost limit for a run (US dollars, the hub’s estimate)",
+      "step_minutes": "Timeout for each step (minutes)",
+      "invalid_time": "A number of minutes above zero, at most a week.",
+      "invalid_cost": "An amount in US dollars above zero, like 2.50.",
+      "invalid_step": "A number of minutes above zero, at most a day.",
+      "saved": "Limits saved. They apply from the next run.",
+      "units": {
+        "hours": "{n} h",
+        "minutes": "{n} min",
+        "seconds": "{n} s"
+      },
+      "stopped": {
+        "max_duration": "Stopped: the run went over its time limit.",
+        "max_cost": "Stopped: the run went over its cost limit.",
+        "step_timeout": "Stopped: a step went over its timeout and nothing handled it."
+      }
     }
   },
   "audit": {

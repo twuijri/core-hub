@@ -10,6 +10,9 @@
  *
  * A schedule the hub fires has two run options (`RunOptions.tsx`): set when it is made, and
  * changed from its card. Hermes decides both for its own jobs, so its schedules have none.
+ *
+ * Writing the time is helped (`ScheduleTemplates.tsx`): a "Common schedules" menu fills in
+ * the cron or the interval, and the form shows the next three times the hub would run it.
  */
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
@@ -27,6 +30,7 @@ import { ProfileBadge } from '../shell/ProfileBadge.js';
 import { useManyProfiles, useProfileInLink, useProfileName } from '../shell/profiles.js';
 import { chatHref } from '../chat/anchor.js';
 import { ScheduleHistory, WorkflowRunDialog } from './ScheduleRuns.js';
+import { NextRuns, ScheduleTemplateMenu } from './ScheduleTemplates.js';
 import {
   DEFAULT_RUN_OPTIONS,
   RunOptions,
@@ -360,6 +364,12 @@ export function SchedulesScreen() {
               />
             )}
           </Field>
+          <ScheduleTemplateMenu
+            onPick={(template) => {
+              setKind(template.kind);
+              setValue(template.value);
+            }}
+          />
           <Field label={t('schedules.kind')}>
             {() => (
               <Select
@@ -393,6 +403,7 @@ export function SchedulesScreen() {
               />
             )}
           </Field>
+          <NextRuns trigger={triggerOf(kind, value, zone)} profile={target} />
           {many && (
             <p
               className="text-xs text-muted"
