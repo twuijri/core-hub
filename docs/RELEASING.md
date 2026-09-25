@@ -232,6 +232,54 @@ Microsoft Store package (**v1.1.0** does) gets its release without the `.msix`, 
 the Store package starts with a later version. For the Store, release a version made after this
 change (for example 1.1.1: bump the root `package.json`, `pnpm version:check --write`, merge, tag).
 
+## The download page (`site/`, GitHub Pages)
+
+**https://twuijri.github.io/core-hub/** — one static page, Arabic first with an English toggle,
+light and dark with the system. It offers the latest release's files for the visitor's system
+(Windows `.exe`, the Apple silicon `.dmg`, Linux AppImage and `.deb`, the Android `.apk`), the
+store buttons, and a short "Run your own hub" section with the Docker image.
+
+- **Always current, no redeploy per release.** The browser reads
+  `GET /repos/twuijri/core-hub/releases/latest` and picks each file by name
+  (`site/src/releases.js`). `site/tests/releases.test.ts` checks those patterns against
+  `apps/desktop/scripts/release-assets.mjs` and against the real v1.1.1 release, so renaming a file
+  there fails the test. When the API cannot be read (offline, rate-limited: 60 calls an hour per
+  visitor), every button points at the releases page instead, never at a guessed URL.
+- **Store buttons** are switched in `site/src/config.js`. Each shows *Coming soon* until its
+  `enabled` is `true` and its `url` is an `https://` link:
+  - **Microsoft Store:** `microsoftStore.enabled = true` once the listing is certified. The URL is
+    already `https://apps.microsoft.com/detail/9MT62R5V3P5N`.
+  - **Google Play:** `googlePlay.enabled = true` when the app is live there.
+  - **App Store:** set `appStore.url` to the App Store link (`https://apps.apple.com/app/id…`) and
+    `enabled = true`.
+
+  Merging that change to `main` republishes the page.
+- **Publishing** is `.github/workflows/pages.yml`. It runs on a push to `main` that touches
+  `site/**` (or the tokens or the mark), or by hand from Actions → *Download page* → *Run
+  workflow*. It builds `site/dist` (`pnpm --filter "@corehub/site..." build`) and deploys it with
+  `actions/upload-pages-artifact` and `actions/deploy-pages`. Only the deploy job gets
+  `pages: write` and `id-token: write`.
+- **Local preview:** `pnpm --filter "@corehub/site..." build && pnpm --filter @corehub/site serve`,
+  then open `http://127.0.0.1:4173/core-hub/`.
+
+**Owner, one time:**
+
+1. Repository **Settings → Pages → Build and deployment → Source: "GitHub Actions"**.
+2. Actions → *Download page* → *Run workflow* on `main` (or merge any change under `site/`).
+3. The page is at https://twuijri.github.io/core-hub/. The *github-pages* environment it creates
+   accepts deployments from `main` only by default; leave it that way.
+
+**Optional custom domain** (for example `download.<your domain>`):
+
+1. At the DNS provider, add a `CNAME` record from that name to `twuijri.github.io`.
+2. Settings → Pages → **Custom domain**: enter the name and save; wait for the DNS check, then tick
+   **Enforce HTTPS**.
+3. Optionally verify the domain under your account's Settings → Pages, so no other repository can
+   claim it.
+
+With the Actions source no `CNAME` file is needed in `site/`. The page's links are relative, so it
+works at `/core-hub/` and at a domain root alike.
+
 ## Windows
 
 ### The `.exe` (unsigned)

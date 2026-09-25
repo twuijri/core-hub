@@ -1,0 +1,39 @@
+{
+  "tag_name": "v1.1.1",
+  "html_url": "https://github.com/twuijri/core-hub/releases/tag/v1.1.1",
+  "published_at": "2026-09-25T22:38:39Z",
+  "draft": false,
+  "prerelease": false,
+  "assets": [
+    {
+      "name": "Core-Hub-1.1.1-android.apk",
+      "browser_download_url": "https://github.com/twuijri/core-hub/releases/download/v1.1.1/Core-Hub-1.1.1-android.apk",
+      "size": 3209330
+    },
+    {
+      "name": "Core-Hub-1.1.1-arm64.dmg",
+      "browser_download_url": "https://github.com/twuijri/core-hub/releases/download/v1.1.1/Core-Hub-1.1.1-arm64.dmg",
+      "size": 117892584
+    },
+    {
+      "name": "Core-Hub-1.1.1-x64.msix",
+      "browser_download_url": "https://github.com/twuijri/core-hub/releases/download/v1.1.1/Core-Hub-1.1.1-x64.msix",
+      "size": 154747105
+    },
+    {
+      "name": "Core-Hub-1.1.1-x86_64.AppImage",
+      "browser_download_url": "https://github.com/twuijri/core-hub/releases/download/v1.1.1/Core-Hub-1.1.1-x86_64.AppImage",
+      "size": 126482645
+    },
+    {
+      "name": "Core-Hub-Setup-1.1.1-x64.exe",
+      "browser_download_url": "https://github.com/twuijri/core-hub/releases/download/v1.1.1/Core-Hub-Setup-1.1.1-x64.exe",
+      "size": 106085310
+    },
+    {
+      "name": "corehub_1.1.1_amd64.deb",
+      "browser_download_url": "https://github.com/twuijri/core-hub/releases/download/v1.1.1/corehub_1.1.1_amd64.deb",
+      "size": 100101696
+    }
+  ]
+}

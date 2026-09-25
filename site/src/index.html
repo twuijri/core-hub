@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- Only this page's own files, and one call to the GitHub API for the latest release. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src https://api.github.com; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f4f3ef" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#111210" media="(prefers-color-scheme: dark)" />
+    <title data-i18n="meta.title">{{meta.title}}</title>
+    <meta name="description" content="{{meta.description}}" data-i18n-content="meta.description" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="mark-light.svg"
+      media="(prefers-color-scheme: light)"
+    />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="mark-dark.svg"
+      media="(prefers-color-scheme: dark)"
+    />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <a class="skip" href="#downloads" data-i18n="nav.skip">{{nav.skip}}</a>
+
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="#top">
+          <picture>
+            <source srcset="mark-dark.svg" media="(prefers-color-scheme: dark)" />
+            <img src="mark-light.svg" alt="" width="28" height="28" />
+          </picture>
+          <span data-i18n="brand.name">{{brand.name}}</span>
+        </a>
+        <nav class="topnav">
+          <a href="#downloads" data-i18n="nav.downloads">{{nav.downloads}}</a>
+          <a href="#server" data-i18n="nav.server">{{nav.server}}</a>
+          <a href="https://github.com/twuijri/core-hub" data-i18n="nav.source">{{nav.source}}</a>
+        </nav>
+        <button
+          class="lang"
+          type="button"
+          id="lang-toggle"
+          lang="en"
+          aria-label="{{lang.switchLabel}}"
+          data-i18n-aria="lang.switchLabel"
+        >
+          <!--icon:languages-->
+          <span data-i18n="lang.switch">{{lang.switch}}</span>
+        </button>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-glow" aria-hidden="true"></div>
+        <picture class="hero-mark">
+          <source srcset="mark-dark.svg" media="(prefers-color-scheme: dark)" />
+          <img src="mark-light.svg" alt="" width="96" height="96" />
+        </picture>
+        <p class="eyebrow" data-i18n="hero.eyebrow">{{hero.eyebrow}}</p>
+        <h1 data-i18n="hero.title">{{hero.title}}</h1>
+        <p class="lead" data-i18n="hero.lead">{{hero.lead}}</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary btn-lg" id="hero-cta" href="#downloads">
+            <!--icon:download-->
+            <span class="btn-text">
+              <span id="hero-cta-label" data-i18n="hero.choose">{{hero.choose}}</span>
+              <small class="btn-meta" id="hero-cta-meta" dir="ltr" hidden></small>
+            </span>
+          </a>
+          <a class="btn btn-quiet btn-lg" href="#downloads" data-i18n="hero.all">{{hero.all}}</a>
+        </div>
+        <p class="release" id="release-line" aria-live="polite">
+          <span id="release-status" data-i18n="release.loading">{{release.loading}}</span>
+          <a id="release-notes" href="https://github.com/twuijri/core-hub/releases/latest" hidden>
+            <span data-i18n="release.notes">{{release.notes}}</span>
+          </a>
+        </p>
+        <noscript>
+          <p class="notice">
+            {{noscript}}
+            <a href="https://github.com/twuijri/core-hub/releases/latest">{{release.page}}</a>
+          </p>
+        </noscript>
+      </section>
+
+      <section class="section" id="downloads" aria-labelledby="downloads-title">
+        <div class="section-head">
+          <h2 id="downloads-title" data-i18n="downloads.title">{{downloads.title}}</h2>
+          <p data-i18n="downloads.lead">{{downloads.lead}}</p>
+        </div>
+        <p class="notice" id="release-unavailable" hidden>
+          <!--icon:info-->
+          <span>
+            <span data-i18n="release.unavailable">{{release.unavailable}}</span>
+            <a href="https://github.com/twuijri/core-hub/releases/latest" data-i18n="release.page"
+              >{{release.page}}</a
+            >
+          </span>
+        </p>
+
+        <div class="grid">
+          <article class="card" data-platform="windows" id="windows">
+            <div class="card-head">
+              <span class="card-icon"><!--icon:monitor--></span>
+              <div class="card-title">
+                <h3 data-i18n="platform.windows">{{platform.windows}}</h3>
+                <p class="req" data-i18n="req.windows">{{req.windows}}</p>
+              </div>
+              <span class="chip chip-detected" data-i18n="badge.detected" hidden
+                >{{badge.detected}}</span
+              >
+            </div>
+            <div class="actions">
+              <a
+                class="btn btn-primary"
+                data-asset="windows-exe"
+                data-ext=".exe"
+                href="https://github.com/twuijri/core-hub/releases/latest"
+              >
+                <!--icon:download-->
+                <span class="btn-text">
+                  <span data-i18n="dl.windows">{{dl.windows}}</span>
+                  <small class="btn-meta" dir="ltr">.exe</small>
+                </span>
+              </a>
+              <a class="btn btn-store" data-store="microsoftStore">
+                <!--icon:store-->
+                <span class="btn-text">
+                  <span dir="ltr">Microsoft Store</span>
+                  <small class="btn-meta" data-store-state>{{soon}}</small>
+                </span>
+              </a>
+            </div>
+            <details class="install">
+              <summary data-i18n="install.title">{{install.title}}</summary>
+              <p data-i18n-html="html.install.windows">{{html.install.windows}}</p>
+            </details>
+          </article>
+
+          <article class="card" data-platform="macos" id="macos">
+            <div class="card-head">
+              <span class="card-icon"><!--icon:laptop--></span>
+              <div class="card-title">
+                <h3 data-i18n="platform.macos">{{platform.macos}}</h3>
+                <p class="req" data-i18n="req.macos">{{req.macos}}</p>
+              </div>
+              <span class="chip chip-detected" data-i18n="badge.detected" hidden
+                >{{badge.detected}}</span
+              >
+            </div>
+            <div class="actions">
+              <a
+                class="btn btn-primary"
+                data-asset="macos-dmg"
+                data-ext=".dmg · Apple silicon"
+                href="https://github.com/twuijri/core-hub/releases/latest"
+              >
+                <!--icon:download-->
+                <span class="btn-text">
+                  <span data-i18n="dl.macos">{{dl.macos}}</span>
+                  <small class="btn-meta" dir="ltr">.dmg · Apple silicon</small>
+                </span>
+              </a>
+            </div>
+            <details class="install">
+              <summary data-i18n="install.title">{{install.title}}</summary>
+              <p data-i18n-html="html.install.macos">{{html.install.macos}}</p>
+            </details>
+          </article>
+
+          <article class="card" data-platform="linux" id="linux">
+            <div class="card-head">
+              <span class="card-icon"><!--icon:square-terminal--></span>
+              <div class="card-title">
+                <h3 data-i18n="platform.linux">{{platform.linux}}</h3>
+                <p class="req" data-i18n="req.linux">{{req.linux}}</p>
+              </div>
+              <span class="chip chip-detected" data-i18n="badge.detected" hidden
+                >{{badge.detected}}</span
+              >
+            </div>
+            <div class="actions">
+              <a
+                class="btn btn-primary"
+                data-asset="linux-appimage"
+                data-ext="AppImage"
+                href="https://github.com/twuijri/core-hub/releases/latest"
+              >
+                <!--icon:download-->
+                <span class="btn-text">
+                  <span data-i18n="dl.appimage">{{dl.appimage}}</span>
+                  <small class="btn-meta" dir="ltr">AppImage</small>
+                </span>
+              </a>
+              <a
+                class="btn btn-secondary"
+                data-asset="linux-deb"
+                data-ext=".deb · Debian, Ubuntu"
+                href="https://github.com/twuijri/core-hub/releases/latest"
+              >
+                <!--icon:package-->
+                <span class="btn-text">
+                  <span data-i18n="dl.deb">{{dl.deb}}</span>
+                  <small class="btn-meta" dir="ltr">.deb · Debian, Ubuntu</small>
+                </span>
+              </a>
+            </div>
+            <details class="install">
+              <summary data-i18n="install.title">{{install.title}}</summary>
+              <p data-i18n="install.linux.appimage">{{install.linux.appimage}}</p>
+              <pre class="code" dir="ltr"><code>chmod +x Core-Hub-*-x86_64.AppImage
+./Core-Hub-*-x86_64.AppImage</code></pre>
+              <p data-i18n="install.linux.deb">{{install.linux.deb}}</p>
+              <pre class="code" dir="ltr"><code>sudo apt install ./corehub_*_amd64.deb</code></pre>
+              <p class="fine" data-i18n-html="html.install.linux.fuse">
+                {{html.install.linux.fuse}}
+              </p>
+            </details>
+          </article>
+
+          <article class="card" data-platform="android" id="android">
+            <div class="card-head">
+              <span class="card-icon"><!--icon:smartphone--></span>
+              <div class="card-title">
+                <h3 data-i18n="platform.android">{{platform.android}}</h3>
+                <p class="req" data-i18n="req.android">{{req.android}}</p>
+              </div>
+              <span class="chip chip-detected" data-i18n="badge.detected" hidden
+                >{{badge.detected}}</span
+              >
+            </div>
+            <div class="actions">
+              <a
+                class="btn btn-primary"
+                data-asset="android-apk"
+                data-ext=".apk"
+                href="https://github.com/twuijri/core-hub/releases/latest"
+              >
+                <!--icon:download-->
+                <span class="btn-text">
+                  <span data-i18n="dl.android">{{dl.android}}</span>
+                  <small class="btn-meta" dir="ltr">.apk</small>
+                </span>
+              </a>
+              <a class="btn btn-store" data-store="googlePlay">
+                <!--icon:store-->
+                <span class="btn-text">
+                  <span dir="ltr">Google Play</span>
+                  <small class="btn-meta" data-store-state>{{soon}}</small>
+                </span>
+              </a>
+            </div>
+            <details class="install">
+              <summary data-i18n="install.title">{{install.title}}</summary>
+              <p data-i18n-html="html.install.android">{{html.install.android}}</p>
+            </details>
+          </article>
+
+          <article class="card" data-platform="ios" id="ios">
+            <div class="card-head">
+              <span class="card-icon"><!--icon:tablet-smartphone--></span>
+              <div class="card-title">
+                <h3 data-i18n="platform.ios">{{platform.ios}}</h3>
+                <p class="req" data-i18n="req.ios">{{req.ios}}</p>
+              </div>
+              <span class="chip chip-detected" data-i18n="badge.detected" hidden
+                >{{badge.detected}}</span
+              >
+            </div>
+            <div class="actions">
+              <a class="btn btn-store" data-store="appStore">
+                <!--icon:store-->
+                <span class="btn-text">
+                  <span dir="ltr">App Store</span>
+                  <small class="btn-meta" data-store-state>{{soon}}</small>
+                </span>
+              </a>
+            </div>
+            <p class="fine" data-i18n="install.ios">{{install.ios}}</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section server" id="server" aria-labelledby="server-title">
+        <div class="server-intro">
+          <span class="card-icon card-icon-lg"><!--icon:container--></span>
+          <p class="eyebrow" data-i18n="server.eyebrow">{{server.eyebrow}}</p>
+          <h2 id="server-title" data-i18n="server.title">{{server.title}}</h2>
+          <p class="lead" data-i18n="server.lead">{{server.lead}}</p>
+          <div class="image-row">
+            <span class="image-label">
+              <span data-i18n="server.image">{{server.image}}</span>
+              <small data-i18n="server.arch">{{server.arch}}</small>
+            </span>
+            <div class="copyable">
+              <code dir="ltr" id="image-ref">ghcr.io/twuijri/core-hub:latest</code>
+              <button class="copy" type="button" data-copy="image-ref">
+                <span class="copy-idle"><!--icon:copy--></span>
+                <span class="copy-done"><!--icon:check--></span>
+                <span class="copy-label" data-i18n="copy">{{copy}}</span>
+              </button>
+            </div>
+          </div>
+          <a
+            class="btn btn-quiet"
+            href="https://github.com/twuijri/core-hub/blob/main/docs/DEPLOY.md"
+          >
+            <!--icon:book-open-->
+            <span data-i18n="server.docs">{{server.docs}}</span>
+          </a>
+        </div>
+        <ol class="steps">
+          <li>
+            <p data-i18n-html="html.server.step1">{{html.server.step1}}</p>
+            <div class="codeblock" dir="ltr">
+              <pre class="code" dir="ltr"><code id="compose">services:
+  hub:
+    image: ghcr.io/twuijri/core-hub:latest
+    restart: unless-stopped
+    ports:
+      - '${HUB_PORT:-8080}:8080'
+    environment:
+      DATA_DIR: /data
+      PORT: '8080'
+    volumes:
+      - hub-data:/data
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+
+volumes:
+  hub-data:</code></pre>
+              <button class="copy" type="button" data-copy="compose">
+                <span class="copy-idle"><!--icon:copy--></span>
+                <span class="copy-done"><!--icon:check--></span>
+                <span class="copy-label" data-i18n="copy">{{copy}}</span>
+              </button>
+            </div>
+          </li>
+          <li>
+            <p data-i18n="server.step2">{{server.step2}}</p>
+            <div class="codeblock" dir="ltr">
+              <pre class="code" dir="ltr"><code id="compose-up">docker compose up -d</code></pre>
+              <button class="copy" type="button" data-copy="compose-up">
+                <span class="copy-idle"><!--icon:copy--></span>
+                <span class="copy-done"><!--icon:check--></span>
+                <span class="copy-label" data-i18n="copy">{{copy}}</span>
+              </button>
+            </div>
+          </li>
+          <li>
+            <p data-i18n-html="html.server.step3">{{html.server.step3}}</p>
+          </li>
+        </ol>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <picture>
+            <source srcset="mark-dark.svg" media="(prefers-color-scheme: dark)" />
+            <img src="mark-light.svg" alt="" width="24" height="24" />
+          </picture>
+          <span data-i18n="brand.name">{{brand.name}}</span>
+        </div>
+        <nav class="footer-links">
+          <a
+            id="privacy-link"
+            href="https://github.com/twuijri/core-hub/blob/main/docs/privacy.ar.md"
+            data-href-ar="https://github.com/twuijri/core-hub/blob/main/docs/privacy.ar.md"
+            data-href-en="https://github.com/twuijri/core-hub/blob/main/docs/privacy.md"
+            data-i18n="footer.privacy"
+            >{{footer.privacy}}</a
+          >
+          <a href="https://github.com/twuijri/core-hub" data-i18n="footer.source"
+            >{{footer.source}}</a
+          >
+          <a href="https://github.com/twuijri/core-hub/releases" data-i18n="footer.releases"
+            >{{footer.releases}}</a
+          >
+        </nav>
+        <p class="fine">
+          <span data-i18n="footer.note">{{footer.note}}</span>
+          <span data-i18n="footer.license">{{footer.license}}</span>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
