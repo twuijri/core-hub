@@ -12,7 +12,9 @@ import hub.core.android.memoryStore
 import hub.core.android.realtime.Envelope
 import hub.core.android.realtime.Realtime
 import hub.core.android.ui.screens.ChatAgents
+import hub.core.client.api.SchedulesApi
 import hub.core.client.api.SessionsApi
+import hub.core.client.api.TasksApi
 import hub.core.client.model.ContentBlock
 import hub.core.client.model.LoginRequest
 import hub.core.client.model.MessageRole
@@ -103,6 +105,32 @@ class LiveHubTest {
         collecting.cancel()
         scope.cancel()
         realtime.close()
+        apis.auth.authLogout()
+    }
+
+    @Test fun `every page the phone reads decodes against a real hub`() = runBlocking {
+        assumeTrue("COREHUB_LIVE_HUB not set", hub != null)
+        val plain = OkHttpClient()
+        val pair = HubApis(hub!!, plain).auth.authLogin(LoginRequest(System.getenv("COREHUB_LIVE_USER"), System.getenv("COREHUB_LIVE_PASSWORD")))
+        val bearer = plain.newBuilder().addInterceptor { it.proceed(it.request().newBuilder().header("Authorization", "Bearer ${pair.accessToken}").build()) }.build()
+        val apis = HubApis(hub, bearer)
+        val profile = pair.user.defaultProfile
+        val board = apis.tasks.tasksGetColumns(profiles = TasksApi.ProfilesTasksGetColumns.ALL)
+        val schedules = apis.schedules.schedulesList(profiles = SchedulesApi.ProfilesSchedulesList.ALL)
+        val notices = apis.notify.notifyListNotices(limit = 20)
+        val profiles = apis.auth.authListProfiles()
+        val users = apis.auth.authListUsers()
+        val tokens = apis.auth.authListAppTokens()
+        val meta = apis.meta.metaGet()
+        val direct = apis.agents.agentsList(profile).items.first { it.slug == "direct" }
+        val settings = apis.agents.agentsGetSettings(profile, direct.id)
+        val search = apis.sessions.sessionsList(profile, profiles = SessionsApi.ProfilesSessionsList.ALL, archived = SessionsApi.ArchivedSessionsList.ALL, q = "مرحبا")
+        println(
+            "live: board ${board.columns.size} columns; ${schedules.items.size} schedules; ${notices.items.size} notices; " +
+                "${profiles.items.size} profiles; ${users.items.size} users; ${tokens.items.size} app tokens; hub ${meta.name} ${meta.contractVersion}; " +
+                "direct settings ${settings.sections.size} sections; search ${search.items.size} hits",
+        )
+        assertTrue(board.columns.isNotEmpty())
         apis.auth.authLogout()
     }
 }

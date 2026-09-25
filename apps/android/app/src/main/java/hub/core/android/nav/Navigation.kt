@@ -18,7 +18,8 @@ sealed interface Route {
     data object Tasks : Route { override val destination = "tasks" }
     data object Schedules : Route { override val destination = "schedules" }
     data object Settings : Route { override val destination = "settings" }
-    data object GlobalAgent : Route { override val destination = "global_agent" }
+    /** The person's one standing conversation in a profile (null: the selector's). */
+    data class GlobalAgent(val profile: String? = null) : Route { override val destination = "global_agent" }
 
     /** A page opened from the Settings list: a tab, a management page or a tool. */
     data class SettingsPage(override val destination: String) : Route
@@ -35,7 +36,7 @@ object Screens {
      * list under the segments and leave the drawer open (NAVIGATION.md §1).
      */
     val top = listOf(
-        Route.NewChat, Route.Search, Route.Agents, Route.Tasks, Route.Schedules, Route.Settings, Route.GlobalAgent,
+        Route.NewChat, Route.Search, Route.Agents, Route.Tasks, Route.Schedules, Route.Settings, Route.GlobalAgent(),
     ).map { it.destination } + listOf("chat", "rooms")
 
     /** The Settings list, in the manifest's order, as the phone's Settings page draws it. */
@@ -68,9 +69,12 @@ object Screens {
         "agent_channels" to "channels", "agent_plugins" to "plugins", "agent_settings" to "settings",
     )
 
-    /** The agent pages an agent with these capabilities shows, in order. */
-    fun agentPages(capabilities: Collection<String>): List<String> =
-        agentLevel.filter { it == "agent_settings" || capabilityOf.getValue(it) in capabilities }
+    /**
+     * The agent pages an agent with these capabilities shows, in order; Settings last for an
+     * agent that can be configured (one that is installed), whatever it declares.
+     */
+    fun agentPages(capabilities: Collection<String>, configurable: Boolean): List<String> =
+        agentLevel.filter { if (it == "agent_settings") configurable else capabilityOf.getValue(it) in capabilities }
 
     /** A drawer or Settings entry is visible to this person. */
     fun visible(destination: String, isAdmin: Boolean): Boolean = isAdmin || destination !in adminOnly

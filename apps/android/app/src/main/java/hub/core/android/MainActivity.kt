@@ -16,6 +16,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,12 +26,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import hub.core.android.data.DeepLink
 import hub.core.android.data.PairingRequest
+import hub.core.android.nav.AppPaths
 import hub.core.android.nav.Navigator
 import hub.core.android.nav.Route
 import hub.core.android.ui.screens.ChatScreen
 import hub.core.android.ui.screens.ConnectScreen
 import hub.core.android.ui.screens.MainShell
+import hub.core.android.nav.Screens
+import hub.core.android.ui.screens.AdminOnly
+import hub.core.android.ui.screens.AgentPageScreen
+import hub.core.android.ui.screens.AgentsScreen
+import hub.core.android.ui.screens.GlobalAgentScreen
 import hub.core.android.ui.screens.PlaceholderScreen
+import hub.core.android.ui.screens.SchedulesScreen
+import hub.core.android.ui.screens.SearchScreen
+import hub.core.android.ui.screens.SettingsPageScreen
+import hub.core.android.ui.screens.SettingsScreen
+import hub.core.android.ui.screens.TasksScreen
+import hub.core.android.ui.screens.ThisDeviceBasics
 import hub.core.android.ui.screens.ShellViewModel
 import hub.core.android.ui.screens.TopBar
 import hub.core.android.ui.screens.term
@@ -40,6 +53,7 @@ import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     private var pendingPairing by mutableStateOf<PairingRequest?>(null)
+    private var pendingPath by mutableStateOf<String?>(null)
 
     /** The in-app language (the footer's language chip) wins over the phone's. */
     override fun attachBaseContext(base: Context) {
@@ -63,7 +77,7 @@ class MainActivity : ComponentActivity() {
             val theme by graph.prefs.theme.collectAsState()
             CoreHubTheme(theme) {
                 Box(Modifier.fillMaxSize().background(LocalTokens.current.bg)) {
-                    AppRoot(pendingPairing) { pendingPairing = null }
+                    AppRoot(pendingPairing, { pendingPairing = null }, pendingPath, { pendingPath = null })
                 }
             }
         }
@@ -78,13 +92,14 @@ class MainActivity : ComponentActivity() {
         val data = intent?.dataString ?: return
         when (val link = DeepLink.parse(data)) {
             is DeepLink.Pair -> pendingPairing = link.request
+            is DeepLink.Open -> pendingPath = link.path
             else -> Unit
         }
     }
 }
 
 @Composable
-private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Unit) {
+private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Unit, pendingPath: String?, onPathHandled: () -> Unit) {
     val graph = androidx.compose.ui.platform.LocalContext.current.graph
     val session by graph.store.session.collectAsState()
     if (session == null) {
@@ -104,6 +119,12 @@ private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Uni
         )
     }
     val nav = remember(session?.hub, session?.user?.id) { Navigator() }
+    // `corehub://open/<path>`: the same paths as the web (surfaceRoutes.android).
+    LaunchedEffect(pendingPath) {
+        val path = pendingPath ?: return@LaunchedEffect
+        AppPaths.resolve(path)?.let { AppPaths.route(it, session!!.profile) }?.let(nav::go)
+        onPathHandled()
+    }
     MainShell(nav) { route, navigator, shell, openDrawer -> Destination(route, navigator, shell, openDrawer) }
 }
 
@@ -127,9 +148,44 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
                 )
                 ChatScreen(route.sessionId, route.profile, shell.profileName(route.profile), onCreated = { _, _ -> })
             }
-            else -> {
-                TopBar(term(titleOf(route)), onMenu = null, onBack = { if (!nav.back()) nav.go(Route.NewChat) })
-                PlaceholderScreen(term(titleOf(route)), stringResource(R.string.phone_not_yet))
+            Route.Search -> {
+                TopBar(term("search"), onMenu = openDrawer)
+                SearchScreen(shell, onOpen = nav::go)
+            }
+            Route.Agents -> {
+                TopBar(term("agent_manager"), onMenu = openDrawer, subtitle = shell.profileName(s.profile))
+                AdminOnly(s.user.isAdmin, onRefused = { nav.go(Route.NewChat) }) { AgentsScreen(s.profile, onOpen = nav::go) }
+            }
+            is Route.AgentPage -> {
+                TopBar(term(titleOf(route)), onMenu = null, onBack = { if (!nav.back()) nav.go(Route.Agents) }, subtitle = shell.profileName(s.profile))
+                AdminOnly(s.user.isAdmin, onRefused = { nav.go(Route.NewChat) }) {
+                    AgentPageScreen(route, s.profile, onOpen = { nav.back(); nav.go(it) }, onBackToAgents = { nav.go(Route.Agents) })
+                }
+            }
+            Route.Tasks -> {
+                TopBar(term("tasks"), onMenu = openDrawer)
+                TasksScreen(shell, onOpenChat = { id, profile -> nav.go(Route.Chat(id, profile)) })
+            }
+            Route.Schedules -> {
+                TopBar(term("schedules"), onMenu = openDrawer)
+                SchedulesScreen(shell, onOpenChat = { id, profile -> nav.go(Route.Chat(id, profile)) })
+            }
+            Route.Settings -> {
+                TopBar(term("settings"), onMenu = openDrawer)
+                SettingsScreen(s.user.isAdmin, onOpen = nav::go, onBackToChats = nav::backToChats)
+            }
+            is Route.SettingsPage -> {
+                TopBar(term(route.destination), onMenu = null, onBack = { if (!nav.back()) nav.go(Route.Settings) })
+                if (Screens.visible(route.destination, s.user.isAdmin)) {
+                    SettingsPageScreen(route.destination, shell, onOpen = nav::go) { ThisDeviceBasics(shell) }
+                } else {
+                    PlaceholderScreen(term(route.destination), stringResource(R.string.admin_only))
+                }
+            }
+            is Route.GlobalAgent -> {
+                val profile = route.profile ?: s.profile
+                TopBar(term("global_agent"), onMenu = openDrawer, subtitle = shell.profileName(profile))
+                GlobalAgentScreen(profile, shell.profileName(profile))
             }
         }
     }

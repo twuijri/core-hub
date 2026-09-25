@@ -5382,7 +5382,15 @@
       "required": ["project_id", "columns", "counts"],
       "properties": {
         "project_id": {
-          "$ref": "#/$defs/Ulid"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The project asked for with `project_id`; `null` for the board of every project."
         },
         "columns": {
           "type": "array",

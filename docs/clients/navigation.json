@@ -577,13 +577,15 @@
     "login": {
       "title": "login",
       "routes": {
-        "web": "/login"
+        "web": "/login",
+        "android": "/login"
       }
     },
     "setup": {
       "title": "setup",
       "routes": {
-        "web": "/setup"
+        "web": "/setup",
+        "android": "/setup"
       }
     }
   },
@@ -614,6 +616,42 @@
       "display": "/settings/display",
       "notifications": "/settings/notifications",
       "privacy": "/settings/privacy",
+      "about": "/settings/about",
+      "logs": "/settings/logs",
+      "usage": "/settings/usage",
+      "performance": "/settings/performance",
+      "theme": "/settings/theme",
+      "workspaces": "/settings/workspaces",
+      "updates": "/settings/updates",
+      "plugins": "/settings/plugins",
+      "agent_skills": "/agents/:agentId/skills",
+      "agent_mcp": "/agents/:agentId/mcp",
+      "agent_memory": "/agents/:agentId/memory",
+      "agent_jobs": "/agents/:agentId/jobs",
+      "agent_channels": "/agents/:agentId/channels",
+      "agent_plugins": "/agents/:agentId/plugins",
+      "agent_settings": "/agents/:agentId/settings",
+      "global_agent": "/global-agent"
+    },
+    "android": {
+      "new_chat": "/new",
+      "search": "/search",
+      "device_connections": "/settings/devices",
+      "agent_manager": "/agents",
+      "models": "/settings/models",
+      "knowledge": "/settings/knowledge",
+      "chat": "/chat/:sessionId?",
+      "rooms": "/rooms",
+      "tasks": "/tasks",
+      "schedules": "/schedules",
+      "settings": "/settings",
+      "account": "/settings/account",
+      "users": "/settings/users",
+      "webhooks": "/settings/webhooks",
+      "display": "/settings/display",
+      "notifications": "/settings/notifications",
+      "privacy": "/settings/privacy",
+      "this_device": "/settings/this-device",
       "about": "/settings/about",
       "logs": "/settings/logs",
       "usage": "/settings/usage",
