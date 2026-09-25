@@ -1,5 +1,5 @@
 /**
- * A coding agent's own config files (contract decision §77): its instructions file
+ * A coding agent's own config files (contract decision §78): its instructions file
  * (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md` …) and its settings file (`settings.json`,
  * `config.toml`), edited here by an owner or an admin.
  *

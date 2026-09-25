@@ -573,7 +573,7 @@
       },
       "roles": ["admin"],
       "surfaces": ["web", "desktop"],
-      "note": "A coding agent's own instructions and settings files (CLAUDE.md, settings.json, AGENTS.md, config.toml …), one set for every profile in the home of the user the hub runs as (DECISIONS §77). Owners and admins; not on the phones."
+      "note": "A coding agent's own instructions and settings files (CLAUDE.md, settings.json, AGENTS.md, config.toml …), one set for every profile in the home of the user the hub runs as (DECISIONS §78). Owners and admins; not on the phones."
     },
     {
       "id": "agent_settings",

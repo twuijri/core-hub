@@ -1,6 +1,6 @@
 /**
  * The hook the hub keeps in a profile's Hermes home beside its `corehub` MCP block (contract
- * decision §78): `hooks/corehub/HOOK.yaml` and `handler.py`, Hermes's own shape for a gateway
+ * decision §79): `hooks/corehub/HOOK.yaml` and `handler.py`, Hermes's own shape for a gateway
  * hook.
  *
  * What was observed in Hermes (MIT, v2026.9.14 — `gateway/hooks.py`, `gateway/run_turn.py`,
@@ -60,7 +60,7 @@ function manifest(): string {
 
 function handler(url: string): string {
   return `# ${MARK}
-"""Core Hub's hook in Hermes's messaging gateway (contract decision §78).
+"""Core Hub's hook in Hermes's messaging gateway (contract decision §79).
 
 Reports who each channel turn is for, so the hub's own MCP tools act for the person who linked
 that account and for nobody else, and passes a \`/start corehub_…\` link code to the hub.

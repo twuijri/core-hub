@@ -1,5 +1,5 @@
 /**
- * Messages on a channel and the hub's own tools (contract decision §78), through the routes a
+ * Messages on a channel and the hub's own tools (contract decision §79), through the routes a
  * person, an admin and the hub's hook in Hermes's messaging gateway use:
  *
  * - a person proves a Telegram or WhatsApp account with a one-time code sent to the bot, which

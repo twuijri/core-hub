@@ -832,7 +832,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     return noContent(reply);
   });
 
-  // ---------------------------------------------------------------- channel identities (§78)
+  // ---------------------------------------------------------------- channel identities (§79)
 
   route('GET', '/auth/me/channel-identities', signedIn, async (request) => ({
     items: listIdentities(db, principalOf(request).user.id).map(presentIdentity),

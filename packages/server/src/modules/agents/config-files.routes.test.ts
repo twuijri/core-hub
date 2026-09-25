@@ -1,5 +1,5 @@
 /**
- * A coding agent's own config files through the hub's routes (contract decision §77). The
+ * A coding agent's own config files through the hub's routes (contract decision §78). The
  * three operations were the contract's 501 stubs: every test here fails on that code.
  *
  * The home is a temporary folder handed to the agents module (`agentHome`), so nothing here

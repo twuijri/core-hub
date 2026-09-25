@@ -423,7 +423,7 @@ export class HermesRuntime {
     this.tui = stdioTuiChannel({
       command: python,
       args: ['-m', 'tui_gateway.entry'],
-      // The hub's own conversations run here: their calls to the hub's tools say so (§78).
+      // The hub's own conversations run here: their calls to the hub's tools say so (§79).
       env: { ...this.cliEnv(), [HUB_ORIGIN_ENV]: 'hub' },
       cwd: home,
       ...(this.options.tuiSpawn ? { spawn: this.options.tuiSpawn } : {}),
@@ -686,7 +686,7 @@ export class HermesRuntime {
       API_SERVER_PORT: url.port || '8642',
       HERMES_DASHBOARD: '0',
       PYTHONUNBUFFERED: '1',
-      // A messaging gateway: its calls to the hub's tools are its channel turns' (§78).
+      // A messaging gateway: its calls to the hub's tools are its channel turns' (§79).
       [HUB_ORIGIN_ENV]: 'gateway',
     };
     let child: SpawnedProcess;

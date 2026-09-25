@@ -196,14 +196,14 @@ Not stored: the **run leases** and **run tokens** (`hub-tools/leases.ts`,
 `auth/run-tokens.ts`) live in memory for the life of a run, because nothing may act in the
 name of a run that no longer exists — a restart ends both.
 
-A **channel lease** (contract decision §78) is the same thing for a turn of Hermes's messaging
+A **channel lease** (contract decision §79) is the same thing for a turn of Hermes's messaging
 gateway: opened by the hub's hook (`hooks/corehub/` in the profile's Hermes home) when the turn
 starts, for the person who linked the sender (`auth`'s `channel_identities`) or for nobody with
 the reason, and closed when it ends (fifteen quiet minutes at most). Also memory only. A call's
 `X-Corehub-Origin` (`hub` or `gateway`, from the `COREHUB_MCP_ORIGIN` the hub sets in each Hermes
 process) says which kind of lease it may belong to.
 
-## A coding agent's config files (contract decision §77)
+## A coding agent's config files (contract decision §78)
 
 Not stored in the database: the files are the agent's own, in the home of the user the hub runs
 as (`config-files.ts` lists each agent's two), one set for every profile. The hub keeps only the

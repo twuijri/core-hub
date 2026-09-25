@@ -25,6 +25,6 @@ export interface AuthContext {
    * (an owner exists, or the window is 0 = token only).
    */
   setupOpenUntil: number | null;
-  /** One-time codes that link a messaging account to a person (contract decision §78). */
+  /** One-time codes that link a messaging account to a person (contract decision §79). */
   linkCodes: LinkCodes;
 }

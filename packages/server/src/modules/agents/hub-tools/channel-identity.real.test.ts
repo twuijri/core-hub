@@ -1,6 +1,6 @@
 /**
  * A message on Telegram and the hub's own tools, against **the real Hermes** from the image
- * (contract decision §78).
+ * (contract decision §79).
  *
  * The whole path a person takes: the hub switches its tools on (the `corehub` block, the key,
  * and now the hook in `hooks/corehub/`), the image's own `hermes gateway run` serves Telegram —

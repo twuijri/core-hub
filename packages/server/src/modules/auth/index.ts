@@ -92,7 +92,7 @@ export type { SetupMeta } from './setup.js';
 export const registerEvents = authModule.registerEvents.bind(authModule);
 
 /**
- * The messaging-account links (contract decision §78) of the hub on this Socket.IO server, for
+ * The messaging-account links (contract decision §79) of the hub on this Socket.IO server, for
  * the hub's own tools (`agents`): who linked a sender, and the `/start <code>` that links one.
  * `null` when auth is not composed into it.
  */

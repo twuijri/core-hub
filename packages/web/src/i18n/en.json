@@ -1950,9 +1950,9 @@
     "not_configured": "not configured",
     "fields_n": "{count} fields",
     "clear": "Forget identity",
-    "none": "No channels",
-    "none_body": "Channels are added in the agent's config file. Whatever is in it appears here.",
-    "restart_note": "This page writes to the agent's config file. Hermes connects to these platforms when it starts, so restart it for a change to take effect.",
+    "none": "No platform linked yet",
+    "none_body": "Link a platform and the agent answers people there: Telegram, WhatsApp, Discord, email and more.",
+    "restart_note": "Hermes connects to these platforms when it starts: restart it for a change to take effect.",
     "editor_note": "The fields come from the agent's file, not from a form we wrote. A secret reads as [stored]; leaving it keeps the one on file.",
     "secret_hint": "Leave it to keep the one already stored.",
     "no_fields": "This channel has no fields yet.",
@@ -1960,7 +1960,6 @@
     "clear_body": "The tokens and secrets are removed and the channel is switched off. Its other settings stay.",
     "login": {
       "button": "Pair by QR",
-      "whatsapp": "Link WhatsApp",
       "title": "Link {name}",
       "note": "Hermes pairs this profile's agent with a phone. Scan the code from WhatsApp on the phone: Settings → Linked devices → Link a device.",
       "expires": "The code is valid until {time}.",
@@ -2021,7 +2020,6 @@
       "hours_ago": "{count} h ago"
     },
     "telegram": {
-      "link": "Link Telegram",
       "link_button": "Link",
       "title": "Link Telegram",
       "intro": "The agent answers on a Telegram bot of your own. You make the bot in Telegram in a minute; the hub never makes one for you.",
@@ -2405,9 +2403,6 @@
       }
     },
     "platform": {
-      "catalog_title": "More platforms",
-      "generic_title": "Other platforms Hermes supports",
-      "generic_list_note": "These link with a form of the values Hermes reads. The hub does not check them and has no settings panel for them.",
       "link_title": "Link {name}",
       "badge_first_use": "Downloaded on first start",
       "badge_inbound": "Needs a public address",
@@ -2416,7 +2411,7 @@
       "how_allowlist": "The agent answers only the people in the allowed list. Change it in Settings.",
       "generic_intro": "Enter the {name} values as Hermes reads them. They are kept secret in this profile's Hermes files.",
       "generic_note": "The hub does not check these values before saving them. If one is wrong, Hermes's message shows on the platform's row once the gateway starts.",
-      "first_use_note": "This platform's library is not in the hub's image: Hermes downloads it from the internet (PyPI) once, the first time it starts, and keeps it in the data folder.",
+      "first_use_note": "This platform’s library is not in the hub’s image: Hermes downloads it from the internet once, the first time it starts, and keeps it in the data folder.",
       "inbound_note": "This platform delivers messages to a web address the internet must reach, and the hub's image does not open that port by itself. It needs extra setup on the server.",
       "optional": "{label} (optional)",
       "secret_hint": "Kept secret in this profile's Hermes files and never shown again.",
@@ -2442,7 +2437,15 @@
         "slack": "Slack",
         "matrix": "Matrix",
         "mattermost": "Mattermost",
-        "email": "Email"
+        "email": "Email",
+        "telegram": "Telegram",
+        "whatsapp": "WhatsApp",
+        "whatsapp_cloud": "WhatsApp Cloud API",
+        "teams": "Microsoft Teams",
+        "google_chat": "Google Chat",
+        "signal": "Signal",
+        "line": "LINE",
+        "sms": "SMS (Twilio)"
       },
       "field": {
         "DISCORD_BOT_TOKEN": "Bot token",
@@ -2460,7 +2463,6 @@
         "EMAIL_SMTP_PORT": "SMTP port (default 587)"
       },
       "discord": {
-        "summary": "A Discord bot that answers in DMs and server channels.",
         "intro": "The agent answers through a Discord bot you make in the developer portal. The hub asks Discord about the bot before it stores the token.",
         "step1": "Open the Discord developer portal, press New Application and pick a name.",
         "step2": "Under Bot, press Reset Token and copy it. On the same page, turn on Message Content Intent.",
@@ -2471,7 +2473,6 @@
         "how": "Add the bot to your server with the link from the developer portal if you have not, then DM it or @mention it in a channel."
       },
       "slack": {
-        "summary": "A Slack app that answers in DMs and channels (Socket Mode).",
         "intro": "The agent answers through a Slack app you make. The hub asks Slack about both tokens before it stores them.",
         "step1": "Open api.slack.com/apps, press Create New App → From scratch and pick your Slack team.",
         "step2": "Under Socket Mode, turn it on and create an app-level token with connections:write (it starts with xapp-).",
@@ -2482,7 +2483,6 @@
         "how": "Invite the app to a channel with /invite, then mention it or message it directly."
       },
       "matrix": {
-        "summary": "A Matrix account that answers in rooms and DMs, on any homeserver.",
         "intro": "The agent answers through a Matrix account. Make one for the bot on your homeserver; the hub asks the server about it before saving.",
         "step1": "Create an account for the bot on a Matrix homeserver (in Element, for example).",
         "step2": "Sign in to Element with that account and copy the Access Token from Settings → Help & About.",
@@ -2491,7 +2491,6 @@
         "how": "Invite the bot's account to a room, or start a direct chat with it. Matrix's library is downloaded on first start."
       },
       "mattermost": {
-        "summary": "A Mattermost bot on your server.",
         "intro": "The agent answers through a Mattermost bot account. The hub asks the server about the account before saving.",
         "step1": "In Mattermost open Integrations → Bot Accounts → Add Bot Account (a system admin turns them on).",
         "step2": "Pick a name for the bot and copy the token shown after it is made.",
@@ -2500,7 +2499,6 @@
         "how": "Add the bot to a channel and @mention it, or message it directly."
       },
       "email": {
-        "summary": "A mailbox the agent reads (IMAP) and answers from (SMTP).",
         "intro": "The agent reads a mailbox and answers the mail. The hub signs in to the incoming and outgoing servers before saving; it reads and sends nothing.",
         "step1": "A mailbox just for the agent is best. In Gmail, turn on 2-Step Verification and make an “app password”.",
         "step2": "Enter the address, the password and the IMAP and SMTP servers (in Gmail: imap.gmail.com and smtp.gmail.com).",
@@ -2508,7 +2506,19 @@
         "allowed": "Addresses the agent answers",
         "allowed_hint": "Email addresses, separated by commas. Mail from anyone else is ignored.",
         "how": "Send a message to the mailbox from an address on the list; the agent answers in the same thread."
-      }
+      },
+      "badge_program": "Needs the {program} program",
+      "program_note": "Hermes runs the {program} program for this platform, and the hub’s image does not include it. Install it on the server first, or the platform reports it missing when the gateway starts."
+    },
+    "guide": "How to start",
+    "picker": {
+      "open": "Link a platform",
+      "title": "Link a platform",
+      "intro": "Pick where the agent answers. Each platform asks for what it needs.",
+      "search": "Search platforms",
+      "popular": "Popular",
+      "more": "More platforms",
+      "none": "No platform matches “{query}”."
     }
   },
   "question": {

@@ -1,6 +1,6 @@
 /**
- * A coding agent's config files page (contract decision §77) and a person's messaging
- * accounts (§78), each mounted in the whole app on a scripted hub: what is asserted is what a
+ * A coding agent's config files page (contract decision §78) and a person's messaging
+ * accounts (§79), each mounted in the whole app on a scripted hub: what is asserted is what a
  * person meets and what the page asks the hub.
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';

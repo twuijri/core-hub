@@ -88,7 +88,7 @@ export interface HubToolsDeps {
   /** Where Hermes reaches this hub's MCP server. */
   url(): string | null;
   /**
-   * The hook in a profile's home changed (decision §78): Hermes's messaging gateway reads its
+   * The hook in a profile's home changed (decision §79): Hermes's messaging gateway reads its
    * hooks when it starts, so the one serving that profile starts again.
    */
   gatewayChanged(workspace: WorkspaceScope): void;
@@ -307,7 +307,7 @@ export class HubToolsService {
         url,
         headers: [
           { name: 'Authorization', value: `Bearer ${key}` },
-          // A coding agent is always one of the hub's own runs (decision §78).
+          // A coding agent is always one of the hub's own runs (decision §79).
           { name: 'X-Corehub-Origin', value: 'hub' },
         ],
       },
@@ -364,7 +364,7 @@ export class HubToolsService {
 
   /**
    * One POST to `agents.hubChannelEvent` from the hub's hook in Hermes's messaging gateway
-   * (decision §78): a turn's sender, or a `/start` link code.
+   * (decision §79): a turn's sender, or a `/start` link code.
    */
   channelEvent(
     bearer: string | null,
@@ -586,7 +586,7 @@ export class HubToolsService {
         errorCode,
         userId: lease?.userId ?? null,
         sessionId: lease?.sessionId ?? null,
-        // A channel turn's key is not a run of the hub's (§78).
+        // A channel turn's key is not a run of the hub's (§79).
         runId: lease && lease.kind === 'run' ? lease.runId : null,
         durationMs: Math.max(0, Math.round(durationMs)),
       })
@@ -607,7 +607,7 @@ export class HubToolsService {
   }
 }
 
-/** What the agent reads when a call acts for nobody (§67, §78). */
+/** What the agent reads when a call acts for nobody (§67, §79). */
 const REFUSALS: Record<string, string> = {
   hub_tools_no_live_run:
     'no conversation of the hub is running in this profile, so there is nobody to act for',

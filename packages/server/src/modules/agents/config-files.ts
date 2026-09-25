@@ -1,5 +1,5 @@
 /**
- * A coding agent's own config files (contract decision §77): its instructions file and its
+ * A coding agent's own config files (contract decision §78): its instructions file and its
  * settings file, edited from the web by an admin.
  *
  * **One set for every profile.** A coding agent does not know Core Hub's profiles: it reads

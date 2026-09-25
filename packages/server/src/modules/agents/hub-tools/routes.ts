@@ -2,7 +2,7 @@
  * The operations of the hub's own tools (contract decision §67): the card's read and write
  * (`agents.getHubTools`, `agents.updateHubTools`), the MCP endpoint Hermes talks to
  * (`agents.hubMcp`), and what the hub's hook in Hermes's messaging gateway reports
- * (`agents.hubChannelEvent`, decision §78). Mounted by the `agents` module, which lends what
+ * (`agents.hubChannelEvent`, decision §79). Mounted by the `agents` module, which lends what
  * they need.
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -20,7 +20,7 @@ export interface HubToolRouteHelpers {
   assertHermes(request: FastifyRequest, agentId: string): void;
 }
 
-/** Where a call came from (decision §78); anything else — an unset `${…}` — is unknown. */
+/** Where a call came from (decision §79); anything else — an unset `${…}` — is unknown. */
 function originOf(header: string | string[] | undefined): HubOrigin | null {
   const value = (Array.isArray(header) ? header[0] : header)?.trim().toLowerCase();
   return value === 'hub' || value === 'gateway' ? value : null;

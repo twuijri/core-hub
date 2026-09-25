@@ -214,7 +214,7 @@ ENV COREHUB_VERSION=${COREHUB_VERSION} \
     PYTHONDONTWRITEBYTECODE=1 \
     HERMES_DISABLE_LAZY_INSTALLS=1 \
     HERMES_LAZY_INSTALL_TARGET=/data/hermes-packages
-# HOME is inside the volume (decision §77): the coding agents read their own config files from
+# HOME is inside the volume (decision §78): the coding agents read their own config files from
 # it (`~/.claude/CLAUDE.md`, `~/.codex/config.toml` …), edited from the web, and an upgrade that
 # replaces the container must not drop them. The hub makes the folder on the first boot of a
 # volume that predates it. npm's cache stays outside the volume, where it always was.

@@ -415,7 +415,7 @@ interface AgentsContext {
   telegramFetch: typeof fetch;
   /** How linking asks the other platforms who an account is. */
   channelProbe: ProbeOptions;
-  /** The coding agents' own config files, one set for the hub (decision §77). */
+  /** The coding agents' own config files, one set for the hub (decision §78). */
   configFiles: ConfigFileStore;
 }
 
@@ -718,7 +718,7 @@ function contextOf(app: FastifyInstance): AgentsContext {
       return home ? { home, reason: null } : { home: null, reason: 'hermes_profile_absent' };
     },
     url: () => hubMcpUrl(app),
-    // Hermes's messaging gateway reads its hooks when it starts (decision §78): the one that
+    // Hermes's messaging gateway reads its hooks when it starts (decision §79): the one that
     // serves the profile starts again — a named profile's at once, the default one held down
     // and started again (it also carries the API server).
     gatewayChanged: (workspace) => {
@@ -1623,7 +1623,7 @@ export const agentsModule = defineModule({
     });
 
     /**
-     * A coding agent's own config files (decision §77): a fixed list per agent, one set for
+     * A coding agent's own config files (decision §78): a fixed list per agent, one set for
      * every profile, in the home of the user the hub runs as (`config-files.ts`).
      */
     const configFileFault = (error: unknown, agentId: string, key?: string): never => {
@@ -1947,6 +1947,7 @@ export const agentsModule = defineModule({
               exclusive: spec.exclusive,
               packages: spec.packages,
               inbound: spec.inbound,
+              program: spec.program,
               docs_url: spec.docsUrl,
             })),
         };

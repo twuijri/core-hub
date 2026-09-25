@@ -1,5 +1,5 @@
 /**
- * A person's messaging accounts (contract decision §78): the Telegram and WhatsApp accounts a
+ * A person's messaging accounts (contract decision §79): the Telegram and WhatsApp accounts a
  * person proved are theirs, so a message from one of them runs with that person's permissions
  * and the hub's own tools act as them.
  *

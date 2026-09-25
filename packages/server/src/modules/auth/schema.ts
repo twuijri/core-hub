@@ -34,7 +34,7 @@ export const LOCKOUT_SUBJECT_KINDS = ['ip', 'user'] as const;
 /** Which flow the failures belong to (the contract's `Lockout.kind`). */
 export const LOCKOUT_KINDS = ['password', 'token', 'pairing'] as const;
 export const PAIRING_CONNECTIONS = ['lan', 'relay'] as const;
-/** The contract's `ChannelIdentityPlatform`: where a person can prove an account (§78). */
+/** The contract's `ChannelIdentityPlatform`: where a person can prove an account (§79). */
 export const CHANNEL_IDENTITY_PLATFORMS = ['telegram', 'whatsapp'] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];
@@ -228,7 +228,7 @@ export const loginLockouts = sqliteTable(
 );
 
 /**
- * A messaging account a person proved is theirs (contract decision §78): a message from it runs
+ * A messaging account a person proved is theirs (contract decision §79): a message from it runs
  * with that person's permissions, so the hub's own tools act as them. Global — one link per
  * account for the whole hub; the person's own memberships decide where it acts. `sender_id`
  * is the account as Hermes names the sender.

@@ -16,7 +16,7 @@
  *   refused (`hub_tools_run_ambiguous`) rather than guessed — acting as the wrong person is
  *   the one mistake this must never make.
  * - a message on a channel (Telegram, WhatsApp …) is a turn of Hermes's messaging gateway, not
- *   a run of the hub's. The hub's hook in that gateway (`hook.ts`, decision §78) opens a
+ *   a run of the hub's. The hub's hook in that gateway (`hook.ts`, decision §79) opens a
  *   **channel lease** for each turn: for the person who linked the sender, or for nobody with
  *   the reason. A call carries where it came from (`X-Corehub-Origin`: the hub's own process or
  *   a gateway), so a gateway's call is only ever one of its turns and a hub process's only
@@ -34,13 +34,13 @@ export const ATTRIBUTION_WAIT_MS = 2000;
 export const CHANNEL_LEASE_IDLE_MS = 15 * 60 * 1000;
 const POLL_MS = 50;
 
-/** Why a channel turn acts for nobody (decision §78). */
+/** Why a channel turn acts for nobody (decision §79). */
 export type ChannelRefusal =
   'hub_tools_sender_not_linked' | 'hub_tools_sender_no_access' | 'hub_tools_group_chat';
 
 export interface Lease {
   runId: string;
-  /** `run`: a run of the hub's own; `channel`: a turn of Hermes's messaging gateway (§78). */
+  /** `run`: a run of the hub's own; `channel`: a turn of Hermes's messaging gateway (§79). */
   kind: 'run' | 'channel';
   sessionId: string | null;
   workspaceId: string;
@@ -98,7 +98,7 @@ export class RunLeases {
   }
 
   /**
-   * A turn of a messaging gateway started (the hub's hook, §78): for the person who linked its
+   * A turn of a messaging gateway started (the hub's hook, §79): for the person who linked its
    * sender, or for nobody with the reason. Either way it is live in its profile, so a call from
    * that gateway meanwhile is its, and never a hub run's.
    */

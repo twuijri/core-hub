@@ -1,5 +1,5 @@
 /**
- * Messaging accounts linked to a person (contract decision §78).
+ * Messaging accounts linked to a person (contract decision §79).
  *
  * A person links their own Telegram or WhatsApp account by proving it: the hub gives a one-time
  * code, the person sends `/start <code>` to their agent's bot from that account, and the hub's

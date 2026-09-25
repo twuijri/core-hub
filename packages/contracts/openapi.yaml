@@ -1234,7 +1234,7 @@ paths:
       tags: [auth]
       summary: The messaging accounts linked to your account
       description: >-
-        The Telegram and WhatsApp accounts you proved are yours (contract decision §78). A
+        The Telegram and WhatsApp accounts you proved are yours (contract decision §79). A
         message from one of them runs with your permissions, so the hub's own tools act as you
         there, in the profiles you may enter; a message from an account nobody linked gets
         none of the hub's tools.
@@ -5341,7 +5341,7 @@ paths:
         instructions file and its settings file, where the pinned version really reads them),
         without their content. There is **one set for every profile**: the files live in the
         home of the user the hub runs as, where the agent reads them whichever profile a
-        conversation is in (contract decision §77). An agent that declares no config files
+        conversation is in (contract decision §78). An agent that declares no config files
         (`AgentCapability` `config_files`) answers an empty list. Owners and admins only: a
         settings file may carry keys.
       x-roles: [owner, admin]
@@ -6162,7 +6162,7 @@ paths:
         not an HTTP error (contract decision §67). A tool call from Hermes's messaging gateway
         acts for the person who linked the message's sender, or is refused
         (`hub_tools_sender_not_linked`, `hub_tools_sender_no_access`, `hub_tools_group_chat`);
-        one from the hub's own process only for one of its runs (contract decision §78).
+        one from the hub's own process only for one of its runs (contract decision §79).
       security: []
       x-scope: global
       parameters:
@@ -6227,7 +6227,7 @@ paths:
         refused when nobody did (`hub_tools_sender_not_linked`). `link` carries the argument
         of a `/start` command: a live link code links the sender to its person and the gateway
         answers `message` instead of passing the command on; anything else is `handled:
-        false` (contract decision §78).
+        false` (contract decision §79).
       security: []
       x-scope: global
       requestBody:
@@ -6831,7 +6831,8 @@ paths:
         gets a pairing code to approve (`pairs`) or is ignored unless listed (`allowlist`),
         whether the channel has its own settings (`settings`), whether Hermes's library for it is
         in the image or downloaded the first time it runs (`packages`), and whether it needs an
-        address reachable from the internet (`inbound`). `support: full` platforms have all of
+        address reachable from the internet (`inbound`) or a program the image does not carry
+        (`program`). `support: full` platforms have all of
         it; `generic` ones are stored as given, unchecked, with no settings panel. Hermes
         platforms that are not listed are still read from the profile's `config.yaml` by
         `agents.listChannels`.
@@ -16687,7 +16688,7 @@ components:
     ChannelIdentity:
       type: object
       description: >-
-        A messaging account a person proved is theirs (contract decision §78). One hub-wide
+        A messaging account a person proved is theirs (contract decision §79). One hub-wide
         link per account: it acts in every profile the person may enter, and nowhere else.
       required: [id, user_id, platform, sender_id, linked_at, last_used_at]
       properties:
@@ -18940,7 +18941,7 @@ components:
         that starts with `/goal`, `/plan`, `/learn` or `/skill <name>` is the agent's
         command rather than text for the model. A client offers a command only when the
         session's agent has its capability. `config_files`: the agent has config files of its
-        own an admin can edit (`agents.listConfigFiles`, decision §77).
+        own an admin can edit (`agents.listConfigFiles`, decision §78).
     AgentSection:
       type: string
       description: The rows shown under the agent's card, in order (NAVIGATION §4).
@@ -19263,7 +19264,7 @@ components:
     ConfigFile:
       type: object
       description: >-
-        One of a coding agent's own config files (contract decision §77). The same file for
+        One of a coding agent's own config files (contract decision §78). The same file for
         every profile: it lives in the home of the user the hub runs as.
       required: [key, label, path, language, exists, size_bytes, revision, updated_at, content]
       properties:
@@ -20148,6 +20149,7 @@ components:
           exclusive,
           packages,
           inbound,
+          program,
           docs_url,
         ]
       properties:
@@ -20206,6 +20208,12 @@ components:
           description: >-
             It receives messages on a webhook, so it needs an address reachable from the
             internet that the hub's image does not open by itself.
+        program:
+          type: [string, 'null']
+          description: >-
+            The name of an outside program Hermes runs for this platform that neither Hermes nor
+            the hub's image carries (Raft's `raft`, Buzz's `buzz`): it has to be installed on the
+            server before the platform can work. Null when Hermes needs nothing outside itself.
         docs_url:
           type: [string, 'null']
           description: Where the platform's app or bot is made.

@@ -1,5 +1,5 @@
 /**
- * A coding agent's own config files (contract decision §77): its instructions file and its
+ * A coding agent's own config files (contract decision §78): its instructions file and its
  * settings file, one set for every profile, so the keys carry no profile.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';

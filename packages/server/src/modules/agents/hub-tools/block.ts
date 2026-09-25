@@ -21,7 +21,7 @@ export const HUB_SERVER_NAME = 'corehub';
 /** The `.env` entry the block's header reads. */
 export const HUB_KEY_ENV = 'COREHUB_MCP_TOKEN';
 /**
- * The variable the hub sets in the environment of each Hermes process it starts (decision §78):
+ * The variable the hub sets in the environment of each Hermes process it starts (decision §79):
  * `hub` for the one its own conversations run in, `gateway` for a messaging gateway. Never in a
  * `.env`, so it is the process's own, and the block's second header carries it to every call —
  * a call from a gateway is told apart from a call from the hub's own runs.

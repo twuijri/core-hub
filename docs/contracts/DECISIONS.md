@@ -2293,7 +2293,33 @@ No web control to set it yet (no planned surface: the agent card has no edit she
 the CLI and the phones can. Rejected: a knowledge attachment (attachments are profile-scoped and
 an agent row is not); an `avatar_mime` column (a migration for what the file already says).
 
-## 77. A coding agent's own config files are edited from the web: one set for the hub, where the agent reads them
+## 77. The platform catalog says when a platform needs a program the image lacks; five more platforms
+
+2026-09-25, the owner: one «ربط منصة» button and a picker of every platform Hermes supports,
+instead of a long list under the linked channels. Checking every platform against the pinned
+Hermes (v2026.9.14, MIT) for the picker found five it has that §64's catalog did not list.
+Proposed here — owner to confirm:
+
+- **`ChannelPlatform.program`** (`string | null`, required): the outside program Hermes runs for
+  the platform that neither Hermes nor the hub's image carries — Raft's `raft` (its
+  `raft agent bridge`) and Buzz's `buzz` CLI. A client says so before the person links it.
+  `null` everywhere else. Additive: older clients ignore it.
+- **The catalog gains** `photon` (iMessage via Photon: `PHOTON_PROJECT_ID`,
+  `PHOTON_PROJECT_SECRET`; its Node bridge is installed with npm on first start, so
+  `packages: first_use`), `wecom_callback` (WeCom Callback: corp id and secret, agent id,
+  token and AES key; a webhook on port 8645, so `inbound`; `defusedxml` on first start),
+  `yuanbao` (Yuanbao: app id and secret; its own access list, so `allowed_users_key` is
+  `YUANBAO_DM_ALLOW_FROM`), `raft` (`RAFT_PROFILE`) and `buzz` (`BUZZ_RELAY_URL`,
+  `BUZZ_PRIVATE_KEY`), all `generic`. `exclusive` is now true where the adapter takes Hermes's
+  platform lock on its identity: LINE, QQ, Yuanbao and Buzz as well.
+- The picker's grouping, order and names are the client's (the catalog stays unordered beyond
+  `full` first): popular first — Telegram, WhatsApp, Discord, Slack, Email, Teams, Google Chat,
+  Signal — then the rest alphabetically in the reader's language.
+
+Left out on purpose: Hermes's `api_server`, `webhook`, `msgraph_webhook` and `relay` (the hub's
+own API, webhooks and an experimental connector — not a place people message the agent) and
+`a2a` (agent-to-agent; it declares no required variable, so there is nothing to link).
+## 78. A coding agent's own config files are edited from the web: one set for the hub, where the agent reads them
 
 The owner, 2026-09-25 (asked in `docs/changes/2026-09-26-twuijri-close-501-stubs.md`, (b)):
 «تم» — build one admin page for coding agents' config files, one set shared by every profile, in
@@ -2340,7 +2366,7 @@ their logins and caches too, and the owner chose one set); arbitrary paths under
 boundary would be the client's); editing Hermes's files here (its settings, memory and files have
 their own pages, §58, §65).
 
-## 78. A message on a channel acts for the person who proved that account is theirs, and for nobody else
+## 79. A message on a channel acts for the person who proved that account is theirs, and for nobody else
 
 The owner, 2026-09-25: «اوافق» to option (b) — a person links their own Telegram and/or WhatsApp
 identity to their hub account; a message from a linked identity runs with that person's
@@ -2399,7 +2425,7 @@ Rejected: typing an account id (anyone could claim anyone's); per-profile links 
 proving the same phone once per profile); acting as the profile's owner for every channel
 message (a stranger would act as the owner); guessing among concurrent senders.
 
-## 79. The relay, presets and hub peers stay in the contract, parked
+## 80. The relay, presets and hub peers stay in the contract, parked
 
 The owner, 2026-09-25, on the rest of the 501 inventory:
 

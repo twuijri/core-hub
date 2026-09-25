@@ -258,7 +258,7 @@ class ProfileGateway {
       PYTHONUNBUFFERED: '1',
       // One board, one dispatcher: the default gateway's (see the top of this file).
       HERMES_KANBAN_DISPATCH_IN_GATEWAY: 'false',
-      // A messaging gateway: its calls to the hub's tools are its channel turns' (§78).
+      // A messaging gateway: its calls to the hub's tools are its channel turns' (§79).
       [HUB_ORIGIN_ENV]: 'gateway',
     });
     let child: SpawnedProcess;

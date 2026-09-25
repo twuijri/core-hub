@@ -208,6 +208,15 @@ describe('The platforms the hub links', () => {
       'teams',
       'homeassistant',
       'ntfy',
+      'irc',
+      'bluebubbles',
+      'whatsapp_cloud',
+      'simplex',
+      'photon',
+      'wecom_callback',
+      'yuanbao',
+      'raft',
+      'buzz',
     ]) {
       expect(items.find((item) => item.platform === platform)).toMatchObject({
         support: 'generic',
@@ -236,7 +245,37 @@ describe('The platforms the hub links', () => {
     });
     expect(items.find((item) => item.platform === 'matrix')).toMatchObject({
       packages: 'first_use',
+      program: null,
     });
+    // Observed in Hermes v2026.9.14: WeCom's callback app takes a webhook and a library on first
+    // start; Photon's bridge is installed on first start; Raft and Buzz run a program of their own.
+    expect(items.find((item) => item.platform === 'wecom_callback')).toMatchObject({
+      inbound: true,
+      packages: 'first_use',
+      allowed_users_key: 'WECOM_CALLBACK_ALLOWED_USERS',
+    });
+    expect(items.find((item) => item.platform === 'photon')).toMatchObject({
+      label: 'iMessage via Photon',
+      packages: 'first_use',
+      inbound: false,
+      credentials: [
+        { key: 'PHOTON_PROJECT_ID', kind: 'text', required: true },
+        { key: 'PHOTON_PROJECT_SECRET', kind: 'secret', required: true },
+      ],
+    });
+    expect(items.find((item) => item.platform === 'yuanbao')).toMatchObject({
+      allowed_users_key: 'YUANBAO_DM_ALLOW_FROM',
+      exclusive: true,
+    });
+    expect(items.find((item) => item.platform === 'raft')).toMatchObject({ program: 'raft' });
+    expect(items.find((item) => item.platform === 'buzz')).toMatchObject({
+      program: 'buzz',
+      exclusive: true,
+    });
+    expect(items.filter((item) => item.program !== null).map((item) => item.platform)).toEqual([
+      'raft',
+      'buzz',
+    ]);
   });
 });
 
@@ -493,6 +532,24 @@ describe('A generic platform', () => {
     const env = envOf(root);
     expect(env).toContain('IRC_CHANNEL="#hub"\n');
     expect(env).toContain('IRC_NICKSERV_PASSWORD="pass word\\"#1"\n');
+  });
+
+  it('links the platforms the picker added (Buzz), with the people Hermes reads', async () => {
+    const { hub: h, agent, root, platforms } = await boot();
+    const res = await link(h, agent, 'default', 'buzz', {
+      credentials: {
+        BUZZ_RELAY_URL: 'https://community.example.test',
+        BUZZ_PRIVATE_KEY: 'nsec1fakekeyfortestsonly',
+      },
+      allowed_users: ['npub1alice', 'npub1bob'],
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json()).toMatchObject({ platform: 'buzz', link: { linked: true } });
+    expect(platforms.asked).toEqual([]);
+    const env = envOf(root);
+    expect(env).toContain('BUZZ_RELAY_URL=https://community.example.test\n');
+    expect(env).toContain('BUZZ_ALLOWED_USERS=npub1alice,npub1bob\n');
+    expect(readFileSync(path.join(root, 'config.yaml'), 'utf8')).toMatch(/buzz:\n\s+enabled: true/);
   });
 });
 
