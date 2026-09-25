@@ -5182,6 +5182,60 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
   # ---------------------------------------------------------------- channels (messaging surfaces)
+  /agents/{agent_id}/channel-platforms:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+    get:
+      operationId: agents.listChannelPlatforms
+      tags: [agents]
+      summary: The messaging platforms the hub can link for this agent, and what each one takes
+      description: >-
+        Every platform of the agent's Hermes the hub knows how to link, observed in Hermes's own
+        adapters (MIT, the pinned release) and described in the hub's words: how it links
+        (`login`), the variables it takes (`credentials`, keyed by the name Hermes reads; the
+        labels and setup steps are the client's, keyed by platform and key), whether the hub asks
+        the platform before storing them (`validates`), whether a stranger who messages the agent
+        gets a pairing code to approve (`pairs`) or is ignored unless listed (`allowlist`),
+        whether the channel has its own settings (`settings`), whether Hermes's library for it is
+        in the image or downloaded the first time it runs (`packages`), and whether it needs an
+        address reachable from the internet (`inbound`). `support: full` platforms have all of
+        it; `generic` ones are stored as given, unchecked, with no settings panel. Hermes
+        platforms that are not listed are still read from the profile's `config.yaml` by
+        `agents.listChannels`.
+      x-rt-events: []
+      responses:
+        '200':
+          description: The platforms, `full` first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelPlatformList'
+              example:
+                items:
+                  - platform: discord
+                    label: Discord
+                    support: full
+                    login: credentials
+                    credentials:
+                      - key: DISCORD_BOT_TOKEN
+                        kind: secret
+                        required: true
+                    allowed_users_key: DISCORD_ALLOWED_USERS
+                    validates: true
+                    pairs: false
+                    allowlist: true
+                    settings: true
+                    exclusive: true
+                    packages: image
+                    inbound: false
+                    docs_url: 'https://discord.com/developers/applications'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /agents/{agent_id}/channels:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -5367,7 +5421,7 @@ paths:
     post:
       operationId: agents.unlinkChannel
       tags: [agents]
-      summary: Unlink a linked channel (WhatsApp, Telegram) from the selected profile (admin)
+      summary: Unlink a linked channel (WhatsApp, Telegram, or a platform linked by credentials) from the selected profile (admin)
       description: >-
         Stops the messaging gateway that serves the profile, stops a bridge it left behind,
         deletes the profile's WhatsApp session folder and switches the channel off
@@ -5378,10 +5432,12 @@ paths:
         token is removed from the profile's `.env` (and from `platforms.telegram.token` if it was
         written there by hand), the hub's note of the bot is deleted and the channel is switched
         off (`platforms.telegram.enabled: false`); the allowed users and the settings stay, and
-        the bot itself keeps existing in Telegram (@BotFather deletes it). Only `whatsapp` and
-        `telegram` link: any other platform answers `409 state_invalid` with `details.reason =
-        unlink_not_supported`; a profile with nothing linked answers `409` with
-        `details.reason = not_linked`.
+        the bot itself keeps existing in Telegram (@BotFather deletes it). A platform linked by
+        credentials (`Channel.login = credentials`, see `agents.listChannelPlatforms`) loses the
+        credential variables it declares from the profile's `.env`, the hub's note of the account,
+        and is switched off; its allowed users and settings stay. A platform the hub does not know
+        answers `409 state_invalid` with `details.reason = unlink_not_supported`; a profile with
+        nothing linked answers `409` with `details.reason = not_linked`.
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
@@ -5423,26 +5479,37 @@ paths:
     post:
       operationId: agents.linkChannel
       tags: [agents]
-      summary: Link a channel that signs in with a bot token (Telegram) in the selected profile (admin)
+      summary: Link a channel that signs in with a bot token or credentials, in the selected profile (admin)
       description: >-
-        Today one platform links by token: `telegram` (a bot the person made with @BotFather;
-        the hub never uses Hermes's outside bot-creation service). The hub checks the token's
-        shape (`<digits>:<30+ letters, digits, _ or ->`, `400 validation_failed`, `details.reason
-        = token_invalid`), then asks Telegram who the bot is (`getMe`): a token Telegram refuses
+        `telegram` links by a bot token (a bot the person made with @BotFather; the hub never
+        uses Hermes's outside bot-creation service). The hub checks the token's shape
+        (`<digits>:<30+ letters, digits, _ or ->`, `400 validation_failed`, `details.reason =
+        token_invalid`), then asks Telegram who the bot is (`getMe`): a token Telegram refuses
         is `400 validation_failed` with `details.reason = token_rejected` and Telegram's own
         words in `details.message`; Telegram not answering is `503 service_unavailable`,
-        `details.reason = telegram_unreachable`. A bot already linked in another profile is
-        `409 conflict`, `details.reason = token_in_use`, `details.profile` — Telegram lets one
-        process poll a bot. Accepted, the token is written to the profile's own Hermes `.env`
-        (`TELEGRAM_BOT_TOKEN`, mode 0600, never returned — `[stored]`), `allowed_users` (when
-        sent) to `TELEGRAM_ALLOWED_USERS`, and the channel is switched on with pairing for
-        unknown senders (`platforms.telegram.enabled: true`, `unauthorized_dm_behavior: pair`),
-        so a stranger who messages the bot gets a pairing code to approve in
-        `agents.listPairing`. The gateway serving the profile follows as `gateway.applies` says:
-        a named profile's starts or restarts now, the default profile's at Hermes's Restart.
-        Linking again replaces the token. Only `telegram`: any other platform answers `409
-        state_invalid`, `details.reason = link_not_supported`; a hub that does not supervise
-        Hermes answers `409` with `details.reason = hermes_not_supervised`.
+        `details.reason = telegram_unreachable`. Every other platform of
+        `agents.listChannelPlatforms` links by `credentials`, keyed by the environment variable
+        Hermes reads (`DISCORD_BOT_TOKEN`, `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN`, …). A
+        required one missing, or one of the wrong shape, is `400 validation_failed` with
+        `details.reason = credentials_invalid` and `details.field` naming it. Where the platform
+        has a cheap question to ask (`validates: true` — Discord `/users/@me`, Slack `auth.test`
+        and `apps.connections.open`, Matrix `/account/whoami`, Mattermost `/users/me`, Email an
+        IMAP and an SMTP sign-in), it is asked before anything is stored: a refusal is `400
+        validation_failed`, `details.reason = credentials_rejected`, with `details.field` and the
+        platform's own words in `details.message`; no answer is `503 service_unavailable`,
+        `details.reason = platform_unreachable`, `details.platform`. The other platforms are
+        stored as given, unchecked. An identity already linked in another profile is `409
+        conflict`, `details.reason = token_in_use`, `details.profile` — the platforms Hermes lets
+        one process hold (Telegram, Discord, Slack, …). Accepted, every value is written to the
+        profile's own Hermes `.env` (mode 0600, secrets never returned — `[stored]`),
+        `allowed_users` (when sent) to the platform's allowlist variable, and the channel is
+        switched on (`platforms.<platform>.enabled: true`); a platform whose strangers Hermes
+        answers with a pairing code (`pairs: true`) gets `unauthorized_dm_behavior: pair`, so a
+        stranger's request waits in `agents.listPairing`. The gateway serving the profile follows
+        as `gateway.applies` says: a named profile's starts or restarts now, the default
+        profile's at Hermes's Restart. Linking again replaces the values. A platform the hub does
+        not know answers `409 state_invalid`, `details.reason = link_not_supported`; a hub that
+        does not supervise Hermes answers `409` with `details.reason = hermes_not_supervised`.
       x-roles: [owner, admin]
       x-rt-events: []
       requestBody:
@@ -5499,14 +5566,16 @@ paths:
       tags: [agents]
       summary: A channel's own settings, as Hermes reads them in the selected profile (admin)
       description: >-
-        Today `telegram`: every user-facing option Hermes has for it, each with the value set in
+        `telegram`, `discord`, `slack`, `matrix`, `mattermost` and `email`: every user-facing
+        option Hermes has for the platform, each with the value set in
         the profile (null while unset), the value that applies while it is unset (`default` —
         Hermes's own, or the profile's global display setting it falls back to), and where the
         value is kept (`source`: `config` for the profile's `config.yaml`, `env` for its `.env`,
         null while unset). A `shared` option is not Telegram's alone: it is kept once for the
         profile (speech-to-text, voice replies) and changes WhatsApp and every other channel
-        there too. Labels and help text are the client's, keyed by `key`. Any other platform
-        answers `409 state_invalid` with `details.reason = settings_not_supported`.
+        there too. Labels and help text are the client's, keyed by `key` (the same key means
+        the same thing on every platform). Any other platform answers `409 state_invalid` with
+        `details.reason = settings_not_supported`.
       x-roles: [owner, admin]
       responses:
         '200':
@@ -15416,16 +15485,19 @@ components:
           type: [string, 'null']
         login:
           type: [string, 'null']
-          enum: [qr, token, null]
+          enum: [qr, token, credentials, null]
           description: >-
             How the platform is linked instead of by fields: `qr` pairs interactively via
-            `/login` (WhatsApp), `token` takes a bot token via `/link` (Telegram).
+            `/login` (WhatsApp), `token` takes a bot token via `/link` (Telegram), `credentials`
+            takes the variables `agents.listChannelPlatforms` declares for it via `/link`.
         link:
           description: >-
             For a platform that is linked rather than filled in: WhatsApp (whether this profile
-            holds a session and whose, read from the profile's session folder) and Telegram
-            (whether the profile has a bot token, and which bot). Null for every other platform.
-            For both `configured` is `link.linked`.
+            holds a session and whose, read from the profile's session folder), Telegram
+            (whether the profile has a bot token, and which bot) and every platform linked by
+            credentials (whether the required ones are in the profile's `.env`, and — where the
+            hub asked the platform when it was linked — whose account). Null for a platform the
+            hub does not know. For all of them `configured` is `link.linked`.
           oneOf:
             - $ref: '#/components/schemas/ChannelLink'
             - type: 'null'
@@ -15449,8 +15521,10 @@ components:
         account_username:
           type: [string, 'null']
           description: >-
-            The bot's @username without the @ (Telegram), as Telegram answered when it was
-            linked; people open it at `https://t.me/<account_username>`. Null for WhatsApp.
+            The account's handle as the platform answered when it was linked, without an @:
+            Telegram's bot @username (people open it at `https://t.me/<account_username>`), the
+            Discord, Slack or Mattermost bot's user name, the Matrix user id, the email address.
+            Null for WhatsApp.
     ChannelGateway:
       type: object
       required: [profile, state, applies, error]
@@ -15597,26 +15671,141 @@ components:
           maxProperties: 50
           description: Option key → new value; null removes it so the default applies.
           additionalProperties: {}
+    ChannelPlatformList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChannelPlatform'
+    ChannelPlatform:
+      type: object
+      required:
+        [
+          platform,
+          label,
+          support,
+          login,
+          credentials,
+          allowed_users_key,
+          validates,
+          pairs,
+          allowlist,
+          settings,
+          exclusive,
+          packages,
+          inbound,
+          docs_url,
+        ]
+      properties:
+        platform:
+          type: string
+          description: Hermes's name for the platform, as `Channel.platform` has it.
+        label:
+          type: string
+          description: The platform's own name (a proper noun, not translated).
+        support:
+          type: string
+          enum: [full, generic]
+          description: >-
+            `full`: linked with a dialog of its own, checked with the platform, named once
+            linked, with its own settings. `generic`: a form of the declared variables, stored
+            unchecked.
+        login:
+          type: string
+          enum: [qr, token, credentials]
+        credentials:
+          type: array
+          description: The variables `agents.linkChannel` takes for it, in the order to ask them.
+          items:
+            $ref: '#/components/schemas/ChannelCredentialField'
+        allowed_users_key:
+          type: [string, 'null']
+          description: The allowlist variable `allowed_users` is written to; null when none.
+        validates:
+          type: boolean
+        pairs:
+          type: boolean
+          description: >-
+            Linking switches pairing on (`unauthorized_dm_behavior: pair`): a stranger who
+            messages the agent gets a pairing code to approve in `agents.listPairing`. False where
+            Hermes drops strangers (see `allowlist`) and for `generic` platforms, whose strangers
+            are left to Hermes's own default.
+        allowlist:
+          type: boolean
+          description: >-
+            Hermes answers nobody on this platform until the allowlist names them (a stranger is
+            dropped, never offered a code).
+        settings:
+          type: boolean
+          description: '`agents.getChannelSettings` has options for it.'
+        exclusive:
+          type: boolean
+          description: One identity may be linked in one profile only.
+        packages:
+          type: string
+          enum: [image, first_use, none]
+          description: >-
+            Where Hermes's library for the platform comes from: already in the image, downloaded
+            from PyPI the first time its gateway starts, or nothing beyond Hermes itself.
+        inbound:
+          type: boolean
+          description: >-
+            It receives messages on a webhook, so it needs an address reachable from the
+            internet that the hub's image does not open by itself.
+        docs_url:
+          type: [string, 'null']
+          description: Where the platform's app or bot is made.
+    ChannelCredentialField:
+      type: object
+      required: [key, kind, required]
+      properties:
+        key:
+          type: string
+          description: The environment variable Hermes reads.
+        kind:
+          type: string
+          enum: [secret, text, url, email, host, number]
+          description: '`secret` is never returned once stored.'
+        required:
+          type: boolean
     ChannelTokenLink:
       type: object
-      required: [token]
       additionalProperties: false
+      description: >-
+        `token` for Telegram; `credentials` for every other platform of
+        `agents.listChannelPlatforms`. One of the two is required.
       properties:
         token:
           type: string
           minLength: 1
           maxLength: 200
           writeOnly: true
-          description: The bot token @BotFather gave. Stored, never returned.
+          description: The bot token @BotFather gave (Telegram). Stored, never returned.
+        credentials:
+          type: object
+          writeOnly: true
+          minProperties: 1
+          maxProperties: 20
+          description: >-
+            The platform's credential variables, keyed by the name Hermes reads
+            (`ChannelPlatform.credentials[].key`). Stored in the profile's `.env`; the secret
+            ones are never returned. An optional one left empty is removed.
+          additionalProperties:
+            type: string
+            maxLength: 4000
         allowed_users:
           type: array
           maxItems: 100
           description: >-
-            Telegram user ids (digits) who may message the bot without pairing
-            (`TELEGRAM_ALLOWED_USERS`). Absent leaves what is set; empty clears it.
+            The people who may message the agent without pairing, as the platform names them
+            (Telegram and Discord user ids, Slack member ids, Matrix user ids, email addresses),
+            written to the platform's allowlist variable (`TELEGRAM_ALLOWED_USERS`,
+            `DISCORD_ALLOWED_USERS`, …). Absent leaves what is set; empty clears it.
           items:
             type: string
-            pattern: '^[0-9]{1,20}$'
+            pattern: '^[^,\s]{1,320}$'
     ChannelWrite:
       type: object
       properties:

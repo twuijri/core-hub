@@ -291,13 +291,13 @@ describe('Link Telegram by a bot token', () => {
 
   it('is Telegram’s and needs a Hermes the hub runs', async () => {
     const withApi = await boot();
-    const slack = await authed(withApi.hub, withApi.hub.token, {
+    const webhook = await authed(withApi.hub, withApi.hub.token, {
       method: 'POST',
-      url: `/api/v1/agents/${withApi.agent}/channels/slack/link`,
+      url: `/api/v1/agents/${withApi.agent}/channels/webhook/link`,
       payload: { token: GOOD },
     });
-    expect(slack.statusCode).toBe(409);
-    expect(slack.json()).toMatchObject({ details: { reason: 'link_not_supported' } });
+    expect(webhook.statusCode).toBe(409);
+    expect(webhook.json()).toMatchObject({ details: { reason: 'link_not_supported' } });
     await hub?.close();
     hub = null;
 
@@ -413,7 +413,7 @@ describe('Telegram settings', () => {
     await vi.waitFor(() => expect(of('manger')).toHaveLength(2));
   });
 
-  it('refuses a wrong value by name, and any platform but Telegram', async () => {
+  it('refuses a wrong value by name, and a platform without settings', async () => {
     const { hub: h, agent } = await boot();
     const wrong = await authed(h, h.token, {
       method: 'PATCH',
@@ -424,8 +424,8 @@ describe('Telegram settings', () => {
     expect(wrong.json()).toMatchObject({
       details: { field: 'values.tool_progress', reason: 'choice_invalid' },
     });
-    const slack = await authed(h, h.token, { url: settingsUrl(agent, 'slack') });
-    expect(slack.statusCode).toBe(409);
-    expect(slack.json()).toMatchObject({ details: { reason: 'settings_not_supported' } });
+    const webhook = await authed(h, h.token, { url: settingsUrl(agent, 'webhook') });
+    expect(webhook.statusCode).toBe(409);
+    expect(webhook.json()).toMatchObject({ details: { reason: 'settings_not_supported' } });
   });
 });
