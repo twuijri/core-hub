@@ -1,0 +1,26 @@
+# Core Hub push relay (ADR 0024). Deploy steps: README.md in this folder.
+name = "corehub-push-relay"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+# `wrangler d1 create corehub-push-relay` prints the id. The deploy workflow fills it from the
+# repository variable PUSH_RELAY_D1_DATABASE_ID; a local deploy needs it pasted here.
+[[d1_databases]]
+binding = "DB"
+database_name = "corehub-push-relay"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# Expired rate-limit counters and request nonces are removed every hour.
+[triggers]
+crons = ["17 * * * *"]
+
+# Proposed defaults (owner to confirm). Secrets are NOT here: `wrangler secret put` (README).
+[vars]
+LIMIT_PER_MINUTE = "120"
+LIMIT_PER_DAY = "5000"
+BINDS_PER_MINUTE = "60"
+REGISTRATIONS_PER_IP_HOUR = "5"
+REGISTRATIONS_PER_DAY = "500"
+BINDING_IDLE_DAYS = "30"

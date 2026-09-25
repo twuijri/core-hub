@@ -2470,3 +2470,29 @@ Rejected: a separate `reported_name` beside `name` (two names on one card for a 
 a heartbeat call for `last_seen_at` (any authenticated call is already a sign of life); asking
 Apple to verify an APNs key on save (Apple answers only a real push to a real token —
 `devices.testPush` does that).
+
+## 82. FCM and APNs without credentials go through the Core Hub push relay
+
+Proposed — owner to confirm (the relay itself is the owner's decision, ADR 0024). A hub with no
+FCM or APNs credentials of its own reaches the official apps through a relay the owner runs,
+which alone holds his keys. (This push relay is not §80's message relay for device connections,
+which stays parked.) The contract's part:
+
+- `PushSender.source` gains `relay`: the sender has no credentials here and delivers through the
+  relay. Every `fcm` and `apns` row carries `relay` (`PushRelayStatus`, null on `webpush`) even
+  when local credentials win, so a settings screen can show the switch and private push:
+  `state` (`ready`, `not_registered` — the hub registers itself on first need —, `unreachable`,
+  `blocked` by the relay's owner, `rate_limited`, `off`, `no_url`), `enabled`, `forced_off`
+  (`COREHUB_PUSH_RELAY=off`), `private_push`, `url`, `hub_id` (not a secret), `last_error`,
+  `checked_at`. A relay that blocked the hub makes its rows `state: error` and takes FCM/APNs out
+  of `devices.getPushConfig`'s `providers`, so the apps stop registering.
+- `PUT /push/relay` (`devices.setPushRelay`, owner/admin) takes `enabled` and `private_push` and
+  answers the status. Private push sends only a generic «إشعار جديد في كور هب» / "New notice in
+  Core Hub", the notice id and its kind; the app reads the rest from its hub.
+- `PushRegistration.relay_proof` (optional): the app's signature over its token with a key it
+  made once per install, forwarded unread; it lets the relay move a token from the hub that
+  holds it to this one. No app sends it yet.
+
+Local credentials always win; nothing changes for a hub that has them. Rejected: a separate
+`relay` row in the senders list (`PushProvider` names services a device registers with, and a
+device never registers with "relay"); a `GET /push/relay` (the senders list already carries it).

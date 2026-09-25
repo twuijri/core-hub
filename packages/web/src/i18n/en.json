@@ -660,6 +660,7 @@
         "generated": "Keys made by the hub",
         "environment": "From the environment",
         "settings": "From Settings",
+        "relay": "Through the Core Hub relay",
         "none": "None"
       },
       "devices": "Devices: {count}",

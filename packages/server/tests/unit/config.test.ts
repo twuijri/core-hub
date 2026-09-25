@@ -31,6 +31,8 @@ describe('config', () => {
       'COREHUB_APNS_BUNDLE_ID',
       'COREHUB_APNS_KEY',
       'COREHUB_APNS_ENVIRONMENT',
+      'COREHUB_PUSH_RELAY_URL',
+      'COREHUB_PUSH_RELAY',
       'COREHUB_WEB_TERMINAL',
       'COREHUB_WEB_TERMINAL_IDLE_MINUTES',
     ]);
