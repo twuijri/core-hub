@@ -105,7 +105,7 @@
 - الاختبارات:
   - الخادم: `channel-link.routes.test.ts`، `channel-validate.test.ts` (خادما IMAP وSMTP محلّيان)،
     `tests/contract/channels.contract.test.ts`، `tests/unit/channels.real.test.ts` (هرمز الحقيقي).
-    وعُدّل اختباران قديمان كانا يستعملان Slack مثالًا لمنصة «غير مدعومة»، فصار المثال `webhook`.
+    وعُدّلت ثلاثة مواضع في اختبارين قديمين كانت تستعمل Slack مثالًا لمنصة «غير مدعومة»، فصار المثال `webhook`.
   - الويب: `tests/channels-platforms.test.tsx`.
 - الوثائق: `docs/STATUS.md`، `docs/DEPLOY.md`، `docs/contracts/DECISIONS.md` §56، هذا السجل.
 
@@ -215,5 +215,5 @@ CI: يُلحق بعد الدفع.
   فيقرؤها هرمز كما هي. تبقى ملاحظة `hub-account.json`، وهي لا تضر.
 
 ## التسليم والخطوة التالية
-- طلب الدمج: يُلحق بعد فتحه (بالإنجليزية إلى `main`).
+- طلب الدمج: https://github.com/twuijri/core-hub/pull/129 (بالإنجليزية إلى `main`).
 - الخطوة التالية: CI أخضر، ثم تجربة المالك بحساب Discord أو Slack حقيقي على صورة من هذا الفرع.
