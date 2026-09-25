@@ -1,7 +1,11 @@
 // Files in the composer (owner, 2026-09-25): the «+» button offers a photo from the library,
 // the camera, or a file. Each one is uploaded to the hub as soon as it is picked
-// (`sessions.uploadAttachment`, as the web's composer does), shows as a chip with a preview and
-// a remove button, and goes with the next message as an image or file block.
+// (`sessions.uploadAttachment`, or the resumable `sessions.startUpload` flow above 25 MB, as the
+// web's composer does), shows as a chip with a preview and a remove button, and goes with the next
+// message as an image or file block.
+//
+// Photos go «Compressed» or at «Original quality», as in Telegram (owner, 2026-09-26: «خله خيارين
+// مثل التيليقرام مع ضغط ولا بدون»): the choice sits in the «+» menu and is remembered.
 import CoreHubClient
 import Foundation
 import Observation
@@ -14,6 +18,9 @@ import UniformTypeIdentifiers
 struct OutgoingMessage: Equatable {
     var text: String
     var attachments: [Attachment] = []
+    /// Photos sent at original quality go as files (as Telegram's «send as file»), whatever
+    /// their kind: the agent gets the untouched bytes.
+    var asFiles: Set<String> = []
 
     var isEmpty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.isEmpty }
 
@@ -23,7 +30,7 @@ struct OutgoingMessage: Equatable {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { blocks.append(.typeTextBlock(TextBlock(type: .text, text: trimmed))) }
         for file in attachments {
-            switch file.kind {
+            switch asFiles.contains(file.id) ? .file : file.kind {
             case .image:
                 blocks.append(.typeImageBlock(ImageBlock(
                     attachmentId: file.id, name: file.name, mime: file.mime, sizeBytes: file.sizeBytes, type: .image
@@ -43,8 +50,13 @@ struct OutgoingMessage: Equatable {
 }
 
 enum AttachmentRules {
-    /// `sessions.uploadAttachment` takes a file in one request up to 25 MB.
-    static let maxBytes = 25 * 1024 * 1024
+    /// `sessions.uploadAttachment` takes a file in one request up to 25 MB; above it the
+    /// resumable flow (`sessions.startUpload`).
+    static let maxOneShotBytes = 25 * 1024 * 1024
+    /// The hub's largest attachment: the contract's `UploadStart.size_bytes` maximum (50 MB; the
+    /// contract offers no call that reports it, and `AttachmentLimitTests` holds this to it). A
+    /// `413` from the hub names its own figure in `details.max_bytes`, which wins.
+    static let maxBytes = 50 * 1024 * 1024
     /// Photos are made smaller before they leave the phone: the longer side at most this.
     static let photoMaxSide: CGFloat = 2048
     static let photoQuality: CGFloat = 0.8
@@ -92,6 +104,8 @@ final class AttachmentTray {
         let isImage: Bool
         let preview: UIImage?
         var state: State
+        /// A photo at original quality: sent as a file block.
+        var asFile = false
     }
 
     private(set) var items: [Item] = []
@@ -120,9 +134,7 @@ final class AttachmentTray {
         self.init(
             upload: { [weak app] file, profile in
                 guard let app else { throw HubFailure.signedOut }
-                return try await app.api.call {
-                    try await SessionsAPI.sessionsUploadAttachment(xHubProfile: profile, file: file, purpose: .message, apiConfiguration: $0)
-                }
+                return try await AttachmentUploader(backend: HubAttachmentBackend(api: app.api)).upload(file, profile: profile)
             },
             discard: { [weak app] attachment in
                 guard let app else { return }
@@ -134,7 +146,7 @@ final class AttachmentTray {
                 let l10n = app?.l10n ?? L10n(.en)
                 let failure = HubFailure(error)
                 if failure.status == 413 {
-                    return l10n("attachments.too_large", ["size": AttachmentRules.size(AttachmentRules.maxBytes)])
+                    return l10n("attachments.too_large", ["size": AttachmentRules.size(failure.maxBytes ?? AttachmentRules.maxBytes)])
                 }
                 return failure.describe(l10n)
             },
@@ -152,12 +164,43 @@ final class AttachmentTray {
         items.compactMap { if case .ready(let attachment) = $0.state { return attachment } else { return nil } }
     }
 
+    /// The uploaded photos that go as files (original quality).
+    var asFiles: Set<String> {
+        Set(items.compactMap { item in
+            if item.asFile, case .ready(let attachment) = item.state { return attachment.id }
+            return nil
+        })
+    }
+
+    /// The message these files make with `text`.
+    func message(_ text: String) -> OutgoingMessage {
+        OutgoingMessage(text: text, attachments: attachments, asFiles: asFiles)
+    }
+
     /// A photo from the library or the camera: made smaller, sent as JPEG.
     func addPhoto(_ image: UIImage, profile: String) {
         guard let data = AttachmentRules.jpeg(image) else { return }
         let name = "photo-\(Self.stamp()).jpg"
         let preview = image.preparingThumbnail(of: CGSize(width: 120, height: 120)) ?? image
         add(data: data, name: name, isImage: true, preview: preview, profile: profile)
+    }
+
+    /// A photo at original quality: its own bytes, untouched (HEIC, JPEG or PNG at full size,
+    /// with its orientation and all its metadata), sent as a file. `type` names its format.
+    func addOriginalPhoto(_ data: Data, type: UTType?, profile: String) {
+        let ext = type?.preferredFilenameExtension ?? "jpg"
+        let name = "photo-\(Self.stamp()).\(ext)"
+        let preview = UIImage(data: data)?.preparingThumbnail(of: CGSize(width: 120, height: 120))
+        add(data: data, name: name, isImage: true, preview: preview, profile: profile, asFile: true)
+    }
+
+    /// A camera photo at original quality: the camera hands over a picture, not a file, so it is
+    /// written at full size as JPEG at the top quality, upright (its orientation in EXIF).
+    func addOriginalCameraPhoto(_ image: UIImage, profile: String) {
+        guard let data = image.jpegData(compressionQuality: 1.0) else { return }
+        let name = "photo-\(Self.stamp()).jpg"
+        let preview = image.preparingThumbnail(of: CGSize(width: 120, height: 120)) ?? image
+        add(data: data, name: name, isImage: true, preview: preview, profile: profile, asFile: true)
     }
 
     /// A file the person chose (security-scoped): copied, checked against the hub's limit, sent.
@@ -180,12 +223,12 @@ final class AttachmentTray {
     }
 
     /// Writes the bytes under their own name (the upload's file name is the attachment's) and uploads.
-    func add(data: Data, name: String, isImage: Bool, preview: UIImage?, profile: String) {
+    func add(data: Data, name: String, isImage: Bool, preview: UIImage?, profile: String, asFile: Bool = false) {
         if data.count > AttachmentRules.maxBytes {
-            items.append(Item(name: name, isImage: isImage, preview: preview, state: .failed(tooLarge(data.count))))
+            items.append(Item(name: name, isImage: isImage, preview: preview, state: .failed(tooLarge(data.count)), asFile: asFile))
             return
         }
-        let item = Item(name: name, isImage: isImage, preview: preview, state: .uploading)
+        let item = Item(name: name, isImage: isImage, preview: preview, state: .uploading, asFile: asFile)
         items.append(item)
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("outgoing-\(item.id.uuidString)", isDirectory: true)
         let file = folder.appendingPathComponent(name)
@@ -243,13 +286,22 @@ struct AttachButton: View {
     let tray: AttachmentTray
     let profile: String
     @Environment(\.l10n) private var l10n
+    @Environment(AppModel.self) private var app
     @State private var choosingPhotos = false
     @State private var photos: [PhotosPickerItem] = []
     @State private var takingPhoto = false
     @State private var choosingFiles = false
 
     var body: some View {
+        @Bindable var device = app.device
         Menu {
+            // Telegram's choice: photos compressed, or at their original quality (remembered).
+            Picker(l10n("attachments.photo_quality"), selection: $device.photoQuality) {
+                Text(l10n("attachments.compressed")).tag(DeviceSettings.PhotoQuality.compressed)
+                Text(l10n("attachments.original")).tag(DeviceSettings.PhotoQuality.original)
+            }
+            .pickerStyle(.inline)
+            .accessibilityIdentifier("composer.photo_quality")
             Button {
                 choosingPhotos = true
             } label: {
@@ -276,13 +328,22 @@ struct AttachButton: View {
         }
         .accessibilityLabel(l10n("attachments.add"))
         .accessibilityIdentifier("composer.attach")
-        .photosPicker(isPresented: $choosingPhotos, selection: $photos, maxSelectionCount: 10, matching: .images)
+        .photosPicker(
+            isPresented: $choosingPhotos, selection: $photos, maxSelectionCount: 10, matching: .images,
+            // `.current`: the library's own file (HEIC stays HEIC), never a transcoded copy.
+            preferredItemEncoding: .current
+        )
         .onChange(of: photos) { _, picked in
             guard !picked.isEmpty else { return }
             photos = []
+            let original = app.device.photoQuality == .original
             for item in picked {
                 Task {
-                    if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+                    guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+                    if original {
+                        let type = item.supportedContentTypes.first { $0.conforms(to: .image) }
+                        tray.addOriginalPhoto(data, type: type, profile: profile)
+                    } else if let image = UIImage(data: data) {
                         tray.addPhoto(image, profile: profile)
                     }
                 }
@@ -290,7 +351,13 @@ struct AttachButton: View {
         }
         .fullScreenCover(isPresented: $takingPhoto) {
             CameraPicker { image in
-                if let image { tray.addPhoto(image, profile: profile) }
+                if let image {
+                    if app.device.photoQuality == .original {
+                        tray.addOriginalCameraPhoto(image, profile: profile)
+                    } else {
+                        tray.addPhoto(image, profile: profile)
+                    }
+                }
                 takingPhoto = false
             }
             .ignoresSafeArea()
@@ -430,5 +497,80 @@ struct MessageAttachments: View {
             }
             .accessibilityIdentifier("message.attachments")
         }
+    }
+}
+
+/// The hub's attachment calls the uploader uses, so its rules are tested without a network.
+protocol AttachmentBackend {
+    func oneShot(_ file: URL, profile: String) async throws -> Attachment
+    func start(_ start: UploadStart, profile: String) async throws -> Upload
+    func chunk(_ uploadID: String, offset: Int, body: URL, profile: String) async throws -> Upload
+    func complete(_ uploadID: String, profile: String) async throws -> Attachment
+    func abort(_ uploadID: String, profile: String) async
+}
+
+/// Uploads one file as the web does: in one request up to 25 MB, in chunks (the resumable flow)
+/// above it, up to the hub's largest attachment.
+struct AttachmentUploader {
+    let backend: AttachmentBackend
+
+    func upload(_ file: URL, profile: String) async throws -> Attachment {
+        let size = (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        if size <= AttachmentRules.maxOneShotBytes { return try await backend.oneShot(file, profile: profile) }
+        let mime = UTType(filenameExtension: file.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+        let open = try await backend.start(
+            UploadStart(name: file.lastPathComponent, mime: mime, sizeBytes: size, purpose: .message),
+            profile: profile
+        )
+        do {
+            let reader = try FileHandle(forReadingFrom: file)
+            defer { try? reader.close() }
+            let part = FileManager.default.temporaryDirectory.appendingPathComponent("chunk-\(open.id)")
+            defer { try? FileManager.default.removeItem(at: part) }
+            var offset = open.nextOffset
+            while offset < size {
+                try reader.seek(toOffset: UInt64(offset))
+                let bytes = try reader.read(upToCount: max(1, open.chunkBytes)) ?? Data()
+                guard !bytes.isEmpty else { break }
+                try bytes.write(to: part)
+                // The hub answers where it stands now; a resent chunk moves nothing twice.
+                let next = try await backend.chunk(open.id, offset: offset, body: part, profile: profile).nextOffset
+                guard next > offset else { throw HubFailure(kind: .other, status: 0, code: nil, message: nil, operationID: "sessions.uploadChunk", requestID: nil, detail: "no progress") }
+                offset = next
+            }
+            return try await backend.complete(open.id, profile: profile)
+        } catch {
+            await backend.abort(open.id, profile: profile)
+            throw error
+        }
+    }
+}
+
+/// `AttachmentBackend` through the generated client only.
+struct HubAttachmentBackend: AttachmentBackend {
+    let api: HubAPI
+
+    func oneShot(_ file: URL, profile: String) async throws -> Attachment {
+        try await api.call {
+            try await SessionsAPI.sessionsUploadAttachment(xHubProfile: profile, file: file, purpose: .message, apiConfiguration: $0)
+        }
+    }
+
+    func start(_ start: UploadStart, profile: String) async throws -> Upload {
+        try await api.call { try await SessionsAPI.sessionsStartUpload(xHubProfile: profile, uploadStart: start, apiConfiguration: $0) }
+    }
+
+    func chunk(_ uploadID: String, offset: Int, body: URL, profile: String) async throws -> Upload {
+        try await api.call {
+            try await SessionsAPI.sessionsUploadChunk(xHubProfile: profile, uploadId: uploadID, offset: offset, body: body, apiConfiguration: $0)
+        }
+    }
+
+    func complete(_ uploadID: String, profile: String) async throws -> Attachment {
+        try await api.call { try await SessionsAPI.sessionsCompleteUpload(xHubProfile: profile, uploadId: uploadID, apiConfiguration: $0) }
+    }
+
+    func abort(_ uploadID: String, profile: String) async {
+        _ = try? await api.call { try await SessionsAPI.sessionsAbortUpload(xHubProfile: profile, uploadId: uploadID, apiConfiguration: $0) }
     }
 }

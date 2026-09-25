@@ -27,6 +27,8 @@ struct HubFailure: Error, Equatable {
     var detail: String
     /// `details.reason`, where the hub names why (e.g. `no_speech` for a silent recording).
     var reason: String?
+    /// `details.max_bytes` of a `413`: the most the hub takes.
+    var maxBytes: Int?
 
     static let signedOut = HubFailure(kind: .signedOut, status: 401, code: "unauthorized", message: nil, operationID: nil, requestID: nil, detail: "")
 
@@ -66,6 +68,7 @@ struct HubFailure: Error, Equatable {
                 detail: String(describing: underlying)
             )
             failure.reason = envelope?.details?.reason
+            failure.maxBytes = envelope?.details?.max_bytes
             return failure
         }
         if error is URLError {
@@ -81,8 +84,9 @@ struct HubFailure: Error, Equatable {
             let operationId: String?
             let request_id: String?
             let reason: String?
+            let max_bytes: Int?
 
-            private enum Keys: String, CodingKey { case operationId, request_id, reason }
+            private enum Keys: String, CodingKey { case operationId, request_id, reason, max_bytes }
 
             /// Each field on its own: one of an unexpected type must not lose the others.
             init(from decoder: Decoder) throws {
@@ -90,6 +94,7 @@ struct HubFailure: Error, Equatable {
                 operationId = try? container.decodeIfPresent(String.self, forKey: .operationId)
                 request_id = try? container.decodeIfPresent(String.self, forKey: .request_id)
                 reason = try? container.decodeIfPresent(String.self, forKey: .reason)
+                max_bytes = try? container.decodeIfPresent(Int.self, forKey: .max_bytes)
             }
         }
 

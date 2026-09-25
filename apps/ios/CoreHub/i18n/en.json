@@ -422,6 +422,9 @@
     "camera": "Camera",
     "file": "File",
     "remove": "Remove {name}",
-    "too_large": "This file is over {size}, the largest the hub takes."
+    "too_large": "This file is over {size}, the largest the hub takes.",
+    "photo_quality": "Photos",
+    "compressed": "Compressed",
+    "original": "Original quality"
   }
 }

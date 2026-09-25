@@ -29,11 +29,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +58,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.graphics.scale
 import hub.core.android.R
+import hub.core.android.graph
 import hub.core.android.chat.AttachmentRules
 import hub.core.android.chat.AttachmentTray
 import hub.core.android.ui.theme.LocalTokens
@@ -75,8 +79,8 @@ object PickedFiles {
     private fun stamp() = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
 
     /** A file (any kind) under its own name, or null when it cannot be read. */
-    fun copy(context: Context, uri: Uri): File? = runCatching {
-        val name = displayName(context, uri) ?: "file-${stamp()}"
+    fun copy(context: Context, uri: Uri, fallbackName: String? = null): File? = runCatching {
+        val name = displayName(context, uri) ?: fallbackName ?: "file-${stamp()}"
         val target = File(folder(context), name.replace('/', '_'))
         context.contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use { input.copyTo(it) } }
             ?: return null
@@ -87,6 +91,24 @@ object PickedFiles {
         context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
             if (c.moveToFirst()) c.getString(0) else null
         }
+
+    /**
+     * A photo at original quality: its own bytes, untouched (HEIC, JPEG or PNG at full size, with
+     * its orientation and metadata as the photo picker hands them over).
+     */
+    fun original(context: Context, uri: Uri): File? {
+        val ext = context.contentResolver.getType(uri)?.substringAfter('/')?.let { if (it == "jpeg") "jpg" else it } ?: "jpg"
+        return copy(context, uri, "photo-${stamp()}.$ext")
+    }
+
+    /** A small picture of a photo for its chip. */
+    fun thumbnail(file: File): Bitmap? = runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, bounds)
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 96) sample *= 2
+        BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply { inSampleSize = sample })
+    }.getOrNull()
 
     /** A photo as the JPEG the hub receives: the longer side at most 2048 px, quality 80, upright. */
     fun photo(context: Context, uri: Uri): Pair<File, Bitmap>? = runCatching {
@@ -136,7 +158,16 @@ fun AttachButton(tray: AttachmentTray) {
     var open by remember { mutableStateOf(false) }
     var cameraUri by rememberSaveable { mutableStateOf<Uri?>(null) }
 
+    val choices by context.graph.device.choices.collectAsState()
+
+    // «Compressed» or «Original quality», as the + menu says (remembered on This device).
     fun addPhoto(uri: Uri) = scope.launch {
+        if (context.graph.device.choices.value.photoOriginal) {
+            val file = withContext(Dispatchers.IO) { PickedFiles.original(context, uri) }
+            if (file == null) tray.addUnreadable(PickedFiles.displayName(context, uri) ?: "photo")
+            else tray.add(file, isImage = true, preview = withContext(Dispatchers.IO) { PickedFiles.thumbnail(file) }, asFile = true)
+            return@launch
+        }
         val picked = withContext(Dispatchers.IO) { PickedFiles.photo(context, uri) }
         if (picked == null) tray.addUnreadable(PickedFiles.displayName(context, uri) ?: "photo")
         else tray.add(picked.first, isImage = true, preview = picked.second)
@@ -176,6 +207,21 @@ fun AttachButton(tray: AttachmentTray) {
             Icon(painterResource(R.drawable.lucide_plus), stringResource(R.string.attach_add), tint = t.textMuted, modifier = Modifier.size(22.dp))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            // Telegram's choice for photos: compressed, or the original file.
+            Text(
+                stringResource(R.string.attach_photo_quality),
+                style = MaterialTheme.typography.labelMedium, color = t.textMuted,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+            listOf(false to R.string.attach_compressed, true to R.string.attach_original).forEach { (original, label) ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(label)) },
+                    leadingIcon = { RadioButton(selected = choices.photoOriginal == original, onClick = null) },
+                    onClick = { context.graph.device.update { it.copy(photoOriginal = original) } },
+                    modifier = Modifier.testTag(if (original) "composer.photo_original" else "composer.photo_compressed"),
+                )
+            }
+            HorizontalDivider()
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.attach_photo)) },
                 leadingIcon = { Icon(painterResource(R.drawable.lucide_image), null, modifier = Modifier.size(20.dp)) },
@@ -239,7 +285,7 @@ fun AttachmentChips(items: List<AttachmentTray.Item>, onRemove: (String) -> Unit
                     (item.state as? AttachmentTray.State.Failed)?.let { failed ->
                         Text(
                             when {
-                                failed.tooLarge -> stringResource(R.string.attach_too_large, AttachmentRules.sizeText(AttachmentRules.MAX_BYTES))
+                                failed.tooLarge -> stringResource(R.string.attach_too_large, AttachmentRules.sizeText(failed.error?.maxBytes ?: AttachmentRules.MAX_BYTES))
                                 failed.error != null -> errorText(failed.error)
                                 else -> stringResource(R.string.attach_unreadable)
                             },

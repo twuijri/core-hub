@@ -268,4 +268,7 @@
     <string name="push_label">الإشعارات</string>
     <string name="notices_off">الإشعارات متوقفة لكور هب</string>
     <string name="notices_open_settings">افتح الإعدادات</string>
+    <string name="attach_photo_quality">الصور</string>
+    <string name="attach_compressed">مضغوطة</string>
+    <string name="attach_original">بالجودة الأصلية</string>
 </resources>
