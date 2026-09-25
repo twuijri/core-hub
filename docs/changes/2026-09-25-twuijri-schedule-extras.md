@@ -122,7 +122,8 @@ $ pnpm build && PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwr
 
 الاختبارات الجديدة تفشل على الكود القديم: لا حقل `limits` ولا مسار `/schedules/preview` ولا قائمة.
 
-CI على #133 (التشغيل 36106683863)، كلها ناجحة:
+أول CI على #133 فشل في اختبار ويب واحد: عنوان المعاينة كان يأخذ المنطقة من المتصفح (UTC في CI) لا من
+جواب الخادم؛ صار يأخذها من الجواب. بعده CI على #133 (التشغيل 36106683863)، كلها ناجحة:
 ```
 Lint, typecheck, contracts, tests, build              pass
 Web smoke journeys (Playwright against the real hub)  pass
