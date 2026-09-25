@@ -207,7 +207,12 @@
     "channels": {
       "telegram": "تيليجرام",
       "whatsapp": "واتساب",
-      "other": "القنوات: {name}"
+      "other": "القنوات: {name}",
+      "readonly_banner": "محادثة من {channel} — للقراءة فقط؛ الرد يكون من {channel}",
+      "unreachable": "تعذّرت قراءة محادثات القنوات من Hermes الآن؛ المعروض آخر ما قُرئ.",
+      "untitled": "محادثة على {channel}",
+      "has_more": "تُعرض آخر ٥٠٠ رسالة فقط من هذه المحادثة.",
+      "no_messages": "لا رسائل نصية في هذه المحادثة بعد."
     }
   },
   "search": {

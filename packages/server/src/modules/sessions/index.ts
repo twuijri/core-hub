@@ -16,6 +16,7 @@ import { AuditService, type BackgroundSource } from '../audit/index.js';
 import { sessionsBackground } from './background.js';
 import { attachSessionsRealtime, sessionsRealtimeFor, type FollowCheck } from './realtime.js';
 import { registerSessionRoutes } from './routes.js';
+import { ChannelConversations, channelSourceFor } from './channel-conversations.js';
 import { derivedScopeResolver, type ScopeCaller, type ScopeResolver } from './scope.js';
 import { SessionsService, type TurnHandle, type TurnInput, type TurnResult } from './service.js';
 import type { EngineScope } from './engine.js';
@@ -67,6 +68,17 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
   const scopesFor = (app: FastifyInstance): ScopeResolver =>
     resolvePort(options.scopes ?? derivedScopeResolver, app);
   const services = new WeakMap<SocketServer, SessionsService>();
+  // One reader per app: what it read of Hermes is kept per app, never shared between hubs.
+  const channelReaders = new WeakMap<SocketServer, ChannelConversations>();
+  const channels = (request: FastifyRequest): ChannelConversations => {
+    const app = request.server;
+    let reader = channelReaders.get(app.hub.io);
+    if (!reader) {
+      reader = new ChannelConversations(() => channelSourceFor(app));
+      channelReaders.set(app.hub.io, reader);
+    }
+    return reader;
+  };
 
   const service = (request: FastifyRequest): SessionsService =>
     serviceFor(request.server, request.log);
@@ -103,7 +115,7 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
     name: 'sessions',
     registerRoutes(app: FastifyInstance) {
       const scopes = scopesFor(app);
-      registerSessionRoutes(app, { service, scopes });
+      registerSessionRoutes(app, { service, scopes, channels });
       sessionsRealtimeFor(app.hub.io)?.authorizeFollowWith(followCheck(app, scopes));
       turns.set(app, (scope, input) => serviceFor(app, app.log).oneTurn(scope, input));
       runs.set(app, {
@@ -289,6 +301,12 @@ export type {
   MaterialisedAttachment,
   WorkflowGate,
 } from './ports.js';
+export {
+  ChannelSourceRefusal,
+  ChannelSourceUnavailable,
+  registerChannelSource,
+  type ChannelSource,
+} from './channel-conversations.js';
 export { RUN_FILES_DIR, collectOutputs, ensureRunFolders, runFolders } from './run-files.js';
 export type { ProducedFile, ProducedFiles, ProducedRefusal } from './run-files.js';
 export type { ScopeResolver, RequestScope } from './scope.js';

@@ -44,6 +44,9 @@ import type {
   AgentSubagentSignal,
 } from '../../server/src/modules/sessions/ports.js';
 import { fakeHermes } from '../../server/src/modules/sessions/testing/fake-runner.js';
+import { registerChannelSource } from '../../server/src/modules/sessions/index.js';
+import { scriptedChannels } from '../../server/src/modules/sessions/testing/scripted-channels.js';
+import { listWorkspacesFor } from '../../server/src/modules/auth/index.js';
 import {
   loadOrCreateSigningKey,
   signAccessToken,
@@ -1125,6 +1128,58 @@ const profileArchives = fakeProfileRuntime((profile) => [
 ]);
 registerProfileTransfer((app) => profileTransferPorts(app, profileArchives.runtime));
 
+/**
+ * Hermes's channel conversations, scripted (contract decision §61): one Telegram conversation
+ * in the default profile, as Hermes's server would list it. Off until a journey turns it on
+ * (`/__e2e/channels`) — every other journey sees a hub with no Hermes to read, as before, so
+ * their lists and screenshots do not change.
+ */
+let channelsOn = false;
+const E2E_T0 = Date.parse('2026-09-25T09:15:00Z') / 1000;
+const hermesChannels = scriptedChannels(
+  {
+    default: {
+      sessions: [
+        {
+          id: '20260925_091500_e2e0tg01',
+          source: 'telegram',
+          user_id: '5550001',
+          chat_id: '5550001',
+          chat_type: 'dm',
+          display_name: 'أحمد من تيليجرام',
+          title: null,
+          message_count: 2,
+          started_at: E2E_T0,
+          last_active: E2E_T0 + 300,
+          preview: 'متى موعد التسليم؟',
+        },
+      ],
+      messages: {
+        '20260925_091500_e2e0tg01': [
+          { id: 1, role: 'user', content: 'متى موعد التسليم؟', timestamp: E2E_T0 },
+          {
+            id: 2,
+            role: 'assistant',
+            content: 'موعد التسليم **يوم الخميس**، وسأذكّرك قبله بيوم.',
+            timestamp: E2E_T0 + 300,
+          },
+        ],
+      },
+    },
+  },
+  {
+    // The hub's default workspace is Hermes's `default` profile (ADR 0014). `app` is the hub
+    // built below; nothing asks before it exists.
+    profileOf: (workspace) =>
+      listWorkspacesFor(requireSqlite(app.hub.database), { id: '', role: 'owner' }).some(
+        (row) => row.id === workspace && row.isDefault,
+      )
+        ? 'default'
+        : null,
+  },
+);
+registerChannelSource(() => (channelsOn ? hermesChannels : null));
+
 const sessions = createSessionsModule({
   agents: { find: async (_workspace, agentId) => fakeHermes(agentId) },
   runner: new ScriptedRunner(),
@@ -1167,6 +1222,12 @@ app.post('/__e2e/git-repo', async () => {
 });
 
 // Test-only control: drop every sessions socket, like a hub restart (journey 3).
+// Test-only control: Hermes's scripted channel conversations on or off (journey 33).
+app.post('/__e2e/channels', async (request) => {
+  channelsOn = (request.body as { on?: boolean } | null)?.on === true;
+  return { ok: true, on: channelsOn };
+});
+
 app.post('/__e2e/drop-sockets', async () => {
   app.hub.io.of('/rt/sessions').disconnectSockets(true);
   return { ok: true };
