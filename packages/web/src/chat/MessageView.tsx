@@ -11,7 +11,11 @@
  * avatar are drawn once, and the gap above a grouped message is the tighter one. That
  * difference in spacing is what makes a turn read as one thing.
  */
-import { useMemo, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useDownloadAttachment } from '../attachments/queries.js';
+import { useAuth } from '../auth/context.js';
+import { hideRunPaths } from '../files/run-paths.js';
 import { useI18n } from '../i18n/context.js';
 import type { Message, Run, RunChanges } from '../types.js';
 import { highlightParts, matchRanges } from '../ui/combobox-filter.js';
@@ -83,6 +87,73 @@ function Marked({ text, query }: { text: string; query: string | null | undefine
   );
 }
 
+/** The keys (`attachment:<id>`) of the files a message carries. */
+function ownKeysOf(message: Message): string[] {
+  return message.content.flatMap((block) =>
+    'attachment_id' in block && block.attachment_id ? [`attachment:${block.attachment_id}`] : [],
+  );
+}
+
+/**
+ * A picture on a message, drawn in it. The bytes are fetched with the bearer header and shown
+ * through an object URL — a plain `<img src>` could not send the token (the contract keeps it
+ * out of URLs). Until they arrive, or if they cannot, the picture is its name like any file.
+ */
+function InlineImage({
+  attachmentId,
+  name,
+  mime,
+  fallback,
+  onOpen,
+}: {
+  attachmentId: string;
+  name: string;
+  mime: string | undefined;
+  fallback: ReactNode;
+  onOpen: (() => void) | null;
+}) {
+  const { t } = useI18n();
+  const { profile } = useAuth();
+  const download = useDownloadAttachment();
+  const bytes = useQuery({
+    queryKey: ['attachment-bytes', profile, attachmentId],
+    queryFn: ({ signal }) =>
+      download.blob({ attachment_id: attachmentId, name, ...(mime ? { mime } : {}) }, signal),
+    staleTime: Infinity,
+    gcTime: 5 * 60_000,
+    retry: false,
+  });
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (!bytes.data) return;
+    const url = URL.createObjectURL(bytes.data);
+    setSrc(url);
+    return () => {
+      URL.revokeObjectURL(url);
+      setSrc(null);
+    };
+  }, [bytes.data]);
+  if (!src) return <>{fallback}</>;
+  const picture = <img className="msg-image" src={src} alt={name} data-testid="message-image" />;
+  return onOpen ? (
+    <button
+      type="button"
+      className="msg-image-open"
+      aria-label={t('files.open', { name })}
+      onClick={onOpen}
+    >
+      {picture}
+    </button>
+  ) : (
+    picture
+  );
+}
+
+/**
+ * What a message carries besides its words: a picture drawn in place, anything else as its
+ * name. Both open beside the chat, like any other file of the conversation (decision §48) —
+ * on the person's messages and on the agent's replies alike.
+ */
 function Attachments({ message }: { message: Message }) {
   const { t } = useI18n();
   const files = useSessionFilesOptional();
@@ -90,7 +161,7 @@ function Attachments({ message }: { message: Message }) {
   const blocks = message.content.filter((b) => b.type !== 'text');
   if (blocks.length === 0) return null;
   return (
-    <ul className="msg-attachments">
+    <ul className="msg-attachments" data-testid="message-attachments">
       {blocks.map((block, i) => {
         const label =
           block.type === 'location'
@@ -99,6 +170,19 @@ function Attachments({ message }: { message: Message }) {
         // An attachment opens beside the chat, like any other file of it (decision §48).
         const key = 'attachment_id' in block ? `attachment:${block.attachment_id}` : null;
         const file = key && files ? files.fileOf(key) : undefined;
+        if (block.type === 'image' && block.attachment_id) {
+          return (
+            <li key={i} className="msg-attachment-image">
+              <InlineImage
+                attachmentId={block.attachment_id}
+                name={block.name ?? file?.name ?? 'image'}
+                mime={block.mime ?? file?.mime}
+                fallback={<Badge>{label}</Badge>}
+                onOpen={file && open ? () => open(file.key) : null}
+              />
+            </li>
+          );
+        }
         return (
           <li key={i}>
             {file && open ? (
@@ -168,6 +252,7 @@ export function MessageView({
   };
   const side = sideOf(message);
   const text = textOf(message);
+  const own = useMemo(() => ownKeysOf(message), [message]);
 
   if (side === 'system') {
     return (
@@ -254,9 +339,12 @@ export function MessageView({
             {/* The reasoning of a *finished* turn only: while the run is alive it is the
                 status line above the composer, not a fold in the transcript. */}
             {reasoning && <Reasoning text={reasoning} seconds={seconds} />}
-            {text ? <Markdown text={text} mark={mark} /> : null}
+            {/* The run folder's path is drawn as the file's name (`files/run-paths.ts`). */}
+            {text ? <Markdown text={hideRunPaths(text)} mark={mark} own={own} /> : null}
           </div>
         )}
+        {/* The files the reply carries: what the agent left in the run's output folder. */}
+        {!streaming && <Attachments message={message} />}
         {changes && !streaming && <RunChangesCard changes={changes} />}
         {!streaming && <FallbackNote run={message.run_id ? runs[message.run_id] : undefined} />}
         {message.usage && !streaming && (
