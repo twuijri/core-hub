@@ -1024,3 +1024,55 @@ did not say how many there are or who owns one. Proposed here — owner to confi
 Rejected: a new `source` field on `SessionCreate` (a client could then make any number of
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
+
+## 52. Webhooks receive a catalogue of the hub's events, queued, signed and retried
+
+2026-09-25, with `notify.redeliverWebhookDelivery`. Until now a webhook received only the test
+delivery (§42 named the header; nothing sent events). Proposed here — owner to confirm:
+
+- **The catalogue is in the contract, and it is a choice, not every realtime event.**
+  `WebhookEventName` lists fourteen events — `run.completed`, `run.failed`, `run.cancelled`,
+  `approval.requested`, `approval.resolved`, `task.created`, `task.moved`, `task.assigned`,
+  `schedule_run.completed`, `schedule_run.failed`, `workflow_run.completed`,
+  `workflow_run.failed`, `step.waiting` (a workflow waiting for a person) and `notice.created` —
+  and its `x-webhook-events` gives each one's realtime source, description (ar/en) and content
+  fields. `notify.listWebhookEvents` serves exactly that (it used to serve every `x-rt-events`
+  name, deltas and typing included); `WebhookWrite.events` refuses any other name (`400`). A
+  stored name from before is kept on the webhook and never fires.
+- **The body is `WebhookPayload`**: `{id, event, profile, occurred_at, content_included, data}`,
+  where `data` is the realtime event's `payload` as its schema in `events/` defines it. `id` is
+  the event at this webhook and stays the same on every retry and redelivery, so a receiver can
+  drop a repeat. Headers: `X-CoreHub-Signature: sha256=<hex>` (with a secret), `X-CoreHub-Event`,
+  `X-CoreHub-Delivery` (the delivery id). The top-level `webhooks.hubEvent` describes the request.
+- **Content is left out by default.** With `include_content: false` (the default) the paths the
+  catalogue lists are removed from `data` — the final message of a run, an approval's title,
+  description, command, choices and answer, a task's title, description, summary and reasons, a
+  scheduled run's output, a workflow run's input, a notice's title and body — so ids, states,
+  times and usage remain. With it on, `data` is the payload whole and valid against its schema.
+- **Who receives what.** A webhook's `profiles` lists where its events come from; empty means
+  every profile **its creator may enter**, and that is checked at each event, so a webhook is
+  never a way to read a profile its creator cannot open. Naming a profile the caller cannot enter
+  is `400 bad_request` with `details.reason = profile_not_allowed`.
+- **Delivery is a queue in `webhook_deliveries`.** An event writes one `queued` row per webhook
+  and returns; a timer sends what is due, up to ten at a time. A failed attempt (anything but a
+  `2xx`, a redirect, no answer within 10 s, or an address that now resolves somewhere private) is
+  `failed` with `next_attempt_at` set, retried after 30 s, 60 s, 120 s … doubling, at most one
+  hour apart, `max_retries` times (default **5**, 0–10); then it is `dead`. The row is leased
+  (its `next_attempt_at` pushed past the deadline) while it is sent, so a hub that stops mid-send
+  retries it after starting; what was due at a restart is sent after it.
+- **The address is checked at every attempt** and the socket connects to the address that was
+  checked (DNS rebinding), not to a second lookup; redirects are not followed.
+- **Redelivery**: `POST /notify/webhooks/{id}/deliveries/{delivery_id}/redeliver` queues a new
+  delivery with the same body and answers it (`202 WebhookDelivery`); only a `dead` one or a
+  `failed` one with no retry pending (`409 state_invalid` otherwise). `WebhookDelivery` gains
+  `next_attempt_at`. The test delivery takes the same path, once, without retries, with an empty
+  `data`.
+
+Not done here: a per-webhook timeout (the 10 s is the hub's; a setting would need a column), and
+`task.moved` from the board's move route still carries only `task` (its schema also requires
+`from`, `to` and `actor`) — a tasks fix of its own.
+
+Rejected: forwarding every realtime event (a webhook subscribed to `message.delta` is a flood,
+and a generic list could not say which fields are content); a generic key blacklist for content
+(it would miss fields and remove harmless ones); retrying in memory only (a restart would lose
+what was waiting).
