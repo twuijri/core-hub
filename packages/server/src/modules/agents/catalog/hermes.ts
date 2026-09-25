@@ -45,4 +45,6 @@ export const hermes: CatalogEntry = {
     'journey',
     'settings',
   ],
+  // Its TUI gateway reports every delegation and takes stop, steer and tail (§47).
+  subagents: 'full',
 };

@@ -40,6 +40,8 @@ import type {
   RunnerRunAccepted,
   RunnerRunInput,
   RunnerRunRequest,
+  RunnerSubagentControl,
+  RunnerSubagentSignal,
   RunnerToolKind,
 } from './ports.js';
 import type { AgentsService } from './service.js';
@@ -58,6 +60,8 @@ interface LiveSession {
   adapterKind: string;
   /** The hub session the agent session serves; the map key, kept for logging. */
   sessionId: string;
+  /** Stops forwarding its subagent reports (§47). */
+  unwatch: () => void;
 }
 
 interface LiveRun {
@@ -82,6 +86,9 @@ export interface AgentRunnerDeps {
 export class AgentRunner implements AgentRunnerPort {
   private readonly sessions = new Map<string, LiveSession>();
   private readonly runs = new Map<string, LiveRun>();
+  private readonly subagentListeners = new Set<
+    (sessionId: string, signal: RunnerSubagentSignal) => void
+  >();
 
   constructor(private readonly deps: AgentRunnerDeps) {}
 
@@ -107,6 +114,7 @@ export class AgentRunner implements AgentRunnerPort {
       // Its process went away between turns — a Hermes TUI gateway retired after a key
       // change and closed once idle: reopen by the stored ref rather than hand the turn to
       // a session that can only refuse it ("Hermes session is closed").
+      live.unwatch();
       this.sessions.delete(request.sessionId);
       live = undefined;
     }
@@ -119,7 +127,14 @@ export class AgentRunner implements AgentRunnerPort {
         reasoningEffort: request.reasoningEffort,
       });
       const session = await adapter.start(target);
-      live = { session, adapterKind: row.adapterKind, sessionId: request.sessionId };
+      const sessionId = request.sessionId;
+      // A subagent's reports are the conversation's, not the turn's: forwarded as they come,
+      // between turns too (Hermes's asynchronous delegation).
+      const unwatch =
+        session.subagents?.watch((signal) => {
+          for (const listener of this.subagentListeners) listener(sessionId, signal);
+        }) ?? (() => undefined);
+      live = { session, adapterKind: row.adapterKind, sessionId, unwatch };
       this.sessions.set(request.sessionId, live);
     }
 
@@ -294,6 +309,25 @@ export class AgentRunner implements AgentRunnerPort {
     return text.trim() === '' ? null : text;
   }
 
+  onSubagent(listener: (sessionId: string, signal: RunnerSubagentSignal) => void): () => void {
+    this.subagentListeners.add(listener);
+    return () => this.subagentListeners.delete(listener);
+  }
+
+  subagents(sessionId: string): RunnerSubagentControl | null {
+    const live = this.sessions.get(sessionId);
+    const control = live && !isClosed(live.session) ? live.session.subagents : undefined;
+    if (!control) return null;
+    // Only the verbs: `watch` stays here, where every report is already forwarded.
+    return {
+      support: control.support,
+      ...(control.list ? { list: () => control.list!() } : {}),
+      ...(control.interrupt ? { interrupt: (id: string) => control.interrupt!(id) } : {}),
+      ...(control.steer ? { steer: (id: string, text: string) => control.steer!(id, text) } : {}),
+      ...(control.tail ? { tail: (id: string) => control.tail!(id) } : {}),
+    };
+  }
+
   /** Shutdown: end every live agent session (ACP children exit, Hermes streams close). */
   async closeAll(): Promise<void> {
     const open = [...this.sessions.values()];
@@ -380,6 +414,7 @@ export class AgentRunner implements AgentRunnerPort {
     // A session whose process died is not reusable; forget it so the next turn opens a
     // fresh one (an ACP child, or the Hermes TUI gateway). Hermes's HTTP sessions stay.
     if (isClosed(run.live.session)) {
+      if (this.sessions.get(run.sessionId) === run.live) run.live.unwatch();
       this.sessions.delete(run.sessionId);
     }
   }

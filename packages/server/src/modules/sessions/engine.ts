@@ -69,6 +69,7 @@ import {
 } from './run-reducer.js';
 import type { SessionsRealtime } from './realtime.js';
 import type { SessionsStore } from './store.js';
+import type { SubagentScope } from './subagents.js';
 import { preview } from './store.js';
 import type { MessagePart } from './schema.js';
 
@@ -98,6 +99,8 @@ export interface EngineDeps {
   realtime: SessionsRealtime;
   ports: SessionsPorts;
   log: FastifyBaseLogger;
+  /** Told where each conversation lives when a run of it starts (§47). */
+  subagents?: { remember(sessionId: string, scope: SubagentScope): void };
 }
 
 export class RunEngine {
@@ -160,6 +163,12 @@ export class RunEngine {
 
   isActive(runId: string): boolean {
     return this.active.has(runId);
+  }
+
+  /** The run going on in a session right now, if any. */
+  activeRunOf(sessionId: string): string | null {
+    for (const run of this.active.values()) if (run.sessionId === sessionId) return run.runId;
+    return null;
   }
 
   /** Ask the adapter to stop; the stream ends on its own afterwards. */
@@ -312,6 +321,12 @@ export class RunEngine {
     }
 
     audit.startJob(runRow.jobId);
+    // The conversation's subagents are told to its profile, and belong to its owner (§47).
+    this.deps.subagents?.remember(session.id, {
+      workspace: scope.workspace,
+      profile: scope.profile,
+      ownerId: session.ownerId,
+    });
 
     // The assistant message shell: it exists before the first delta so every
     // delta has a message to append to (contract: run.started).

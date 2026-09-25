@@ -31,6 +31,14 @@ import { createInterface } from 'node:readline';
 import type { AgentCapability } from '../schema.js';
 import { entriesFor, type CatalogEntry } from '../catalog/index.js';
 import { EventQueue } from './event-queue.js';
+import {
+  SubagentSignals,
+  acpDelegationAgent,
+  acpDelegationGoal,
+  acpParentToolRef,
+  isAcpDelegation,
+  type SubagentControl,
+} from './subagents.js';
 import { parseVersion, runCommand, whichSync, type HostEnvironment } from './host.js';
 import type {
   AgentAdapter,
@@ -128,6 +136,18 @@ export class AcpSession implements AgentSession {
   private readonly approvals = new Map<string, number | string>();
   private nextId = 1;
   private closed = false;
+  private readonly subagentSignals = new SubagentSignals();
+  /** Tool calls that are delegations, by their id: the subagent is the call (§47). */
+  private readonly delegations = new Map<string, { goal: string | null }>();
+
+  /**
+   * What an ACP agent's stream says about its delegations: that one started, what it was asked,
+   * and that it ended — `observe`, nothing more (contract decision §47).
+   */
+  readonly subagents: SubagentControl = {
+    support: 'observe',
+    watch: (listener) => this.subagentSignals.watch(listener),
+  };
 
   private constructor(transport: AcpTransport, sessionId: string) {
     this.transport = transport;
@@ -177,6 +197,7 @@ export class AcpSession implements AgentSession {
       }
       this.pending.clear();
       this.closed = true;
+      this.subagentSignals.endAll(reason);
       this.queue.end();
     });
   }
@@ -252,17 +273,24 @@ export class AcpSession implements AgentSession {
       case 'agent_thought_chunk':
         if (text) this.queue.push({ type: 'reasoning.delta', text });
         return;
-      case 'tool_call':
+      case 'tool_call': {
+        const id = String(update.toolCallId ?? '');
+        const parent = acpParentToolRef(update);
         this.queue.push({
           type: 'tool.started',
-          id: String(update.toolCallId ?? ''),
+          id,
           title: String(update.title ?? update.kind ?? 'tool'),
           kind: String(update.kind ?? 'other'),
+          // A subagent's own call, where the bridge says whose it is.
+          ...(parent && this.delegations.has(parent) ? { subagentId: parent } : {}),
           raw: update,
         });
+        this.trackDelegation(id, update);
         return;
+      }
       case 'tool_call_update': {
         const status = String(update.status ?? '');
+        this.trackDelegation(String(update.toolCallId ?? ''), update);
         const output = contentText(update.content) ?? contentText(update.rawOutput);
         if (status === 'failed') {
           this.queue.push({
@@ -296,6 +324,45 @@ export class AcpSession implements AgentSession {
         // Updates the hub does not model yet (usage, modes, commands) are dropped, not
         // guessed at; the terminal `run.completed` still carries the outcome.
         return;
+    }
+  }
+
+  /**
+   * A delegation starts with its tool call, learns its goal when the arguments arrive (OpenCode
+   * sends them in a later update) and ends with the call.
+   */
+  private trackDelegation(id: string, update: Record<string, unknown>): void {
+    if (!id) return;
+    const known = this.delegations.get(id);
+    if (!known && !isAcpDelegation(update)) return;
+    const goal = acpDelegationGoal(update);
+    const agent = acpDelegationAgent(update);
+    const status = String(update.status ?? '');
+    if (!known) {
+      this.delegations.set(id, { goal });
+      this.subagentSignals.emit({
+        phase: 'started',
+        id,
+        parentId: null,
+        depth: 0,
+        goal,
+        model: agent,
+        toolCount: null,
+        acceptingSteer: false,
+        toolCallRef: id,
+      });
+    } else if (goal && goal !== known.goal) {
+      known.goal = goal;
+      this.subagentSignals.emit({ phase: 'updated', id, goal, ...(agent ? { model: agent } : {}) });
+    }
+    if (status === 'completed' || status === 'failed') {
+      this.subagentSignals.emit({
+        phase: 'completed',
+        id,
+        status: status === 'completed' ? 'completed' : 'failed',
+        summary: contentText(update.content) ?? contentText(update.rawOutput),
+        acceptingSteer: false,
+      });
     }
   }
 
@@ -338,6 +405,8 @@ export class AcpSession implements AgentSession {
       10 * 60_000,
     )) as { stopReason?: string };
     const stopReason = result.stopReason ?? 'completed';
+    // An ACP delegation lives inside its turn: one the stream never closed ends with it.
+    this.subagentSignals.endAll();
     this.queue.push({ type: 'run.completed', stopReason });
     return { stopReason };
   }
@@ -353,6 +422,7 @@ export class AcpSession implements AgentSession {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    this.subagentSignals.endAll();
     this.queue.end();
     this.transport.close();
   }

@@ -32,6 +32,8 @@ export interface AgentInfo {
   available: boolean;
   /** Machine-readable reason for `available: false` (`not_installed`, `stopped`, …). */
   unavailableReason?: string;
+  /** What it lets a person do with its subagents (§47); absent is `none`. */
+  subagents?: 'full' | 'observe' | 'none';
 }
 
 export interface AgentDirectory {
@@ -235,6 +237,50 @@ export interface AgentRunner {
    * hub that cannot name a session prettily still names it.
    */
   ask?(request: AgentAskRequest): Promise<string | null>;
+  /**
+   * Optional (contract decision §47): every report about a subagent of any live conversation,
+   * named by the hub session it belongs to. A runner without it has no subagents to tell of.
+   */
+  onSubagent?(listener: (sessionId: string, signal: AgentSubagentSignal) => void): () => void;
+  /** What the live conversation lets a person do with its subagents; `null` when nothing. */
+  subagents?(sessionId: string): AgentSubagentControl | null;
+}
+
+/** One report about one subagent; absent fields are "not said". */
+export interface AgentSubagentSignal {
+  phase: 'started' | 'updated' | 'tool' | 'completed';
+  id: string;
+  parentId?: string | null;
+  depth?: number | null;
+  goal?: string | null;
+  model?: string | null;
+  toolName?: string | null;
+  toolPreview?: string | null;
+  toolCount?: number | null;
+  status?: 'completed' | 'failed' | 'interrupted';
+  summary?: string | null;
+  acceptingSteer?: boolean;
+  toolCallRef?: string | null;
+}
+
+export interface AgentLiveSubagent {
+  id: string;
+  parentId: string | null;
+  depth: number;
+  goal: string;
+  model: string | null;
+  startedAt: number | null;
+  toolCount: number | null;
+  lastTool: string | null;
+  acceptingSteer: boolean;
+}
+
+export interface AgentSubagentControl {
+  readonly support: 'full' | 'observe';
+  list?(): Promise<AgentLiveSubagent[]>;
+  interrupt?(id: string): Promise<boolean>;
+  steer?(id: string, text: string): Promise<'queued' | 'rejected'>;
+  tail?(id: string): Promise<{ available: boolean; text: string; truncated: boolean }>;
 }
 
 /**

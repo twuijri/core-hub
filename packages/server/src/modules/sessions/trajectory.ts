@@ -21,12 +21,13 @@ import type { UsageTotals } from '../audit/index.js';
 import { toToolCall, type MessageRow, type RunRow, type ToolCallRow } from './mappers.js';
 import type { RunState } from './run-reducer.js';
 import type { RunTiming } from './schema.js';
+import { toSubagent, type SubagentRecord } from './subagents.js';
 
 /** A recorded turn, as stored on the run or held by the engine for a live one. */
 type TurnRecord = RunTiming['turns'][number];
 
-export type TrajectoryStepKind = 'input' | 'turn' | 'reasoning' | 'tool';
-export type TrajectoryLane = 'input' | 'model' | 'tools';
+export type TrajectoryStepKind = 'input' | 'turn' | 'reasoning' | 'tool' | 'subagent';
+export type TrajectoryLane = 'input' | 'model' | 'tools' | 'subagents';
 export type TrajectoryStepStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
 
 export interface TrajectoryStep {
@@ -44,6 +45,8 @@ export interface TrajectoryStep {
   tool_call_only: boolean;
   first_token_ms: number | null;
   tool_call: Record<string, unknown> | null;
+  /** The subagent of a `subagent` step (§47). */
+  subagent?: ReturnType<typeof toSubagent>;
 }
 
 export interface TrajectoryMetrics {
@@ -83,6 +86,8 @@ export interface TrajectorySource {
   usage: ReadonlyMap<string, UsageTotals>;
   /** The engine's state of each run that is still active. */
   live: ReadonlyMap<string, RunState>;
+  /** The conversation's subagents (§47); none when absent. */
+  subagents?: readonly SubagentRecord[];
   now: number;
 }
 
@@ -165,6 +170,8 @@ export function buildTrajectory(source: TrajectorySource): Trajectory {
     if (!built.facts.timed) untimedTurns += 1;
     steps.push(...built.steps);
   }
+
+  placeSubagents(steps, source.subagents ?? [], Math.max(exchange, 1));
 
   const timedRuns = [...facts.values()].filter((f) => f.timed).length;
   const timing: Trajectory['timing'] =
@@ -343,7 +350,13 @@ function runSteps(
     pieces.sort((a, b) => (a.place as number) - (b.place as number) || a.order - b.order);
   } else if (turns !== null) {
     // Turns recorded without their place: by time, a turn first at the same instant.
-    const rank: Record<TrajectoryStepKind, number> = { input: 0, reasoning: 1, turn: 2, tool: 3 };
+    const rank: Record<TrajectoryStepKind, number> = {
+      input: 0,
+      reasoning: 1,
+      turn: 2,
+      tool: 3,
+      subagent: 4,
+    };
     pieces.sort(
       (a, b) =>
         (a.at ?? Number.MAX_SAFE_INTEGER) - (b.at ?? Number.MAX_SAFE_INTEGER) ||
@@ -499,4 +512,60 @@ function metricsOf(
     input_tokens: input > 0 ? input : null,
     output_tokens: output > 0 ? output : null,
   };
+}
+
+const SUBAGENT_STATUS: Record<SubagentRecord['status'], TrajectoryStepStatus> = {
+  running: 'running',
+  completed: 'succeeded',
+  failed: 'failed',
+  interrupted: 'cancelled',
+};
+
+/**
+ * Subagents get a lane of their own (§47): every tool call a subagent made moves there, and each
+ * subagent is one step from its start to its end, placed after the last step of its run that
+ * began before it (or at the end, for one that started between runs).
+ */
+function placeSubagents(
+  steps: TrajectoryStep[],
+  subagents: readonly SubagentRecord[],
+  lastExchange: number,
+): void {
+  for (const step of steps) {
+    if (step.kind === 'tool' && step.tool_call && step.tool_call.subagent_id) {
+      step.lane = 'subagents';
+    }
+  }
+  const ordered = [...subagents].sort((a, b) => a.startedAt - b.startedAt);
+  for (const record of ordered) {
+    let at = -1;
+    let exchange = lastExchange;
+    steps.forEach((step, index) => {
+      const sameRun = record.runId === null || step.run_id === record.runId;
+      const before = step.started_at === null || Date.parse(step.started_at) <= record.startedAt;
+      if (!sameRun || !before) return;
+      at = index;
+      exchange = step.exchange;
+    });
+    const ended = record.finishedAt;
+    const step: TrajectoryStep = {
+      id: `subagent:${record.id}`,
+      kind: 'subagent',
+      lane: 'subagents',
+      exchange,
+      run_id: record.runId,
+      message_id: null,
+      status: SUBAGENT_STATUS[record.status],
+      started_at: isoMs(record.startedAt),
+      ended_at: isoMs(ended),
+      duration_ms: ended === null ? null : Math.max(0, ended - record.startedAt),
+      text: record.goal,
+      tool_call_only: false,
+      first_token_ms: null,
+      tool_call: null,
+      subagent: toSubagent(record),
+    };
+    if (at < 0) steps.push(step);
+    else steps.splice(at + 1, 0, step);
+  }
 }

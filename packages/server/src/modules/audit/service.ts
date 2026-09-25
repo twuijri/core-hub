@@ -340,6 +340,27 @@ export class AuditService {
     return pageOf(rows, limit, (row) => row);
   }
 
+  /**
+   * The Background panel's jobs (§47): one person's, in these workspaces — every one still
+   * queued or running, and the ones that ended at or after `since`.
+   */
+  backgroundJobs(ownerId: string, workspaces: readonly string[], since: number): JobRow[] {
+    if (workspaces.length === 0) return [];
+    return this.db
+      .select()
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.ownerId, ownerId),
+          inArray(jobs.workspace, [...workspaces]),
+          sql`(${jobs.status} in ('queued', 'running', 'cancelling') or ${jobs.finishedAt} >= ${since})`,
+        ),
+      )
+      .orderBy(desc(jobs.id))
+      .limit(500)
+      .all();
+  }
+
   appendJobEvent(jobId: string, message: string, level: 'info' | 'error' | 'progress'): void {
     const row = this.job(jobId);
     if (!row) return;

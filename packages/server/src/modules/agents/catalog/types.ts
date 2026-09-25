@@ -83,6 +83,11 @@ export interface CatalogEntry {
   defaultEndpoint?: string;
   capabilities: AgentCapability[];
   sections: AgentSection[];
+  /**
+   * What the agent lets a person do with the subagents it delegates to (contract decision
+   * §47), as its protocol actually carries it — checked against the pinned version.
+   */
+  subagents: 'full' | 'observe' | 'none';
 }
 
 /** The pinned version an entry should be at, or null when the hub does not install it. */

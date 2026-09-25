@@ -167,6 +167,8 @@ export interface AgentInfo {
   available: boolean;
   /** Machine-readable reason for `available: false` (`not_installed`, `stopped`, …). */
   unavailableReason?: string;
+  /** What it lets a person do with its subagents (§47); absent is `none`. */
+  subagents?: 'full' | 'observe' | 'none';
 }
 
 export interface AgentDirectoryPort {
@@ -298,4 +300,45 @@ export interface AgentRunnerPort {
   send(runId: string, input: RunnerRunInput): Promise<void>;
   interrupt(runId: string): Promise<void>;
   ask(request: RunnerAskRequest): Promise<string | null>;
+  /** Every subagent report of every live conversation, by hub session id (§47). */
+  onSubagent(listener: (sessionId: string, signal: RunnerSubagentSignal) => void): () => void;
+  /** What the live conversation lets a person do with its subagents; `null` when none. */
+  subagents(sessionId: string): RunnerSubagentControl | null;
+}
+
+/** `adapters/subagents.ts` `SubagentSignal`, restated for `sessions` (see above). */
+export interface RunnerSubagentSignal {
+  phase: 'started' | 'updated' | 'tool' | 'completed';
+  id: string;
+  parentId?: string | null;
+  depth?: number | null;
+  goal?: string | null;
+  model?: string | null;
+  toolName?: string | null;
+  toolPreview?: string | null;
+  toolCount?: number | null;
+  status?: 'completed' | 'failed' | 'interrupted';
+  summary?: string | null;
+  acceptingSteer?: boolean;
+  toolCallRef?: string | null;
+}
+
+export interface RunnerLiveSubagent {
+  id: string;
+  parentId: string | null;
+  depth: number;
+  goal: string;
+  model: string | null;
+  startedAt: number | null;
+  toolCount: number | null;
+  lastTool: string | null;
+  acceptingSteer: boolean;
+}
+
+export interface RunnerSubagentControl {
+  readonly support: 'full' | 'observe';
+  list?(): Promise<RunnerLiveSubagent[]>;
+  interrupt?(id: string): Promise<boolean>;
+  steer?(id: string, text: string): Promise<'queued' | 'rejected'>;
+  tail?(id: string): Promise<{ available: boolean; text: string; truncated: boolean }>;
 }

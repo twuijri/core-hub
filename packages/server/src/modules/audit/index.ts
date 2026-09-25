@@ -23,7 +23,14 @@ import { createContractIndex } from '../../lib/contract.js';
 import { defineModule, REALTIME_NAMESPACES } from '../../lib/module.js';
 import { createRealtime, type Realtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
-import { requireRole, requireUser, requireWorkspace } from '../auth/index.js';
+import { listWorkspacesFor, requireRole, requireUser, requireWorkspace } from '../auth/index.js';
+import {
+  FINISHED_WINDOW_MS,
+  backgroundSourcesFor,
+  jobItem,
+  mergeBackground,
+  type BackgroundItem,
+} from './background.js';
 import { createJobRunner, type JobRunner } from './jobs.js';
 import { ReportService, type LogLevel, type ReportKind } from './reports.js';
 import { AuditService, serializeJob } from './service.js';
@@ -42,6 +49,14 @@ export type {
   UsageWrite,
 } from './service.js';
 export { createJobRunner } from './jobs.js';
+export { registerBackgroundSource } from './background.js';
+export type {
+  BackgroundCaller,
+  BackgroundItem,
+  BackgroundKind,
+  BackgroundSource,
+  BackgroundStatus,
+} from './background.js';
 export { ReportService, isoDate, moneyOf, windowOf } from './reports.js';
 export type { LogLevel, Report, ReportKind, ReportRequest } from './reports.js';
 export type { JobHandle, JobRunner, JobWorker, NewJob } from './jobs.js';
@@ -184,6 +199,78 @@ export const auditModule = defineModule({
         const row = context.runner.cancel(scope.id, id);
         if (!row) throw notFound({ resource: 'job', id });
         return serializeJob(row, scope.slug);
+      },
+    });
+
+    // ------------------------------------------------ the Background panel (§47)
+
+    defineRoute(app, deps, {
+      operationId: 'background.list',
+      handler: (request, { query }) => {
+        const scope = scopeOf(request);
+        const user = request.principal?.user;
+        if (!user) throw new HubError('unauthorized');
+        const context = contextOf(request.server);
+        // `profiles=all`: every workspace this person may enter — `auth`'s rule, never a list
+        // the client sends; the header was already checked by `requireWorkspace`.
+        const workspaces = new Map<string, string>([[scope.id, scope.slug]]);
+        if (query.profiles === 'all') {
+          for (const row of listWorkspacesFor(requireSqlite(request.server.hub.database), user)) {
+            workspaces.set(row.id, row.slug);
+          }
+        }
+        for (const [id, slug] of workspaces) context.audit.rememberWorkspace(id, slug);
+        const since = Date.now() - FINISHED_WINDOW_MS;
+        const caller = {
+          userId: user.id,
+          workspaces: [...workspaces].map(([id, slug]) => ({ id, slug })),
+        };
+        const items: BackgroundItem[] = [];
+        for (const row of context.audit.backgroundJobs(user.id, [...workspaces.keys()], since)) {
+          const item = jobItem(row, workspaces.get(row.workspace ?? '') ?? scope.slug);
+          if (item) items.push(item);
+        }
+        for (const source of backgroundSourcesFor(request.server)) {
+          items.push(...source.list(caller, since));
+        }
+        return mergeBackground(items);
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'background.stop',
+      handler: async (request, { params }) => {
+        const scope = scopeOf(request);
+        const user = request.principal?.user;
+        if (!user) throw new HubError('unauthorized');
+        const id = String(params.item_id);
+        const prefix = id.slice(0, id.indexOf(':'));
+        if (prefix === 'job') {
+          const context = contextOf(request.server);
+          const jobId = id.slice(4);
+          const row = context.audit.jobIn(scope.id, jobId);
+          const item = row && row.ownerId === user.id ? jobItem(row, scope.slug) : null;
+          if (!row || !item) throw notFound({ resource: 'background_item', id });
+          if (item.status !== 'queued' && item.status !== 'running') {
+            throw new HubError('state_invalid', { details: { reason: 'finished' } });
+          }
+          if (!item.stoppable) {
+            throw new HubError('state_invalid', { details: { reason: 'not_stoppable' } });
+          }
+          const after = context.runner.cancel(scope.id, jobId);
+          return (after && jobItem(after, scope.slug)) ?? item;
+        }
+        const source = backgroundSourcesFor(request.server).find((candidate) =>
+          candidate.prefixes.includes(prefix),
+        );
+        const stopped = source
+          ? await source.stop(
+              { userId: user.id, workspace: { id: scope.id, slug: scope.slug } },
+              id,
+            )
+          : null;
+        if (!stopped) throw notFound({ resource: 'background_item', id });
+        return stopped;
       },
     });
 
