@@ -97,7 +97,8 @@
             "settings"
           ],
           "default_model": null,
-          "limited": false
+          "limited": false,
+          "subagents": "full"
         }
       }
     }
@@ -123,7 +124,8 @@
             "capabilities",
             "sections",
             "default_model",
-            "limited"
+            "limited",
+            "subagents"
           ],
           "properties": {
             "slug": {
@@ -179,6 +181,9 @@
             "limited": {
               "type": "boolean",
               "description": "True for the process harness — the UI marks the agent \"limited\"."
+            },
+            "subagents": {
+              "$ref": "#/$defs/SubagentSupport"
             }
           }
         }
@@ -379,6 +384,11 @@
           "$ref": "#/$defs/Timestamp"
         }
       }
+    },
+    "SubagentSupport": {
+      "type": "string",
+      "enum": ["full", "observe", "none"],
+      "description": "What an agent lets a person do with the subagents it delegates to (contract decision\n§47). `full` — see them live, stop one, steer one while it takes guidance, read its\noutput (Hermes); `observe` — see them start and end, nothing more (a coding agent whose\nstream names its delegations); `none` — the agent never says it delegated.\n"
     },
     "Timestamp": {
       "type": "string",

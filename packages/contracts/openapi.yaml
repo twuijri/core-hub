@@ -181,6 +181,130 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /background:
+    get:
+      operationId: background.list
+      tags: [jobs]
+      summary: What is running for the person, and what finished in the last day
+      description: |
+        The Background panel (contract decision §47): everything working for the caller — their
+        chat runs, task runs, schedule runs, workflow runs, jobs (exports, imports, plugin
+        installs, channel logins and the rest) and the subagents of their conversations — in one
+        list. `running` holds what is queued or running, oldest first; `finished` what ended in
+        the last 24 hours, newest first, at most 50. With `profiles=all` it covers every profile
+        the caller may enter (the server decides which); each item names its `profile`. An item
+        is the caller's own work: a run they started or a schedule of theirs fired, a job they
+        asked for, a subagent of their conversation. A subagent that finished before the hub last
+        started is not in `finished`.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - name: profiles
+          in: query
+          description: >-
+            `all` covers every profile the caller may enter instead of the one in the header.
+          schema:
+            type: string
+            enum: [all]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The caller's background work.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackgroundList'
+              example:
+                running:
+                  - id: 'run:01J8QK3ZR2W7M5N4P6T8V9X0RN'
+                    kind: chat_run
+                    job_kind: null
+                    title: 'خطة إطلاق التطبيق'
+                    profile: work
+                    status: running
+                    started_at: '2026-09-21T10:15:01Z'
+                    finished_at: null
+                    stoppable: true
+                    session_id: 01J8QK3ZR2W7M5N4P6T8V9X0YA
+                    resource:
+                      kind: run
+                      id: 01J8QK3ZR2W7M5N4P6T8V9X0RN
+                  - id: 'subagent:01J8QK3ZR2W7M5N4P6T8V9X0YA:sa-2-7f3c'
+                    kind: subagent
+                    job_kind: null
+                    title: 'راجع ملفات الاختبارات واذكر ما ينقصها'
+                    profile: work
+                    status: running
+                    started_at: '2026-09-21T10:15:05Z'
+                    finished_at: null
+                    stoppable: true
+                    session_id: 01J8QK3ZR2W7M5N4P6T8V9X0YA
+                    resource: null
+                finished:
+                  - id: 'job:01J8QK3ZR2W7M5N4P6T8V9X0JB'
+                    kind: job
+                    job_kind: export
+                    title: 'تصدير البروفايل work'
+                    profile: work
+                    status: succeeded
+                    started_at: '2026-09-21T09:40:00Z'
+                    finished_at: '2026-09-21T09:41:12Z'
+                    stoppable: false
+                    session_id: null
+                    resource:
+                      kind: profile
+                      id: 01J8QK3ZR2W7M5N4P6T8V9X0PF
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /background/{item_id}/stop:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - name: item_id
+        in: path
+        required: true
+        description: A `BackgroundItem.id`; the header names the item's own `profile`.
+        schema:
+          type: string
+          pattern: '^(run|workflow_run|job|subagent):[A-Za-z0-9._:-]{1,200}$'
+    post:
+      operationId: background.stop
+      tags: [jobs]
+      summary: Stop one background item
+      description: |
+        Stops it the way its own screen would: a run as the chat's Stop does (`run.cancelled`), a
+        workflow run as its Cancel does, a job through `jobs.cancel`, a subagent through
+        `sessions.interruptSubagent`. The answer is the item after the request — it may still
+        read `running` for a moment. `409 state_invalid` when it has finished or cannot be
+        stopped (`details.reason = finished | not_stoppable`).
+      x-rt-events: [run.cancelled, workflow_run.cancelled, job.cancelled, subagent.completed]
+      responses:
+        '200':
+          description: The item after the request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackgroundItem'
+              example:
+                id: 'run:01J8QK3ZR2W7M5N4P6T8V9X0RN'
+                kind: task_run
+                job_kind: null
+                title: 'حدّث صفحة الأسعار'
+                profile: work
+                status: running
+                started_at: '2026-09-21T10:15:01Z'
+                finished_at: null
+                stoppable: false
+                session_id: 01J8QK3ZR2W7M5N4P6T8V9X0YA
+                resource:
+                  kind: task
+                  id: 01J8QK3ZR2W7M5N4P6T8V9X0TK
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /jobs/{job_id}:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -2883,6 +3007,173 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
   # ---------------------------------------------------------------- approvals
+  /sessions/{session_id}/subagents:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      operationId: sessions.listSubagents
+      tags: [sessions]
+      summary: List the subagents a conversation's agent delegated to
+      description: |
+        Every subagent the conversation's agent started (contract decision §47): the ones still
+        running first, then the finished ones, newest first. `support` says what the agent lets a
+        person do with them — `full` (stop, steer, read the live output: Hermes), `observe` (see
+        them come and go, nothing else: a coding agent whose stream names its delegations) or
+        `none` (the agent never says; the list is always empty). Finished subagents are kept on
+        the conversation (the last 50); one that was running when the hub restarted reads as
+        `interrupted`. Live changes arrive as `subagent.*` on `/rt/sessions`.
+      x-rt-events: []
+      responses:
+        '200':
+          description: The conversation's subagents.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubagentList'
+              example:
+                support: full
+                items:
+                  - id: sa-2-7f3c
+                    session_id: 01J8QK3ZR2W7M5N4P6T8V9X0YA
+                    run_id: 01J8QK3ZR2W7M5N4P6T8V9X0RN
+                    parent_id: null
+                    depth: 0
+                    goal: 'راجع ملفات الاختبارات واذكر ما ينقصها'
+                    model: claude-sonnet-4.6
+                    status: running
+                    started_at: '2026-09-21T10:15:05Z'
+                    finished_at: null
+                    tool_count: 3
+                    last_tool: read_file
+                    accepting_steer: true
+                    summary: null
+                    tools:
+                      - name: search_files
+                        preview: 'tests/**/*.test.ts'
+                        at: '2026-09-21T10:15:06Z'
+                      - name: read_file
+                        preview: 'tests/unit/status.test.ts'
+                        at: '2026-09-21T10:15:09Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /sessions/{session_id}/subagents/{subagent_id}/interrupt:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/SubagentId'
+    post:
+      operationId: sessions.interruptSubagent
+      tags: [sessions]
+      summary: Stop one running subagent
+      description: |
+        Asks the agent to stop this subagent alone; the conversation's run goes on and hears
+        that the subagent was stopped. The answer is the subagent as it stands — still `running`
+        for a moment, until the agent confirms with `subagent.completed` (`interrupted`).
+        `409 state_invalid` when it has already finished (`details.reason = finished`) or the
+        agent cannot stop subagents (`details.reason = unsupported`).
+      x-rt-events: [subagent.completed]
+      responses:
+        '200':
+          description: The subagent after the request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subagent'
+              example:
+                id: sa-2-7f3c
+                session_id: 01J8QK3ZR2W7M5N4P6T8V9X0YA
+                run_id: 01J8QK3ZR2W7M5N4P6T8V9X0RN
+                parent_id: null
+                depth: 0
+                goal: 'راجع ملفات الاختبارات واذكر ما ينقصها'
+                model: claude-sonnet-4.6
+                status: running
+                started_at: '2026-09-21T10:15:05Z'
+                finished_at: null
+                tool_count: 3
+                last_tool: read_file
+                accepting_steer: false
+                summary: null
+                tools: []
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /sessions/{session_id}/subagents/{subagent_id}/steer:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/SubagentId'
+    post:
+      operationId: sessions.steerSubagent
+      tags: [sessions]
+      summary: Give a running subagent guidance
+      description: |
+        Hands the subagent a note it reads before its next step; the step it is in is never cut
+        short. `queued` is not "read": a subagent past its last step never sees it, and the agent
+        may say so in its own reply. `rejected` when the agent no longer takes guidance for it.
+        Only where `accepting_steer` is true; otherwise `409 state_invalid`
+        (`details.reason = not_accepting_steer` or `unsupported`).
+      x-rt-events: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubagentSteer'
+            example:
+              text: 'ركّز على اختبارات الخادم فقط'
+      responses:
+        '200':
+          description: What the agent did with the note.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubagentSteerResult'
+              example:
+                status: queued
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /sessions/{session_id}/subagents/{subagent_id}/tail:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/SubagentId'
+    get:
+      operationId: sessions.tailSubagent
+      tags: [sessions]
+      summary: Read the end of a running subagent's own transcript
+      description: |
+        The last part (up to 16 KB) of what the subagent has written so far, as the agent keeps
+        it. `available: false` when the agent has nothing to show — it is starting, it already
+        finished, or the agent keeps no such transcript (`support` other than `full`).
+      x-rt-events: []
+      responses:
+        '200':
+          description: The end of the subagent's transcript.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubagentTail'
+              example:
+                available: true
+                text: "قرأت tests/unit/status.test.ts\nينقصه اختبار لحالة الخطأ 409"
+                truncated: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /approvals:
     get:
       operationId: sessions.listApprovals
@@ -3588,6 +3879,7 @@ paths:
                       provider_id: 01J8QK3ZR2W7M5N4P6T8V9X0PV
                       model: claude-sonnet-4-5
                     limited: false
+                    subagents: full
                   - id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
                     profile: work
                     owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
@@ -3624,6 +3916,7 @@ paths:
                     sections: [skills, mcp, settings]
                     default_model: null
                     limited: false
+                    subagents: observe
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -3707,6 +4000,7 @@ paths:
                 sections: [skills, mcp, settings]
                 default_model: null
                 limited: false
+                subagents: observe
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3768,6 +4062,7 @@ paths:
                 sections: [skills, mcp, settings]
                 default_model: null
                 limited: false
+                subagents: observe
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -12366,6 +12661,14 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/Ulid'
+    SubagentId:
+      name: subagent_id
+      in: path
+      required: true
+      description: The agent's own id for the subagent (`Subagent.id`).
+      schema:
+        type: string
+        maxLength: 200
     AttachmentId:
       name: attachment_id
       in: path
@@ -14253,15 +14556,17 @@ components:
     # ---------------------------------------------------------------- trajectory
     TrajectoryStepKind:
       type: string
-      enum: [input, turn, reasoning, tool]
+      enum: [input, turn, reasoning, tool, subagent]
       description: |
         `input` is something the person sent; `turn` is the model speaking once (before, between
         or after tool calls); `reasoning` is what the model showed of its thinking in that turn;
-        `tool` is one tool call.
+        `tool` is one tool call; `subagent` is one delegated subagent from start to end (§47).
     TrajectoryLane:
       type: string
-      enum: [input, model, tools]
-      description: The row of the timeline a step is drawn in. `turn` and `reasoning` share `model`.
+      enum: [input, model, tools, subagents]
+      description: >-
+        The row of the timeline a step is drawn in. `turn` and `reasoning` share `model`;
+        `subagents` holds each subagent and every tool call a subagent made (§47).
     TrajectoryStepStatus:
       type: string
       enum: [running, succeeded, failed, cancelled]
@@ -14341,6 +14646,11 @@ components:
             - $ref: '#/components/schemas/ToolCall'
             - type: 'null'
           description: The whole call — arguments and result — for a `tool` step.
+        subagent:
+          oneOf:
+            - $ref: '#/components/schemas/Subagent'
+            - type: 'null'
+          description: The subagent of a `subagent` step (§47); absent or `null` otherwise.
     TrajectoryMetrics:
       type: object
       description: |
@@ -14436,6 +14746,218 @@ components:
         metrics:
           $ref: '#/components/schemas/TrajectoryMetrics'
     # ---------------------------------------------------------------- runs
+    # ------------------------------------------------------------ subagents (§47)
+    SubagentSupport:
+      type: string
+      enum: [full, observe, none]
+      description: |
+        What an agent lets a person do with the subagents it delegates to (contract decision
+        §47). `full` — see them live, stop one, steer one while it takes guidance, read its
+        output (Hermes); `observe` — see them start and end, nothing more (a coding agent whose
+        stream names its delegations); `none` — the agent never says it delegated.
+    SubagentStatus:
+      type: string
+      enum: [running, completed, failed, interrupted]
+    SubagentTool:
+      type: object
+      required: [name, preview, at]
+      properties:
+        name:
+          type: string
+        preview:
+          type: [string, 'null']
+          description: The agent's one-line summary of the call, when it gave one.
+        at:
+          $ref: '#/components/schemas/Timestamp'
+    Subagent:
+      type: object
+      description: |
+        One delegated agent of a conversation. `id` is the agent's own (not a ULID). A nested
+        subagent names the one that started it in `parent_id`; `depth` is 0 for one the
+        conversation's agent started itself.
+      required:
+        [
+          id,
+          session_id,
+          run_id,
+          parent_id,
+          depth,
+          goal,
+          model,
+          status,
+          started_at,
+          finished_at,
+          tool_count,
+          last_tool,
+          accepting_steer,
+          summary,
+          tools,
+        ]
+      properties:
+        id:
+          type: string
+          maxLength: 200
+        session_id:
+          $ref: '#/components/schemas/Ulid'
+        run_id:
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+          description: The run that was going when it started; `null` when none was.
+        parent_id:
+          type: [string, 'null']
+        depth:
+          type: integer
+          minimum: 0
+        goal:
+          type: string
+          description: What it was asked to do, in the agent's words.
+        model:
+          type: [string, 'null']
+        status:
+          $ref: '#/components/schemas/SubagentStatus'
+        started_at:
+          $ref: '#/components/schemas/Timestamp'
+        finished_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        tool_count:
+          type: [integer, 'null']
+          minimum: 0
+          description: Tools it called so far; `null` when the agent does not say (`observe`).
+        last_tool:
+          type: [string, 'null']
+        accepting_steer:
+          type: boolean
+          description: A note sent now would reach it (`sessions.steerSubagent`).
+        summary:
+          type: [string, 'null']
+          description: Its last words when it finished, or why it failed.
+        tools:
+          type: array
+          maxItems: 50
+          description: Its most recent tool calls, oldest first (at most 50).
+          items:
+            $ref: '#/components/schemas/SubagentTool'
+    SubagentList:
+      type: object
+      required: [support, items]
+      properties:
+        support:
+          $ref: '#/components/schemas/SubagentSupport'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Subagent'
+    SubagentSteer:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 4000
+      example:
+        text: 'ركّز على اختبارات الخادم فقط'
+    SubagentSteerResult:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [queued, rejected]
+    SubagentTail:
+      type: object
+      required: [available, text, truncated]
+      properties:
+        available:
+          type: boolean
+        text:
+          type: string
+        truncated:
+          type: boolean
+          description: Only the end is here; the transcript is longer.
+    # ------------------------------------------------------------ background (§47)
+    BackgroundKind:
+      type: string
+      enum: [chat_run, task_run, schedule_run, workflow_run, job, subagent]
+    BackgroundStatus:
+      type: string
+      enum: [queued, running, succeeded, failed, cancelled]
+    BackgroundItem:
+      type: object
+      description: |
+        One piece of work in the Background panel. `id` is `<kind>:<id>` (`run:…`,
+        `workflow_run:…`, `job:…`, `subagent:<session_id>:<subagent id>`) and is what
+        `background.stop` takes. Where it lives: a run or a subagent in its conversation
+        (`session_id`), a task run on its task (`resource.kind = task`), a workflow run on the
+        Schedules page (`resource.kind = workflow_run`), a job on its `resource`.
+      required:
+        [
+          id,
+          kind,
+          job_kind,
+          title,
+          profile,
+          status,
+          started_at,
+          finished_at,
+          stoppable,
+          session_id,
+          resource,
+        ]
+      properties:
+        id:
+          type: string
+        kind:
+          $ref: '#/components/schemas/BackgroundKind'
+        job_kind:
+          oneOf:
+            - $ref: '#/components/schemas/JobKind'
+            - type: 'null'
+          description: The job's kind when `kind = job`.
+        title:
+          type: string
+          description: What it is — a conversation's or task's title, a workflow's name, a
+            subagent's goal, a job's progress line.
+        profile:
+          $ref: '#/components/schemas/ProfileSlug'
+        status:
+          $ref: '#/components/schemas/BackgroundStatus'
+        started_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: '`null` while it waits in a queue.'
+        finished_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        stoppable:
+          type: boolean
+          description: '`background.stop` would stop it now.'
+        session_id:
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+        resource:
+          oneOf:
+            - $ref: '#/components/schemas/ResourceRef'
+            - type: 'null'
+    BackgroundList:
+      type: object
+      required: [running, finished]
+      properties:
+        running:
+          type: array
+          items:
+            $ref: '#/components/schemas/BackgroundItem'
+        finished:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/BackgroundItem'
     RunStatus:
       type: string
       enum: [queued, running, waiting, succeeded, failed, cancelled]
@@ -14880,6 +15402,7 @@ components:
               sections,
               default_model,
               limited,
+              subagents,
             ]
           properties:
             slug:
@@ -14916,6 +15439,8 @@ components:
             limited:
               type: boolean
               description: True for the process harness — the UI marks the agent "limited".
+            subagents:
+              $ref: '#/components/schemas/SubagentSupport'
     AgentPatch:
       type: object
       properties:

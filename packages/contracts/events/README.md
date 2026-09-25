@@ -111,7 +111,7 @@ message.
 ## Catalogue
 
 
-### `/rt/sessions` — 17 events
+### `/rt/sessions` — 20 events
 
 | Event | Emitted by | Payload | Notes |
 |---|---|---|---|
@@ -132,6 +132,9 @@ message.
 | `approval.requested` | sessions module when an adapter asks for a decision; schedules module for workflow-step gates | `approval`: `Approval` | The agent is blocked on a decision. Profile-wide so the pending-actions bar can show it anywhere. |
 | `approval.resolved` | sessions module | `approval`: `Approval` | A decision was recorded (by any client) or the approval expired. Profile-wide. |
 | `context.updated` | sessions module after each run and after compression | `session_id`: `Ulid`, `context`: `ContextUsage`, `usage`: `Usage | null` | The context-window usage of a session changed. |
+| `subagent.started` | sessions module from the agent's delegation reports | `subagent`: `Subagent` | A delegated subagent began (DECISIONS §47). Profile-wide, so the Background panel hears it anywhere. |
+| `subagent.updated` | sessions module from the agent's delegation reports | `subagent`: `Subagent` | A running subagent called a tool or stopped taking guidance; `subagent` is its whole state. Profile-wide. |
+| `subagent.completed` | sessions module from the agent's delegation reports, `sessions.interruptSubagent`, `background.stop` | `subagent`: `Subagent` | A subagent ended: `completed`, `failed` or `interrupted`. Profile-wide. |
 
 ### `/rt/rooms` — 25 events
 

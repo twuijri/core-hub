@@ -1024,3 +1024,48 @@ did not say how many there are or who owns one. Proposed here — owner to confi
 Rejected: a new `source` field on `SessionCreate` (a client could then make any number of
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
+
+## 47. Subagents are part of their conversation; the Background panel is everything working for a person
+
+The owner asked for what Claude shows as its background tasks: the subagents an agent is running,
+and everything else working in the background. Hermes delegates to subagents with its
+`delegate_task` tools and reports them on its TUI gateway (`subagent.start`, `subagent.tool`,
+`subagent.complete`; `subagent.list`, `subagent.interrupt`, `subagent.steer`, `subagent.tail` —
+read in Hermes's MIT source, `tui_gateway/` and `tools/delegate_tool*.py`). Proposed here — owner
+to confirm:
+
+- **A subagent belongs to its conversation, not to a run.** Hermes can keep a subagent going
+  after the turn that started it (asynchronous delegation), so `Subagent.run_id` is only the run
+  that was going when it started. `sessions.listSubagents`, `sessions.interruptSubagent`,
+  `sessions.steerSubagent` and `sessions.tailSubagent` are per conversation, and the three events
+  `subagent.started`, `subagent.updated`, `subagent.completed` on `/rt/sessions` are profile-wide
+  (like `approval.*`) so the Background panel hears them wherever the person is. `subagent.*`
+  carries the whole `Subagent`, never a delta.
+- **What an agent supports is declared, not guessed**: `Agent.subagents` is `full` (Hermes: live,
+  Stop, Steer while `accepting_steer`, the output's tail), `observe` (Claude Code and OpenCode:
+  their ACP stream names a delegation — Claude Code's `Task` tool, OpenCode's `task` tool with a
+  `subagent_type` — and its end, and no more: no tools, no stop, no steer) or `none` (Gemini CLI
+  and Codex: their ACP bridges send a delegation as an ordinary tool call with nothing that marks
+  it; the hub's own `direct` agent does not delegate). A client shows only what `support` allows.
+  A subagent's own tool calls are attributed to it only where the agent's stream says so
+  (`ToolCall.subagent_id`); Claude Code's bridge flattens them into the parent's stream without a
+  parent id, so they stay the parent's tools.
+- **Finished subagents stay on the conversation**: the last 50, with their goal, model, times,
+  tool count, their last 50 tools and their last words, kept in the session's `metadata` (no new
+  table). One recorded as running when the hub restarted reads `interrupted`.
+- **The trajectory draws them in a lane of their own** (`TrajectoryLane.subagents`): one
+  `subagent` step per subagent from start to end, and every tool call that carries a
+  `subagent_id`.
+- **The Background panel is the person's own work** (`background.list`, `background.stop`): their
+  chat runs, task runs, schedule runs (a schedule of theirs that fired), workflow runs, jobs and
+  their conversations' subagents, across every profile they may enter with `profiles=all`.
+  Running first (oldest first), then what finished in the last 24 hours (newest first, at most
+  50). Another person's run in a shared profile is not in it: it is work for them, not for the
+  one looking. Stop is the item's own stop, reached through one operation so every client stops
+  every kind the same way. A subagent that finished before the hub last started is not listed
+  as finished there (it stays on its conversation).
+
+Rejected: one run-level list (it would lose a subagent that outlives its turn); guessing Claude
+Code's subagent tools from "whatever ran while one Task was open" (parallel Tasks would be
+mis-attributed); a new table for subagents (the conversation already has a place for adapter
+data, and a migration would collide with the open usage-analytics one).
