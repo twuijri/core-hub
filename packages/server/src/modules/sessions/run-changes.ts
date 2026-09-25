@@ -59,6 +59,9 @@ export interface ChangeCaps {
   gitTimeoutMs: number;
 }
 
+/** The caps, and the environment every git call of one tracker runs with. */
+type TrackerOptions = ChangeCaps & { env: NodeJS.ProcessEnv };
+
 export const CHANGE_CAPS: ChangeCaps = {
   maxFiles: 200,
   diffMaxBytes: 256 * KiB,
@@ -118,9 +121,9 @@ interface Candidate extends Omit<FileChange, 'diff' | 'diffTruncated'> {
  */
 export async function startChangeTracking(
   workingDir: string,
-  options: { caps?: Partial<ChangeCaps>; now?: () => number } = {},
+  options: { caps?: Partial<ChangeCaps>; now?: () => number; env?: NodeJS.ProcessEnv } = {},
 ): Promise<ChangeTracker | null> {
-  const caps = { ...CHANGE_CAPS, ...options.caps };
+  const caps = { ...CHANGE_CAPS, ...options.caps, env: withoutGit(options.env ?? {}) };
   let root: string;
   try {
     root = realpathSync(workingDir);
@@ -139,7 +142,7 @@ async function recordOf(
   source: 'git' | 'snapshot',
   complete: boolean,
   candidates: Candidate[],
-  caps: ChangeCaps,
+  caps: TrackerOptions,
 ): Promise<RunChangesRecord> {
   candidates.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   let additions = 0;
@@ -212,7 +215,14 @@ interface GitResult {
 export function runGit(
   cwd: string,
   args: readonly string[],
-  options: { env?: Record<string, string>; input?: string; maxBytes?: number; timeoutMs: number },
+  options: {
+    /** The whole environment of the call (see `withoutGit`). */
+    base: NodeJS.ProcessEnv;
+    env?: Record<string, string>;
+    input?: string;
+    maxBytes?: number;
+    timeoutMs: number;
+  },
 ): Promise<GitResult> {
   const maxBytes = options.maxBytes ?? 16 * MiB;
   return new Promise((resolve) => {
@@ -221,7 +231,7 @@ export function runGit(
       child = spawn('git', ['-c', 'core.fsmonitor=false', '-c', 'core.quotepath=false', ...args], {
         cwd,
         env: {
-          ...inheritedEnv(),
+          ...options.base,
           GIT_TERMINAL_PROMPT: '0',
           GIT_OPTIONAL_LOCKS: '0',
           LC_ALL: 'C',
@@ -267,13 +277,13 @@ export function runGit(
 }
 
 /**
- * The hub's environment without git's own variables: a `GIT_DIR` or `GIT_INDEX_FILE` the hub
+ * The host's environment without git's own variables: a `GIT_DIR` or `GIT_INDEX_FILE` the hub
  * happened to inherit (a hook, a test run from one) would point every call at another
  * repository or index.
  */
-function inheritedEnv(): NodeJS.ProcessEnv {
+function withoutGit(inherited: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(process.env)) {
+  for (const [key, value] of Object.entries(inherited)) {
     if (!key.startsWith('GIT_')) env[key] = value;
   }
   return env;
@@ -306,11 +316,12 @@ class GitTracker implements ChangeTracker {
     private readonly root: string,
     private readonly indexPath: string,
     private readonly start: GitSnapshot,
-    private readonly caps: ChangeCaps,
+    private readonly caps: TrackerOptions,
   ) {}
 
-  static async start(root: string, caps: ChangeCaps): Promise<GitTracker | null> {
-    const call = (args: string[]) => runGit(root, args, { timeoutMs: caps.gitTimeoutMs });
+  static async start(root: string, caps: TrackerOptions): Promise<GitTracker | null> {
+    const call = (args: string[]) =>
+      runGit(root, args, { base: caps.env, timeoutMs: caps.gitTimeoutMs });
     const top = await call(['rev-parse', '--show-toplevel']);
     if (top.code !== 0) return null;
     const topDir = top.stdout.toString('utf8').trim();
@@ -353,8 +364,8 @@ class GitTracker implements ChangeTracker {
       end.tree,
     ];
     const [names, counts] = await Promise.all([
-      runGit(root, [...base, '--name-status'], { timeoutMs: caps.gitTimeoutMs }),
-      runGit(root, [...base, '--numstat'], { timeoutMs: caps.gitTimeoutMs }),
+      runGit(root, [...base, '--name-status'], { base: caps.env, timeoutMs: caps.gitTimeoutMs }),
+      runGit(root, [...base, '--numstat'], { base: caps.env, timeoutMs: caps.gitTimeoutMs }),
     ]);
     if (names.code !== 0 || counts.code !== 0 || names.overflow || counts.overflow) {
       throw new Error(`git diff failed: ${names.stderr || counts.stderr}`);
@@ -455,7 +466,7 @@ class GitTracker implements ChangeTracker {
         '--',
         ...specs,
       ],
-      { timeoutMs: this.caps.gitTimeoutMs, maxBytes: maxBytes + 64 * KiB },
+      { base: this.caps.env, timeoutMs: this.caps.gitTimeoutMs, maxBytes: maxBytes + 64 * KiB },
     );
     if (result.code !== 0 && !result.overflow) return null;
     const text = result.stdout.toString('utf8');
@@ -506,7 +517,7 @@ function statOf(file: string): Stat | null {
 async function gitSnapshot(
   root: string,
   indexPath: string,
-  caps: ChangeCaps,
+  caps: TrackerOptions,
 ): Promise<GitSnapshot | null> {
   const dir = await mkdtemp(path.join(tmpdir(), 'corehub-changes-'));
   try {
@@ -520,7 +531,7 @@ async function gitSnapshot(
     const others = await runGit(
       root,
       ['ls-files', '-z', '--others', '--exclude-standard', '--', '.', EXCLUDE_RUN_FILES],
-      { env, timeoutMs: caps.gitTimeoutMs, maxBytes: 32 * MiB },
+      { base: caps.env, env, timeoutMs: caps.gitTimeoutMs, maxBytes: 32 * MiB },
     );
     if (others.code !== 0 || others.overflow) return null;
     const big = new Map<string, Stat>();
@@ -532,11 +543,15 @@ async function gitSnapshot(
     const added = await runGit(
       root,
       ['add', '-A', '--ignore-errors', '--pathspec-from-file=-', '--pathspec-file-nul'],
-      { env, input: `${specs.join('\0')}\0`, timeoutMs: caps.gitTimeoutMs },
+      { base: caps.env, env, input: `${specs.join('\0')}\0`, timeoutMs: caps.gitTimeoutMs },
     );
     // `--ignore-errors` answers 1 when a file could not be read; the rest is still staged.
     if (added.code !== 0 && added.code !== 1) return null;
-    const tree = await runGit(root, ['write-tree'], { env, timeoutMs: caps.gitTimeoutMs });
+    const tree = await runGit(root, ['write-tree'], {
+      base: caps.env,
+      env,
+      timeoutMs: caps.gitTimeoutMs,
+    });
     if (tree.code !== 0) return null;
     return { tree: tree.stdout.toString('utf8').trim(), big };
   } finally {
@@ -557,7 +572,7 @@ interface Kept {
 /** Every regular file under `root`, bounded; `complete` is false when a cap was hit. */
 function readFolder(
   root: string,
-  caps: ChangeCaps,
+  caps: TrackerOptions,
 ): { files: Map<string, Stat>; complete: boolean } {
   const files = new Map<string, Stat>();
   let seen = 0;
@@ -610,7 +625,7 @@ class SnapshotTracker implements ChangeTracker {
 
   private constructor(
     private readonly root: string,
-    private readonly caps: ChangeCaps,
+    private readonly caps: TrackerOptions,
     private readonly startedAt: number,
     private readonly files: Map<string, Stat>,
     private readonly complete: boolean,
@@ -618,7 +633,7 @@ class SnapshotTracker implements ChangeTracker {
     this.budget = { start: caps.preimageTotalBytes, touch: caps.preimageTouchBytes };
   }
 
-  static start(root: string, caps: ChangeCaps, now: () => number): SnapshotTracker {
+  static start(root: string, caps: TrackerOptions, now: () => number): SnapshotTracker {
     const startedAt = now();
     const { files, complete } = readFolder(root, caps);
     const tracker = new SnapshotTracker(root, caps, startedAt, files, complete);

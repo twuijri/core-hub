@@ -16,7 +16,11 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { startChangeTracking, type RunChangesRecord } from './run-changes.js';
+import { startChangeTracking as start, type RunChangesRecord } from './run-changes.js';
+
+/** As the hub calls it: with the host's environment (`HubConfig.hostEnv`). */
+const startChangeTracking = (dir: string, options: Parameters<typeof start>[1] = {}) =>
+  start(dir, { env: process.env, ...options });
 
 const folders: string[] = [];
 afterEach(() => {

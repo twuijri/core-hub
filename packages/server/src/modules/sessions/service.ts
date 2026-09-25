@@ -141,10 +141,12 @@ export class SessionsService {
     private readonly log: FastifyBaseLogger,
     /** `${DATA_DIR}`; every session works under `<dataDir>/workspaces/<profile>`. */
     private readonly dataDir: string,
+    /** The host's environment, for the git calls that record a run's changes (decision §49). */
+    hostEnv: NodeJS.ProcessEnv = {},
   ) {
     this.store = store;
     this.audit = audit;
-    this.engine = new RunEngine({ store, audit, realtime, ports, log });
+    this.engine = new RunEngine({ store, audit, realtime, ports, log, hostEnv });
   }
 
   // ------------------------------------------------------------- sessions

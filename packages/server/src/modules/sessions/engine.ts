@@ -102,6 +102,8 @@ export interface EngineDeps {
   realtime: SessionsRealtime;
   ports: SessionsPorts;
   log: FastifyBaseLogger;
+  /** What a git call inherits (`HubConfig.hostEnv`), minus git's own variables. */
+  hostEnv?: NodeJS.ProcessEnv;
 }
 
 export class RunEngine {
@@ -467,7 +469,7 @@ export class RunEngine {
   ): Promise<ChangeTracker | null> {
     if (!workingDir) return null;
     try {
-      return await startChangeTracking(workingDir);
+      return await startChangeTracking(workingDir, { env: this.deps.hostEnv ?? {} });
     } catch (error) {
       this.deps.log.warn(
         { err: error, runId: runRow.id, workingDir },
