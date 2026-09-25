@@ -23,6 +23,13 @@ describe('config', () => {
       'COREHUB_VERSION',
       'COREHUB_SETUP_OPEN_MINUTES',
       'COREHUB_RESET_OWNER',
+      'COREHUB_PUSH_CONTACT',
+      'COREHUB_FCM_SERVICE_ACCOUNT',
+      'COREHUB_APNS_KEY_ID',
+      'COREHUB_APNS_TEAM_ID',
+      'COREHUB_APNS_BUNDLE_ID',
+      'COREHUB_APNS_KEY',
+      'COREHUB_APNS_ENVIRONMENT',
     ]);
     const picked = pickEnv({
       DATA_DIR: '/x',

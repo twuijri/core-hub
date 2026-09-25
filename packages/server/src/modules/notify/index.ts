@@ -37,7 +37,14 @@ import {
   requireWorkspace,
   resolveWorkspaceFor,
 } from '../auth/index.js';
-import { deliver, unreadCount, type NoticeEvent, type Recipient } from './notices.js';
+import {
+  deliver,
+  localeOf,
+  unreadCount,
+  type NoticeEvent,
+  type NoticePush,
+  type Recipient,
+} from './notices.js';
 import { checkAddress } from './address.js';
 import {
   notificationPreferences,
@@ -48,7 +55,16 @@ import {
 } from './schema.js';
 
 export { checkAddress, isPrivateAddress } from './address.js';
-export { quietNow, sentenceFor, type NoticeEvent, type Recipient } from './notices.js';
+export {
+  pushAllowed,
+  quietNow,
+  sentenceFor,
+  type NoticeEvent,
+  type NoticePush,
+  type NoticePushMessage,
+  type NoticePushResult,
+  type Recipient,
+} from './notices.js';
 
 /**
  * What another module holds to put something in somebody's inbox. One method, named after
@@ -63,13 +79,23 @@ export interface HubNotifier {
   ): void;
 }
 
-/** A notifier bound to this hub's database and sockets. Composed in `bootstrap`. */
-export function createNotifier(db: ModuleDb, io: () => SocketServer | null): HubNotifier {
+/** A notifier bound to this hub's database, sockets and push. Composed in `bootstrap`. */
+export function createNotifier(
+  db: ModuleDb,
+  io: () => SocketServer | null,
+  push: NoticePush | null = null,
+): HubNotifier {
   return {
     announce(recipient, event, resource) {
-      deliver({ db, io: io(), record }, recipient, event, resource);
+      deliver({ db, io: io(), record, push }, recipient, event, resource);
     },
   };
+}
+
+/** The push port, lent by the composition root (`devices` sends). */
+let noticePush: ((app: FastifyInstance) => NoticePush) | null = null;
+export function registerNoticePush(factory: (app: FastifyInstance) => NoticePush): void {
+  noticePush = factory;
 }
 
 /** Injected so a test can exercise delivery without reaching the network. */
@@ -401,6 +427,34 @@ export const notifyModule = defineModule({
           next_cursor: null,
           unread_count: unreadCount,
         };
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'notify.sendTestNotice',
+      status: 201,
+      handler: (request) => {
+        const scope = scopeOf(request);
+        const db = dbOf(request);
+        const ar = localeOf(db, scope.userId) === 'ar';
+        const id = deliver(
+          { db, io: request.server.hub.io, record, push: noticePush?.(request.server) ?? null },
+          { userId: scope.userId, workspace: scope.workspace, profile: scope.profile },
+          {
+            kind: 'system',
+            title: ar ? 'إشعار تجريبي' : 'Test notification',
+            body: ar
+              ? 'إن وصلك هذا على جهازك فالإشعارات تعمل.'
+              : 'If this reached your device, notifications work.',
+          },
+          null,
+        );
+        // The person turned "system" notices off: nothing was written, and saying so is
+        // more useful than a notice they asked not to get.
+        if (!id) throw new HubError('conflict', { details: { reason: 'kind_turned_off' } });
+        const row = db.select().from(notifications).where(eq(notifications.id, id)).get();
+        if (!row) throw notFound({ resource: 'notice', id });
+        return toNotice(row, scope.profile);
       },
     });
 

@@ -153,6 +153,25 @@ export function overrideModels(next: ModelsOverrides | null): void {
 }
 
 const contexts = new WeakMap<SocketServer, ModelsService>();
+const rings = new WeakMap<SocketServer, DataKeyRing>();
+
+/**
+ * The hub's one data key ring (`${DATA_DIR}/keys/data.key`). Lent to the composition root
+ * so another module that stores a secret (`devices`: push tokens and push credentials)
+ * seals it with the same keys rather than opening a second copy of the file.
+ */
+export function dataKeyRingFor(app: FastifyInstance): DataKeyRing {
+  const { hub } = app;
+  const existing = rings.get(hub.io);
+  if (existing) return existing;
+  if (pendingOverrides) {
+    overrides.set(hub.io, pendingOverrides);
+    pendingOverrides = null;
+  }
+  const ring = overrides.get(hub.io)?.keys ?? DataKeyRing.open(hub.config.dataDir);
+  rings.set(hub.io, ring);
+  return ring;
+}
 
 function contextOf(app: FastifyInstance): ModelsService {
   const { hub } = app;
@@ -164,7 +183,7 @@ function contextOf(app: FastifyInstance): ModelsService {
   }
   const own = overrides.get(hub.io) ?? {};
   const db = requireSqlite(hub.database);
-  const keys = own.keys ?? DataKeyRing.open(hub.config.dataDir);
+  const keys = dataKeyRingFor(app);
   const runtime = hermesRuntimeFor(app);
   const hermes: HermesTarget = own.hermes ?? {
     // Only a runtime this hub supervises has a home the hub may write into; an

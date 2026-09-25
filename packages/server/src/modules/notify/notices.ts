@@ -12,16 +12,17 @@
  * key. The recipient's own locale decides, never the locale of whoever caused it.
  *
  * **Quiet hours silence push, not the inbox.** A notice written at 3 a.m. is still in the
- * inbox at 8 — hiding it would lose it. Push is not built yet (`devices` is still 501),
- * so `quietNow()` is used by nothing today and is tested on its own, rather than being
- * wired to a channel that does not exist.
+ * inbox at 8 — hiding it would lose it. Push is the `devices` module's (DECISIONS §56): a
+ * notice that was written, whose kind the person left on for push, outside their quiet
+ * hours, is handed to the push port, and what each device's push service answered is
+ * recorded in `notification_deliveries`.
  */
 import { and, eq, isNull } from 'drizzle-orm';
 import type { Server as SocketServer } from 'socket.io';
 import type { ModuleDb } from '../../lib/db.js';
 import { REALTIME_NAMESPACES } from '../../lib/module.js';
 import { emitToUser, findUser } from '../auth/index.js';
-import { notifications, notificationPreferences } from './schema.js';
+import { notificationDeliveries, notifications, notificationPreferences } from './schema.js';
 
 export type Locale = 'ar' | 'en';
 
@@ -166,9 +167,99 @@ export function quietNow(
   return from < to ? now >= from && now < to : now >= from || now < to;
 }
 
+/** What is pushed; the shape `devices` sends, restated so notify does not import it. */
+export interface NoticePushMessage {
+  noticeId: string | null;
+  kind: string;
+  title: string;
+  body: string | null;
+  profile: string | null;
+  resource: { kind: string; id: string } | null;
+  urgent: boolean;
+}
+
+/** One device's answer. */
+export interface NoticePushResult {
+  deviceId: string;
+  ok: boolean;
+  providerRef: string | null;
+  error: string | null;
+}
+
+/** The push port the composition root lends (`devices`). */
+export interface NoticePush {
+  send(userId: string, message: NoticePushMessage): Promise<NoticePushResult[]>;
+}
+
+/**
+ * May this kind be pushed to this person now? Their `push` switch for the kind (on when
+ * never changed) and, on the `*` row, their quiet hours.
+ */
+export function pushAllowed(
+  db: ModuleDb,
+  recipient: { workspace: string; userId: string },
+  contractKind: string,
+  at: Date,
+): boolean {
+  const rowOf = (kind: string) =>
+    db
+      .select()
+      .from(notificationPreferences)
+      .where(
+        and(
+          eq(notificationPreferences.workspace, recipient.workspace),
+          eq(notificationPreferences.ownerId, recipient.userId),
+          eq(notificationPreferences.kind, kind),
+        ),
+      )
+      .get();
+  const kind = rowOf(contractKind);
+  if (kind && !kind.push) return false;
+  const all = rowOf('*');
+  if (!all) return true;
+  return !quietNow(
+    {
+      // `muted_until` set means the window is on (see readQuiet in index.ts).
+      enabled: all.mutedUntil !== null,
+      from: all.quietFrom ?? '22:00',
+      to: all.quietTo ?? '07:00',
+      timezone: all.quietTimezone ?? 'UTC',
+    },
+    at,
+  );
+}
+
+/** What each device's push service said, one row per device. */
+export function recordPushDeliveries(
+  db: ModuleDb,
+  recipient: { workspace: string; userId: string },
+  notificationId: string,
+  results: readonly NoticePushResult[],
+  at: Date,
+): void {
+  for (const result of results) {
+    db.insert(notificationDeliveries)
+      .values({
+        ownerId: recipient.userId,
+        workspace: recipient.workspace,
+        notificationId,
+        channel: 'push',
+        deviceId: result.deviceId,
+        status: result.ok ? 'sent' : 'failed',
+        attempts: 1,
+        providerRef: result.providerRef?.slice(0, 200) ?? null,
+        lastError: result.error,
+        sentAt: result.ok ? at : null,
+      })
+      .run();
+  }
+}
+
 export interface DeliverDeps {
   db: ModuleDb;
   io: SocketServer | null;
+  /** Push to the person's devices; absent where nothing can push (a bare test). */
+  push?: NoticePush | null;
   /** Injected so a test does not depend on the clock. */
   now?: () => Date;
   /** `record` from the module's index; passed in to keep this file free of its imports. */
@@ -235,5 +326,23 @@ export function deliver(
     },
     (deps.now?.() ?? new Date()).getTime(),
   );
+  const at = deps.now?.() ?? new Date();
+  if (deps.push && pushAllowed(deps.db, recipient, contractKind, at)) {
+    const db = deps.db;
+    void deps.push
+      .send(recipient.userId, {
+        noticeId: row.id,
+        kind: contractKind,
+        title: row.title,
+        body: row.body,
+        profile: recipient.profile,
+        resource,
+        urgent: SEVERITY[event.kind] === 'action_required',
+      })
+      .then((results) => recordPushDeliveries(db, recipient, row.id, results, at))
+      // A push that could not be sent is not a reason for the notice to fail; the inbox
+      // already has it, and the device will see it there.
+      .catch(() => undefined);
+  }
   return id;
 }

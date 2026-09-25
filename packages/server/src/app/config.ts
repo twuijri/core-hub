@@ -11,6 +11,13 @@ export const ENV_KEYS = [
   'COREHUB_VERSION',
   'COREHUB_SETUP_OPEN_MINUTES',
   'COREHUB_RESET_OWNER',
+  'COREHUB_PUSH_CONTACT',
+  'COREHUB_FCM_SERVICE_ACCOUNT',
+  'COREHUB_APNS_KEY_ID',
+  'COREHUB_APNS_TEAM_ID',
+  'COREHUB_APNS_BUNDLE_ID',
+  'COREHUB_APNS_KEY',
+  'COREHUB_APNS_ENVIRONMENT',
 ] as const;
 export type EnvKey = (typeof ENV_KEYS)[number];
 export type EnvSource = Partial<Record<EnvKey, string | undefined>> & {
@@ -65,7 +72,47 @@ const envSchema = z.object({
       message: 'COREHUB_RESET_OWNER must be 1 (reset) or 0',
     })
     .optional(),
+  /**
+   * Push (DECISIONS §56). All optional: Web Push works with nothing set (the hub makes its own
+   * VAPID keys), and FCM / APNs can be configured from Settings instead. When set here, the
+   * environment wins and Settings shows the sender as configured by the environment.
+   *
+   * `COREHUB_PUSH_CONTACT`: the `mailto:` or `https:` contact a push service may use (VAPID `sub`).
+   * `COREHUB_FCM_SERVICE_ACCOUNT`: the Firebase service-account JSON, or a path to the file.
+   * `COREHUB_APNS_KEY`: the `.p8` key's contents, or a path to it.
+   */
+  COREHUB_PUSH_CONTACT: z
+    .string()
+    .trim()
+    .regex(/^(mailto:|https:\/\/)/, 'COREHUB_PUSH_CONTACT must start with mailto: or https://')
+    .optional(),
+  COREHUB_FCM_SERVICE_ACCOUNT: z.string().trim().optional(),
+  COREHUB_APNS_KEY_ID: z.string().trim().optional(),
+  COREHUB_APNS_TEAM_ID: z.string().trim().optional(),
+  COREHUB_APNS_BUNDLE_ID: z.string().trim().optional(),
+  COREHUB_APNS_KEY: z.string().trim().optional(),
+  COREHUB_APNS_ENVIRONMENT: z
+    .enum(['production', 'sandbox'], {
+      message: 'COREHUB_APNS_ENVIRONMENT must be production or sandbox',
+    })
+    .optional(),
 });
+
+/**
+ * Push credentials given by the environment. Values are as given: a path or the content
+ * itself; the devices module reads a path when the value is not the content.
+ */
+export interface PushEnv {
+  contact: string | undefined;
+  fcmServiceAccount: string | undefined;
+  apns: {
+    keyId: string | undefined;
+    teamId: string | undefined;
+    bundleId: string | undefined;
+    key: string | undefined;
+    environment: 'production' | 'sandbox' | undefined;
+  };
+}
 
 export type DatabaseConfig = { kind: 'sqlite'; file: string } | { kind: 'postgres'; url: string };
 
@@ -105,6 +152,8 @@ export interface HubConfig {
   setupOpenMinutes: number;
   /** `COREHUB_RESET_OWNER=1`: disable the owner and reopen setup on this boot (once). */
   resetOwner: boolean;
+  /** Push senders' credentials from the environment (all optional). */
+  push?: PushEnv;
 }
 
 export class ConfigError extends Error {
@@ -139,6 +188,17 @@ export function loadConfig(
     deprecatedEnv: source.deprecated ?? [],
     setupOpenMinutes: env.COREHUB_SETUP_OPEN_MINUTES,
     resetOwner: env.COREHUB_RESET_OWNER === '1' || env.COREHUB_RESET_OWNER === 'true',
+    push: {
+      contact: env.COREHUB_PUSH_CONTACT,
+      fcmServiceAccount: env.COREHUB_FCM_SERVICE_ACCOUNT,
+      apns: {
+        keyId: env.COREHUB_APNS_KEY_ID,
+        teamId: env.COREHUB_APNS_TEAM_ID,
+        bundleId: env.COREHUB_APNS_BUNDLE_ID,
+        key: env.COREHUB_APNS_KEY,
+        environment: env.COREHUB_APNS_ENVIRONMENT,
+      },
+    },
   };
 }
 

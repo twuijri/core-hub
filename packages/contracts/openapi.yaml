@@ -11781,7 +11781,7 @@ paths:
       operationId: notify.sendTestNotice
       tags: [notify]
       summary: Put a test notice in the caller's own inbox, delivered like any other (push included)
-      description: Kind `system`, in the caller's language. It goes through the same preferences and quiet hours as every notice.
+      description: Kind `system`, in the caller's language. It goes through the same preferences and quiet hours as every notice; `409 conflict` when the caller turned `system` notices off.
       x-scope: global
       x-rt-events: [notice.created]
       responses:
@@ -11803,6 +11803,8 @@ paths:
                 created_at: '2026-09-25T09:10:00Z'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /notify/preferences:
     get:
       operationId: notify.getPreferences
