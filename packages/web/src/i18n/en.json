@@ -292,6 +292,63 @@
     },
     "context_ring": "Context: {percent}% — {used} of {window} tokens"
   },
+  "slash": {
+    "title": "Commands",
+    "skills_title": "Skills — pick one to use in this message",
+    "no_match": "No command matches. Press Enter to send it as a message.",
+    "needs_argument": "{command} needs words after it.",
+    "model_unknown": "No model called “{model}” in this profile.",
+    "cleared": "The screen was cleared; the messages are still in the conversation.",
+    "show_cleared": "Show them",
+    "describe": {
+      "compress": "Compress this conversation’s context now (add words to say what to keep)",
+      "steer": "Guide the running turn without stopping it",
+      "skill": "Use one of the agent’s skills in this message",
+      "plan": "Have the agent write a plan without doing the work",
+      "goal": "Set a standing goal the agent works on across turns, or show it",
+      "learn": "Turn the recent work, or what you describe, into a skill",
+      "new": "Start a new chat with this agent",
+      "fork": "Fork this conversation into a new one",
+      "archive": "Archive this conversation",
+      "model": "Change the model (add a name, or pick from the list)",
+      "clear-screen": "Clear the screen; nothing is deleted"
+    }
+  },
+  "context_meter": {
+    "title": "Context window",
+    "percent": "{percent}% full",
+    "used": "{used} of {window} tokens",
+    "ring_estimate": "Context (estimate): {percent}% — about {used} of {window} tokens",
+    "source": {
+      "reported": "As the agent reported it after the last turn.",
+      "agent_estimate": "The agent’s own rough count after the last turn.",
+      "estimate": "Estimate: the last turn’s tokens against the model’s window in the catalogue."
+    },
+    "compress": "Compress now",
+    "compressing": "Compressing…",
+    "compressing_manual": "Compressing the conversation’s context…",
+    "compressing_auto": "The agent is compressing the context to make room…",
+    "last_compressed": "Last compression: about {before} → {after} tokens.",
+    "last_done": "Last compression finished.",
+    "last_failed": "The last compression failed.",
+    "wait_for_run": "Wait for the running turn to finish, then compress."
+  },
+  "compression_settings": {
+    "title": "Context compression",
+    "subtitle": "How Hermes shortens long conversations in this profile. Applied from the next message.",
+    "enabled": "Compress automatically",
+    "enabled_hint": "When a conversation fills the window up to the threshold, Hermes summarises its older part.",
+    "threshold": "Threshold (% of the window)",
+    "threshold_hint": "Hermes raises anything under 75% to 75% for models whose window is under 512K tokens.",
+    "target": "Kept word for word (% of the threshold)",
+    "target_hint": "The recent part left as it is. Hermes keeps it between 10% and 80%.",
+    "protect_first": "First messages always kept",
+    "protect_last": "Recent messages always kept",
+    "context_length": "Context window override (tokens)",
+    "context_length_hint": "Only when the model’s own window is reported wrong. Empty = the model’s own.",
+    "saved": "Saved. Hermes applies it from the next message.",
+    "invalid": "Enter a whole number in range (at least 1024 for the window)."
+  },
   "approval": {
     "from": "{agent} is waiting for your decision",
     "once": "Once",

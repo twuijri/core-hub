@@ -60,7 +60,7 @@ describe('how full the window is', () => {
       1000,
     );
     // A compacted conversation goes *down*: 250, not 750.
-    expect(use).toEqual({ used: 250, window: 1000, ratio: 0.25 });
+    expect(use).toEqual({ used: 250, window: 1000, ratio: 0.25, source: 'estimate' });
   });
 
   it('never claims a full window before it is full', () => {

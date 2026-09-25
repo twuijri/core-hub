@@ -39,6 +39,7 @@ export const SESSION_EVENTS = [
   'approval.requested',
   'approval.resolved',
   'context.updated',
+  'context.compression',
 ] as const;
 
 /** `/rt/tasks`: the board only listens, and refreshes on any of these. */
