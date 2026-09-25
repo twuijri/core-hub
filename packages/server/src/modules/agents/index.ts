@@ -1826,6 +1826,7 @@ export const agentsModule = defineModule({
               exclusive: spec.exclusive,
               packages: spec.packages,
               inbound: spec.inbound,
+              program: spec.program,
               docs_url: spec.docsUrl,
             })),
         };

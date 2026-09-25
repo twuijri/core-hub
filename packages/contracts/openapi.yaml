@@ -6607,7 +6607,8 @@ paths:
         gets a pairing code to approve (`pairs`) or is ignored unless listed (`allowlist`),
         whether the channel has its own settings (`settings`), whether Hermes's library for it is
         in the image or downloaded the first time it runs (`packages`), and whether it needs an
-        address reachable from the internet (`inbound`). `support: full` platforms have all of
+        address reachable from the internet (`inbound`) or a program the image does not carry
+        (`program`). `support: full` platforms have all of
         it; `generic` ones are stored as given, unchecked, with no settings panel. Hermes
         platforms that are not listed are still read from the profile's `config.yaml` by
         `agents.listChannels`.
@@ -19827,6 +19828,7 @@ components:
           exclusive,
           packages,
           inbound,
+          program,
           docs_url,
         ]
       properties:
@@ -19885,6 +19887,12 @@ components:
           description: >-
             It receives messages on a webhook, so it needs an address reachable from the
             internet that the hub's image does not open by itself.
+        program:
+          type: [string, 'null']
+          description: >-
+            The name of an outside program Hermes runs for this platform that neither Hermes nor
+            the hub's image carries (Raft's `raft`, Buzz's `buzz`): it has to be installed on the
+            server before the platform can work. Null when Hermes needs nothing outside itself.
         docs_url:
           type: [string, 'null']
           description: Where the platform's app or bot is made.

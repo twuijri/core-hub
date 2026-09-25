@@ -31,15 +31,20 @@
  * **More platforms link like Telegram.** Discord, Slack, Matrix, Mattermost and Email each have a
  * «ربط <المنصة>» dialog with plain setup steps; the hub asks the platform who the account is
  * before storing anything, and the linked row names it and offers its own settings. Every other
- * platform Hermes has is listed under «منصات أخرى» with a form of the variables Hermes reads,
- * stored unchecked — the dialog says so. The catalog is the hub's (`agents.listChannelPlatforms`).
+ * platform Hermes has links with a form of the variables Hermes reads, stored unchecked — the
+ * dialog says so. The catalog is the hub's (`agents.listChannelPlatforms`).
+ *
+ * **Only what is linked is listed** (the owner, 2026-09-25). One «ربط منصة» button opens a
+ * searchable picker of every platform (`ChannelPlatformPicker`), and picking one opens that
+ * platform's own form. With nothing linked the page is an empty state with the same button. Each
+ * platform's "how to start" lives in its own card and dialog, never over the page.
  *
  * **When a change takes effect** is said by the gateway that serves the profile: at once in a
  * named profile (the hub restarts that profile's messaging gateway), after Hermes's Restart in
  * the default one.
  */
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router';
 import { describeError } from '../auth/client.js';
 import { useAuth } from '../auth/context.js';
@@ -59,7 +64,7 @@ import {
   Switch,
   useConfirm,
 } from '../ui/index.js';
-import { IconGlobe } from '../ui/icons.js';
+import { IconGlobe, IconPlus } from '../ui/icons.js';
 import { QrCode } from '../screens/DeviceConnectionsScreen.js';
 import type { Job } from '../types.js';
 import {
@@ -84,6 +89,7 @@ import {
   type ChannelLink,
   type PairingState,
 } from './skills.js';
+import { ChannelPlatformPicker } from './ChannelPlatformPicker.js';
 import { ChannelSettingsPanel } from './ChannelSettingsPanel.js';
 import { useProfileName } from '../shell/profiles.js';
 import { describeToolError, platformName } from './toolErrors.js';
@@ -98,7 +104,10 @@ export function AgentChannelsScreen() {
   const [pairing, setPairing] = useState<string | null>(null);
   const [linkingTelegram, setLinkingTelegram] = useState(false);
   const [linking, setLinking] = useState<ChannelPlatform | null>(null);
+  const [picking, setPicking] = useState(false);
   const platforms = useChannelPlatforms(agentId);
+  const requests = usePairing(agentId, !!channels.data);
+  const unlink = useUnlinkChannel(agentId);
   const specOf = (platform: string) =>
     platforms.data?.items.find((entry) => entry.platform === platform) ?? null;
 
@@ -106,51 +115,51 @@ export function AgentChannelsScreen() {
   const title = agent ? t('channels.title_of', { name: agent.name }) : t('nav.agent_channels');
   const items = channels.data?.items ?? [];
   const gateway = channels.data?.gateway ?? null;
-  const whatsapp = items.find((channel) => channel.platform === 'whatsapp');
-  const linked = whatsapp?.link?.linked === true;
-  const telegram = items.find((channel) => channel.platform === 'telegram');
-  const telegramLinked = telegram?.link?.linked === true;
+  const pending = requests.data?.pending ?? [];
+  const approved = requests.data?.approved ?? [];
+  const waiting = new Set(pending.map((request) => request.platform));
+  // Only what is linked (or somebody is waiting on): the platforms not linked yet live in the
+  // picker, not in a long list under these.
+  const shown = items.filter(
+    (channel) =>
+      (channel.link ? channel.link.linked : channel.configured) || waiting.has(channel.platform),
+  );
+  const linkedSet = new Set(
+    items.filter((channel) => channel.link?.linked).map((channel) => channel.platform),
+  );
+  /** Still waiting for its first person: nobody approved on it yet, or a request is waiting. */
+  const starting = (platform: string) =>
+    waiting.has(platform) || !approved.some((sender) => sender.platform === platform);
+
+  const pick = (spec: ChannelPlatform) => {
+    setPicking(false);
+    if (spec.login === 'token') setLinkingTelegram(true);
+    else if (spec.login === 'qr') setPairing(spec.platform);
+    else setLinking(spec);
+  };
+  const pickButton = (
+    <Button
+      size="sm"
+      icon={<IconPlus size={14} />}
+      disabled={!platforms.data}
+      onClick={() => setPicking(true)}
+      data-testid="platform-picker-open"
+    >
+      {t('channels.picker.open')}
+    </Button>
+  );
+  const unlinkedName = unlink.variables
+    ? platformName(unlink.variables, t, specOf(unlink.variables)?.label)
+    : '';
 
   return (
     <AppShell title={title}>
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-lg font-semibold">{title}</h1>
-          <span className="ms-auto flex flex-wrap gap-2">
-            {channels.data && !telegramLinked && (
-              <Button
-                size="sm"
-                variant={linked ? 'primary' : 'ghost'}
-                onClick={() => setLinkingTelegram(true)}
-                data-testid="telegram-link-open"
-              >
-                {t('channels.telegram.link')}
-              </Button>
-            )}
-            {!linked && (
-              <Button
-                size="sm"
-                onClick={() => setPairing('whatsapp')}
-                data-testid="channel-pair-whatsapp"
-              >
-                {t('channels.login.whatsapp')}
-              </Button>
-            )}
-          </span>
+          {shown.length > 0 && <span className="ms-auto">{pickButton}</span>}
         </div>
-        <GatewayNote gateway={gateway} />
-        {linked && whatsapp?.link && <HowToUse link={whatsapp.link} gateway={gateway} />}
-        {telegramLinked && telegram?.link && (
-          <TelegramHowTo link={telegram.link} gateway={gateway} />
-        )}
-        {items
-          .filter((channel) => channel.login === 'credentials' && channel.link?.linked)
-          .map((channel) => {
-            const spec = specOf(channel.platform);
-            return spec?.support === 'full' ? (
-              <PlatformHowTo key={channel.platform} spec={spec} gateway={gateway} />
-            ) : null;
-          })}
+        {shown.length > 0 && <GatewayNote gateway={gateway} />}
 
         {channels.isPending && (
           <SkeletonGroup label={t('common.loading')}>
@@ -158,43 +167,63 @@ export function AgentChannelsScreen() {
           </SkeletonGroup>
         )}
         {channels.isError && <Notice tone="danger">{describeToolError(channels.error, t)}</Notice>}
+        {unlink.isError && <Notice tone="danger">{describeToolError(unlink.error, t)}</Notice>}
+        {unlink.isSuccess && unlink.variables && (
+          <Notice>
+            <span data-testid="channel-unlinked">
+              {unlink.variables === 'telegram'
+                ? t('channels.telegram.unlinked_note')
+                : unlink.variables === 'whatsapp'
+                  ? t('channels.unlinked_note')
+                  : t('channels.platform.unlinked_note', { name: unlinkedName })}
+            </span>
+          </Notice>
+        )}
         {channels.data &&
-          (items.length === 0 ? (
+          (shown.length === 0 ? (
             <EmptyState
               icon={<IconGlobe size={20} />}
               title={t('channels.none')}
               body={t('channels.none_body')}
+              action={pickButton}
+              testId="channels-empty"
             />
           ) : (
             <ul className="flex flex-col gap-2" data-testid="channel-list">
-              {items.map((channel) => (
-                <li key={channel.platform}>
-                  <ChannelRow
-                    agentId={agentId}
-                    channel={channel}
-                    spec={specOf(channel.platform)}
-                    gateway={gateway}
-                    onEdit={() => setEditing(channel)}
-                    onPair={() => {
-                      const spec = specOf(channel.platform);
-                      if (channel.login === 'token') setLinkingTelegram(true);
-                      else if (channel.login === 'credentials' && spec) setLinking(spec);
-                      else setPairing(channel.platform);
-                    }}
-                  />
-                </li>
-              ))}
+              {shown.map((channel) => {
+                const spec = specOf(channel.platform);
+                return (
+                  <li key={channel.platform}>
+                    <ChannelRow
+                      agentId={agentId}
+                      channel={channel}
+                      spec={spec}
+                      gateway={gateway}
+                      starting={starting(channel.platform)}
+                      unlinking={unlink.isPending}
+                      onUnlink={() => unlink.mutate(channel.platform)}
+                      onEdit={() => setEditing(channel)}
+                      onPair={() => {
+                        if (channel.login === 'token') setLinkingTelegram(true);
+                        else if (channel.login === 'credentials' && spec) setLinking(spec);
+                        else setPairing(channel.platform);
+                      }}
+                    />
+                  </li>
+                );
+              })}
             </ul>
           ))}
-        {channels.data && platforms.data && (
-          <PlatformCatalog
-            platforms={platforms.data.items}
-            channels={items}
-            onLink={(spec) => setLinking(spec)}
-          />
-        )}
-        {channels.data && <PairingSection agentId={agentId} />}
+        {channels.data && shown.length > 0 && <PairingSection agentId={agentId} />}
       </div>
+      {picking && platforms.data && (
+        <ChannelPlatformPicker
+          platforms={platforms.data.items}
+          linked={linkedSet}
+          onPick={pick}
+          onClose={() => setPicking(false)}
+        />
+      )}
       {editing && (
         <ChannelEditor agentId={agentId} channel={editing} onClose={() => setEditing(null)} />
       )}
@@ -220,11 +249,19 @@ export function AgentChannelsScreen() {
   );
 }
 
+/**
+ * One linked platform. Its "how to start" lives here, not over the page: open while the platform
+ * waits for its first person (nobody approved yet, or a request waiting), behind «كيف تبدأ»
+ * otherwise.
+ */
 function ChannelRow({
   agentId,
   channel,
   spec,
   gateway,
+  starting,
+  unlinking,
+  onUnlink,
   onEdit,
   onPair,
 }: {
@@ -232,21 +269,31 @@ function ChannelRow({
   channel: Channel;
   spec: ChannelPlatform | null;
   gateway: ChannelGateway | null;
+  /** Nobody approved on it yet, or somebody is waiting for approval. */
+  starting: boolean;
+  unlinking: boolean;
+  onUnlink: () => void;
   onEdit: () => void;
   onPair: () => void;
 }) {
   const { t } = useI18n();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState<boolean | null>(null);
   const name = platformName(channel.platform, t, spec?.label);
   const hasSettings =
     (channel.platform === 'telegram' || spec?.settings === true) && channel.link?.linked === true;
   const credentials = channel.login === 'credentials';
   const update = useUpdateChannel(agentId);
   const clear = useClearChannel(agentId);
-  const unlink = useUnlinkChannel(agentId);
   const { ask, dialog } = useConfirm();
   const link = channel.link;
   const account = link ? accountOf(link) : '';
+  const guide = link?.linked ? guideOf(channel, spec, gateway) : null;
+  // Pairing platforms open their guide by themselves while they wait for the first person; the
+  // ones that only answer an allowlist never wait, so theirs stays behind the button.
+  const waitsForPeople =
+    channel.platform === 'whatsapp' || channel.platform === 'telegram' || spec?.pairs === true;
+  const showGuide = guide !== null && (guideOpen ?? (starting && waitsForPeople));
 
   return (
     <div className="flex flex-col gap-2">
@@ -312,12 +359,23 @@ function ChannelRow({
             {t('channels.settings.open')}
           </Button>
         )}
+        {guide && (
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-expanded={showGuide}
+            data-testid={`channel-guide-${channel.platform}`}
+            onClick={() => setGuideOpen(!showGuide)}
+          >
+            {t('channels.guide')}
+          </Button>
+        )}
         {link?.linked && (
           <Button
             size="sm"
             variant="danger"
             data-testid={`channel-unlink-${channel.platform}`}
-            disabled={unlink.isPending}
+            disabled={unlinking}
             onClick={() => {
               void ask({
                 title: t('channels.unlink_title', { name: credentials ? name : channel.label }),
@@ -329,7 +387,7 @@ function ChannelRow({
                       : t('channels.unlink_body'),
                 confirmLabel: t('channels.unlink'),
               }).then((yes) => {
-                if (yes) unlink.mutate(channel.platform);
+                if (yes) onUnlink();
               });
             }}
           >
@@ -358,6 +416,7 @@ function ChannelRow({
         )}
         {dialog}
       </div>
+      {showGuide && guide}
       {hasSettings && settingsOpen && (
         <ChannelSettingsPanel
           agentId={agentId}
@@ -371,20 +430,24 @@ function ChannelRow({
           <span dir="auto">{channel.error}</span>
         </Notice>
       )}
-      {unlink.isError && <Notice tone="danger">{describeToolError(unlink.error, t)}</Notice>}
-      {unlink.isSuccess && (
-        <Notice>
-          <span data-testid="channel-unlinked">
-            {channel.platform === 'telegram'
-              ? t('channels.telegram.unlinked_note')
-              : credentials
-                ? t('channels.platform.unlinked_note', { name })
-                : t('channels.unlinked_note')}
-          </span>
-        </Notice>
-      )}
     </div>
   );
+}
+
+/** The platform's own "how to start", once it is linked; null when it has none. */
+function guideOf(
+  channel: Channel,
+  spec: ChannelPlatform | null,
+  gateway: ChannelGateway | null,
+): ReactNode {
+  const link = channel.link;
+  if (!link?.linked) return null;
+  if (channel.platform === 'whatsapp') return <HowToUse link={link} gateway={gateway} />;
+  if (channel.platform === 'telegram') return <TelegramHowTo link={link} gateway={gateway} />;
+  if (channel.login === 'credentials' && spec?.support === 'full') {
+    return <PlatformHowTo spec={spec} gateway={gateway} />;
+  }
+  return null;
 }
 
 const STATUS_TONE: Record<Channel['status'], 'success' | 'danger' | 'neutral'> = {
@@ -417,14 +480,14 @@ function GatewayNote({ gateway }: { gateway: ChannelGateway | null }) {
   const { t } = useI18n();
   if (!gateway || gateway.applies === 'on_restart') {
     return (
-      <Notice>
-        <span data-testid="channel-gateway-note">{t('channels.restart_note')}</span>
-      </Notice>
+      <p className="text-xs text-muted" data-testid="channel-gateway-note">
+        {t('channels.restart_note')}
+      </p>
     );
   }
   return (
-    <Notice>
-      <span className="flex flex-wrap items-center gap-2" data-testid="channel-gateway-note">
+    <div className="flex flex-col gap-1 text-xs text-muted">
+      <p className="flex flex-wrap items-center gap-2" data-testid="channel-gateway-note">
         <span>{t('channels.applies_now')}</span>
         <span data-testid="channel-gateway-state" data-state={gateway.state}>
           <Badge
@@ -439,13 +502,13 @@ function GatewayNote({ gateway }: { gateway: ChannelGateway | null }) {
             {t(`channels.gateway.${gateway.state}`)}
           </Badge>
         </span>
-      </span>
+      </p>
       {gateway.error && (
-        <span className="mt-1 block text-xs" dir="auto">
+        <p className="text-danger-soft-text" dir="auto">
           {gateway.error}
-        </span>
+        </p>
       )}
-    </Notice>
+    </div>
   );
 }
 
@@ -665,78 +728,6 @@ function wordsOf(t: (key: string, values?: Record<string, string>) => string) {
   };
 }
 
-/**
- * «منصات أخرى»: every platform the hub can link that this profile has not linked yet — the ones
- * the hub checks and names first, each with «ربط <المنصة>», then the rest with a form of what
- * Hermes reads and a note that nothing there is checked.
- */
-function PlatformCatalog({
-  platforms,
-  channels,
-  onLink,
-}: {
-  platforms: ChannelPlatform[];
-  channels: Channel[];
-  onLink: (spec: ChannelPlatform) => void;
-}) {
-  const { t } = useI18n();
-  const linked = new Set(
-    channels.filter((channel) => channel.link?.linked).map((channel) => channel.platform),
-  );
-  const open = platforms.filter(
-    (spec) => spec.login === 'credentials' && !linked.has(spec.platform),
-  );
-  const full = open.filter((spec) => spec.support === 'full');
-  const generic = open.filter((spec) => spec.support === 'generic');
-  if (open.length === 0) return null;
-  const card = (spec: ChannelPlatform) => {
-    const name = platformName(spec.platform, t, spec.label);
-    return (
-      <li key={spec.platform} className="skill-row" data-testid={`platform-card-${spec.platform}`}>
-        <span className="skill-open">
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="font-medium" dir="auto">
-              {name}
-            </span>
-            {spec.packages === 'first_use' && (
-              <Badge>{t('channels.platform.badge_first_use')}</Badge>
-            )}
-            {spec.inbound && <Badge tone="warning">{t('channels.platform.badge_inbound')}</Badge>}
-          </span>
-          {spec.support === 'full' && (
-            <span className="skill-description">
-              {t(`channels.platform.${spec.platform}.summary`)}
-            </span>
-          )}
-        </span>
-        <Button
-          size="sm"
-          variant={spec.support === 'full' ? 'primary' : 'ghost'}
-          data-testid={`platform-link-${spec.platform}`}
-          onClick={() => onLink(spec)}
-        >
-          {t('channels.platform.link_title', { name })}
-        </Button>
-      </li>
-    );
-  };
-  return (
-    <section className="flex flex-col gap-3" data-testid="platform-catalog">
-      <h2 className="text-base font-semibold">{t('channels.platform.catalog_title')}</h2>
-      {full.length > 0 && <ul className="flex flex-col gap-2">{full.map(card)}</ul>}
-      {generic.length > 0 && (
-        <>
-          <h3 className="text-sm font-semibold">{t('channels.platform.generic_title')}</h3>
-          <p className="text-sm text-muted">{t('channels.platform.generic_list_note')}</p>
-          <ul className="flex flex-col gap-2" data-testid="platform-generic">
-            {generic.map(card)}
-          </ul>
-        </>
-      )}
-    </section>
-  );
-}
-
 /** What to do once a platform is linked, in plain words. */
 function PlatformHowTo({
   spec,
@@ -908,6 +899,13 @@ function PlatformLinkDialog({
               <span data-testid="platform-inbound">{t('channels.platform.inbound_note')}</span>
             </Notice>
           )}
+          {spec.program && (
+            <Notice tone="warning">
+              <span data-testid="platform-program">
+                {t('channels.platform.program_note', { program: spec.program })}
+              </span>
+            </Notice>
+          )}
           {spec.credentials.map((credential) => (
             <Field
               key={credential.key}
@@ -1037,7 +1035,7 @@ function PairingSection({ agentId }: { agentId: string | undefined }) {
             >
               <span className="skill-open">
                 <span className="flex flex-wrap items-center gap-2">
-                  <Badge>{request.platform}</Badge>
+                  <Badge>{platformName(request.platform, t)}</Badge>
                   <span className="font-medium" dir="auto">
                     {request.user_name ?? t('channels.pairing.unnamed')}
                   </span>
@@ -1086,7 +1084,7 @@ function PairingSection({ agentId }: { agentId: string | undefined }) {
             >
               <span className="skill-open">
                 <span className="flex flex-wrap items-center gap-2">
-                  <Badge>{sender.platform}</Badge>
+                  <Badge>{platformName(sender.platform, t)}</Badge>
                   <span className="font-medium" dir="auto">
                     {sender.user_name ?? t('channels.pairing.unnamed')}
                   </span>
