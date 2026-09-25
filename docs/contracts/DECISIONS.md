@@ -1784,3 +1784,41 @@ releases; §41's reasoning); letting the hub create Discord or Slack apps (their
 the person's own account); and pretending Discord and Email pair — Hermes's adapters drop a
 stranger there before the gateway could send a code, so the client asks for the allowlist up
 front instead.
+
+## 65. A profile's working files are managed inside its folder only, by its owner and admins
+
+Agents work in `${DATA_DIR}/workspaces/<profile>/…` — a folder per conversation, one per task —
+and until now a person could not see those files from a client. Proposed here — owner to confirm:
+
+- **Eleven operations under `knowledge`** (`/workspace-files…`): list a folder, download a file,
+  download a folder as a zip, read text, save text, upload, new folder, move (rename is a move
+  in the same folder), copy, delete, and attach a file for a chat. `knowledge` already owns files
+  and the attachment registry the last one writes into. Owner and admin only (`x-roles`), in the
+  profile of `X-Hub-Profile`. A file manager, not a shell: nothing here runs a program.
+- **Paths are relative to the root, `/`-separated, `''` the root.** An absolute path, a NUL byte,
+  a `..` that climbs out, or a symlink — on the way or as the entry — that leads outside the root
+  is `400 validation_failed` with `details.reason` (`absolute`, `invalid`, `outside_root`,
+  `symlink_outside`). Work happens at the real path; a link inside the root is read through, a
+  link is deleted and moved as a link, never written through (`reason: symlink`). Files are
+  opened `O_NOFOLLOW` and the descriptor's path is re-checked. The root cannot be deleted or
+  moved (`reason: root`), a folder not into itself (`into_itself`).
+- **Caps, in `WorkspaceFileLimits` on every listing:** upload and attach 25 MB (the one-shot
+  attachment ceiling), text editing 1 MiB of UTF-8 (`415` for a binary or non-UTF-8 file), zip and
+  folder copy 200 MiB of file bytes or 20 000 entries, refused `413` before anything is written or
+  sent. A listing shows at most 5000 entries (`truncated`).
+- **Save conflicts by etag.** `readWorkspaceText` answers a strong etag (a hash of the bytes, not
+  the mtime); `writeWorkspaceText` must send it back and is `409 conflict`
+  (`details.reason = changed`, `details.etag` = the current one) when the file changed, writing
+  nothing. `etag: null` creates a file and is `409` (`exists`) when one is there.
+- **Nothing an agent wrote is served as a page.** `downloadWorkspaceFile?disposition=inline`
+  shows only pictures (not SVG), PDF and plain text in place; everything else goes out as
+  `application/octet-stream` with `nosniff` and a `sandbox` CSP.
+- **Attach copies.** `attachWorkspaceFile` makes an ordinary attachment (`purpose: message`,
+  `meta.workspacePath`); later edits to the working file do not change it.
+- **Every write is audited** (`workspace_file.created|written|uploaded|folder_created|moved|copied|deleted|attached`, and `zipped`).
+
+Rejected: a generic "file system" endpoint taking absolute paths (the boundary would be the
+client's); letting members in (a member's conversations are in the same folder as everyone's in
+the profile, so per-person visibility would need per-session folders owned by people — a later
+ADR if wanted); following links out "because the agent made them" (a link to `/data/keys` is
+exactly what must stay closed); an mtime etag (two writes in one second would look the same).

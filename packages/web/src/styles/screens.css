@@ -974,3 +974,130 @@
 .background-finished {
   margin-block-start: var(--ch-space-3);
 }
+
+/* Files (workspace-files/FilesTool.tsx, DECISIONS §65): the profile's working folder. The
+   list is the drop target; while files are over it, it says so with the accent. */
+.files-drop {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-2);
+  min-block-size: 8rem;
+  border: 1px dashed transparent;
+  border-radius: var(--ch-radius-md);
+}
+.files-drop[data-dragging='true'] {
+  border-color: var(--ch-color-accent);
+  background: var(--ch-color-accent-soft);
+}
+.files-drop-hint {
+  padding: var(--ch-space-2) var(--ch-space-3);
+  color: var(--ch-color-accent-soft-text);
+  font-weight: 600;
+  text-align: center;
+}
+.files-up {
+  align-self: flex-start;
+  font-size: var(--ch-font-size-sm);
+  color: var(--ch-color-accent-strong);
+}
+.files-name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ch-space-2);
+  min-inline-size: 0;
+}
+.files-icon {
+  display: inline-flex;
+  color: var(--ch-color-text-muted);
+}
+.files-name {
+  max-inline-size: 28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: start;
+  color: var(--ch-color-text);
+}
+button.files-name:hover,
+button.files-name:focus-visible {
+  color: var(--ch-color-accent-strong);
+  text-decoration: underline;
+}
+.files-name-disabled {
+  color: var(--ch-color-text-muted);
+}
+
+/* The editor: a transparent textarea exactly over its coloured copy (CodeEditor.tsx). One
+   grid cell holds both, so the text sets the size and the frame is the only scroll box. */
+.files-editor-frame,
+.files-preview-frame {
+  max-block-size: 65vh;
+  overflow: auto;
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-surface);
+}
+.files-editor {
+  display: grid;
+  min-block-size: 16rem;
+}
+.files-editor-layer,
+.files-editor-input {
+  grid-area: 1 / 1;
+  margin: 0;
+  padding: var(--ch-space-3);
+  border: 0;
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-font-size-sm);
+  line-height: 1.55;
+  tab-size: 2;
+  white-space: pre;
+  overflow-wrap: normal;
+  letter-spacing: normal;
+}
+.files-editor[data-prose='true'] .files-editor-layer,
+.files-editor[data-prose='true'] .files-editor-input {
+  font-family: var(--ch-font-sans);
+}
+/* The base styles give <code> a font of its own; here it must be the layer's exactly. */
+.files-editor-layer code {
+  font: inherit;
+  letter-spacing: inherit;
+}
+.files-editor-layer {
+  pointer-events: none;
+  background: transparent;
+  color: var(--ch-color-text);
+}
+.files-editor-input {
+  resize: none;
+  overflow: hidden;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--ch-color-text);
+  outline: none;
+}
+.files-editor-input::selection {
+  background: var(--ch-color-accent-soft);
+  color: transparent;
+}
+.files-editor-input:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--ch-color-accent);
+}
+.files-preview-image {
+  display: grid;
+  place-items: center;
+  padding: var(--ch-space-3);
+}
+.files-preview-image img {
+  max-inline-size: 100%;
+  max-block-size: 60vh;
+  object-fit: contain;
+}
+.files-preview-pdf {
+  inline-size: 100%;
+  block-size: 65vh;
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+}

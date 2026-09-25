@@ -111,6 +111,10 @@
       "en": "Plugins",
       "ar": "الإضافات"
     },
+    "files": {
+      "en": "Files",
+      "ar": "الملفات"
+    },
     "skills": {
       "en": "Skills",
       "ar": "المهارات"
@@ -461,6 +465,17 @@
       "roles": ["admin"]
     },
     {
+      "id": "files",
+      "title": "files",
+      "module": "knowledge",
+      "level": "settings",
+      "entry": {
+        "kind": "settings-tool"
+      },
+      "roles": ["admin"],
+      "note": "The selected profile's working folder (${DATA_DIR}/workspaces/<profile>): browse, upload, download, zip, new folder, rename, move, copy, delete, preview, edit text, attach to a chat. A file manager only — no shell, no commands (DECISIONS §65). Owner and admin; follows the top-bar profile chip."
+    },
+    {
       "id": "agent_skills",
       "title": "skills",
       "module": "agents",
@@ -573,7 +588,8 @@
     "theme",
     "workspaces",
     "updates",
-    "plugins"
+    "plugins",
+    "files"
   ],
   "agentLevel": [
     "agent_skills",
@@ -648,6 +664,7 @@
       "workspaces": "/settings/workspaces",
       "updates": "/settings/updates",
       "plugins": "/settings/plugins",
+      "files": "/settings/files",
       "agent_skills": "/agents/:agentId/skills",
       "agent_mcp": "/agents/:agentId/mcp",
       "agent_memory": "/agents/:agentId/memory",

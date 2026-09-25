@@ -42,6 +42,8 @@ export const ATTACHMENT_SOURCES = [
 export type NoteLink = { kind: 'session' | 'room' | 'run' | 'schedule' | 'note'; id: string };
 
 export type AttachmentMeta = {
+  /** For a copy of a profile's working file (`knowledge.attachWorkspaceFile`): where it was. */
+  workspacePath?: string;
   width?: number;
   height?: number;
   durationMs?: number;

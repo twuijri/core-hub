@@ -25,6 +25,7 @@ import { UpdatesTab } from './UpdatesTab.js';
 import { SkillsUsagePage } from './usage/SkillsUsagePage.js';
 import { UsagePage } from './usage/UsagePage.js';
 import { ThemeTool } from './ThemeTool.js';
+import { FilesTool } from '../workspace-files/FilesTool.js';
 
 /**
  * Which section draws which destination.
@@ -55,6 +56,8 @@ const SECTIONS: Record<string, () => ReactElement> = {
   // measured when asked.
   logs: () => <LogsTool />,
   performance: () => <PerformanceTool />,
+  // The selected profile's working folder (DECISIONS §65).
+  files: () => <FilesTool />,
 };
 
 export function SettingsScreen({ id }: { id: string }) {

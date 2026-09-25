@@ -22,6 +22,10 @@
  * paging are the real ones, and the other two kinds appear the moment something writes
  * them, with no change here.
  *
+ * Also implemented: the profile's working files (`knowledge.*WorkspaceFile*`, contract
+ * decision §65) — a file manager over `${DATA_DIR}/workspaces/<profile>` for owners and
+ * admins, in `workspace-files.ts` (the path rules) and `workspace-files-routes.ts`.
+ *
  * What the rest of the hub gets is `attachmentsPortFor(app)`: resolve ids, put a
  * person's files where an agent can read them, and take back what the agent wrote.
  */
@@ -43,6 +47,7 @@ import { KnowledgeItems, type ItemKind } from './items.js';
 import { KnowledgeService, type AttachmentScope } from './service.js';
 import { attachmentUrl, toAttachment } from './serialize.js';
 import type { AttachmentRow } from './store.js';
+import { registerWorkspaceFileRoutes } from './workspace-files-routes.js';
 
 export { KnowledgeItems } from './items.js';
 export type { ItemKind, ItemQuery, KnowledgeItem } from './items.js';
@@ -419,6 +424,10 @@ export const knowledgeModule = defineModule({
         return toAttachment(row, scope.profile);
       },
     });
+
+    // ------------------------------------------- the profile's working files (§65)
+
+    registerWorkspaceFileRoutes(app, deps, knowledge);
   },
   registerEvents(_io) {
     // This module does not stream (ARCHITECTURE §Realtime).
