@@ -147,6 +147,24 @@ PR adds or updates a change record                       pass  13s
 PR leaves graphify-out/ to the code-map bot              pass  10s
 ```
 
+بعد دمج `origin/main` (فيه #104 «الوكيل العام» الذي أخذ §46): تعارض واحد في `DECISIONS.md`،
+فصار قرار هذه المهمة **§47** وعُدّلت الإشارات إليه. أُعيدت الفحوص على الدمج:
+```
+$ pnpm lint                      -> All matched files use Prettier code style!
+$ pnpm typecheck                 -> exit 0
+$ pnpm i18n:check                -> i18n:check  OK
+$ pnpm contracts:lint            -> contracts:lint  OK
+$ pnpm contracts:check-clients   -> check-clients  OK — 284 client file(s) scanned, 176 contract path(s) known.
+$ pnpm nav:check                 -> nav:check  OK — 34 destinations, 2 pre-auth screens (login, setup), 39 terms, ar/en complete, routes for web
+$ pnpm change-record:check       -> change-record  OK — 1 record(s) valid
+$ vitest run tests/unit/task-runs.test.ts tests/unit/config.test.ts src/modules/tasks/ tests/unit/task-worktrees.test.ts   (server)
+ Test Files  9 passed | 2 skipped (11)
+      Tests  102 passed | 6 skipped (108)
+$ vitest run tests/task-worktrees.test.tsx tests/task-run.test.tsx tests/task-hermes-card.test.tsx tests/i18n.test.ts   (web)
+ Test Files  4 passed (4)
+      Tests  28 passed (28)
+```
+
 ## المخاطر والرجوع
 - **العدّ والطابور في الذاكرة**: يعيشان ما دامت العملية؛ إعادة التشغيل تُنهي التشغيلات فيبدأ العدّ
   من صفر، وعند الإقلاع يُنظر في كل بروفايل فيه مهام تنتظر البدء.
