@@ -780,12 +780,11 @@ export class AgentsService implements UpdatePolicyStore {
     if (!latest || compareVersions(latest, pinned) <= 0) return undefined;
     const versions: Record<string, string> = { [entry.install.package]: latest };
     for (const companion of entry.install.companions ?? []) {
-      let next: string | null = null;
-      try {
-        next = (await this.options.registry?.latest('npm', companion.package)) ?? null;
-      } catch {
-        next = null;
-      }
+      const registry = this.options.registry;
+      // An unreachable registry keeps the companion at its pin rather than failing the update.
+      const next = registry
+        ? await registry.latest('npm', companion.package).catch(() => null)
+        : null;
       versions[companion.package] = newerOf(companion.version, stable(next)) ?? companion.version;
     }
     return versions;
