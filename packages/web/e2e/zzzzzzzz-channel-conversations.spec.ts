@@ -1,5 +1,5 @@
 /**
- * 33. Telegram conversations in the chats list (contract decision §55), against the real hub
+ * 33. Telegram conversations in the chats list (contract decision §61), against the real hub
  *     with a scripted Hermes behind it: a conversation Hermes keeps for Telegram shows under
  *     «تيليجرام», and opens as a read-only transcript — the person's message and the agent's
  *     reply, and in the composer's place the banner «محادثة من تيليجرام — للقراءة فقط؛ الرد

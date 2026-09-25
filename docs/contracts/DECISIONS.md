@@ -1025,7 +1025,7 @@ Rejected: a new `source` field on `SessionCreate` (a client could then make any 
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
 
-## 54. A session category is the profile's, shared like its conversations; moving is a session patch
+## 60. A session category is the profile's, shared like its conversations; moving is a session patch
 
 The contract has declared `session_categories` since the start (`SessionCategory`, four
 operations, `Session.category_id`, `sessions.list?category_id=`), but no module built them and
@@ -1063,11 +1063,11 @@ fetch, which is enough for a rare change; the moves themselves already travel as
 `session.updated`); a separate `moveSession` operation (the patch already carries the field, and
 `bulkUpdate` moves many at once); per-person categories (above).
 
-## 55. Channel conversations are Hermes's, read through its server, never copied into the hub
+## 61. Channel conversations are Hermes's, read through its server, never copied into the hub
 
 Telegram, WhatsApp and the other messaging channels reach the agent through Hermes's gateway,
 and Hermes keeps those conversations in its own session store (`state.db` of each profile); the
-hub never sees them. The chats list had groups «تيليجرام» / «واتساب» (§54) with nothing to put
+hub never sees them. The chats list had groups «تيليجرام» / «واتساب» (§60) with nothing to put
 in them. Proposed here — owner to confirm:
 
 - **Read, not copied.** Two operations read them from Hermes's internal server (ADR 0015) the

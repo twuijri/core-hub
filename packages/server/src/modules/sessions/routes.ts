@@ -122,7 +122,7 @@ function pathId(params: unknown, name: string, resource: string): string {
 export interface RouteDeps {
   service(request: FastifyRequest): SessionsService;
   scopes: ScopeResolver;
-  /** Channel conversations read from Hermes (§55). */
+  /** Channel conversations read from Hermes (§61). */
   channels(request: FastifyRequest): ChannelConversations;
 }
 
@@ -386,7 +386,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
   });
 
   // ----------------------------------------------------------- categories
-  // Contract decision §54: the profile's folders of its chats list (`categories.ts`).
+  // Contract decision §60: the profile's folders of its chats list (`categories.ts`).
 
   app.get('/session-categories', async (request) => {
     const scope = await scopeOf(request);
@@ -425,7 +425,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
   });
 
   // ------------------------------------------------- channel conversations
-  // Contract decision §55: Telegram, WhatsApp… conversations as Hermes keeps them, read-only.
+  // Contract decision §61: Telegram, WhatsApp… conversations as Hermes keeps them, read-only.
 
   app.get('/channel-conversations', async (request) => {
     const scope = await scopeOf(request);

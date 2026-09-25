@@ -1,4 +1,4 @@
-// A conversation held on Telegram, WhatsApp… as Hermes keeps it (contract decision §55), in
+// A conversation held on Telegram, WhatsApp… as Hermes keeps it (contract decision §61), in
 // the chat screen's own look — the person on the channel on one side, the agent's replies on the
 // other — but read-only: the hub cannot write to it, so where the composer would be there is the
 // banner saying where the reply is made. It is read again every half minute while open.

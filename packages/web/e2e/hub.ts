@@ -778,7 +778,7 @@ const profileArchives = fakeProfileRuntime((profile) => [
 registerProfileTransfer((app) => profileTransferPorts(app, profileArchives.runtime));
 
 /**
- * Hermes's channel conversations, scripted (contract decision §55): one Telegram conversation
+ * Hermes's channel conversations, scripted (contract decision §61): one Telegram conversation
  * in the default profile, as Hermes's server would list it. Off until a journey turns it on
  * (`/__e2e/channels`) — every other journey sees a hub with no Hermes to read, as before, so
  * their lists and screenshots do not change.

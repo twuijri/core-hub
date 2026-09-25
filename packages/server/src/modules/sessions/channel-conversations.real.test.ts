@@ -1,5 +1,5 @@
 /**
- * Channel conversations (contract decision §55) against **the real Hermes** from the image:
+ * Channel conversations (contract decision §61) against **the real Hermes** from the image:
  * conversations are written into Hermes's own session store with Hermes's own code (`SessionDB`,
  * as its gateway writes a Telegram or WhatsApp chat), `hermes serve` is started by the hub's
  * `HermesDashboard`, and the hub's reader — over the composition root's own source

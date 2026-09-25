@@ -47,7 +47,7 @@ the only place that converts:
 | preview | text(300)? | first 300 chars of the newest message |
 | pinned | bool | |
 | parent_session_id | ulid? | set by `sessions.fork`; no FK, the parent may be purged |
-| category_id | ulid? → session_category | the category it is filed under (contract decision §54); no FK — deleting a category clears it on every session and announces each |
+| category_id | ulid? → session_category | the category it is filed under (contract decision §60); no FK — deleting a category clears it on every session and announces each |
 | notify | bool | push a notice when a run here finishes |
 | metadata | json<SessionMetadata> | skills picked, non-private adapter data |
 | archived_at | ms? | |
@@ -57,7 +57,7 @@ Indexes: (workspace, archived_at, last_message_at) for the list;
 
 ## session_category (scoped)
 
-A folder of the profile's chats list (contract decision §54): the profile's, shared by
+A folder of the profile's chats list (contract decision §60): the profile's, shared by
 everyone who may enter it, like its sessions. Whether a group is collapsed is the viewer's
 and never stored here.
 
@@ -199,5 +199,5 @@ row keeps the same ids in `attachment_ids`.
 Conversations on Telegram, WhatsApp and the other messaging channels are Hermes's: its gateway
 receives them and its own session store keeps them. This module stores nothing of them; it reads
 them on demand through Hermes's internal server (`channel-conversations.ts`, contract decision
-§55) and keeps the last read in memory per Hermes profile, until that profile's `state.db`
+§61) and keeps the last read in memory per Hermes profile, until that profile's `state.db`
 changes. They are `ChannelConversation` / `ChannelMessage` on the wire, never `session` rows.

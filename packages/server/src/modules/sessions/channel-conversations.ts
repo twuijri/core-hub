@@ -1,6 +1,6 @@
 /**
  * Conversations held on messaging channels — Telegram, WhatsApp and the rest — read from
- * Hermes, read-only (contract decision §55).
+ * Hermes, read-only (contract decision §61).
  *
  * The hub does not receive these messages: Hermes's gateway does, and Hermes keeps them in its
  * own session store (`state.db` of each profile). The hub reads them through Hermes's internal

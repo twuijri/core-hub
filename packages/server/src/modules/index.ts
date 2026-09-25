@@ -203,7 +203,7 @@ function hermesAgentId(app: FastifyInstance, workspace: string): string | null {
 
 /**
  * Conversations on Telegram, WhatsApp… live in Hermes's own store, not the hub's (contract
- * decision §55). `sessions` reads them through Hermes's server (ADR 0015) — only where the hub
+ * decision §61). `sessions` reads them through Hermes's server (ADR 0015) — only where the hub
  * supervises Hermes, so anywhere else there is no source and the list says why. `auth` says
  * which Hermes profile a workspace is (ADR 0014), and the store file's size and time tell
  * `sessions` whether anything was written since it last read.

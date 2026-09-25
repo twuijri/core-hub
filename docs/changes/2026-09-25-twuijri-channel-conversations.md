@@ -14,8 +14,8 @@
   «محادثة من تيليجرام — للقراءة فقط؛ الرد يكون من تيليجرام»؛ والبحث يشمل عناوينها.
 
 ## القرار والموافقات
-المالك نائم؛ القرارات التالية **مقترحة — المالك يؤكد**، ومكتوبة في DECISIONS §55 (آخر رقم
-مأخوذ §54: أخذه #121 وأخذه أيضًا #123 feat/voice — تعارض بينهما لا يخص هذا الطلب):
+المالك نائم؛ القرارات التالية **مقترحة — المالك يؤكد**، ومكتوبة في DECISIONS §61 (آخر رقم
+مأخوذ §60: أخذه #121 وأخذه أيضًا #123 feat/voice — تعارض بينهما لا يخص هذا الطلب):
 - **قراءة لا نسخ.** المحادثات تُقرأ من خادم Hermes الداخلي (`hermes serve`، ADR 0015) كما يقرؤها
   تطبيق Hermes المكتبي، ولا تُنسخ إلى جداول المركز. تحقّقتُ من المسارات في مصدر Hermes المثبّت
   (MIT، `v2026.9.14`، `hermes_cli/web_routers/sessions.py`): `GET /api/sessions?profile=&sources=&order=recent&limit≤100`،
@@ -63,7 +63,7 @@
     → `{ conversation, items: ChannelMessage[], has_more }`؛ `404` (`resource: channel_conversation`)
     و`503`.
 - مخططات جديدة: `ChannelConversation`، `ChannelMessagePreview`، `ChannelMessage`،
-  `ChannelConversationsUnavailable`. لا أحداث جديدة. DECISIONS §55.
+  `ChannelConversationsUnavailable`. لا أحداث جديدة. DECISIONS §61.
 
 ## الملفات والتأثير
 الخادم (`packages/server`):
@@ -88,7 +88,7 @@
   (الرحلة ٣٣) ولقطتها `e2e/shots/channel-conversation-ar-light.png`.
 - `tests/channel-conversations.test.tsx` (جديد).
 
-الوثائق: `docs/contracts/DECISIONS.md` §55، `docs/domain/sessions.md`، `docs/STATUS.md`
+الوثائق: `docs/contracts/DECISIONS.md` §61، `docs/domain/sessions.md`، `docs/STATUS.md`
 (صف sessions ٣٤ من ٣٤، والعدد ٢١٢ من ٢٦٦).
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
@@ -162,7 +162,7 @@ db:generate + db:migrate (SQLite and PostgreSQL) — pass (53s)
 - الرجوع: إرجاع الالتزامات؛ لا جداول ولا ترحيلات ولا كتابة إلى Hermes، فلا أثر يبقى.
 
 ## التسليم والخطوة التالية
-- طلب دمج مكدّس فوق #121 (القاعدة `feat/session-categories`)؛ المالك يؤكد قرارات §55.
+- طلب دمج مكدّس فوق #121 (القاعدة `feat/session-categories`)؛ المالك يؤكد قرارات §61.
 - مقترح تالٍ: «متابعة في كور هب» — عملية `POST /channel-conversations/{id}/continue` تنشئ محادثة
   في المركز مع الوكيل، وتمرّر نص المحادثة سياقًا لأول تشغيل (لا نسخ رسائل تبدو كأنها جرت هنا).
 - لاحقًا: ترقيم صفحات لأكثر من ١٠٠ محادثة، وعرض المرفقات (صور تيليجرام) إن احتاجها المالك.

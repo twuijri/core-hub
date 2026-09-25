@@ -1,5 +1,5 @@
 /**
- * Telegram and WhatsApp conversations in the chats list (contract decision §55): Hermes keeps
+ * Telegram and WhatsApp conversations in the chats list (contract decision §61): Hermes keeps
  * them, the hub reads them read-only, and the web puts each in its channel's group («تيليجرام»،
  * «واتساب») and opens it as a transcript with no composer — only the banner saying where the
  * reply is made.

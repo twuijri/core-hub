@@ -1,5 +1,5 @@
 /**
- * Channel conversations (contract decision §55): what the hub reads of Hermes's Telegram and
+ * Channel conversations (contract decision §61): what the hub reads of Hermes's Telegram and
  * WhatsApp conversations, against a scripted Hermes that answers as Hermes's server does.
  *
  * The reader: how a Hermes row becomes a `ChannelConversation`, that the hub's own chats (the
