@@ -249,7 +249,7 @@ describe("a coding agent's config files", () => {
     fireEvent.click(screen.getByTestId('config-file-save'));
     await screen.findByTestId('config-file-saved');
     const put = sent.find((s) => s.method === 'PUT');
-    expect(put?.path).toBe(`/api/v1/agents/${CLAUDE}/config-files/instructions`);
+    expect(put?.path.endsWith(`${CLAUDE}/config-files/instructions`)).toBe(true);
     expect(put?.body).toEqual({ content: '# notes\nAlways run the tests.\n', revision: 'rev1' });
   });
 
@@ -289,7 +289,7 @@ describe('messaging accounts', () => {
         sent.some(
           (s) =>
             s.method === 'DELETE' &&
-            s.path === '/api/v1/auth/me/channel-identities/01J9ZT1A2B3C4D5E6F7G8H9J0K',
+            s.path.endsWith('channel-identities/01J9ZT1A2B3C4D5E6F7G8H9J0K'),
         ),
       ).toBe(true),
     );

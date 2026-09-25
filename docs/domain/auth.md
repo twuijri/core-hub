@@ -120,6 +120,14 @@ throttle for every guessable secret an unauthenticated caller can try.
 
 Indexes: unique (subject_kind, subject, kind). Rows are deleted when unlocked.
 
+## channel_identity (global)
+
+A messaging account a person proved is theirs (contract decision §78): `user_id` (the person,
+cascade), `platform` (`telegram` | `whatsapp`), `sender_id` (the account as Hermes names the
+sender — Telegram's numeric id, WhatsApp's chat id), `last_used_at`. Unique on
+(`platform`, `sender_id`): one link per account for the hub. The one-time link codes are not
+stored: they live in memory (hashed, ten minutes, once, one per person).
+
 ## Queries the clients need
 
 - Login: `users` by username → verify hash → issue `app_token`.
