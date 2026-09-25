@@ -204,9 +204,13 @@ describe('surface', () => {
     const { SETTINGS_IDS } = await import('../src/settings/SettingsNav.js');
     expect(manifest.SURFACE).toBe('desktop');
     expect(manifest.routeOf('this_device')).toBe('/settings/this-device');
-    // The desktop inherits the web's routes rather than keeping a second list.
-    for (const [id, route] of Object.entries(manifest.navigation.surfaceRoutes.web ?? {}))
-      if (!id.startsWith('$')) expect(manifest.routeOf(id)).toBe(route);
+    // The desktop inherits the web's routes rather than keeping a second list — all but a
+    // destination the manifest keeps to the web alone (the owner's terminal, DECISIONS §70).
+    for (const [id, route] of Object.entries(manifest.navigation.surfaceRoutes.web ?? {})) {
+      const destination = manifest.destinationsById.get(id);
+      if (id.startsWith('$') || (destination && !manifest.onThisSurface(destination))) continue;
+      expect(manifest.routeOf(id)).toBe(route);
+    }
     expect(routes.map((r) => r.id)).toContain('this_device');
     // In the settings list, between Privacy and About, as navigation.json orders the tabs.
     const tabs = SETTINGS_IDS.filter((id) => manifest.navigation.settingsTabs.includes(id));
