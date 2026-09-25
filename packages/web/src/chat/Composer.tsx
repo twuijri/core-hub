@@ -5,7 +5,7 @@
  *   [ agent chips ]                                   — passed in, above the surface
  *   ┌───────────────────────────────────────────────┐
  *   │ attachments · error · the growing textarea    │
- *   │ [+]  [model]  [approvals]        [mic] [send] │
+ *   │ [+]  [model]  [approvals]    [mic][▾] [send] │
  *   └───────────────────────────────────────────────┘
  *   [ starters, on an empty chat ]
  *
@@ -16,6 +16,11 @@
  * The textarea grows without moving anything: the surface is a grid whose invisible
  * `::after` twin carries the same text, so the row's height is already correct when the
  * character lands (`.composer-grow` in styles/app.css). No measuring, no jump.
+ *
+ * The mic dictates into the text (contract decision §54, `voice/`): pressed once it records,
+ * pressed again the take is transcribed by the hub and the words land here for the person to
+ * read before sending. The small menu beside it holds the dictation language, reading replies
+ * aloud, and voice mode where the screen offers it.
  *
  * Glass belongs to floating chrome, which this is (DESIGN §Glass); the intensity is the
  * one token scale, so `prefers-reduced-transparency` flattens it with everything else.
@@ -35,7 +40,6 @@ import { useI18n } from '../i18n/context.js';
 import type { Attachment, ContentBlock } from '../types.js';
 import {
   IconClose,
-  IconMic,
   IconPaperclip,
   IconPlus,
   IconSend,
@@ -53,6 +57,10 @@ import { Select } from '../ui/Select.js';
 import type { ComboboxOption } from '../ui/Combobox.js';
 import type { SelectOption } from '../ui/Select.js';
 import { canSend, composerState } from './composer-state.js';
+import { DictationNotice, MicButton, VoiceMenu } from '../voice/DictationControls.js';
+import { useVoicePreferences } from '../voice/context.js';
+import { dictationHint } from '../voice/recorder.js';
+import { useDictation } from '../voice/useDictation.js';
 
 interface Pending {
   key: string;
@@ -120,6 +128,8 @@ export interface ComposerProps {
   approvalDisabledReason?: string | null;
   /** Three suggestions, shown only while the chat is empty. */
   starters?: readonly string[];
+  /** Opens the full-screen voice stage; the voice menu offers it only when given. */
+  onVoiceMode?: (() => void) | undefined;
 }
 
 export const APPROVAL_MODES = ['ask', 'auto_safe', 'auto_all'] as const;
@@ -150,8 +160,9 @@ export function Composer({
   onApprovalMode,
   approvalDisabledReason = null,
   starters = [],
+  onVoiceMode,
 }: ComposerProps) {
-  const { t } = useI18n();
+  const { t, language: uiLanguage } = useI18n();
   const { upload: uploadAttachment } = useUploadAttachment();
   const [text, setText] = useState('');
   const [pending, setPending] = useState<Pending[]>([]);
@@ -161,6 +172,16 @@ export function Composer({
   const fileInput = useRef<HTMLInputElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const reasonId = useId();
+
+  // Dictated words join what is already typed, for the person to read before sending.
+  const voicePreferences = useVoicePreferences();
+  const dictation = useDictation({
+    language: dictationHint(voicePreferences.dictationLanguage, uiLanguage),
+    onText: (words) => {
+      setText((current) => (current.trim() ? `${current.replace(/\s+$/, '')} ${words}` : words));
+      textarea.current?.focus();
+    },
+  });
 
   const hasContent = text.trim() !== '' || pending.some((p) => p.status === 'done');
   const input = { disabled, dragging, busy, sending, error: error !== null, hasContent };
@@ -294,6 +315,7 @@ export function Composer({
             {error}
           </Notice>
         )}
+        <DictationNotice dictation={dictation} />
 
         <div className="composer-grow" data-value={text}>
           <textarea
@@ -393,24 +415,10 @@ export function Composer({
 
           <span className="composer-spacer" />
 
-          {/* Disabled, and the reason is in the tooltip rather than left to be guessed.
-              A disabled button takes no pointer events, so the tooltip hangs off a
-              focusable wrapper — otherwise the explanation would never appear. */}
           {context}
 
-          <Tooltip label={t('composer.dictate_unavailable')}>
-            <span tabIndex={0} aria-describedby={undefined} data-testid="composer-mic-wrap">
-              <button
-                type="button"
-                className="composer-btn"
-                disabled
-                aria-label={t('composer.dictate')}
-                data-testid="composer-mic"
-              >
-                <IconMic />
-              </button>
-            </span>
-          </Tooltip>
+          <MicButton dictation={dictation} disabled={disabled} />
+          <VoiceMenu disabled={disabled} onVoiceMode={onVoiceMode} />
 
           {busy ? (
             <Tooltip label={t('composer.stop')}>

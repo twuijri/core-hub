@@ -1033,3 +1033,118 @@ summary.tool-head:hover {
     display: none;
   }
 }
+
+/* ------------------------------------------------------------------ voice (DECISIONS §54) */
+
+/* The mic while it records: the danger colour and a slow breath, so it is plain that the
+   microphone is open. */
+.composer-btn-mic[data-phase='recording'] {
+  background: var(--ch-color-danger);
+  color: var(--ch-color-danger-text);
+  animation: ch-pulse 1.4s var(--ch-motion-ease) infinite;
+}
+.composer-btn-mic[data-phase='transcribing'],
+.composer-btn-mic[data-phase='requesting'] {
+  animation: ch-pulse 1s var(--ch-motion-ease) infinite;
+}
+/* The voice options chevron: a half-width companion of the mic. */
+.composer-btn-narrow {
+  inline-size: 1.25rem;
+  margin-inline-start: calc(var(--ch-space-1) * -1);
+}
+.composer-voice-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ch-space-2);
+  padding-block-end: var(--ch-space-1);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
+}
+.composer-voice-dot {
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: var(--ch-radius-full);
+  background: var(--ch-color-accent);
+}
+.composer-voice-dot[data-phase='recording'] {
+  background: var(--ch-color-danger);
+  animation: ch-pulse 1.4s var(--ch-motion-ease) infinite;
+}
+.msg-speak-error {
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-danger-soft-text);
+}
+.msg-actions [data-testid='message-speak'][data-phase='loading'] {
+  animation: ch-pulse 1s var(--ch-motion-ease) infinite;
+}
+
+/* The full-screen stage of voice mode: one big button whose colour is the state. */
+.ch-dialog-full {
+  inline-size: calc(100vw - 2rem);
+  block-size: calc(100dvh - 2rem);
+  max-block-size: none;
+}
+.voice-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ch-space-4);
+  text-align: center;
+  overflow-y: auto;
+}
+.voice-stage-state {
+  font-size: var(--ch-font-size-xl);
+  font-weight: 600;
+}
+.voice-orb {
+  display: grid;
+  place-items: center;
+  inline-size: 9rem;
+  block-size: 9rem;
+  border-radius: var(--ch-radius-full);
+  border: 0;
+  background: var(--ch-color-accent);
+  color: var(--ch-color-accent-text);
+  box-shadow: var(--ch-shadow-lg);
+  touch-action: none;
+  transition-duration: var(--ch-motion-fast);
+  transition-timing-function: var(--ch-motion-ease);
+  transition-property: background-color, transform;
+}
+.voice-orb:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.voice-orb[data-state='listening'] {
+  background: var(--ch-color-danger);
+  color: var(--ch-color-danger-text);
+  animation: ch-pulse 1.4s var(--ch-motion-ease) infinite;
+}
+.voice-orb[data-state='thinking'],
+.voice-orb[data-state='transcribing'] {
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text);
+  animation: ch-pulse 1s var(--ch-motion-ease) infinite;
+}
+.voice-orb[data-state='speaking'] {
+  background: var(--ch-color-accent-strong);
+}
+.voice-stage-line {
+  max-inline-size: 40rem;
+  font-size: var(--ch-font-size-md);
+}
+.voice-stage-reply {
+  color: var(--ch-color-text-muted);
+  max-block-size: 30vh;
+  overflow-y: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-btn-mic,
+  .composer-voice-dot,
+  .voice-orb,
+  .msg-actions [data-testid='message-speak'] {
+    animation: none !important;
+  }
+}

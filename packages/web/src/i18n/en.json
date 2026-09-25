@@ -231,8 +231,6 @@
     "copy": "Copy",
     "reply": "Reply to this",
     "fork_here": "Fork from here",
-    "speak": "Listen",
-    "speak_later": "Speech arrives in a later phase.",
     "replying_to": "Replying to: {text}",
     "estimated": "≈ {amount}",
     "anchor_missing": "The message this search pointed to is no longer in this conversation.",
@@ -270,8 +268,6 @@
       "off": "No approvals",
       "always": "Always ask"
     },
-    "dictate": "Dictate",
-    "dictate_unavailable": "Dictation arrives with a speech provider (models.transcribe is still 501).",
     "add_agent": "Add an agent",
     "approval_hint": {
       "ask": "Asks before a command or a write outside the working folder.",
@@ -608,7 +604,11 @@
       "scope_all": "All profiles",
       "scope_profile": "This profile only",
       "scope_all_hint": "Shared: every profile uses it, including profiles made later.",
-      "scope_profile_hint": "Only {profile} uses it, and its key wins there over a shared provider of the same kind. Other profiles never see it."
+      "scope_profile_hint": "Only {profile} uses it, and its key wins there over a shared provider of the same kind. Other profiles never see it.",
+      "kind": "What it does",
+      "kind_llm": "Chat",
+      "kind_stt": "Speech to text",
+      "kind_tts": "Text to speech"
     },
     "runtime": {
       "title": "Runtime",
@@ -636,6 +636,26 @@
       "all_ok": "Everything works",
       "show": "Show checks",
       "hide": "Hide checks"
+    },
+    "speech": {
+      "active_stt": "Speech to text for this profile",
+      "active_tts": "Text to speech for this profile",
+      "hint_stt": "The composer’s microphone and voice mode send what you say to this provider.",
+      "hint_tts": "The speaker under each reply, reading replies aloud and voice mode speak through this provider.",
+      "provider": "Provider",
+      "none": "None",
+      "model": "Model",
+      "voice": "Voice",
+      "voice_hint": "The provider’s voice id, e.g. alloy",
+      "language": "Language (optional)",
+      "save": "Save",
+      "saved": "Saved.",
+      "ready": "Ready",
+      "not_ready": "Not ready",
+      "try": "Try the voice",
+      "try_text": "Hello. This is how replies will sound.",
+      "try_failed": "The voice could not be played: {detail}",
+      "add_hint": "Add OpenAI (it brings its speech rows with the same key), ElevenLabs, or your own OpenAI-compatible speech server with Add provider → Custom."
     }
   },
   "working_dir": {
@@ -1654,6 +1674,49 @@
       "cache_hit": "Cache hit",
       "input_tokens": "Input tokens",
       "output_tokens": "Output tokens"
+    }
+  },
+  "voice": {
+    "dictate": "Dictate",
+    "stop_dictation": "Stop and transcribe",
+    "requesting": "Waiting for the microphone…",
+    "listening": "Listening… {seconds}s",
+    "transcribing": "Transcribing…",
+    "cancel": "Cancel",
+    "browser_engine": "With this browser’s own recognizer: the profile has no speech-to-text provider.",
+    "error": {
+      "no_provider": "Dictation needs a speech-to-text provider, and this browser has no recognizer of its own.",
+      "mic_denied": "The browser was not allowed to use the microphone.",
+      "mic_unavailable": "No microphone could be opened.",
+      "no_speech": "Nothing was heard. Try again a little closer to the microphone.",
+      "failed": "Dictation failed: {detail}"
+    },
+    "open_models": "Set one up in Models",
+    "menu": "Voice options",
+    "language": "Dictation language",
+    "language_auto": "Detect automatically",
+    "language_ar": "العربية",
+    "language_en": "English",
+    "auto_read": "Read replies aloud",
+    "mode": "Voice mode",
+    "speak": "Read aloud",
+    "stop_speaking": "Stop reading",
+    "loading_audio": "Preparing the voice…",
+    "browser_voice": "Read aloud with this browser’s voice (the profile has no text-to-speech provider)",
+    "no_tts": "No text-to-speech provider is ready for this profile.",
+    "stage": {
+      "title": "Voice mode",
+      "turn_by_turn": "Turn by turn: the hub’s speech providers don’t stream, so your words go when you stop talking, and the reply is spoken sentence by sentence as it arrives.",
+      "ready": "Tap to talk",
+      "listening": "Listening",
+      "transcribing": "Transcribing",
+      "thinking": "Thinking",
+      "speaking": "Speaking",
+      "tap_to_send": "Tap to send",
+      "interrupt": "Interrupt",
+      "close": "End voice mode",
+      "hint": "Tap to start and tap again to send — or hold, and let go to send.",
+      "you_said": "You said:"
     }
   }
 }
