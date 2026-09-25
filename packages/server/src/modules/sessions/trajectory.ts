@@ -565,7 +565,14 @@ function placeSubagents(
       tool_call: null,
       subagent: toSubagent(record),
     };
-    if (at < 0) steps.push(step);
-    else steps.splice(at + 1, 0, step);
+    if (at < 0) {
+      steps.push(step);
+      continue;
+    }
+    // After the subagents already placed there: two started in the same instant keep the
+    // order the agent reported them in.
+    let slot = at + 1;
+    while (steps[slot]?.kind === 'subagent') slot += 1;
+    steps.splice(slot, 0, step);
   }
 }
