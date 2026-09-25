@@ -1,6 +1,6 @@
 {
   "name": "@corehub/ui-tokens",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "Core Hub design tokens: one JSON source of truth, generated CSS variables and TypeScript types; exportable to Kotlin/Swift later.",
   "type": "module",

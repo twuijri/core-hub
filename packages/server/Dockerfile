@@ -21,7 +21,7 @@ WORKDIR /app
 # before the hub answers, and the hub reports it on /api/v1/health and /api/v1/meta. The default
 # is the root package.json's version (`pnpm version:check` keeps the two equal); release.yml
 # passes the tag's version, or `<version>-preview.<run>` for a manual preview.
-ARG COREHUB_VERSION=1.1.0
+ARG COREHUB_VERSION=1.1.1
 
 # ---- all dependencies + build -------------------------------------------------------------
 FROM base AS build

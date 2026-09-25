@@ -1,6 +1,6 @@
 {
   "name": "@corehub/server",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "Core Hub server: Fastify + Socket.IO + Drizzle. Owns the truth about agents, sessions, rooms, tasks and schedules.",
   "type": "module",
