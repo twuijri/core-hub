@@ -7118,6 +7118,7 @@ paths:
                   account_phone: null
                   account_username: null
                   mode: null
+                  reply_title: null
                 fields: []
         '401':
           $ref: '#/components/responses/Unauthorized'
@@ -7179,6 +7180,77 @@ paths:
                   account_phone: '966500000000'
                   account_username: null
                   mode: self-chat
+                  reply_title: 'Office'
+                fields: []
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /agents/{agent_id}/channels/{platform}/reply-header:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/Platform'
+    put:
+      operationId: agents.setChannelReplyHeader
+      tags: [agents]
+      summary: Set the header over the agent's WhatsApp replies in "Message yourself" — the agent's name or a title the person typed (admin)
+      description: >-
+        WhatsApp only. In `self-chat` the owner and the agent write from one number, so Hermes puts
+        a header over every reply; its own is «☤ *Hermes Agent*». This writes
+        `WHATSAPP_REPLY_PREFIX` in the profile's `.env` as the title in bold over a rule
+        (`ChannelLink.reply_title` reads it back), and the messaging gateway serving the profile
+        restarts to follow, like every channel change (the default profile's included, after a
+        burst of changes has settled). It can be written in `bot` mode too, where Hermes sends no
+        header. There is no "no header": Hermes v2026.9.14's WhatsApp bridge sends its own header
+        for an empty value. The hub also writes the agent's name, when nothing is written yet, as
+        a number is linked in `self-chat` (`agents.loginChannel`) or switched to it
+        (`agents.setChannelMode`); it never rewrites a profile when it starts. Any other platform
+        answers `409 state_invalid` with `details.reason = reply_header_not_supported`; a profile
+        with no linked WhatsApp answers `409` with `details.reason = not_linked`; `custom` with no
+        usable title answers `400 validation_failed` with `details.reason = reply_title_invalid`.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelReplyHeaderWrite'
+            example:
+              use: custom
+              title: Office assistant
+      responses:
+        '200':
+          description: Written; the channel as it now reads.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Channel'
+              example:
+                platform: whatsapp
+                label: whatsapp
+                enabled: true
+                configured: true
+                exclusive: true
+                status: unknown
+                error: null
+                restart_needed: false
+                login: qr
+                link:
+                  linked: true
+                  account_id: '966500000000:3@s.whatsapp.net'
+                  account_name: Office
+                  account_phone: '966500000000'
+                  account_username: null
+                  mode: self-chat
+                  reply_title: Office assistant
                 fields: []
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -7264,6 +7336,7 @@ paths:
                   account_phone: null
                   account_username: office_helper_bot
                   mode: null
+                  reply_title: null
                 fields: []
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -20131,7 +20204,8 @@ components:
             $ref: '#/components/schemas/ChannelField'
     ChannelLink:
       type: object
-      required: [linked, account_id, account_name, account_phone, account_username, mode]
+      required:
+        [linked, account_id, account_name, account_phone, account_username, mode, reply_title]
       properties:
         linked:
           type: boolean
@@ -20161,6 +20235,16 @@ components:
             Hermes does not know reads as null.
           type: [string, 'null']
           enum: [bot, self-chat, null]
+        reply_title:
+          description: >-
+            WhatsApp only, null for every other platform: the title of the header Hermes puts over
+            every reply in `self-chat` (the owner and the agent write from one number there), read
+            from the profile's `WHATSAPP_REPLY_PREFIX`. The hub writes it as the title in bold over
+            a rule, the shape of Hermes's own «☤ *Hermes Agent*» header. Null while nothing usable
+            is written, which Hermes answers with its own header; a prefix written by hand reads as
+            its text on one line. `bot` replies carry no header, whatever this says. See
+            `agents.setChannelReplyHeader`.
+          type: [string, 'null']
     ChannelLoginRequest:
       type: object
       additionalProperties: false
@@ -20172,6 +20256,24 @@ components:
           description: >-
             How the number being linked will be used (`ChannelLink.mode`). A client asks the
             person; it does not guess from the number.
+    ChannelReplyHeaderWrite:
+      type: object
+      additionalProperties: false
+      required: [use]
+      properties:
+        use:
+          type: string
+          enum: [agent_name, custom]
+          description: >-
+            `agent_name` — the agent's name as the hub shows it (`Agent.name`), read when this is
+            written: renaming the agent later does not rewrite it. `custom` — `title`.
+        title:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >-
+            With `custom`, the title: one line (white space is folded to single spaces), at most 64
+            characters after trimming. Ignored with `agent_name`.
     ChannelModeWrite:
       type: object
       additionalProperties: false

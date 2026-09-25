@@ -7,6 +7,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  cleanReplyTitle,
+  replyPrefixFor,
+  whatsappReplyTitle,
   ChannelError,
   activeChannels,
   clearChannel,
@@ -420,5 +423,32 @@ describe('the profile .env', () => {
     writeEnvValue(dir, 'A', null);
     expect(readFileSync(path.join(dir, '.env'), 'utf8')).toBe('# mine\nB="two words"\nC=3\n');
     expect(readEnv(dir)).toEqual({ B: 'two words', C: '3' });
+  });
+});
+
+describe("WhatsApp's reply header", () => {
+  it('is written in Hermes’s shape and read back as its title', () => {
+    expect(replyPrefixFor('سارة')).toBe('*سارة*\\n────────────\\n');
+    expect(whatsappReplyTitle({ WHATSAPP_REPLY_PREFIX: replyPrefixFor('Office bot') })).toBe(
+      'Office bot',
+    );
+  });
+
+  it('reads nothing written, and an empty value, as Hermes’s own header', () => {
+    expect(whatsappReplyTitle({})).toBeNull();
+    // Hermes's adapter drops an empty value before its bridge starts: the bridge's header shows.
+    expect(whatsappReplyTitle({ WHATSAPP_REPLY_PREFIX: '' })).toBeNull();
+    expect(whatsappReplyTitle({ WHATSAPP_REPLY_PREFIX: '\\n' })).toBeNull();
+  });
+
+  it('reads a prefix written by hand as its text on one line', () => {
+    expect(whatsappReplyTitle({ WHATSAPP_REPLY_PREFIX: '🤖 Office:\\n' })).toBe('🤖 Office:');
+  });
+
+  it('takes one trimmed line of at most 64 characters', () => {
+    expect(cleanReplyTitle('  a \n b ')).toBe('a b');
+    expect(cleanReplyTitle('   ')).toBeNull();
+    expect(cleanReplyTitle('x'.repeat(64))).toHaveLength(64);
+    expect(cleanReplyTitle('x'.repeat(65))).toBeNull();
   });
 });
