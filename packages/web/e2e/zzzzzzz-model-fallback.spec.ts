@@ -98,8 +98,7 @@ test('34. a fallback model answers when the chat model is down, and the reply sa
   await shot(page, 'models-fallbacks-ar-light');
 
   // The next message: the chat model fails, the fallback answers, and the reply says so.
-  await page.getByRole('link', { name: 'محادثة جديدة' }).first().click();
-  await expect(page).toHaveURL(/\/new$/);
+  await page.goto('/new');
   await expect(async () => {
     await page.getByTestId('composer-input').fill('جرّب النموذج الاحتياطي');
     await expect(page.getByTestId('send')).toBeEnabled({ timeout: 1_000 });

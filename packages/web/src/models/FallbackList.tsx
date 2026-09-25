@@ -50,7 +50,7 @@ export function FallbackList({
           {t('models.defaults.fallbacks_empty')}
         </p>
       ) : (
-        <ol className="flex flex-col gap-1" data-testid="fallback-list">
+        <ol className="flex max-w-xl flex-col gap-1" data-testid="fallback-list">
           {chain.map((ref, index) => {
             const name = nameOf(ref);
             return (
