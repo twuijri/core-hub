@@ -26,6 +26,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -73,9 +74,11 @@ fun ConnectScreen(pendingPairing: PairingRequest?, onPairingHandled: () -> Unit)
         val contents = result.contents ?: return@rememberLauncherForActivityResult
         vm.claim(PairingInput.parse(contents), deviceName(context))
     }
-    if (pendingPairing != null) {
-        vm.claim(pendingPairing, deviceName(context))
-        onPairingHandled()
+    LaunchedEffect(pendingPairing) {
+        if (pendingPairing != null) {
+            vm.claim(pendingPairing, deviceName(context))
+            onPairingHandled()
+        }
     }
     val scanPrompt = stringResource(R.string.connect_scan_prompt)
 
