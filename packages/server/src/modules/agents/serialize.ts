@@ -1,7 +1,9 @@
 // Registry row -> the contract's `Agent`. Pure; unit-tested against the states the
 // install lifecycle can be in (docs/domain/agents.md).
 import { iso } from '../../lib/time.js';
+import { catalogEntry, pinnedVersion } from './catalog/index.js';
 import type { agents, agentSettings } from './schema.js';
+import { compareVersions } from './update-policy.js';
 
 /**
  * The contract's `Avatar`. Until the hub stores agent pictures, every agent is a
@@ -43,6 +45,8 @@ export interface ContractAgent {
     version: string | null;
     latest_version: string | null;
     update_available: boolean;
+    pinned_version: string | null;
+    newer_than_tested: boolean;
     auto_update: boolean;
     auto_update_supported: boolean;
     checked_at: string | null;
@@ -118,6 +122,9 @@ export function serializeAgent(
   },
 ): ContractAgent {
   const enabled = options.settings?.enabled ?? true;
+  // The catalog's pin is the tested baseline; an agent the catalog no longer carries has none.
+  const entry = catalogEntry(row.slug);
+  const pinned = entry ? pinnedVersion(entry) : null;
   return {
     id: row.id,
     profile: options.profile,
@@ -140,7 +147,15 @@ export function serializeAgent(
       command: row.command.length > 0 ? row.command.join(' ') : null,
       version: row.version,
       latest_version: row.latestVersion,
-      update_available: !!row.latestVersion && !!row.version && row.latestVersion !== row.version,
+      update_available:
+        !!row.latestVersion && !!row.version && compareVersions(row.latestVersion, row.version) > 0,
+      pinned_version: pinned,
+      // Past the pin the owner tested: said in the UI, never hidden (`update-policy.ts`).
+      newer_than_tested:
+        row.source === 'managed' &&
+        !!pinned &&
+        !!row.version &&
+        compareVersions(row.version, pinned) > 0,
       auto_update: row.autoUpdate,
       auto_update_supported: row.packageName !== null,
       checked_at: iso(row.checkedAt),

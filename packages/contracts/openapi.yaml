@@ -3561,6 +3561,8 @@ paths:
                       version: 0.21.3
                       latest_version: 0.21.3
                       update_available: false
+                      pinned_version: null
+                      newer_than_tested: false
                       auto_update: true
                       auto_update_supported: true
                       checked_at: '2026-09-21T06:00:00Z'
@@ -3611,6 +3613,8 @@ paths:
                       version: 2.1.0
                       latest_version: 2.1.4
                       update_available: true
+                      pinned_version: 2.1.0
+                      newer_than_tested: false
                       auto_update: false
                       auto_update_supported: true
                       checked_at: '2026-09-21T06:00:00Z'
@@ -3695,6 +3699,8 @@ paths:
                   version: 2.1.0
                   latest_version: 2.1.4
                   update_available: true
+                  pinned_version: 2.1.0
+                  newer_than_tested: false
                   auto_update: false
                   auto_update_supported: true
                   checked_at: '2026-09-21T06:00:00Z'
@@ -3756,6 +3762,8 @@ paths:
                   version: 2.1.0
                   latest_version: 2.1.4
                   update_available: true
+                  pinned_version: 2.1.0
+                  newer_than_tested: false
                   auto_update: true
                   auto_update_supported: true
                   checked_at: '2026-09-21T06:00:00Z'
@@ -3859,6 +3867,11 @@ paths:
       operationId: agents.upgrade
       tags: [agents]
       summary: Update the agent's CLI to `latest_version` (admin)
+      description: >-
+        A job that installs the exact `latest_version` (never the registry's moving `latest`
+        tag) — the catalog's `pinned_version` when nothing newer is known. A run of the agent
+        asked for while it works waits for it to end. The same job runs on its own for an
+        agent with `auto_update`, only while no run of it is in flight.
       x-roles: [owner, admin]
       x-rt-events: [job.queued, job.progress, job.completed, job.failed, agent.updated]
       responses:
@@ -3886,7 +3899,12 @@ paths:
       operationId: agents.checkUpdate
       tags: [agents]
       summary: Check the registry for a newer version (admin)
-      description: A short job; its result is `{ latest_version, update_available }` and `install` is refreshed.
+      description: >-
+        A short job that asks the package registry (npm, PyPI) for the newest stable version
+        without installing it; its result is `{ latest_version, pinned_version,
+        update_available }` and `install` is refreshed. The hub also runs this check every six
+        hours for every agent it installed. An unreachable registry fails the job
+        (`service_unavailable`).
       x-roles: [owner, admin]
       x-rt-events: [job.queued, job.completed, job.failed, agent.updated]
       responses:
@@ -14810,6 +14828,8 @@ components:
           version,
           latest_version,
           update_available,
+          pinned_version,
+          newer_than_tested,
           auto_update,
           auto_update_supported,
           checked_at,
@@ -14830,10 +14850,29 @@ components:
           type: [string, 'null']
         latest_version:
           type: [string, 'null']
+          description: >-
+            The newest stable version the hub knows of: the registry's answer to the last
+            check (every six hours, and `agents.checkUpdate`), never older than
+            `pinned_version`. Asked, never installed on its own.
         update_available:
           type: boolean
+          description: '`latest_version` is newer than the installed `version`.'
+        pinned_version:
+          type: [string, 'null']
+          description: >-
+            The catalog's pin for the package the hub installs — the version the owner
+            tested, and the one a fresh install takes. `null` for an agent the hub does not
+            install (Hermes, the hub's own agent).
+        newer_than_tested:
+          type: boolean
+          description: >-
+            The hub installed this agent and its `version` is past `pinned_version` (an
+            update took a newer release). Clients say so: «أحدث من النسخة المختبرة».
         auto_update:
           type: boolean
+          description: >-
+            Take an available update automatically. Off by default. Taken only while no run
+            of the agent is in flight; a run asked for during the update waits for it.
         auto_update_supported:
           type: boolean
         checked_at:

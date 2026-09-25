@@ -21,8 +21,9 @@
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { runCommand, whichSync, type HostEnvironment } from './adapters/host.js';
-import { isManaged, pinnedVersion, type CatalogEntry } from './catalog/index.js';
+import { isManaged, pinnedPackages, pinnedVersion, type CatalogEntry } from './catalog/index.js';
 import { agentUnavailable, HubError } from '../../lib/errors.js';
+import { isStableVersion } from './update-policy.js';
 
 export interface InstallOutcome {
   version: string | null;
@@ -46,7 +47,15 @@ export interface AgentInstaller {
   binDirFor(id: string): string;
   /** True when `<DATA_DIR>/agents/<id>` holds the entry's binary. */
   isPresent(entry: CatalogEntry): boolean;
-  install(entry: CatalogEntry, report: InstallProgress): Promise<InstallOutcome>;
+  /**
+   * Installs the entry's packages at their catalog pins, or at the exact versions
+   * `versions` names per package (an update past the tested pin, `update-policy.ts`).
+   */
+  install(
+    entry: CatalogEntry,
+    report: InstallProgress,
+    versions?: Readonly<Record<string, string>>,
+  ): Promise<InstallOutcome>;
   uninstall(entry: CatalogEntry, report: InstallProgress): Promise<void>;
   /** Runs the entry's health check against what is on disk. */
   health(entry: CatalogEntry): Promise<HealthResult>;
@@ -115,8 +124,8 @@ export function createNpmInstaller(options: NpmInstallerOptions): AgentInstaller
     return { package: entry.install.package, version: entry.install.version };
   };
 
-  const binaryIn = (entry: CatalogEntry): string | null =>
-    whichSync(entry.binary, {
+  const binaryIn = (entry: CatalogEntry, binary: string = entry.binary): string | null =>
+    whichSync(binary, {
       pathValue: agentBinDir(options.dataDir, entry.id),
       ...(options.host.pathExt !== undefined ? { pathExt: options.host.pathExt } : {}),
     });
@@ -132,14 +141,25 @@ export function createNpmInstaller(options: NpmInstallerOptions): AgentInstaller
       return isManaged(entry) && binaryIn(entry) !== null;
     },
 
-    async install(entry, report) {
+    async install(entry, report, versions) {
       const recipe = requireManaged(entry);
+      // Always an exact version per package — the pin, or the exact one an update names.
+      // Anything else (a tag, a range, a path) is refused before npm is even looked for.
+      for (const [name, version] of Object.entries(versions ?? {})) {
+        if (!isStableVersion(version)) {
+          throw new HubError('internal', {
+            message: `refusing to install ${name}@${version}: not an exact released version`,
+          });
+        }
+      }
       const npmPath = npm();
       const prefix = agentPrefix(options.dataDir, entry.id);
-      const spec = `${recipe.package}@${recipe.version}`;
-      await report(10, `installing ${spec} into ${prefix}`);
+      const specs = pinnedPackages(entry).map(
+        (pin) => `${pin.package}@${versions?.[pin.package] ?? pin.version}`,
+      );
+      await report(10, `installing ${specs.join(' ')} into ${prefix}`);
       const result = await runCommand(
-        [npmPath, 'install', '--global', '--prefix', prefix, '--no-fund', '--no-audit', spec],
+        [npmPath, 'install', '--global', '--prefix', prefix, '--no-fund', '--no-audit', ...specs],
         { timeoutMs },
       );
       if (!result.ok) {
@@ -154,7 +174,10 @@ export function createNpmInstaller(options: NpmInstallerOptions): AgentInstaller
           message: health.error ?? `${entry.name} was installed but its health check failed`,
         });
       }
-      return { version: health.version ?? recipe.version, executablePath: binaryIn(entry) };
+      return {
+        version: health.version ?? versions?.[recipe.package] ?? recipe.version,
+        executablePath: binaryIn(entry),
+      };
     },
 
     async uninstall(entry, report) {
@@ -177,9 +200,15 @@ export function createNpmInstaller(options: NpmInstallerOptions): AgentInstaller
         // An `http` check belongs to the adapter that owns the endpoint (Hermes).
         return { ok: false, version: null, error: 'this entry is checked by its adapter' };
       }
-      const executablePath = binaryIn(entry);
-      if (!executablePath) {
+      // The protocol binary must be there to be driven at all; the check itself may ask
+      // the CLI it drives (`HealthCheck.binary`).
+      if (!binaryIn(entry)) {
         return { ok: false, version: null, error: `${entry.binary} is not in the agent directory` };
+      }
+      const checked = entry.health.binary ?? entry.binary;
+      const executablePath = binaryIn(entry, checked);
+      if (!executablePath) {
+        return { ok: false, version: null, error: `${checked} is not in the agent directory` };
       }
       const result = await runCommand([executablePath, ...entry.health.args], {
         timeoutMs: 30_000,

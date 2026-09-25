@@ -56,6 +56,10 @@ type DecisionMap = Map<RunnerDecision, string>;
 interface LiveSession {
   session: AgentSession;
   adapterKind: string;
+  /** The registry row it runs, so an update can retire the sessions of that agent. */
+  agentId: string;
+  /** Set when the agent was updated under a running turn: closed as soon as it ends. */
+  retire?: boolean;
   /** The hub session the agent session serves; the map key, kept for logging. */
   sessionId: string;
 }
@@ -87,7 +91,7 @@ export class AgentRunner implements AgentRunnerPort {
 
   async start(request: RunnerRunRequest): Promise<RunnerRunAccepted> {
     const { service, adapters } = this.deps;
-    const row = service.loadAgent(request.agentId);
+    const row = await this.readyRow(request.agentId);
     if (row.installState !== 'installed') {
       throw agentUnavailable({ agent_id: row.id, status: row.installState });
     }
@@ -119,7 +123,12 @@ export class AgentRunner implements AgentRunnerPort {
         reasoningEffort: request.reasoningEffort,
       });
       const session = await adapter.start(target);
-      live = { session, adapterKind: row.adapterKind, sessionId: request.sessionId };
+      live = {
+        session,
+        adapterKind: row.adapterKind,
+        agentId: row.id,
+        sessionId: request.sessionId,
+      };
       this.sessions.set(request.sessionId, live);
     }
 
@@ -172,6 +181,52 @@ export class AgentRunner implements AgentRunnerPort {
    */
   get busy(): boolean {
     return this.runs.size > 0;
+  }
+
+  /**
+   * Whether a turn of this agent is in flight. The update policy asks before an
+   * auto-update: it never replaces an agent's CLI under a running turn
+   * (`update-policy.ts`).
+   */
+  busyFor(agentId: string): boolean {
+    for (const run of this.runs.values()) {
+      if (run.live.agentId === agentId) return true;
+    }
+    return false;
+  }
+
+  /**
+   * After an agent was installed again or updated: its open sessions still run the old
+   * process, so each idle one is closed now and each busy one as soon as its turn ends.
+   * The next turn opens a fresh session on the new CLI, resuming the conversation by
+   * its stored ref.
+   */
+  retireSessionsOf(agentId: string): void {
+    const busy = new Set([...this.runs.values()].map((run) => run.live));
+    for (const [sessionId, live] of [...this.sessions.entries()]) {
+      if (live.agentId !== agentId) continue;
+      if (busy.has(live)) {
+        live.retire = true;
+        continue;
+      }
+      this.sessions.delete(sessionId);
+      void live.session.close().catch((error: unknown) => {
+        this.deps.log.warn({ err: error, sessionId }, 'agents: close after update failed');
+      });
+    }
+  }
+
+  /**
+   * The agent's row, once it can run: a turn asked for while the agent is being updated
+   * waits for the update to end instead of starting on a CLI that is being replaced
+   * (`AgentsService.settled`, bounded by `HOLD_FOR_UPDATE_MS`).
+   */
+  private async readyRow(agentId: string) {
+    const { service } = this.deps;
+    const row = service.loadAgent(agentId);
+    if (row.installState !== 'updating') return row;
+    await service.settled(row.id);
+    return service.loadAgent(agentId);
   }
 
   stream(runId: string): AsyncIterable<RunnerEvent> {
@@ -248,7 +303,7 @@ export class AgentRunner implements AgentRunnerPort {
    */
   async ask(request: RunnerAskRequest): Promise<string | null> {
     const { service, adapters } = this.deps;
-    const row = service.loadAgent(request.agentId);
+    const row = await this.readyRow(request.agentId);
     if (row.installState !== 'installed') return null;
     const target = service.targetFor(row, request.workspace, {
       // A conversation of its own: `-ask-` keeps it apart from the chat's own ref for
@@ -381,6 +436,10 @@ export class AgentRunner implements AgentRunnerPort {
     // fresh one (an ACP child, or the Hermes TUI gateway). Hermes's HTTP sessions stay.
     if (isClosed(run.live.session)) {
       this.sessions.delete(run.sessionId);
+    } else if (run.live.retire && this.sessions.get(run.sessionId) === run.live) {
+      // Updated under this turn: the process is the old CLI, so it goes now.
+      this.sessions.delete(run.sessionId);
+      void run.live.session.close().catch(() => undefined);
     }
   }
 }
