@@ -78,6 +78,11 @@ export interface DesktopUpdateCheck {
 }
 
 export interface DesktopUpdatesState {
+  /**
+   * `store`: the Microsoft Store build — the Store updates it, so the app never checks and
+   * `releasesPage` is its Store page. Absent (an older app) means `github`.
+   */
+  channel?: 'github' | 'store';
   /** Checks once a day on its own. */
   auto: boolean;
   /** The last answer, or null before the first check. */

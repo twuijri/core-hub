@@ -2784,6 +2784,8 @@
     "failed": "تعذّر التحقق: {message}",
     "checked_at": "آخر تحقق {time}",
     "all_releases": "كل الإصدارات",
+    "from_store": "التحديثات تأتي من متجر مايكروسوفت.",
+    "store_page": "فتح في متجر مايكروسوفت",
     "size": "{size} MB"
   },
   "rooms": {

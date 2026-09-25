@@ -233,7 +233,14 @@ its approval.
   or installed by the app. Since 2026-09-26 the `appId` is `com.twuijri.corehub` and
   `.github/workflows/desktop-signed.yml` (by hand or a release tag, never on a pull request)
   signs the macOS dmg with Developer ID and notarises it (docs/RELEASING.md); Windows is still
-  unsigned. Not yet: voice (the page says so).
+  unsigned. Since 2026-09-26 Windows also builds the **Microsoft Store MSIX** (identity
+  `AbdulazizAltuwijri.CoreHub`, version `X.Y.Z.0`, Arabic and English, brand tiles; 154.6 MB
+  beside the 106.0 MB `.exe`): that build never checks GitHub for updates and This device says the
+  Store updates it; a pull request installs a test-signed copy and starts it in local mode (the hub
+  answers, its data lands in the package's own folder). A `v*` tag now also makes the **GitHub
+  release** (`publish-release.yml`): the `.exe`, `.msix`, notarised dmg, AppImage, `.deb` and the
+  signed Android APK, marked latest — not yet run on a real tag. The Store upload is by hand
+  (docs/RELEASING.md). Not yet: voice (the page says so).
   Tests:
   unit tests of the main process logic, the loopback proxy, Hermes detection per platform, the
   installer runner, the hub supervisor, the helper (folder rule with links, tools, the MCP

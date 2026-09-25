@@ -1,23 +1,41 @@
 name: Desktop installers
 
 # Builds the desktop app's installers on Linux, macOS and Windows and keeps them as workflow
-# artifacts, with their sizes in the job summary. It never publishes a release: attaching
-# installers to a GitHub release is the owner's step (TEAM-RULES §6). Unsigned: the signed and
-# notarised macOS build is desktop-signed.yml, never run on a pull request (docs/RELEASING.md).
+# artifacts, with their sizes in the job summary: AppImage + deb, dmg, and on Windows both the
+# NSIS .exe (GitHub releases, its own update check) and the Microsoft Store MSIX (the Store
+# signs it; its update check is off). Unsigned: the signed and notarised macOS build is
+# desktop-signed.yml, never run on a pull request (docs/RELEASING.md). It publishes nothing
+# itself; publish-release.yml calls it on a release tag and attaches the files to the release.
 on:
   workflow_dispatch:
     inputs:
       version:
         description: 'Version to stamp (e.g. 1.1.0-preview.3); empty uses the root package.json version'
         required: false
+  workflow_call:
+    inputs:
+      ref:
+        description: 'The ref to build (a release tag)'
+        type: string
+        required: true
+      version:
+        description: 'Version to stamp'
+        type: string
+        required: true
+      targets:
+        description: 'JSON list of {os, target} to build; empty builds all three'
+        type: string
+        required: false
+        default: ''
   pull_request:
     paths:
       - 'apps/desktop/**'
+      - 'scripts/icons/**'
       - '.github/workflows/desktop.yml'
 
 concurrency:
-  group: desktop-${{ github.ref }}
-  cancel-in-progress: true
+  group: desktop-${{ inputs.ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -26,21 +44,17 @@ jobs:
   installers:
     name: Installers (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            target: --linux
-          - os: macos-latest
-            target: --mac
-          - os: windows-latest
-            target: --win
+        include: ${{ fromJSON(inputs.targets || '[{"os":"ubuntu-latest","target":"--linux"},{"os":"macos-latest","target":"--mac"},{"os":"windows-latest","target":"--win"}]') }}
     env:
       COREHUB_VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || '' }}
       - run: corepack enable
       - uses: actions/setup-node@v4
         with:
@@ -58,6 +72,45 @@ jobs:
           command -v xvfb-run || (sudo apt-get update && sudo apt-get install -y xvfb)
           COREHUB_DESKTOP_SMOKE_EXECUTABLE="$PWD/apps/desktop/release/linux-unpacked/corehub" \
             xvfb-run -a pnpm --filter @corehub/desktop test:smoke
+      # The version every Windows check expects: the stamped one, else the root package.json's.
+      # The MSIX steps need this change's packaging; a release of an older tag (v1.1.0, through
+      # publish-release.yml) builds its .exe only.
+      - name: Version
+        if: runner.os == 'Windows' && hashFiles('apps/desktop/scripts/msix-smoke.ps1') != ''
+        shell: bash
+        run: |
+          v="${COREHUB_VERSION:-$(node -p "require('./package.json').version")}"
+          echo "PACKAGE_VERSION=${v#v}" | tee -a "$GITHUB_ENV"
+      - name: The .exe build checks GitHub for updates
+        if: runner.os == 'Windows' && env.PACKAGE_VERSION != ''
+        shell: bash
+        run: node apps/desktop/scripts/check-windows-package.mjs asar apps/desktop/release/win-unpacked/resources/app.asar github "$PACKAGE_VERSION"
+      # The Microsoft Store package: a second packaging run stamped for the Store channel.
+      - name: Package the Microsoft Store MSIX
+        if: runner.os == 'Windows' && env.PACKAGE_VERSION != ''
+        env:
+          COREHUB_CHANNEL: store
+        run: pnpm --filter @corehub/desktop package --win
+      - name: Check the MSIX
+        if: runner.os == 'Windows' && env.PACKAGE_VERSION != ''
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msix = Get-ChildItem apps/desktop/release/*.msix | Select-Object -First 1
+          if (-not $msix) { throw 'no .msix was made' }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $dir = Join-Path $env:RUNNER_TEMP 'msix'
+          [System.IO.Compression.ZipFile]::ExtractToDirectory($msix.FullName, $dir)
+          node apps/desktop/scripts/check-windows-package.mjs msix $dir $env:PACKAGE_VERSION
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      # The MSIX installed and started the way Windows runs a Store app: signed here with a
+      # throwaway certificate for the same publisher (never kept; the artifact stays unsigned),
+      # then local mode starts from a prepared desktop.json and must answer, with its data in a
+      # writable folder. Findings: docs/RELEASING.md (Microsoft Store).
+      - name: Run the MSIX in local mode
+        if: runner.os == 'Windows' && env.PACKAGE_VERSION != ''
+        shell: pwsh
+        run: ./apps/desktop/scripts/msix-smoke.ps1 -Msix (Get-ChildItem apps/desktop/release/*.msix | Select-Object -First 1).FullName
       - uses: actions/upload-artifact@v4
         with:
           name: corehub-desktop-${{ runner.os }}
@@ -66,6 +119,7 @@ jobs:
             apps/desktop/release/*.deb
             apps/desktop/release/*.dmg
             apps/desktop/release/*.exe
+            apps/desktop/release/*.msix
             apps/desktop/release/sizes.md
           retention-days: 14
           if-no-files-found: error

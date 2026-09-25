@@ -2784,6 +2784,8 @@
     "failed": "Could not check: {message}",
     "checked_at": "Checked {time}",
     "all_releases": "All releases",
+    "from_store": "Updates come from the Microsoft Store.",
+    "store_page": "Open in the Microsoft Store",
     "size": "{size} MB"
   },
   "rooms": {
