@@ -62,6 +62,22 @@ RUN set -eu; \
       find "$pkg/prebuilds" -type f ! -name 'linux-x64.node' ! -name 'linux-arm64.node' -delete; \
     done; \
     cd packages/server && node -e "const db=require('better-sqlite3')(':memory:'); if (db.prepare('select 1 as ok').get().ok!==1) process.exit(1)"
+# node-pty (MIT) is the owner's web terminal (DECISIONS §60). It ships prebuilt binaries only for
+# macOS and Windows (~58 MB), so on Linux `pnpm install` above compiled it with node-gyp — the
+# build tools (python3, make, g++) come with this node:24-bookworm stage and never reach the
+# runtime image. At runtime lib/utils.js loads build/Release/pty.node; everything else — the
+# foreign prebuilds, the winpty/conpty sources, node-gyp's intermediates — goes. The script
+# spawns a shell on a real PTY and reads its output, so a binary that does not load or work fails
+# the build rather than a terminal session.
+RUN set -eu; \
+    for pkg in node_modules/.pnpm/node-pty@*/node_modules/node-pty; do \
+      rm -rf "$pkg/prebuilds" "$pkg/deps" "$pkg/src" "$pkg/third_party" "$pkg/scripts" \
+             "$pkg/binding.gyp" "$pkg/typings" "$pkg/build/Makefile" "$pkg/build/config.gypi" \
+             "$pkg"/build/*.mk "$pkg/build/Release/obj.target" "$pkg/build/Release/.deps"; \
+      find "$pkg/lib" -name '*.test.js*' -delete; \
+      test -f "$pkg/build/Release/pty.node"; \
+    done; \
+    cd packages/server && node -e "const p=require('node-pty').spawn('/bin/sh',['-c','echo pty-ok'],{cols:80,rows:24,cwd:'/',env:{PATH:'/usr/bin:/bin'}});let o='';p.onData(d=>o+=d);p.onExit(()=>process.exit(o.includes('pty-ok')?0:1))"
 
 # ---- Hermes Agent (MIT), pinned to a release tag ------------------------------------------
 # A standalone CPython managed by uv plus a venv, both under /opt/hermes so the runtime stage
