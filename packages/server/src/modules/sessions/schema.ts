@@ -132,6 +132,27 @@ export interface RunTiming {
   }>;
 }
 
+/**
+ * `runs.changes`: what the run changed in its working folder, summed, written when it ends
+ * (contract decision §49). `null` for a run that recorded nothing — no working folder, or it
+ * ran before changes were recorded. The files themselves are `run_file_changes` rows.
+ */
+export interface RunChangesSummary {
+  source: 'git' | 'snapshot';
+  /** The run's start covered the whole folder. */
+  complete: boolean;
+  filesChanged: number;
+  additions: number;
+  deletions: number;
+  /** More files changed than are kept as rows. */
+  truncated: boolean;
+  /** Epoch milliseconds. */
+  recordedAt: number;
+}
+
+export const RUN_FILE_CHANGE_KINDS = ['added', 'modified', 'deleted', 'renamed'] as const;
+export const RUN_FILE_DIFF_STATES = ['available', 'binary', 'too_large', 'unavailable'] as const;
+
 export type SessionMetadata = {
   /** Skills the user picked for this session (Hermes). */
   skills?: string[];
@@ -268,6 +289,8 @@ export const runs = sqliteTable(
      * times for its turns (contract decision §43).
      */
     timing: json<RunTiming>('timing'),
+    /** What the run changed in its working folder, summed (decision §49); `null` if unrecorded. */
+    changes: json<RunChangesSummary>('changes'),
   },
   (t) => [
     index('runs_session_idx').on(t.sessionId, t.createdAt),
@@ -316,6 +339,40 @@ export const toolCalls = sqliteTable(
     index('tool_calls_message_idx').on(t.messageId),
     check('tool_calls_kind_check', inList(t.kind, TOOL_CALL_KINDS)),
     check('tool_calls_status_check', inList(t.status, TOOL_CALL_STATUSES)),
+  ],
+);
+
+/**
+ * One file a run changed in its working folder, with the diff recorded when the run ended
+ * (contract decision §49): the answer stays what the run did, whatever the file became later.
+ * At most `CHANGES_MAX_FILES` per run (`run-changes.ts`), the first by path.
+ */
+export const runFileChanges = sqliteTable(
+  'run_file_changes',
+  {
+    ...scopedColumns(),
+    runId: ulid('run_id')
+      .notNull()
+      .references(() => runs.id, { onDelete: 'cascade' }),
+    /** Order inside the run: by path. */
+    seq: integer('seq').notNull(),
+    /** Relative to the working folder, `/`-separated; where a deleted file was. */
+    path: text('path').notNull(),
+    /** Where a renamed file was. */
+    oldPath: text('old_path'),
+    change: text('change', { enum: RUN_FILE_CHANGE_KINDS }).notNull(),
+    additions: integer('additions'),
+    deletions: integer('deletions'),
+    binary: bool('binary').notNull().default(false),
+    diffState: text('diff_state', { enum: RUN_FILE_DIFF_STATES }).notNull(),
+    /** The unified diff's hunks, capped; `null` unless `diff_state` is `available`. */
+    diff: text('diff'),
+    diffTruncated: bool('diff_truncated').notNull().default(false),
+  },
+  (t) => [
+    uniqueIndex('run_file_changes_run_seq_uq').on(t.runId, t.seq),
+    check('run_file_changes_change_check', inList(t.change, RUN_FILE_CHANGE_KINDS)),
+    check('run_file_changes_diff_state_check', inList(t.diffState, RUN_FILE_DIFF_STATES)),
   ],
 );
 

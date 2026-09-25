@@ -16,7 +16,9 @@ import { usePane } from '../shell/pane.js';
 import type { SessionFile } from '../types.js';
 import { Button, Notice, Spinner } from '../ui/index.js';
 import { IconClose, IconDownload, IconExternal } from '../ui/icons.js';
+import { parseDiffKey } from './changes.js';
 import { useSessionFilesContext } from './context.js';
+import { DiffView } from './DiffView.js';
 import { CSV_MAX_ROWS, delimiterOf, parseCsv } from './csv.js';
 import { PREVIEW_SANDBOX, sandboxedPage, withPolicy } from './html.js';
 import { formatBytes, languageOf, previewable } from './kinds.js';
@@ -30,6 +32,8 @@ export function FilePreviewPanel() {
   const files = useSessionFilesContext();
   const pane = usePane();
   const active = files.active ? files.fileOf(files.active) : undefined;
+  // A run's diff of one file is a tab too (decision §49), keyed `diff:<run>:<path>`.
+  const activeDiff = files.active ? parseDiffKey(files.active) : null;
 
   const close = (key: string) => {
     if (files.tabs.length === 1) pane.close();
@@ -41,7 +45,10 @@ export function FilePreviewPanel() {
       <div className="file-tabs" role="tablist" aria-label={t('files.panel_label')}>
         {files.tabs.map((key) => {
           const file = files.fileOf(key);
-          const name = file?.name ?? key.replace(/^(path|attachment):/, '');
+          const diff = parseDiffKey(key);
+          const name = diff
+            ? t('changes.diff_tab', { name: diff.path.split('/').at(-1) ?? diff.path })
+            : (file?.name ?? key.replace(/^(path|attachment):/, ''));
           const selected = key === files.active;
           return (
             <div key={key} className="file-tab" data-active={selected ? 'true' : 'false'}>
@@ -68,7 +75,14 @@ export function FilePreviewPanel() {
           );
         })}
       </div>
-      {active ? (
+      {activeDiff ? (
+        <DiffView
+          key={files.active}
+          sessionId={files.sessionId}
+          runId={activeDiff.runId}
+          path={activeDiff.path}
+        />
+      ) : active ? (
         <FileView key={active.key} sessionId={files.sessionId} file={active} />
       ) : files.active && files.status === 'loading' ? (
         <Spinner label={t('files.loading')} />

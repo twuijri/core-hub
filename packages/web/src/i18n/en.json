@@ -1744,5 +1744,46 @@
     "updated": "Updated just now",
     "gone": "This file is no longer in the conversation's folder.",
     "close": "Close the files"
+  },
+  "changes": {
+    "label": "Files this run changed",
+    "summary": {
+      "zero": "Changed no files",
+      "one": "Changed one file",
+      "two": "Changed two files",
+      "few": "Changed {count} files",
+      "many": "Changed {count} files",
+      "other": "Changed {count} files"
+    },
+    "kind": {
+      "added": "new",
+      "modified": "changed",
+      "deleted": "deleted",
+      "renamed": "moved"
+    },
+    "binary": "binary",
+    "open_diff": "Show what this run changed in {name}",
+    "diff_tab": "{name} (changes)",
+    "show_all": "Show all {count}",
+    "show_less": "Show fewer",
+    "unlisted": "And more files not listed here ({count}).",
+    "incomplete": "The folder is larger than the hub reads when a run starts, so a change may be missing here."
+  },
+  "diff": {
+    "layout": "How to show the changes",
+    "unified": "Unified",
+    "split": "Side by side",
+    "open_file": "Open the file",
+    "open_file_named": "Open {name}",
+    "loading": "Loading the changes…",
+    "renamed_from": "Moved from",
+    "truncated": "The changes are cut here to stay under the size limit.",
+    "no_lines": "Moved without changing its lines.",
+    "state": {
+      "available": "There are no lines to show.",
+      "binary": "A binary file: there are no lines to compare.",
+      "too_large": "The changes to this file are too large to show here.",
+      "unavailable": "The hub saw this file change but kept no copy of it from before the run, so it cannot show the lines."
+    }
   }
 }

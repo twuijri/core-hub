@@ -1118,3 +1118,54 @@ bearer tokens out of URLs), serving the agent's HTML from the hub's origin with 
 a third-party renderer for DOCX/PPTX that inflates without limits, and listing the whole profile
 folder (another conversation's files are not this one's).
 
+
+## 49. A run's changed files are recorded when it ends, from git or from a snapshot of its start
+
+The owner wants to see what a run did to the files (2026-09-25, the next task §48 named). Proposed
+— owner to confirm. (§47 is the open task-worktree change's and §48 the file preview's, so this
+is §49.)
+
+- **Three operations, no event.** `sessions.listChanges` (`GET /sessions/{id}/changes`) pages the
+  runs of a conversation that changed a file, newest first, each a `RunChanges`: its files with
+  what happened to them (`added`, `modified`, `deleted`, `renamed` with `old_path`) and their
+  added/removed line counts, and the totals. `sessions.getRunChanges`
+  (`GET /sessions/{id}/runs/{run_id}/changes`) is one run's; `sessions.getRunChangeDiff`
+  (`…/changes/diff?path=`) is one file's unified diff, as text a client draws itself. A client
+  reads the list again when `run.completed` / `run.failed` / `run.cancelled` arrives: the changes
+  are written before that event is sent. The path §48 sketched (`…/runs/{run_id}/files`) became
+  `…/changes`, so it does not read as a second file list.
+- **Recorded, not recomputed.** The run's start is taken before the agent is handed the turn and
+  compared with the folder when the run ends; the result — the files and their diffs — is stored
+  with the run (`runs.changes`, `run_file_changes`). The answer is what *that run* did, whatever
+  later runs or the person did to the files. A run that recorded nothing (no working folder, or
+  from before this) has no entry and no card; one that changed nothing has an empty entry.
+- **Git when the folder is in a repository or worktree.** The folder is written to a git tree
+  through a *copy* of the index (`GIT_INDEX_FILE`), at the start and at the end, and git compares
+  the two trees (`--numstat`, renames with `-M`, one patch per file). Tracked changes and untracked
+  files count, ignored files and the hub's `.corehub` run folders do not; the person's index,
+  branch and stash are never touched. An untracked file over 2 MB is not hashed into the
+  repository (it would bloat `.git` on every run): it is compared by size and time and its diff
+  is `too_large`. A folder the repository ignores is read as a plain folder. Every git call is an
+  argument array with a 20-second timeout and an output cap, `core.fsmonitor` off.
+- **A snapshot without git.** The folder is read at the start to 8 levels and 10 000 entries
+  (`complete: false` beyond), and text files up to 256 KB are kept in memory to diff against
+  (8 MB a run, plus 4 MB for files a tool call names during the run that the start did not keep).
+  The hub diffs them itself (Myers, 3 lines of context; above 50 000 lines a side or 2000 edits
+  apart it only counts). A file with no kept copy is still listed as changed, with
+  `diff: unavailable` and no counts; a rename is recognised when a deleted file's exact bytes
+  reappear under another name.
+- **Caps.** 200 files kept per run (the first by path; the totals count every one, `truncated`
+  says so), 256 KB of diff per file (cut at a line, `truncated`), 2 MB of diff per run (files
+  past it are `too_large`), 1 MB the largest file diffed without git. Binary files (a NUL byte in
+  the first 8000, git's test) are `binary`, without counts.
+- **Clients.** A compact card under the last reply of each run that changed something —
+  «غيّر N ملفات (+a −b)» / "Changed N files (+a −b)" — lists each file with its counts; a file
+  opens its diff in the file panel of §48 (unified, with line numbers; side by side on a wide
+  screen), with a button that opens the file itself. Code is left-to-right inside a right-to-left
+  page.
+
+Rejected: recomputing a diff on request from the two trees' ids (unreferenced git objects are
+pruned by `git gc`, and a plain folder has no second copy), relying on the diffs ACP agents send
+with a tool call (Hermes sends none, and a shell command that writes a file sends nothing),
+committing to the person's branch or a hidden ref at each run (it would change their
+repository), and a realtime event per change (the run's end already tells a client to look).

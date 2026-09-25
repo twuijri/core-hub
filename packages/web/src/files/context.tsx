@@ -9,9 +9,10 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { useI18n } from '../i18n/context.js';
 import { usePaneOptional } from '../shell/pane.js';
-import type { SessionFile } from '../types.js';
+import type { RunChanges, SessionFile } from '../types.js';
+import { diffKey } from './changes.js';
 import { FilePreviewPanel } from './FilePreviewPanel.js';
-import { useSessionFiles } from './queries.js';
+import { useSessionChanges, useSessionFiles } from './queries.js';
 
 export interface SessionFilesValue {
   sessionId: string;
@@ -26,6 +27,8 @@ export interface SessionFilesValue {
   closeTab(key: string): void;
   activate(key: string): void;
   fileOf(key: string): SessionFile | undefined;
+  /** What each run changed, by run id (decision §49); runs that changed nothing are absent. */
+  changes: ReadonlyMap<string, RunChanges>;
 }
 
 const FilesContext = createContext<SessionFilesValue | null>(null);
@@ -33,13 +36,24 @@ const FilesContext = createContext<SessionFilesValue | null>(null);
 export function SessionFilesProvider({
   sessionId,
   revision,
+  changesRevision = '',
   children,
 }: {
   sessionId: string;
   revision: string;
+  /** Changes when a run ends: the files it changed are read again then. */
+  changesRevision?: string;
   children: ReactNode;
 }) {
   const query = useSessionFiles(sessionId, revision);
+  const changesQuery = useSessionChanges(sessionId, changesRevision);
+  const changes = useMemo(
+    () =>
+      new Map(
+        ((changesQuery.data?.items ?? []) as RunChanges[]).map((run) => [run.run_id, run] as const),
+      ),
+    [changesQuery.data],
+  );
   const [open, setOpen] = useState<{ tabs: string[]; active: string | null }>({
     tabs: [],
     active: null,
@@ -84,6 +98,7 @@ export function SessionFilesProvider({
       closeTab,
       activate,
       fileOf: (key) => byKey.get(key),
+      changes,
     }),
     [
       sessionId,
@@ -97,6 +112,7 @@ export function SessionFilesProvider({
       closeTab,
       activate,
       byKey,
+      changes,
     ],
   );
   return <FilesContext.Provider value={value}>{children}</FilesContext.Provider>;
@@ -130,4 +146,13 @@ export function useOpenFile(): ((key: string) => void) | null {
     [files, pane, t],
   );
   return files && pane ? open : null;
+}
+
+/** Open what a run did to one file, as a tab of the same panel. `null` outside a conversation. */
+export function useOpenDiff(): ((runId: string, path: string) => void) | null {
+  const open = useOpenFile();
+  return useMemo(
+    () => (open ? (runId: string, path: string) => open(diffKey(runId, path)) : null),
+    [open],
+  );
 }

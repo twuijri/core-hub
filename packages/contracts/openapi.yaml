@@ -2663,6 +2663,174 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /sessions/{session_id}/changes:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      operationId: sessions.listChanges
+      tags: [sessions]
+      summary: List the files each run of a conversation changed
+      description: |
+        The files each run of the conversation changed in its working folder, with their added
+        and removed line counts (contract decision §49), newest run first. Only runs that
+        changed something are listed; a run that recorded nothing (it had no working folder,
+        or it ran before the hub recorded changes) is absent. The diffs themselves are read
+        one file at a time with `sessions.getRunChangeDiff`.
+
+        A run's changes are recorded when it ends, before its `run.completed` / `run.failed` /
+        `run.cancelled` is sent, so a client reads this list again as one of those arrives.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      x-rt-events: []
+      responses:
+        '200':
+          description: A page of runs with their changed files, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunChangesList'
+              example:
+                items:
+                  - run_id: 01J8QK3ZR2W7M5N4P6T8V9X0RN
+                    source: git
+                    complete: true
+                    files_changed: 3
+                    additions: 14
+                    deletions: 2
+                    truncated: false
+                    recorded_at: '2026-09-25T10:15:40Z'
+                    files:
+                      - path: src/app.ts
+                        old_path: null
+                        change: modified
+                        additions: 6
+                        deletions: 2
+                        binary: false
+                        diff: available
+                      - path: 'ملاحظات.md'
+                        old_path: null
+                        change: added
+                        additions: 8
+                        deletions: 0
+                        binary: false
+                        diff: available
+                      - path: docs/logo.png
+                        old_path: logo.png
+                        change: renamed
+                        additions: null
+                        deletions: null
+                        binary: true
+                        diff: binary
+                next_cursor: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /sessions/{session_id}/runs/{run_id}/changes:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/SessionId'
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Ulid'
+    get:
+      operationId: sessions.getRunChanges
+      tags: [sessions]
+      summary: The files one run changed
+      description: |
+        The files this run changed in the session's working folder, with their line counts
+        (contract decision §49). A run that ended with nothing changed answers an empty `files`.
+        `404` when the run is not this conversation's, is still going, or recorded no changes
+        (no working folder, or it ran before the hub recorded them).
+      x-rt-events: []
+      responses:
+        '200':
+          description: The run's changed files.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunChanges'
+              example:
+                run_id: 01J8QK3ZR2W7M5N4P6T8V9X0RN
+                source: snapshot
+                complete: true
+                files_changed: 1
+                additions: 2
+                deletions: 1
+                truncated: false
+                recorded_at: '2026-09-25T10:15:40Z'
+                files:
+                  - path: notes.md
+                    old_path: null
+                    change: modified
+                    additions: 2
+                    deletions: 1
+                    binary: false
+                    diff: available
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /sessions/{session_id}/runs/{run_id}/changes/diff:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/SessionId'
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Ulid'
+    get:
+      operationId: sessions.getRunChangeDiff
+      tags: [sessions]
+      summary: The unified diff of one file a run changed
+      description: |
+        What the run did to one file (contract decision §49): its unified diff as the hub
+        recorded it when the run ended — the same answer later, whatever happened to the file
+        since. `path` is the file's `path` in the run's changes. `diff` is `null` when the entry
+        says there is none to show (`binary`, `too_large`, `unavailable`); a recorded diff over
+        the size cap is cut at a line and `truncated` is true.
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: The file, as `RunFileChange.path` names it.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 4096
+          example: src/app.ts
+      x-rt-events: []
+      responses:
+        '200':
+          description: The file's diff.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunFileDiff'
+              example:
+                run_id: 01J8QK3ZR2W7M5N4P6T8V9X0RN
+                path: notes.md
+                old_path: null
+                change: modified
+                additions: 2
+                deletions: 1
+                binary: false
+                diff: available
+                truncated: false
+                text: "@@ -1,2 +1,3 @@\n # ملاحظات\n-قديم\n+جديد\n+سطر آخر\n"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /sessions/{session_id}/fork:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -14672,6 +14840,120 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SessionFile'
+    # ---------------------------------------------------------------- run changes
+    RunFileChangeKind:
+      type: string
+      enum: [added, modified, deleted, renamed]
+      description: What the run did to the file. A rename may also have changed the content.
+    RunFileDiffState:
+      type: string
+      enum: [available, binary, too_large, unavailable]
+      description: |
+        Whether `sessions.getRunChangeDiff` has lines to show: `available`; `binary` (a file
+        that is not text); `too_large` (over the hub's diff cap); `unavailable` (the hub saw the
+        file change but kept no copy of what it was before — a large file in a folder that is
+        not a git repository, or one the run's start could not read).
+    RunFileChange:
+      type: object
+      required: [path, old_path, change, additions, deletions, binary, diff]
+      properties:
+        path:
+          type: string
+          description: |
+            Relative to the session's working folder, `/`-separated: where the file is after
+            the run, or where it was for a deleted one.
+        old_path:
+          type: [string, 'null']
+          description: Where a renamed file was before the run; `null` otherwise.
+        change:
+          $ref: '#/components/schemas/RunFileChangeKind'
+        additions:
+          type: [integer, 'null']
+          minimum: 0
+          description: Lines added; `null` when the hub cannot count them (binary, or no copy of before).
+        deletions:
+          type: [integer, 'null']
+          minimum: 0
+          description: Lines removed; `null` as for `additions`.
+        binary:
+          type: boolean
+        diff:
+          $ref: '#/components/schemas/RunFileDiffState'
+    RunChanges:
+      type: object
+      required:
+        [
+          run_id,
+          source,
+          complete,
+          files_changed,
+          additions,
+          deletions,
+          truncated,
+          recorded_at,
+          files,
+        ]
+      properties:
+        run_id:
+          $ref: '#/components/schemas/Ulid'
+        source:
+          type: string
+          enum: [git, snapshot]
+          description: |
+            How the hub knew: `git` — the working folder is in a git repository or worktree, and
+            the run's start and end were compared as two git trees (untracked files included,
+            ignored ones not); `snapshot` — no git, so the folder was read at the start and
+            again at the end, with small text files kept to diff against.
+        complete:
+          type: boolean
+          description: |
+            The start covered the whole folder. `false` when the folder was larger than the
+            hub reads at a run's start: a change to a file it did not read may be missing.
+        files_changed:
+          type: integer
+          minimum: 0
+          description: Every file the run changed, including any beyond `files`.
+        additions:
+          type: integer
+          minimum: 0
+          description: Lines added over every counted file.
+        deletions:
+          type: integer
+          minimum: 0
+        truncated:
+          type: boolean
+          description: More files changed than the hub keeps per run; `files` holds the first by path.
+        recorded_at:
+          $ref: '#/components/schemas/Timestamp'
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunFileChange'
+    RunChangesList:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/RunChanges'
+    RunFileDiff:
+      allOf:
+        - $ref: '#/components/schemas/RunFileChange'
+        - type: object
+          required: [run_id, truncated, text]
+          properties:
+            run_id:
+              $ref: '#/components/schemas/Ulid'
+            truncated:
+              type: boolean
+              description: The recorded diff was cut at a line to stay under the cap.
+            text:
+              type: [string, 'null']
+              description: |
+                The unified diff's hunks (from the first `@@` line, three lines of context),
+                `null` unless `diff` is `available`. Lines are as the file has them, UTF-8.
     # ---------------------------------------------------------------- runs
     RunStatus:
       type: string

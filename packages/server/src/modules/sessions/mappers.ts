@@ -17,11 +17,25 @@
  *   (contract `MessageRole`).
  */
 import type { UsageTotals } from '../audit/index.js';
-import type { approvals, messages, runs, sessions, toolCalls } from './schema.js';
+import type { approvals, messages, runFileChanges, runs, sessions, toolCalls } from './schema.js';
 
 export type SessionRow = typeof sessions.$inferSelect;
 export type MessageRow = typeof messages.$inferSelect;
 export type RunRow = typeof runs.$inferSelect;
+/** A file a run changed, without its diff (`run_file_changes`, decision §49). */
+export type RunFileChangeRow = Pick<
+  typeof runFileChanges.$inferSelect,
+  | 'id'
+  | 'runId'
+  | 'seq'
+  | 'path'
+  | 'oldPath'
+  | 'change'
+  | 'additions'
+  | 'deletions'
+  | 'binary'
+  | 'diffState'
+>;
 export type ToolCallRow = typeof toolCalls.$inferSelect;
 export type ApprovalRow = typeof approvals.$inferSelect;
 
@@ -454,5 +468,47 @@ export function toApproval(view: ApprovalView, profile: string): Record<string, 
           }
         : null,
     expires_at: iso(row.expiresAt),
+  };
+}
+
+/** The contract's `RunFileChange`. */
+export function toRunFileChange(row: RunFileChangeRow) {
+  return {
+    path: row.path,
+    old_path: row.oldPath,
+    change: row.change,
+    additions: row.additions,
+    deletions: row.deletions,
+    binary: row.binary,
+    diff: row.diffState,
+  };
+}
+
+/** The contract's `RunChanges`, for a run whose changes were recorded. */
+export function toRunChanges(run: RunRow, files: readonly RunFileChangeRow[]) {
+  const summary = run.changes!;
+  return {
+    run_id: run.id,
+    source: summary.source,
+    complete: summary.complete,
+    files_changed: summary.filesChanged,
+    additions: summary.additions,
+    deletions: summary.deletions,
+    truncated: summary.truncated,
+    recorded_at: new Date(summary.recordedAt).toISOString(),
+    files: files.map(toRunFileChange),
+  };
+}
+
+/** The contract's `RunFileDiff`. */
+export function toRunFileDiff(
+  runId: string,
+  row: RunFileChangeRow & { diff: string | null; diffTruncated: boolean },
+) {
+  return {
+    ...toRunFileChange(row),
+    run_id: runId,
+    truncated: row.diffTruncated,
+    text: row.diffState === 'available' ? (row.diff ?? '') : null,
   };
 }

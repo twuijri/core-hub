@@ -258,6 +258,18 @@ function scriptFor(prompt: string): Step[] {
       { type: 'completed' },
     ];
   }
+  if (/عدّل المشروع|edit the project/i.test(prompt)) {
+    // The files a run changed (journey 33, decision §49): after journey 32's three files, this
+    // run edits two of them and creates a third — the card under the reply counts them.
+    return [
+      { type: 'message_delta', text: 'أعدّل الملفات.\n\n' },
+      ...writes('e1', 'data.csv', DATA_CSV.replace('كهرباء,300', 'كهرباء,350')),
+      ...writes('e2', 'notes.md', `${NOTES_MD}- أرسل التقرير\n`),
+      ...writes('e3', 'plan.md', '# الخطة\n\n1. راجع الأرقام\n2. أرسل التقرير\n'),
+      { type: 'message_delta', text: 'عدّلت data.csv و notes.md وكتبت plan.md.' },
+      { type: 'completed' },
+    ];
+  }
   if (/ارسم المسار|trace this/i.test(prompt)) {
     // The Trajectory tab (journey 31): a turn that reads a file, a command that fails, and
     // an answer — with pauses, so every step has a duration on the timeline.

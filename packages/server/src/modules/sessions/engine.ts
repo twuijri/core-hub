@@ -57,6 +57,8 @@ import type {
 } from './ports.js';
 import { SessionNamer } from './naming.js';
 import { OutputWatcher, ensureRunFolders, type ProducedRefusal } from './run-files.js';
+import { startChangeTracking, type ChangeTracker } from './run-changes.js';
+import { fileRefsOf } from './files.js';
 import {
   initialRunState,
   isTerminal,
@@ -90,6 +92,8 @@ interface ActiveRun {
   state: RunState;
   /** The run's output folder, watched while it is live; `null` when files are off. */
   outputs: OutputWatcher | null;
+  /** The working folder as the run started it (decision §49); `null` without one. */
+  changes: ChangeTracker | null;
 }
 
 export interface EngineDeps {
@@ -98,6 +102,8 @@ export interface EngineDeps {
   realtime: SessionsRealtime;
   ports: SessionsPorts;
   log: FastifyBaseLogger;
+  /** What a git call inherits (`HubConfig.hostEnv`), minus git's own variables. */
+  hostEnv?: NodeJS.ProcessEnv;
 }
 
 export class RunEngine {
@@ -331,6 +337,8 @@ export class RunEngine {
     // Files in and files out. A session always has a working directory
     // (`working-dir.ts`), so the only reason this is `null` is a disk that refused.
     const exchange = this.prepareFiles(scope, session.workingDir, runRow);
+    // The folder as the agent is about to find it, so the end can say what this run changed.
+    const changes = await this.trackChanges(session.workingDir, runRow);
 
     const active: ActiveRun = {
       runId: runRow.id,
@@ -340,6 +348,7 @@ export class RunEngine {
       agent,
       state: initialRunState(shell.id),
       outputs: exchange ? new OutputWatcher(exchange.files.outputDir).start() : null,
+      changes,
     };
     this.active.set(runRow.id, active);
 
@@ -451,6 +460,46 @@ export class RunEngine {
   }
 
   /**
+   * Record the working folder as the run starts it (decision §49). Never fails the run: a
+   * folder that cannot be read is a run without a "files changed" card, and the reason is logged.
+   */
+  private async trackChanges(
+    workingDir: string | null,
+    runRow: RunRow,
+  ): Promise<ChangeTracker | null> {
+    if (!workingDir) return null;
+    try {
+      return await startChangeTracking(workingDir, { env: this.deps.hostEnv ?? {} });
+    } catch (error) {
+      this.deps.log.warn(
+        { err: error, runId: runRow.id, workingDir },
+        'sessions: the run works without recording its file changes',
+      );
+      return null;
+    }
+  }
+
+  /** Compare the folder with the run's start and write what changed, before the run ends. */
+  private async recordChanges(run: ActiveRun): Promise<void> {
+    if (!run.changes) return;
+    try {
+      const record = await run.changes.finish();
+      this.deps.store.saveRunChanges(
+        run.scope.workspace,
+        run.scope.userId,
+        run.runId,
+        record,
+        new Date(),
+      );
+    } catch (error) {
+      this.deps.log.warn(
+        { err: error, runId: run.runId },
+        'sessions: the files this run changed could not be recorded',
+      );
+    }
+  }
+
+  /**
    * Everything the agent wrote into this run's output folder becomes an attachment on
    * the reply, so the person can download it. What the caps refused is named in the
    * message rather than dropped in silence.
@@ -533,6 +582,21 @@ export class RunEngine {
         case 'tool_failed': {
           const call = state.toolCalls.find((c) => c.id === action.toolCallId);
           if (!call) break;
+          if (action.type === 'tool_started' && run.changes) {
+            // Keep what the files this call names look like before it works on them.
+            run.changes.touch(
+              fileRefsOf([
+                {
+                  id: call.id,
+                  runId: run.runId,
+                  name: call.name,
+                  kind: call.kind,
+                  title: call.title,
+                  input: call.input,
+                },
+              ]).map((ref) => ref.path),
+            );
+          }
           const row = this.writeToolCall(run, call);
           this.emitToSession(
             scope,
@@ -722,6 +786,9 @@ export class RunEngine {
     store.updateRun(scope.workspace, run.runId, { timing: { turns: state.turns } });
 
     const produced = await this.collectProduced(run);
+    // Written before the terminal event, so a client that reads the changes when it arrives
+    // finds them (contract `sessions.listChanges`).
+    await this.recordChanges(run);
     const note = refusalNote(produced.refused, scope.language);
     const text = note ? [state.text, note].filter(Boolean).join('\n\n') : state.text;
 

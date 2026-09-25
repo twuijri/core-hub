@@ -90,6 +90,7 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
       portsFor(app),
       log,
       hub.config.dataDir,
+      hub.config.hostEnv.inherited,
     );
     const stale = created.recoverStaleRuns();
     if (stale > 0) log.warn({ runs: stale }, 'sessions: failed runs left by a restart');
