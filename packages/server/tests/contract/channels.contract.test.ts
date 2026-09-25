@@ -101,8 +101,7 @@ describe.skipIf(!doc)('contract: messaging platforms linked by credentials', () 
       url: `/agents/${agent}/channels/discord/link`,
       payload: {
         credentials: {
-          DISCORD_BOT_TOKEN:
-            'fake-discord-token-for-tests-only-0000000000000000000000000000bad',
+          DISCORD_BOT_TOKEN: 'fake-discord-token-for-tests-only-0000000000000000000000000000bad',
         },
       },
     });

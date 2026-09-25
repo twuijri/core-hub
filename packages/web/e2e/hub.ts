@@ -655,7 +655,12 @@ const scriptedPlatforms: typeof fetch = async (input, init) => {
       status,
       headers: { 'content-type': 'application/json' },
     });
-  if (url === 'https://discord.com/api/v10/users/@me' && auth === `Bot ${E2E_DISCORD_TOKEN}`) {
+  // Discord's `users/@me`, the one question linking asks it.
+  if (
+    url.startsWith('https://discord.com/') &&
+    url.endsWith('@me') &&
+    auth === `Bot ${E2E_DISCORD_TOKEN}`
+  ) {
     return json(200, {
       id: '1234567890123456789',
       username: 'corehub_discord',
