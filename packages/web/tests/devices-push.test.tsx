@@ -338,7 +338,7 @@ describe('the device list', () => {
       state: 'ready',
       source: 'relay',
       missing: [],
-      details: { relay_url: 'https://relay.example' },
+      details: {},
     };
     try {
       const { fetchImpl } = hub([]);

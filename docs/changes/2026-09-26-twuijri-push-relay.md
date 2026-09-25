@@ -153,6 +153,12 @@ $ vitest (web) devices-push, device-cards, push-sender-files   Tests  24 passed
 # شارة المرحّل على بطاقة main قبلها:
      × says when APNs goes through the Core Hub relay        Tests  1 failed | 9 skipped (10)
 ```
+CI عند `749323fa`: كل شيء ناجح إلا «Lint, typecheck, contracts, client tests, build» — `pnpm typecheck` للويب
+(`tsconfig.test.json`) رفض `details: { relay_url }` في اختبار الشارة الجديد (نوع الـfixture):
+```
+tests/devices-push.test.tsx(341,18): error TS2353: Object literal may only specify known properties, and 'relay_url' does not exist in type …
+```
+أُصلح (`details: {}`)، و`pnpm --filter @corehub/web typecheck` ينجح محليًا (exit 0) والملف ١٠/١٠.
 نتيجة CI الأخيرة تُضاف عند انتهائها.
 
 ## المخاطر والرجوع
