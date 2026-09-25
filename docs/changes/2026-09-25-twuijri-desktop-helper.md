@@ -86,7 +86,16 @@ Running 3 tests using 1 worker
 ثم يناديه من خارج التطبيق: بمفتاح خاطئ 401، وبالصحيح ثلاث أدوات فقط (لا مجلد ولا فتح).
 وفحص التوافق بعميل MCP الرسمي نجح (`Tests 1 passed`) ولم يُضف إلى المستودع.
 
-CI: يُملأ بعد الدفع.
+CI على #115 — كلها ناجحة:
+```
+pass  Lint, typecheck, contracts, tests, build
+pass  Desktop app smoke (Electron under Xvfb against the real hub)
+pass  Web smoke journeys (Playwright against the real hub)
+pass  Docker image builds and answers /health
+pass  db:generate + db:migrate (SQLite and PostgreSQL)
+pass  PR adds or updates a change record
+pass  PR leaves graphify-out/ to the code-map bot
+```
 
 ## المخاطر والرجوع
 - وكيل مسموح له الكتابة في مجلد يستطيع كتابة أي شيء فيه؛ واستبدال ملف برابط بين الفحص والكتابة
