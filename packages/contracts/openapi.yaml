@@ -22369,6 +22369,25 @@ components:
                   type: [string, 'null']
                 refreshable:
                   type: boolean
+                source:
+                  type: [string, 'null']
+                  enum: [provider, fallback, null]
+                  description: >-
+                    Where the model list came from (decision §83, the owner's rule): `provider`
+                    is what the provider's own models endpoint returned for this account;
+                    `fallback` is a list kept in code — the agent runtime's — used only because
+                    the provider could not be asked, and a client says so. `null` before the
+                    first list, or for a catalogue older than this field.
+                fallback_reason:
+                  type: [string, 'null']
+                  description: Why the provider could not be asked, when `source` is `fallback`.
+            draws_images:
+              type: boolean
+              description: >-
+                The hub can draw with this provider's `image_output` models (decisions §72 and
+                §84): a chat provider with a key, one that needs none, or the ChatGPT
+                subscription signed in through Hermes. A client offers only these in the Images
+                role.
             visibility:
               $ref: '#/components/schemas/Visibility'
             models:
@@ -22670,7 +22689,8 @@ components:
         image:
           description: >-
             The profile's image model (decision §72). It must be a model with `image_output` on
-            a provider the hub holds the key of (or that needs none); `null` goes back to
+            a provider the hub can draw with (`Provider.draws_images`: one it holds the key of,
+            one that needs none, or the ChatGPT subscription, §84); `null` goes back to
             inheriting the `default` profile's.
           oneOf:
             - $ref: '#/components/schemas/ModelRef'

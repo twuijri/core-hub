@@ -52,14 +52,38 @@ const IMAGES_API_MODEL =
   /(?:^|[/:._-])(?:gpt-image|chatgpt-image|dall-e|dalle|imagen|flux|stable-diffusion|sdxl|sd3|seedream|hidream|recraft|ideogram|kolors|qwen-image)/i;
 
 /** How `image_api.py` speaks to the model: its `COREHUB_IMAGE_PROVIDER`. */
-export type ImageProtocol = 'gemini' | 'compatible' | 'chat';
+export type ImageProtocol = 'gemini' | 'compatible' | 'chat' | 'codex';
+
+/**
+ * Images through the ChatGPT subscription (decision §84). The Codex backend lists no image
+ * model; it draws when a chat model it serves is handed the `image_generation` tool with an
+ * image model named in it. The hub offers that as one model of the signed-in provider, named
+ * after the image model the tool is asked for and labelled by the clients as the subscription's
+ * — the one model the hub adds to a provider's list, because there is no other way to choose it.
+ */
+export const CODEX_IMAGES = {
+  /** Hermes's provider id of the ChatGPT / Codex subscription. */
+  hermesProvider: 'openai-codex',
+  /** The image model the tool is asked for (`COREHUB_IMAGE_MODEL`). */
+  model: 'gpt-image-2',
+  /** The chat model that carries the tool call (fixed in `image_api.py`). */
+  host: 'gpt-5.5',
+} as const;
 
 /**
  * The shape a provider protocol and a model are spoken to in, or null when the hub cannot
  * draw with it at all (Anthropic answers no image; Ollama serves none; a speech protocol is
  * not a drawing one).
  */
-export function imageProtocolOf(providerProtocol: string, modelKey: string): ImageProtocol | null {
+export function imageProtocolOf(
+  providerProtocol: string,
+  modelKey: string,
+  hermesProvider?: string | null,
+): ImageProtocol | null {
+  // The subscription draws through its own backend, and only with the one model it offers.
+  if (hermesProvider === CODEX_IMAGES.hermesProvider) {
+    return modelKey === CODEX_IMAGES.model ? 'codex' : null;
+  }
   if (providerProtocol === 'google') return 'gemini';
   if (providerProtocol !== 'openai') return null;
   return IMAGES_API_MODEL.test(modelKey) ? 'compatible' : 'chat';
@@ -97,7 +121,10 @@ export interface ImageChoice {
   protocol: ImageProtocol;
   baseUrl: string;
   model: string;
-  /** Plaintext, or null for an endpoint that takes none. Only ever written to `.env`. */
+  /**
+   * Plaintext, or null for an endpoint that takes none — and always null for `codex`, whose
+   * token Hermes keeps and `image_api.py` asks Hermes for. Only ever written to `.env`.
+   */
   apiKey: string | null;
 }
 

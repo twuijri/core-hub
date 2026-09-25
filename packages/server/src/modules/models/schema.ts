@@ -106,6 +106,14 @@ export interface ProviderCapabilities {
   listModels?: boolean;
   /** Provider can list TTS voices (`models.listVoices`). */
   listVoices?: boolean;
+  /**
+   * Where the last model list came from (decision §83): the provider's own endpoint, or — only
+   * when it could not be asked — the agent runtime's list. Kept in this JSON column rather than
+   * a new one: it is a note on the catalogue, and needs no migration.
+   */
+  catalogueSource?: 'provider' | 'fallback';
+  /** Why the provider could not be asked, when `catalogueSource` is `fallback`. */
+  catalogueFallbackReason?: string | null;
 }
 
 /** Micro-USD per million tokens (integers; the contract renders them as `Money`). */

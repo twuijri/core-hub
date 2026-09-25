@@ -60,7 +60,10 @@ export interface ContractProvider {
     refreshed_at: string | null;
     error: string | null;
     refreshable: boolean;
+    source: 'provider' | 'fallback' | null;
+    fallback_reason: string | null;
   };
+  draws_images: boolean;
   visibility: { mode: string; models: string[] };
   models: ContractModel[];
 }
@@ -128,6 +131,8 @@ export interface SerializeProviderOptions {
   keyStored: boolean;
   /** True when the adapter can list this provider's models. */
   refreshable: boolean;
+  /** The hub can draw with its image models (decisions §72, §84). */
+  drawsImages: boolean;
 }
 
 export function serializeProvider(
@@ -168,7 +173,13 @@ export function serializeProvider(
       refreshed_at: iso(row.catalogueRefreshedAt),
       error: row.catalogueError,
       refreshable: options.refreshable,
+      source: row.capabilities.catalogueSource ?? null,
+      fallback_reason:
+        row.capabilities.catalogueSource === 'fallback'
+          ? (row.capabilities.catalogueFallbackReason ?? null)
+          : null,
     },
+    draws_images: options.drawsImages,
     visibility: { mode: row.visibilityMode, models: [...row.visibleModels] },
     models: options.models.map((model) => serializeModel(model, row.slug)),
   };
