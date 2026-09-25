@@ -350,7 +350,11 @@ export class ChannelConversations {
       scopes.map(async (scope) => {
         const hermes = source.hermesProfile(scope.workspace);
         if (!hermes) {
-          unavailable.push({ profile: scope.profile, reason: 'profile_not_in_hermes', message: null });
+          unavailable.push({
+            profile: scope.profile,
+            reason: 'profile_not_in_hermes',
+            message: null,
+          });
           return;
         }
         let rows: HermesSessionRow[];
@@ -371,7 +375,11 @@ export class ChannelConversations {
         await this.readLatest(source, hermes, shown);
         for (const row of shown) {
           items.push(
-            toConversation(row, scope.profile, this.latest.get(latestKey(hermes, row))?.value ?? null),
+            toConversation(
+              row,
+              scope.profile,
+              this.latest.get(latestKey(hermes, row))?.value ?? null,
+            ),
           );
         }
       }),
@@ -453,7 +461,11 @@ export class ChannelConversations {
       .get<{ sessions?: HermesSessionRow[] } | null>(`/api/sessions?${query.toString()}`)
       .then((body) => {
         const rows = (Array.isArray(body?.sessions) ? body.sessions : []).filter(
-          (row) => row && typeof row.id === 'string' && CONVERSATION_ID.test(row.id) && isChannel(row.source),
+          (row) =>
+            row &&
+            typeof row.id === 'string' &&
+            CONVERSATION_ID.test(row.id) &&
+            isChannel(row.source),
         );
         // Stamped after the read: Hermes may tidy its store while listing (auto-archive), and
         // that write must not make the next call read again.

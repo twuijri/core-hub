@@ -1,9 +1,10 @@
 // The chats list in groups (contract decision §54): the profile's categories first, in their
-// order, then one group per messaging channel a conversation came from (Telegram, WhatsApp…),
-// then everything else. Pure functions only — the list component renders what these return,
+// order, then one group per messaging channel a conversation came from (Telegram, WhatsApp…) —
+// holding the channel conversations Hermes keeps too (§55) — then everything else. Pure functions only — the list component renders what these return,
 // and the tests read them directly.
 import { derived } from '@corehub/contracts';
 import type { Schemas, Session } from '../types.js';
+import type { ChannelConversation } from './channels.js';
 import { arrange } from './order.js';
 
 export type SessionCategory = Schemas['SessionCategory'];
@@ -19,6 +20,11 @@ export interface SessionGroup {
   /** The platform slug (`telegram`, `whatsapp`…), for `kind: channel`. */
   channel?: string;
   items: Session[];
+  /**
+   * For `kind: channel`: the conversations Hermes keeps for that channel (contract decision
+   * §55), read-only, most recent first, after any hub session of the same channel.
+   */
+  conversations?: ChannelConversation[];
 }
 
 export const categoryKey = (id: string): GroupKey => `category:${id}`;
@@ -45,7 +51,12 @@ export function groupKeyOf(session: Session, known: ReadonlySet<string>): GroupK
 export function groupSessions(
   sessions: readonly Session[],
   categories: readonly SessionCategory[],
-  options: { manual?: readonly string[]; keepEmpty?: boolean } = {},
+  options: {
+    manual?: readonly string[];
+    keepEmpty?: boolean;
+    /** Channel conversations read from Hermes: each fills its platform's group. */
+    conversations?: readonly ChannelConversation[];
+  } = {},
 ): SessionGroup[] {
   const manual = options.manual ?? [];
   const keepEmpty = options.keepEmpty ?? true;
@@ -66,16 +77,28 @@ export function groupSessions(
       items: arrange(items, manual),
     });
   }
-  const channels = [...buckets.keys()]
-    .filter((key): key is `channel:${string}` => key.startsWith('channel:'))
-    .map((key) => key.slice('channel:'.length))
-    .sort((a, b) => channelRank(a) - channelRank(b) || a.localeCompare(b));
+  const byChannel = new Map<string, ChannelConversation[]>();
+  for (const conversation of options.conversations ?? []) {
+    byChannel.set(conversation.channel, [
+      ...(byChannel.get(conversation.channel) ?? []),
+      conversation,
+    ]);
+  }
+  const channels = [
+    ...new Set([
+      ...[...buckets.keys()]
+        .filter((key): key is `channel:${string}` => key.startsWith('channel:'))
+        .map((key) => key.slice('channel:'.length)),
+      ...byChannel.keys(),
+    ]),
+  ].sort((a, b) => channelRank(a) - channelRank(b) || a.localeCompare(b));
   for (const channel of channels) {
     groups.push({
       key: channelKey(channel),
       kind: 'channel',
       channel,
       items: arrange(buckets.get(channelKey(channel)) ?? [], manual),
+      conversations: byChannel.get(channel) ?? [],
     });
   }
   groups.push({ key: 'rest', kind: 'rest', items: arrange(buckets.get('rest') ?? [], manual) });

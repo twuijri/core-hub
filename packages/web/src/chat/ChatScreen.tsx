@@ -29,6 +29,8 @@ import {
 } from '../ui/index.js';
 import { IconClose, IconSpark } from '../ui/icons.js';
 import { AgentChips } from './AgentChips.js';
+import { ChannelConversationView } from './ChannelConversationView.js';
+import { isChannelAddress } from '../sessions/channels.js';
 import {
   ANCHOR_PARAM,
   QUERY_PARAM,
@@ -91,9 +93,14 @@ export function ChatScreen() {
   // The conversation is opened in its own profile (ADR 0016): a list across profiles puts
   // it in the address, and everything inside — the transcript, the models, the agents —
   // asks that profile. The person's own profile and the top selector do not move.
+  // A Telegram or WhatsApp conversation (`?source=channel`) is Hermes's, read-only (§55).
   return (
     <ProfileScope profile={readProfileParam(params) ?? homeProfile}>
-      <OpenSession sessionId={sessionId} />
+      {isChannelAddress(params) ? (
+        <ChannelConversationView id={sessionId} />
+      ) : (
+        <OpenSession sessionId={sessionId} />
+      )}
     </ProfileScope>
   );
 }

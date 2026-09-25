@@ -93,7 +93,10 @@ describe('channel conversations: the reader', () => {
     const reader = new ChannelConversations(() => hermes);
     const { items, unavailable } = await reader.list([{ workspace: 'w', profile: 'home' }]);
     expect(unavailable).toEqual([]);
-    expect(items.map((c) => c.id)).toEqual(['20260925_091500_aa11bb22', '20260925_080000_cc33dd44']);
+    expect(items.map((c) => c.id)).toEqual([
+      '20260925_091500_aa11bb22',
+      '20260925_080000_cc33dd44',
+    ]);
     expect(items[0]).toEqual({
       id: '20260925_091500_aa11bb22',
       profile: 'home',
@@ -192,7 +195,9 @@ describe('channel conversations: the reader', () => {
   });
 
   it('says why a profile is missing, and keeps what it had when Hermes stops answering', async () => {
-    expect(await new ChannelConversations(() => null).list([{ workspace: 'w', profile: 'p' }])).toEqual({
+    expect(
+      await new ChannelConversations(() => null).list([{ workspace: 'w', profile: 'p' }]),
+    ).toEqual({
       items: [],
       unavailable: [{ profile: null, reason: 'hermes_not_managed', message: null }],
     });
@@ -246,15 +251,22 @@ describe('channel conversations: the reader', () => {
     expect(await code('../etc/passwd')).toBe('not_found');
     hermes.down = true;
     expect(await code('20260925_091500_aa11bb22')).toBe('service_unavailable');
-    expect(await new ChannelConversations(() => null).messages(scope, 'x').catch((e) => e.code)).toBe(
-      'service_unavailable',
-    );
+    expect(
+      await new ChannelConversations(() => null).messages(scope, 'x').catch((e) => e.code),
+    ).toBe('service_unavailable');
   });
 
   it('says there is more when Hermes returned a full page', async () => {
-    const long = talk(...Array.from({ length: 520 }, (_, i): [string, string] => ['user', `m${i}`]));
+    const long = talk(
+      ...Array.from({ length: 520 }, (_, i): [string, string] => ['user', `m${i}`]),
+    );
     const hermes = scriptedChannels(
-      { default: { sessions: [telegram('20260925_091500_aa11bb22', T0)], messages: { '20260925_091500_aa11bb22': long } } },
+      {
+        default: {
+          sessions: [telegram('20260925_091500_aa11bb22', T0)],
+          messages: { '20260925_091500_aa11bb22': long },
+        },
+      },
       { profileOf: () => 'default' },
     );
     const opened = await new ChannelConversations(() => hermes).messages(
@@ -374,7 +386,9 @@ describe('channel conversations: the routes', () => {
     ]);
 
     // A member reads the profiles they were given, whatever they ask for.
-    const theirs = (await get(member, '/channel-conversations?profiles=all', 'designer')).json() as {
+    const theirs = (
+      await get(member, '/channel-conversations?profiles=all', 'designer')
+    ).json() as {
       items: Array<{ profile: string }>;
     };
     expect(theirs.items.map((c) => c.profile)).toEqual(['designer']);
