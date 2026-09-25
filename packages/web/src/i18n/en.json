@@ -1724,6 +1724,6 @@
     "reason_idle": "nobody typed for too long",
     "reason_shutdown": "the hub stopped",
     "gone": "This terminal is no longer on the hub.",
-    "folder": "Folder: {cwd}"
+    "folder": "Folder:"
   }
 }

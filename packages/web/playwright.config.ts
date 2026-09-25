@@ -12,6 +12,10 @@ const baseURL = `http://127.0.0.1:${port}`;
 export const setupPort = Number(process.env.COREHUB_E2E_SETUP_PORT ?? 8792);
 export const setupBaseURL = `http://127.0.0.1:${setupPort}`;
 export const setupDataDir = path.resolve('e2e/.setup-data');
+// A third hub for the owner's web terminal (DECISIONS §60), started with COREHUB_WEB_TERMINAL=1:
+// the terminal is off by default, and the other journeys run against a hub that has it off.
+export const terminalPort = Number(process.env.COREHUB_E2E_TERMINAL_PORT ?? 8793);
+export const terminalBaseURL = `http://127.0.0.1:${terminalPort}`;
 
 export default defineConfig({
   testDir: 'e2e',
@@ -46,6 +50,13 @@ export default defineConfig({
         COREHUB_E2E_MODE: 'setup',
         COREHUB_E2E_DATA_DIR: setupDataDir,
       },
+    },
+    {
+      command: `node --import tsx e2e/hub.ts`,
+      url: `${terminalBaseURL}/api/v1/health`,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      env: { COREHUB_E2E_PORT: String(terminalPort), COREHUB_WEB_TERMINAL: '1' },
     },
   ],
   projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],

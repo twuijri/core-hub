@@ -344,8 +344,11 @@ function TerminalWorkspace({ status }: { status: TerminalStatus }) {
       ) : (
         <Suspense fallback={<Skeleton height="20rem" radius="md" />}>
           {front && (
-            <p className="text-xs text-muted" dir="auto">
-              {t('terminal.folder', { cwd: front.cwd })}
+            <p className="text-xs text-muted">
+              {t('terminal.folder')}{' '}
+              <bdi dir="ltr" className="font-mono">
+                {front.cwd}
+              </bdi>
             </p>
           )}
           {front?.ended && <Notice tone="info">{reasonText(front.ended)}</Notice>}

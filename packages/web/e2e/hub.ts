@@ -19,6 +19,12 @@ import { fakeProfileRuntime } from '../../server/src/modules/auth/testing/fake-p
 import { principalScopeResolver } from '../../server/src/modules/auth/index.js';
 import { overrideAgents } from '../../server/src/modules/agents/index.js';
 import { overrideModels } from '../../server/src/modules/models/index.js';
+import {
+  loadNodePty,
+  overrideTerminal,
+  pipeSpawner,
+  ptySpawner,
+} from '../../server/src/modules/terminal/index.js';
 import type { AgentInstaller, HermesApiCall } from '../../server/src/modules/agents/index.js';
 import { createSessionsModule } from '../../server/src/modules/sessions/index.js';
 import { SessionsStore } from '../../server/src/modules/sessions/store.js';
@@ -786,11 +792,21 @@ const sessions = createSessionsModule({
   notifier: notifierPort,
   agentTimeoutMs: 30_000,
 });
+// The terminal journey's shell is `sh` on a real PTY: no machine's bash profile (its prompt,
+// its user and host names) reaches the journey or its screenshot.
+if (process.env.COREHUB_WEB_TERMINAL === '1') {
+  const pty = loadNodePty();
+  overrideTerminal({
+    spawner: () => (pty ? ptySpawner(pty, '/bin/sh') : pipeSpawner('/bin/sh')),
+  });
+}
 const app = await buildServer({
   config: loadConfig({
     DATA_DIR: dataDir,
     PORT: String(port),
     ...(setupMode ? {} : { HUB_ADMIN_PASSWORD: E2E_PASSWORD }),
+    // The terminal journey's hub (playwright.config.ts): the owner's web terminal is on.
+    ...(process.env.COREHUB_WEB_TERMINAL === '1' ? { COREHUB_WEB_TERMINAL: '1' } : {}),
   }),
   logger: createLogger({ level: 'warn' }),
   modules: defaultModules.map((module) => (module.name === 'sessions' ? sessions : module)),
