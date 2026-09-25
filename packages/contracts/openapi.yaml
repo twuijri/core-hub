@@ -10734,6 +10734,96 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+    post:
+      operationId: devices.register
+      tags: [devices]
+      summary: Register the calling client as a device (a browser or an app signed in with a web session)
+      description: |
+        A phone or computer that paired (`auth.claimPairing`) is already a device and answers
+        `409 conflict` here. Anything else signed in — a browser, the desktop app in remote mode —
+        describes itself with a stable `device_key` it generated once; registering again with the
+        same key updates the same row (`200`) and records that it was seen. Push is added with
+        `devices.registerPush`.
+      x-scope: global
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceRegistration'
+            example:
+              device_key: 9f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f
+              name: 'Firefox — Linux'
+              platform: web
+              kind: browser
+              brand: null
+              model: null
+              app_version: null
+              capabilities: [notifications]
+      x-rt-events: [device.linked, device.updated]
+      responses:
+        '200':
+          description: The same device, registered again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+              example:
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0DB
+                user_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                device_key: 9f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f
+                name: 'Firefox — Linux'
+                platform: web
+                kind: browser
+                brand: null
+                model: null
+                app_version: null
+                connection: lan
+                online: false
+                last_seen_at: '2026-09-25T09:00:00Z'
+                app_token_id: null
+                capabilities:
+                  - kind: notifications
+                    enabled: true
+                    consent_at: null
+                push: null
+                this_device: true
+                created_at: '2026-09-24T20:00:00Z'
+                updated_at: '2026-09-25T09:00:00Z'
+        '201':
+          description: A new device.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+              example:
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0DB
+                user_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                device_key: 9f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f
+                name: 'Firefox — Linux'
+                platform: web
+                kind: browser
+                brand: null
+                model: null
+                app_version: null
+                connection: lan
+                online: false
+                last_seen_at: '2026-09-25T09:00:00Z'
+                app_token_id: null
+                capabilities:
+                  - kind: notifications
+                    enabled: true
+                    consent_at: null
+                push: null
+                this_device: true
+                created_at: '2026-09-25T09:00:00Z'
+                updated_at: '2026-09-25T09:00:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /devices/{device_id}:
     parameters:
       - $ref: '#/components/parameters/DeviceId'
@@ -10776,7 +10866,7 @@ paths:
     patch:
       operationId: devices.update
       tags: [devices]
-      summary: Rename a device or update its capabilities and app version (the device itself, or an admin)
+      summary: Rename a device or update its capabilities and app version (the device itself, its owner, or an admin)
       x-scope: global
       requestBody:
         required: true
@@ -10851,6 +10941,12 @@ paths:
       operationId: devices.registerPush
       tags: [devices]
       summary: Register (or refresh) the device's push token
+      description: |
+        The device itself (its app token), or — for a device with no app token, such as a browser —
+        its owner. `400` when the token does not fit the provider or a Web Push endpoint is not a
+        public `https` address; `409 conflict` when that sender is not configured on this hub
+        (`devices.getPushConfig`). Notices written to the owner's inbox are then pushed here,
+        following the owner's per-kind `push` switch and quiet hours.
       x-scope: global
       requestBody:
         required: true
@@ -10882,6 +10978,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
     delete:
       operationId: devices.unregisterPush
       tags: [devices]
@@ -10897,6 +10995,35 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /devices/{device_id}/push/test:
+    parameters:
+      - $ref: '#/components/parameters/DeviceId'
+    post:
+      operationId: devices.testPush
+      tags: [devices]
+      summary: Send a test push to one device and say what the push service answered
+      description: The device's owner or an admin. `409 conflict` when the device has no push registration.
+      x-scope: global
+      x-rt-events: []
+      responses:
+        '200':
+          description: What the push service answered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushTestResult'
+              example:
+                provider: apns
+                status: failed
+                error: 'APNs: BadDeviceToken (400)'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /device-requests:
     get:
       operationId: devices.listRequests
@@ -11350,6 +11477,163 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /push/config:
+    get:
+      operationId: devices.getPushConfig
+      tags: [devices]
+      summary: What a client needs to register for push (the hub's Web Push key, the senders that can deliver)
+      description: |
+        `webpush_public_key` is the hub's own VAPID public key (uncompressed P-256, base64url), the
+        `applicationServerKey` a browser subscribes with. `providers` lists only the senders that can
+        deliver right now, so an app does not register a token nobody will use.
+      x-scope: global
+      x-rt-events: []
+      responses:
+        '200':
+          description: Push configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushConfig'
+              example:
+                webpush_public_key: BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM
+                providers: [webpush]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /push/senders:
+    get:
+      operationId: devices.listPushSenders
+      tags: [devices]
+      summary: The push senders and whether each can deliver (admin)
+      description: One row per sender. `missing` names what the owner still has to provide; secrets never come back.
+      x-scope: global
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: Senders (not paged).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PushSender'
+              example:
+                items:
+                  - provider: webpush
+                    state: ready
+                    source: generated
+                    missing: []
+                    details:
+                      public_key: BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM
+                      subject: https://github.com/twuijri/core-hub
+                    devices: 2
+                    last_error: null
+                    last_sent_at: '2026-09-25T09:10:00Z'
+                  - provider: fcm
+                    state: not_configured
+                    source: none
+                    missing: [service_account]
+                    details: {}
+                    devices: 0
+                    last_error: null
+                    last_sent_at: null
+                  - provider: apns
+                    state: not_configured
+                    source: none
+                    missing: [key_id, team_id, bundle_id, private_key]
+                    details: {}
+                    devices: 0
+                    last_error: null
+                    last_sent_at: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /push/senders/{provider}:
+    parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/PushProvider'
+    put:
+      operationId: devices.setPushSender
+      tags: [devices]
+      summary: Store a sender's credentials or switch it on or off (admin)
+      description: |
+        FCM takes the Firebase service-account JSON; APNs takes the key id, team id, app bundle id,
+        environment and the `.p8` key. Web Push takes only `subject` (the contact a push service
+        may use) and `enabled` — its keys are the hub's own. Secrets are stored encrypted and read
+        back as `[stored]`; sending `[stored]` keeps the stored value. A sender configured by the
+        environment answers `409 conflict`: the environment wins.
+      x-scope: global
+      x-roles: [owner, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushSenderUpdate'
+            example:
+              enabled: true
+              key_id: ABC123DEFG
+              team_id: DEF123GHIJ
+              bundle_id: hub.core.ios
+              environment: production
+              private_key: "-----BEGIN PRIVATE KEY-----\n…\n-----END PRIVATE KEY-----"
+      x-rt-events: []
+      responses:
+        '200':
+          description: The sender.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushSender'
+              example:
+                provider: apns
+                state: ready
+                source: settings
+                missing: []
+                details:
+                  key_id: ABC123DEFG
+                  team_id: DEF123GHIJ
+                  bundle_id: hub.core.ios
+                  environment: production
+                  private_key: '[stored]'
+                devices: 0
+                last_error: null
+                last_sent_at: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      operationId: devices.deletePushSender
+      tags: [devices]
+      summary: Forget a sender's stored credentials (admin; FCM and APNs only)
+      x-scope: global
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '204':
+          description: Forgotten.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   # ================================================================== notify
   /notify/notices:
     get:
@@ -11492,6 +11776,33 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /notify/test-notice:
+    post:
+      operationId: notify.sendTestNotice
+      tags: [notify]
+      summary: Put a test notice in the caller's own inbox, delivered like any other (push included)
+      description: Kind `system`, in the caller's language. It goes through the same preferences and quiet hours as every notice.
+      x-scope: global
+      x-rt-events: [notice.created]
+      responses:
+        '201':
+          description: The notice written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notice'
+              example:
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0NT
+                user_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                profile: default
+                kind: system
+                title: 'إشعار تجريبي'
+                body: 'إن وصلك هذا على جهازك فالإشعارات تعمل.'
+                resource: null
+                read_at: null
+                created_at: '2026-09-25T09:10:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /notify/preferences:
     get:
       operationId: notify.getPreferences
@@ -17910,6 +18221,12 @@ components:
           enum: [fcm, apns, webpush]
         token:
           type: string
+          maxLength: 4096
+          description: |
+            `fcm`: the FCM registration token. `apns`: the device token as hex. `webpush`: the
+            browser's `PushSubscription` as JSON (`{"endpoint": "https://…", "keys": {"p256dh": "…",
+            "auth": "…"}}`), subscribed with `devices.getPushConfig`'s `webpush_public_key`.
+            Stored encrypted and never returned.
         locale:
           $ref: '#/components/schemas/Locale'
     Device:
@@ -17981,6 +18298,93 @@ components:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
           $ref: '#/components/schemas/Timestamp'
+    PushProvider:
+      type: string
+      enum: [webpush, fcm, apns]
+    PushConfig:
+      type: object
+      required: [webpush_public_key, providers]
+      properties:
+        webpush_public_key:
+          type: [string, 'null']
+          description: The hub's VAPID public key (uncompressed P-256 point, base64url), or null when Web Push is off.
+        providers:
+          type: array
+          description: Senders that can deliver right now.
+          items:
+            $ref: '#/components/schemas/PushProvider'
+    PushSender:
+      type: object
+      required: [provider, state, source, missing, details, devices, last_error, last_sent_at]
+      properties:
+        provider:
+          $ref: '#/components/schemas/PushProvider'
+        state:
+          type: string
+          enum: [ready, disabled, not_configured, error]
+          description: '`error`: configured, but the credentials could not be read.'
+        source:
+          type: string
+          enum: [generated, environment, settings, none]
+          description: Where the credentials come from. Web Push keys are generated by the hub.
+        missing:
+          type: array
+          description: What still has to be provided (field names of `PushSenderUpdate`).
+          items:
+            type: string
+        details:
+          type: object
+          description: Non-secret identifiers (project id, client email, key id, team id, bundle id, environment, public key, subject); a secret shows as `[stored]`.
+          additionalProperties:
+            type: string
+        devices:
+          type: integer
+          minimum: 0
+          description: Linked devices registered with this sender.
+        last_error:
+          type: [string, 'null']
+        last_sent_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+    PushSenderUpdate:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        service_account:
+          type: string
+          description: FCM. The Firebase service-account JSON (write-only).
+        key_id:
+          type: string
+          description: APNs. The key's 10-character id.
+        team_id:
+          type: string
+          description: APNs. The Apple developer team id.
+        bundle_id:
+          type: string
+          description: APNs. The app's bundle id (the `apns-topic`).
+        environment:
+          type: string
+          enum: [production, sandbox]
+          description: APNs. `sandbox` for development builds.
+        private_key:
+          type: string
+          description: APNs. The `.p8` key's contents (write-only).
+        subject:
+          type: string
+          description: Web Push. A `mailto:` or `https:` contact a push service may use.
+    PushTestResult:
+      type: object
+      required: [provider, status, error]
+      properties:
+        provider:
+          $ref: '#/components/schemas/PushProvider'
+        status:
+          type: string
+          enum: [sent, failed]
+        error:
+          type: [string, 'null']
     DevicePatch:
       type: object
       properties:
