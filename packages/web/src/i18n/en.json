@@ -1830,7 +1830,29 @@
     "builtin": "Built into Hermes",
     "builtin_hint": "One of Hermes's own skills. Hermes keeps it in step with its bundle, so it can be read and pinned here but not edited, switched off or deleted.",
     "bundled_refused": "This is one of Hermes's own skills; it is read-only here.",
-    "close": "Close"
+    "close": "Close",
+    "library": {
+      "title": "Core Hub library",
+      "hint": "One of Core Hub's own skills. Core Hub keeps it up to date while it is as shipped; edit it freely — an edited skill is yours and is never overwritten.",
+      "edited": "Edited",
+      "edited_hint": "You changed this skill, so Core Hub no longer updates it. Restore puts the library's version back.",
+      "edited_count": "{count} edited",
+      "restore": "Restore",
+      "restore_title": "Restore {name}?",
+      "restore_body": "Your changes to this skill are replaced by the version Core Hub ships. A skill you switched off stays off.",
+      "restored": "{name} is back to the library's version.",
+      "summary_on": "{installed} of {available} skills in this profile — images, documents, data, research, translation, slides and schedules. Kept up to date until you edit one.",
+      "summary_none": "Not installed in this profile yet: {available} skills — images, documents, data, research, translation, slides and schedules.",
+      "summary_off": "Off in this profile. Switch it on to install Core Hub's skills again.",
+      "install": "Install",
+      "switch": "Core Hub library in this profile",
+      "off_title": "Switch the Core Hub library off?",
+      "off_body": "Its skills are removed from this profile, except the ones you edited, which stay as your own. Core Hub stops installing and updating them here until you switch it back on.",
+      "off_confirm": "Switch off",
+      "editor_note": "One of Core Hub's own skills. Once you save a change it is yours: Core Hub stops updating it, and Restore brings its version back.",
+      "not_library": "This skill is not one of Core Hub's own.",
+      "off_refused": "The Core Hub library is off in this profile; switch it on first."
+    }
   },
   "mcp": {
     "title_of": "{name} MCP servers",

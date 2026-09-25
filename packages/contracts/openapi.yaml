@@ -5347,7 +5347,9 @@ paths:
         Hermes seeded from its own bundle (named in `skills/.bundled_manifest`) is `source:
         builtin` and read-only here: it can be read and pinned, not written, switched or
         deleted (`409 conflict`, `details.reason = skill_bundled`). A skill's `key` is its
-        folder's name wherever the folder is.
+        folder's name wherever the folder is. Core Hub's own skills (decision §71) live in the
+        `core-hub` category, are `source: library` with `library` saying whether the person
+        edited them, and `library` in the answer describes the library in this profile.
       x-rt-events: []
       responses:
         '200':
@@ -5369,8 +5371,15 @@ paths:
                       runtime started with a different home reads as the wrong directory
                       rather than as an agent with no skills. `null` when the hub cannot
                       name one.
+                  library:
+                    $ref: '#/components/schemas/SkillLibrary'
               example:
                 home: /data/hermes/skills
+                library:
+                  enabled: true
+                  available: 12
+                  installed: 12
+                  edited: 0
                 categories:
                   - key: research
                     name: 'بحث'
@@ -5588,6 +5597,103 @@ paths:
       responses:
         '204':
           description: Deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /agents/{agent_id}/skills/{skill_key}/restore:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - name: skill_key
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-z0-9._-]{1,80}$'
+    post:
+      operationId: agents.restoreSkill
+      tags: [agents]
+      summary: Put a Core Hub library skill back as the library ships it (admin)
+      description: >-
+        Rewrites every file of one of Core Hub's own skills (`source: library`, decision §71)
+        in the profile in `X-Hub-Profile` exactly as the library ships it, over the person's
+        edits — the only operation that writes over an edit. A switched-off skill stays off.
+        A skill the library does not ship is `409 conflict` with `details.reason =
+        skill_not_library`; with the library switched off in this profile, `details.reason =
+        skill_library_off`.
+      x-roles: [owner, admin]
+      x-rt-events: [agent.updated]
+      responses:
+        '200':
+          description: The restored skill (content omitted).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Skill'
+              example:
+                key: image-generate
+                name: image-generate
+                description: 'Generate an image from a text prompt, in any language.'
+                enabled: true
+                pinned: false
+                source: library
+                use_count: 0
+                updated_at: '2026-09-25T10:00:00Z'
+                content: null
+                library: current
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /agents/{agent_id}/skill-library:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+    patch:
+      operationId: agents.updateSkillLibrary
+      tags: [agents]
+      summary: Switch Core Hub's skill library on or off in a profile (admin)
+      description: >-
+        Core Hub installs its own skills into every Hermes profile's `skills/core-hub/`
+        (decision §71), on by default. `enabled: false` removes the library's skills that are
+        still exactly as the hub wrote them and leaves the ones the person edited, as theirs;
+        the hub then stops installing and updating the library in this profile. `enabled:
+        true` installs the whole library again. The choice is kept in the profile
+        (`skills/.core-hub-library.json`), so a copy or an export of the profile carries it.
+        Hermes only.
+      x-roles: [owner, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkillLibraryPatch'
+            example:
+              enabled: false
+      x-rt-events: [agent.updated]
+      responses:
+        '200':
+          description: The library in this profile after the change.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillLibrary'
+              example:
+                enabled: false
+                available: 12
+                installed: 1
+                edited: 1
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -18819,9 +18925,10 @@ components:
       type: string
       description: >-
         `builtin`: seeded by the agent from its own bundle (Hermes's `skills/.bundled_manifest`)
-        and read-only through the hub; `external`: installed from a pack that names itself;
-        `user`: written by a person.
-      enum: [builtin, user, external]
+        and read-only through the hub; `library`: one of Core Hub's own skills (decision §71),
+        installed and kept up to date by the hub until the person edits it; `external`:
+        installed from a pack that names itself; `user`: written by a person.
+      enum: [builtin, user, external, library]
     Skill:
       type: object
       required: [key, name, description, enabled, pinned, source, use_count, updated_at, content]
@@ -18846,6 +18953,41 @@ components:
             - type: 'null'
         content:
           type: [string, 'null']
+        library:
+          type: [string, 'null']
+          enum: [current, edited, null]
+          description: >-
+            For a Core Hub library skill (`source: library`): `current` while every file is as
+            the hub wrote it (the hub updates it with each new version), `edited` once the person
+            changed one (the hub leaves it alone; `agents.restoreSkill` puts it back). `null`
+            for every other skill.
+    SkillLibrary:
+      type: object
+      description: Core Hub's own skill library in one profile (decision §71).
+      required: [enabled, available, installed, edited]
+      properties:
+        enabled:
+          type: boolean
+          description: On by default; off means the hub neither installs nor updates it here.
+        available:
+          type: integer
+          minimum: 0
+          description: How many skills the library ships.
+        installed:
+          type: integer
+          minimum: 0
+          description: How many of them this profile has.
+        edited:
+          type: integer
+          minimum: 0
+          description: How many of those the person edited (left alone by updates).
+    SkillLibraryPatch:
+      type: object
+      required: [enabled]
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
     SkillCategory:
       type: object
       required: [key, name, description, skills]

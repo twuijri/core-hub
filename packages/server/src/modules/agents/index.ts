@@ -159,6 +159,16 @@ import {
   setSkillEnabled,
   type Skill,
 } from './skills.js';
+import {
+  LIBRARY_CATEGORY,
+  LibraryError,
+  libraryStatus,
+  restoreLibrarySkill,
+  seedLibrary,
+  seedLibraryOfEveryProfile,
+  setLibraryEnabled,
+  type LibraryStatus,
+} from './skill-library.js';
 
 export { AgentsService } from './service.js';
 export type { AgentPatchInput, AgentsServiceOptions, ReconcileReport } from './service.js';
@@ -470,6 +480,52 @@ function hubMcpUrl(app: FastifyInstance): string | null {
   const port = address && typeof address === 'object' ? address.port : app.hub.config.port;
   if (!port) return null;
   return `http://127.0.0.1:${port}/api/v1/hub-mcp`;
+}
+
+/**
+ * Core Hub's skill library into every profile Hermes has (`skill-library.ts`, decision §71): at
+ * boot, so an upgraded image updates the skills it wrote and a profile made outside the hub gets
+ * them too. A profile switched off, and every skill the person edited, are left as they are.
+ * Called only when the hub runs Hermes itself (`managed`).
+ */
+export function seedSkillLibraryOfEveryProfile(
+  root: string | null | undefined,
+  log: Pick<FastifyInstance['log'], 'info' | 'warn'>,
+): void {
+  if (!root) return;
+  seedLibraryOfEveryProfile(
+    [
+      { profile: 'default', home: root },
+      ...namedHermesProfiles(root).map((name) => ({
+        profile: name,
+        home: path.join(root, 'profiles', name),
+      })),
+    ],
+    log,
+  );
+}
+
+/** The library into one profile just made (a copy carries its source's manifest and choice). */
+export function seedSkillLibraryOf(
+  home: string,
+  log: Pick<FastifyInstance['log'], 'info' | 'warn'>,
+): void {
+  try {
+    seedLibrary(home);
+  } catch (error) {
+    log.warn({ home, err: error }, 'agents: could not seed the Core Hub skill library');
+  }
+}
+
+/** The library in one profile's home, as the contract's `SkillLibrary`. */
+function toLibrary(status: LibraryStatus): Record<string, unknown> {
+  const states = [...status.skills.values()];
+  return {
+    enabled: status.enabled,
+    available: status.available,
+    installed: states.length,
+    edited: states.filter((state) => state === 'edited').length,
+  };
 }
 
 const contexts = new WeakMap<SocketServer, AgentsContext>();
@@ -803,17 +859,27 @@ const actorOf = (request: FastifyRequest): { userId: string } => {
  * read-only here), one that names the pack it came from is `external`, and one that names
  * none was written by a person, which is `user`.
  */
-function toSkill(skill: Skill, pinned: readonly string[]): Record<string, unknown> {
+function toSkill(
+  skill: Skill,
+  pinned: readonly string[],
+  library?: LibraryStatus,
+): Record<string, unknown> {
+  // One of Core Hub's own (§71): in the library's category folder and recorded by its manifest.
+  const state =
+    skill.category === LIBRARY_CATEGORY && !skill.bundled
+      ? (library?.skills.get(skill.key) ?? null)
+      : null;
   return {
     key: skill.key,
     name: skill.name,
     description: skill.broken ? `[${skill.broken}]` : skill.description,
     enabled: skill.enabled,
     pinned: pinned.includes(skill.key),
-    source: skill.bundled ? 'builtin' : skill.pack ? 'external' : 'user',
+    source: skill.bundled ? 'builtin' : state ? 'library' : skill.pack ? 'external' : 'user',
     use_count: 0,
     updated_at: skill.updatedAt.toISOString(),
     content: skill.content,
+    library: state,
   };
 }
 
@@ -830,6 +896,7 @@ function categorise(
   home: string,
   skills: readonly Skill[],
   pinned: readonly string[],
+  library?: LibraryStatus,
 ): Array<Record<string, unknown>> {
   const groups = new Map<string, Skill[]>();
   const folders = new Set<string>();
@@ -850,7 +917,7 @@ function categorise(
         description: folders.has(key) ? categoryDescription(home, key) : null,
         skills: list
           .sort((a, b) => Number(pinned.includes(b.key)) - Number(pinned.includes(a.key)))
-          .map((skill) => toSkill(skill, pinned)),
+          .map((skill) => toSkill(skill, pinned, library)),
       }))
   );
 }
@@ -893,6 +960,9 @@ export const agentsModule = defineModule({
       // The hub's own tools go back into every profile that has them on (§67).
       ctx.hubTools.syncAll();
       if (ctx.updatesArmed) ctx.updates.start();
+      // Only into a Hermes this hub runs itself: an external gateway's home is somebody else's,
+      // and there the Skills page installs the library when asked (`agents.updateSkillLibrary`).
+      if (mode === 'managed') seedSkillLibraryOfEveryProfile(ctx.runtime.status().home, app.log);
     });
     // Again once the port is known for certain (a hub on port 0 learns it only now).
     app.addHook('onListen', async () => {
@@ -1168,12 +1238,15 @@ export const agentsModule = defineModule({
       handler: (request, { params }) => {
         const agentId = params.agent_id as string;
         const home = skillHome(request, agentId);
+        const library = libraryStatus(home);
         return {
           categories: categorise(
             home,
             listSkills(home),
             contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
+            library,
           ),
+          library: toLibrary(library),
           // Which folder this is. A Hermes somebody else started with a different home
           // would otherwise read as "no skills", and a path on screen is the difference
           // between an empty agent and the wrong directory.
@@ -1187,11 +1260,13 @@ export const agentsModule = defineModule({
       handler: (request, { params }) => {
         const agentId = params.agent_id as string;
         const key = params.skill_key as string;
-        const skill = getSkill(skillHome(request, agentId), key);
+        const home = skillHome(request, agentId);
+        const skill = getSkill(home, key);
         if (!skill) throw notFound({ resource: 'skill', id: key });
         return toSkill(
           skill,
           contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
+          libraryStatus(home),
         );
       },
     });
@@ -1209,6 +1284,7 @@ export const agentsModule = defineModule({
           return toSkill(
             written,
             contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
+            libraryStatus(home),
           );
         } catch (error) {
           return skillFault(error);
@@ -1237,7 +1313,7 @@ export const agentsModule = defineModule({
               patch.pinned ? [...pinned, key] : pinned.filter((entry) => entry !== key),
             );
           }
-          return toSkill(skill, pinned);
+          return toSkill(skill, pinned, libraryStatus(home));
         } catch (error) {
           return skillFault(error);
         }
@@ -1254,6 +1330,44 @@ export const agentsModule = defineModule({
           return skillFault(error);
         }
         return null;
+      },
+    });
+
+    /**
+     * Core Hub's skill library in this profile (§71): on by default; off removes the library's
+     * skills that are still as the hub wrote them and leaves the edited ones as the person's.
+     */
+    defineRoute(app, deps, {
+      operationId: 'agents.updateSkillLibrary',
+      handler: (request, { params, body }) => {
+        const home = skillHome(request, params.agent_id as string);
+        setLibraryEnabled(home, (body as { enabled: boolean }).enabled === true);
+        return toLibrary(libraryStatus(home));
+      },
+    });
+
+    /** One library skill back as the library ships it — the only write over a person's edit. */
+    defineRoute(app, deps, {
+      operationId: 'agents.restoreSkill',
+      handler: (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const key = params.skill_key as string;
+        const home = skillHome(request, agentId);
+        try {
+          restoreLibrarySkill(home, key);
+        } catch (error) {
+          if (error instanceof LibraryError) {
+            throw new HubError('conflict', { details: { reason: error.reason } });
+          }
+          throw error;
+        }
+        const skill = getSkill(home, key);
+        if (!skill) throw notFound({ resource: 'skill', id: key });
+        return toSkill(
+          skill,
+          contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
+          libraryStatus(home),
+        );
       },
     });
 
