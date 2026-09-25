@@ -38,7 +38,9 @@ module.exports = {
   },
   deb: { packageName: 'corehub', artifactName: 'corehub_${version}_${arch}.${ext}' },
   mac: {
-    target: [{ target: 'dmg', arch: ['arm64', 'x64'] }],
+    // Apple silicon only: argon2 (the hub's password hashing) ships no darwin-x64 binary, so an
+    // Intel build could not run local mode. Proposed — owner to confirm (ADR 0023).
+    target: [{ target: 'dmg', arch: ['arm64'] }],
     category: 'public.app-category.productivity',
     icon: 'assets/icon.png',
     // TODO(owner): Developer ID signing and notarisation. Unsigned builds open with a warning.
