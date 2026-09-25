@@ -108,7 +108,18 @@ All matched files use Prettier code style!
 $ pnpm --filter @corehub/web typecheck   (exit 0)
 ```
 
-CI: يُضاف بعد الدفع.
+CI على #125 (قاعدته `feat/android-app`):
+
+```
+Android build, unit tests, lint                       pass   (run 36094329104, BUILD SUCCESSFUL in 5m 13s)
+  Debug APK: 15M (14885947 bytes) · artifact corehub-android-debug-apk (14,314,335 bytes zipped)
+Lint, typecheck, contracts, tests, build              pass
+Web smoke journeys (Playwright against the real hub)  pass
+Docker image builds and answers /health               pass
+db:generate + db:migrate (SQLite and PostgreSQL)      pass
+PR adds or updates a change record                    pass
+PR leaves graphify-out/ to the code-map bot           pass
+```
 
 ## المخاطر والرجوع
 - `navigation.json` يتغيّر أيضًا في طلب سطح المكتب #111 (`surfaceRoutes.desktop`) في الموضع نفسه؛ من
