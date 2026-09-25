@@ -7,7 +7,7 @@
  *
  * Also implemented (Phase 4): `audit.getReport` for `usage`, `logs`, `performance` and
  * `skills`, and the typed Usage and Skills usage screens `audit.getUsage` /
- * `audit.getSkillUsage` (contract decision §47, `analytics.ts`). Skill use is recorded from
+ * `audit.getSkillUsage` (contract decision §50, `analytics.ts`). Skill use is recorded from
  * the version that added it (`skill_uses`); the reports say from when.
  *
  * Composition note: the module object is a singleton shared by every `buildServer()` in a

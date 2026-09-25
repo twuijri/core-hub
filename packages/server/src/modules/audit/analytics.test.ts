@@ -1,5 +1,5 @@
 /**
- * The Usage and Skills usage reports (contract decision §47): aggregated by calendar day, per
+ * The Usage and Skills usage reports (contract decision §50): aggregated by calendar day, per
  * profile and per agent, and — the hub's rule — a number only where something was measured.
  */
 import { describe, expect, it } from 'vitest';

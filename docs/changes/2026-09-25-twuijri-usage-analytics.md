@@ -16,7 +16,7 @@
   «بدأ العدّ في <تاريخ>» لأن الماضي لا يُعاد بناؤه.
 
 ## القرار والموافقات
-العقد: DECISIONS §47 (آخر رقم في `main` وقت الكتابة §46). الترحيل `0016` (آخر رقم في `main` كان
+العقد: DECISIONS §50 (آخر رقم في `main` وقت الكتابة §46). الترحيل `0017` (آخر رقم في `main` كان
 `0015`). لا ADR جديد: القرار في حدود ADR 0012 (رُصد Hermes من مصدره MIT) و ADR 0016 (قوائم كل
 البروفايلات).
 
@@ -63,11 +63,11 @@
   `UtcOffset`.
 - `audit.getReport`: `skills` صار يجيب (نفس جسم `getSkillUsage` في `data` لبروفايل الترويسة) بدل
   `501`؛ ووصف وسم `audit` لم يعد «Phase 4 stub».
-- لا حدث لحظي جديد. DECISIONS §47، و`COVERAGE.md` (الصفّان ١٢ و١٤).
+- لا حدث لحظي جديد. DECISIONS §50، و`COVERAGE.md` (الصفّان ١٢ و١٤).
 
 ## الملفات والتأثير
 الخادم (`packages/server`):
-- `modules/audit/schema.ts` + `drizzle/0016_usage_analytics.sql`: جدول `skill_uses` (فهارس
+- `modules/audit/schema.ts` + `drizzle/0017_usage_analytics.sql`: جدول `skill_uses` (فهارس
   `(workspace, used_at)` و`(workspace, agent_id, used_at)` وفريد `(run_id, skill)`)، وجدول
   `audit_counters` يكتب فيه الترحيل لحظة بدء العدّ على هذا التثبيت؛ وفهرس `runs (workspace, created_at)`.
 - `modules/audit/analytics.ts` (جديد): `UsageAnalytics` — تجميع SQL حسب يوم التقويم على فهارس الزمن
@@ -93,7 +93,7 @@
 الرموز: `packages/ui-tokens/tokens.json` — `chart-1…6` في السمتين، وأزواج تباين لـ `chart-1/2/6`.
 
 التنقّل والوثائق: `docs/clients/navigation.json` (وجهة `skills_usage` بين `usage` و`performance`،
-`/settings/skills-usage`)، `docs/clients/NAVIGATION.md`، `docs/contracts/DECISIONS.md` §47،
+`/settings/skills-usage`)، `docs/clients/NAVIGATION.md`، `docs/contracts/DECISIONS.md` §50،
 `docs/contracts/COVERAGE.md`، `docs/STATUS.md` (208 من 266، وصف `audit` 3 من 3).
 
 ## الفحوص (الأوامر ونواتجها الفعلية)

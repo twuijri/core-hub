@@ -1,5 +1,5 @@
 /**
- * 32. Usage and Skills usage (contract decision §47): a scripted run loads a skill the way
+ * 32. Usage and Skills usage (contract decision §50): a scripted run loads a skill the way
  *     Hermes does (`skill_view`) and reports its tokens with a cache read. Usage then shows the
  *     cards and the daily chart for the chosen period — switching to 7 days draws seven bars —
  *     and Skills usage shows that skill as the most used, in its table, and from when the hub

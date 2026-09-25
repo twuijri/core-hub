@@ -535,7 +535,7 @@ export class RunEngine {
           const call = state.toolCalls.find((c) => c.id === action.toolCallId);
           if (!call) break;
           const row = this.writeToolCall(run, call);
-          // A skill the agent loaded is a use of it (contract decision §47).
+          // A skill the agent loaded is a use of it (contract decision §50).
           if (action.type === 'tool_completed') {
             const skill = skillUseOf(call);
             if (skill) {

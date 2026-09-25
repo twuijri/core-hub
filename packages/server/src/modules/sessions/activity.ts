@@ -1,6 +1,6 @@
 /**
  * Runs per agent, conversation and calendar day, for the Usage report (`audit.getUsage`,
- * contract decision §47). Runs are this module's, so the question is answered here and lent
+ * contract decision §50). Runs are this module's, so the question is answered here and lent
  * to `audit` by the composition root; `audit` never reads this module's tables.
  *
  * Every run counts, whether or not its agent reported usage — that difference is what lets

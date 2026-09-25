@@ -1,4 +1,4 @@
-// `pnpm contract:test`: the Usage and Skills usage reports (contract decision §47) through the
+// `pnpm contract:test`: the Usage and Skills usage reports (contract decision §50) through the
 // generated TypeScript client, every answer validated against the schema the contract documents
 // for its status — seeded ledgers, `profiles=all`, one agent, the caller's calendar, and the
 // refusals (a period outside 1–365 days, an agent id that is not one, nobody signed in).

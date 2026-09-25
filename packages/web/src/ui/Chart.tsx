@@ -1,5 +1,5 @@
 /**
- * The kit's two charts: a daily stacked bar chart and a list of share bars (decision §47).
+ * The kit's two charts: a daily stacked bar chart and a list of share bars (decision §50).
  *
  * No charting library: the Usage and Skills usage pages need two plain forms, and both are a
  * few flex boxes. Built from boxes rather than an SVG on purpose — a row of boxes follows the

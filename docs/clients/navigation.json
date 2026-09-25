@@ -402,7 +402,7 @@
         "kind": "settings-tool"
       },
       "roles": ["member"],
-      "note": "Which skills the agents loaded, and which never (contract decision §47)."
+      "note": "Which skills the agents loaded, and which never (contract decision §50)."
     },
     {
       "id": "performance",

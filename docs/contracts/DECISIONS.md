@@ -1025,7 +1025,7 @@ Rejected: a new `source` field on `SessionCreate` (a client could then make any 
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
 
-## 47. Usage and Skills usage are typed reports aggregated on the hub; a number only where one was measured
+## 50. Usage and Skills usage are typed reports aggregated on the hub; a number only where one was measured
 
 `audit.getReport` answered Usage with an open `data` block over a rolling window, and `skills`
 with `501` because nothing recorded skill use. The Usage page now needs a period choice,

@@ -19,7 +19,7 @@
  *   it was written with. That is why `level` filters the merged list rather than one table.
  * - **performance** (global, admin): the snapshots the sampler writes, plus this
  *   process's own numbers at the moment of asking.
- * - **skills**: built by `analytics.ts` from `skill_uses` (contract decision §47) and answered
+ * - **skills**: built by `analytics.ts` from `skill_uses` (contract decision §50) and answered
  *   by the route itself, so `build` has nothing to say about it.
  */
 import { and, desc, eq, gte, inArray, like, lte, sql } from 'drizzle-orm';

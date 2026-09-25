@@ -268,7 +268,7 @@ describe('audit: the report route', () => {
     }
   });
 
-  it('answers the skills report now that skill use is recorded (decision §47)', async () => {
+  it('answers the skills report now that skill use is recorded (decision §50)', async () => {
     const hub = await signedInHub();
     try {
       const response = await authed(hub, hub.token, {

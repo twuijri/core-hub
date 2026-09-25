@@ -47,7 +47,7 @@ const SECTIONS: Record<string, () => ReactElement> = {
   theme: () => <ThemeTool />,
   webhooks: () => <WebhooksTab />,
   privacy: () => <PrivacyTab />,
-  // The audit module's reports: Usage and Skills usage are their own pages (decision §47).
+  // The audit module's reports: Usage and Skills usage are their own pages (decision §50).
   usage: () => <UsagePage />,
   skills_usage: () => <SkillsUsagePage />,
   logs: () => <AuditReport kind="logs" />,

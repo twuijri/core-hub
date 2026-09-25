@@ -1,5 +1,5 @@
 /**
- * Skill use is recorded from the agent's own tool calls (contract decision §47): Hermes loads a
+ * Skill use is recorded from the agent's own tool calls (contract decision §50): Hermes loads a
  * skill with `skill_view(name, file_path?)`. A scripted run proves what counts — a completed
  * load, once per run and skill — and what does not: a failed load, a linked file of a skill
  * already loaded, an edit through `skill_manage`, any other tool.

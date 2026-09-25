@@ -1,6 +1,6 @@
 /**
  * The Usage and Skills usage screens (`audit.getUsage`, `audit.getSkillUsage`; contract
- * decision §47).
+ * decision §50).
  *
  * Both are aggregated here, in SQL grouped by calendar day, over the time indexes of the two
  * ledgers (`usage_records_workspace_time_idx`, `skill_uses_workspace_time_idx`) and of the runs

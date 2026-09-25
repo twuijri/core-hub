@@ -482,7 +482,7 @@ export function agentsServiceFor(app: FastifyInstance): AgentsService {
 
 /**
  * The enabled skills of the hub's Hermes in one profile, by name — what the Skills usage
- * report compares with the skills actually loaded (contract decision §47). `null` when the
+ * report compares with the skills actually loaded (contract decision §50). `null` when the
  * hub cannot see them: no Hermes home, or a profile Hermes does not have.
  */
 export function installedSkillNames(

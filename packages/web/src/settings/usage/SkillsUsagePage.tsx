@@ -1,5 +1,5 @@
 /**
- * Skills usage (`audit.getSkillUsage`, decision §47): which skills the agents loaded in a
+ * Skills usage (`audit.getSkillUsage`, decision §50): which skills the agents loaded in a
  * period, how often, and which enabled skills no run loaded.
  *
  * The hub records a use when a run loads a skill (Hermes's `skill_view`); nothing before that

@@ -1,5 +1,5 @@
 /**
- * The Usage and Skills usage pages (contract decision §47).
+ * The Usage and Skills usage pages (contract decision §50).
  *
  * The pure rules first — which series a chart has, which days the table lists, how money
  * reads — then the pages: cards that say "not reported" instead of zeros, the cost only while

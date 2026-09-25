@@ -272,7 +272,7 @@ export const runs = sqliteTable(
   (t) => [
     index('runs_session_idx').on(t.sessionId, t.createdAt),
     index('runs_workspace_status_idx').on(t.workspace, t.status),
-    /** The Usage report counts runs and conversations per day of a period (decision §47). */
+    /** The Usage report counts runs and conversations per day of a period (decision §50). */
     index('runs_workspace_time_idx').on(t.workspace, t.createdAt),
     index('runs_origin_idx').on(t.originKind, t.originId),
     check('runs_status_check', inList(t.status, RUN_STATUSES)),

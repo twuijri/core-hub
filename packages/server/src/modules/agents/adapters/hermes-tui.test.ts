@@ -252,7 +252,7 @@ describe('Hermes over the TUI gateway', () => {
     expect(events[4]).toMatchObject({ inputTokens: 12, outputTokens: 3 });
   });
 
-  it('carries the skill a skill_view call loads, which is what counts as its use (§47)', async () => {
+  it('carries the skill a skill_view call loads, which is what counts as its use (§50)', async () => {
     // Frames as tui_gateway/tool_progress.py sends them for Hermes's `skill_view` tool:
     // the full arguments with `tool.start`, the parsed result with `tool.complete`.
     const gateway = fakeGateway((method, _params, api) => {

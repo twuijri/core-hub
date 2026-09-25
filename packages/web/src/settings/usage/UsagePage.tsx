@@ -1,5 +1,5 @@
 /**
- * Usage (`audit.getUsage`, decision §47): tokens, the cache, the estimated cost and the
+ * Usage (`audit.getUsage`, decision §50): tokens, the cache, the estimated cost and the
  * conversations of a period, by day, by model and by agent.
  *
  * **Only what was measured is drawn as a number.** A cache no provider reported says "not

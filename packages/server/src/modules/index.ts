@@ -430,7 +430,7 @@ registerTaskNames((app) => (kind, id) => {
 });
 
 /**
- * The Usage and Skills usage reports (contract decision §47) count runs, name agents and
+ * The Usage and Skills usage reports (contract decision §50) count runs, name agents and
  * compare with the installed skills: runs are `sessions`'s, agents and skills `agents`'s, and
  * `audit` reads neither module's tables — it is lent the three answers here.
  */

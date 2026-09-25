@@ -442,7 +442,7 @@ export class AuditService {
   // ------------------------------------------------------------ skill use
 
   /**
-   * One skill an agent loaded in one run (contract decision §47). The same skill loaded again
+   * One skill an agent loaded in one run (contract decision §50). The same skill loaded again
    * in the same run is the same use, so a second write is ignored rather than counted.
    */
   recordSkillUse(input: SkillUseWrite): void {

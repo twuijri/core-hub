@@ -242,7 +242,7 @@ function scriptFor(prompt: string): Step[] {
     ];
   }
   if (/حمّل المهارة|load the skill/i.test(prompt)) {
-    // Usage and Skills usage (journey 32, decision §47): the agent loads a skill the way
+    // Usage and Skills usage (journey 32, decision §50): the agent loads a skill the way
     // Hermes does — `skill_view` with the skill's name — then a linked file of it (the same
     // use), and reports its tokens with a cache read.
     return [

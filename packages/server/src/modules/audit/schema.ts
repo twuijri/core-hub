@@ -112,7 +112,7 @@ export const usageRecords = sqliteTable(
 );
 
 /**
- * One skill an agent loaded in one run (contract decision §47): Hermes's `skill_view` tool
+ * One skill an agent loaded in one run (contract decision §50): Hermes's `skill_view` tool
  * opening the skill itself. Written by `sessions` through `AuditService.recordSkillUse` when
  * the tool call completes; the same skill loaded again in the same run is the same use.
  * Nothing before this table existed can be rebuilt — `audit_counters` says from when.

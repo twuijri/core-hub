@@ -1,5 +1,5 @@
 /**
- * The Usage and Skills usage reports (`audit.getUsage`, `audit.getSkillUsage`, decision §47):
+ * The Usage and Skills usage reports (`audit.getUsage`, `audit.getSkillUsage`, decision §50):
  * the query both pages share, and the pure rules that turn a report into what is drawn.
  *
  * The rules live here, apart from the pages, because they are the part worth a unit test:

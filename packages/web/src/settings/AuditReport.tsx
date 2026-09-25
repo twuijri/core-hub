@@ -1,6 +1,6 @@
 /**
  * The two reports behind Logs and Performance (`audit.getReport`). Usage and Skills usage
- * are typed reports with pages of their own (`usage/`, decision §47).
+ * are typed reports with pages of their own (`usage/`, decision §50).
  *
  * One screen for both kinds, because they are one call with one shape: a period, a
  * generated-at, and a `data` block the report defines. What differs is how the block is

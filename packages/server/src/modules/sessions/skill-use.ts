@@ -1,5 +1,5 @@
 /**
- * Which skill a finished tool call loaded, if any (contract decision §47).
+ * Which skill a finished tool call loaded, if any (contract decision §50).
  *
  * Read from Hermes's MIT source (tag v2026.9.14): the model loads a skill through the
  * `skill_view` tool, whose arguments are `name` (the skill, `plugin:skill` for a plugin's) and

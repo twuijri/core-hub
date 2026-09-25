@@ -72,7 +72,7 @@
 | `tasks` | Tasks | المهام | القسم اسمه «المهام»، لا «اللوحة» ولا Kanban |
 | `schedules` | Schedules | الجدولة | كانت «Workflow» في تطبيق الجوال |
 | `settings` | Settings | الإعدادات | |
-| `logs` · `usage` · `skills_usage` · `performance` | Logs · Usage · Skills usage · Performance | السجلات · الاستخدام · استخدام المهارات · الأداء | أدوات في أسفل الإعدادات؛ «استخدام المهارات» منذ 2026-09-25 (DECISIONS §47) |
+| `logs` · `usage` · `skills_usage` · `performance` | Logs · Usage · Skills usage · Performance | السجلات · الاستخدام · استخدام المهارات · الأداء | أدوات في أسفل الإعدادات؛ «استخدام المهارات» منذ 2026-09-25 (DECISIONS §50) |
 | `theme` | Theme | السمة | |
 | `workspaces` | Profiles | البروفايلات | قرار المالك 2026-09-23: «بروفايل» / "Profile" في كل نصوص الواجهة، كما يسمّيه هرمز وإيكو والعقد (`profile`، `X-Hub-Profile`)؛ لا «مساحة عمل» ولا «Workspace». المعرّفات البرمجية `workspaces` باقية |
 | `updates` · `plugins` | Updates · Plugins | التحديثات · الإضافات | للمشرف |
