@@ -18,9 +18,19 @@
  * a phone scans it, the code expires, or the person closes the dialog (which stops the pairing
  * in Hermes too). Linked, the row names the account and offers Unlink instead.
  *
- * **Who may message the agent.** A linked WhatsApp answers a new sender with a pairing code;
- * the request waits in "Waiting for approval" until someone approves or turns it down here.
- * The list is read again every ten seconds while the page is open.
+ * **How the number is used** is asked before the code is drawn (the owner, 2026-09-26): «بوت»,
+ * a number for the agent that other people message, or «أنا», the person's own number, talking to
+ * the agent in WhatsApp's "Message yourself". Nothing is guessed from the number. The linked card
+ * says which, and «تغيير الوضع» switches it (the hub restarts the gateway itself).
+ *
+ * **Who may message the agent.** A linked WhatsApp in bot mode answers a new sender with a pairing
+ * code; the request waits under «الموافقات» — one button in the page's header with the count
+ * waiting, opening a panel grouped by platform — until someone approves or denies it there, and
+ * the approved senders are removed there too (the owner, 2026-09-26: not a list under the cards).
+ * A card with somebody waiting links to the same panel. Read again every ten seconds.
+ *
+ * **A channel the gateway does not serve yet** (`restart_needed`) says Hermes needs a restart,
+ * with the button.
  *
  * **Telegram links by a bot token.** "Link Telegram" explains @BotFather in plain words, takes the
  * token, and the hub asks Telegram who the bot is before storing it (in the profile's own `.env`,
@@ -44,7 +54,7 @@
  * the default one.
  */
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router';
 import { describeError } from '../auth/client.js';
 import { useAuth } from '../auth/context.js';
@@ -59,6 +69,8 @@ import {
   Field,
   Input,
   Notice,
+  Radio,
+  Sheet,
   Skeleton,
   SkeletonGroup,
   Switch,
@@ -66,6 +78,8 @@ import {
 } from '../ui/index.js';
 import { IconGlobe, IconPlus } from '../ui/icons.js';
 import { QrCode } from '../screens/DeviceConnectionsScreen.js';
+import { canRestart, useRestartAgent } from './useRestartAgent.js';
+import { PairingDecision } from './PairingDecision.js';
 import type { Job } from '../types.js';
 import {
   channelKeys,
@@ -80,6 +94,7 @@ import {
   useLoginChannel,
   usePairing,
   useRevokePairing,
+  useSetChannelMode,
   useUnlinkChannel,
   useUpdateChannel,
   type Channel,
@@ -88,6 +103,7 @@ import {
   type ChannelGateway,
   type ChannelLink,
   type PairingState,
+  type WhatsAppMode,
 } from './skills.js';
 import { ChannelPlatformPicker } from './ChannelPlatformPicker.js';
 import { ChannelSettingsPanel } from './ChannelSettingsPanel.js';
@@ -99,8 +115,11 @@ export function AgentChannelsScreen() {
   const { t } = useI18n();
   const { agentId } = useParams<{ agentId: string }>();
   const agents = useAgents();
+  const { user } = useAuth();
   const channels = useChannels(agentId);
   const [editing, setEditing] = useState<Channel | null>(null);
+  const [approvalsOpen, setApprovalsOpen] = useState(false);
+  const [changingMode, setChangingMode] = useState<Channel | null>(null);
   const [pairing, setPairing] = useState<string | null>(null);
   const [linkingTelegram, setLinkingTelegram] = useState(false);
   const [linking, setLinking] = useState<ChannelPlatform | null>(null);
@@ -108,6 +127,7 @@ export function AgentChannelsScreen() {
   const platforms = useChannelPlatforms(agentId);
   const requests = usePairing(agentId, !!channels.data);
   const unlink = useUnlinkChannel(agentId);
+  const restarter = useRestartAgent(agentId);
   const specOf = (platform: string) =>
     platforms.data?.items.find((entry) => entry.platform === platform) ?? null;
 
@@ -118,6 +138,13 @@ export function AgentChannelsScreen() {
   const pending = requests.data?.pending ?? [];
   const approved = requests.data?.approved ?? [];
   const waiting = new Set(pending.map((request) => request.platform));
+  const waitingOn = (platform: string) =>
+    pending.filter((request) => request.platform === platform).length;
+  // A person who may not manage the channels is answered 403: no Approvals for them.
+  const mayApprove = !(
+    requests.isError && (requests.error as { status?: number } | null)?.status === 403
+  );
+  const restartable = canRestart(agent, user?.role);
   // Only what is linked (or somebody is waiting on): the platforms not linked yet live in the
   // picker, not in a long list under these.
   const shown = items.filter(
@@ -156,7 +183,32 @@ export function AgentChannelsScreen() {
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-lg font-semibold">{title}</h1>
-          {shown.length > 0 && <span className="ms-auto">{pickButton}</span>}
+          {(shown.length > 0 || pending.length > 0) && (
+            <span className="ms-auto flex flex-wrap items-center gap-2">
+              {mayApprove && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setApprovalsOpen(true)}
+                  aria-label={
+                    pending.length > 0
+                      ? t('channels.approvals.open_count', { count: String(pending.length) })
+                      : t('channels.approvals.open')
+                  }
+                  data-testid="approvals-open"
+                  data-count={pending.length}
+                >
+                  {t('channels.approvals.open')}
+                  {pending.length > 0 && (
+                    <Badge tone="warning" testId="approvals-count">
+                      {pending.length > 99 ? '99+' : String(pending.length)}
+                    </Badge>
+                  )}
+                </Button>
+              )}
+              {shown.length > 0 && pickButton}
+            </span>
+          )}
         </div>
         {shown.length > 0 && <GatewayNote gateway={gateway} />}
 
@@ -199,6 +251,10 @@ export function AgentChannelsScreen() {
                       spec={spec}
                       gateway={gateway}
                       starting={starting(channel.platform)}
+                      waiting={mayApprove ? waitingOn(channel.platform) : 0}
+                      onReview={() => setApprovalsOpen(true)}
+                      onChangeMode={() => setChangingMode(channel)}
+                      restart={restartable ? restarter : null}
                       unlinking={unlink.isPending}
                       onUnlink={() => unlink.mutate(channel.platform)}
                       onEdit={() => setEditing(channel)}
@@ -213,8 +269,17 @@ export function AgentChannelsScreen() {
               })}
             </ul>
           ))}
-        {channels.data && shown.length > 0 && <PairingSection agentId={agentId} />}
       </div>
+      {mayApprove && (
+        <ApprovalsSheet agentId={agentId} open={approvalsOpen} onOpenChange={setApprovalsOpen} />
+      )}
+      {changingMode && (
+        <ModeDialog
+          agentId={agentId}
+          channel={changingMode}
+          onClose={() => setChangingMode(null)}
+        />
+      )}
       {picking && platforms.data && (
         <ChannelPlatformPicker
           platforms={platforms.data.items}
@@ -259,6 +324,10 @@ function ChannelRow({
   spec,
   gateway,
   starting,
+  waiting,
+  onReview,
+  onChangeMode,
+  restart,
   unlinking,
   onUnlink,
   onEdit,
@@ -270,6 +339,14 @@ function ChannelRow({
   gateway: ChannelGateway | null;
   /** Nobody approved on it yet, or somebody is waiting for approval. */
   starting: boolean;
+  /** How many senders wait for approval on this platform. */
+  waiting: number;
+  /** Opens «الموافقات». */
+  onReview: () => void;
+  /** Opens «تغيير الوضع» (WhatsApp). */
+  onChangeMode: () => void;
+  /** Restarts the agent's runtime; null for a person or a runtime that cannot. */
+  restart: { restart: () => Promise<void>; pending: boolean } | null;
   unlinking: boolean;
   onUnlink: () => void;
   onEdit: () => void;
@@ -296,6 +373,8 @@ function ChannelRow({
   const showGuide = guide !== null && (guideOpen ?? (starting && waitsForPeople));
 
   const failed = channel.status === 'error' && channel.error;
+  const restartNeeded = channel.restart_needed === true;
+  const mode = channel.platform === 'whatsapp' && link?.linked ? (link.mode ?? null) : null;
 
   return (
     <div className="flex flex-col gap-2">
@@ -336,6 +415,15 @@ function ChannelRow({
                   {t(`channels.status.${channel.status}`)}
                 </Badge>
               )}
+              {mode && (
+                <span data-testid={`channel-mode-${channel.platform}`} data-mode={mode}>
+                  <Badge tone="info">
+                    {t(
+                      mode === 'self-chat' ? 'channels.mode.badge_self' : 'channels.mode.badge_bot',
+                    )}
+                  </Badge>
+                </span>
+              )}
             </span>
             <span className="skill-description" data-testid={`channel-account-${channel.platform}`}>
               {link?.linked && account ? (
@@ -364,6 +452,16 @@ function ChannelRow({
               onClick={() => setSettingsOpen(!settingsOpen)}
             >
               {t('channels.settings.open')}
+            </Button>
+          )}
+          {mode && (
+            <Button
+              size="sm"
+              variant="ghost"
+              data-testid={`channel-mode-change-${channel.platform}`}
+              onClick={onChangeMode}
+            >
+              {t('channels.mode.change')}
             </Button>
           )}
           {guide && (
@@ -423,12 +521,43 @@ function ChannelRow({
           )}
           {dialog}
         </div>
-        {(showGuide || failed) && (
+        {(showGuide || failed || restartNeeded || waiting > 0) && (
           <div className="channel-card-body">
+            {restartNeeded && (
+              <Notice tone="warning">
+                <span
+                  className="flex flex-wrap items-center gap-2"
+                  data-testid={`channel-restart-needed-${channel.platform}`}
+                >
+                  <span>{t('channels.restart_needed', { name })}</span>
+                  {restart && (
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      disabled={restart.pending}
+                      data-testid={`channel-restart-now-${channel.platform}`}
+                      onClick={() => void restart.restart()}
+                    >
+                      {t('channels.restart_now')}
+                    </Button>
+                  )}
+                </span>
+              </Notice>
+            )}
             {failed && (
               <Notice tone="danger">
                 <span dir="auto">{channel.error}</span>
               </Notice>
+            )}
+            {waiting > 0 && (
+              <button
+                type="button"
+                className="link self-start text-sm underline"
+                data-testid={`channel-waiting-${channel.platform}`}
+                onClick={onReview}
+              >
+                {t('channels.approvals.waiting_review', { count: String(waiting) })}
+              </button>
             )}
             {showGuide && guide}
           </div>
@@ -454,7 +583,7 @@ function guideOf(
 ): ReactNode {
   const link = channel.link;
   if (!link?.linked) return null;
-  if (channel.platform === 'whatsapp') return <HowToUse link={link} gateway={gateway} />;
+  if (channel.platform === 'whatsapp') return <HowToUse link={link} />;
   if (channel.platform === 'telegram') return <TelegramHowTo link={link} gateway={gateway} />;
   if (channel.login === 'credentials' && spec?.support === 'full') {
     return <PlatformHowTo spec={spec} gateway={gateway} />;
@@ -524,10 +653,34 @@ function GatewayNote({ gateway }: { gateway: ChannelGateway | null }) {
   );
 }
 
-/** What to do once WhatsApp is linked, in plain words, and what linking a personal number means. */
-function HowToUse({ link, gateway }: { link: ChannelLink; gateway: ChannelGateway | null }) {
+/**
+ * What to do once WhatsApp is linked, in plain words: in «أنا» mode, write to the agent in
+ * "Message yourself"; in «بوت» mode, message the number from another account and approve the
+ * first request — with what linking a personal number that way means.
+ */
+function HowToUse({ link }: { link: ChannelLink }) {
   const { t } = useI18n();
   const account = accountOf(link);
+  if (link.mode === 'self-chat') {
+    return (
+      <Notice tone="info">
+        <span
+          className="flex flex-col gap-1"
+          data-testid="channel-how-to-use"
+          data-mode="self-chat"
+        >
+          <strong>{t('channels.how.title')}</strong>
+          <span dir="auto">
+            {account
+              ? t('channels.how.self_step_open_as', { account })
+              : t('channels.how.self_step_open')}
+          </span>
+          <span>{t('channels.how.self_step_write')}</span>
+          <span>{t('channels.how.self_note')}</span>
+        </span>
+      </Notice>
+    );
+  }
   return (
     <Notice tone="info">
       <span className="flex flex-col gap-1" data-testid="channel-how-to-use">
@@ -538,7 +691,6 @@ function HowToUse({ link, gateway }: { link: ChannelLink; gateway: ChannelGatewa
             : t('channels.how.step_message')}
         </span>
         <span>{t('channels.how.step_approve')}</span>
-        {gateway?.applies === 'on_restart' && <span>{t('channels.how.step_restart')}</span>}
         <span className="text-warning-soft-text" data-testid="channel-personal-warning">
           {t('channels.how.personal_warning')}
         </span>
@@ -1004,132 +1156,236 @@ function ageOf(iso: string, t: (key: string, values?: Record<string, string>) =>
   return t('channels.pairing.hours_ago', { count: String(Math.floor(minutes / 60)) });
 }
 
+/** Rows grouped by platform, in the order the platforms first appear. */
+function byPlatform<T extends { platform: string }>(rows: readonly T[]): Array<[string, T[]]> {
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const group = groups.get(row.platform);
+    if (group) group.push(row);
+    else groups.set(row.platform, [row]);
+  }
+  return [...groups];
+}
+
 /**
- * «طلبات بانتظار الموافقة»: the senders Hermes answered with a pairing code in this profile,
- * each approved or turned down here, and below them the approved ones, each revocable.
- * Hidden for a person who may not manage the channels (the hub answers them 403).
+ * «الموافقات»: the senders Hermes answered with a pairing code in this profile, grouped by
+ * platform, each approved or denied here; and the approved senders per platform, each removable.
+ * One panel for every platform that pairs (WhatsApp, Telegram, Slack…), opened from the page's
+ * header or from a card with somebody waiting.
  */
-function PairingSection({ agentId }: { agentId: string | undefined }) {
+function ApprovalsSheet({
+  agentId,
+  open,
+  onOpenChange,
+}: {
+  agentId: string | undefined;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const { t } = useI18n();
   const pairing = usePairing(agentId);
   const approve = useApprovePairing(agentId);
   const deny = useDenyPairing(agentId);
   const revoke = useRevokePairing(agentId);
   const { ask, dialog } = useConfirm();
-  if (pairing.isError && (pairing.error as { status?: number } | null)?.status === 403) return null;
   const pending = pairing.data?.pending ?? [];
   const approved = pairing.data?.approved ?? [];
   const failed = approve.error ?? deny.error ?? revoke.error;
 
   return (
-    <section className="flex flex-col gap-3" data-testid="pairing-section">
-      <h2 className="text-base font-semibold">{t('channels.pairing.title')}</h2>
-      <p className="text-sm text-muted">{t('channels.pairing.note')}</p>
-      {pairing.isPending && (
-        <SkeletonGroup label={t('common.loading')}>
-          <Skeleton height="3rem" radius="md" />
-        </SkeletonGroup>
-      )}
-      {pairing.isError && <Notice tone="danger">{describeToolError(pairing.error, t)}</Notice>}
-      {failed && <Notice tone="danger">{describeToolError(failed, t)}</Notice>}
-      {pairing.data && pending.length === 0 && (
-        <p className="text-sm text-muted" data-testid="pairing-none">
-          {t('channels.pairing.none')}
-        </p>
-      )}
-      {pending.length > 0 && (
-        <ul className="flex flex-col gap-2" data-testid="pairing-pending">
-          {pending.map((request) => (
-            <li
-              key={`${request.platform}:${request.request_id}`}
-              className="skill-row"
-              data-testid={`pairing-request-${request.request_id}`}
-            >
-              <span className="skill-open">
-                <span className="flex flex-wrap items-center gap-2">
-                  <Badge>{platformName(request.platform, t)}</Badge>
-                  <span className="font-medium" dir="auto">
-                    {request.user_name ?? t('channels.pairing.unnamed')}
-                  </span>
-                </span>
-                <span className="skill-description">
-                  <span dir="ltr">{request.user_id}</span>
-                  {' · '}
-                  {ageOf(request.requested_at, t)}
-                </span>
-              </span>
-              <Button
-                size="sm"
-                variant="primary"
-                data-testid={`pairing-approve-${request.request_id}`}
-                disabled={approve.isPending}
-                onClick={() => approve.mutate(request)}
+    <Sheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t('channels.approvals.title')}
+      closeLabel={t('channels.approvals.close')}
+      testId="approvals-sheet"
+    >
+      <section className="flex flex-col gap-3" data-testid="pairing-section">
+        <h2 className="text-base font-semibold">{t('channels.pairing.title')}</h2>
+        <p className="text-sm text-muted">{t('channels.pairing.note')}</p>
+        {pairing.isPending && (
+          <SkeletonGroup label={t('common.loading')}>
+            <Skeleton height="3rem" radius="md" />
+          </SkeletonGroup>
+        )}
+        {pairing.isError && <Notice tone="danger">{describeToolError(pairing.error, t)}</Notice>}
+        {failed && <Notice tone="danger">{describeToolError(failed, t)}</Notice>}
+        {pairing.data && pending.length === 0 && (
+          <p className="text-sm text-muted" data-testid="pairing-none">
+            {t('channels.pairing.none')}
+          </p>
+        )}
+        {pending.length > 0 && (
+          <div className="flex flex-col gap-3" data-testid="pairing-pending">
+            {byPlatform(pending).map(([platform, rows]) => (
+              <div
+                key={platform}
+                className="flex flex-col gap-2"
+                data-testid={`pairing-pending-${platform}`}
               >
-                {t('channels.pairing.approve')}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                data-testid={`pairing-deny-${request.request_id}`}
-                disabled={deny.isPending}
-                onClick={() => deny.mutate(request)}
+                <h3 className="text-sm font-semibold">{platformName(platform, t)}</h3>
+                <ul className="flex flex-col gap-2">
+                  {rows.map((request) => (
+                    <li
+                      key={`${request.platform}:${request.request_id}`}
+                      className="skill-row"
+                      data-testid={`pairing-request-${request.request_id}`}
+                    >
+                      <span className="skill-open">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <Badge>{platformName(request.platform, t)}</Badge>
+                          <span className="font-medium" dir="auto">
+                            {request.user_name ?? t('channels.pairing.unnamed')}
+                          </span>
+                        </span>
+                        <span className="skill-description">
+                          <span dir="ltr">{request.user_id}</span>
+                          {' · '}
+                          {ageOf(request.requested_at, t)}
+                        </span>
+                      </span>
+                      <PairingDecision
+                        request={request}
+                        busy={approve.isPending || deny.isPending}
+                        onApprove={() => approve.mutate(request)}
+                        onDeny={() => deny.mutate(request)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+        <h2 className="text-base font-semibold">{t('channels.pairing.approved_title')}</h2>
+        {pairing.data && approved.length === 0 && (
+          <p className="text-sm text-muted" data-testid="pairing-approved-none">
+            {t('channels.pairing.approved_none')}
+          </p>
+        )}
+        {approved.length > 0 && (
+          <div className="flex flex-col gap-3" data-testid="pairing-approved">
+            {byPlatform(approved).map(([platform, rows]) => (
+              <div
+                key={platform}
+                className="flex flex-col gap-2"
+                data-testid={`pairing-approved-${platform}`}
               >
-                {t('channels.pairing.deny')}
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <h3 className="text-sm font-semibold">{t('channels.pairing.approved_title')}</h3>
-      {pairing.data && approved.length === 0 && (
-        <p className="text-sm text-muted" data-testid="pairing-approved-none">
-          {t('channels.pairing.approved_none')}
-        </p>
-      )}
-      {approved.length > 0 && (
-        <ul className="flex flex-col gap-2" data-testid="pairing-approved">
-          {approved.map((sender) => (
-            <li
-              key={`${sender.platform}:${sender.user_id}`}
-              className="skill-row"
-              data-testid={`pairing-sender-${sender.user_id}`}
-            >
-              <span className="skill-open">
-                <span className="flex flex-wrap items-center gap-2">
-                  <Badge>{platformName(sender.platform, t)}</Badge>
-                  <span className="font-medium" dir="auto">
-                    {sender.user_name ?? t('channels.pairing.unnamed')}
-                  </span>
-                </span>
-                <span className="skill-description" dir="ltr">
-                  {sender.user_id}
-                </span>
-              </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                data-testid={`pairing-revoke-${sender.user_id}`}
-                disabled={revoke.isPending}
-                onClick={() => {
-                  void ask({
-                    title: t('channels.pairing.revoke_title', {
-                      name: sender.user_name ?? sender.user_id,
-                    }),
-                    body: t('channels.pairing.revoke_body'),
-                    confirmLabel: t('channels.pairing.revoke'),
-                  }).then((yes) => {
-                    if (yes) revoke.mutate(sender);
-                  });
-                }}
-              >
-                {t('channels.pairing.revoke')}
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {dialog}
-    </section>
+                <h3 className="text-sm font-semibold">{platformName(platform, t)}</h3>
+                <ul className="flex flex-col gap-2">
+                  {rows.map((sender) => (
+                    <li
+                      key={`${sender.platform}:${sender.user_id}`}
+                      className="skill-row"
+                      data-testid={`pairing-sender-${sender.user_id}`}
+                    >
+                      <span className="skill-open">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <Badge>{platformName(sender.platform, t)}</Badge>
+                          <span className="font-medium" dir="auto">
+                            {sender.user_name || t('channels.pairing.unnamed')}
+                          </span>
+                        </span>
+                        <span className="skill-description" dir="ltr">
+                          {sender.user_id}
+                        </span>
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        data-testid={`pairing-revoke-${sender.user_id}`}
+                        disabled={revoke.isPending}
+                        onClick={() => {
+                          void ask({
+                            title: t('channels.pairing.revoke_title', {
+                              name: sender.user_name || sender.user_id,
+                            }),
+                            body: t('channels.pairing.revoke_body'),
+                            confirmLabel: t('channels.pairing.revoke'),
+                          }).then((yes) => {
+                            if (yes) revoke.mutate(sender);
+                          });
+                        }}
+                      >
+                        {t('channels.pairing.revoke')}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+        {dialog}
+      </section>
+    </Sheet>
+  );
+}
+
+/** The two ways a WhatsApp number is used, as the person chooses them. */
+function useModeOptions() {
+  const { t } = useI18n();
+  return [
+    { value: 'bot', label: t('channels.mode.bot'), hint: t('channels.mode.bot_hint') },
+    { value: 'self-chat', label: t('channels.mode.self'), hint: t('channels.mode.self_hint') },
+  ] as const;
+}
+
+/**
+ * «تغيير الوضع»: how the linked number is used. The phone stays linked; the hub rewrites the mode
+ * and restarts the gateway that serves the profile itself.
+ */
+function ModeDialog({
+  agentId,
+  channel,
+  onClose,
+}: {
+  agentId: string | undefined;
+  channel: Channel;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const setMode = useSetChannelMode(agentId);
+  const options = useModeOptions();
+  const [mode, setModeValue] = useState<WhatsAppMode | null>(channel.link?.mode ?? null);
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={t('channels.mode.change_title')}
+      description={t('channels.mode.change_note')}
+      closeLabel={t('common.cancel')}
+      testId="channel-mode-dialog"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="primary"
+            data-testid="channel-mode-save"
+            disabled={!mode || mode === channel.link?.mode || setMode.isPending}
+            onClick={() => {
+              if (!mode) return;
+              setMode.mutate({ platform: channel.platform, mode }, { onSuccess: onClose });
+            }}
+          >
+            {t('channels.mode.save')}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {setMode.isError && <Notice tone="danger">{describeToolError(setMode.error, t)}</Notice>}
+        <Radio
+          label={t('channels.mode.title')}
+          value={mode}
+          onChange={(next) => setModeValue(next as WhatsAppMode)}
+          options={options}
+          testId="channel-mode-choice"
+        />
+      </div>
+    </Dialog>
   );
 }
 
@@ -1242,8 +1498,9 @@ function latest(a: Job | undefined, b: Job | undefined): Job | undefined {
 }
 
 /**
- * Pairing by QR: one `channel_login` job, started when the dialog opens. Closing it before
- * the phone is linked cancels the job, and the hub tells Hermes to forget the pairing.
+ * Pairing by QR. First the person says how the number will be used — «بوت» or «أنا» — nothing is
+ * picked for them; then one `channel_login` job in that mode draws the code. Closing the dialog
+ * before the phone is linked cancels the job, and the hub tells Hermes to forget the pairing.
  */
 function PairDialog({
   agentId,
@@ -1262,18 +1519,15 @@ function PairDialog({
   const cancel = useCancelJob();
   const [jobId, setJobId] = useState<string | null>(null);
   const polled = useJob(jobId);
-  const started = useRef(false);
+  const options = useModeOptions();
+  const [choice, setChoice] = useState<WhatsAppMode | null>(null);
+  const [mode, setMode] = useState<WhatsAppMode | null>(null);
 
-  const start = () => {
+  const start = (chosen: WhatsAppMode) => {
+    setMode(chosen);
     setJobId(null);
-    login.mutate(platform, { onSuccess: (data) => setJobId(data.job_id) });
+    login.mutate({ platform, mode: chosen }, { onSuccess: (data) => setJobId(data.job_id) });
   };
-  useEffect(() => {
-    // Once, even under React's development double effects.
-    if (started.current) return;
-    started.current = true;
-    start();
-  }, []);
 
   const job = jobId ? latest(jobs[jobId], polled.data) : undefined;
   const state = (job?.result ?? {}) as PairingState;
@@ -1291,6 +1545,19 @@ function PairDialog({
     onClose();
   };
   const account = [state.account_name, state.account_phone].filter(Boolean).join(' · ');
+  const personal = (state.mode ?? mode) === 'self-chat';
+  const doneKey =
+    state.applies === 'now'
+      ? personal
+        ? account
+          ? 'channels.login.done_as_self_now'
+          : 'channels.login.done_self_now'
+        : account
+          ? 'channels.login.done_as_now'
+          : 'channels.login.done_now'
+      : account
+        ? 'channels.login.done_as'
+        : 'channels.login.done';
 
   return (
     <Dialog
@@ -1302,8 +1569,18 @@ function PairDialog({
       testId="channel-pair"
       footer={
         <>
-          {job && (job.status === 'failed' || job.status === 'cancelled') && (
-            <Button onClick={start} data-testid="channel-pair-again">
+          {!mode && (
+            <Button
+              variant="primary"
+              disabled={!choice}
+              onClick={() => choice && start(choice)}
+              data-testid="channel-pair-continue"
+            >
+              {t('channels.mode.continue')}
+            </Button>
+          )}
+          {mode && job && (job.status === 'failed' || job.status === 'cancelled') && (
+            <Button onClick={() => start(mode)} data-testid="channel-pair-again">
               {t('channels.login.again')}
             </Button>
           )}
@@ -1313,57 +1590,68 @@ function PairDialog({
         </>
       }
     >
-      <div className="flex flex-col items-center gap-3" data-status={job?.status ?? 'starting'}>
-        {login.isError && <Notice tone="danger">{describeToolError(login.error, t)}</Notice>}
-        {!login.isError && !done && !state.qr && (
-          <SkeletonGroup label={t('common.loading')}>
-            <Skeleton height="14rem" radius="md" />
-          </SkeletonGroup>
-        )}
-        {!done && state.qr && (
-          <div data-testid="channel-pair-qr" data-qr={state.qr}>
-            <QrCode text={state.qr} />
-          </div>
-        )}
-        {!done && job?.progress.message && (
-          <p className="text-center text-sm" data-testid="channel-pair-message">
-            {job.progress.message}
-          </p>
-        )}
-        {!done && state.expires_at && (
-          <p className="text-xs text-muted">
-            {t('channels.login.expires', {
-              time: new Date(state.expires_at).toLocaleTimeString(),
-            })}
-          </p>
-        )}
-        {!done && (
-          <Notice tone="warning">
-            <span data-testid="channel-pair-warning">{t('channels.how.personal_warning')}</span>
-          </Notice>
-        )}
-        {job?.status === 'succeeded' && (
-          <Notice tone="success">
-            <span data-testid="channel-pair-done" dir="auto">
-              {state.applies === 'now'
-                ? account
-                  ? t('channels.login.done_as_now', { account })
-                  : t('channels.login.done_now')
-                : account
-                  ? t('channels.login.done_as', { account })
-                  : t('channels.login.done')}
-            </span>
-          </Notice>
-        )}
-        {job?.status === 'failed' && (
-          <Notice tone="danger">
-            <span data-testid="channel-pair-failed" dir="auto">
-              {job.error?.error ?? t('channels.login.failed')}
-            </span>
-          </Notice>
-        )}
-        {job?.status === 'cancelled' && <Notice>{t('channels.login.cancelled')}</Notice>}
-      </div>
+      {!mode ? (
+        <div className="flex flex-col gap-3" data-testid="channel-pair-mode">
+          <p className="text-sm font-medium">{t('channels.mode.title')}</p>
+          <Radio
+            label={t('channels.mode.title')}
+            value={choice}
+            onChange={(next) => setChoice(next as WhatsAppMode)}
+            options={options}
+            testId="channel-pair-mode-choice"
+          />
+        </div>
+      ) : (
+        <div
+          className="flex flex-col items-center gap-3"
+          data-status={job?.status ?? 'starting'}
+          data-mode={mode}
+        >
+          {login.isError && <Notice tone="danger">{describeToolError(login.error, t)}</Notice>}
+          {!login.isError && !done && !state.qr && (
+            <SkeletonGroup label={t('common.loading')}>
+              <Skeleton height="14rem" radius="md" />
+            </SkeletonGroup>
+          )}
+          {!done && state.qr && (
+            <div data-testid="channel-pair-qr" data-qr={state.qr}>
+              <QrCode text={state.qr} />
+            </div>
+          )}
+          {!done && job?.progress?.message && (
+            <p className="text-center text-sm" data-testid="channel-pair-message">
+              {job.progress.message}
+            </p>
+          )}
+          {!done && state.expires_at && (
+            <p className="text-xs text-muted">
+              {t('channels.login.expires', {
+                time: new Date(state.expires_at).toLocaleTimeString(),
+              })}
+            </p>
+          )}
+          {!done && !personal && (
+            <Notice tone="warning">
+              <span data-testid="channel-pair-warning">{t('channels.how.personal_warning')}</span>
+            </Notice>
+          )}
+          {job?.status === 'succeeded' && (
+            <Notice tone="success">
+              <span data-testid="channel-pair-done" dir="auto">
+                {t(doneKey, { account })}
+              </span>
+            </Notice>
+          )}
+          {job?.status === 'failed' && (
+            <Notice tone="danger">
+              <span data-testid="channel-pair-failed" dir="auto">
+                {job.error?.error ?? t('channels.login.failed')}
+              </span>
+            </Notice>
+          )}
+          {job?.status === 'cancelled' && <Notice>{t('channels.login.cancelled')}</Notice>}
+        </div>
+      )}
     </Dialog>
   );
 }

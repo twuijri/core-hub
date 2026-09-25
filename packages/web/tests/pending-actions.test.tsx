@@ -229,6 +229,7 @@ function hub(options: {
   pairing?: unknown[];
 }) {
   const seen: Seen[] = [];
+  let pairing = [...((options.pairing ?? []) as Array<{ request_id: string }>)];
   const fetchImpl = ((url: string, init: RequestInit = {}) => {
     const { pathname } = new URL(String(url));
     // Everything after the version segment: the operation's own path.
@@ -253,8 +254,13 @@ function hub(options: {
     else if (path === '/approvals')
       body = { items: options.approvals[profile ?? ''] ?? [], next_cursor: null };
     else if (path === '/agents') body = { items: options.agents ?? [], next_cursor: null };
-    else if (path.endsWith('/pairing')) body = { pending: options.pairing ?? [], approved: [] };
-    else if (path === '/sessions/global-agent') {
+    else if (path.endsWith('/pairing')) body = { pending: pairing, approved: [] };
+    else if (/\/pairing\/whatsapp\/requests\/[^/]+(\/approve)?$/.test(path)) {
+      // Approved or denied: either way it no longer waits.
+      const id = path.split('/requests/')[1]!.replace('/approve', '');
+      body = pairing.find((row) => row.request_id === id) ?? null;
+      pairing = pairing.filter((row) => row.request_id !== id);
+    } else if (path === '/sessions/global-agent') {
       status = 404;
       body = { error: 'x', code: 'not_found' };
     }
@@ -374,6 +380,39 @@ describe('the bar in the top bar', () => {
     expect(within(item).getByTestId('pending-item-open').getAttribute('href')).toBe(
       `/agents/${AGENT_ID}/channels`,
     );
+  });
+
+  it('approves or denies a sender waiting to pair right there, in the profile', async () => {
+    const request = (id: string, name: string) => ({
+      platform: 'whatsapp',
+      request_id: id,
+      user_id: `9665000000${id.length}`,
+      user_name: name,
+      requested_at: '2026-09-25T10:02:00Z',
+    });
+    const { fetchImpl, seen } = hub({
+      profiles: ['default'],
+      approvals: {},
+      agents: [AGENT],
+      pairing: [request('r1', 'Sara'), request('r22', 'Omar')],
+    });
+    mount(fetchImpl, 'owner', <TopBar title="x" onMenu={() => undefined} />);
+    const bar = await screen.findByTestId('pending-actions');
+    await waitFor(() => expect(bar.getAttribute('data-count')).toBe('2'));
+    fireEvent.click(bar);
+    await screen.findAllByTestId('pending-item');
+
+    fireEvent.click(screen.getByTestId('pairing-approve-r1'));
+    await waitFor(() => expect(screen.queryByTestId('pairing-approve-r1')).toBeNull());
+    expect(
+      seen.find((s) => s.method === 'POST' && s.path.endsWith('/requests/r1/approve')),
+    ).toMatchObject({ path: `/agents/${AGENT_ID}/pairing/whatsapp/requests/r1/approve` });
+
+    fireEvent.click(screen.getByTestId('pairing-deny-r22'));
+    expect(await screen.findByTestId('pending-actions-none')).toBeTruthy();
+    expect(
+      seen.find((s) => s.method === 'DELETE' && s.path.endsWith('/requests/r22')),
+    ).toBeTruthy();
   });
 });
 

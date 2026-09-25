@@ -2,18 +2,22 @@
  * The pending-actions bar: one quiet button at the top of every screen that says how many
  * things are waiting for the person — approvals, agents' questions, workflow steps, and for
  * an admin the senders waiting to pair with a channel — and opens them as a sheet. An
- * approval or a question is answered right there (the transcript's own card); every item
- * also opens where it lives. The sheet is also the way into the global agent (NAVIGATION §4).
+ * approval or a question is answered right there (the transcript's own card), and so is a
+ * sender waiting to pair (Approve / Deny, the Channels page's own buttons); every item also
+ * opens where it lives. The sheet is also the way into the global agent (NAVIGATION §4).
  */
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { ProfileScope } from '../auth/context.js';
+import { PairingDecision } from '../agents/PairingDecision.js';
+import { useApprovePairing, useDenyPairing } from '../agents/skills.js';
+import { describeToolError } from '../agents/toolErrors.js';
 import { ApprovalCard } from '../chat/ApprovalCard.js';
 import { useI18n } from '../i18n/context.js';
 import { routeOf } from '../navigation/manifest.js';
 import { pendingHref, type PendingItem } from '../pending/pending.js';
 import { usePendingActions } from '../pending/queries.js';
-import { Badge, buttonClass, Card, EmptyState, Sheet, Tooltip } from '../ui/index.js';
+import { Badge, buttonClass, Card, EmptyState, Notice, Sheet, Tooltip } from '../ui/index.js';
 import { IconInbox, IconSpark } from '../ui/icons.js';
 import { ProfileBadge } from './ProfileBadge.js';
 import { useManyProfiles, useProfileInLink } from './profiles.js';
@@ -119,20 +123,7 @@ function PendingRow({
       {link}
     </div>
   );
-  if (item.kind === 'pairing') {
-    return (
-      <Card padding="sm" testId="pending-item" data-kind="pairing">
-        {meta}
-        <p className="text-sm font-medium" dir="auto">
-          {t('pending.pairing', {
-            name: item.request.user_name ?? item.request.user_id,
-            platform: item.request.platform,
-          })}
-        </p>
-        <p className="text-xs text-muted">{t('pending.pairing_hint')}</p>
-      </Card>
-    );
-  }
+  if (item.kind === 'pairing') return <PairingRow item={item} meta={meta} />;
   return (
     <div
       data-testid="pending-item"
@@ -145,5 +136,40 @@ function PendingRow({
         <ApprovalCard approval={item.approval} />
       </ProfileScope>
     </div>
+  );
+}
+
+/** A sender waiting to pair: approved or denied right here, in the profile it waits in. */
+function PairingRow({
+  item,
+  meta,
+}: {
+  item: Extract<PendingItem, { kind: 'pairing' }>;
+  meta: ReactNode;
+}) {
+  const { t } = useI18n();
+  const approve = useApprovePairing(item.agentId);
+  const deny = useDenyPairing(item.agentId);
+  const failed = approve.error ?? deny.error;
+  return (
+    <Card padding="sm" testId="pending-item" data-kind="pairing">
+      {meta}
+      <p className="text-sm font-medium" dir="auto">
+        {t('pending.pairing', {
+          name: item.request.user_name ?? item.request.user_id,
+          platform: item.request.platform,
+        })}
+      </p>
+      <p className="text-xs text-muted">{t('pending.pairing_hint')}</p>
+      {failed && <Notice tone="danger">{describeToolError(failed, t)}</Notice>}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <PairingDecision
+          request={item.request}
+          busy={approve.isPending || deny.isPending}
+          onApprove={() => approve.mutate(item.request)}
+          onDeny={() => deny.mutate(item.request)}
+        />
+      </div>
+    </Card>
   );
 }
