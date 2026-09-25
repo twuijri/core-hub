@@ -1,5 +1,5 @@
 /**
- * Memory and skill writes waiting for review — Hermes's own approval gate (contract decision §56).
+ * Memory and skill writes waiting for review — Hermes's own approval gate (contract decision §58).
  *
  * With `memory.write_approval` or `skills.write_approval` on in a profile, Hermes does not save
  * what the agent writes to its memory or its skills: it keeps each write as

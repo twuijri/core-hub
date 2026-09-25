@@ -1,5 +1,5 @@
 /**
- * Hermes's own settings, round-tripped through the profile's files (contract decision §56): every
+ * Hermes's own settings, round-tripped through the profile's files (contract decision §58): every
  * key is written where Hermes reads it, read back as the form shows it, and put back to Hermes's
  * default by `null`. The real Hermes reading the same files is `hermes-settings.real.test.ts`.
  */

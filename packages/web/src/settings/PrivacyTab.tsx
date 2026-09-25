@@ -1,7 +1,7 @@
 /**
  * Privacy: who, besides you signing in, can act as you on this hub — and taking that away.
  *
- * **Hiding ids from the model** (contract decision §56, proposed — owner to confirm): the
+ * **Hiding ids from the model** (contract decision §58, proposed — owner to confirm): the
  * switch here is Hermes's own `privacy.redact_pii` in the selected profile — read and written
  * through Hermes's settings (`agents.getSettings` / `agents.updateSettings`, section `privacy`),
  * so it does what it says: on WhatsApp, Telegram, Signal and BlueBubbles Hermes hashes the ids

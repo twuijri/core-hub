@@ -1025,7 +1025,7 @@ Rejected: a new `source` field on `SessionCreate` (a client could then make any 
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
 
-## 56. Hermes's settings are Hermes's own keys, per profile; staged memory and skill writes are reviewed in the hub
+## 58. Hermes's settings are Hermes's own keys, per profile; staged memory and skill writes are reviewed in the hub
 
 Hermes's Settings page showed four sections (`agent`, `memory`, `session`, `gateway`) that the
 hub stored in its own table and nothing read — a turn limit of 40 that Hermes never saw, an

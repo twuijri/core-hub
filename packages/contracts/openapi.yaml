@@ -3945,7 +3945,7 @@ paths:
         The adapter declares sections and typed fields; the client renders them. An ACP agent
         usually has none.
 
-        Hermes's are **Hermes's own keys in the selected profile** (contract decision §56), read
+        Hermes's are **Hermes's own keys in the selected profile** (contract decision §58), read
         from and written to that profile's `config.yaml` (comments and every other key kept) or
         its `.env`: `agent` (turn limit, run time limit, tool-use enforcement, default reasoning
         effort), `memory` (the two character budgets), `approvals` (dangerous commands, memory and
@@ -4096,7 +4096,7 @@ paths:
         With Hermes's `memory.write_approval` or `skills.write_approval` on, Hermes does not save
         what the agent writes to its memory or its skills: it keeps each write under the profile's
         `pending/memory/` or `pending/skills/` until somebody approves or rejects it (contract
-        decision §56). Oldest first. Listed even when the gate is off again, so nothing is
+        decision §58). Oldest first. Listed even when the gate is off again, so nothing is
         stranded. Hermes only (`409 state_invalid` for another agent).
       x-roles: [owner, admin]
       x-rt-events: []
@@ -13650,7 +13650,7 @@ components:
           description: >-
             Stored by the hub and applied by nothing. The proxy Hermes uses is Hermes's own, per
             profile: `agents.getSettings` / `agents.updateSettings`, section `network` (contract
-            decision §56). Kept so an older client still reads a whole object.
+            decision §58). Kept so an older client still reads a whole object.
           required: [https_proxy, http_proxy, all_proxy, no_proxy]
           properties:
             https_proxy:
@@ -13688,7 +13688,7 @@ components:
           description: >-
             Stored by the hub and applied by nothing. Hiding user ids and phone numbers from the
             model is Hermes's own `privacy.redact_pii`, per profile: `agents.updateSettings`,
-            section `privacy` — what the Privacy page switches (contract decision §56). Kept so an
+            section `privacy` — what the Privacy page switches (contract decision §58). Kept so an
             older client still reads a whole object.
           required: [redact_pii]
           properties:

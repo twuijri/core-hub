@@ -729,7 +729,7 @@ export const agentsModule = defineModule({
 
     /**
      * Settings. Hermes's are its own keys in the selected profile's `config.yaml` and `.env`
-     * (`hermes-settings.ts`, contract decision §56); any other agent's are the form its adapter
+     * (`hermes-settings.ts`, contract decision §58); any other agent's are the form its adapter
      * declares, stored by the hub.
      */
     const isHermes = (request: FastifyRequest, agentId: string): boolean =>

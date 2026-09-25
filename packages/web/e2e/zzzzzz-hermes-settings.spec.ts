@@ -1,5 +1,5 @@
 /**
- * Journey 45: Hermes's own settings, from its Settings page (contract decision §56) — against the
+ * Journey 45: Hermes's own settings, from its Settings page (contract decision §58) — against the
  * real hub, whose Hermes home is a folder of the e2e data directory:
  *
  * - the page draws Hermes's sections with each field's help and Hermes's default, in Arabic;

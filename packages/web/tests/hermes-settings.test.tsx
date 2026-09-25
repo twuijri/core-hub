@@ -1,5 +1,5 @@
 /**
- * Hermes's Settings page (contract decision §56): the form Hermes's adapter declares, drawn with
+ * Hermes's Settings page (contract decision §58): the form Hermes's adapter declares, drawn with
  * each field's help and Hermes's default in the reading language; a save says when it applies (or
  * that Hermes restarts); the writes waiting for review are approved or rejected; and Privacy's
  * switch is Hermes's own `privacy.redact_pii`. The whole app is mounted on a scripted hub.

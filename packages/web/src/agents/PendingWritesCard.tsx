@@ -1,6 +1,6 @@
 /**
  * «بانتظار المراجعة» / "Waiting for review" — what Hermes's agent wrote to its memory or its
- * skills while `memory.write_approval` or `skills.write_approval` is on (contract decision §56).
+ * skills while `memory.write_approval` or `skills.write_approval` is on (contract decision §58).
  *
  * Hermes keeps each such write aside instead of saving it; here a person reads what it would
  * change and approves it (Hermes applies it with its own code) or rejects it (it is dropped).

@@ -2,7 +2,7 @@
  * Hermes's own settings in a profile — the Hermes Settings page (ADR 0002: the adapter declares
  * the form, the client draws it), read and written **where Hermes reads each one**: the profile's
  * `config.yaml` (edited in place, comments and every other key kept, like the MCP and channel
- * blocks) or its `.env`. Contract decision §56.
+ * blocks) or its `.env`. Contract decision §58.
  *
  * Until 2026-09-25 this page showed four sections the hub stored in its own table and nothing
  * read (a turn limit of 40 Hermes never saw, an approvals mode, a gateway URL). What is here now

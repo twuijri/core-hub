@@ -1,5 +1,5 @@
 /**
- * The Hermes Settings page's routes (contract decision §56): `agents.getSettings` and
+ * The Hermes Settings page's routes (contract decision §58): `agents.getSettings` and
  * `agents.updateSettings` read and write Hermes's own keys in **the selected profile's** files, and
  * the review list of staged memory and skill writes answers per profile too. Every response is
  * checked against the contract's schema.

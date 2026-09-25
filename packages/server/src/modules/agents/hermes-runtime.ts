@@ -348,7 +348,7 @@ export class HermesRuntime {
   }
 
   /**
-   * Hermes's own settings in `profile` changed (the Settings page, contract decision §56).
+   * Hermes's own settings in `profile` changed (the Settings page, contract decision §58).
    * Hermes reads them when it builds a session's agent, so the TUI gateway is retired the way a
    * key change retires it: the next message in any conversation opens a fresh one that reads
    * them, and a turn already running finishes on the values it started with. A named profile's

@@ -1,5 +1,5 @@
 /**
- * The review list of memory and skill writes Hermes staged (contract decision §56): read from
+ * The review list of memory and skill writes Hermes staged (contract decision §58): read from
  * Hermes's own `pending/<kind>/<id>.json`, rejected by removing the record, approved by Hermes's own
  * code — scripted here; the real Hermes applying one is `hermes-settings.real.test.ts`.
  */

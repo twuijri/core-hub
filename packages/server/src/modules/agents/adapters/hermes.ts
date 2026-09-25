@@ -692,7 +692,7 @@ export function createHermesAdapter(options: HermesAdapterOptions): AgentAdapter
     /**
      * Hermes's settings are Hermes's own keys in the profile's `config.yaml` and `.env`, so they
      * are read and written where the route knows that profile's home (`hermes-settings.ts`,
-     * contract decision §56) — not stored by the hub, where Hermes never read them.
+     * contract decision §58) — not stored by the hub, where Hermes never read them.
      */
     settings(): SettingsSection[] {
       return [];

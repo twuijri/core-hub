@@ -354,7 +354,7 @@ describe('Hermes runtime: the TUI gateway and changing keys', () => {
   });
 });
 
-describe("Hermes runtime: Hermes's settings changed (contract decision §56)", () => {
+describe("Hermes runtime: Hermes's settings changed (contract decision §58)", () => {
   it('retires the TUI gateway so the next message reads the new values, and leaves an external Hermes alone', async () => {
     const { logger } = capturingLogger();
     const { spawnImpl } = fakeSpawner();

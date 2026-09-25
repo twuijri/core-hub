@@ -1,5 +1,5 @@
 /**
- * The Hermes Settings page against **the real Hermes** from the image (contract decision §56):
+ * The Hermes Settings page against **the real Hermes** from the image (contract decision §58):
  *
  * - every value the hub writes (`hermes-settings.ts`) into a profile's `config.yaml` and `.env` is
  *   what Hermes's **own loaders** read back — `hermes_cli.config.load_config` with

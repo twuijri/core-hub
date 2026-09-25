@@ -21,7 +21,7 @@ import type { SelectOption } from '../ui/Select.js';
  * The approval field, whatever the adapter calls it. The ACP adapters declare
  * `approval_mode` (ask · auto_safe · auto_all — the one the `agent_settings.approval_mode`
  * column stores); Hermes declares `approvals_mode` with its own three (`manual`, `smart`, `off`
- * — Hermes's `approvals.mode` in the profile, contract decision §56). The client does not
+ * — Hermes's `approvals.mode` in the profile, contract decision §58). The client does not
  * decide which exist (NAVIGATION rule 5): it shows the options the descriptor declares.
  */
 export const APPROVAL_FIELDS = ['approval_mode', 'approvals_mode'] as const;
