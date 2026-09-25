@@ -139,7 +139,15 @@ node scripts/image-sealed-check.mjs core-hub:terminal
 الاختبارات الجديدة تفشل على الكود القديم: لا مسار `/terminal` ولا مساحة `/rt/terminal` ولا وجهة
 `terminal` قبل هذا الفرع.
 
-CI: يُكمَّل بعد الدفع.
+CI على طلب الدمج #141 (الالتزام `d76beb6`، التشغيل 36123405650) — كله أخضر:
+```
+Lint, typecheck, contracts, tests, build              pass  19m29s
+Web smoke journeys (Playwright against the real hub)  pass  5m31s
+Docker image builds and answers /health               pass  3m47s
+db:generate + db:migrate (SQLite and PostgreSQL)      pass  1m8s
+PR adds or updates a change record                    pass  11s
+PR leaves graphify-out/ to the code-map bot           pass  8s
+```
 
 ## المخاطر والرجوع
 - **الخطر الأكبر مقصود:** من يملك كلمة مرور المالك والطرفية مفعّلة يملك صدفة بحساب المركز (نموذج
