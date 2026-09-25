@@ -3091,7 +3091,7 @@ paths:
       description: >-
         A category belongs to its profile and is shared by everyone who may enter it, as
         the profile's conversations are; `owner_id` is who made it. `session_count` counts
-        the conversations in it that are not archived (contract decision §53).
+        the conversations in it that are not archived (contract decision §54).
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: profiles
@@ -3141,7 +3141,7 @@ paths:
         `name` is required. The new category goes last, or at `position` when given (the
         others move down to make room). `409 conflict` when the profile already has a
         category of that name (compared trimmed, ignoring case) or already has 100
-        (contract decision §53).
+        (contract decision §54).
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -3194,7 +3194,7 @@ paths:
       description: >-
         `position` moves the category to that place in the profile's order (past the end
         is the end) and renumbers the others, so positions are always `0…n-1`. A name
-        another category of the profile has is `409 conflict` (contract decision §53).
+        another category of the profile has is `409 conflict` (contract decision §54).
       requestBody:
         required: true
         content:
@@ -13852,7 +13852,7 @@ components:
             - type: 'null'
           description: >-
             A category of this session's profile (`sessions.listCategories`); another
-            profile's, or none, is `404` (contract decision §53).
+            profile's, or none, is `404` (contract decision §54).
     GlobalAgentOpen:
       type: object
       required: [agent_id]
@@ -13882,7 +13882,7 @@ components:
             - type: 'null'
           description: >-
             Moves the session into a category of its own profile; `null` takes it out. A
-            category the profile does not have is `404` (contract decision §53).
+            category the profile does not have is `404` (contract decision §54).
         model:
           type: [string, 'null']
         provider:

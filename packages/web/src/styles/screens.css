@@ -154,7 +154,7 @@
   opacity: 1;
 }
 
-/* ------------------------------------------ groups of the session list (decision §53) */
+/* ------------------------------------------ groups of the session list (decision §54) */
 .session-group {
   display: flex;
   flex-direction: column;

@@ -1,4 +1,4 @@
-// The profile's session categories over the generated client (contract decision §53).
+// The profile's session categories over the generated client (contract decision §54).
 // A category is the profile's, so every call names the profile it acts in; the list across
 // profiles is one request (`profiles=all`, ADR 0016), like the chats list itself.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';

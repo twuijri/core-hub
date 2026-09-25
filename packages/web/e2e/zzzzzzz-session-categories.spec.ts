@@ -1,5 +1,5 @@
 /**
- * 32. Categories in the chats list (contract decision §53), against the real hub: a category
+ * 32. Categories in the chats list (contract decision §54), against the real hub: a category
  *     «عملاء» is made from the list, a chat is moved into it from its menu («نقل إلى تصنيف»),
  *     the group is collapsed — and after a reload it is still collapsed, because which groups
  *     are closed is the viewer's own and stays in the browser.
@@ -30,7 +30,7 @@ test('32. a category is made, a chat moved into it, and its collapse survives a 
   request,
 }, testInfo) => {
   // A retry runs against the same hub, where the first attempt's «عملاء» already exists and a
-  // second one of that name is refused (§53): each attempt makes its own.
+  // second one of that name is refused (§54): each attempt makes its own.
   const attempt = testInfo.retry + testInfo.repeatEachIndex;
   const name = attempt === 0 ? 'عملاء' : `عملاء ${attempt + 1}`;
   await login(page);

@@ -1,5 +1,5 @@
 /**
- * Session categories (contract decision §53): the folders of a profile's chats list.
+ * Session categories (contract decision §54): the folders of a profile's chats list.
  *
  * A category is the profile's, shared by everyone who may enter it, as the profile's sessions
  * are. Its order is `position`, kept dense (`0…n-1`) by every write here, so a client can

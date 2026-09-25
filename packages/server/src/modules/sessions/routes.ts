@@ -383,7 +383,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
   });
 
   // ----------------------------------------------------------- categories
-  // Contract decision §53: the profile's folders of its chats list (`categories.ts`).
+  // Contract decision §54: the profile's folders of its chats list (`categories.ts`).
 
   app.get('/session-categories', async (request) => {
     const scope = await scopeOf(request);

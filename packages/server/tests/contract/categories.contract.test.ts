@@ -1,4 +1,4 @@
-// `pnpm contract:test`: session categories (contract decision §53) driven through the generated
+// `pnpm contract:test`: session categories (contract decision §54) driven through the generated
 // TypeScript client — create, list (one profile and every profile), rename, reorder, move a
 // session in and out, delete — each answer validated against the schema the contract documents
 // for its status, the failures included, and the `session.updated` a delete announces

@@ -122,7 +122,7 @@ export class SessionsService {
   readonly store: SessionsStore;
   readonly audit: AuditService;
   readonly engine: RunEngine;
-  /** The profile's categories (contract decision §53, `categories.ts`). */
+  /** The profile's categories (contract decision §54, `categories.ts`). */
   readonly categories: SessionCategories;
 
   constructor(
@@ -314,7 +314,7 @@ export class SessionsService {
     patch: SessionPatchInput,
   ): Promise<Record<string, unknown>> {
     const row = this.requireSession(scope, sessionId);
-    // A category of this profile, or `404` — never a silent drop (contract decision §53).
+    // A category of this profile, or `404` — never a silent drop (contract decision §54).
     if (patch.category_id) this.categories.require(scope.workspace, patch.category_id);
     const changes: Partial<SessionRow> = {};
     /**

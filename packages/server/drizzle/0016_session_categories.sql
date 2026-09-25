@@ -1,4 +1,4 @@
--- Session categories (contract decision §53): a profile's folders of its chats list, shared by
+-- Session categories (contract decision §54): a profile's folders of its chats list, shared by
 -- everyone who may enter it. `sessions.category_id` already existed; nothing pointed it anywhere.
 CREATE TABLE `session_categories` (
 	`id` text(26) PRIMARY KEY NOT NULL,

@@ -1025,7 +1025,7 @@ Rejected: a new `source` field on `SessionCreate` (a client could then make any 
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
 
-## 53. A session category is the profile's, shared like its conversations; moving is a session patch
+## 54. A session category is the profile's, shared like its conversations; moving is a session patch
 
 The contract has declared `session_categories` since the start (`SessionCategory`, four
 operations, `Session.category_id`, `sessions.list?category_id=`), but no module built them and

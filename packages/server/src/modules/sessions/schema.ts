@@ -359,7 +359,7 @@ export const approvals = sqliteTable(
 );
 
 /**
- * A folder of the profile's chats list (contract decision §53): the profile's, shared by
+ * A folder of the profile's chats list (contract decision §54): the profile's, shared by
  * everyone who may enter it, like its sessions. `sessions.category_id` points here; no FK, so
  * deleting a category clears its sessions in the service, which announces each one.
  */

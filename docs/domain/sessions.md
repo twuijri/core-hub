@@ -47,7 +47,7 @@ the only place that converts:
 | preview | text(300)? | first 300 chars of the newest message |
 | pinned | bool | |
 | parent_session_id | ulid? | set by `sessions.fork`; no FK, the parent may be purged |
-| category_id | ulid? → session_category | the category it is filed under (contract decision §53); no FK — deleting a category clears it on every session and announces each |
+| category_id | ulid? → session_category | the category it is filed under (contract decision §54); no FK — deleting a category clears it on every session and announces each |
 | notify | bool | push a notice when a run here finishes |
 | metadata | json<SessionMetadata> | skills picked, non-private adapter data |
 | archived_at | ms? | |
@@ -57,7 +57,7 @@ Indexes: (workspace, archived_at, last_message_at) for the list;
 
 ## session_category (scoped)
 
-A folder of the profile's chats list (contract decision §53): the profile's, shared by
+A folder of the profile's chats list (contract decision §54): the profile's, shared by
 everyone who may enter it, like its sessions. Whether a group is collapsed is the viewer's
 and never stored here.
 

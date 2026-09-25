@@ -1,5 +1,5 @@
 /**
- * Session categories (contract decision §53): create, rename, reorder, delete, and moving a
+ * Session categories (contract decision §54): create, rename, reorder, delete, and moving a
  * session in and out of one — through the routes, the way a client reaches them.
  */
 import { Ajv2020 } from 'ajv/dist/2020.js';
