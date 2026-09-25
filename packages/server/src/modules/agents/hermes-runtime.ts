@@ -305,6 +305,19 @@ export class HermesRuntime {
   }
 
   /**
+   * A channel of `profile` was linked, or its mode changed, and must answer now — in the default
+   * profile too. A named profile's gateway follows as for any channel change; the default one is
+   * held down for a moment and started again (the API server with it), the way a change to the
+   * hub's tools restarts it (decision §79). Without this a WhatsApp linked in the default profile
+   * read `offline` until somebody pressed Restart (the owner's report of 2026-09-26).
+   */
+  channelLinked(profile: string): Promise<void> {
+    if (this.mode !== 'managed') return Promise.resolve();
+    if (profile !== 'default') return this.profileGateways.channelsChanged(profile);
+    return this.withGatewayStopped('default', () => undefined);
+  }
+
+  /**
    * Hermes's scheduled jobs changed somewhere (the hub's schedules page wrote one): a profile
    * that now has an active job gets its gateway, one with neither a job nor a channel left
    * loses it. A gateway reads its jobs on every tick, so a running one is not restarted.

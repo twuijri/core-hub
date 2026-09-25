@@ -86,12 +86,20 @@ function scriptedHermes(root: () => string) {
       });
     }
     if (method === 'PUT' && url.pathname === '/api/messaging/platforms/whatsapp') {
-      // What Hermes writes without restarting anything: the switch, in `.env` and the file.
+      // What Hermes writes without restarting anything: the values it was given into `.env`,
+      // over what was there, and the switch in the file.
       const home = profileHome(url.searchParams.get('profile') ?? 'default');
-      writeFileSync(
-        path.join(home, '.env'),
-        'WHATSAPP_ENABLED=true\nWHATSAPP_MODE=bot\nWHATSAPP_DM_POLICY=pairing\n',
+      const file = path.join(home, '.env');
+      const values = new Map(
+        (existsSync(file) ? readFileSync(file, 'utf8') : '')
+          .split('\n')
+          .filter((line) => line.includes('='))
+          .map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]),
       );
+      for (const [key, value] of Object.entries((body as { env: Record<string, string> }).env)) {
+        values.set(key, value);
+      }
+      writeFileSync(file, [...values].map(([key, value]) => `${key}=${value}\n`).join(''));
       writeFileSync(path.join(home, 'config.yaml'), 'platforms:\n  whatsapp:\n    enabled: true\n');
       return answer({ ok: true });
     }
@@ -174,6 +182,7 @@ interface ChannelsAnswer {
     enabled: boolean;
     configured: boolean;
     status: string;
+    restart_needed: boolean;
     link: { linked: boolean; account_phone: string | null; account_name: string | null } | null;
   }>;
   gateway: { profile: string; state: string; applies: string } | null;
@@ -243,8 +252,11 @@ describe('WhatsApp paired in a named profile', () => {
     ]);
   });
 
-  it('in the default profile, says the change waits for the Restart', async () => {
+  it('in the default profile, restarts its gateway so the number is answered without a Restart', async () => {
+    // The owner's report of 2026-09-26: linked in the default profile, «مربوط» but «غير متصل» —
+    // the default gateway had started before the link and never read it.
     const { hub: h, agent, of } = await boot();
+    expect(of('default')).toHaveLength(1);
     const started = await authed(h, h.token, {
       method: 'POST',
       url: `/api/v1/agents/${agent}/channels/whatsapp/login`,
@@ -253,9 +265,120 @@ describe('WhatsApp paired in a named profile', () => {
     const job = await authed(h, h.token, {
       url: `/api/v1/jobs/${(started.json() as { job_id: string }).job_id}`,
     });
-    expect(job.json()).toMatchObject({ result: { applies: 'on_restart' } });
-    expect((await channels(h, agent, 'default')).gateway).toMatchObject({ applies: 'on_restart' });
-    expect(of('default')).toHaveLength(1);
+    expect(job.json()).toMatchObject({ result: { applies: 'now', mode: 'bot' } });
+    await vi.waitFor(() => expect(of('default')).toHaveLength(2));
+    expect(of('default')[0]?.child.killed).toEqual(['SIGTERM']);
+    expect(of('default')[1]?.args).toEqual(['gateway', 'run']);
+  });
+});
+
+describe("WhatsApp's mode: a number for the agent, or the person's own", () => {
+  it('links a personal number in self-chat mode, with the owner allowed to talk to the agent', async () => {
+    const { hub: h, agent, root, hermes } = await boot();
+    const started = await authed(h, h.token, {
+      method: 'POST',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/login`,
+      payload: { mode: 'self-chat' },
+    });
+    expect(started.statusCode, started.body).toBe(202);
+    await drainJobs(h.app);
+    expect(hermes.calls[0]).toMatchObject({ body: { mode: 'self-chat', profile: 'default' } });
+    const env = readFileSync(path.join(root, '.env'), 'utf8');
+    expect(env).toContain('WHATSAPP_MODE=self-chat\n');
+    expect(env).toContain('WHATSAPP_ALLOWED_USERS=966500000000\n');
+    const list = await channels(h, agent, 'default');
+    expect(list.items[0]).toMatchObject({
+      platform: 'whatsapp',
+      link: { linked: true, mode: 'self-chat' },
+    });
+
+    const wrong = await authed(h, h.token, {
+      method: 'POST',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/login`,
+      payload: { mode: 'personal' },
+    });
+    expect(wrong.statusCode).toBe(400);
+  });
+
+  it('changes the mode of a linked number and restarts the gateway that serves it', async () => {
+    const { hub: h, agent, root, of } = await boot();
+    await makeProfile(h, 'manger');
+    await authed(h, h.token, {
+      method: 'POST',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/login`,
+    });
+    await drainJobs(h.app);
+    await vi.waitFor(() => expect(of('default')).toHaveLength(2));
+
+    const changed = await authed(h, h.token, {
+      method: 'PUT',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/mode`,
+      payload: { mode: 'self-chat' },
+    });
+    expect(changed.statusCode, changed.body).toBe(200);
+    expect(changed.json()).toMatchObject({
+      platform: 'whatsapp',
+      enabled: true,
+      link: { linked: true, mode: 'self-chat', account_phone: '966500000000' },
+    });
+    const env = readFileSync(path.join(root, '.env'), 'utf8');
+    expect(env).toContain('WHATSAPP_MODE=self-chat\n');
+    expect(env).toContain('WHATSAPP_ALLOWED_USERS=966500000000\n');
+    // Held down while `.env` changed, then started again: Hermes reads the mode at start.
+    await vi.waitFor(() => expect(of('default')).toHaveLength(3));
+    expect(of('default')[1]?.child.killed).toEqual(['SIGTERM']);
+
+    const back = await authed(h, h.token, {
+      method: 'PUT',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/mode`,
+      payload: { mode: 'bot' },
+    });
+    expect(back.json()).toMatchObject({ link: { mode: 'bot' } });
+
+    const telegram = await authed(h, h.token, {
+      method: 'PUT',
+      url: `/api/v1/agents/${agent}/channels/telegram/mode`,
+      payload: { mode: 'bot' },
+    });
+    expect(telegram.statusCode).toBe(409);
+    expect(telegram.json()).toMatchObject({ details: { reason: 'mode_not_supported' } });
+    const nothing = await authed(h, h.token, {
+      method: 'PUT',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/mode`,
+      profile: 'manger',
+      payload: { mode: 'self-chat' },
+    });
+    expect(nothing.statusCode).toBe(409);
+    expect(nothing.json()).toMatchObject({ details: { reason: 'not_linked' } });
+  });
+});
+
+describe('a channel the running gateway does not serve', () => {
+  it('says a restart is needed until Hermes names it, then how it is', async () => {
+    const { hub: h, agent, root, of } = await boot();
+    // Linked behind the hub's back (by hand, or by a hub before this fix): the default gateway
+    // is running and was started without it.
+    writeFileSync(path.join(root, '.env'), 'WHATSAPP_ENABLED=true\nWHATSAPP_MODE=bot\n');
+    const session = path.join(root, 'platforms', 'whatsapp', 'session');
+    mkdirSync(session, { recursive: true });
+    writeFileSync(
+      path.join(session, 'creds.json'),
+      JSON.stringify({ me: { id: '966500000000:3@s.whatsapp.net' } }),
+    );
+    const record = (platforms: Record<string, unknown>) =>
+      writeFileSync(
+        path.join(root, 'gateway_state.json'),
+        JSON.stringify({ pid: of('default')[0]!.child.pid, gateway_state: 'running', platforms }),
+      );
+    const whatsapp = async () =>
+      (await channels(h, agent, 'default')).items.find((item) => item.platform === 'whatsapp');
+
+    record({});
+    expect(await whatsapp()).toMatchObject({ status: 'offline', restart_needed: true });
+    record({ whatsapp: { state: 'connecting' } });
+    expect(await whatsapp()).toMatchObject({ status: 'unknown', restart_needed: false });
+    record({ whatsapp: { state: 'connected' } });
+    expect(await whatsapp()).toMatchObject({ status: 'online', restart_needed: false });
   });
 });
 

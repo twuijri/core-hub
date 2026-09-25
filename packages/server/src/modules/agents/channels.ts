@@ -102,6 +102,8 @@ export interface ChannelLink {
   accountPhone: string | null;
   /** Telegram: the bot's @username without the @. */
   accountUsername: string | null;
+  /** WhatsApp: how Hermes uses the linked number (`whatsappMode`); null for every other platform. */
+  mode: WhatsAppMode | null;
 }
 
 export interface Channel {
@@ -207,7 +209,7 @@ export function listChannels(home: string): Channel[] {
           configured: whatsapp.linked,
           exclusive: true,
           fields,
-          link: whatsapp,
+          link: { ...whatsapp, mode: whatsapp.linked ? whatsappMode(env) : null },
         };
       }
       if (platform === 'telegram') {
@@ -243,6 +245,7 @@ export function listChannels(home: string): Channel[] {
             accountName: link.accountName,
             accountPhone: null,
             accountUsername: link.accountUsername,
+            mode: null,
           },
         };
       }
@@ -344,6 +347,7 @@ export function whatsappLink(home: string): ChannelLink {
     accountName: first(['name', 'verifiedName', 'notify', 'pushName']),
     accountPhone: digits || null,
     accountUsername: null,
+    mode: null,
   };
 }
 
@@ -353,7 +357,83 @@ const UNLINKED: ChannelLink = {
   accountName: null,
   accountPhone: null,
   accountUsername: null,
+  mode: null,
 };
+
+// ------------------------------------------------------------------ WhatsApp mode
+
+/**
+ * How Hermes uses a linked WhatsApp number — the profile's `WHATSAPP_MODE`, read by Hermes's
+ * adapter and passed to its bridge (`plugins/platforms/whatsapp/adapter.py` §_bridge_env,
+ * `scripts/whatsapp-bridge/bridge.js`; Hermes v2026.9.14, MIT), described here in our words:
+ *
+ * - `bot`: a number dedicated to the agent. Other people message it; with the DM policy
+ *   `pairing` a sender nobody approved gets a pairing code. What the account owner types from
+ *   the phone itself is dropped (it would be the agent's own number talking).
+ * - `self-chat`: the person's own number. Only messages the account owner writes in their own
+ *   "Message yourself" chat reach the agent, and it answers there with a short signature so the
+ *   two sides can be told apart. Messages from anybody else are dropped by the bridge before
+ *   Hermes sees them, so nobody else is answered or sent a pairing code.
+ */
+export const WHATSAPP_MODES = ['bot', 'self-chat'] as const;
+export type WhatsAppMode = (typeof WHATSAPP_MODES)[number];
+
+/** Hermes's rule: `bot` or `self-chat` as written; nothing written is `self-chat` (its default). */
+export function whatsappMode(env: Record<string, string>): WhatsAppMode | null {
+  const raw = (env.WHATSAPP_MODE ?? '').trim().toLowerCase();
+  if (raw === '') return 'self-chat';
+  return (WHATSAPP_MODES as readonly string[]).includes(raw) ? (raw as WhatsAppMode) : null;
+}
+
+/**
+ * `WHATSAPP_ALLOWED_USERS` with the account owner in it. In `self-chat` the owner writes to
+ * themselves, and Hermes's gateway still asks whether the sender may talk to the agent: an owner
+ * missing from the list would be treated as a stranger and sent a pairing code in their own chat.
+ * Hermes's own onboarding adds the linked number for the same reason
+ * (`hermes_cli/web_routers/messaging.py` §apply_whatsapp_onboarding). Whoever else is on the list
+ * stays, in the order written; `*` (everybody) already includes the owner.
+ */
+export function withAllowedOwner(existing: string | undefined, owner: string): string {
+  const entries = (existing ?? '')
+    .split(',')
+    .map((entry) => entry.replace(/\s+/g, ''))
+    .filter(Boolean);
+  const bare = (entry: string) => entry.replace(/^\+/, '');
+  if (entries.includes('*') || entries.some((entry) => bare(entry) === bare(owner))) {
+    return entries.join(',');
+  }
+  return [...entries, owner].join(',');
+}
+
+/** The linked account as Hermes's allowlist names it: the phone's digits, else its id. */
+export function whatsappOwner(link: ChannelLink): string | null {
+  return link.accountPhone ?? link.accountId ?? null;
+}
+
+/**
+ * Switches how the linked number is used. The phone stays linked; only `.env` changes. The
+ * caller holds the gateway that serves the profile down while this runs and starts it again
+ * (Hermes reads the mode when its bridge starts).
+ */
+export function setWhatsAppMode(home: string, mode: WhatsAppMode): Channel {
+  if (!(WHATSAPP_MODES as readonly string[]).includes(mode)) {
+    throw new ChannelError('channel_mode_invalid');
+  }
+  const link = whatsappLink(home);
+  if (!link.linked) throw new ChannelError('channel_not_linked');
+  writeEnvValue(home, 'WHATSAPP_MODE', mode);
+  const owner = whatsappOwner(link);
+  if (mode === 'self-chat' && owner) {
+    writeEnvValue(
+      home,
+      'WHATSAPP_ALLOWED_USERS',
+      withAllowedOwner(readEnv(home).WHATSAPP_ALLOWED_USERS, owner),
+    );
+  }
+  const written = getChannel(home, 'whatsapp');
+  if (!written) throw new ChannelError('channel_write_failed');
+  return written;
+}
 
 // ------------------------------------------------------------------ Telegram bot
 
@@ -425,6 +505,7 @@ export function telegramLink(
     accountName: typeof bot.name === 'string' && bot.name ? bot.name : null,
     accountPhone: null,
     accountUsername: typeof bot.username === 'string' && bot.username ? bot.username : null,
+    mode: null,
   };
 }
 

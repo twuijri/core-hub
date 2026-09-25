@@ -17,12 +17,13 @@
  *   Hermes's own `…/apply` then restarts the gateway with `hermes gateway restart`, which in a
  *   container stops the gateway this hub supervises and starts a second one inside the
  *   dashboard process. So the hub does not call it: it enables the channel with
- *   `PUT /api/messaging/platforms/whatsapp`, the write Hermes makes without a restart, and the
- *   agent picks the channel up at its next restart — the rule every channel change here has.
+ *   `PUT /api/messaging/platforms/whatsapp`, the write Hermes makes without a restart, and
+ *   restarts the gateway it supervises itself (the route that runs the pairing).
  */
 import { HubError } from '../../lib/errors.js';
 import { t, type Language } from '../../i18n/index.js';
 import type { JobHandle } from '../audit/index.js';
+import { withAllowedOwner, type WhatsAppMode } from './channels.js';
 import { HermesDashboardRefusal, HermesDashboardUnavailable } from './hermes-dashboard.js';
 
 /** One call to Hermes's API. The dashboard's `request`, or a test's fake. */
@@ -163,6 +164,10 @@ interface HermesPairing {
 export interface PairingOptions {
   profile: string;
   language: Language;
+  /** How the number will be used (`channels.ts` §whatsappMode). Default `bot`. */
+  mode?: WhatsAppMode;
+  /** The profile's `WHATSAPP_ALLOWED_USERS` before pairing; `self-chat` adds the owner to it. */
+  allowedUsers?: string;
   /** Between two questions to Hermes. Default 1 s. */
   pollMs?: number;
   /** Past Hermes's own expiry, how long the hub keeps asking before it gives up. */
@@ -191,6 +196,7 @@ export async function pairWhatsApp(
   options: PairingOptions,
 ): Promise<Record<string, unknown>> {
   const { profile, language } = options;
+  const mode = options.mode ?? 'bot';
   const pollMs = options.pollMs ?? 1000;
   const graceMs = options.graceMs ?? 30_000;
   const now = options.now ?? Date.now;
@@ -199,7 +205,7 @@ export async function pairWhatsApp(
 
   let state: HermesPairing;
   try {
-    state = await api<HermesPairing>('POST', `${base}/start`, { mode: 'bot', profile });
+    state = await api<HermesPairing>('POST', `${base}/start`, { mode, profile });
   } catch (error) {
     return hermesFault(error);
   }
@@ -278,10 +284,21 @@ export async function pairWhatsApp(
     qr: null,
     expires_at: null,
   });
+  const env: Record<string, string> = {
+    WHATSAPP_ENABLED: 'true',
+    WHATSAPP_MODE: mode,
+    WHATSAPP_DM_POLICY: 'pairing',
+  };
+  // The owner writes to themselves in `self-chat`: on the allowlist, or Hermes pairs them like a
+  // stranger. What Hermes's own onboarding writes (`…/apply`), minus its restart.
+  const owner = state.account_phone?.trim() || state.account_id?.trim() || '';
+  if (mode === 'self-chat' && owner) {
+    env.WHATSAPP_ALLOWED_USERS = withAllowedOwner(options.allowedUsers, owner);
+  }
   try {
     await api('PUT', `/api/messaging/platforms/whatsapp?${query(profile)}`, {
       enabled: true,
-      env: { WHATSAPP_ENABLED: 'true', WHATSAPP_MODE: 'bot', WHATSAPP_DM_POLICY: 'pairing' },
+      env,
       profile,
     });
   } catch (error) {
@@ -297,5 +314,6 @@ export async function pairWhatsApp(
     status: 'connected',
     account_name: state.account_name ?? null,
     account_phone: state.account_phone ?? null,
+    mode,
   };
 }

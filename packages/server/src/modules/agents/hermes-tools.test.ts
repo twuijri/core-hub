@@ -210,6 +210,7 @@ describe('pairing WhatsApp through Hermes', () => {
       status: 'connected',
       account_name: 'Office',
       account_phone: '966500000000',
+      mode: 'bot',
     });
     expect(calls[0]).toMatchObject({ body: { mode: 'bot', profile: 'work' } });
     // One progress per change, not per question: installing, QR-ONE, QR-TWO, saving, done.
@@ -231,6 +232,36 @@ describe('pairing WhatsApp through Hermes', () => {
     // Never Hermes's `apply`: that restarts the gateway this hub supervises.
     expect(calls.some((call) => call.path.includes('/apply'))).toBe(false);
     expect(calls.at(-1)).toMatchObject({ method: 'DELETE' });
+  });
+
+  it('links a personal number in self-chat mode, with the owner on the allowlist', async () => {
+    const { api, calls } = scripted({
+      'POST /api/messaging/whatsapp/onboarding/start': [
+        { ...start, status: 'connected', account_name: 'Me', account_phone: '966511111111' },
+      ],
+      'PUT /api/messaging/platforms/whatsapp': [{ ok: true }],
+      'DELETE /api/messaging/whatsapp/onboarding/p1': [{ ok: true }],
+    });
+    const outcome = await pairWhatsApp(api, fakeHandle().handle, {
+      profile: 'default',
+      language: 'ar',
+      sleep: noSleep,
+      mode: 'self-chat',
+      allowedUsers: '966522222222',
+    });
+    expect(outcome).toMatchObject({ status: 'connected', mode: 'self-chat' });
+    expect(calls[0]).toMatchObject({ body: { mode: 'self-chat', profile: 'default' } });
+    expect(calls.find((call) => call.method === 'PUT')!.body).toEqual({
+      enabled: true,
+      env: {
+        WHATSAPP_ENABLED: 'true',
+        WHATSAPP_MODE: 'self-chat',
+        WHATSAPP_DM_POLICY: 'pairing',
+        // Whoever was allowed stays; the owner is added so Hermes does not pair them.
+        WHATSAPP_ALLOWED_USERS: '966522222222,966511111111',
+      },
+      profile: 'default',
+    });
   });
 
   it("fails in Hermes's words when the pairing fails, and when the code expires", async () => {
