@@ -506,7 +506,7 @@ export function useChannelPlatforms(agentId: string | undefined) {
 export interface ChannelGateway {
   profile: string;
   state: 'running' | 'starting' | 'stopped' | 'error';
-  /** `now` in a named profile; `on_restart` in the default one. */
+  /** `now` from a hub that restarts the gateway after a channel change (every profile since 1.1.1); `on_restart` from an older hub's default profile. */
   applies: 'now' | 'on_restart';
   error: string | null;
 }

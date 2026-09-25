@@ -90,7 +90,7 @@ async function boot() {
   hub = await signedInHub(
     {},
     {
-      agents: { pathValue: bin, runtime: { spawnImpl, healthIntervalMs: 0 } },
+      agents: { pathValue: bin, runtime: { spawnImpl, healthIntervalMs: 0, channelSettleMs: 5 } },
       models: { fetchImpl: endpoints, restartDelayMs: 0 },
     },
   );
