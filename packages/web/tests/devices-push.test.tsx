@@ -113,7 +113,7 @@ const SENDERS = {
 function hub(devices: Record<string, unknown>[]) {
   const sent: Sent[] = [];
   const fetchImpl = ((url: string, init: RequestInit = {}) => {
-    const path = new URL(String(url)).pathname.replace('/api/v1', '');
+    const path = new URL(String(url)).pathname.replace(/^\/api\/v1/, '');
     const method = (init.method ?? 'GET').toUpperCase();
     const body = init.body ? JSON.parse(String(init.body)) : null;
     sent.push({ path, method, body });
@@ -235,7 +235,7 @@ describe('browser push, in this browser', () => {
       baseUrl: 'http://hub.test',
       fetch: (url, init) => {
         sent.push({
-          path: new URL(String(url)).pathname.replace('/api/v1', ''),
+          path: new URL(String(url)).pathname.replace(/^\/api\/v1/, ''),
           method: (init?.method ?? 'GET').toUpperCase(),
           body: init?.body ? JSON.parse(String(init.body)) : null,
         });
