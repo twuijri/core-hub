@@ -45,6 +45,10 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        # corehub://pair?hub=…&id=…&code=… — the pairing link the web offers to copy.
+        CFBundleURLTypes:
+          - CFBundleURLName: io.github.twuijri.corehub
+            CFBundleURLSchemes: [corehub]
         NSCameraUsageDescription: Core Hub uses the camera to scan the pairing code your hub shows on the web.
         NSLocalNetworkUsageDescription: Core Hub connects to your hub on your local network.
         # A self-hosted hub is often reached over plain http on a LAN or a VPN address

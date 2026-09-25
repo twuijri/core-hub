@@ -15,6 +15,7 @@ struct CoreHubApp: App {
                 .preferredColorScheme(app.theme.colorScheme)
                 .tint(Tone.accent)
                 .task { await app.launch() }
+                .onOpenURL { url in app.open(url) }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { app.becameActive() }

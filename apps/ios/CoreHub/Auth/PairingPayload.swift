@@ -15,23 +15,43 @@ struct PairingPayload: Equatable {
         case expired
     }
 
+    /// The QR's JSON, or the `corehub://pair?hub=…&id=…&code=…` link the web offers to copy
+    /// (the desktop app and the Android app read the same two forms).
     static func parse(_ text: String, now: Date = Date()) -> Result<PairingPayload, Failure> {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.lowercased().hasPrefix("\(Product.id):") { return parseLink(trimmed) }
         guard let data = trimmed.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let type = object["type"] as? String,
-              type == Product.pairingType || type == Product.legacyPairingType,
-              let rawURL = object["hub_url"] as? String,
-              let hubURL = HubAddress.normalise(rawURL),
-              let pairingID = object["pairing_id"] as? String, !pairingID.isEmpty,
-              let code = object["code"] as? String, !code.isEmpty
+              type == Product.pairingType || type == Product.legacyPairingType
         else { return .failure(.notAPairingCode) }
         var expiresAt: Date?
         if let raw = object["expires_at"] as? String {
             expiresAt = HubDate.parse(raw)
             if let expiresAt, expiresAt < now { return .failure(.expired) }
         }
-        return .success(PairingPayload(hubURL: hubURL, pairingID: pairingID, code: code, expiresAt: expiresAt))
+        return make(hub: object["hub_url"] as? String, id: object["pairing_id"] as? String,
+                    code: object["code"] as? String, expiresAt: expiresAt)
+    }
+
+    static func parseLink(_ text: String) -> Result<PairingPayload, Failure> {
+        guard let components = URLComponents(string: text),
+              components.scheme?.lowercased() == Product.id else { return .failure(.notAPairingCode) }
+        // `corehub://pair?…` has the host `pair`; `corehub:pair?…` has the path.
+        let action = ((components.host ?? "") + components.path).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard action == "pair" else { return .failure(.notAPairingCode) }
+        let value = { (name: String) in components.queryItems?.first { $0.name == name }?.value }
+        return make(hub: value("hub"), id: value("id"), code: value("code"), expiresAt: nil)
+    }
+
+    private static func make(hub: String?, id: String?, code: String?, expiresAt: Date?) -> Result<PairingPayload, Failure> {
+        guard let hub, let hubURL = HubAddress.normalise(hub),
+              let id = id?.trimmingCharacters(in: .whitespaces).uppercased(),
+              id.range(of: "^[0-9A-HJKMNP-TV-Z]{26}$", options: .regularExpression) != nil,
+              let code = code?.trimmingCharacters(in: .whitespaces).uppercased(),
+              code.range(of: "^[A-Z0-9-]{4,32}$", options: .regularExpression) != nil
+        else { return .failure(.notAPairingCode) }
+        return .success(PairingPayload(hubURL: hubURL, pairingID: id, code: code, expiresAt: expiresAt))
     }
 }
 

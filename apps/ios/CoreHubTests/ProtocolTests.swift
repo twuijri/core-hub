@@ -96,17 +96,28 @@ final class PairingTests: XCTestCase {
     }
 
     func testAnOlderHubsTypeIsStillRead() {
-        let text = #"{"type":"majlis.pairing","hub_url":"http://192.168.1.5:8080","pairing_id":"p","code":"c"}"#
+        let text = #"{"type":"majlis.pairing","hub_url":"http://192.168.1.5:8080","pairing_id":"01J8QK3ZR2W7M5N4P6T8V9X0PR","code":"7kq2-m9xw"}"#
         guard case .success(let payload) = PairingPayload.parse(text, now: now) else { return XCTFail() }
         XCTAssertEqual(payload.hubURL.absoluteString, "http://192.168.1.5:8080")
         XCTAssertNil(payload.expiresAt)
+        XCTAssertEqual(payload.code, "7KQ2-M9XW")
+    }
+
+    func testThePairingLinkTheWebOffers() {
+        let link = "corehub://pair?hub=https%3A%2F%2Fhub.example.com&id=01J8QK3ZR2W7M5N4P6T8V9X0PR&code=7KQ2-M9XW"
+        guard case .success(let payload) = PairingPayload.parse(link, now: now) else { return XCTFail() }
+        XCTAssertEqual(payload.hubURL.absoluteString, "https://hub.example.com")
+        XCTAssertEqual(payload.pairingID, "01J8QK3ZR2W7M5N4P6T8V9X0PR")
+        XCTAssertEqual(PairingPayload.parse("corehub://pair?hub=https://h&id=nope&code=7KQ2-M9XW", now: now), .failure(.notAPairingCode))
+        XCTAssertEqual(PairingPayload.parse("corehub://pair?hub=https://h&id=01J8QK3ZR2W7M5N4P6T8V9X0PR&code=%3Cscript%3E", now: now), .failure(.notAPairingCode))
+        XCTAssertEqual(PairingPayload.parse("corehub://open/chat", now: now), .failure(.notAPairingCode))
     }
 
     func testOtherCodesAreRefused() {
         XCTAssertEqual(PairingPayload.parse("https://example.com", now: now), .failure(.notAPairingCode))
-        XCTAssertEqual(PairingPayload.parse(#"{"type":"other","hub_url":"https://h","pairing_id":"p","code":"c"}"#, now: now), .failure(.notAPairingCode))
-        XCTAssertEqual(PairingPayload.parse(#"{"type":"corehub.pairing","hub_url":"ftp://h","pairing_id":"p","code":"c"}"#, now: now), .failure(.notAPairingCode))
-        XCTAssertEqual(PairingPayload.parse(#"{"type":"corehub.pairing","hub_url":"https://h","pairing_id":"p","code":"c","expires_at":"2020-01-01T00:00:00Z"}"#, now: now), .failure(.expired))
+        XCTAssertEqual(PairingPayload.parse(#"{"type":"other","hub_url":"https://h","pairing_id":"01J8QK3ZR2W7M5N4P6T8V9X0PR","code":"7KQ2-M9XW"}"#, now: now), .failure(.notAPairingCode))
+        XCTAssertEqual(PairingPayload.parse(#"{"type":"corehub.pairing","hub_url":"ftp://h","pairing_id":"01J8QK3ZR2W7M5N4P6T8V9X0PR","code":"7KQ2-M9XW"}"#, now: now), .failure(.notAPairingCode))
+        XCTAssertEqual(PairingPayload.parse(#"{"type":"corehub.pairing","hub_url":"https://h","pairing_id":"01J8QK3ZR2W7M5N4P6T8V9X0PR","code":"7KQ2-M9XW","expires_at":"2020-01-01T00:00:00Z"}"#, now: now), .failure(.expired))
     }
 
     func testHubAddresses() {

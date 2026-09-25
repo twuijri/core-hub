@@ -47,6 +47,8 @@ final class AppModel {
     let realtime: RealtimeClient
     private let defaults: UserDefaults
     @ObservationIgnored private var sessionsNamespace: RealtimeNamespace?
+    /// A link that opened the app before it knew whether anyone was signed in.
+    @ObservationIgnored private var pendingLink: URL?
 
     enum Keys {
         static let language = Product.storagePrefix + "language"
@@ -89,8 +91,13 @@ final class AppModel {
         await keeper.setLanguage(language)
         guard let stored = await keeper.credentials else {
             phase = .signedOut
+            if let link = pendingLink {
+                pendingLink = nil
+                open(link)
+            }
             return
         }
+        pendingLink = nil
         credentials = stored
         enterSignedIn()
         if stored.needsRenewal() { _ = await keeper.refresh() }
@@ -260,6 +267,28 @@ final class AppModel {
         profiles = []
         agents = []
         phase = .signedOut
+    }
+
+    /// A `corehub://` link opened the app. Signed out, a `pair` link pairs this phone; the
+    /// sentence of a refusal lands on the sign-in screen.
+    func open(_ url: URL) {
+        if phase == .launching {
+            pendingLink = url
+            return
+        }
+        guard phase == .signedOut else { return }
+        switch PairingPayload.parseLink(url.absoluteString) {
+        case .success(let payload):
+            Task {
+                do {
+                    try await pair(payload)
+                } catch {
+                    notice = HubFailure(error).describe(l10n)
+                }
+            }
+        case .failure:
+            notice = l10n("login.pairing_invalid")
+        }
     }
 
     /// Foreground again: reconnect now and renew a device token that is due.
