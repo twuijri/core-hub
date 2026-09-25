@@ -744,7 +744,9 @@ describe('devices: the senders', () => {
       {
         provider: 'apns',
         state: 'not_configured',
-        missing: ['key_id', 'team_id', 'bundle_id', 'private_key'],
+        // The hub knows its own app's bundle id, and offers production.
+        missing: ['key_id', 'team_id', 'private_key'],
+        details: { bundle_id: 'com.twuijri.corehub', environment: 'production' },
       },
     ]);
 
@@ -787,6 +789,37 @@ describe('devices: the senders', () => {
     ).toBe(400);
   });
 
+  it('refuses the wrong file for each sender, saying which it is', async () => {
+    const hub = await hubWith();
+    const put = (provider: string, payload: unknown) =>
+      authed(hub, hub.token, { method: 'PUT', url: `/api/v1/push/senders/${provider}`, payload });
+    const googleServices = JSON.stringify({
+      project_info: { project_id: 'core-hub-66772', project_number: '1' },
+      client: [{ client_info: { android_client_info: { package_name: 'com.twuijri.corehub' } } }],
+    });
+    const app = await put('fcm', { service_account: googleServices });
+    expect(app.statusCode).toBe(400);
+    expect(app.body).toContain('google-services.json');
+    const user = await put('fcm', {
+      service_account: JSON.stringify({ type: 'authorized_user', client_id: 'x' }),
+    });
+    expect(user.statusCode).toBe(400);
+    expect(user.body).toContain('authorized_user');
+
+    // An RSA key parses, but cannot sign an APNs token.
+    const { privateKey: rsa } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const wrongKey = await put('apns', {
+      key_id: 'ABC123DEFG',
+      team_id: 'DEF123GHIJ',
+      private_key: rsa.export({ format: 'pem', type: 'pkcs8' }).toString(),
+    });
+    expect(wrongKey.statusCode).toBe(400);
+    expect(wrongKey.body).toContain('EC P-256');
+    const notAKey = await put('apns', { key_id: 'ABC123DEFG', private_key: 'hello' });
+    expect(notAKey.statusCode).toBe(400);
+    expect(notAKey.body).toContain('.p8');
+  });
+
   it('lets the environment win over Settings', async () => {
     const hub = await hubWith({ COREHUB_APNS_KEY_ID: 'ABC123DEFG' });
     const apns = (
@@ -797,8 +830,8 @@ describe('devices: the senders', () => {
     expect(apns).toMatchObject({
       source: 'environment',
       state: 'not_configured',
-      missing: ['team_id', 'bundle_id', 'private_key'],
-      details: { key_id: 'ABC123DEFG' },
+      missing: ['team_id', 'private_key'],
+      details: { key_id: 'ABC123DEFG', bundle_id: 'com.twuijri.corehub' },
     });
     const refused = await authed(hub, hub.token, {
       method: 'PUT',
@@ -842,7 +875,7 @@ describe('devices: the senders', () => {
       payload: {
         key_id: 'ABC123DEFG',
         team_id: 'DEF123GHIJ',
-        bundle_id: 'com.twuijri.corehub',
+        // No bundle id: the hub's own app's is the default.
         environment: 'sandbox',
         private_key: privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(),
       },

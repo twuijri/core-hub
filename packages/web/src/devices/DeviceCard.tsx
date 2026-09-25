@@ -210,12 +210,16 @@ export function DeviceCard({
             ) : (
               t('devices.never_seen')
             )}
-            <span aria-hidden> · </span>
-            <span data-testid="device-paired">
-              {t(device.kind === 'browser' ? 'devices.added_on' : 'devices.paired_on', {
-                date: shortDate(device.paired_at, language),
-              })}
-            </span>
+            {device.paired_at && (
+              <>
+                <span aria-hidden> · </span>
+                <span data-testid="device-paired">
+                  {t(device.kind === 'browser' ? 'devices.added_on' : 'devices.paired_on', {
+                    date: shortDate(device.paired_at, language),
+                  })}
+                </span>
+              </>
+            )}
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={PUSH_TONE[push.state]} testId="device-push">

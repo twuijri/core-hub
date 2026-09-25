@@ -679,12 +679,35 @@
         "sandbox": "Sandbox (development builds)",
         "private_key": ".p8 key",
         "private_key_hint": "The contents of AuthKey_….p8. Stored encrypted and never shown again.",
-        "forget": "Forget"
+        "forget": "Forget",
+        "refused": "The hub refused it: {detail}",
+        "drop_here": "or drop the file here",
+        "paste_instead": "Paste instead",
+        "paste_hide": "Hide the text field",
+        "fcm_upload": "Upload the service-account JSON",
+        "fcm_ok": "Service account for project {project}.",
+        "fcm_not_json": "That file is not JSON. Choose the service-account key Firebase downloaded.",
+        "fcm_google_services": "That is google-services.json, the Android app's own file. The hub needs a service-account key: Firebase Console → Project settings → Service accounts → Generate new private key.",
+        "fcm_not_service_account": "That JSON is not a service-account key. Generate one under Firebase Console → Project settings → Service accounts.",
+        "fcm_missing": "That service account is missing type, project_id, client_email or private_key. Download a new key from Firebase.",
+        "apns_upload": "Upload AuthKey_….p8",
+        "apns_ok": "Key read. Its Key ID was taken from the file name.",
+        "apns_not_a_key": "That is not a .p8 key: it should start with -----BEGIN PRIVATE KEY-----.",
+        "apns_not_p8": "That is not the .p8 file. Apple lets you download it once, as AuthKey_<Key ID>.p8."
       },
       "manage": "Manage",
       "hide": "Hide",
       "env_title": "Or set it with environment variables",
-      "env_body": "Variables set on the hub win over what is saved here. The full list is in"
+      "env_body": "Variables set on the hub win over what is saved here. The full list is in",
+      "saved": "Saved",
+      "saved_project": "project {project}",
+      "saved_key": "key ending …{ending}",
+      "saved_team": "team {team}",
+      "saved_incomplete": "Saved, but not complete yet: open it again to fill in what is left.",
+      "valid": {
+        "fcm": "Saved. The service account looks valid; the first notification proves it with Google.",
+        "apns": "Saved. The key looks valid (it signed a test token); the first notification proves it with Apple."
+      }
     },
     "pair_heading": "Pair a phone or computer",
     "list_title": "Your devices",

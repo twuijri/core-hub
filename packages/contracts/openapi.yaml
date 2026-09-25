@@ -22652,8 +22652,13 @@ components:
             The device's last authenticated call to the hub, written at most once a minute: any call
             made with its pairing token, or with the sign-in that registered it (`devices.register`).
         paired_at:
-          $ref: '#/components/schemas/Timestamp'
-          description: When the device was last paired (or registered, for one that signed in).
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: |
+            When the device was last paired (or registered, for one that signed in). Always set by
+            this hub; null-able so that an app reading an older hub, which does not send it, still
+            decodes the device.
         app_token_id:
           oneOf:
             - $ref: '#/components/schemas/Ulid'

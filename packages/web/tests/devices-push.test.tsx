@@ -78,6 +78,13 @@ function device(over: Record<string, unknown> = {}) {
   };
 }
 
+const ACCOUNT = JSON.stringify({
+  type: 'service_account',
+  project_id: 'core-hub-66772',
+  client_email: 'push@core-hub-66772.iam.gserviceaccount.com',
+  private_key: '-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----\n',
+});
+
 const SENDERS = {
   items: [
     {
@@ -339,13 +346,22 @@ describe('the device list', () => {
       'https://github.com/twuijri/core-hub/blob/main/docs/DEPLOY.md',
     );
     expect(within(dialog).getByTestId('push-sender-save').hasAttribute('disabled')).toBe(true);
+    // The file is the way in; the text field waits behind "Paste instead".
+    expect(within(dialog).queryByLabelText('Service account JSON')).toBeNull();
+    await user.click(within(dialog).getByTestId('push-sender-paste'));
     await user.click(within(dialog).getByLabelText('Service account JSON'));
     await user.paste('{"project_id":"p"}');
+    expect(within(dialog).getByTestId('push-sender-save').hasAttribute('disabled')).toBe(true);
+    await user.clear(within(dialog).getByLabelText('Service account JSON'));
+    await user.paste(ACCOUNT);
+    expect(within(dialog).getByTestId('push-sender-file-ok').textContent).toContain(
+      'core-hub-66772',
+    );
     await user.click(within(dialog).getByTestId('push-sender-save'));
     await waitFor(() =>
       expect(sent.find((s) => s.method === 'PUT' && s.path === '/push/senders/fcm')?.body).toEqual({
         enabled: true,
-        service_account: '{"project_id":"p"}',
+        service_account: ACCOUNT,
       }),
     );
   });

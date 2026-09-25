@@ -183,7 +183,14 @@
           ]
         },
         "paired_at": {
-          "$ref": "#/$defs/Timestamp"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "app_token_id": {
           "oneOf": [

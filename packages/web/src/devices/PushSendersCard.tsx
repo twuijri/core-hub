@@ -9,7 +9,8 @@
  * form never fills it back in.
  */
 import { PRODUCT } from '@corehub/contracts';
-import { useState, type Ref } from 'react';
+import { useRef, useState, type ReactNode, type Ref } from 'react';
+import { HubApiError } from '@corehub/contracts';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import {
@@ -34,6 +35,7 @@ import {
   type PushSender,
   type PushSenderUpdate,
 } from './queries.js';
+import { ending, inspectP8, inspectServiceAccount } from './senderFiles.js';
 
 const TONE: Record<PushSender['state'], BadgeTone> = {
   ready: 'success',
@@ -68,6 +70,8 @@ export function PushSendersSection({
   const { t } = useI18n();
   const senders = usePushSenders(true);
   const [editing, setEditing] = useState<PushSender | null>(null);
+  /** What the hub made of the last save: the key looks valid, or why not. */
+  const [saved, setSaved] = useState<PushSender | null>(null);
   return (
     <details
       ref={ref}
@@ -124,7 +128,10 @@ export function PushSendersSection({
                       size="sm"
                       variant={sender.source === 'settings' ? 'ghost' : 'secondary'}
                       className="ms-auto"
-                      onClick={() => setEditing(sender)}
+                      onClick={() => {
+                        setSaved(null);
+                        setEditing(sender);
+                      }}
                       data-testid={`push-sender-edit-${sender.provider}`}
                     >
                       {t(
@@ -135,7 +142,22 @@ export function PushSendersSection({
                     </Button>
                   )}
                 </div>
-                {sender.last_error && (
+                <SavedLine sender={sender} />
+                {saved?.provider === sender.provider && (
+                  <Notice
+                    tone={
+                      saved.state === 'ready' || saved.state === 'disabled' ? 'success' : 'warning'
+                    }
+                    testId="push-sender-saved"
+                  >
+                    {saved.state === 'ready' || saved.state === 'disabled'
+                      ? t(`devices.push.valid.${saved.provider}`)
+                      : saved.state === 'not_configured'
+                        ? t('devices.push.saved_incomplete')
+                        : t('devices.push.form.refused', { detail: saved.last_error ?? '' })}
+                  </Notice>
+                )}
+                {sender.last_error && saved?.provider !== sender.provider && (
                   <p className="text-xs text-danger-soft-text" dir="auto">
                     {sender.last_error}
                   </p>
@@ -145,8 +167,36 @@ export function PushSendersSection({
           </ul>
         )}
       </div>
-      {editing && <SenderDialog sender={editing} onClose={() => setEditing(null)} />}
+      {editing && (
+        <SenderDialog sender={editing} onClose={() => setEditing(null)} onSaved={setSaved} />
+      )}
     </details>
+  );
+}
+
+/**
+ * What is stored, said without a secret: the project a service account belongs to; the APNs
+ * key's last characters and the team. A secret itself never comes back from the hub.
+ */
+function SavedLine({ sender }: { sender: PushSender }) {
+  const { t } = useI18n();
+  if (sender.source === 'none' || sender.provider === 'webpush') return null;
+  const d = sender.details;
+  const parts =
+    sender.provider === 'fcm'
+      ? d.project_id
+        ? [t('devices.push.saved_project', { project: d.project_id })]
+        : []
+      : [
+          ...(d.key_id ? [t('devices.push.saved_key', { ending: ending(d.key_id) })] : []),
+          ...(d.team_id ? [t('devices.push.saved_team', { team: d.team_id })] : []),
+          ...(d.environment === 'sandbox' ? [t('devices.push.form.sandbox')] : []),
+        ];
+  if (parts.length === 0) return null;
+  return (
+    <p className="text-xs text-muted" data-testid={`push-sender-stored-${sender.provider}`}>
+      {t('devices.push.saved')} — <bdi>{parts.join(' · ')}</bdi>
+    </p>
   );
 }
 
@@ -173,7 +223,93 @@ function EnvironmentNote({ provider }: { provider: 'fcm' | 'apns' }) {
   );
 }
 
-function SenderDialog({ sender, onClose }: { sender: PushSender; onClose(): void }) {
+/**
+ * A file chosen with the button or dropped on the zone, read as text. The zone is the
+ * button's surroundings: a person who drags the file from Finder drops it anywhere near.
+ */
+function FileDrop({
+  label,
+  accept,
+  testId,
+  onFile,
+  chosen,
+}: {
+  label: string;
+  accept: string;
+  testId: string;
+  onFile(name: string, text: string): void;
+  chosen: string | null;
+}) {
+  const { t } = useI18n();
+  const input = useRef<HTMLInputElement>(null);
+  const [over, setOver] = useState(false);
+  const read = (file: File | undefined) => {
+    if (!file) return;
+    void file.text().then((text) => onFile(file.name, text));
+  };
+  return (
+    <div
+      className={`flex flex-wrap items-center gap-3 rounded-md border border-dashed p-3 ${
+        over ? 'border-accent bg-sunken' : 'border-line-strong'
+      }`}
+      data-testid={`${testId}-drop`}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(event) => {
+        event.preventDefault();
+        setOver(false);
+        read(event.dataTransfer.files[0]);
+      }}
+    >
+      <Button variant="secondary" size="sm" onClick={() => input.current?.click()}>
+        {label}
+      </Button>
+      <span className="text-xs text-muted" dir="auto">
+        {chosen ?? t('devices.push.form.drop_here')}
+      </span>
+      <input
+        ref={input}
+        type="file"
+        accept={accept}
+        className="sr-only"
+        tabIndex={-1}
+        aria-label={label}
+        data-testid={testId}
+        onChange={(event) => {
+          read(event.target.files?.[0]);
+          event.target.value = '';
+        }}
+      />
+    </div>
+  );
+}
+
+/** The hub's reason for refusing a save, when it gave one; the generic message otherwise. */
+function refusal(
+  error: unknown,
+  t: (key: string, p?: Record<string, string | number>) => string,
+): string {
+  const detail =
+    error instanceof HubApiError
+      ? (error.body as { details?: { message?: unknown } } | undefined)?.details?.message
+      : undefined;
+  return typeof detail === 'string' && detail
+    ? t('devices.push.form.refused', { detail })
+    : describeError(error, t);
+}
+
+function SenderDialog({
+  sender,
+  onClose,
+  onSaved,
+}: {
+  sender: PushSender;
+  onClose(): void;
+  onSaved(result: PushSender): void;
+}) {
   const { t } = useI18n();
   const save = useSetPushSender();
   const forget = useDeletePushSender();
@@ -182,11 +318,42 @@ function SenderDialog({ sender, onClose }: { sender: PushSender; onClose(): void
   const [serviceAccount, setServiceAccount] = useState('');
   const [keyId, setKeyId] = useState(sender.details.key_id ?? '');
   const [teamId, setTeamId] = useState(sender.details.team_id ?? '');
+  // The hub offers its own app's bundle id (APP_IDS in the contract); the page never types it.
   const [bundleId, setBundleId] = useState(sender.details.bundle_id ?? '');
   const [environment, setEnvironment] = useState<'production' | 'sandbox'>(
     sender.details.environment === 'sandbox' ? 'sandbox' : 'production',
   );
   const [privateKey, setPrivateKey] = useState('');
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [pasting, setPasting] = useState(false);
+  const [fileProblem, setFileProblem] = useState<string | null>(null);
+
+  const account = serviceAccount.trim() ? inspectServiceAccount(serviceAccount) : null;
+  const key = privateKey.trim() ? inspectP8(fileName, privateKey) : null;
+
+  const onServiceAccount = (name: string, text: string) => {
+    setFileName(name);
+    const check = inspectServiceAccount(text);
+    if (check.ok) {
+      setServiceAccount(text);
+      setFileProblem(null);
+    } else {
+      setServiceAccount('');
+      setFileProblem(t(`devices.push.form.fcm_${check.reason}`));
+    }
+  };
+  const onP8 = (name: string, text: string) => {
+    setFileName(name);
+    const check = inspectP8(name, text);
+    if (check.ok) {
+      setPrivateKey(text);
+      setFileProblem(null);
+      if (check.keyId) setKeyId(check.keyId);
+    } else {
+      setPrivateKey('');
+      setFileProblem(t(`devices.push.form.apns_${check.reason}`));
+    }
+  };
 
   // A secret left empty keeps what is stored; the hub reads `[stored]` as "unchanged".
   const body: PushSenderUpdate =
@@ -202,8 +369,11 @@ function SenderDialog({ sender, onClose }: { sender: PushSender; onClose(): void
         };
   const ready =
     sender.provider === 'fcm'
-      ? stored || serviceAccount.trim() !== ''
-      : keyId.trim() !== '' && teamId.trim() !== '' && bundleId.trim() !== '';
+      ? (stored && !serviceAccount.trim()) || account?.ok === true
+      : keyId.trim() !== '' &&
+        teamId.trim() !== '' &&
+        bundleId.trim() !== '' &&
+        (privateKey.trim() ? key?.ok === true : stored);
   const error = save.error ?? forget.error;
 
   return (
@@ -231,7 +401,17 @@ function SenderDialog({ sender, onClose }: { sender: PushSender; onClose(): void
           <Button
             variant="primary"
             disabled={!ready || save.isPending}
-            onClick={() => save.mutate({ provider: sender.provider, body }, { onSuccess: onClose })}
+            onClick={() =>
+              save.mutate(
+                { provider: sender.provider, body },
+                {
+                  onSuccess: (result) => {
+                    onSaved(result);
+                    onClose();
+                  },
+                },
+              )
+            }
             data-testid="push-sender-save"
           >
             {t('common.save')}
@@ -242,24 +422,86 @@ function SenderDialog({ sender, onClose }: { sender: PushSender; onClose(): void
       <div className="flex flex-col gap-3">
         <Switch checked={enabled} onChange={setEnabled} label={t('devices.push.form.enabled')} />
         {sender.provider === 'fcm' ? (
-          <Field
-            label={t('devices.push.form.service_account')}
-            hint={t(
-              stored ? 'devices.push.form.secret_kept' : 'devices.push.form.service_account_hint',
+          <>
+            <FileDrop
+              label={t('devices.push.form.fcm_upload')}
+              accept=".json,application/json"
+              testId="push-sender-file"
+              onFile={onServiceAccount}
+              chosen={fileName}
+            />
+            {account?.ok && (
+              <Notice tone="success" testId="push-sender-file-ok">
+                {t('devices.push.form.fcm_ok', { project: account.projectId })}
+              </Notice>
             )}
-          >
-            {(props) => (
-              <Textarea
-                {...props}
-                rows={8}
-                dir="ltr"
-                value={serviceAccount}
-                onChange={(event) => setServiceAccount(event.target.value)}
-              />
+            {account && !account.ok && pasting && (
+              <Notice tone="warning">{t(`devices.push.form.fcm_${account.reason}`)}</Notice>
             )}
-          </Field>
+            {stored && !serviceAccount && (
+              <p className="text-xs text-muted">{t('devices.push.form.secret_kept')}</p>
+            )}
+            <PasteToggle open={pasting} onToggle={setPasting}>
+              <Field
+                label={t('devices.push.form.service_account')}
+                hint={t('devices.push.form.service_account_hint')}
+              >
+                {(props) => (
+                  <Textarea
+                    {...props}
+                    rows={8}
+                    dir="ltr"
+                    value={serviceAccount}
+                    onChange={(event) => {
+                      setFileName(null);
+                      setFileProblem(null);
+                      setServiceAccount(event.target.value);
+                    }}
+                  />
+                )}
+              </Field>
+            </PasteToggle>
+          </>
         ) : (
           <>
+            <FileDrop
+              label={t('devices.push.form.apns_upload')}
+              accept=".p8"
+              testId="push-sender-file"
+              onFile={onP8}
+              chosen={fileName}
+            />
+            {key?.ok && fileName && (
+              <Notice tone="success" testId="push-sender-file-ok">
+                {t('devices.push.form.apns_ok')}
+              </Notice>
+            )}
+            {key && !key.ok && pasting && (
+              <Notice tone="warning">{t(`devices.push.form.apns_${key.reason}`)}</Notice>
+            )}
+            {stored && !privateKey && (
+              <p className="text-xs text-muted">{t('devices.push.form.secret_kept')}</p>
+            )}
+            <PasteToggle open={pasting} onToggle={setPasting}>
+              <Field
+                label={t('devices.push.form.private_key')}
+                hint={t('devices.push.form.private_key_hint')}
+              >
+                {(props) => (
+                  <Textarea
+                    {...props}
+                    rows={6}
+                    dir="ltr"
+                    value={privateKey}
+                    onChange={(event) => {
+                      setFileName(null);
+                      setFileProblem(null);
+                      setPrivateKey(event.target.value);
+                    }}
+                  />
+                )}
+              </Field>
+            </PasteToggle>
             {(
               [
                 ['key_id', keyId, setKeyId],
@@ -274,6 +516,7 @@ function SenderDialog({ sender, onClose }: { sender: PushSender; onClose(): void
                     dir="ltr"
                     value={value}
                     onChange={(event) => set(event.target.value)}
+                    data-testid={`push-sender-${field}`}
                   />
                 )}
               </Field>
@@ -287,27 +530,44 @@ function SenderDialog({ sender, onClose }: { sender: PushSender; onClose(): void
                 { value: 'sandbox', label: t('devices.push.form.sandbox') },
               ]}
             />
-            <Field
-              label={t('devices.push.form.private_key')}
-              hint={t(
-                stored ? 'devices.push.form.secret_kept' : 'devices.push.form.private_key_hint',
-              )}
-            >
-              {(props) => (
-                <Textarea
-                  {...props}
-                  rows={6}
-                  dir="ltr"
-                  value={privateKey}
-                  onChange={(event) => setPrivateKey(event.target.value)}
-                />
-              )}
-            </Field>
           </>
         )}
+        {fileProblem && (
+          <Notice tone="danger" testId="push-sender-file-problem">
+            {fileProblem}
+          </Notice>
+        )}
         {sender.provider !== 'webpush' && <EnvironmentNote provider={sender.provider} />}
-        {error && <Notice tone="danger">{describeError(error, t)}</Notice>}
+        {error && <Notice tone="danger">{refusal(error, t)}</Notice>}
       </div>
     </Dialog>
+  );
+}
+
+/** "Paste instead": the text field behind the file, for a key copied from elsewhere. */
+function PasteToggle({
+  open,
+  onToggle,
+  children,
+}: {
+  open: boolean;
+  onToggle(open: boolean): void;
+  children: ReactNode;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="flex flex-col gap-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="self-start"
+        aria-expanded={open}
+        onClick={() => onToggle(!open)}
+        data-testid="push-sender-paste"
+      >
+        {t(open ? 'devices.push.form.paste_hide' : 'devices.push.form.paste_instead')}
+      </Button>
+      {open && children}
+    </div>
   );
 }
