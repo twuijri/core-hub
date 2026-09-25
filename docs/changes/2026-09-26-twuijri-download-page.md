@@ -110,10 +110,25 @@ fallback (api.github.com → 403): الملاحظة ظاهرة، كل الأزر
 أول لقطة للجوال كشفت تمريرًا أفقيًا (513 من 390) من كتلة الشيفرة داخل الشبكة؛ أصلحته بـ
 `minmax(0, 1fr)` وأعدت القياس (390/390). وجملة «(M1 أو أحدث)» كانت تنقلب في RTL فأعدت صياغتها.
 
-CI على الـPR: يُحدَّث بعد الدفع.
+CI على الفرع (تشغيل يدوي لـ`ci.yml`، الرقم 36198344444) قبل فتح الـPR — كل المهام نجحت، ومنها
+اختبارات الصفحة وبناؤها داخل «Lint, typecheck, contracts, client tests, build»:
+```
+success
+Lint, typecheck, contracts, client tests, build: success
+Lint, typecheck, contracts, tests, build: success
+Server unit tests (shard 1/3, 2/3, 3/3): success
+Web smoke journeys (Playwright against the real hub): success
+Desktop app smoke (Electron under Xvfb against the real hub): success
+Docker image builds and answers /health: success
+db:generate + db:migrate (SQLite and PostgreSQL): success
+ ✓ tests/page.test.ts (9 tests)
+ ✓ tests/releases.test.ts (32 tests)
+site: built site/dist
+```
+`pages.yml` نفسه لا يعمل إلا على `main` بعد الدمج وبعد خطوة المالك؛ لم يُشغَّل.
 
 ## المخاطر والرجوع
-- حد الـAPI غير الموثّق ٦٠ طلبًا في الساعة لكل عنوان IP؛ بعده تعمل الصفحة بالرجوع إلى صفحة
+- حد الـAPI للطلبات بلا تسجيل دخول ٦٠ طلبًا في الساعة لكل عنوان IP؛ بعده تعمل الصفحة بالرجوع إلى صفحة
   الإصدارات، والتخزين عشر دقائق يخفّف التكرار.
 - `/releases/latest` يتجاهل الإصدارات التجريبية والمسودات؛ هذا المقصود.
 - النشر الأول يفشل حتى يختار المالك مصدر Pages «GitHub Actions»؛ لا أثر على بقية CI.
