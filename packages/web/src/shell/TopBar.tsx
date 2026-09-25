@@ -3,6 +3,7 @@ import { useMeta } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { IconMenu, IconPanel } from '../ui/icons.js';
 import { usePane } from './pane.js';
+import { PendingActions } from './PendingActions.js';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher.js';
 
 export function TopBar({ title, onMenu }: { title: string; onMenu: () => void }) {
@@ -32,6 +33,7 @@ export function TopBar({ title, onMenu }: { title: string; onMenu: () => void })
       <span className="hidden text-xs text-muted sm:inline" dir="auto">
         {hubName}
       </span>
+      <PendingActions />
       <WorkspaceSwitcher />
       {pane.content && pane.collapsed && (
         <button

@@ -744,3 +744,21 @@
   font-size: var(--ch-font-size-xs);
   line-height: var(--ch-font-leading-normal);
 }
+
+/* The pending-actions bar's count (shell/PendingActions.tsx): a small disc on the tray's
+   corner, the accent that says "yours to do", on the reading direction's end side. */
+.ch-pending-count {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  min-inline-size: 1.1rem;
+  padding-inline: 0.25rem;
+  border-radius: var(--ch-radius-full);
+  background: var(--ch-color-accent);
+  color: var(--ch-color-accent-text);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.1rem;
+  text-align: center;
+  pointer-events: none;
+}

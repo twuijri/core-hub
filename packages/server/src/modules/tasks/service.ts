@@ -767,7 +767,7 @@ export class TasksService {
         currentRunId: null,
         status: current.status === 'running' ? 'ready' : current.status,
         // A person who stops a task wants it stopped: it waits in `ready` and does not start
-        // again by itself (DECISIONS §46). A reassignment is not a stop — the new agent's
+        // again by itself (DECISIONS §47). A reassignment is not a stop — the new agent's
         // start follows.
         ...(note === 'reassigned' ? {} : { autoStart: false }),
         updatedAt: new Date(),

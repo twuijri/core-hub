@@ -69,7 +69,7 @@ const envSchema = z.object({
   /**
    * Tasks: how many runs the hub starts **on its own** (`auto_start`) at once in one profile.
    * A person's "assign and start" is never held back by it; an automatic start waits for a
-   * free place instead (DECISIONS §46).
+   * free place instead (DECISIONS §47).
    */
   COREHUB_TASK_AUTO_START_MAX: z.coerce
     .number()

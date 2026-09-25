@@ -2007,6 +2007,108 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /sessions/global-agent:
+    post:
+      operationId: sessions.openGlobalAgent
+      tags: [sessions]
+      summary: Open the global agent (the person's standing conversation in this profile)
+      description: |
+        The global agent is one conversation per person per profile (`source: global_agent`)
+        that is not a chat in the list: a client reaches it from search and from the
+        pending-actions bar, never from a menu (docs/clients/NAVIGATION.md). This returns
+        the caller's own one, and creates it with `agent_id` the first time — `200` for the
+        one that exists (whatever agent it was made with; `agent_id` is then ignored),
+        `201` for a new one. It cannot be archived (`sessions.update` answers
+        `409 state_invalid`); deleting it is allowed, and the next open makes a new one.
+        Contract decision §46.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlobalAgentOpen'
+            example:
+              agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AG
+      x-rt-events: [session.created]
+      responses:
+        '200':
+          description: The caller's global-agent conversation, which already existed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+              example:
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0YG
+                profile: work
+                owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                created_at: '2026-09-25T10:20:00Z'
+                updated_at: '2026-09-25T11:02:00Z'
+                agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AG
+                title: 'ما الذي ينتظرني اليوم؟'
+                source: global_agent
+                origin: null
+                channel: null
+                model: null
+                provider: null
+                reasoning_effort: null
+                working_dir: /home/agent/workspaces/work/01J8QK3ZR2W7M5N4P6T8V9X0YG
+                pinned: false
+                archived: false
+                category_id: null
+                preview: 'عندك موافقتان معلّقتان وسؤال من الوكيل.'
+                message_count: 2
+                usage: null
+                context: null
+                status: idle
+                active_run_id: null
+                parent_session_id: null
+                notify: true
+                last_message_at: '2026-09-25T11:02:00Z'
+                match: null
+        '201':
+          description: The caller's global-agent conversation, created now.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+              example:
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0YG
+                profile: work
+                owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                created_at: '2026-09-25T10:20:00Z'
+                updated_at: '2026-09-25T10:20:00Z'
+                agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AG
+                title: null
+                source: global_agent
+                origin: null
+                channel: null
+                model: null
+                provider: null
+                reasoning_effort: null
+                working_dir: /home/agent/workspaces/work/01J8QK3ZR2W7M5N4P6T8V9X0YG
+                pinned: false
+                archived: false
+                category_id: null
+                preview: null
+                message_count: 0
+                usage: null
+                context: null
+                status: idle
+                active_run_id: null
+                parent_session_id: null
+                notify: true
+                last_message_at: null
+                match: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/AgentUnavailable'
   /sessions/{session_id}:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -2134,6 +2236,9 @@ paths:
         (`sessions.cancelRun`) for every live run: queued runs are cancelled before they
         start, an active run is interrupted and ends `cancelled` with its own
         `run.cancelled`. Restoring (`archived: false`) starts nothing (contract decision §31).
+
+        The global agent's conversation (`source: global_agent`) is never archived:
+        `archived: true` on it is `409 state_invalid` (contract decision §46).
       requestBody:
         required: true
         content:
@@ -13744,6 +13849,13 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Ulid'
             - type: 'null'
+    GlobalAgentOpen:
+      type: object
+      required: [agent_id]
+      description: The agent a first open makes the global agent's conversation with.
+      properties:
+        agent_id:
+          $ref: '#/components/schemas/Ulid'
     SessionPatch:
       type: object
       description: JSON merge-patch; every field optional, `null` clears.

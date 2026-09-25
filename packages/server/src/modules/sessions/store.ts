@@ -139,6 +139,26 @@ export class SessionsStore {
       .get();
   }
 
+  /**
+   * The person's global-agent conversation in this workspace (contract decision §46): the
+   * oldest one, should two ever exist, so every open lands on the same conversation.
+   */
+  findGlobalAgent(workspace: string, ownerId: string): SessionRow | undefined {
+    return this.db
+      .select()
+      .from(sessions)
+      .where(
+        and(
+          eq(sessions.workspace, workspace),
+          eq(sessions.ownerId, ownerId),
+          eq(sessions.source, 'global_agent'),
+        ),
+      )
+      .orderBy(asc(sessions.createdAt), asc(sessions.id))
+      .limit(1)
+      .get();
+  }
+
   updateSession(workspace: string, id: string, patch: Partial<SessionRow>): SessionRow | undefined {
     this.db
       .update(sessions)

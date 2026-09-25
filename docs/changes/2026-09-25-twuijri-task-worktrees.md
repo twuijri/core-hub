@@ -63,7 +63,7 @@
 6. **اسم الفرع** `task/<مفتاح-رقم>-<slug>` مع البديل من معرّف المهمة للمفاتيح غير اللاتينية.
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
-أوصاف وأمثلة فقط، بلا حقل ولا عملية ولا حدث جديد — DECISIONS §46:
+أوصاف وأمثلة فقط، بلا حقل ولا عملية ولا حدث جديد — DECISIONS §47:
 - `Project.working_dir` و`default_branch`: القاعدة أعلاه؛ `createProject`/`updateProject`: أسباب
   `400`؛ `deleteProject`: الشجر تُزال أولًا.
 - `Worktree` ووصف `status` (`error` يحمل كلام git؛ `merged`/`removed` محجوزتان).
@@ -100,7 +100,7 @@
   و`e2e/hub.ts` (أداة اختبار `/__e2e/git-repo` تصنع مستودعًا حين تطلبه الرحلة، لا عند الإقلاع،
   فلا تراه رحلة أخرى).
 - `packages/contracts/openapi.yaml` و`events/tasks/*.schema.json` (أوصاف وأمثلة)،
-  `docs/contracts/DECISIONS.md` (§46)، `docs/STATUS.md`.
+  `docs/contracts/DECISIONS.md` (§47)، `docs/STATUS.md`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 محليًا ما يلمسه التغيير فقط (قاعدة السرعة)، والباقي على CI:

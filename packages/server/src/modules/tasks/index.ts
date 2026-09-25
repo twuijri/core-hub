@@ -20,7 +20,7 @@
  * branch stays), and can be removed from the task's details. A task without a repository
  * keeps the session's own folder. And a task with `auto_start` starts **on its own** when it
  * is `ready` and given to an agent — at most `COREHUB_TASK_AUTO_START_MAX` such runs at once
- * per profile; the rest wait their turn (DECISIONS §46).
+ * per profile; the rest wait their turn (DECISIONS §47).
  *
  * Still not done: reporting into a project's room, which waits on `rooms`.
  */
