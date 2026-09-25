@@ -1949,13 +1949,15 @@
     "lane": {
       "input": "Input",
       "model": "Model",
-      "tools": "Tools"
+      "tools": "Tools",
+      "subagents": "Subagents"
     },
     "kind": {
       "input": "Input",
       "turn": "Turn",
       "reasoning": "Reasoning",
-      "tool": "Tool call"
+      "tool": "Tool call",
+      "subagent": "Subagent"
     },
     "status": {
       "running": "running",
@@ -2149,6 +2151,65 @@
       "binary": "A binary file: there are no lines to compare.",
       "too_large": "The changes to this file are too large to show here.",
       "unavailable": "The hub saw this file change but kept no copy of it from before the run, so it cannot show the lines."
+    }
+  },
+  "subagents": {
+    "title": "Subagents",
+    "running_count": "{count} running",
+    "finished": "Finished ({count})",
+    "stop": "Stop",
+    "steer": "Steer",
+    "steer_placeholder": "Tell it what to change…",
+    "steer_send": "Send",
+    "steer_queued": "Sent. It reads it before its next step.",
+    "steer_rejected": "It no longer takes guidance.",
+    "view": "View",
+    "tools": "{count} tools",
+    "last_tool": "last: {tool}",
+    "status": {
+      "running": "Running",
+      "completed": "Done",
+      "failed": "Failed",
+      "interrupted": "Stopped"
+    },
+    "observe_note": "This agent only says when its subagents start and end.",
+    "sheet_title": "Subagent",
+    "close": "Close",
+    "status_label": "Status",
+    "model": "Model",
+    "elapsed": "Time",
+    "tool_count": "Tools",
+    "summary": "Last words",
+    "recent_tools": "Recent tools",
+    "output": "Live output",
+    "no_output": "Nothing to show yet.",
+    "output_truncated": "Only the end is shown.",
+    "open_trajectory": "Open in Trajectory"
+  },
+  "background": {
+    "open": "Background",
+    "open_count": "Running in the background: {count}",
+    "title": "Background",
+    "close": "Close",
+    "none": "Nothing is running.",
+    "none_body": "Chats, tasks, schedules, workflows, jobs and subagents appear here while they work.",
+    "finished": "Finished in the last 24 hours ({count})",
+    "stop": "Stop",
+    "open_item": "Open",
+    "kind": {
+      "chat_run": "Chat",
+      "task_run": "Task",
+      "schedule_run": "Schedule",
+      "workflow_run": "Workflow",
+      "job": "Job",
+      "subagent": "Subagent"
+    },
+    "status": {
+      "queued": "Queued",
+      "running": "Running",
+      "succeeded": "Done",
+      "failed": "Failed",
+      "cancelled": "Stopped"
     }
   }
 }

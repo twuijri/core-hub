@@ -12,7 +12,8 @@ import type { Server as SocketServer } from 'socket.io';
 import { requireSqlite } from '../../lib/db.js';
 import { HubError } from '../../lib/errors.js';
 import { defineModule, REALTIME_NAMESPACES, type HubModule } from '../../lib/module.js';
-import { AuditService } from '../audit/index.js';
+import { AuditService, type BackgroundSource } from '../audit/index.js';
+import { sessionsBackground } from './background.js';
 import { attachSessionsRealtime, sessionsRealtimeFor, type FollowCheck } from './realtime.js';
 import { registerSessionRoutes } from './routes.js';
 import { derivedScopeResolver, type ScopeCaller, type ScopeResolver } from './scope.js';
@@ -120,6 +121,10 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
         },
         outcome: (workspace, runId) => serviceFor(app, app.log).turnResult(workspace, runId),
       });
+      backgrounds.set(
+        app,
+        sessionsBackground(() => serviceFor(app, app.log)),
+      );
       gates.set(app, {
         raise: (scope, input) => serviceFor(app, app.log).raiseWorkflowApproval(scope, input),
         cancel: (scope, workflowRunId) =>
@@ -189,6 +194,13 @@ const runs = new WeakMap<FastifyInstance, SessionRuns>();
 /** `null` when this app composes no sessions module. */
 export function sessionRunsFor(app: FastifyInstance): SessionRuns | null {
   return runs.get(app) ?? null;
+}
+
+const backgrounds = new WeakMap<FastifyInstance, BackgroundSource>();
+
+/** This module's runs and subagents in the Background panel (§56); `null` when not composed. */
+export function sessionBackgroundFor(app: FastifyInstance): BackgroundSource | null {
+  return backgrounds.get(app) ?? null;
 }
 
 /**

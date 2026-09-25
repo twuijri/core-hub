@@ -9,7 +9,7 @@
  * the scheduler claims, with a compare-and-set on that very value, so two ticks — two
  * processes, or one restarted — never fire the same moment twice.
  */
-import { and, asc, desc, eq, inArray, isNull, lt, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { newUlid } from '../../db/ids.js';
 import type { ModuleDb } from '../../lib/db.js';
 import { conflict, notFound } from '../../lib/errors.js';
@@ -1204,6 +1204,35 @@ export class SchedulesService {
         ),
       )
       .run();
+  }
+
+  /**
+   * The Background panel's workflow runs (§56): one person's in these workspaces — every one not
+   * over, and those that ended at or after `since` — with the workflow's name.
+   */
+  backgroundWorkflowRuns(
+    ownerId: string,
+    workspaces: readonly string[],
+    since: number,
+  ): Array<{ run: WorkflowRunRow; name: string }> {
+    if (workspaces.length === 0) return [];
+    return this.db
+      .select({ run: workflowRuns, name: workflows.name })
+      .from(workflowRuns)
+      .innerJoin(workflows, eq(workflows.id, workflowRuns.workflowId))
+      .where(
+        and(
+          eq(workflowRuns.ownerId, ownerId),
+          inArray(workflowRuns.workspace, [...workspaces]),
+          or(
+            inArray(workflowRuns.status, ['queued', 'running', 'waiting_approval', 'paused']),
+            sql`${workflowRuns.finishedAt} >= ${since}`,
+          ),
+        ),
+      )
+      .orderBy(desc(workflowRuns.createdAt))
+      .limit(500)
+      .all();
   }
 
   cancelWorkflowRun(scope: Scope, id: string): WorkflowRunRow {

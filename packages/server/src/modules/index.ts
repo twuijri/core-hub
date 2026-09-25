@@ -45,6 +45,7 @@ import {
   registerWorkflowGate,
   runActivity,
   sessionActivityFor,
+  sessionBackgroundFor,
   sessionRunsFor,
   sessionTurnsFor,
   workflowApprovalsFor,
@@ -67,6 +68,7 @@ import {
   registerScheduleRunner,
   registerWorkflowPorts,
   schedulesModule,
+  workflowBackgroundFor,
   workflowGateFor,
 } from './schedules/index.js';
 import {
@@ -79,7 +81,13 @@ import { modelsModule, modelsServiceFor } from './models/index.js';
 import { devicesModule } from './devices/index.js';
 import { createNotifier, notifyModule } from './notify/index.js';
 import { updatesModule } from './updates/index.js';
-import { auditFor, auditModule, registerAnalyticsSources, registerLiveSources } from './audit/index.js';
+import {
+  auditFor,
+  auditModule,
+  registerAnalyticsSources,
+  registerBackgroundSource,
+  registerLiveSources,
+} from './audit/index.js';
 import { pluginsModule } from './plugins/index.js';
 
 // The one wiring line the sessions module asked for: its ports come from `agents` (the
@@ -484,6 +492,13 @@ registerLiveSources((app) => ({
     }));
   },
 }));
+
+/**
+ * The Background panel (contract decision §56) is `audit`'s list of a person's work; the runs
+ * and subagents are `sessions`'s, the workflow runs `schedules`'s. Each answers for its own.
+ */
+registerBackgroundSource((app) => sessionBackgroundFor(app));
+registerBackgroundSource((app) => workflowBackgroundFor(app));
 
 export const modules: readonly HubModule[] = [
   authModule,

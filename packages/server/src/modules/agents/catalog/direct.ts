@@ -38,4 +38,6 @@ export const direct: CatalogEntry = {
   // a given model accepts an image is that model row's own capability, checked per turn.
   capabilities: ['streaming', 'vision', 'resume'],
   sections: ['settings'],
+  // The hub's own agent does not delegate.
+  subagents: 'none',
 };

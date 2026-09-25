@@ -33,6 +33,7 @@ import type { EngineScope } from './engine.js';
 import type { ScopeResolver } from './scope.js';
 import type { SessionsService } from './service.js';
 import { DEFAULT_LIMIT, MAX_LIMIT } from './store.js';
+import { toSubagent } from './subagents.js';
 
 const ulid = z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/, 'must be a ULID');
 const limit = z.coerce.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT);
@@ -338,6 +339,46 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     const run_id = pathId(request.params, 'run_id', 'run');
     const query = parse(z.object({ path: z.string().min(1).max(4096) }), request.query, 'query');
     return deps.service(request).runChangeDiff(scope, session_id, run_id, query.path);
+  });
+
+  // ------------------------------------------------------------ subagents (§56)
+
+  const subagentId = (params: unknown): string => {
+    const value = (params as { subagent_id?: unknown }).subagent_id;
+    if (typeof value !== 'string' || value === '' || value.length > 200) {
+      throw notFound({ resource: 'subagent', id: String(value ?? '') });
+    }
+    return value;
+  };
+
+  app.get('/sessions/:session_id/subagents', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const list = await deps.service(request).listSubagents(scope, session_id);
+    return { support: list.support, items: list.items.map(toSubagent) };
+  });
+
+  app.post('/sessions/:session_id/subagents/:subagent_id/interrupt', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const id = subagentId(request.params);
+    return toSubagent(await deps.service(request).interruptSubagent(scope, session_id, id));
+  });
+
+  app.post('/sessions/:session_id/subagents/:subagent_id/steer', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const id = subagentId(request.params);
+    const body = parse(z.object({ text: z.string().trim().min(1).max(4000) }), request.body);
+    const status = await deps.service(request).steerSubagent(scope, session_id, id, body.text);
+    return { status };
+  });
+
+  app.get('/sessions/:session_id/subagents/:subagent_id/tail', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const id = subagentId(request.params);
+    return deps.service(request).tailSubagent(scope, session_id, id);
   });
 
   // ------------------------------------------------------------- messages

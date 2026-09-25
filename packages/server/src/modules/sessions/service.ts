@@ -41,6 +41,7 @@ import {
   type OpenedFile,
   type SessionFileEntry,
 } from './files.js';
+import { SubagentBook, type SubagentRecord, type SubagentSupport } from './subagents.js';
 
 /** `undefined` is spelled out everywhere: `exactOptionalPropertyTypes` is on. */
 export interface ContentBlockInput {
@@ -137,6 +138,8 @@ export class SessionsService {
   readonly store: SessionsStore;
   readonly audit: AuditService;
   readonly engine: RunEngine;
+  /** The subagents of every conversation (§56). */
+  readonly subagents: SubagentBook;
 
   constructor(
     store: SessionsStore,
@@ -151,7 +154,63 @@ export class SessionsService {
   ) {
     this.store = store;
     this.audit = audit;
-    this.engine = new RunEngine({ store, audit, realtime, ports, log, hostEnv });
+    this.subagents = new SubagentBook({
+      store,
+      realtime,
+      activeRunOf: (sessionId) => this.engine.activeRunOf(sessionId),
+      control: (sessionId) => ports.runner.subagents?.(sessionId) ?? null,
+    });
+    this.engine = new RunEngine({
+      store,
+      audit,
+      realtime,
+      ports,
+      log,
+      hostEnv,
+      subagents: this.subagents,
+    });
+    ports.runner.onSubagent?.((sessionId, signal) => this.subagents.onSignal(sessionId, signal));
+  }
+
+  // ------------------------------------------------------------ subagents (§56)
+
+  /** `sessions.listSubagents`: what the agent supports, and its subagents. */
+  async listSubagents(
+    scope: EngineScope,
+    sessionId: string,
+  ): Promise<{ support: SubagentSupport; items: SubagentRecord[] }> {
+    const row = this.requireSession(scope, sessionId);
+    const live = this.ports.runner.subagents?.(row.id);
+    const support: SubagentSupport =
+      live?.support ??
+      (await this.ports.agents.find(scope.workspace, row.agentId).catch(() => null))?.subagents ??
+      'none';
+    return { support, items: this.subagents.list(scope.workspace, row.id) };
+  }
+
+  interruptSubagent(scope: EngineScope, sessionId: string, id: string): Promise<SubagentRecord> {
+    const row = this.requireSession(scope, sessionId);
+    return this.subagents.interrupt(scope.workspace, row.id, id);
+  }
+
+  steerSubagent(
+    scope: EngineScope,
+    sessionId: string,
+    id: string,
+    text: string,
+  ): Promise<'queued' | 'rejected'> {
+    const row = this.requireSession(scope, sessionId);
+    return this.subagents.steer(scope.workspace, row.id, id, text);
+  }
+
+  /** Whether the live conversation's agent can stop one of its subagents. */
+  canStopSubagents(sessionId: string): boolean {
+    return !!this.ports.runner.subagents?.(sessionId)?.interrupt;
+  }
+
+  tailSubagent(scope: EngineScope, sessionId: string, id: string) {
+    const row = this.requireSession(scope, sessionId);
+    return this.subagents.tail(scope.workspace, row.id, id);
   }
 
   // ------------------------------------------------------------- sessions
@@ -566,6 +625,7 @@ export class SessionsService {
       toolCalls: this.store.toolCallsForRuns(scope.workspace, ids),
       usage: this.audit.totalsForRuns(scope.workspace, ids),
       live,
+      subagents: this.subagents.list(scope.workspace, row.id),
       now,
     });
   }

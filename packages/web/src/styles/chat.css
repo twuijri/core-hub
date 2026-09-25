@@ -1433,3 +1433,177 @@ button.run-change:focus-visible {
     display: none;
   }
 }
+
+/* ------------------------------------------------ the Subagents panel (§56) */
+/* Above the composer, in the reading column; a quiet card that folds to one line. */
+.chat-flow .subagents {
+  inline-size: 100%;
+  max-inline-size: var(--ch-layout-composer-max);
+  margin-inline: auto;
+}
+.subagents {
+  display: flex;
+  flex-direction: column;
+  margin-block-end: var(--ch-space-2);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-surface);
+  font-size: var(--ch-font-size-sm);
+}
+.subagents-head {
+  display: flex;
+  align-items: center;
+  gap: var(--ch-space-2);
+  padding-inline: var(--ch-space-3);
+  padding-block: var(--ch-space-2);
+  border: 0;
+  background: none;
+  color: var(--ch-color-text);
+  text-align: start;
+  cursor: pointer;
+}
+.subagents-head:focus-visible,
+.subagents-finished-toggle:focus-visible {
+  outline: 2px solid var(--ch-color-focus);
+  outline-offset: -2px;
+}
+.subagents-chevron {
+  transition: transform var(--ch-motion-fast) var(--ch-motion-ease);
+}
+.subagents-chevron[data-open='true'] {
+  transform: rotate(180deg);
+}
+.subagents-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-2);
+  padding-inline: var(--ch-space-3);
+  padding-block-end: var(--ch-space-3);
+  max-block-size: 40vh;
+  overflow-y: auto;
+}
+.subagents-note {
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
+}
+.subagents-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-1);
+}
+.subagent-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ch-space-2);
+  padding-block: var(--ch-space-1);
+  padding-inline-start: calc(var(--indent, 0) * var(--ch-space-4));
+  border-block-end: 1px solid var(--ch-color-border);
+}
+.subagent-row:last-child {
+  border-block-end: 0;
+}
+.subagent-row[data-status='running'] {
+  border-inline-start: 2px solid var(--ch-color-status-running);
+  padding-inline-start: calc(var(--indent, 0) * var(--ch-space-4) + var(--ch-space-2));
+}
+.subagent-line {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.subagent-goal {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.subagent-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ch-space-2);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
+}
+.subagent-actions {
+  display: flex;
+  gap: var(--ch-space-1);
+}
+.subagent-steer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ch-space-2);
+  inline-size: 100%;
+}
+.subagent-steer > :first-child {
+  flex: 1;
+  min-inline-size: 12rem;
+}
+.subagent-steer-result {
+  inline-size: 100%;
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
+}
+.subagents-finished-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ch-space-1);
+  padding-block: var(--ch-space-1);
+  border: 0;
+  background: none;
+  color: var(--ch-color-text-muted);
+  font-size: var(--ch-font-size-xs);
+  cursor: pointer;
+}
+.subagent-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-3);
+}
+.subagent-sheet-goal {
+  font-weight: 600;
+}
+.subagent-sheet-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: var(--ch-space-2);
+  font-size: var(--ch-font-size-sm);
+}
+.subagent-sheet-facts dt {
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
+}
+.subagent-sheet-heading {
+  margin-block-end: var(--ch-space-1);
+  font-size: var(--ch-font-size-xs);
+  font-weight: 600;
+  color: var(--ch-color-text-muted);
+}
+.subagent-sheet-text {
+  white-space: pre-wrap;
+}
+.subagent-sheet-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--ch-font-size-xs);
+}
+.subagent-sheet-output {
+  max-block-size: 20rem;
+  overflow: auto;
+  padding: var(--ch-space-2);
+  border-radius: var(--ch-radius-sm);
+  background: var(--ch-color-code-bg);
+  color: var(--ch-color-code-text);
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-font-size-xs);
+  white-space: pre-wrap;
+}
+/* A subagent in the Trajectory: its own lane, its own colour (§56). */
+.trajectory-bar[data-kind='subagent'],
+.trajectory-dot[data-kind='subagent'] {
+  background: var(--ch-color-status-running);
+}

@@ -21,6 +21,8 @@ import type {
   AgentRunInput,
   AgentRunRequest,
   AgentRunner,
+  AgentSubagentControl,
+  AgentSubagentSignal,
 } from '../ports.js';
 
 export class FakeAgentDirectory implements AgentDirectory {
@@ -40,8 +42,12 @@ export class FakeAgentDirectory implements AgentDirectory {
   }
 }
 
-/** One step of a script: an event to emit, or a pause until a person answers. */
-export type ScriptStep = AgentEvent | { type: 'await_input' };
+/**
+ * One step of a script: an event to emit, a pause until a person answers, or a report about a
+ * subagent (§56), which goes to `onSubagent` listeners rather than into the turn.
+ */
+export type ScriptStep =
+  AgentEvent | { type: 'await_input' } | { type: 'subagent'; signal: AgentSubagentSignal };
 
 export interface FakeRunnerOptions {
   /** Events for the next run, in order. */
@@ -63,9 +69,16 @@ export interface FakeRunnerOptions {
    * proves the fallback.
    */
   answer?: string | null | ((request: AgentAskRequest) => string | null | Promise<string | null>);
+  /**
+   * What the agent lets a person do with its subagents (§56). `full` answers every verb —
+   * a stop is confirmed at once with a `completed` / `interrupted` report — `observe` none.
+   * Absent: the runner has no subagents at all.
+   */
+  subagents?: 'full' | 'observe';
 }
 
 interface RunChannel {
+  runId: string;
   queue: ScriptStep[];
   waiting: ((value: IteratorResult<AgentEvent>) => void)[];
   pending: AgentEvent[];
@@ -79,7 +92,14 @@ export class FakeAgentRunner implements AgentRunner {
   readonly asked: AgentAskRequest[] = [];
   readonly inputs: Array<{ runId: string; input: AgentRunInput }> = [];
   readonly interrupted: string[] = [];
+  /** Every subagent verb the hub used, in order (§56). */
+  readonly subagentCalls: Array<{ verb: string; sessionId: string; id?: string; text?: string }> =
+    [];
   private readonly channels = new Map<string, RunChannel>();
+  private readonly sessionOfRun = new Map<string, string>();
+  private readonly subagentListeners = new Set<
+    (sessionId: string, signal: AgentSubagentSignal) => void
+  >();
   private script: ScriptStep[];
 
   /**
@@ -108,8 +128,10 @@ export class FakeAgentRunner implements AgentRunner {
   async start(request: AgentRunRequest): Promise<AgentRunAccepted> {
     if (this.options.failOnStart) throw this.options.failOnStart;
     this.started.push(request);
+    this.sessionOfRun.set(request.runId, request.sessionId);
     await this.options.onStart?.(request);
     this.channels.set(request.runId, {
+      runId: request.runId,
       queue: [...this.script],
       waiting: [],
       pending: [],
@@ -162,6 +184,39 @@ export class FakeAgentRunner implements AgentRunner {
     this.wake(channel);
   }
 
+  onSubagent(listener: (sessionId: string, signal: AgentSubagentSignal) => void): () => void {
+    this.subagentListeners.add(listener);
+    return () => this.subagentListeners.delete(listener);
+  }
+
+  /** Tell the hub about a subagent of `sessionId`, as an agent would between turns. */
+  report(sessionId: string, signal: AgentSubagentSignal): void {
+    for (const listener of this.subagentListeners) listener(sessionId, signal);
+  }
+
+  subagents(sessionId: string): AgentSubagentControl | null {
+    const support = this.options.subagents;
+    if (!support) return null;
+    if (support === 'observe') return { support };
+    return {
+      support,
+      list: async () => [],
+      interrupt: async (id) => {
+        this.subagentCalls.push({ verb: 'interrupt', sessionId, id });
+        this.report(sessionId, { phase: 'completed', id, status: 'interrupted', summary: null });
+        return true;
+      },
+      steer: async (id, text) => {
+        this.subagentCalls.push({ verb: 'steer', sessionId, id, text });
+        return 'queued';
+      },
+      tail: async (id) => {
+        this.subagentCalls.push({ verb: 'tail', sessionId, id });
+        return { available: true, text: `tail of ${id}`, truncated: false };
+      },
+    };
+  }
+
   /** Move script steps into the pending queue until the script blocks or ends. */
   private pump(channel: RunChannel): void {
     while (!channel.blocked && channel.queue.length > 0) {
@@ -169,6 +224,11 @@ export class FakeAgentRunner implements AgentRunner {
       if (step.type === 'await_input') {
         channel.blocked = true;
         return;
+      }
+      if (step.type === 'subagent') {
+        const sessionId = this.sessionOfRun.get(channel.runId);
+        if (sessionId) this.report(sessionId, step.signal);
+        continue;
       }
       channel.pending.push(step);
     }

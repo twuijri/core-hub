@@ -264,6 +264,12 @@ export const IconInbox = (p: IconProps) => (
     <path d="M4 13h4.5l1 2h5l1-2H20" />
   </Svg>
 );
+/** Work going on in the background: a pulse line (the Background button, §56). */
+export const IconActivity = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 12h4l2.5-6 5 12 2.5-6h4" />
+  </Svg>
+);
 export const IconShield = (p: IconProps) => (
   <Svg {...p}>
     <path d="M12 3 5 6v6c0 4 3 7.3 7 9 4-1.7 7-5 7-9V6l-7-3z" />

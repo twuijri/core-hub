@@ -14,7 +14,9 @@ import type { AgentEvent, AgentTarget } from './types.js';
  * streams a few updates and finishes the turn. It lets the adapter be driven end to end
  * without a real CLI, which is what makes the protocol code testable at all.
  */
-function fakeAgent(options: { protocolVersion?: number } = {}) {
+function fakeAgent(
+  options: { protocolVersion?: number; updates?: Record<string, unknown>[] } = {},
+) {
   const sent: Record<string, unknown>[] = [];
   let onMessage: (message: Record<string, unknown>) => void = () => {};
   let onClose: (reason: string | null) => void = () => {};
@@ -39,7 +41,7 @@ function fakeAgent(options: { protocolVersion?: number } = {}) {
       } else if (method === 'session/new') {
         reply({ jsonrpc: '2.0', id, result: { sessionId: 'sess-1' } });
       } else if (method === 'session/prompt') {
-        for (const update of [
+        for (const update of options.updates ?? [
           { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'thinking' } },
           { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hello' } },
           { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: ' world' } },
@@ -441,5 +443,156 @@ describe('acpToolInput', () => {
       }),
     ).toEqual({ file_path: '/w/a.md', content: 'x', locations: ['/w/a.md', '/w/b.md'] });
     expect(acpToolInput({ title: 'Run tests' })).toEqual({});
+  });
+});
+
+describe('ACP adapter: subagents (§56)', () => {
+  const connect = async (updates: Record<string, unknown>[]) => {
+    const agent = fakeAgent({ updates });
+    const { session } = await AcpSession.connect(agent.transport, {
+      cwd: '/work',
+      clientName: 'corehub',
+      clientVersion: '1.0.0',
+    });
+    const signals: unknown[] = [];
+    session.subagents.watch((signal) => signals.push(signal));
+    return { session, signals };
+  };
+
+  it("maps Claude Code's Task tool to a subagent that starts and ends with the call", async () => {
+    // What claude-code-acp 0.16 sends: `_meta.claudeCode.toolName`, the arguments in
+    // `rawInput`, the description as the title; the subagent's own calls arrive flat.
+    const { session, signals } = await connect([
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'task1',
+        title: 'Review the tests',
+        kind: 'think',
+        status: 'pending',
+        rawInput: {
+          description: 'Review the tests',
+          prompt: 'Read every test file',
+          subagent_type: 'general-purpose',
+        },
+        _meta: { claudeCode: { toolName: 'Task' } },
+      },
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'bash1',
+        title: 'ls tests',
+        kind: 'execute',
+        _meta: { claudeCode: { toolName: 'Bash' } },
+      },
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'read1',
+        title: 'Read a.test.ts',
+        kind: 'read',
+        _meta: { claudeCode: { toolName: 'Read', parentToolUseId: 'task1' } },
+      },
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'task1',
+        status: 'completed',
+        content: [{ type: 'content', content: { type: 'text', text: 'Two tests are missing.' } }],
+        _meta: { claudeCode: { toolName: 'Task' } },
+      },
+    ]);
+    expect(session.subagents.support).toBe('observe');
+    const events = take(session.stream(), 5);
+    await session.send({ text: 'review' });
+    const started = (await events).filter((event) => event.type === 'tool.started');
+    // A call the bridge does not attribute stays the parent's; one it does is the subagent's.
+    expect(
+      started.map((event) => [event.id, 'subagentId' in event ? event.subagentId : null]),
+    ).toEqual([
+      ['task1', null],
+      ['bash1', null],
+      ['read1', 'task1'],
+    ]);
+    expect(signals).toEqual([
+      {
+        phase: 'started',
+        id: 'task1',
+        parentId: null,
+        depth: 0,
+        goal: 'Review the tests',
+        model: 'general-purpose',
+        toolCount: null,
+        acceptingSteer: false,
+        toolCallRef: 'task1',
+      },
+      {
+        phase: 'completed',
+        id: 'task1',
+        status: 'completed',
+        summary: 'Two tests are missing.',
+        acceptingSteer: false,
+      },
+    ]);
+  });
+
+  it("maps OpenCode's task tool, learning its goal when the arguments arrive", async () => {
+    const { session, signals } = await connect([
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'oc1',
+        title: 'task',
+        kind: 'think',
+        status: 'pending',
+        rawInput: {},
+      },
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'oc1',
+        status: 'in_progress',
+        kind: 'think',
+        title: 'task',
+        rawInput: { description: 'Find the config', prompt: '…', subagent_type: 'general' },
+      },
+      { sessionUpdate: 'tool_call_update', toolCallId: 'oc1', status: 'failed', content: [] },
+    ]);
+    await session.send({ text: 'go' });
+    expect(signals).toEqual([
+      expect.objectContaining({ phase: 'started', id: 'oc1', goal: null, model: null }),
+      { phase: 'updated', id: 'oc1', goal: 'Find the config', model: 'general' },
+      { phase: 'completed', id: 'oc1', status: 'failed', summary: null, acceptingSteer: false },
+    ]);
+  });
+
+  it('says nothing of a tool call that does not mark itself a delegation (Gemini, Codex)', async () => {
+    const { session, signals } = await connect([
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'g1',
+        title: 'Codebase Investigator',
+        kind: 'think',
+        status: 'in_progress',
+      },
+      { sessionUpdate: 'tool_call_update', toolCallId: 'g1', status: 'completed', content: [] },
+    ]);
+    await session.send({ text: 'go' });
+    expect(signals).toEqual([]);
+  });
+
+  it('ends a delegation the stream never closed with the turn', async () => {
+    const { session, signals } = await connect([
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'task2',
+        title: 'Look around',
+        kind: 'think',
+        rawInput: { description: 'Look around', subagent_type: 'Explore' },
+        _meta: { claudeCode: { toolName: 'Task' } },
+      },
+    ]);
+    await session.send({ text: 'go' });
+    expect(signals.at(-1)).toEqual({
+      phase: 'completed',
+      id: 'task2',
+      status: 'interrupted',
+      summary: null,
+      acceptingSteer: false,
+    });
   });
 });

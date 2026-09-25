@@ -55,6 +55,7 @@ import {
 import { NO_LIMITS, runLimits } from './limits.js';
 import { ScheduleRuns, type ScheduleRunPorts } from './schedule-runs.js';
 import { HubScheduler } from './scheduler.js';
+import type { BackgroundItem, BackgroundSource, BackgroundStatus } from '../audit/index.js';
 
 export { SchedulesService, validateDefinition, warningsFor } from './service.js';
 export type { Scope } from './service.js';
@@ -295,6 +296,78 @@ function realtimeOf(app: FastifyInstance): Realtime {
   const created = createRealtime(app.hub.io);
   realtimes.set(app.hub.io, created);
   return created;
+}
+
+const LIVE_WORKFLOW_RUN: ReadonlySet<string> = new Set([
+  'queued',
+  'running',
+  'waiting_approval',
+  'paused',
+]);
+
+/** A workflow run as a Background item (§56). */
+function workflowRunItem(row: WorkflowRunRow, name: string, profile: string): BackgroundItem {
+  const status: BackgroundStatus =
+    row.status === 'queued'
+      ? 'queued'
+      : LIVE_WORKFLOW_RUN.has(row.status)
+        ? 'running'
+        : row.status === 'succeeded'
+          ? 'succeeded'
+          : row.status === 'cancelled'
+            ? 'cancelled'
+            : 'failed';
+  return {
+    id: `workflow_run:${row.id}`,
+    kind: 'workflow_run',
+    job_kind: null,
+    title: name,
+    profile,
+    status,
+    started_at: row.startedAt ? row.startedAt.toISOString() : null,
+    finished_at: row.finishedAt ? row.finishedAt.toISOString() : null,
+    stoppable: LIVE_WORKFLOW_RUN.has(row.status),
+    session_id: null,
+    resource: { kind: 'workflow_run', id: row.id },
+  };
+}
+
+/**
+ * This module's share of the Background panel (§56): a person's workflow runs, stopped as their
+ * Cancel does. Registered with `audit` by the composition root.
+ */
+export function workflowBackgroundFor(app: FastifyInstance): BackgroundSource {
+  const service = () => new SchedulesService(requireSqlite(app.hub.database));
+  return {
+    prefixes: ['workflow_run'],
+    list(caller, since) {
+      const slugOf = new Map(caller.workspaces.map((w) => [w.id, w.slug]));
+      return service()
+        .backgroundWorkflowRuns(caller.userId, [...slugOf.keys()], since)
+        .map(({ run, name }) => workflowRunItem(run, name, slugOf.get(run.workspace) ?? ''));
+    },
+    async stop(caller, id) {
+      const svc = service();
+      const runId = id.slice('workflow_run:'.length);
+      const run = svc.workflowRunById(runId);
+      if (!run || run.workspace !== caller.workspace.id || run.ownerId !== caller.userId) {
+        return null;
+      }
+      const name = svc
+        .backgroundWorkflowRuns(caller.userId, [run.workspace], 0)
+        .find((row) => row.run.id === run.id)?.name;
+      if (!LIVE_WORKFLOW_RUN.has(run.status)) {
+        throw new HubError('state_invalid', { details: { reason: 'finished' } });
+      }
+      const scope = {
+        workspace: caller.workspace.id,
+        profile: caller.workspace.slug,
+        userId: caller.userId,
+      };
+      const row = cancelWorkflowRunNow(app, svc, scope, run.id);
+      return workflowRunItem(row, name ?? '', caller.workspace.slug);
+    },
+  };
 }
 
 /**

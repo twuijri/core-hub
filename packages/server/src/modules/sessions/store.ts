@@ -443,6 +443,41 @@ export class SessionsStore {
     return this.getRun(input.workspace, input.id) as RunRow;
   }
 
+  /**
+   * The Background panel's runs (§56): one person's in these workspaces — every one not over,
+   * and those that ended at or after `since` — each with its conversation's title.
+   */
+  backgroundRuns(
+    ownerId: string,
+    workspaces: readonly string[],
+    since: number,
+  ): Array<{ run: RunRow; title: string | null; source: SessionRow['source'] }> {
+    if (workspaces.length === 0) return [];
+    return this.db
+      .select({ run: runs, title: sessions.title, source: sessions.source })
+      .from(runs)
+      .innerJoin(sessions, eq(sessions.id, runs.sessionId))
+      .where(
+        and(
+          eq(runs.ownerId, ownerId),
+          inArray(runs.workspace, [...workspaces]),
+          or(
+            inArray(runs.status, [
+              'queued',
+              'starting',
+              'streaming',
+              'waiting_approval',
+              'waiting_input',
+            ]),
+            sql`${runs.finishedAt} >= ${since}`,
+          ),
+        ),
+      )
+      .orderBy(desc(runs.createdAt))
+      .limit(500)
+      .all();
+  }
+
   getRun(workspace: string, id: string): RunRow | undefined {
     return this.db
       .select()

@@ -38,6 +38,8 @@ import type {
   AgentRunInput,
   AgentRunRequest,
   AgentRunner,
+  AgentSubagentControl,
+  AgentSubagentSignal,
 } from '../../server/src/modules/sessions/ports.js';
 import { fakeHermes } from '../../server/src/modules/sessions/testing/fake-runner.js';
 import {
@@ -58,7 +60,11 @@ type Step =
   /** Write a file in the session's working folder, as an agent's tool would. */
   | { type: 'write'; path: string; content: string }
   // The real direct path (journey 34): the models module answers the turn, fallback chain and all.
-  | { type: 'direct'; workspace: string; text: string };
+  | { type: 'direct'; workspace: string; text: string }
+  // A report about a subagent (§56): told to the hub on its own channel, not in the turn.
+  | { type: 'subagent'; signal: AgentSubagentSignal }
+  // Waits until the person stops this subagent (or `ms` passes, or the run is stopped).
+  | { type: 'until_stopped'; id: string; ms: number };
 
 /** The three files journey 32 writes, opens and reads back. */
 const REPORT_HTML =
@@ -290,6 +296,71 @@ function scriptFor(prompt: string, workspace = ''): Step[] {
       { type: 'completed' },
     ];
   }
+  if (/وزّع العمل|delegate this/i.test(prompt)) {
+    // The Subagents panel (journey 33): two subagents start, one calls a tool; the person
+    // stops the first, and only then does the second finish and the run end — so the order
+    // the journey sees is never a race with the script.
+    return [
+      { type: 'message_delta', text: 'سأوزّع العمل على وكيلين.' },
+      {
+        type: 'tool_started',
+        ref: 'd1',
+        name: 'delegate_task',
+        kind: 'custom',
+        title: 'delegate_task',
+      },
+      {
+        type: 'subagent',
+        signal: {
+          phase: 'started',
+          id: 'sa-0-tests',
+          depth: 0,
+          goal: 'راجع ملفات الاختبارات',
+          model: 'hermes-4',
+          toolCount: 0,
+          acceptingSteer: true,
+        },
+      },
+      {
+        type: 'subagent',
+        signal: {
+          phase: 'started',
+          id: 'sa-1-notes',
+          depth: 0,
+          goal: 'اكتب ملاحظات الإصدار',
+          model: 'hermes-4',
+          toolCount: 0,
+          acceptingSteer: true,
+        },
+      },
+      { type: 'delay', ms: 300 },
+      {
+        type: 'subagent',
+        signal: {
+          phase: 'tool',
+          id: 'sa-0-tests',
+          toolName: 'read_file',
+          toolPreview: 'tests/status.test.ts',
+          toolCount: 1,
+        },
+      },
+      { type: 'until_stopped', id: 'sa-0-tests', ms: 60_000 },
+      { type: 'delay', ms: 300 },
+      {
+        type: 'subagent',
+        signal: {
+          phase: 'completed',
+          id: 'sa-1-notes',
+          status: 'completed',
+          summary: 'ملاحظات الإصدار جاهزة.',
+          toolCount: 2,
+        },
+      },
+      { type: 'tool_completed', ref: 'd1', output: 'done', exitCode: 0 },
+      { type: 'message_delta', text: 'انتهى الوكيلان.' },
+      { type: 'completed' },
+    ];
+  }
   if (/ارسم المسار|trace this/i.test(prompt)) {
     // The Trajectory tab (journey 31): a turn that reads a file, a command that fails, and
     // an answer — with pauses, so every step has a duration on the timeline.
@@ -431,8 +502,37 @@ async function* directTurn(workspace: string, text: string): AsyncIterable<Agent
 /** A runner with real pauses, so a socket can be dropped mid-run and resumed. */
 class ScriptedRunner implements AgentRunner {
   private readonly runs = new Map<string, Live>();
+  private readonly sessionOfRun = new Map<string, string>();
+  private readonly listeners = new Set<(sessionId: string, signal: AgentSubagentSignal) => void>();
+  /** `<session>:<subagent>` of the subagents a person stopped. */
+  private readonly stopped = new Set<string>();
+
+  onSubagent(listener: (sessionId: string, signal: AgentSubagentSignal) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private report(sessionId: string, signal: AgentSubagentSignal): void {
+    for (const listener of this.listeners) listener(sessionId, signal);
+  }
+
+  /** Hermes-like (`full`): a stop is confirmed at once, a note is queued, the tail is text. */
+  subagents(sessionId: string): AgentSubagentControl {
+    return {
+      support: 'full',
+      list: async () => [],
+      interrupt: async (id) => {
+        this.stopped.add(`${sessionId}:${id}`);
+        this.report(sessionId, { phase: 'completed', id, status: 'interrupted', summary: null });
+        return true;
+      },
+      steer: async () => 'queued',
+      tail: async (id) => ({ available: true, text: `${id}: أعمل…`, truncated: false }),
+    };
+  }
 
   async start(request: AgentRunRequest): Promise<AgentRunAccepted> {
+    this.sessionOfRun.set(request.runId, request.sessionId);
     const text = request.prompt.map((b) => (b.type === 'text' ? b.text : '')).join(' ');
     this.runs.set(request.runId, {
       queue: scriptFor(text, request.workspace),
@@ -481,6 +581,19 @@ class ScriptedRunner implements AgentRunner {
       }
       if (step.type === 'direct') {
         yield* directTurn(step.workspace, step.text);
+        continue;
+      }
+      if (step.type === 'subagent') {
+        const sessionId = this.sessionOfRun.get(runId);
+        if (sessionId) this.report(sessionId, step.signal);
+        continue;
+      }
+      if (step.type === 'until_stopped') {
+        const sessionId = this.sessionOfRun.get(runId) ?? '';
+        const until = Date.now() + step.ms;
+        while (!live.closed && Date.now() < until && !this.stopped.has(`${sessionId}:${step.id}`)) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
         continue;
       }
       if (step.type === 'tool_completed' && step.output) {

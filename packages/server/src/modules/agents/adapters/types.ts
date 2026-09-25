@@ -17,6 +17,7 @@
  * Nothing here knows about HTTP, Fastify or the database.
  */
 import type { AgentCapability, AgentSection } from '../schema.js';
+import type { SubagentControl } from './subagents.js';
 
 export type AdapterKind = 'hermes' | 'acp' | 'harness' | 'builtin';
 
@@ -320,6 +321,12 @@ export interface AgentSession {
   answer?(questionId: string, text: string | null): Promise<void>;
   interrupt(): Promise<void>;
   close(): Promise<void>;
+  /**
+   * The subagents this conversation's agent delegates to (contract decision §56), on a channel
+   * of their own because one can outlive the turn that started it. Absent: the agent never
+   * says it delegated.
+   */
+  readonly subagents?: SubagentControl;
 }
 
 export interface SettingsChoice {

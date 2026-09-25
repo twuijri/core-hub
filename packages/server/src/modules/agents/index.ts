@@ -74,6 +74,7 @@ import { SkillImportError, installPack, planImport, type UploadedFile } from './
 import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './installer.js';
 import type { AgentDirectoryPort, AgentInfo, AgentModelsPort, AgentRunnerPort } from './ports.js';
 import { AgentRunner } from './runner.js';
+import { subagentSupport } from './serialize.js';
 import { AgentsService, type AgentPatchInput } from './service.js';
 import {
   ChannelError,
@@ -1702,6 +1703,7 @@ export function agentDirectory(app: FastifyInstance): AgentDirectoryPort {
         defaultProvider: model?.provider_id ?? null,
         available,
         ...(available ? {} : { unavailableReason: enabled ? row.installState : 'disabled' }),
+        subagents: subagentSupport(row),
       });
     },
   };

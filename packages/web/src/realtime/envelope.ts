@@ -41,6 +41,16 @@ export const SESSION_EVENTS = [
   'context.updated',
 ] as const;
 
+/**
+ * A conversation's subagents (contract decision §56). Profile-wide on `/rt/sessions`, so the
+ * Background panel hears them wherever the person is; each carries the whole `Subagent`.
+ */
+export const SUBAGENT_EVENTS = [
+  'subagent.started',
+  'subagent.updated',
+  'subagent.completed',
+] as const;
+
 /** `/rt/tasks`: the board only listens, and refreshes on any of these. */
 export const TASK_EVENTS = [
   'task.created',

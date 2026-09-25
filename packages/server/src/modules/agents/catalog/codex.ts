@@ -17,4 +17,6 @@ export const codex: CatalogEntry = {
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp'],
   sections: ['mcp', 'settings'],
+  // codex-acp 0.16 sends no report of Codex's `spawn_agent` delegations (§56).
+  subagents: 'none',
 };

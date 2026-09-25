@@ -49,7 +49,10 @@ export type SessionEventName =
   | 'run.cancelled'
   | 'approval.requested'
   | 'approval.resolved'
-  | 'context.updated';
+  | 'context.updated'
+  | 'subagent.started'
+  | 'subagent.updated'
+  | 'subagent.completed';
 
 export interface Envelope {
   event: string;

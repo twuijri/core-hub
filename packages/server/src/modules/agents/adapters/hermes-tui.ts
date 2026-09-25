@@ -31,6 +31,14 @@ import { createInterface } from 'node:readline';
 import { StringDecoder } from 'node:string_decoder';
 import { HubError } from '../../../lib/errors.js';
 import { EventQueue } from './event-queue.js';
+import {
+  SubagentSignals,
+  hermesLiveSubagent,
+  hermesSubagentSignal,
+  type LiveSubagent,
+  type SubagentControl,
+  type SubagentTailText,
+} from './subagents.js';
 import type { AgentEvent, AgentSession, FallbackModel, PromptInput } from './types.js';
 
 type Json = Record<string, unknown>;
@@ -401,6 +409,7 @@ export class HermesTuiSession implements AgentSession {
   private readonly approvals = new Map<string, (choice: string) => void>();
   private readonly questions = new Map<string, (answer: string | null) => void>();
   private readonly openTools: Array<{ id: string; name: string }> = [];
+  private readonly subagentSignals = new SubagentSignals();
   private counter = 0;
   private isClosed = false;
   /**
@@ -513,6 +522,53 @@ export class HermesTuiSession implements AgentSession {
     return this.isClosed || !this.channel.alive;
   }
 
+  /**
+   * Hermes's delegations (contract decision §56): its `subagent.*` events, and its calls to
+   * list, stop, steer and read a subagent of this session. The calls name the live session,
+   * which is what Hermes checks the caller's authority against.
+   */
+  readonly subagents: SubagentControl = {
+    support: 'full',
+    watch: (listener) => this.subagentSignals.watch(listener),
+    list: async (): Promise<LiveSubagent[]> => {
+      if (this.closed) return [];
+      const result = await this.channel.request('subagent.list', { session_id: this.liveId });
+      const rows = Array.isArray(result.subagents) ? result.subagents : [];
+      return rows.map(hermesLiveSubagent).filter((row): row is LiveSubagent => row !== null);
+    },
+    interrupt: async (id) => {
+      if (this.closed) return false;
+      const result = await this.channel.request('subagent.interrupt', {
+        session_id: this.liveId,
+        subagent_id: id,
+      });
+      return result.found === true;
+    },
+    steer: async (id, note) => {
+      if (this.closed) return 'rejected';
+      const result = await this.channel.request('subagent.steer', {
+        session_id: this.liveId,
+        subagent_id: id,
+        text: note,
+      });
+      return result.status === 'queued' ? 'queued' : 'rejected';
+    },
+    tail: async (id): Promise<SubagentTailText> => {
+      const none = { available: false, text: '', truncated: false };
+      if (this.closed) return none;
+      const result = await this.channel.request('subagent.tail', {
+        session_id: this.liveId,
+        subagent_id: id,
+      });
+      if (result.available !== true) return none;
+      return {
+        available: true,
+        text: typeof result.text === 'string' ? result.text : '',
+        truncated: result.truncated === true,
+      };
+    },
+  };
+
   stream(): AsyncIterable<AgentEvent> {
     return this.queue.iterator();
   }
@@ -594,6 +650,7 @@ export class HermesTuiSession implements AgentSession {
   async close(): Promise<void> {
     if (this.isClosed) return;
     this.isClosed = true;
+    this.subagentSignals.endAll();
     this.detach();
     this.stopExit();
     if (this.channel.alive) {
@@ -607,6 +664,12 @@ export class HermesTuiSession implements AgentSession {
   // ------------------------------------------------------------ from Hermes
 
   private onEvent(type: string, payload: Json): void {
+    if (type.startsWith('subagent.')) {
+      // Not part of the turn: a subagent can outlive it (asynchronous delegation).
+      const signal = hermesSubagentSignal(type, payload);
+      if (signal) this.subagentSignals.emit(signal);
+      return;
+    }
     switch (type) {
       case 'message.delta': {
         const delta = text(payload.text);
@@ -815,6 +878,7 @@ export class HermesTuiSession implements AgentSession {
   }
 
   private onExit(reason: string): void {
+    this.subagentSignals.endAll(reason);
     if (this.turn) this.queue.push({ type: 'run.failed', error: reason });
     this.end('failed');
     this.isClosed = true;

@@ -1,6 +1,7 @@
 // Registry row -> the contract's `Agent`. Pure; unit-tested against the states the
 // install lifecycle can be in (docs/domain/agents.md).
 import { iso } from '../../lib/time.js';
+import { catalogEntry } from './catalog/index.js';
 import type { agents, agentSettings } from './schema.js';
 
 /**
@@ -59,6 +60,7 @@ export interface ContractAgent {
   /** What this workspace's providers resolve to for this agent (ADR 0010). */
   default_model: { provider_id: string; model: string } | null;
   limited: boolean;
+  subagents: 'full' | 'observe' | 'none';
 }
 
 /**
@@ -151,5 +153,19 @@ export function serializeAgent(
     sections: [...row.sections],
     default_model: options.defaultModel ?? null,
     limited: row.limited,
+    subagents: subagentSupport(row),
   };
+}
+
+/**
+ * What the agent lets a person do with its subagents (§56): its catalog entry's word, or for an
+ * agent found on the host rather than in the catalog, its adapter's — Hermes reports them all,
+ * an unknown ACP agent is not trusted to.
+ */
+export function subagentSupport(
+  row: Pick<AgentRow, 'slug' | 'adapterKind'>,
+): 'full' | 'observe' | 'none' {
+  const entry = catalogEntry(row.slug);
+  if (entry) return entry.subagents;
+  return row.adapterKind === 'hermes' ? 'full' : 'none';
 }
