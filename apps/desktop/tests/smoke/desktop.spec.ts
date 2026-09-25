@@ -1,0 +1,133 @@
+// The desktop app end to end: first run → remote mode against a real hub → sign in → a chat
+// that streams through the app's loopback origin (HTTP and WebSocket) → This device. Then a
+// second computer pairs by link instead of a password.
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
+import { hubPort } from './playwright.config.js';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const appDir = path.resolve(here, '../..');
+const executablePath = createRequire(import.meta.url)('electron') as unknown as string;
+const hub = `http://127.0.0.1:${hubPort}`;
+const PASSWORD = 'e2e-owner-password';
+const shots = path.join(appDir, 'test-results', 'shots');
+mkdirSync(shots, { recursive: true });
+
+async function launch(language: 'ar' | 'en'): Promise<ElectronApplication> {
+  const userData = mkdtempSync(path.join(os.tmpdir(), 'corehub-desktop-'));
+  writeFileSync(path.join(userData, 'desktop.json'), JSON.stringify({ language }));
+  return electron.launch({
+    executablePath,
+    // On Linux the test draws on the X server xvfb-run gives it, never on the desktop session
+    // of whoever runs it (a Wayland session would otherwise be picked up from the env).
+    args: [
+      appDir,
+      ...(process.platform === 'linux' ? ['--no-sandbox', '--ozone-platform=x11'] : []),
+    ],
+    env: {
+      ...process.env,
+      WAYLAND_DISPLAY: '',
+      COREHUB_DESKTOP_USER_DATA: userData,
+      COREHUB_DESKTOP_NO_TRAY: '1',
+    },
+  });
+}
+
+test('remote mode: connect, sign in, chat, This device', async () => {
+  const app = await launch('ar');
+  try {
+    const welcome = await app.firstWindow();
+    await expect(welcome.locator('html')).toHaveAttribute('dir', 'rtl');
+    await expect(welcome.getByRole('heading', { name: 'أهلًا بك في كور هب' })).toBeVisible();
+    await welcome.screenshot({ path: path.join(shots, 'welcome-ar.png') });
+
+    // A wrong address is refused on the spot, in the person's language.
+    await welcome.getByTestId('choose-remote').click();
+    await welcome.getByTestId('hub-url').fill('127.0.0.1:9');
+    await welcome.getByTestId('connect').click();
+    await expect(welcome.getByTestId('welcome-error')).toContainText('لم يُجب أحد');
+    await welcome.screenshot({ path: path.join(shots, 'welcome-remote-ar.png') });
+
+    await welcome.getByTestId('hub-url').fill(`127.0.0.1:${hubPort}`);
+    const [page] = await Promise.all([
+      app.waitForEvent('window'),
+      welcome.getByTestId('connect').click(),
+    ]);
+
+    // The bundled web client, served by the app, talking to the hub through it.
+    await expect(page).toHaveURL(/\/login$/);
+    expect(new URL(page.url()).hostname).toBe('127.0.0.1');
+    expect(new URL(page.url()).port).not.toBe(String(hubPort));
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await page.getByLabel('اسم المستخدم').fill('admin');
+    await page.getByLabel('كلمة المرور').fill(PASSWORD);
+    await page.getByRole('button', { name: 'دخول' }).click();
+    await expect(page).toHaveURL(/\/chat$/);
+
+    // A streamed reply proves the realtime socket crosses the loopback origin.
+    await page.getByRole('link', { name: 'محادثة جديدة' }).first().click();
+    await expect(page.getByTestId('composer-input')).toBeEnabled();
+    await page.getByTestId('composer-input').fill('مرحبا');
+    await page.getByTestId('send').click();
+    const assistant = page.getByTestId('message-assistant');
+    await expect(assistant.getByRole('heading', { name: 'مرحبا' })).toBeVisible();
+    await expect(assistant).toHaveAttribute('data-status', 'complete');
+    await page.screenshot({ path: path.join(shots, 'chat-ar.png') });
+
+    // This device: only the desktop has it, and it knows which hub the window talks to.
+    await page.goto(new URL('/settings/this-device', page.url()).toString());
+    await expect(page.getByTestId('this-device-hub')).toHaveText(hub);
+    await expect(page.getByTestId('this-device-mode')).toHaveText('متصل بمركز');
+    await expect(page.getByTestId('this-device-hub-state')).toContainText('يُجيب');
+    await page.screenshot({ path: path.join(shots, 'this-device-ar.png') });
+
+    // Changing the connection goes back to the first-run screen, the hub remembered.
+    const [back] = await Promise.all([
+      app.waitForEvent('window'),
+      page.getByTestId('this-device-change').click(),
+    ]);
+    await back.getByTestId('choose-remote').click();
+    await expect(back.getByTestId('hub-url')).toHaveValue(hub);
+  } finally {
+    await app.close();
+  }
+});
+
+test('pairing: a link from a signed-in device signs this computer in', async ({ request }) => {
+  const login = await request.post(`${hub}/api/v1/auth/login`, {
+    data: { username: 'admin', password: PASSWORD },
+  });
+  const token = (await login.json()).access_token as string;
+  const pairing = await (
+    await request.post(`${hub}/api/v1/auth/pairings`, {
+      headers: { authorization: `Bearer ${token}` },
+      data: {},
+    })
+  ).json();
+
+  const app = await launch('en');
+  try {
+    const welcome = await app.firstWindow();
+    await expect(welcome.getByRole('heading', { name: 'Welcome to Core Hub' })).toBeVisible();
+    await welcome.getByTestId('choose-remote').click();
+    await welcome.getByTestId('pair-text').fill(pairing.qr_payload);
+    const [page] = await Promise.all([
+      app.waitForEvent('window'),
+      welcome.getByTestId('pair').click(),
+    ]);
+    // Signed in by the pairing: no sign-in screen.
+    await expect(page).toHaveURL(/\/chat$/);
+    const claimed = await (
+      await request.get(`${hub}/api/v1/auth/pairings/${pairing.id}`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+    ).json();
+    expect(claimed.status).toBe('claimed');
+  } finally {
+    await app.close();
+  }
+});

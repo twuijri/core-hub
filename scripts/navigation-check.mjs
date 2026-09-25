@@ -108,6 +108,30 @@ for (const [a, b] of Object.entries(manifest.secondaryEntries ?? {})) {
     if (!byId.has(target)) fail(`secondaryEntries: "${a}" -> "${target}" is not a destination`);
 }
 
+// A surface that draws another surface's client (the desktop app draws the web client) says
+// `"$extends": "<surface>"` and lists only what it adds; its routes are the base's routes for
+// destinations that exist on it, plus its own. Resolved here exactly as the client resolves it.
+function resolvedRoutes(surface, seen = new Set()) {
+  const own = manifest.surfaceRoutes?.[surface] ?? {};
+  if (seen.has(surface)) {
+    fail(`surfaceRoutes.${surface}: "$extends" loops back to itself`);
+    return {};
+  }
+  seen.add(surface);
+  const baseName = own.$extends;
+  if (baseName !== undefined && !(SURFACES.has(baseName) && manifest.surfaceRoutes?.[baseName]))
+    fail(`surfaceRoutes.${surface}: "$extends" names "${baseName}", which has no routes`);
+  const base = baseName && manifest.surfaceRoutes?.[baseName] ? resolvedRoutes(baseName, seen) : {};
+  const merged = {};
+  for (const [id, route] of Object.entries(base)) {
+    const destination = byId.get(id);
+    if (destination?.surfaces && !destination.surfaces.includes(surface)) continue;
+    merged[id] = route;
+  }
+  for (const [id, route] of Object.entries(own)) if (!id.startsWith('$')) merged[id] = route;
+  return merged;
+}
+
 // preAuth: the screens a client shows before anyone is signed in (sign-in, first-run setup).
 // They are not destinations — no entry, no role, no place in any list — but the clients still
 // build their routes from the manifest, so the names and paths live here and not in code.
@@ -130,9 +154,9 @@ for (const [id, screen] of Object.entries(preAuth)) {
         `preAuth: route "${route}" on ${surface} is used by "${preAuthRoutes.get(key)}" and "${id}"`,
       );
     preAuthRoutes.set(key, id);
-    const clash = Object.entries(manifest.surfaceRoutes?.[surface] ?? {}).find(
-      ([, value]) => value === route,
-    );
+    const clash = Object.entries(
+      manifest.surfaceRoutes?.[surface] ? resolvedRoutes(surface) : {},
+    ).find(([, value]) => value === route);
     if (clash)
       fail(`preAuth "${id}": route "${route}" already belongs to destination "${clash[0]}"`);
   }
@@ -140,12 +164,13 @@ for (const [id, screen] of Object.entries(preAuth)) {
 
 // surfaceRoutes: a URL (web) or screen id per destination that exists on that surface — the
 // client's router is built from it, so it must be complete, exact and unique.
-for (const [surface, routes] of Object.entries(manifest.surfaceRoutes ?? {})) {
+for (const surface of Object.keys(manifest.surfaceRoutes ?? {})) {
   if (surface.startsWith('$')) continue;
   if (!SURFACES.has(surface)) {
     fail(`surfaceRoutes: unknown surface "${surface}"`);
     continue;
   }
+  const routes = resolvedRoutes(surface);
   const seen = new Map();
   for (const [id, route] of Object.entries(routes)) {
     const destination = byId.get(id);
@@ -183,7 +208,7 @@ if (agentShell) {
 const under = (route, prefix) => route === prefix || route.startsWith(`${prefix}/`);
 for (const [surface, map] of Object.entries(manifest.legacyRoutes ?? {})) {
   if (surface.startsWith('$')) continue;
-  const live = Object.values(manifest.surfaceRoutes?.[surface] ?? {});
+  const live = Object.values(manifest.surfaceRoutes?.[surface] ? resolvedRoutes(surface) : {});
   for (const [from, to] of Object.entries(map ?? {})) {
     if (!from.startsWith('/') || !String(to).startsWith('/'))
       fail(`legacyRoutes.${surface}: "${from}" -> "${to}" must be absolute paths`);

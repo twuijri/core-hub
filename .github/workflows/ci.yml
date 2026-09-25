@@ -87,6 +87,31 @@ jobs:
           path: packages/web/playwright-report
           retention-days: 7
 
+  desktop:
+    name: Desktop app smoke (Electron under Xvfb against the real hub)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Xvfb for a headless display
+        run: command -v xvfb-run || (sudo apt-get update && sudo apt-get install -y xvfb)
+      # pnpm-workspace.yaml keeps electron's ~100 MB download out of every other install.
+      - run: pnpm --filter @corehub/desktop electron:install
+      - run: pnpm build
+      - run: xvfb-run -a pnpm --filter @corehub/desktop test:smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-smoke
+          path: apps/desktop/test-results
+          retention-days: 7
+
   map-untouched:
     name: PR leaves graphify-out/ to the code-map bot
     # Only a pull request has a base to compare with; a push or a dispatched run skips it.

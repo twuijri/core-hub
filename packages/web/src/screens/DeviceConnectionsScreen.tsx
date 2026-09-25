@@ -1,6 +1,7 @@
 // Device connections (NAVIGATION §1): tab App pairs a phone with a QR from `auth.createPairing`
 // and waits for `pairing.claimed` on `/rt/devices` (polling `auth.getPairing` as fallback);
 // tab Devices (admin) lists linked devices once the devices module serves them.
+import { PRODUCT } from '@corehub/contracts';
 import qrcode from 'qrcode-generator';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/context.js';
@@ -24,6 +25,63 @@ export function qrSvgPath(text: string): { path: string; size: number } {
   for (let r = 0; r < size; r += 1)
     for (let c = 0; c < size; c += 1) if (qr.isDark(r, c)) path += `M${c} ${r}h1v1h-1z`;
   return { path, size };
+}
+
+/**
+ * The pairing as a `corehub://pair` link, for a computer: a desktop app cannot scan the
+ * screen it is showing, but it opens its own links (apps/desktop, deep links). `null` when
+ * the payload is not a pairing.
+ */
+export function pairingLinkOf(qrPayload: string): string | null {
+  try {
+    const value = JSON.parse(qrPayload) as Record<string, unknown>;
+    if (
+      typeof value.hub_url !== 'string' ||
+      typeof value.pairing_id !== 'string' ||
+      typeof value.code !== 'string'
+    )
+      return null;
+    const query = new URLSearchParams({
+      hub: value.hub_url,
+      id: value.pairing_id,
+      code: value.code,
+    });
+    return `${PRODUCT.id}://pair?${query.toString()}`;
+  } catch {
+    return null;
+  }
+}
+
+function PairingLink({ qrPayload }: { qrPayload: string }) {
+  const { t } = useI18n();
+  const [copied, setCopied] = useState(false);
+  const link = pairingLinkOf(qrPayload);
+  if (!link) return null;
+  return (
+    <div className="flex flex-col items-center gap-2 text-center">
+      <p className="text-xs text-muted">{t('devices.pair_link')}</p>
+      <a
+        href={link}
+        dir="ltr"
+        className="break-all font-mono text-xs text-link"
+        data-testid="pairing-link"
+      >
+        {link}
+      </a>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() =>
+          void navigator.clipboard.writeText(link).then(
+            () => setCopied(true),
+            () => setCopied(false),
+          )
+        }
+      >
+        {copied ? t('devices.copied') : t('devices.copy_link')}
+      </Button>
+    </div>
+  );
 }
 
 export function QrCode({ text }: { text: string }) {
@@ -143,6 +201,7 @@ export function DeviceConnectionsScreen() {
                     <p className="text-xs text-muted">
                       {t('devices.expires_in', { seconds: secondsLeft })}
                     </p>
+                    <PairingLink qrPayload={pairing.qr_payload} />
                   </>
                 ) : pairing.status === 'claimed' ? (
                   <Notice tone="success">

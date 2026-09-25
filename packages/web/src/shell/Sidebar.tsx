@@ -48,6 +48,7 @@ import {
   Tooltip,
 } from '../ui/index.js';
 import { useNoticeStream } from '../notify/queries.js';
+import { useDesktopEffects } from '../desktop/effects.js';
 
 const RAIL_ICONS: Record<string, (p: { size?: number }) => ReactElement> = {
   new_chat: IconPlus,
@@ -73,6 +74,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   // The inbox is watched here rather than on its own page: the unread count rides in the
   // Settings list, which is on screen when that page is not.
   useNoticeStream();
+  useDesktopEffects();
   const { t, language } = useI18n();
   const { user, signOut } = useAuth();
   const { prefs, update } = useTheme();

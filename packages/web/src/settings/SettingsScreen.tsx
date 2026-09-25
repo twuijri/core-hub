@@ -22,6 +22,7 @@ import { PluginsTab } from './PluginsTab.js';
 import { PrivacyTab } from './PrivacyTab.js';
 import { UpdatesTab } from './UpdatesTab.js';
 import { ThemeTool } from './ThemeTool.js';
+import { ThisDeviceTab } from './ThisDeviceTab.js';
 
 /**
  * Which section draws which destination.
@@ -45,6 +46,8 @@ const SECTIONS: Record<string, () => ReactElement> = {
   theme: () => <ThemeTool />,
   webhooks: () => <WebhooksTab />,
   privacy: () => <PrivacyTab />,
+  // Desktop and phones only: the web surface has no route to it (navigation.json).
+  this_device: () => <ThisDeviceTab />,
   // The three reports the audit module answers; `skills` is still a 501 and stays a
   // placeholder, which is what the hub itself says about it.
   usage: () => <AuditReport kind="usage" />,
