@@ -1262,6 +1262,47 @@
       "failed": "Hermes could not connect:"
     }
   },
+  "hub_tools": {
+    "title": "{product} tools",
+    "subtitle": "{product} offers itself to this agent as an MCP server, so the agent can work with the board, schedules, conversations and files of this profile.",
+    "enabled": "Offer {product} tools",
+    "acts_as": "Every call acts for the person whose conversation it is, in this profile only, with that person's permissions — never as an admin. Only the hub's own conversations can use them; a message arriving from a channel cannot.",
+    "allow_writes": "Allow changes",
+    "writes_only": "Only changes: nothing here reads.",
+    "recent": "Recent calls",
+    "no_calls": "No calls yet.",
+    "call_ok": "done",
+    "call_failed": "refused",
+    "group": {
+      "tasks": "Tasks",
+      "schedules": "Schedules",
+      "conversations": "Conversations",
+      "notifications": "Notifications",
+      "workflows": "Workflows",
+      "files": "Files"
+    },
+    "group_about": {
+      "tasks": "List the board's tasks; with changes allowed, create, move, assign and comment on them.",
+      "schedules": "List schedules; with changes allowed, create one, pause it or run it now.",
+      "conversations": "List and search this profile's conversations and read a summary of one.",
+      "notifications": "Tell the person something: a notice in their inbox.",
+      "workflows": "List workflows; with changes allowed, run one.",
+      "files": "Read the files in this profile's folder; with changes allowed, write them."
+    },
+    "unavailable": {
+      "runtime_absent": "There is no Hermes beside this hub to give the tools to.",
+      "hermes_profile_absent": "Hermes has no folder for this profile yet. Start a conversation in it first."
+    },
+    "reason": {
+      "hub_tools_no_live_run": "no conversation was running, so there was nobody to act for",
+      "hub_tools_run_ambiguous": "several people had conversations running and the hub could not tell whose it was",
+      "hub_tools_tool_off": "that tool is switched off here",
+      "path_outside_profile": "the path was outside the profile's folder",
+      "forbidden": "the person may not do that",
+      "not_found": "not found",
+      "validation_failed": "the arguments were not valid"
+    }
+  },
   "memory": {
     "title_of": "{name} memory",
     "persona": "read at every start",
