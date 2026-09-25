@@ -1069,3 +1069,41 @@ Rejected: running a repository task in the session's own folder when git refuses
 would work on an empty folder and look successful); a per-project limit (the owner asked per
 profile); a migration to make `worktrees.path` unique only among live rows — a task's removed
 worktree row is reused instead, which also keeps one history per task.
+
+## 60. Core Hub ships its own skill library, installed into every profile and never written over an edit
+
+Bundled skills (2026-09-25). The owner: «اهم المهارات الرئيسية ولزم يكون فيه شي خاص بالصور».
+Core Hub carries a library of its own skills (`packages/server/skill-library/`, Apache-2.0, part of
+Core Hub) and installs it into every Hermes profile as the category folder `skills/core-hub/`, which
+Hermes lists like its own categories (#91). Added: `SkillSource: library`, `Skill.library`
+(`current` | `edited` | `null`), `SkillLibrary` in the `agents.listSkills` answer,
+`agents.updateSkillLibrary` (`PATCH /agents/{agent_id}/skill-library`) and `agents.restoreSkill`
+(`POST /agents/{agent_id}/skills/{skill_key}/restore`).
+
+- **When:** at every boot, for `default` and every named profile Hermes has (so a new image
+  updates what it wrote, and a profile made outside the hub gets the library), and right after a
+  profile is made, copied or imported through the hub.
+- **Only what the hub wrote is ever updated.** A manifest in the profile,
+  `skills/.core-hub-library.json`, records the SHA-256 of every file the hub put there. A file whose
+  bytes still equal the record is replaced by the new version; a file that differs is the
+  person's, and the skill is `library: edited` — left exactly as it is, by every later boot, until
+  `agents.restoreSkill`. A library skill the person deletes is remembered and not brought back. A
+  folder of a library skill's name that the hub did not write is never touched.
+- **On by default, off per profile.** The switch is in the same manifest, in the profile, so a
+  copy or an export carries it. Off removes the skills still exactly as the hub wrote them and
+  releases the edited ones as the person's own (no badge, never updated); on installs the whole
+  library again, deleted skills included. Admins only, like writing a skill.
+- A library skill is otherwise an ordinary skill: it can be opened, edited, switched off, pinned
+  and deleted from the Skills page.
+
+Proposed, owner to confirm: the twelve skills and their names (`image-generate`, `image-edit`,
+`image-describe`, `image-convert`, `summarize`, `report-writer`, `data-to-chart`, `research-brief`,
+`translate`, `slides-html`, `schedule-helper`, `proofread`); the image skills preferring Hermes's
+own `image_generate` / `vision_analyze` tools and falling back to a script whose key comes from
+`COREHUB_IMAGE_API_KEY` (Hermes hides its own provider keys from the terminal); background removal
+limited to plain backgrounds (no segmentation model in the image); the switch on the Skills page
+rather than in Settings.
+
+Rejected: a copy per skill in the hub's database (two truths that can disagree); overwriting on
+upgrade (loses the person's edits); marking library skills read-only like Hermes's built-ins (a library
+skill is meant to be adapted, and the edit kept); a flag file per skill (one manifest is one atomic write).

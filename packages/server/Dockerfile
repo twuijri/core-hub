@@ -223,6 +223,8 @@ COPY --from=build /app/packages/contracts/events ./packages/contracts/events
 COPY --from=build /app/packages/contracts/dist ./packages/contracts/dist
 COPY --from=build /app/packages/server/dist ./packages/server/dist
 COPY --from=build /app/packages/server/drizzle ./packages/server/drizzle
+# Core Hub's own skills, installed into every Hermes profile's skills/core-hub/ (decision §60).
+COPY --from=build /app/packages/server/skill-library ./packages/server/skill-library
 # The web client: static files the hub serves from / (packages/server/src/app/web.ts).
 COPY --from=build /app/packages/web/dist ./packages/web/dist
 USER hub

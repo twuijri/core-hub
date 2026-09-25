@@ -14,5 +14,7 @@ docs
 !docs/clients/navigation.json
 *.md
 !packages/**/README.md
+# Core Hub's skill library is Markdown the hub installs into every profile (decision §60).
+!packages/server/skill-library/**
 coverage
 .eslintcache

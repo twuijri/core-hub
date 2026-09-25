@@ -36,6 +36,7 @@ import {
   hermesProfileRunner,
   hermesRuntimeFor,
   registerAgentAttachments,
+  seedSkillLibraryOf,
 } from './agents/index.js';
 import {
   attachmentReferences,
@@ -270,6 +271,17 @@ onProfileCreated((app, { profile, source, actorId }) => {
   if (source) models.copyOwnProviders(source.id, profile.id, { userId: actorId });
   const home = hermesRuntimeFor(app).status().home;
   if (home && !profile.isDefault) models.prepareProfile(path.join(home, 'profiles', profile.slug));
+});
+
+/**
+ * Core Hub's skill library in a profile just made (decision §60), before its first turn rather
+ * than at the next boot. A copy or an import brings its source's manifest, so its choice (on or
+ * off) and its edited skills come with it.
+ */
+onProfileCreated((app, { profile }) => {
+  const { mode, home } = hermesRuntimeFor(app).status();
+  if (mode !== 'managed' || !home) return;
+  seedSkillLibraryOf(profile.isDefault ? home : path.join(home, 'profiles', profile.slug), app.log);
 });
 
 /** Hermes's archives through its server, with its errors in `auth`'s words; null unmanaged. */
