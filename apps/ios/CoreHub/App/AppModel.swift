@@ -214,9 +214,8 @@ final class AppModel {
         notice = nil
         enterSignedIn()
         await refreshAccount()
-        // Asked once, right after the person chose this phone (proposed — owner to confirm);
-        // with a yes, the phone registers for push with the hub.
-        _ = await LocalNotices.shared.requestPermission()
+        // Asks for notifications (in front, once a launch, while iOS has not asked yet); with a
+        // yes, the phone registers for push with the hub.
         await PushCenter.shared.start(app: self)
     }
 
@@ -384,6 +383,8 @@ final class AppModel {
         takeShared()
         Task {
             if let stored = await keeper.credentials, stored.needsRenewal() { _ = await keeper.refresh() }
+            // Not asked yet, turned on in Settings, or the hub has a sender now: try again.
+            await PushCenter.shared.foreground(app: self)
         }
     }
 }

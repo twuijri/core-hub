@@ -17,7 +17,7 @@ struct ShellView: View {
     @Environment(\.l10n) private var l10n
     @State private var main: MainContent = .newChat
     @State private var beforeSettings: MainContent = .newChat
-    @State private var drawerOpen = false
+    @State private var drawer = DrawerState()
     @State private var segment: DestinationID = .chat
     @State private var sessionList: SessionListModel?
     /// The first message of a chat made from the draft, handed to its conversation once.
@@ -30,7 +30,7 @@ struct ShellView: View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 page
-                if drawerOpen, let sessionList {
+                if drawer.isOpen, let sessionList {
                     Tone.scrim
                         .ignoresSafeArea()
                         .onTapGesture { setDrawer(false) }
@@ -117,8 +117,8 @@ struct ShellView: View {
     private var content: some View {
         switch main {
         case .newChat:
-            NewChatScreen(opened: { sessionID, profile, text in
-                firstMessages.put(sessionID, text)
+            NewChatScreen(opened: { sessionID, profile, message in
+                firstMessages.put(sessionID, message)
                 seed = nil
                 main = .chat(sessionID: sessionID, profile: profile)
             }, seed: seed)
@@ -156,15 +156,15 @@ struct ShellView: View {
     }
 
     private func setDrawer(_ open: Bool) {
-        withAnimation(.easeInOut(duration: Motion.normal)) { drawerOpen = open }
+        drawer.set(open)
     }
 }
 
 /// Not view state: taking a message must not redraw the shell.
 final class FirstMessages {
-    private var pending: [String: String] = [:]
+    private var pending: [String: OutgoingMessage] = [:]
 
-    func put(_ sessionID: String, _ text: String) { pending[sessionID] = text }
+    func put(_ sessionID: String, _ message: OutgoingMessage) { pending[sessionID] = message }
 
-    func take(_ sessionID: String) -> String? { pending.removeValue(forKey: sessionID) }
+    func take(_ sessionID: String) -> OutgoingMessage? { pending.removeValue(forKey: sessionID) }
 }

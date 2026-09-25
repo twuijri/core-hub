@@ -5,6 +5,7 @@ import hub.core.client.api.AuditApi
 import hub.core.client.api.AuthApi
 import hub.core.client.api.DevicesApi
 import hub.core.client.api.MetaApi
+import hub.core.client.api.ModelsApi
 import hub.core.client.api.NotifyApi
 import hub.core.client.api.RoomsApi
 import hub.core.client.api.SchedulesApi
@@ -49,10 +50,18 @@ class HubApis(hub: String, client: OkHttpClient) {
     val updates = UpdatesApi(base, client)
     val devices = DevicesApi(base, client)
     val audit = AuditApi(base, client)
+    /** Speech: whether the profile's STT / TTS providers are ready, transcribing, speaking. */
+    val models = ModelsApi(base, client)
 }
 
 /** A failed call, with the hub's own `{ error, code }` when it sent one. */
-data class HubError(val status: Int, val code: String?, val text: String?) : Exception(text ?: code) {
+data class HubError(
+    val status: Int,
+    val code: String?,
+    val text: String?,
+    /** `details.reason`, where the hub names why (e.g. `no_speech` for a silent recording). */
+    val reason: String? = null,
+) : Exception(text ?: code) {
     val offline: Boolean get() = status == 0
 
     companion object {
@@ -64,11 +73,17 @@ data class HubError(val status: Int, val code: String?, val text: String?) : Exc
             return str("code") to str("error")
         }
 
+        fun reasonOf(body: String?): String? {
+            val obj = body?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
+            return ((obj?.get("details") as? JsonObject)?.get("reason") as? JsonPrimitive)?.contentOrNull
+        }
+
         fun from(error: Throwable): HubError = when (error) {
             is HubError -> error
             is ClientException -> {
-                val (code, text) = bodyFields((error.response as? ClientError<*>)?.body as? String)
-                HubError(error.statusCode, code, text)
+                val body = (error.response as? ClientError<*>)?.body as? String
+                val (code, text) = bodyFields(body)
+                HubError(error.statusCode, code, text, reasonOf(body))
             }
             is ServerException -> {
                 val (code, text) = bodyFields((error.response as? ServerError<*>)?.body as? String)

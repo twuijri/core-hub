@@ -211,6 +211,8 @@ struct NotificationsPage: View {
             return try await (preferences, notices)
         } content: { loaded, reload in
             PreferencesForm(initial: loaded.0, saved: reload) { draft in
+                // Whether this phone can show them at all comes first.
+                PushStatusSection()
                 Section {
                     Toggle(l10n("notifications.on_complete"), isOn: draft.notifyOnComplete)
                     Toggle(l10n("notifications.on_approval"), isOn: draft.notifyOnApproval)

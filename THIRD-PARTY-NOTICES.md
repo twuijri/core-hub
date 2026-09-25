@@ -38,6 +38,30 @@ SST, Nous Research, Alibaba Cloud's Qwen team, Moonshot AI and Earendil. Core Hu
 what a trademark is for. Core Hub is not affiliated with, endorsed by, or a product of any
 of them. The ninth mark, for our own `direct` agent, is drawn by us.
 
+## Lucide — the apps' icons
+
+The iOS and Android apps draw their new icons from [Lucide](https://lucide.dev)
+([`lucide-static`](https://www.npmjs.com/package/lucide-static) `1.48.0`, a root dev dependency, pinned).
+`scripts/icons/lucide-mobile.mjs` reads the outlines of the icons listed in
+`scripts/icons/lucide-mobile.json` from the package's `icon-nodes.json` and writes them as template
+images in `apps/ios/CoreHub/Resources/Assets.xcassets/Lucide/` and as vector drawables
+`apps/android/app/src/main/res/drawable/lucide_*.xml`; each generated file names the package and its
+licence. Some Lucide icons derive from Feather (MIT, Copyright (c) 2013-present Cole Bemis), as the
+package's own licence file lists.
+
+ISC License · Copyright (c) 2026 Lucide Icons and Contributors
+
+> Permission to use, copy, modify, and/or distribute this software for any purpose with or without
+> fee is hereby granted, provided that the above copyright notice and this permission notice appear
+> in all copies.
+>
+> THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS
+> SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+> AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+> WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
+> NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+> OF THIS SOFTWARE.
+
 ## fflate — reading Office files in the web client
 
 The web client bundles [`fflate`](https://github.com/101arrowz/fflate) `0.8.3` (an npm

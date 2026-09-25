@@ -49,20 +49,18 @@ struct NoticeView: View {
     }
 }
 
-/// The product's mark: a rounded tile in the accent colour with the initials.
+/// The product's mark, as on the web: the Core Hub mark in the accent (the asset catalog's
+/// `BrandMark`, a template made by scripts/icons/build-icons.mjs from the one source).
 struct BrandMark: View {
     var size: CGFloat = 28
 
     var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-            .fill(Tone.accent)
+        Image("BrandMark")
+            .renderingMode(.template)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
             .frame(width: size, height: size)
-            .overlay(
-                Text("CH")
-                    .font(.system(size: size * 0.4, weight: .bold, design: .rounded))
-                    .foregroundStyle(Tone.accentText)
-            )
-            .environment(\.layoutDirection, .leftToRight)
+            .foregroundStyle(Tone.accent)
             .accessibilityHidden(true)
     }
 }

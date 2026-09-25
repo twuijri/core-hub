@@ -186,6 +186,7 @@ export function infoPlistStrings(language, product, catalogue) {
     NSCameraUsageDescription: catalogue.permissions.camera,
     NSLocalNetworkUsageDescription: catalogue.permissions.local_network,
     NSMicrophoneUsageDescription: catalogue.permissions.microphone,
+    NSPhotoLibraryUsageDescription: catalogue.permissions.photos,
     NSSpeechRecognitionUsageDescription: catalogue.permissions.speech,
   };
   const lines = Object.entries(entries).map(([k, v]) => `${k} = ${stringsLiteral(v)};`);
