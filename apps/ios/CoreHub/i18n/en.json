@@ -38,7 +38,9 @@
     "sign_out": "Sign out",
     "login": "Sign in",
     "setup": "First-run setup",
-    "back_to_agents": "Back to agents"
+    "back_to_agents": "Back to agents",
+    "skills_usage": "Skills usage",
+    "files": "Files"
   },
   "common": {
     "cancel": "Cancel",

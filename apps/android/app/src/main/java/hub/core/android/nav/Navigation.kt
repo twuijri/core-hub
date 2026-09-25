@@ -42,7 +42,9 @@ object Screens {
     /** The Settings list, in the manifest's order, as the phone's Settings page draws it. */
     val settingsTabs = listOf("account", "users", "webhooks", "display", "notifications", "privacy", "this_device", "about")
     val settingsManagement = listOf("models", "device_connections", "knowledge")
-    val settingsTools = listOf("logs", "usage", "performance", "theme", "workspaces", "updates", "plugins")
+    val settingsTools = listOf(
+        "logs", "usage", "skills_usage", "performance", "theme", "workspaces", "updates", "plugins", "files",
+    )
 
     /** An agent's pages, in order; each shows only when the adapter declares its capability. */
     val agentLevel = listOf(
@@ -61,7 +63,9 @@ object Screens {
     val all: Set<String> get() = (top + settingsTabs + settingsManagement + settingsTools + agentLevel).toSet()
 
     /** Destinations only an owner or admin sees (`roles: ["admin"]`). */
-    val adminOnly = setOf("agent_manager", "users", "webhooks", "performance", "workspaces", "updates", "plugins") + agentLevel
+    val adminOnly = setOf(
+        "agent_manager", "users", "webhooks", "performance", "workspaces", "updates", "plugins", "files",
+    ) + agentLevel
 
     /** The capability an agent page needs (`agent_settings` is shown for every installed agent). */
     val capabilityOf = mapOf(

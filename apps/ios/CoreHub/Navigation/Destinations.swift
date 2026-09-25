@@ -26,11 +26,13 @@ enum DestinationID: String, CaseIterable, Hashable, Identifiable {
     case about
     case logs
     case usage
+    case skillsUsage = "skills_usage"
     case performance
     case theme
     case workspaces
     case updates
     case plugins
+    case files
     case agentSkills = "agent_skills"
     case agentMcp = "agent_mcp"
     case agentMemory = "agent_memory"
@@ -61,7 +63,7 @@ enum DestinationID: String, CaseIterable, Hashable, Identifiable {
     /// Owners and admins only (`roles: ["admin"]`).
     var adminOnly: Bool {
         switch self {
-        case .agentManager, .users, .webhooks, .performance, .workspaces, .updates, .plugins,
+        case .agentManager, .users, .webhooks, .performance, .workspaces, .updates, .plugins, .files,
              .agentSkills, .agentMcp, .agentMemory, .agentJobs, .agentChannels, .agentPlugins, .agentSettings:
             return true
         default:
@@ -94,7 +96,9 @@ enum NavigationMap {
     static let footer: [DestinationID] = [.settings]
     static let settingsTabs: [DestinationID] = [.account, .users, .webhooks, .display, .notifications, .privacy, .thisDevice, .about]
     static let settingsManagement: [DestinationID] = [.models, .deviceConnections, .knowledge]
-    static let settingsTools: [DestinationID] = [.logs, .usage, .performance, .theme, .workspaces, .updates, .plugins]
+    static let settingsTools: [DestinationID] = [
+        .logs, .usage, .skillsUsage, .performance, .theme, .workspaces, .updates, .plugins, .files,
+    ]
     static let agentLevel: [DestinationID] = [.agentSkills, .agentMcp, .agentMemory, .agentJobs, .agentChannels, .agentPlugins, .agentSettings]
     /// Reached only from these entries (`secondaryEntries`).
     static let secondaryEntries: [DestinationID: [DestinationID]] = [.chat: [.search], .globalAgent: [.search]]
