@@ -19,8 +19,9 @@
  *
  * Two things are deliberately not here. There is **no list-attachments query**: the
  * contract declares no such operation, and a message's own blocks already carry every
- * file it has, so a list would be a second source of truth. And there is **no
- * transcription**: `models.transcribe` is still a documented `501`.
+ * file it has, so a list would be a second source of truth. And a dictation is **not an
+ * attachment**: the composer's mic sends its take to `models.transcribe` (`voice/`), which
+ * keeps nothing (DECISIONS §54).
  *
  * Upload progress needs `XMLHttpRequest` — `fetch` cannot report how much of a body it
  * has sent — so the one-shot upload does not go through the generated client. It sends

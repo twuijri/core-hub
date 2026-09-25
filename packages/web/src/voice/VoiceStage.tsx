@@ -62,6 +62,8 @@ export function VoiceStage({
   const [error, setError] = useState<string | null>(null);
   const turn = useRef<Turn | null>(null);
   const [waiting, setWaiting] = useState(false);
+  // The reply last spoken stays on the stage while the next turn is heard.
+  const [replyId, setReplyId] = useState<string | null>(null);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
@@ -100,6 +102,7 @@ export function VoiceStage({
     const text = textOf(reply);
     if (!current.reading) {
       current.replyId = reply.id;
+      setReplyId(reply.id);
       current.reading = voice.player.open(VOICE_MODE_ID, {
         language: languageOf(text || heard || ''),
         source: voice.source ?? 'hub',
@@ -187,9 +190,7 @@ export function VoiceStage({
     else if (phase === 'speaking' || phase === 'thinking') interrupt();
   };
 
-  const lastReply = turn.current?.replyId
-    ? messages.find((message) => message.id === turn.current?.replyId)
-    : undefined;
+  const lastReply = replyId ? messages.find((message) => message.id === replyId) : undefined;
 
   return (
     <Dialog
@@ -233,7 +234,7 @@ export function VoiceStage({
           {phase === 'listening' ? <IconStop size={40} /> : <IconMic size={40} />}
         </button>
         <p className="text-sm text-muted">{t('voice.stage.hint')}</p>
-        <DictationNotice dictation={dictation} />
+        <DictationNotice dictation={dictation} errorsOnly />
         {error && <Notice tone="danger">{error}</Notice>}
         {player.error?.id === VOICE_MODE_ID && (
           <Notice tone="danger">{player.error.message}</Notice>

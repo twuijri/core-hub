@@ -125,7 +125,14 @@ export const STT_SETUP = () => `${routeOf('models')}?tab=stt_providers`;
 export const TTS_SETUP = () => `${routeOf('models')}?tab=tts_providers`;
 
 /** What dictation is doing, or why it stopped — one line above the text, never silent. */
-export function DictationNotice({ dictation }: { dictation: Dictation }) {
+export function DictationNotice({
+  dictation,
+  errorsOnly = false,
+}: {
+  dictation: Dictation;
+  /** Where the state is already drawn large (voice mode), only a failure is said here. */
+  errorsOnly?: boolean;
+}) {
   const { t } = useI18n();
   const { state } = dictation;
   const seconds = useElapsedSeconds(state);
@@ -158,7 +165,7 @@ export function DictationNotice({ dictation }: { dictation: Dictation }) {
       </Notice>
     );
   }
-  if (!isLive(state)) return null;
+  if (errorsOnly || !isLive(state)) return null;
   return (
     <p className="composer-voice-status" role="status" data-testid="dictation-status">
       <span className="composer-voice-dot" data-phase={state.phase} aria-hidden />
