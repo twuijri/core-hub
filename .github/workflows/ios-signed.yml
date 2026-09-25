@@ -4,8 +4,9 @@ name: iOS signed build
 # The Apple Distribution certificate goes into a temporary keychain; the App Store provisioning
 # profiles come through the App Store Connect API key, which xcodebuild also uses
 # (-allowProvisioningUpdates). Never on a pull request: only when the owner runs it by hand or
-# pushes a release tag. TestFlight only when a manual run asks for it; the .ipa becomes a
-# workflow artifact only on a tag or when asked (the repository is public).
+# pushes a release tag. TestFlight only when a manual run asks for it, and then the build is added
+# to the TestFlight groups asked for (Owner by default); the .ipa becomes a workflow artifact only
+# on a tag or when asked (the repository is public).
 on:
   workflow_dispatch:
     inputs:
@@ -13,6 +14,10 @@ on:
         description: 'Upload the build to TestFlight'
         type: boolean
         default: false
+      testflight_groups:
+        description: 'TestFlight groups to add the uploaded build to (comma-separated; empty adds none)'
+        required: false
+        default: 'Owner'
       keep_artifacts:
         description: 'Keep the signed .ipa as a workflow artifact (anyone can download it)'
         type: boolean
@@ -39,7 +44,8 @@ jobs:
   signed:
     name: Signed archive and export
     runs-on: macos-latest
-    timeout-minutes: 60
+    # 60 for the build, and up to 30 more waiting for App Store Connect to process a TestFlight upload.
+    timeout-minutes: 95
     steps:
       - uses: actions/checkout@v4
       - name: Refuse tags that are not on main
@@ -215,7 +221,9 @@ jobs:
           share="$app/PlugIns/CoreHubShare.appex"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")" = "$APP_ID"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$share/Info.plist")" = "$SHARE_ID"
-          echo "Version $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Info.plist") ($(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Info.plist"))"
+          built_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Info.plist")
+          echo "Version $built_version ($(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Info.plist"))"
+          echo "BUILT_VERSION=$built_version" >> "$GITHUB_ENV"
           codesign --verify --deep --strict "$app"
           codesign -dv "$app" 2>&1 | grep -E '^(Identifier|TeamIdentifier|Authority)='
           for bundle in "$app" "$share"; do
@@ -231,6 +239,18 @@ jobs:
           ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
           ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
         run: xcrun altool --upload-app -f "$IPA" -t ios --apiKey "$ASC_API_KEY_ID" --apiIssuer "$ASC_API_ISSUER_ID"
+      # altool uploads are not "Xcode builds", so App Store Connect does not add them to internal
+      # groups by itself. Waits for processing (up to 30 minutes; slower is a warning, not a
+      # failure), then adds the build to each group. External groups still need Beta App Review.
+      - name: Add the build to TestFlight groups
+        if: github.event_name == 'workflow_dispatch' && inputs.upload_testflight && inputs.testflight_groups != ''
+        timeout-minutes: 35
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          TESTFLIGHT_GROUPS: ${{ inputs.testflight_groups }}
+          TESTFLIGHT_WAIT_MINUTES: '30'
+        run: node apps/ios/scripts/testflight-distribute.mjs "$APP_ID" "$BUILD_NUMBER" "$BUILT_VERSION" "$TESTFLIGHT_GROUPS"
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'push' || inputs.keep_artifacts
         with:

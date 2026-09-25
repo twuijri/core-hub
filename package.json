@@ -26,6 +26,7 @@
     "nav:check": "node scripts/navigation-check.mjs",
     "change-record:check": "node scripts/check-change-record.mjs",
     "version:check": "node scripts/version-check.mjs",
+    "scripts:test": "node --test \"apps/ios/scripts/*.test.mjs\"",
     "build": "pnpm -r --workspace-concurrency=1 --if-present build",
     "dev": "pnpm --filter @corehub/server dev",
     "web:dev": "pnpm --filter @corehub/web dev",
