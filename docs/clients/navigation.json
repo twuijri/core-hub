@@ -204,7 +204,7 @@
         "kind": "settings-management"
       },
       "roles": ["member"],
-      "note": "One page since 2026-09-26 (it had tabs App / Devices): pairing at the top, then the person's devices as cards grouped by kind (rename, remove, test, last active, push); an admin sees everyone's and the push senders folded at the bottom (contract decision §66, §77). A Settings page since 2026-09-22: configured once, so not in the sidebar."
+      "note": "One page since 2026-09-26 (it had tabs App / Devices): pairing at the top, then the person's devices as cards grouped by kind (rename, remove, test, last active, push); an admin sees everyone's and the push senders folded at the bottom (contract decisions §66, §78). A Settings page since 2026-09-22: configured once, so not in the sidebar."
     },
     {
       "id": "agent_manager",

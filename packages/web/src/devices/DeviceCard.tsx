@@ -135,145 +135,148 @@ export function DeviceCard({
         testId="device-row"
         data-device={device.id}
         data-kind={device.kind}
-        className="flex-row items-start gap-3"
+        className="h-full"
       >
-        <span
-          className="flex size-10 shrink-0 items-center justify-center rounded-md bg-sunken text-muted"
-          data-testid="device-icon"
-          data-icon={device.kind === 'phone' ? `${device.kind}-${device.platform}` : device.kind}
-        >
-          <DeviceIcon device={device} label={t(`devices.kind.${device.kind}`)} />
-        </span>
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium" dir="auto" data-testid="device-name">
-              {device.name}
-            </span>
-            {justPaired && (
-              <Badge tone="accent" testId="device-just-paired">
-                {t('devices.just_paired')}
-              </Badge>
-            )}
-            {(device.this_device || thisBrowser) && (
-              <Badge tone="accent" testId="device-this">
-                {t(thisBrowser ? 'devices.this_browser' : 'devices.this_device')}
-              </Badge>
-            )}
-            {!mine && <Badge tone="info">{t('devices.owner_other')}</Badge>}
-            {device.online && (
-              <Badge tone="success" dot>
-                {t('devices.online')}
-              </Badge>
-            )}
-          </div>
-          {model && model !== device.name && (
-            <p className="text-sm" dir="auto" data-testid="device-model">
-              {model}
-            </p>
-          )}
-          {(os || device.app_version) && (
-            <p className="text-xs text-muted" data-testid="device-versions">
-              {os && (
-                <span>
-                  {t(os)}
-                  {device.os_version && (
-                    <>
-                      {' '}
-                      <bdi dir="ltr">{device.os_version}</bdi>
-                    </>
-                  )}
-                </span>
+        {/* The kit's card stacks its children; the icon sits beside the text instead. */}
+        <div className="flex items-start gap-3">
+          <span
+            className="flex size-10 shrink-0 items-center justify-center rounded-md bg-sunken text-muted"
+            data-testid="device-icon"
+            data-icon={device.kind === 'phone' ? `${device.kind}-${device.platform}` : device.kind}
+          >
+            <DeviceIcon device={device} label={t(`devices.kind.${device.kind}`)} />
+          </span>
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium" dir="auto" data-testid="device-name">
+                {device.name}
+              </span>
+              {justPaired && (
+                <Badge tone="accent" testId="device-just-paired">
+                  {t('devices.just_paired')}
+                </Badge>
               )}
-              {os && device.app_version && <span aria-hidden> · </span>}
-              {device.app_version && (
-                <span>
-                  {t('app.name')} <bdi dir="ltr">{device.app_version}</bdi>
-                </span>
+              {(device.this_device || thisBrowser) && (
+                <Badge tone="accent" testId="device-this">
+                  {t(thisBrowser ? 'devices.this_browser' : 'devices.this_device')}
+                </Badge>
+              )}
+              {!mine && <Badge tone="info">{t('devices.owner_other')}</Badge>}
+              {device.online && (
+                <Badge tone="success" dot>
+                  {t('devices.online')}
+                </Badge>
+              )}
+            </div>
+            {model && model !== device.name && (
+              <p className="text-sm" dir="auto" data-testid="device-model">
+                {model}
+              </p>
+            )}
+            {(os || device.app_version) && (
+              <p className="text-xs text-muted" data-testid="device-versions">
+                {os && (
+                  <span>
+                    {t(os)}
+                    {device.os_version && (
+                      <>
+                        {' '}
+                        <bdi dir="ltr">{device.os_version}</bdi>
+                      </>
+                    )}
+                  </span>
+                )}
+                {os && device.app_version && <span aria-hidden> · </span>}
+                {device.app_version && (
+                  <span>
+                    {t('app.name')} <bdi dir="ltr">{device.app_version}</bdi>
+                  </span>
+                )}
+              </p>
+            )}
+            <p className="text-xs text-muted" data-testid="device-seen">
+              {device.last_seen_at ? (
+                <>
+                  {t('devices.last_active')}{' '}
+                  <Tooltip label={exactTime(device.last_seen_at, language)}>
+                    <time
+                      dateTime={device.last_seen_at}
+                      tabIndex={0}
+                      className="underline decoration-dotted underline-offset-2"
+                      data-testid="device-seen-time"
+                    >
+                      {relativeTime(device.last_seen_at, now, language)}
+                    </time>
+                  </Tooltip>
+                </>
+              ) : (
+                t('devices.never_seen')
+              )}
+              {device.paired_at && (
+                <>
+                  <span aria-hidden> · </span>
+                  <span data-testid="device-paired">
+                    {t(device.kind === 'browser' ? 'devices.added_on' : 'devices.paired_on', {
+                      date: shortDate(device.paired_at, language),
+                    })}
+                  </span>
+                </>
               )}
             </p>
-          )}
-          <p className="text-xs text-muted" data-testid="device-seen">
-            {device.last_seen_at ? (
-              <>
-                {t('devices.last_active')}{' '}
-                <Tooltip label={exactTime(device.last_seen_at, language)}>
-                  <time
-                    dateTime={device.last_seen_at}
-                    tabIndex={0}
-                    className="underline decoration-dotted underline-offset-2"
-                    data-testid="device-seen-time"
-                  >
-                    {relativeTime(device.last_seen_at, now, language)}
-                  </time>
-                </Tooltip>
-              </>
-            ) : (
-              t('devices.never_seen')
-            )}
-            {device.paired_at && (
-              <>
-                <span aria-hidden> · </span>
-                <span data-testid="device-paired">
-                  {t(device.kind === 'browser' ? 'devices.added_on' : 'devices.paired_on', {
-                    date: shortDate(device.paired_at, language),
-                  })}
-                </span>
-              </>
-            )}
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={PUSH_TONE[push.state]} testId="device-push">
-              <span data-state={push.state}>{pushLabel}</span>
-            </Badge>
-            {push.state === 'no_sender' && isAdmin && onSetUpPush && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={PUSH_TONE[push.state]} testId="device-push">
+                <span data-state={push.state}>{pushLabel}</span>
+              </Badge>
+              {push.state === 'no_sender' && isAdmin && onSetUpPush && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={onSetUpPush}
+                  data-testid="device-set-up-push"
+                >
+                  {t('devices.push_set_up')}
+                </Button>
+              )}
+            </div>
+            <div className="mt-1 flex flex-wrap gap-2">
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={onSetUpPush}
-                data-testid="device-set-up-push"
+                onClick={() => void onRename()}
+                data-testid="device-rename"
               >
-                {t('devices.push_set_up')}
+                {t('devices.rename')}
               </Button>
-            )}
-          </div>
-          <div className="mt-1 flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => void onRename()}
-              data-testid="device-rename"
-            >
-              {t('devices.rename')}
-            </Button>
-            {device.push && (
+              {device.push && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={test.isPending}
+                  onClick={onTest}
+                  data-testid="device-test"
+                >
+                  {t('devices.test_push')}
+                </Button>
+              )}
               <Button
                 size="sm"
-                variant="ghost"
-                disabled={test.isPending}
-                onClick={onTest}
-                data-testid="device-test"
+                variant="danger"
+                disabled={unlink.isPending}
+                onClick={() => void onRemove()}
+                data-testid="device-revoke"
               >
-                {t('devices.test_push')}
+                {t('devices.revoke')}
               </Button>
+            </div>
+            {tested && (
+              <Notice tone={tested.ok ? 'success' : 'warning'}>
+                {tested.ok
+                  ? t('devices.test_sent')
+                  : t('devices.test_failed', { error: tested.error ?? '' })}
+              </Notice>
             )}
-            <Button
-              size="sm"
-              variant="danger"
-              disabled={unlink.isPending}
-              onClick={() => void onRemove()}
-              data-testid="device-revoke"
-            >
-              {t('devices.revoke')}
-            </Button>
+            {error !== null && <Notice tone="danger">{describeError(error, t)}</Notice>}
           </div>
-          {tested && (
-            <Notice tone={tested.ok ? 'success' : 'warning'}>
-              {tested.ok
-                ? t('devices.test_sent')
-                : t('devices.test_failed', { error: tested.error ?? '' })}
-            </Notice>
-          )}
-          {error !== null && <Notice tone="danger">{describeError(error, t)}</Notice>}
         </div>
       </Card>
       {nameDialog}
