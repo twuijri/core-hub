@@ -16,6 +16,7 @@ import { conflict, notFound } from '../../lib/errors.js';
 import { CronError, nextRunAt, parseCron } from './cron.js';
 import { ConditionError, parseCondition, pathsIn } from './expr.js';
 import { deliveryOfHermes, type HermesJob } from './hermes-jobs.js';
+import { NO_LIMITS, limitsOf } from './limits.js';
 import { MAX_DELAY_SECONDS } from './workflow-engine.js';
 import {
   nodeRuns,
@@ -27,6 +28,7 @@ import {
   type ScheduleOverlap,
   type WorkflowDefinition,
   type WorkflowEdge,
+  type WorkflowLimits,
   type WorkflowNode,
   type WorkflowResumeState,
 } from './schema.js';
@@ -156,6 +158,40 @@ export class SchedulesService {
     if (!row.enabled) return null;
     if (row.repeatLimit !== null && row.repeatCount >= row.repeatLimit) return null;
     return row.nextRunAt;
+  }
+
+  /**
+   * The next `count` times a trigger would fire, from `now`, without saving anything — the
+   * same checks as saving it (`validateTrigger`) and the same calculation that sets
+   * `next_run_at` (`cron.ts`), each next time counted from the one before, as the scheduler
+   * does when it claims a tick. Fewer come back when there are fewer.
+   */
+  previewTrigger(
+    trigger: Record<string, unknown>,
+    count: number,
+    now: Date = new Date(),
+  ): { timezone: string; nextRuns: Date[] } {
+    this.validateTrigger(trigger);
+    const timezone = (trigger.timezone as string | undefined) ?? 'UTC';
+    const kind = (trigger.kind as ScheduleRow['kind'] | undefined) ?? 'cron';
+    const shape = {
+      kind,
+      cron: (trigger.expression as string | null | undefined) ?? null,
+      timezone,
+      intervalSeconds: trigger.every_minutes ? Number(trigger.every_minutes) * 60 : null,
+      runAt: trigger.run_at ? new Date(String(trigger.run_at)) : null,
+    };
+    const nextRuns: Date[] = [];
+    let from = now;
+    let last: Date | null = null;
+    while (nextRuns.length < count) {
+      const next = nextRunAt(shape, from, last);
+      if (!next) break;
+      nextRuns.push(next);
+      from = next;
+      last = next;
+    }
+    return { timezone, nextRuns };
   }
 
   create(scope: Scope, input: Record<string, unknown>): ScheduleRow {
@@ -842,11 +878,17 @@ export class SchedulesService {
     const values: Partial<typeof workflows.$inferInsert> = { updatedAt: new Date() };
     if (patch.name !== undefined) values.name = String(patch.name);
     if (patch.description !== undefined) values.description = patch.description as string | null;
-    if (patch.nodes !== undefined || patch.edges !== undefined || patch.working_dir !== undefined) {
+    if (
+      patch.nodes !== undefined ||
+      patch.edges !== undefined ||
+      patch.working_dir !== undefined ||
+      patch.limits !== undefined
+    ) {
       const definition = definitionOf({
         nodes: patch.nodes ?? current.definition.nodes,
         edges: patch.edges ?? current.definition.edges,
         working_dir: patch.working_dir ?? current.definition.workingDir ?? null,
+        limits: patch.limits !== undefined ? patch.limits : (current.definition.limits ?? null),
       });
       const problems = validateDefinition(definition);
       if (problems.length > 0) throw conflict({ reason: 'workflow_invalid', problems });
@@ -926,6 +968,8 @@ export class SchedulesService {
       triggerKind: WorkflowRunRow['triggerKind'];
       triggerRef?: string | null;
       scheduleId?: string | null;
+      /** The limits this run works under; the workflow's when not given. */
+      limits?: WorkflowLimits;
     },
   ): WorkflowRunRow {
     const id = newUlid();
@@ -942,7 +986,11 @@ export class SchedulesService {
         triggerRef: input.triggerRef ?? null,
         status: 'running',
         workflowVersion: workflow.version,
-        definitionSnapshot: workflow.definition,
+        // The run's own limits travel with the drawing it runs, so a rerun keeps them.
+        definitionSnapshot: {
+          ...workflow.definition,
+          limits: input.limits ?? workflow.definition.limits ?? { ...NO_LIMITS },
+        },
         input: input.input,
         startedAt: now,
       })
@@ -1222,6 +1270,7 @@ export function definitionOf(input: Record<string, unknown>): WorkflowDefinition
     nodes: ((input.nodes as WorkflowNode[] | undefined) ?? []).map((node) => ({ ...node })),
     edges: ((input.edges as WorkflowEdge[] | undefined) ?? []).map((edge) => ({ ...edge })),
     workingDir: (input.working_dir as string | null | undefined) ?? null,
+    limits: limitsOf(input.limits),
   };
 }
 

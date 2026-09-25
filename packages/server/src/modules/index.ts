@@ -79,7 +79,7 @@ import { modelsModule, modelsServiceFor } from './models/index.js';
 import { devicesModule } from './devices/index.js';
 import { createNotifier, notifyModule } from './notify/index.js';
 import { updatesModule } from './updates/index.js';
-import { auditModule, registerAnalyticsSources, registerLiveSources } from './audit/index.js';
+import { auditFor, auditModule, registerAnalyticsSources, registerLiveSources } from './audit/index.js';
 import { pluginsModule } from './plugins/index.js';
 
 // The one wiring line the sessions module asked for: its ports come from `agents` (the
@@ -344,10 +344,33 @@ registerHermesCron((app) => ({
 registerWorkflowPorts((app) => {
   const notifier = createNotifier(requireSqlite(app.hub.database), () => app.hub.io);
   return {
-    agentTurn: async (scope, input) => {
-      const turn = sessionTurnsFor(app);
-      if (!turn) throw new Error('this hub composes no sessions module');
-      return turn(scope, { ...input, source: 'workflow' });
+    agentTurn: async (scope, input, control) => {
+      if (!control) {
+        const turn = sessionTurnsFor(app);
+        if (!turn) throw new Error('this hub composes no sessions module');
+        return turn(scope, { ...input, source: 'workflow' });
+      }
+      // Followed while it works: the engine reads its cost by run id, and a limit that runs
+      // out stops it the way the chat's Stop does (DECISIONS §53).
+      const runs = sessionRunsFor(app);
+      if (!runs) throw new Error('this hub composes no sessions module');
+      const handle = await runs.start(scope, { ...input, source: 'workflow' });
+      control.started({ sessionId: handle.sessionId, runId: handle.runId });
+      const stop = () => {
+        void runs.cancel(scope, handle.sessionId, handle.runId).catch(() => undefined);
+      };
+      if (control.signal.aborted) stop();
+      else control.signal.addEventListener('abort', stop, { once: true });
+      try {
+        return await handle.done;
+      } finally {
+        control.signal.removeEventListener('abort', stop);
+      }
+    },
+    // A turn's cost is the hub's per-turn estimate the usage ledger keeps (`Usage.cost`).
+    cost: (scope, runId) => {
+      const totals = auditFor(app).totalsForRun(scope.workspace, runId);
+      return { microUsd: totals.costMicroUsd, priced: totals.hasCost };
     },
     notice: (scope, input) =>
       notifier.announce(

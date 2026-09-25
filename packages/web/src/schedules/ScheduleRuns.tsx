@@ -8,6 +8,9 @@
  * A workflow run that waits for a person shows the question and two answers where the
  * run is shown. The answer is the same `respondApproval` every other approval uses; a
  * "no" carries its reason, which becomes the failed step's error.
+ *
+ * A run also shows the limits it worked under, what it cost so far and which limit stopped
+ * it (`WorkflowLimits.tsx`), and opens its workflow's limits to change them for next time.
  */
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -18,6 +21,13 @@ import { chatHref } from '../chat/anchor.js';
 import { useI18n } from '../i18n/context.js';
 import { useProfileInLink } from '../shell/profiles.js';
 import { Badge, Button, Dialog, Input, Notice, Skeleton, type BadgeTone } from '../ui/index.js';
+import {
+  RunLimits,
+  WorkflowLimitsForm,
+  type Limits,
+  type Money,
+  type StoppedBy,
+} from './WorkflowLimits.js';
 
 interface ScheduleRunRow {
   id: string;
@@ -43,9 +53,13 @@ interface WorkflowStepRow {
 
 interface WorkflowRunRow {
   id: string;
+  workflow_id: string;
   status: 'queued' | 'running' | 'waiting' | 'succeeded' | 'failed' | 'cancelled';
   steps: WorkflowStepRow[];
   error: string | null;
+  limits?: Limits;
+  cost?: Money | null;
+  stopped_by?: StoppedBy | null;
 }
 
 interface ApprovalRow {
@@ -217,6 +231,7 @@ export function WorkflowRunDialog({
   const waiting = run.data?.steps.find(
     (step) => step.status === 'waiting_approval' && step.approval_id,
   );
+  const [editLimits, setEditLimits] = useState(false);
 
   return (
     <Dialog
@@ -274,6 +289,29 @@ export function WorkflowRunDialog({
               {run.data.error}
             </p>
           )}
+          <section className="flex flex-col gap-2 border-t border-line pt-3">
+            <span className="flex items-center gap-2">
+              <h3 className="text-sm font-medium">{t('schedules.limits.title')}</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ms-auto"
+                aria-expanded={editLimits}
+                onClick={() => setEditLimits((open) => !open)}
+                data-testid="workflow-limits-toggle"
+              >
+                {t(editLimits ? 'schedules.limits.hide' : 'schedules.limits.edit')}
+              </Button>
+            </span>
+            <RunLimits
+              limits={run.data.limits}
+              cost={run.data.cost}
+              stoppedBy={run.data.stopped_by}
+            />
+            {editLimits && (
+              <WorkflowLimitsForm workflowId={run.data.workflow_id} profile={profile} />
+            )}
+          </section>
         </div>
       )}
     </Dialog>

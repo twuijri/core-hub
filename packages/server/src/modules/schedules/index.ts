@@ -44,7 +44,15 @@ import {
 } from './service.js';
 import type { WorkflowDefinition } from './schema.js';
 import { HermesCron, refusedByHermesCron, type HermesCronPort } from './hermes-cron.js';
-import { WorkflowEngine, stepOf, type RunScope, type WorkflowPorts } from './workflow-engine.js';
+import {
+  WorkflowEngine,
+  costOf,
+  stepOf,
+  stoppedByOf,
+  type RunScope,
+  type WorkflowPorts,
+} from './workflow-engine.js';
+import { NO_LIMITS, runLimits } from './limits.js';
 import { ScheduleRuns, type ScheduleRunPorts } from './schedule-runs.js';
 import { HubScheduler } from './scheduler.js';
 
@@ -444,6 +452,7 @@ function toWorkflow(
     active_run_id: counts.activeRunId,
     run_count: counts.runs,
     schedule_count: counts.schedules,
+    limits: definition.limits ?? { ...NO_LIMITS },
   };
 }
 
@@ -479,6 +488,10 @@ function toWorkflowRun(
     error: row.error,
     started_at: row.startedAt?.toISOString() ?? null,
     finished_at: row.finishedAt?.toISOString() ?? null,
+    // The limits it ran under, what it cost so far, and which limit ended it (§53).
+    limits: (row.definitionSnapshot as WorkflowDefinition).limits ?? { ...NO_LIMITS },
+    cost: costOf(row.output),
+    stopped_by: stoppedByOf(row.output),
   };
 }
 
@@ -710,6 +723,18 @@ export const schedulesModule = defineModule({
         const schedule = toSchedule(row, scope.profile, service.shownNext(row));
         announce(request, 'schedule.created', { schedule });
         return schedule;
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'schedules.previewTrigger',
+      handler: (request, { body }) => {
+        const ask = body as { trigger: Record<string, unknown>; count?: number };
+        const preview = serviceOf(request).previewTrigger(ask.trigger, ask.count ?? 3);
+        return {
+          timezone: preview.timezone,
+          next_runs: preview.nextRuns.map((at) => at.toISOString()),
+        };
       },
     });
 
@@ -1000,8 +1025,15 @@ export const schedulesModule = defineModule({
         const scope = runScopeOf(request);
         const service = serviceOf(request);
         const workflow = service.workflow(scope, params.workflow_id as string);
-        const ask = (body ?? {}) as { input?: string | null; start_node_ids?: string[] | null };
+        const ask = (body ?? {}) as {
+          input?: string | null;
+          start_node_ids?: string[] | null;
+          limits?: Record<string, unknown> | null;
+          timeout_ms?: number | null;
+        };
         const definition = workflow.definition as WorkflowDefinition;
+        // This run's own limits over the workflow's (§53); refused before anything starts.
+        const limits = runLimits(definition.limits, ask.limits, ask.timeout_ms);
         if (definition.nodes.length === 0) {
           throw new HubError('conflict', { details: { reason: 'workflow_empty' } });
         }
@@ -1017,6 +1049,7 @@ export const schedulesModule = defineModule({
           input: ask.input ?? null,
           triggerKind: 'manual',
           startNodeIds: ask.start_node_ids ?? null,
+          limits,
         });
         return { job_id: run.id, workflow_run_id: run.id };
       },

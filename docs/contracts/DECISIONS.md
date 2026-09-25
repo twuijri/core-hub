@@ -1293,3 +1293,49 @@ Not added: recipients for `notify` (a notice reaches the inbox of whoever the ru
 and a timeout for `approval` (it waits until answered) — the engine has neither, and a form
 field that does nothing would be a promise. Rejected: validating in the client (two rules that
 drift), and a separate `layout` object (positions already live on the nodes).
+
+## 53. A workflow run has limits; a schedule's next times can be asked before it is saved
+
+Two small additions to `schedules`. Proposed here — owner to confirm:
+
+- **`WorkflowLimits`** — `max_duration_seconds` (time budget, at most a week),
+  `max_cost` (`Money`, USD only, above zero) and `step_timeout_seconds` (at most a day), each
+  `null` for no limit. `Workflow.limits` is required (no limits = three `null`s);
+  `WorkflowWrite.limits` replaces the whole object. A run can set its own:
+  `WorkflowRunRequest.limits` (`WorkflowLimitsOverride`) — a field given replaces the workflow's
+  for that run, `null` lifts it, absent keeps it; the older `timeout_ms` is the same time
+  budget in milliseconds, and `limits.max_duration_seconds` wins over it. A cost in another
+  currency, or not above zero, is `409` with `details.reason = limit_invalid` and
+  `details.field`. `schedules.createWorkflow` now documents its `409` (it already answered
+  `workflow_invalid` with it).
+- **What a run shows**: `WorkflowRun.limits` (the ones it ran under — a rerun from a step keeps
+  those of the run it repeats), `WorkflowRun.cost` (`Money`, the sum of the hub's per-turn
+  estimate — the same one `Usage.cost` carries — over its agent steps; `null` while none had a
+  price) and `WorkflowRun.stopped_by` (`max_duration` | `max_cost` | `step_timeout` | `null`).
+- **How they stop a run.** The time budget and the cost budget stop the run at once: the step
+  working then is cancelled (an agent's run is stopped the way the chat's Stop does; a delay
+  ends), its status is `cancelled`, and the run is `failed` with `stopped_by` and an `error` that
+  says the limit ("stopped: the run went over its cost limit of $1.00 (it cost about $1.25)").
+  The cost is read while an agent step works (every two seconds) and when it ends; a budget
+  already used up stops the run before its next step. A step past `step_timeout_seconds` is
+  cancelled and **fails like any failed step** ("timed out after 30 s"), so a `failure` edge can
+  take it; only a timeout nothing handles ends the run, with `stopped_by: step_timeout`.
+- **Waiting for a person is not work.** Time a run waits at an approval counts toward neither
+  the time budget nor a step's timeout; what the run used before the wait is written down with
+  its place and carried on after the answer (and after a restart).
+- **A turn with no price counts as nothing.** The hub only knows what its estimate knows; a
+  model it has no price for cannot trip a cost budget. The run view says "no priced turn yet".
+- **`schedules.previewTrigger`** (`POST /schedules/preview`, body `{trigger, count}`) answers the
+  next `count` times (3 by default, at most 10) a trigger would fire, from now, in UTC, with the
+  trigger's `timezone` to show them in — the same check and the same calculation that set a
+  saved schedule's `next_run_at` (`cron.ts`), each next time counted from the one before as the
+  scheduler does. A trigger saving would refuse is refused the same way (`409 cron_invalid`,
+  `timezone_unknown`, …). A schedule in Hermes's scheduler is timed by Hermes; a five-field cron
+  reads the same there. Nothing is written.
+
+Rejected: limits as columns (they live in the workflow's `definition` and the run's
+`definition_snapshot`, where the drawing already is — no migration, and a run keeps what it ran
+under); cost budgets in any currency (the hub has no exchange rate); a step timeout that ends
+the whole run (a timeout is a failure a drawing may want to handle, like any other); counting
+the wait at an approval (a budget protects against runaway work, not a slow person); computing
+the next times in the browser (a second cron reader that could disagree with the hub's).
