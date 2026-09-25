@@ -1,0 +1,103 @@
+package hub.core.android
+
+import android.app.Application
+import android.content.Context
+import android.content.SharedPreferences
+import hub.core.android.data.HttpClients
+import hub.core.android.data.HubApis
+import hub.core.android.data.KeystoreSealer
+import hub.core.android.data.SecureStore
+import hub.core.android.data.SessionStore
+import hub.core.android.data.StoredSession
+import hub.core.android.realtime.Realtime
+import hub.core.android.ui.theme.ThemeChoice
+import java.util.Locale
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+/** The two UI languages; content direction is decided per message, not by this. */
+enum class AppLanguage(val tag: String) {
+    AR("ar"), EN("en");
+
+    companion object {
+        fun of(tag: String?): AppLanguage? = entries.firstOrNull { it.tag == tag }
+        fun system(): AppLanguage = if (Locale.getDefault().language == "ar") AR else EN
+    }
+}
+
+/** Local preferences of this install (NAVIGATION.md §1 footer chips: language and theme). */
+class AppPrefs(private val prefs: SharedPreferences) {
+    /** Null follows the phone's language. */
+    var language: AppLanguage?
+        get() = AppLanguage.of(prefs.getString(KEY_LANGUAGE, null))
+        set(value) = prefs.edit().putString(KEY_LANGUAGE, value?.tag).apply()
+
+    val effectiveLanguage: AppLanguage get() = language ?: AppLanguage.system()
+
+    private val _theme = MutableStateFlow(
+        runCatching { ThemeChoice.valueOf(prefs.getString(KEY_THEME, null) ?: "") }.getOrDefault(ThemeChoice.SYSTEM),
+    )
+    val theme: StateFlow<ThemeChoice> = _theme.asStateFlow()
+
+    fun setTheme(choice: ThemeChoice) {
+        prefs.edit().putString(KEY_THEME, choice.name).apply()
+        _theme.value = choice
+    }
+
+    private companion object {
+        const val KEY_LANGUAGE = "language"
+        const val KEY_THEME = "theme"
+    }
+}
+
+/** Everything long-lived the screens share, made once per process. */
+class AppGraph(context: Context) {
+    val prefs = AppPrefs(context.getSharedPreferences("corehub.prefs", Context.MODE_PRIVATE))
+    val store = SessionStore(
+        SecureStore(context.getSharedPreferences("corehub.secure", Context.MODE_PRIVATE), KeystoreSealer()),
+    )
+    private val _signedOut = MutableSharedFlow<String?>(extraBufferCapacity = 4)
+
+    /** Emits when the hub ended the session (revoked, expired): the reason code, if any. */
+    val signedOut: SharedFlow<String?> = _signedOut.asSharedFlow()
+    val http = HttpClients(store, { prefs.effectiveLanguage.tag }) { reason -> _signedOut.tryEmit(reason) }
+    val realtime = Realtime(http.plain)
+
+    /**
+     * The first message of a chat created from the draft, waiting for the conversation screen:
+     * it subscribes before it sends, so not one event of the first reply is missed.
+     */
+    val outbox = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    private var apisFor: String? = null
+    private var cachedApis: HubApis? = null
+
+    /** The generated API of the signed-in hub. */
+    @Synchronized
+    fun apis(session: StoredSession): HubApis {
+        if (apisFor != session.hub || cachedApis == null) {
+            cachedApis = HubApis(session.hub, http.authed)
+            apisFor = session.hub
+        }
+        return cachedApis!!
+    }
+
+    /** An API with no credentials, for sign-in, first-run setup and claiming a pairing. */
+    fun anonymous(hub: String) = HubApis(hub, http.plain)
+}
+
+class CoreHubApp : Application() {
+    lateinit var graph: AppGraph
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        graph = AppGraph(this)
+    }
+}
+
+val Context.graph: AppGraph get() = (applicationContext as CoreHubApp).graph

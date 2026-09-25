@@ -12,3 +12,9 @@ additionalProperties:
   enumPropertyNaming: UPPERCASE
   omitGradleWrapper: true
   useCoroutines: true
+# A free-form value (`{}` / `additionalProperties: true`) is kept as the JSON it is: kotlinx
+# has no serializer for `kotlin.Any`, and the hub sends tool arguments and settings this way.
+typeMappings:
+  AnyType: JsonElement
+importMappings:
+  JsonElement: kotlinx.serialization.json.JsonElement

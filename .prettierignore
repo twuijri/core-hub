@@ -11,6 +11,9 @@ packages/web/dist
 packages/ui-tokens/dist
 packages/web/playwright-report
 packages/web/test-results
+# Gradle's output and caches for the Android client
+apps/android/**/build
+apps/android/.gradle
 
 # Graphify's code map, written by `graphify update .` (docs/harness/knowledge-graph.md)
 graphify-out/

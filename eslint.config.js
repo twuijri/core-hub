@@ -28,6 +28,9 @@ export default tseslint.config(
       '**/coverage/**',
       'packages/contracts/generated/**',
       'data/**',
+      // Gradle's output (test and lint reports carry their own scripts).
+      'apps/android/**/build/**',
+      'apps/android/.gradle/**',
     ],
   },
   js.configs.recommended,

@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- النصوص العربية. كل مفتاح هنا موجود في values/strings.xml أيضًا (StringsParityTest). -->
+<resources>
+    <string name="back">رجوع</string>
+    <string name="cancel">إلغاء</string>
+    <string name="loading">جارٍ التحميل…</string>
+    <string name="menu_open">فتح القائمة</string>
+    <string name="menu_close">إغلاق القائمة</string>
+    <string name="phone_not_yet">هذه الصفحة ليست في تطبيق الجوال بعد. تصل في التحديث القادم، وهي حتى ذلك الحين في الويب.</string>
+
+    <string name="error_offline">تعذّر الوصول إلى المركز. تحقّق من العنوان ومن الاتصال.</string>
+    <string name="error_not_built">المركز لا يقدّم هذا بعد.</string>
+    <string name="error_code">رفض المركز: %1$s</string>
+    <string name="error_unknown">حدث خطأ ما.</string>
+
+    <string name="connect_title">اتصل بمركزك</string>
+    <string name="connect_scan_body">في الويب أو تطبيق سطح المكتب افتح الإعدادات ← اتصالات الأجهزة واختر إقران جهاز، ثم امسح الرمز الذي يظهر.</string>
+    <string name="connect_scan">امسح رمز الإقران</string>
+    <string name="connect_scan_prompt">وجّه الكاميرا إلى رمز الإقران</string>
+    <string name="connect_pairing_invalid">هذا ليس رمز إقران لكور هب، أو انتهت صلاحيته. أنشئ رمزًا جديدًا وامسحه.</string>
+    <string name="connect_paste_open">الصق رمز الإقران بدلًا من ذلك</string>
+    <string name="connect_paste_label">رمز الإقران أو رابطه</string>
+    <string name="connect_paste_claim">أقرن هذا الجوال</string>
+    <string name="connect_or_address">أو سجّل الدخول بعنوان المركز</string>
+    <string name="connect_hub_label">عنوان المركز</string>
+    <string name="connect_hub_invalid">اكتب عنوان المركز، مثل hub.example.com أو http://192.168.1.10:8787</string>
+    <string name="connect_continue">متابعة</string>
+    <string name="connect_username">اسم المستخدم</string>
+    <string name="connect_password">كلمة المرور</string>
+    <string name="connect_other_hub">استخدم مركزًا آخر</string>
+
+    <string name="setup_open_body">لا مالك لهذا المركز بعد. من يهيّئه الآن يصبح مالكه.</string>
+    <string name="setup_token_body">لا مالك لهذا المركز بعد. أدخل رمز التهيئة من سجل المركز أو من الملف setup-token.txt في مجلد بياناته.</string>
+    <string name="setup_display_name">اسمك</string>
+    <string name="setup_confirm">كلمة المرور مرة أخرى</string>
+    <string name="setup_token">رمز التهيئة</string>
+    <string name="setup_create">أنشئ حساب المالك</string>
+
+    <string name="pair_switch_title">الإقران بمركز آخر؟</string>
+    <string name="pair_switch_body">هذا الجوال مسجَّل الدخول. الإقران بـ %1$s يسجّل خروجه من هنا أولًا.</string>
+    <string name="pair_switch_confirm">سجّل الخروج وأقرِن</string>
+
+    <string name="profile_label">البروفايل</string>
+    <string name="chats_all_profiles">كل البروفايلات</string>
+    <string name="chats_search">ابحث في المحادثات</string>
+    <string name="chats_active">النشطة</string>
+    <string name="chats_archived">المؤرشفة</string>
+    <string name="chats_all">الكل</string>
+    <string name="chats_pinned">المثبّتة</string>
+    <string name="chats_recent">الأخيرة · %1$d</string>
+    <string name="chats_empty">لا محادثات بعد.</string>
+    <string name="rooms_empty">لا غرف بعد.</string>
+
+    <string name="theme_light">فاتح</string>
+    <string name="theme_dark">داكن</string>
+    <string name="theme_system">حسب النظام</string>
+
+    <string name="chat_you">أنت</string>
+    <string name="chat_greeting">على ماذا نعمل؟</string>
+    <string name="chat_in_profile">في البروفايل %1$s</string>
+    <string name="chat_no_agents">لا وكيل للحديث معه</string>
+    <string name="chat_no_agents_body">لا وكيل مثبّت في هذا البروفايل. يثبّته المالك أو المشرف من صفحة الوكلاء.</string>
+    <string name="chat_placeholder">اكتب رسالة</string>
+    <string name="chat_placeholder_agent">رسالة إلى %1$s</string>
+    <string name="chat_send">إرسال</string>
+    <string name="chat_stop">إيقاف</string>
+    <string name="chat_copy">نسخ</string>
+    <string name="chat_copy_code">انسخ الكود</string>
+    <string name="chat_thinking">يفكّر</string>
+    <string name="chat_queued">ينتظر في الطابور</string>
+    <string name="chat_seconds_short">%1$d ث</string>
+    <string name="chat_seconds">%1$.1f ث</string>
+    <string name="chat_thought_for">فكّر %1$d ث</string>
+    <string name="chat_reasoning">التفكير</string>
+    <string name="chat_loading_older">جارٍ تحميل الرسائل الأقدم…</string>
+    <string name="chat_run_failed">فشل التشغيل.</string>
+    <string name="chat_tool_done">تم</string>
+    <string name="chat_tool_failed">فشل</string>
+    <string name="chat_tool_arguments">المدخلات</string>
+    <string name="chat_tool_output">المخرجات</string>
+
+    <string name="approval_tool">%1$s يريد تنفيذ هذا</string>
+    <string name="approval_memory">%1$s يريد الكتابة في ذاكرته</string>
+    <string name="approval_skill">%1$s يريد تغيير مهارة</string>
+    <string name="approval_plan">%1$s يطلب موافقتك على خطة</string>
+    <string name="approval_step">خطوة في سير عمل تنتظرك</string>
+    <string name="approval_once">اسمح مرة</string>
+    <string name="approval_session">اسمح في هذه المحادثة</string>
+    <string name="approval_always">اسمح دائمًا</string>
+    <string name="approval_deny">ارفض</string>
+
+    <string name="question_title">الوكيل يسأل</string>
+    <string name="question_left">بقي %1$s</string>
+    <string name="question_skip">تخطَّ</string>
+    <string name="question_own">إجابتك أنت</string>
+    <string name="question_send">إرسال</string>
+    <string name="question_recommended">مقترح</string>
+</resources>

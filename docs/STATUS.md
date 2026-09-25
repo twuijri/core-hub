@@ -96,7 +96,16 @@ its approval.
   realtime.
 - **Terminal** (`packages/cli`): the reference client — `setup`, login, pairing,
   agents, models, sessions, an interactive `chat` with resume and approvals.
-- Desktop, Android and iOS: not started (ADR 0007, ADR 0009).
+- **Android** (`apps/android`, Kotlin + Compose, since 2026-09-25, part 1 of 3): pairing by the
+  hub's QR (or a pasted code, or a `corehub://pair` link) or the hub's address and sign-in (and
+  first-run setup), tokens sealed with a Keystore key and renewed as the contract says; the drawer
+  (the sidebar), the profile switcher at its top, the chats list with its «all profiles» filter,
+  archive filter and search; the conversation with realtime streaming (resume with `after_seq`),
+  Markdown and code, tool-call cards, approvals and the agent's questions, the thinking indicator;
+  Arabic (RTL) and English. Search, Agents, Tasks, Schedules and Settings say they are not on the
+  phone yet. The generated Kotlin client reads all 219 response examples of the contract. CI builds
+  the debug APK (`.github/workflows/android.yml`); nothing is published.
+- Desktop and iOS: not started (ADR 0007, ADR 0009).
 
 ## Name
 Since 2026-09-24 the product is **Core Hub** («كور هب», ADR 0017): packages `@corehub/*`, the

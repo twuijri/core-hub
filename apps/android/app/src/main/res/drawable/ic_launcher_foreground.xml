@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Our own mark: a hub — a ring with a centre and four spokes. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="5"
+        android:pathData="M54,32 A22,22 0 1,1 53.99,32 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M54,46 A8,8 0 1,1 53.99,46 Z" />
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="4" android:strokeLineCap="round"
+        android:pathData="M54,32 L54,46 M54,62 L54,76 M32,54 L46,54 M62,54 L76,54" />
+</vector>
