@@ -893,6 +893,90 @@ describe('the Models tabs: speech in its own tabs, and an Images tab (owner, 202
     });
   });
 
+  it('offers the ChatGPT subscription’s image model, labelled as the subscription’s, and says where its list came from', async () => {
+    const CODEX_ID = '01J8QK3ZR2W7M5N4P6T8V9X0CX';
+    const NOUS_ID = '01J8QK3ZR2W7M5N4P6T8V9X0NS';
+    const codexModel = (model: string, capabilities: string[] = ['tools']) => ({
+      ...MODEL,
+      key: `openai-codex/${model}`,
+      provider_id: CODEX_ID,
+      provider: 'openai-codex',
+      model,
+      capabilities,
+    });
+    const codex = provider({
+      id: CODEX_ID,
+      slug: 'openai-codex',
+      label: 'ChatGPT / Codex (subscription)',
+      base_url: 'https://chatgpt.com/backend-api/codex',
+      auth: { kind: 'oauth', signed_in: true },
+      catalogue: {
+        status: 'ready',
+        refreshed_at: '2026-09-26T00:00:00Z',
+        error: null,
+        refreshable: true,
+        source: 'provider',
+        fallback_reason: null,
+      },
+      draws_images: true,
+      models: [codexModel('gpt-6-sol'), codexModel('gpt-image-2', ['image_output'])],
+    });
+    // Another signed-in provider whose id looks like an image model: the hub cannot draw with it.
+    const nous = provider({
+      id: NOUS_ID,
+      slug: 'nous',
+      label: 'Nous Portal',
+      auth: { kind: 'oauth', signed_in: true },
+      catalogue: {
+        status: 'ready',
+        refreshed_at: '2026-09-26T00:00:00Z',
+        error: null,
+        refreshable: true,
+        source: 'fallback',
+        fallback_reason: 'the provider answered HTTP 503',
+      },
+      draws_images: false,
+    });
+    const nousImage = {
+      ...MODEL,
+      key: 'nous/flux-2',
+      provider_id: NOUS_ID,
+      provider: 'nous',
+      model: 'flux-2',
+      capabilities: ['image_output'],
+    };
+    const { state, fetchImpl } = hub({
+      providers: [codex, nous],
+      models: [codexModel('gpt-6-sol'), codexModel('gpt-image-2', ['image_output']), nousImage],
+      defaults: defaults(),
+    });
+    renderScreen(fetchImpl);
+    // The list on the card says whose it is: the account's own, or a fallback and why.
+    expect((await screen.findByTestId('catalogue-from-account')).textContent).toContain(
+      'your ChatGPT / Codex (subscription) plan offers',
+    );
+    expect((await screen.findByTestId('catalogue-fallback')).textContent).toContain(
+      'the provider answered HTTP 503',
+    );
+
+    await userEvent.click(screen.getByText('Images'));
+    await screen.findByTestId('images-tab');
+    const undo = stubListViewport();
+    await openControl(userEvent, screen.getByTestId('image-model'));
+    const rows = await screen.findAllByTestId('combobox-option');
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining(
+        'Images via your ChatGPT / Codex (subscription) subscription (gpt-image-2 through the chat model)',
+      ),
+    ]);
+    await userEvent.click(rows[0]!);
+    undo();
+    await waitFor(() => {
+      const put = state.sent.find((call) => call.url.endsWith('/models/defaults') && call.body);
+      expect(put?.body).toEqual({ image: { provider_id: CODEX_ID, model: 'gpt-image-2' } });
+    });
+  });
+
   it("says an inherited image model is the default profile's, and a chosen one can go back to it", async () => {
     const chosen = { provider_id: PROXY_ID, model: 'gemini-3.1-flash-image' };
     const inheritedHub = hub({

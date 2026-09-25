@@ -945,10 +945,15 @@
       "hint": "The model this profile draws and edits images with. It comes from your chat providers — there are no separate image providers. A profile that chooses none uses the default profile's.",
       "model": "Image model",
       "none": "None of your chat providers offers an image model.",
-      "none_hint": "Add or refresh a provider that has one — for example a proxy that serves gemini-3.1-flash-image, or OpenAI with gpt-image — and it appears here.",
+      "none_hint": "Add or refresh a provider that has one — for example a proxy that serves gemini-3.1-flash-image, OpenAI with gpt-image, or a signed-in ChatGPT subscription — and it appears here.",
       "to_providers": "Go to Providers",
       "clear": "Use the default profile’s",
-      "used_by": "Hermes's image tool and the image skills (generate, edit, remove background) use this model with its provider's key. Nothing else to set up."
+      "used_by": "Hermes's image tool and the image skills (generate, edit, remove background) use this model with its provider's key. Nothing else to set up.",
+      "via_subscription": "Images via your {provider} subscription ({model} through the chat model)"
+    },
+    "catalogue": {
+      "fallback": "This list is a fallback kept in code, not the provider's own: the provider could not be asked ({reason}). Refresh once it can be.",
+      "from_account": "These are the models your {provider} plan offers, as the provider lists them for your account."
     }
   },
   "working_dir": {
