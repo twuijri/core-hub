@@ -1,9 +1,9 @@
 # audit
 
-Owns: `audit_event`, `usage_record`, `performance_snapshot`, `job`,
-`job_event`. Schema: `packages/server/src/modules/audit/schema.ts`.
+Owns: `audit_event`, `usage_record`, `job`, `job_event`. Schema: `packages/server/src/modules/audit/schema.ts`.
 
-`usage_records` is scoped. `performance_snapshots` is global.
+`usage_records` is scoped. (`performance_snapshots` was dropped by migration
+`0023`, contract decision §73: Performance is measured when asked.)
 `audit_events`, `jobs`, `job_events` carry a **nullable** `workspace`
 (hub-level rows have none). Base columns omitted. Jobs are here by
 `DECISIONS.md` §6.
@@ -122,7 +122,8 @@ Indexes: (status, created_at) for the worker; (workspace, created_at);
   for a period; session cost = sum by `session_id`.
 - Audit log (admin): `audit_events` newest first, filter by workspace,
   actor, action, entity.
-- Performance dashboard: `performance_snapshots` in a window.
+- Performance: measured when asked, never stored (`live.ts`, contract
+  decision §51).
 
 ## Not stored
 

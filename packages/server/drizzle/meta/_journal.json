@@ -162,6 +162,13 @@
       "when": 1790351883773,
       "tag": "0022_device_push_session",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1790352945046,
+      "tag": "0023_drop_performance_snapshots",
+      "breakpoints": true
     }
   ]
 }

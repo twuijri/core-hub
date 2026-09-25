@@ -14749,25 +14749,22 @@ paths:
       - name: kind
         in: path
         required: true
-        description: Which screen's data — `logs`, `usage`, `performance` or `skills`.
+        description: Which report — `usage` or `skills`.
         schema:
           type: string
-          enum: [logs, usage, performance, skills]
+          enum: [usage, skills]
     get:
       operationId: audit.getReport
       tags: [audit]
-      summary: The Logs, Usage, Performance and Skills usage reports in one open shape
+      summary: The Usage and Skills usage reports of one profile in one open shape
       description: |
-        Global for `logs` and `performance` (admin); workspace-scoped for `usage` and `skills`.
-        The Usage and Skills usage screens read the typed `audit.getUsage` and
-        `audit.getSkillUsage` (contract decision §50); `skills` here answers the header's profile
-        with the same body as `audit.getSkillUsage` in `data`.
+        Workspace-scoped: the header's profile. The Usage and Skills usage screens read the typed
+        `audit.getUsage` and `audit.getSkillUsage` (contract decision §50); `skills` here answers
+        the header's profile with the same body as `audit.getSkillUsage` in `data`. Logs and
+        Performance are `audit.listLogLines` and `audit.getLivePerformance` (§51); the `logs` and
+        `performance` kinds that were here are gone (§73).
       parameters:
-        - name: X-Hub-Profile
-          in: header
-          required: false
-          schema:
-            $ref: '#/components/schemas/ProfileSlug'
+        - $ref: '#/components/parameters/Profile'
         - name: days
           in: query
           schema:
@@ -14775,15 +14772,6 @@ paths:
             minimum: 1
             maximum: 365
             default: 30
-        - name: q
-          in: query
-          schema:
-            type: string
-        - name: level
-          in: query
-          schema:
-            type: string
-            enum: [error, warn, info, debug]
       x-rt-events: []
       responses:
         '200':
@@ -23496,7 +23484,7 @@ components:
       properties:
         kind:
           type: string
-          enum: [logs, usage, performance, skills]
+          enum: [usage, skills]
         period:
           type: object
           required: [from, to]
@@ -23511,7 +23499,7 @@ components:
           $ref: '#/components/schemas/Timestamp'
         data:
           type: object
-          description: Kind-specific; fixed in Phase 4 (usage totals and breakdowns, runtime processes, skill counts, log entries with ISO timestamps and byte sizes).
+          description: Kind-specific (usage totals and breakdowns; the Skills usage body of `audit.getSkillUsage`).
           additionalProperties: true
     TerminalSession:
       type: object

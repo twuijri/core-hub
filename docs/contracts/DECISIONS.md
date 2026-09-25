@@ -2180,3 +2180,28 @@ service, so cli-proxy-api and custom endpoints would not work); a second copy of
 protocols inside the backend (two implementations drift); keeping `OPENAI_API_KEY`/`GEMINI_API_KEY`
 as fallbacks in the skills (Hermes hides them from the terminal, and they would draw with a model
 nobody chose).
+
+## 73. `audit.getReport` loses its `logs` and `performance` kinds
+
+Since §51 the web's Logs and Performance read `audit.listLogLines` and `audit.getLivePerformance`,
+and §51 kept the old kinds "for the CLI and older clients". On 2026-09-26 the Android and iOS apps
+moved to the live endpoints too (Android had no Logs or Performance screen; iOS read the old
+kinds). Nothing in the repository asks for `logs` or `performance` any more — not the web, the
+CLI, the desktop shell or either app — and the apps only talk to hubs of their own version.
+Proposed here — owner to confirm:
+
+- **`audit.getReport` answers `usage` and `skills` only.** The `kind` enum (path and
+  `AuditReport.kind`) is `[usage, skills]`; asking for `logs` or `performance` is `400`. Both
+  kinds are a profile's own, so `X-Hub-Profile` is now the required `Profile` parameter, as on
+  every scoped operation. The `q` and `level` query parameters, which only the logs kind read, are
+  gone.
+- **The minute-by-minute sampler stops, and `performance_snapshots` is dropped** (migration
+  `0023`). Its rows fed only the old performance kind; Performance is measured when asked (§51).
+  The audit trail and job events the logs kind merged are unchanged — they are still written and
+  still read by everything else that reads them.
+- Swift and Kotlin clients are regenerated from the contract; the iOS Usage page is the only
+  caller left and passes its profile, as it did.
+
+Rejected: keeping the kinds deprecated (a shape nobody calls is a shape nobody tests); keeping the
+sampler for a future history screen (history is the live endpoint's `history`, and a table that
+fills itself for nobody is waste).

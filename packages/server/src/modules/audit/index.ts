@@ -1,12 +1,12 @@
 /**
- * Module `audit`: the audit trail, the usage/cost ledger, performance snapshots, and the
- * jobs kernel every other module uses for long work (invariant 4).
+ * Module `audit`: the audit trail, the usage/cost ledger, and the jobs kernel every other
+ * module uses for long work (invariant 4).
  *
  * Implemented: `jobs.list`, `jobs.get`, `jobs.cancel`, the `/rt/jobs` namespace, and the
  * `AuditService` / `JobRunner` other modules import from here.
  *
- * Also implemented (Phase 4): `audit.getReport` for `usage`, `logs`, `performance` and
- * `skills`, and the typed Usage and Skills usage screens `audit.getUsage` /
+ * Also implemented (Phase 4): `audit.getReport` for `usage` and `skills` (its `logs` and
+ * `performance` kinds went with contract decision §73), and the typed Usage and Skills usage screens `audit.getUsage` /
  * `audit.getSkillUsage` (contract decision §50, `analytics.ts`). Skill use is recorded from
  * the version that added it (`skill_uses`); the reports say from when. And the live screens
  * (contract decision §51): `audit.getLivePerformance` (`live.ts`, measured when asked) and
@@ -19,7 +19,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
 import { loadOpenApiDocument } from '@corehub/contracts';
-import { newUlid } from '../../db/ids.js';
 import { requireSqlite } from '../../lib/db.js';
 import { HubError, notFound } from '../../lib/errors.js';
 import { createContractIndex } from '../../lib/contract.js';
@@ -36,7 +35,8 @@ import {
   type BackgroundItem,
 } from './background.js';
 import { createJobRunner, type JobRunner } from './jobs.js';
-import { ReportService, type LogLevel, type ReportKind } from './reports.js';
+import { ReportService, type ReportKind } from './reports.js';
+import type { LogLevel } from '../../lib/log-ring.js';
 import { LiveSampler, liveSourcesFor, socketsPerProfile } from './live.js';
 import { AuditService, serializeJob } from './service.js';
 
@@ -64,7 +64,7 @@ export type {
   BackgroundStatus,
 } from './background.js';
 export { ReportService, isoDate, moneyOf, windowOf } from './reports.js';
-export type { LogLevel, Report, ReportKind, ReportRequest } from './reports.js';
+export type { Report, ReportKind, ReportRequest } from './reports.js';
 export { UsageAnalytics, calendarPeriod } from './analytics.js';
 export type {
   AnalyticsProfile,
@@ -130,43 +130,10 @@ function contextOf(app: FastifyInstance): AuditContext {
     live: new LiveSampler(),
   };
   contexts.set(hub.io, created);
-  startSampler(app, reports);
   app.addHook('onClose', () => {
     created.live.close();
   });
   return created;
-}
-
-/** How often the hub writes down what it is using. One row a minute is 1 440 a day. */
-export const SAMPLE_INTERVAL_MS = 60_000;
-
-/** A row nobody signed: the hub measuring itself has no user behind it. */
-const SYSTEM_OWNER = '00000000000000000000000000';
-
-/**
- * The Performance screen needs a history, and a history has to be written by somebody.
- * The hub writes one row a minute about itself, and stops when the app closes — a timer
- * that outlives its app would keep a test process alive for ever, so it is `unref`'d and
- * hooked to `onClose` as well.
- */
-function startSampler(app: FastifyInstance, reports: ReportService): void {
-  const timer = setInterval(() => {
-    try {
-      reports.sample({
-        id: newUlid(),
-        ownerId: SYSTEM_OWNER,
-        queuedJobs: reports.queuedJobs(),
-        connectedClients: app.hub.io.engine?.clientsCount ?? 0,
-      });
-    } catch (error) {
-      // A sample nobody can write is not worth failing a hub over.
-      app.log.debug({ err: error }, 'audit: performance sample failed');
-    }
-  }, SAMPLE_INTERVAL_MS);
-  timer.unref?.();
-  app.addHook('onClose', () => {
-    clearInterval(timer);
-  });
 }
 
 /** The audit ledger for this app; callers use it during a request, when `app.hub` exists. */
@@ -322,23 +289,20 @@ export const auditModule = defineModule({
       operationId: 'audit.getReport',
       handler: (request, { params, query }) => {
         const kind = params.kind as ReportKind;
-        // `usage` and `skills` are a workspace's own; `logs` and `performance` are the
-        // hub's. The contract says so with an optional `X-Hub-Profile`, so the header
-        // decides rather than this handler inventing a scope.
-        const workspace =
-          kind === 'usage' || kind === 'skills' ? (request.workspace?.id ?? null) : null;
-        if ((kind === 'usage' || kind === 'skills') && workspace === null) {
+        // Both reports are a profile's own: the contract's required `X-Hub-Profile` names it.
+        const here = request.workspace;
+        if (!here) {
           throw new HubError('bad_request', {
             details: { reason: 'profile_required', header: 'X-Hub-Profile' },
           });
         }
         const context = contextOf(request.server);
+        const days = (query.days as number | undefined) ?? 30;
         if (kind === 'skills') {
           // The same body the Skills usage screen reads, for the header's profile alone.
-          const here = request.workspace!;
           const data = context.analytics.skills({
             profiles: [{ id: here.id, slug: here.slug, isDefault: here.isDefault }],
-            days: (query.days as number | undefined) ?? 30,
+            days,
           });
           const period = data.period as { from: string; to: string };
           return {
@@ -348,15 +312,9 @@ export const auditModule = defineModule({
             data,
           };
         }
-        const report = context.reports.build({
-          kind,
-          workspace,
-          days: (query.days as number | undefined) ?? 30,
-          q: query.q as string | undefined,
-          level: query.level as LogLevel | undefined,
-        });
-        // Every kind has a builder now; a kind without one would say so with the hub's 501
-        // rather than answer zeros that read as a measurement.
+        const report = context.reports.build({ kind, workspace: here.id, days });
+        // A kind without a builder would say so with the hub's 501 rather than answer zeros
+        // that read as a measurement.
         if (!report) {
           throw new HubError('not_implemented', {
             details: { operationId: 'audit.getReport', kind },
