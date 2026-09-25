@@ -1,0 +1,103 @@
+name: iOS store listing
+
+# The App Store listing of the iOS app (apps/ios/fastlane/metadata, docs/store/apple/README.md).
+# On a pull request or main: the listing is within App Store Connect's limits, and the demo hub the
+# screenshots use (apps/ios/CoreHub/Demo) still answers in the contract's shapes. By hand, with
+# `upload` ticked (off by default): the listing's text alone goes to App Store Connect with
+# fastlane deliver — no screenshots (ios-screenshots.yml sends those), no build, never a
+# submission for review.
+on:
+  pull_request:
+    paths:
+      - 'apps/ios/fastlane/**'
+      - 'apps/ios/scripts/store-metadata.mjs'
+      - 'apps/ios/scripts/demo-fixtures.mjs'
+      - 'apps/ios/CoreHub/Demo/**'
+      - 'packages/contracts/openapi.yaml'
+      - '.github/workflows/ios-store-metadata.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/ios/fastlane/**'
+      - 'apps/ios/scripts/store-metadata.mjs'
+      - 'apps/ios/scripts/demo-fixtures.mjs'
+      - 'apps/ios/CoreHub/Demo/**'
+      - 'packages/contracts/openapi.yaml'
+      - '.github/workflows/ios-store-metadata.yml'
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: 'Upload the listing text to App Store Connect (no screenshots, no build, never submits)'
+        type: boolean
+        default: false
+      version:
+        description: 'App Store version the listing belongs to; empty = the root package.json version'
+        required: false
+
+concurrency:
+  group: ios-store-metadata-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Store listing and demo hub checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @corehub/contracts
+      - name: The listing is within App Store Connect's limits
+        run: node apps/ios/scripts/store-metadata.mjs --summary
+      - name: The demo hub's answers match the contract
+        run: node apps/ios/scripts/demo-fixtures.mjs --check
+
+  upload:
+    name: Upload the listing to App Store Connect
+    needs: check
+    if: github.event_name == 'workflow_dispatch' && inputs.upload
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write the App Store Connect API key
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: bash apps/ios/scripts/asc-api-key-json.sh
+      - name: fastlane
+        run: |
+          command -v fastlane || brew install fastlane
+          fastlane --version | tail -n 1
+      - name: Upload with deliver (no screenshots, no build, no submission)
+        env:
+          VERSION: ${{ inputs.version }}
+          FASTLANE_SKIP_UPDATE_CHECK: '1'
+          FASTLANE_HIDE_TIMESTAMP: '1'
+        run: |
+          set -euo pipefail
+          version=${VERSION:-$(node -p "require('./package.json').version")}
+          fastlane deliver \
+            --api_key_path "$ASC_API_KEY_JSON" \
+            --app_identifier com.twuijri.corehub \
+            --platform ios \
+            --app_version "$version" \
+            --metadata_path apps/ios/fastlane/metadata \
+            --skip_screenshots true \
+            --skip_binary_upload true \
+            --skip_submission true \
+            --submit_for_review false \
+            --automatic_release false \
+            --run_precheck_before_submit false \
+            --force true
+      - name: Remove the key
+        if: always()
+        run: rm -f "${ASC_API_KEY_JSON:-/nonexistent}"

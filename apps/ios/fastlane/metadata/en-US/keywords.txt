@@ -1,0 +1,1 @@
+ai,agents,self-hosted,assistant,chat,llm,automation,tasks,mcp,server,homelab,open source

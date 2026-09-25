@@ -95,6 +95,12 @@ final class AppModel {
     func launch() async {
         await keeper.onSignedOut { [weak self] in self?.signedOutByHub() }
         await keeper.setLanguage(language)
+        #if DEBUG
+        if DemoHub.isOn {
+            await launchDemo()
+            return
+        }
+        #endif
         guard let stored = await keeper.credentials else {
             phase = .signedOut
             if let link = pendingLink {
@@ -110,6 +116,23 @@ final class AppModel {
         await refreshAccount()
         await PushCenter.shared.start(app: self)
     }
+
+    #if DEBUG
+    /// Screenshots and UI tests (`-UITestDemo YES`, DemoHub.swift): signed in to the demo hub at
+    /// once, with no socket, no push and no notices; `-UITestDemoOpen <path>` opens a page.
+    private func launchDemo() async {
+        let demo = DemoHub.credentials()
+        await keeper.set(demo)
+        credentials = demo
+        currentProfile = AppModel.pickProfile(remembered: nil, credentials: demo)
+        connection = .connected
+        phase = .signedIn
+        await refreshAccount()
+        if let path = DemoHub.openPath, let url = URL(string: "\(Product.id)://open\(path)") {
+            pendingRoute = AppModel.route(for: url, selector: currentProfile)
+        }
+    }
+    #endif
 
     /// Username and password against the hub at `hub`.
     func signIn(hub: URL, username: String, password: String) async throws {
@@ -390,6 +413,9 @@ final class AppModel {
     /// Foreground again: reconnect now and renew a device token that is due.
     func becameActive() {
         guard phase == .signedIn else { return }
+        #if DEBUG
+        if DemoHub.isOn { return }
+        #endif
         realtime.resume()
         takeShared()
         Task {

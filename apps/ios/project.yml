@@ -156,12 +156,37 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.twuijri.corehub.tests
         GENERATE_INFOPLIST_FILE: YES
+  # The App Store screenshots (docs/store/apple/README.md): XCUITest against the app signed in to
+  # its demo hub (`-UITestDemo YES`, CoreHub/Demo). Run by .github/workflows/ios-screenshots.yml
+  # through the CoreHubScreenshots scheme; built, not run, by the CoreHub scheme's tests.
+  CoreHubUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: CoreHubUITests
+    dependencies:
+      - target: CoreHub
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.twuijri.corehub.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: CoreHub
 schemes:
   CoreHub:
     build:
       targets:
         CoreHub: all
         CoreHubTests: [test]
+        CoreHubUITests: [test]
     test:
       targets:
         - CoreHubTests
+  CoreHubScreenshots:
+    build:
+      targets:
+        CoreHub: all
+        CoreHubUITests: [test]
+    test:
+      config: Debug
+      targets:
+        - CoreHubUITests

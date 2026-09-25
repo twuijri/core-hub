@@ -158,6 +158,44 @@ installers stay unsigned (`desktop.yml`).
 - **Play**: nothing yet; the signed AAB is ready for an internal-testing track when the owner
   decides. The listing's 512 px icon is `apps/android/store/icon-512.png`.
 
+## App Store submission
+
+Owner's decision (2026-09-25): the iPhone app goes to the App Store (no Mac App Store; Google Play
+later). The listing, screenshots, privacy policy and review notes are prepared in the repository
+([docs/store/apple/README.md](store/apple/README.md)); **submitting is always the owner's own step
+in App Store Connect**. No workflow submits for review.
+
+Once, and again when the listing or the screenshots change:
+
+1. **Listing and screenshots.** Actions → *iOS store screenshots* → Run workflow on `main`. Look
+   at the artifact `corehub-store-screenshots`; when they are right, run it again with **upload**
+   ticked. It sends the listing (`apps/ios/fastlane/metadata`) and the light screenshots to the
+   version (the root version, or the `version` input), creating that version in App Store Connect
+   if it is missing. For text alone: *iOS store listing* with **upload**.
+2. **App Privacy** (App Store Connect → the app → App Privacy): "No, we do not collect data from
+   this app", and the privacy policy URL
+   `https://github.com/twuijri/core-hub/blob/main/docs/privacy.md` (the checklist:
+   [docs/store/apple/README.md → App Privacy](store/apple/README.md#app-privacy-nutrition-label)).
+3. **Age rating** (App Information → Age Rating): the answers in
+   [docs/store/apple/README.md → Age rating](store/apple/README.md#age-rating-answers-to-app-store-connects-questionnaire).
+
+For each version:
+
+1. **A build.** Actions → *iOS signed build* → Run workflow with **upload_testflight** ticked.
+   Wait until App Store Connect has processed the build (TestFlight shows it).
+2. **Pick the build.** App Store Connect → the app → the version in "Prepare for Submission" →
+   **Build** → choose the build from TestFlight.
+3. **App Review Information.** Tick **Sign-in required** and enter the demo account's username
+   and password (only there, never in the repository). Paste the notes from
+   [docs/store/apple/review-notes.md](store/apple/review-notes.md) into **Notes**, with the demo
+   hub's address in place of `<DEMO_HUB_URL>`, and fill in the contact (name, phone, email).
+   Check first that the demo hub answers and its model replies.
+4. **Export compliance.** Nothing to answer: the app declares `ITSAppUsesNonExemptEncryption =
+   false` (`apps/ios/project.yml`), so App Store Connect does not ask.
+5. **Version details.** Check the version's text and screenshots, and the release choice
+   (manual or automatic after approval).
+6. **Add for Review**, then **Submit to App Review** on the page that follows.
+
 ## The GitHub release (`publish-release.yml`)
 
 On a `v*` tag on `main`, one workflow builds every file of the release and then, in its last job
