@@ -15,7 +15,9 @@ export const RUN_HISTORY_LIMIT = 100;
 export function useRunHistory(sessionId: string, live: Record<string, Run>): Record<string, Run> {
   const { client, profile, session } = useAuth();
   const history = useQuery({
-    queryKey: ['sessions', 'run-history', profile, sessionId] as const,
+    // Not under `['sessions']`: the session list updates every query of that prefix as a
+    // page of sessions, and would rewrite this list of runs as one.
+    queryKey: ['run-history', profile, sessionId] as const,
     enabled: !!session,
     queryFn: async () =>
       (

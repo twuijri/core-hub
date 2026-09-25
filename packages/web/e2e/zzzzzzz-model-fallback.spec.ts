@@ -83,7 +83,9 @@ test('34. a fallback model answers when the chat model is down, and the reply sa
   await expect(list).toContainText('النماذج الاحتياطية');
   await expect(list.getByTestId('fallback-empty')).toBeVisible();
   await list.getByTestId('fallback-add').click();
-  await page.getByRole('option', { name: /gpt-backup/ }).click();
+  // Earlier journeys leave hundreds of models on the hub: search, as a person would.
+  await page.getByTestId('combobox-field').fill('gpt-backup');
+  await page.getByTestId('combobox-option').filter({ hasText: 'gpt-backup' }).first().click();
   await expect(list.getByTestId('fallback-item')).toHaveCount(1);
   await expect(list.getByTestId('fallback-item').first()).toHaveAttribute(
     'data-model',

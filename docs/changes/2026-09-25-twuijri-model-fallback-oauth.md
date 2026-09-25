@@ -126,6 +126,19 @@ up-1}]` في `config.yaml` مع بقاء المفاتيح الأخرى، ونم�
 auth_unavailable`، فينتقل Hermes بنفسه إلى `up-1` ويجيب، ويقول المحوّل `model.fallback` بأسماء
 المركز. شُغّلت حاوية واحدة بـ `--rm` ولم يكن يعمل غير حاويات المالك الدائمة.
 
+أول CI (تشغيل 36084639082) فشل في رحلات Playwright 9 و26 و34 وفي اختبار CLI `pair`: مفتاح
+استعلام سجل التشغيلات الجديد كان تحت `['sessions', …]`، وقائمة المحادثات تحدّث كل استعلام بهذه
+البادئة على أنه صفحة محادثات، فتضيع تحديثات العناوين (9، 26)؛ ورحلة 34 لم تجد الخيار في قائمة
+مُفترضة (virtualized) بعد أن تركت الرحلات السابقة مئات النماذج. أُصلح الاثنان (مفتاح
+`['run-history', …]`، والبحث في الخانة قبل الاختيار). اختبار CLI نجح محليًا (19/19) دون تغيير —
+تذبذب توقيت. بعد الإصلاح محليًا:
+```
+$ playwright test setup.spec.ts smoke.spec.ts                          22 passed (1.4m)
+$ playwright test smoke.spec.ts zzzzzzz-model-fallback.spec.ts         22 passed (1.4m)
+$ playwright test zzz-chat-history.spec.ts                             3 passed (21.4s)
+$ vitest run tests/integration/cli.test.ts (packages/cli)              Tests  19 passed (19)
+```
+
 أثناء الكتابة كشف اختبار الويب حلقة استطلاع لا تنتهي (إبطال `['models']` كان يشمل استعلام
 الدخول نفسه) فأُصلحت قبل الدفع.
 
