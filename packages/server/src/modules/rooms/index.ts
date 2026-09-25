@@ -1,5 +1,5 @@
 /**
- * Module `rooms`: several agents and people in one conversation (DECISIONS §57, proposed —
+ * Module `rooms`: several agents and people in one conversation (DECISIONS §69, proposed —
  * owner to confirm).
  *
  * A room has members (people: its maker, who manages it, and whoever joined by its invite

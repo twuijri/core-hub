@@ -8,7 +8,7 @@ Realtime namespace `/rt/rooms`: `room_message.posted`, `seat.typing`,
 `seat.joined`, `seat.left`, `handoff.requested`, `handoff.completed`,
 `room.memory_updated`.
 
-**Since migration `0017` (contract decision §57)** the tables carry what the contract's room,
+**Since migration `0020` (contract decision §69)** the tables carry what the contract's room,
 seat and message need, and this page's older columns map as follows: `seat.alias` is the
 seat's `name`, `seat.persona` its `instructions`, and `seat.status = left` is a removed seat;
 `room` gained `working_dir`, `invite_code` (unique), `can_mention_all`, `lead_seat_id`, the
@@ -17,7 +17,7 @@ summary and handoff policies, `total_tokens`, the memory's status/error/coverage
 `avatar`, `preset_id` and `seen_seq` (the last room `seq` the seat was shown);
 `room_message` gained `status`, `author_name`, `session_id`, `mention_list` (the contract's
 `Mention` objects), `handoff`, `reasoning` and `usage`. `room.turn_policy` and
-`max_agent_turns` are not read: who answers is §57's rule (mentions, `@all`, else the lead
+`max_agent_turns` are not read: who answers is §69's rule (mentions, `@all`, else the lead
 seat) and the loop breaker is the handoff policy's `max_depth`. Agent-to-agent passes are
 `room_handoff_chains` (the contract's `HandoffChain`), not the founding `handoff` table,
 which stays unused. `seat_presets` holds saved seats. Room members are `owner` or `member`.

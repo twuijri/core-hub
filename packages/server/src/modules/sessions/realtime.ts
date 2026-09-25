@@ -89,7 +89,7 @@ const refuseAll: FollowCheck = () => Promise.resolve(false);
 
 /**
  * Hears every event of a session as it is sent — how `rooms` re-emits its seats' streams on
- * `/rt/rooms` (DECISIONS §1, §57). A listener that throws is ignored: a room must never be
+ * `/rt/rooms` (DECISIONS §1, §69). A listener that throws is ignored: a room must never be
  * able to break a conversation's stream.
  */
 export type SessionEventListener = (

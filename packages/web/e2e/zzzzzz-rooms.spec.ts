@@ -1,5 +1,5 @@
 /**
- * Rooms against the real hub (DECISIONS §57): the Rooms segment, a new room with an agent
+ * Rooms against the real hub (DECISIONS §69): the Rooms segment, a new room with an agent
  * seated, a message into it, the invite code, a second agent added from the members panel,
  * and archiving it.
  */
