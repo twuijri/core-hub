@@ -2777,6 +2777,129 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /sessions/{session_id}/files:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      operationId: sessions.listFiles
+      tags: [sessions]
+      summary: List the files of a conversation for preview
+      description: |
+        The conversation's files (contract decision §47): what its agent wrote or edited through
+        a tool (the paths in the tool calls' arguments), what is in its working folder, and the
+        files attached to its messages — the person's and the ones the agent handed back. One
+        entry per file, newest first; a file both in the folder and named by a tool call is one
+        entry with both `sources`.
+
+        Only the session's own working folder is listed (a task's session works in its own
+        folder too; a git worktree joins when the hub makes one). The folder is read to a
+        bounded depth and count (`truncated` says the cap was hit); hidden folders
+        (`.git`, the hub's own run folders) and `node_modules` are skipped unless a tool call
+        named a file inside them. Symbolic links are never followed.
+
+        `preview` says how a client shows the file and `preview_max_bytes` how large a file of
+        that kind may be to be previewed; a larger one, or `preview: none`, is offered for
+        download only. Read the bytes with `sessions.readFile` (`path`) or
+        `sessions.downloadAttachment` (`attachment_id`). A client reads the list again as
+        `tool.completed` / `tool.failed` / `run.completed` arrive on `/rt/sessions`; a
+        changed `modified_at` or `size_bytes` means the file changed.
+      x-rt-events: []
+      responses:
+        '200':
+          description: The files of the conversation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionFileList'
+              example:
+                working_dir: /data/workspaces/default/01J8QK3ZR2W7M5N4P6T8V9X0YA
+                truncated: false
+                items:
+                  - key: 'path:report.html'
+                    name: report.html
+                    path: report.html
+                    attachment_id: null
+                    message_id: null
+                    mime: text/html
+                    preview: html
+                    size_bytes: 2048
+                    preview_max_bytes: 5242880
+                    modified_at: '2026-09-25T10:15:39Z'
+                    sources: [tool, working_dir]
+                    tool_call_ids: [01J8QK3ZR2W7M5N4P6T8V9X0TC]
+                  - key: 'attachment:01J8QK3ZR2W7M5N4P6T8V9X0AT'
+                    name: 'ميزانية.xlsx'
+                    path: null
+                    attachment_id: 01J8QK3ZR2W7M5N4P6T8V9X0AT
+                    message_id: 01J8QK3ZR2W7M5N4P6T8V9X0MA
+                    mime: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+                    preview: xlsx
+                    size_bytes: 18200
+                    preview_max_bytes: 15728640
+                    modified_at: null
+                    sources: [attachment]
+                    tool_call_ids: []
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /sessions/{session_id}/files/content:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      operationId: sessions.readFile
+      tags: [sessions]
+      summary: Read one file of a conversation's working folder, for preview or download
+      description: |
+        The bytes of one file in the session's working folder (contract decision §47), read-only.
+        `path` is relative to the folder (as `sessions.listFiles` gives it) or absolute inside
+        it. Refused with `400 validation_failed` (`details.reason`): a path outside the folder
+        (`outside_root`), through or to a symbolic link (`symlink`), or not a regular file
+        (`not_a_file`). A file that is not there is `404`.
+
+        Without `download` the file is sent for preview (`Content-Disposition: inline`) and
+        refused with `413 payload_too_large` above its kind's preview limit (`details.max_bytes`,
+        the entry's `preview_max_bytes`); with `download=true` it is sent as a file
+        (`Content-Disposition: attachment`) up to the download limit. The type is chosen from
+        the name, never sniffed (`X-Content-Type-Options: nosniff`), text is `charset=utf-8`,
+        and every answer carries `Content-Security-Policy: sandbox; default-src 'none'` and
+        `Cache-Control: no-store`, so an HTML file opened directly runs nothing in the hub's
+        origin. A client renders HTML in a sandboxed frame of its own.
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: The file, relative to the session's working folder.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 4096
+          example: report.html
+        - name: download
+          in: query
+          description: 'Send the file for saving (`Content-Disposition: attachment`).'
+          schema:
+            type: boolean
+            default: false
+      x-rt-events: []
+      responses:
+        '200':
+          description: The file.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
   # ---------------------------------------------------------------- approvals
   /approvals:
     get:
@@ -14323,6 +14446,95 @@ components:
             $ref: '#/components/schemas/TrajectoryStep'
         metrics:
           $ref: '#/components/schemas/TrajectoryMetrics'
+    # ---------------------------------------------------------------- session files
+    SessionFilePreview:
+      type: string
+      enum: [html, pdf, image, markdown, code, text, csv, xlsx, docx, pptx, none]
+      description: |
+        How a client previews the file, decided from its name. `none` is offered for download
+        only. `html` is rendered in a sandboxed frame, never in the client's own origin.
+    SessionFileSource:
+      type: string
+      enum: [tool, working_dir, attachment]
+      description: |
+        Why the file is listed: a tool call named it, it is in the working folder, or it is
+        attached to a message (the person's, or one the agent handed back).
+    SessionFile:
+      type: object
+      required:
+        [
+          key,
+          name,
+          path,
+          attachment_id,
+          message_id,
+          mime,
+          preview,
+          size_bytes,
+          preview_max_bytes,
+          modified_at,
+          sources,
+          tool_call_ids,
+        ]
+      properties:
+        key:
+          type: string
+          description: Stable within the conversation — `path:<path>` or `attachment:<id>`.
+        name:
+          type: string
+          description: The file's own name (the last part of its path).
+        path:
+          type: [string, 'null']
+          description: Relative to the working folder, `/`-separated; `null` for an attachment.
+        attachment_id:
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+        message_id:
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+          description: The message the attachment is on.
+        mime:
+          type: string
+        preview:
+          $ref: '#/components/schemas/SessionFilePreview'
+        size_bytes:
+          type: integer
+          minimum: 0
+        preview_max_bytes:
+          type: integer
+          minimum: 0
+          description: The largest file of this kind `sessions.readFile` sends for preview.
+        modified_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: The file's last change on disk; `null` for an attachment.
+        sources:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SessionFileSource'
+        tool_call_ids:
+          type: array
+          description: The tool calls that named this file, oldest first.
+          items:
+            $ref: '#/components/schemas/Ulid'
+    SessionFileList:
+      type: object
+      required: [working_dir, truncated, items]
+      properties:
+        working_dir:
+          type: [string, 'null']
+          description: The folder the paths are relative to; `null` when the session has none.
+        truncated:
+          type: boolean
+          description: The folder held more than the hub lists; the newest are listed.
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionFile'
     # ---------------------------------------------------------------- runs
     RunStatus:
       type: string
