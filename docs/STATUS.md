@@ -106,10 +106,17 @@ its approval.
   by the OS and the unread count is the dock/taskbar badge, a tray keeps the app running
   (where the desktop has one), and the menus are in the app's language. The web client is the
   `desktop` surface there and gets **This device** (hub connection, change connection, app
-  version, keep-in-tray). Not yet: local mode (the first-run card says so), the local helper,
-  installers and the update check, voice (the page says so). Tests: unit tests of the main
-  process logic and the loopback proxy, and a smoke test (Electron under Xvfb) that connects,
-  signs in, streams a chat reply and pairs a second computer against the real hub.
+  version, keep-in-tray). Since 2026-09-25 also **local mode** (ADR 0021, proposed): the app
+  runs the same server as a child with Electron's own Node, on 127.0.0.1 and a free port, its
+  data in `<app data>/local-hub`; it finds the person's Hermes program (PATH, then where
+  Hermes's installers put it on Linux, macOS and Windows) or a running gateway, and without
+  one offers **Install Hermes** — Hermes's own installer, shown before it runs, output streamed
+  — or to continue without; This device then shows the data folder and the Hermes in use. Not
+  yet: the local helper, installers and the update check, voice (the page says so). Tests:
+  unit tests of the main process logic, the loopback proxy, Hermes detection per platform, the
+  installer runner and the hub supervisor; a smoke test (Electron under Xvfb) that connects,
+  signs in, streams a chat reply and pairs a second computer against the real hub, and starts
+  local mode on a computer without Hermes through to the first-run setup.
 - Android and iOS: not started (ADR 0007).
 
 ## Name

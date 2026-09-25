@@ -26,6 +26,14 @@ const paths = {
     ? path.resolve(process.env.COREHUB_DESKTOP_WEB_DIR)
     : path.join(here, 'web'),
   rendererDir: path.join(here, 'renderer'),
+  // Outside the asar archive in an installed app: the hub runs as its own Node process and
+  // loads native modules, neither of which can come from inside an archive.
+  hubEntry: path.join(
+    app.isPackaged ? path.join(process.resourcesPath, 'hub') : path.join(here, 'hub'),
+    'dist',
+    'app',
+    'hub.mjs',
+  ),
   preload: path.join(here, 'preload.cjs'),
   assetsDir: path.join(here, 'assets'),
 };

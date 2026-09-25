@@ -15,8 +15,7 @@
     "local": {
       "title": "Run on this computer",
       "body": "The app runs its own hub here and uses Hermes Agent installed on this computer. Nothing leaves this machine unless you connect it.",
-      "choose": "Run on this computer",
-      "unavailable": "Local mode is not in this build yet."
+      "choose": "Run on this computer"
     }
   },
   "remote": {
@@ -42,7 +41,11 @@
     "hub_unreachable": "Nothing answered at {url}. Check the address and that the hub is running.",
     "not_a_hub": "{url} answered, but it is not a Core Hub.",
     "pair_invalid": "This is not a pairing link, or it has expired. Start a new pairing and try again.",
-    "pair_failed": "Pairing did not work: {message}"
+    "pair_failed": "Pairing did not work: {message}",
+    "local_failed": "The hub on this computer did not start: {message}",
+    "local_stopped": "The hub on this computer stopped ({reason}). Start it again, or connect to a hub.",
+    "install_failed": "Installing Hermes did not work: {message}",
+    "install_not_found": "The installer finished, but Hermes is still not where it installs. Open a new terminal and run hermes --version, then try again."
   },
   "tray": {
     "show": "Open Core Hub",
@@ -82,5 +85,17 @@
     "pair_detail": "A link asked Core Hub to pair with this hub. Continue only if you started the pairing yourself.",
     "pair": "Pair",
     "cancel": "Cancel"
+  },
+  "local": {
+    "starting": "Starting the hub on this computer…",
+    "no_hermes_title": "Hermes Agent is not on this computer",
+    "no_hermes_body": "The hub on this computer works with Hermes Agent, which you install once with Hermes's own installer. It goes into Hermes's own folder; Core Hub does not carry a copy of it.",
+    "install": "Install Hermes",
+    "installing": "Installing Hermes… This can take several minutes.",
+    "install_command": "This is what will run, from Hermes's site:",
+    "without": "Continue without Hermes",
+    "without_hint": "The hub starts now; its agents show Hermes as not installed until you install it.",
+    "docs": "Hermes's installation guide",
+    "log": "Installer output"
   }
 }

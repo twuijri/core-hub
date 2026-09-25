@@ -48,7 +48,10 @@ if (location.protocol === 'file:') {
     init: () => ipcRenderer.invoke(CHANNELS.welcomeInit),
     connect: (url: string) => ipcRenderer.invoke(CHANNELS.welcomeConnect, String(url)),
     pair: (text: string) => ipcRenderer.invoke(CHANNELS.welcomePair, String(text)),
-    chooseLocal: () => ipcRenderer.invoke(CHANNELS.welcomeLocal),
+    chooseLocal: (options) =>
+      ipcRenderer.invoke(CHANNELS.welcomeLocal, { withoutHermes: options?.withoutHermes === true }),
+    installHermes: () => ipcRenderer.invoke(CHANNELS.welcomeInstallHermes),
+    onInstallLog: (listener) => listen<string>(CHANNELS.welcomeInstallLog, listener),
     setLanguage: (language: Language) =>
       ipcRenderer.invoke(CHANNELS.welcomeLanguage, language === 'ar' ? 'ar' : 'en'),
     onPrefill: (listener) => listen<string>(CHANNELS.welcomePrefill, listener),

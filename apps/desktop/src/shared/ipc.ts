@@ -20,6 +20,8 @@ export const CHANNELS = {
   welcomeLocal: 'welcome:local',
   welcomeLanguage: 'welcome:language',
   welcomePrefill: 'welcome:prefill',
+  welcomeInstallHermes: 'welcome:install-hermes',
+  welcomeInstallLog: 'welcome:install-log',
 } as const;
 
 export interface WelcomeInit {
@@ -32,6 +34,8 @@ export interface WelcomeInit {
   localAvailable: boolean;
   /** Opened from a `corehub://connect` link: show the remote form with this address. */
   prefill: string | null;
+  /** Why the first-run screen is back (the local hub stopped, say), or null. */
+  notice: WelcomeError | null;
 }
 
 /** An error the first-run screen shows: a catalogue key and its parameters. */
@@ -42,11 +46,24 @@ export interface WelcomeError {
 
 export type WelcomeResult = { ok: true } | { ok: false; error: WelcomeError };
 
+/** Hermes's official installer, as the first-run screen shows it before running it. */
+export interface HermesMissing {
+  command: string;
+  docs: string;
+}
+
+export type LocalResult =
+  { ok: true } | { ok: false; error: WelcomeError | null; hermesMissing?: HermesMissing };
+
 export interface WelcomeApi {
   init(): Promise<WelcomeInit>;
   connect(url: string): Promise<WelcomeResult>;
   pair(text: string): Promise<WelcomeResult>;
-  chooseLocal(): Promise<WelcomeResult>;
+  /** Local mode; without Hermes on the computer it asks first, unless told to go on. */
+  chooseLocal(options?: { withoutHermes?: boolean }): Promise<LocalResult>;
+  /** Runs Hermes's own installer, then starts local mode. */
+  installHermes(): Promise<LocalResult>;
+  onInstallLog(listener: (line: string) => void): () => void;
   setLanguage(language: Language): Promise<void>;
   onPrefill(listener: (url: string) => void): () => void;
 }

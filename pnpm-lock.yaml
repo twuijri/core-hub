@@ -197,6 +197,9 @@ importers:
         specifier: workspace:*
         version: link:../../packages/contracts
     devDependencies:
+      '@corehub/server':
+        specifier: workspace:*
+        version: link:../../packages/server
       '@corehub/web':
         specifier: workspace:*
         version: link:../../packages/web

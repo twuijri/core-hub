@@ -1683,6 +1683,12 @@
     "close_to_tray_hint": "The app stays in the tray and keeps showing notifications. Quit it from the tray.",
     "no_tray": "This desktop has no tray, so closing the window quits the app.",
     "voice": "Voice",
-    "voice_later": "Voice input, the dictation language and spoken replies are not in the desktop app yet."
+    "voice_later": "Voice input, the dictation language and spoken replies are not in the desktop app yet.",
+    "data_dir": "Data folder",
+    "hermes": "Hermes Agent",
+    "hermes_program": "Installed on this computer",
+    "hermes_gateway": "Already running on this computer",
+    "hermes_none": "Not found — the agents show Hermes as not installed",
+    "hermes_path": "Hermes program"
   }
 }

@@ -38,10 +38,23 @@ import {
 } from '../shared/deep-link.js';
 import { normalizeHubUrl, partitionKey } from '../shared/hub-url.js';
 import { isolate, translate } from '../shared/i18n.js';
-import { CHANNELS, type WelcomeInit, type WelcomeResult } from '../shared/ipc.js';
+import {
+  HERMES_INSTALL_DOCS,
+  hermesInstallerFor,
+  pathWithHermes,
+} from '../shared/hermes-detect.js';
+import {
+  CHANNELS,
+  type LocalResult,
+  type WelcomeError,
+  type WelcomeInit,
+  type WelcomeResult,
+} from '../shared/ipc.js';
 import { placeWindow } from '../shared/window-state.js';
 import { ConfigStore } from './config-store.js';
+import { findHermes, installHermes, thisMachine, type HermesFound } from './hermes.js';
 import { claimPairing, probeHub, type WebSession } from './hub.js';
+import { LocalHubError, startLocalHub, type LocalHub } from './local-hub.js';
 import { appMenuTemplate, trayMenuTemplate, type MenuActions } from './menu.js';
 import { startProxy, type ProxyServer } from './proxy.js';
 
@@ -50,6 +63,8 @@ export interface ControllerPaths {
   webDir: string;
   /** `welcome.html` and its script. */
   rendererDir: string;
+  /** The embedded hub's entry (`dist/hub/dist/app/hub.mjs`), for local mode. */
+  hubEntry: string;
   preload: string;
   assetsDir: string;
 }
@@ -64,6 +79,11 @@ export class DesktopController {
   private pendingSession: WebSession | null = null;
   private pendingPath: string | null = null;
   private saveBoundsTimer: NodeJS.Timeout | null = null;
+  private localHub: LocalHub | null = null;
+  private hermes: HermesFound | null = null;
+  /** Shown on the first-run screen when the app came back to it on its own. */
+  private welcomeNotice: WelcomeError | null = null;
+  private installing = false;
 
   constructor(
     private readonly paths: ControllerPaths,
@@ -88,7 +108,13 @@ export class DesktopController {
     if (this.options.tray) this.createTray();
     const config = this.config.get();
     if (config.mode === 'remote' && config.remote.url) this.openRemote(config.remote.url);
-    else this.openWelcome();
+    else if (config.mode === 'local') {
+      const started = await this.startLocal();
+      if (!started.ok) {
+        this.welcomeNotice = started.error;
+        this.openWelcome();
+      }
+    } else this.openWelcome();
   }
 
   prepareToQuit(): void {
@@ -104,8 +130,12 @@ export class DesktopController {
     this.quitting = true;
     this.tray?.destroy();
     this.tray = null;
-    // Quitting never waits long on a socket: the process ending closes whatever is left.
-    await Promise.race([this.proxy?.close(), new Promise((resolve) => setTimeout(resolve, 1_000))]);
+    // The local hub is stopped properly (its database, its Hermes child); the rest never
+    // holds up quitting: the process ending closes whatever socket is left.
+    await Promise.all([
+      this.stopLocal(),
+      Promise.race([this.proxy?.close(), new Promise((resolve) => setTimeout(resolve, 1_000))]),
+    ]);
   }
 
   /** Another launch, a dock click, a tray click: bring the current window forward. */
@@ -215,6 +245,60 @@ export class DesktopController {
     const proxy = this.requireProxy();
     proxy.setTarget(hub);
     this.openAppWindow(`persist:hub-${partitionKey(hub)}`);
+    // Local mode's hub has no one to serve now.
+    void this.stopLocal();
+  }
+
+  // ---------------------------------------------------------------- local mode
+
+  /** The embedded hub's data, apart from everything remote mode keeps. */
+  private localDataDir(): string {
+    return path.join(app.getPath('userData'), 'local-hub');
+  }
+
+  private async startLocal(): Promise<LocalResult> {
+    this.hermes = await findHermes(thisMachine());
+    if (!this.localHub) {
+      try {
+        const hub: LocalHub = await startLocalHub({
+          entry: this.paths.hubEntry,
+          dataDir: this.localDataDir(),
+          pathEnv: pathWithHermes(process.platform, this.hermes.cli, process.env.PATH),
+          env: process.env,
+          onExit: (code, signal) => this.localHubExited(code, signal),
+        });
+        this.localHub = hub;
+      } catch (error) {
+        const message =
+          error instanceof LocalHubError
+            ? [error.message, ...error.log.slice(-5)].join('\n')
+            : String(error);
+        return { ok: false, error: { key: 'errors.local_failed', params: { message } } };
+      }
+    }
+    this.requireProxy().setTarget(this.localHub.origin);
+    this.config.update((c) => ({ ...c, mode: 'local' }));
+    this.openAppWindow('persist:local');
+    return { ok: true };
+  }
+
+  private localHubExited(code: number | null, signal: NodeJS.Signals | null): void {
+    if (!this.localHub) return; // stopped on purpose
+    this.localHub = null;
+    if (this.quitting || this.config.get().mode !== 'local') return;
+    this.welcomeNotice = {
+      key: 'errors.local_stopped',
+      params: { reason: signal ?? `exit ${code ?? '?'}` },
+    };
+    this.requireProxy().setTarget(null);
+    this.openWelcome();
+  }
+
+  private async stopLocal(): Promise<void> {
+    const hub = this.localHub;
+    if (!hub) return;
+    this.localHub = null;
+    await hub.stop();
   }
 
   private openAppWindow(partition: string): void {
@@ -403,9 +487,17 @@ export class DesktopController {
       appVersion: app.getVersion(),
       platform: process.platform,
       mode: config.mode,
-      hubUrl: config.mode === 'remote' ? config.remote.url : null,
+      hubUrl: config.mode === 'remote' ? config.remote.url : (this.localHub?.origin ?? null),
       closeToTray: config.closeToTray,
       trayAvailable: this.tray !== null,
+      local:
+        config.mode === 'local'
+          ? {
+              dataDir: this.localDataDir(),
+              hermes: this.hermes?.gateway ? 'gateway' : this.hermes?.cli ? 'program' : 'none',
+              hermesProgram: this.hermes?.cli ?? null,
+            }
+          : null,
     };
   }
 
@@ -457,8 +549,9 @@ export class DesktopController {
         appVersion: app.getVersion(),
         remoteUrl: config.remote.url,
         recent: config.remote.recent,
-        localAvailable: false,
+        localAvailable: true,
         prefill,
+        notice: this.welcomeNotice,
       };
     });
     ipcMain.handle(CHANNELS.welcomeLanguage, (event, value: unknown) => {
@@ -482,9 +575,48 @@ export class DesktopController {
         return this.pair(pairing);
       },
     );
-    ipcMain.handle(CHANNELS.welcomeLocal, (event): WelcomeResult | null => {
-      if (!this.fromWelcome(event)) return null;
-      return { ok: false, error: { key: 'welcome.local.unavailable' } };
+    ipcMain.handle(
+      CHANNELS.welcomeLocal,
+      async (event, options: unknown): Promise<LocalResult | null> => {
+        if (!this.fromWelcome(event)) return null;
+        this.welcomeNotice = null;
+        const withoutHermes = (options as { withoutHermes?: unknown } | null)?.withoutHermes;
+        if (withoutHermes !== true) {
+          const found = await findHermes(thisMachine());
+          if (!found.cli && !found.gateway) {
+            const installer = hermesInstallerFor(process.platform);
+            return {
+              ok: false,
+              error: null,
+              hermesMissing: { command: installer.display, docs: HERMES_INSTALL_DOCS },
+            };
+          }
+        }
+        return this.startLocal();
+      },
+    );
+    ipcMain.handle(CHANNELS.welcomeInstallHermes, async (event): Promise<LocalResult | null> => {
+      if (!this.fromWelcome(event) || this.installing) return null;
+      this.installing = true;
+      const sender = event.sender;
+      try {
+        const result = await installHermes({
+          onLine: (line) => {
+            if (!sender.isDestroyed()) sender.send(CHANNELS.welcomeInstallLog, line);
+          },
+        });
+        if (!result.ok)
+          return {
+            ok: false,
+            error: { key: 'errors.install_failed', params: { message: result.message } },
+          };
+        const found = await findHermes(thisMachine());
+        if (!found.cli && !found.gateway)
+          return { ok: false, error: { key: 'errors.install_not_found' } };
+        return await this.startLocal();
+      } finally {
+        this.installing = false;
+      }
     });
   }
 

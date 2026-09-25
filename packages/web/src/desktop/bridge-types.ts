@@ -21,6 +21,20 @@ export interface DesktopState {
   closeToTray: boolean;
   /** Whether the OS gave the app a tray icon (some Linux desktops have none). */
   trayAvailable: boolean;
+  /** Local mode only: where the hub keeps its data, and which Hermes it found. */
+  local: DesktopLocalState | null;
+}
+
+export interface DesktopLocalState {
+  /** The embedded hub's data folder (its database, keys, and Hermes home). */
+  dataDir: string;
+  /**
+   * `program`: the hub runs the Hermes program installed on this computer; `gateway`: a
+   * Hermes gateway was already running and the hub uses it; `none`: no Hermes was found.
+   */
+  hermes: 'program' | 'gateway' | 'none';
+  /** The Hermes program the hub was given, when there is one. */
+  hermesProgram: string | null;
 }
 
 /** One notice shown by the OS (the in-app inbox keeps it too). */
