@@ -240,7 +240,14 @@ its approval.
   Since 2026-09-26 the `applicationId` is `com.twuijri.corehub` (the Kotlin packages stay
   `hub.core.android`), and `.github/workflows/android-signed.yml` (by hand or a release tag)
   builds a signed APK and AAB with Firebase's `google-services.json` from a secret — proven by a
-  run on the branch; the app does not register with FCM yet (docs/RELEASING.md).
+  run on the branch (docs/RELEASING.md). Since 2026-09-26 **push**: a build with Firebase takes an FCM
+  token after sign-in and registers it with the hub (`devices.registerPush`; a password sign-in
+  first registers this install as a device, a paired phone uses the device its pairing made),
+  again when Firebase rotates it, and removes it before sign-out; a tapped push opens the page its
+  notice is about; while push is registered the 15-minute background check stops. A build without
+  Firebase (every pull request) says so on This device and keeps the check. Unit-tested against a
+  scripted hub; **no real push has been sent to a phone** — the hub's FCM sender stays off until
+  the owner enters its credentials.
   Part 2 (2026-09-25): search across every profile (a global-agent hit opens the global agent),
   the Agents cards and each agent's pages (read-only), the Tasks board one column at a time (move,
   assign, start, open the conversation), Schedules (run now, pause, resume, history), and Settings
@@ -249,8 +256,8 @@ its approval.
   `corehub://open/<path>` opens the page the web path names (`surfaceRoutes.android`), and a
   parity test checks the app against `navigation.json`.
   Part 3 (2026-09-25): notices become Android notifications — announced on `/rt/devices` while the
-  app runs, and a background check every 15 minutes while it is closed (no push yet: the app does not
-  register with FCM — a follow-up; the hub's FCM sender came with the devices module); «Share to Core Hub» turns shared text into a new chat's draft (files
+  app runs, and a background check every 15 minutes while it is closed (replaced by push since
+  2026-09-26 when the build and the hub have it, above); «Share to Core Hub» turns shared text into a new chat's draft (files
   and pictures are a follow-up); the composer's microphone uses the phone's own speech recognizer;
   spoken replies; and This device in full: the hub connection, voice input and dictation language,
   spoken replies, notifications, and self-update from the hub's `updates` channel (SHA-256 checked,
@@ -276,9 +283,14 @@ its approval.
   page they name. The navigation parity test (`NavigationParityTests`) holds the app to
   `navigation.json`, whose `surfaceRoutes.ios` it reads. **Phone specifics** (part 3): the hub's
   notices (a reply finished, an agent waits) become local notifications while the app runs, quiet
-  for the conversation on screen and opening it when tapped — **no push when the app is closed**:
-  the app does not register for APNs yet (the hub's APNs sender came with the devices module the
-  same day) and APNs needs the owner's Apple account; a share extension hands shared text and links to a new chat (through an App Group
+  for the conversation on screen and opening it when tapped; since 2026-09-26 **push**: after
+  sign-in, with notifications allowed, the app registers for remote notifications and sends its
+  APNs token to the hub (`devices.registerPush`, again at each launch), shows a pushed notice once
+  (the socket and the push share one list of what was shown), opens what it is about when tapped,
+  and removes the registration before sign-out; the `aps-environment` entitlement is `production`
+  in Release (checked by the signed workflow). Without push the background look goes on; with push
+  it is not scheduled. Unit-tested on the simulator; **no real push has been sent** — the hub's
+  APNs sender stays off until the owner enters its key; a share extension hands shared text and links to a new chat (through an App Group
   that works once the app is signed); dictation into the composer with the phone's speech
   recognition; replies read aloud; This device holds the voice input, dictation language, spoken
   replies and notification permission, kept on the phone. Built and unit-tested on a macOS

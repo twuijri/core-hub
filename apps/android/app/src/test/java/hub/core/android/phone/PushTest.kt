@@ -82,25 +82,25 @@ class PushTest {
         val outcome = registrar.register("fcm-token-1", "ar")
         assertEquals(PushRegistrar.Outcome.Registered("01J8QK3ZR2W7M5N4P6T8V9X0D0"), outcome)
         assertEquals(
-            listOf("GET /api/v1/push/config", "POST /api/v1/devices", "PUT /api/v1/devices/01J8QK3ZR2W7M5N4P6T8V9X0D0/push"),
+            listOf("GET /api/v1/push/config", "POST /api/v1/devices", "PUT /api/v1/devices/${ID_D0}/push"),
             calls,
         )
         assertTrue(bodies.getValue("POST /api/v1/devices").contains("\"device_key\":\"key-1\""))
-        val push = bodies.getValue("PUT /api/v1/devices/01J8QK3ZR2W7M5N4P6T8V9X0D0/push")
+        val push = bodies.getValue("PUT /api/v1/devices/${ID_D0}/push")
         assertTrue(push, push.contains("\"provider\":\"fcm\"") && push.contains("\"token\":\"fcm-token-1\"") && push.contains("\"locale\":\"ar\""))
         assertEquals("01J8QK3ZR2W7M5N4P6T8V9X0D0", store.current!!.deviceId)
 
         // A rotated token (onNewToken) goes to the same device, without registering it again.
         calls.clear()
         registrar.register("fcm-token-2", "en")
-        assertEquals(listOf("GET /api/v1/push/config", "PUT /api/v1/devices/01J8QK3ZR2W7M5N4P6T8V9X0D0/push"), calls)
+        assertEquals(listOf("GET /api/v1/push/config", "PUT /api/v1/devices/${ID_D0}/push"), calls)
         assertTrue(bodies.getValue(calls.last()).contains("\"locale\":\"en\""))
     }
 
     @Test fun `a paired phone registers against the device its pairing made`() = runTest {
         store.save(storedSession(hub = hub(), kind = TokenKind.APP, refresh = null).copy(deviceId = "01J8QK3ZR2W7M5N4P6T8V9X0DV"))
         registrar.register("fcm-token", "ar")
-        assertEquals(listOf("GET /api/v1/push/config", "PUT /api/v1/devices/01J8QK3ZR2W7M5N4P6T8V9X0DV/push"), calls)
+        assertEquals(listOf("GET /api/v1/push/config", "PUT /api/v1/devices/${ID_DV}/push"), calls)
     }
 
     @Test fun `a phone paired before the id was kept finds itself in the device list`() = runTest {
@@ -130,9 +130,9 @@ class PushTest {
         assertEquals(
             listOf(
                 "GET /api/v1/push/config",
-                "PUT /api/v1/devices/01J8QK3ZR2W7M5N4P6T8V9X0GN/push",
+                "PUT /api/v1/devices/${ID_GN}/push",
                 "POST /api/v1/devices",
-                "PUT /api/v1/devices/01J8QK3ZR2W7M5N4P6T8V9X0D0/push",
+                "PUT /api/v1/devices/${ID_D0}/push",
             ),
             calls,
         )
@@ -142,7 +142,7 @@ class PushTest {
         registrar.unregister(storedSession(hub = hub()))
         assertTrue(calls.isEmpty())
         registrar.unregister(storedSession(hub = hub()).copy(deviceId = "01J8QK3ZR2W7M5N4P6T8V9X0D0"))
-        assertEquals(listOf("DELETE /api/v1/devices/01J8QK3ZR2W7M5N4P6T8V9X0D0/push"), calls)
+        assertEquals(listOf("DELETE /api/v1/devices/${ID_D0}/push"), calls)
     }
 
     @Test fun `signed out, nothing is registered`() = runTest {
@@ -165,5 +165,11 @@ class PushTest {
         assertEquals("/chat/a%2F..%2Fb", PushPayload.path(data("resource_kind" to "session", "resource_id" to "a/../b")))
         assertNull(PushPayload.path(mapOf("resource_kind" to "session", "resource_id" to "X")))
         assertNull(PushPayload.path(mapOf("type" to "other")))
+    }
+
+    private companion object {
+        const val ID_D0 = "01J8QK3ZR2W7M5N4P6T8V9X0D0"
+        const val ID_DV = "01J8QK3ZR2W7M5N4P6T8V9X0DV"
+        const val ID_GN = "01J8QK3ZR2W7M5N4P6T8V9X0GN"
     }
 }
