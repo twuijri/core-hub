@@ -14,7 +14,7 @@
 ## القرار والموافقات
 كلها **مقترحة — تنتظر تأكيد المالك** (ADR 0023):
 
-1. **electron-builder 26**: AppImage وdeb (لينكس x64)، dmg لكل معمارية (ماك arm64 وx64)، NSIS (ويندوز
+1. **electron-builder 26**: AppImage وdeb (لينكس x64)، dmg لماك بمعالجات Apple فقط (arm64) — لا Intel لأن `argon2` 0.45 لا يأتي مبنيًّا لـ darwin-x64 فلن يعمل الوضع المحلي عليه (ظهر في أول تشغيل للسير في CI)، NSIS (ويندوز
    x64، لكل مستخدم، ويختار المجلد). الأمر `pnpm --filter @corehub/desktop package` بعد `pnpm build`.
 2. **أرشيف التطبيق بلا node_modules** (العملية الرئيسية حزمة واحدة)، والمركز المضمَّن بجانبه في
    `resources/hub`، وخطاف `afterPack` يُبقي ملفات SQLite وargon2 الخاصة بنظام المثبّت فقط، ونصوص

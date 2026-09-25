@@ -10,7 +10,8 @@ silent auto-update without his decision.
 
 ## Decision (proposed)
 1. **electron-builder 26** builds, per platform: **AppImage and .deb** on Linux (x64), a
-   **.dmg** per architecture on macOS (arm64, x64), an **NSIS** installer on Windows (x64,
+   **.dmg** for Apple silicon (arm64) on macOS — not Intel: `argon2` 0.45 ships no darwin-x64
+   binary, so an Intel build could not run local mode — an **NSIS** installer on Windows (x64,
    per-user, directory selectable). Configuration: `apps/desktop/electron-builder.config.cjs`;
    command: `pnpm --filter @corehub/desktop package` after `pnpm build`.
 2. The app archive holds only the bundled main process, preload, first-run screen and web
