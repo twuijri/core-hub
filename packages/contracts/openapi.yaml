@@ -10572,7 +10572,15 @@ paths:
       operationId: models.transcribe
       tags: [models]
       summary: Transcribe a recording with the active STT provider
-      description: '`400 validation_failed` with `details.reason: no_speech` when the take is silent — clients show a friendly hint, not an error.'
+      description: >-
+        The recording goes to the profile's chosen speech-to-text provider (or the one named
+        by `provider_id`) and its words come back; nothing is stored. `400 validation_failed`
+        with `details.reason: no_speech` when the take is silent — clients show a friendly
+        hint, not an error. `422 agent_unavailable` names why nothing could transcribe it in
+        `details.reason`: `no_stt_provider` (none chosen — clients link to Models),
+        `provider_disabled`, or the provider's own failure (`unauthorized`, `unreachable`,
+        `http_error`, `no_key`, `unsupported`) with its words in `details.detail`. Over
+        25 MB is `413` (DECISIONS §54).
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -10592,6 +10600,12 @@ paths:
                   description: BCP-47 hint; omit for auto-detect.
                 provider_id:
                   $ref: '#/components/schemas/Ulid'
+                duration_ms:
+                  type: integer
+                  minimum: 0
+                  description: >-
+                    How long the client recorded. `Transcription.duration_ms` is the
+                    provider's own figure when it reports one, else this, else 0.
             encoding:
               audio:
                 contentType: audio/*

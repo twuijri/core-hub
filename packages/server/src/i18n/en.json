@@ -149,6 +149,9 @@
       "no_tts_provider": "No text-to-speech provider is chosen for this profile.",
       "provider_disabled": "The chosen text-to-speech provider is switched off.",
       "failed": "The speech provider did not return audio.",
+      "no_stt_provider": "No speech-to-text provider is chosen for this profile.",
+      "transcribe_failed": "The speech-to-text provider did not return a transcript.",
+      "no_speech": "No speech was heard in the recording.",
       "stt": {
         "not_chosen": "No speech-to-text provider is chosen.",
         "disabled": "The chosen speech-to-text provider is switched off.",
@@ -159,9 +162,6 @@
         "disabled": "The chosen text-to-speech provider is switched off.",
         "no_key": "The chosen text-to-speech provider has no key."
       }
-    },
-    "transcribe": {
-      "not_implemented": "The hub cannot receive an audio upload yet; dictate on the device instead."
     },
     "signin": {
       "not_implemented": "No provider here signs in by browser yet; every one of them takes an API key."
