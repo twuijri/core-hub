@@ -82,6 +82,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.twuijri.corehub
         PRODUCT_NAME: CoreHub
         TARGETED_DEVICE_FAMILY: '1,2'
+        # CoreHub/Resources/Assets.xcassets/AppIcon: one 1024 px icon with dark and tinted looks,
+        # made by scripts/icons/build-icons.mjs from the Core Hub mark (App Store needs it).
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO
       configs:
         Debug:

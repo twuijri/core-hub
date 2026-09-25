@@ -30,12 +30,14 @@
     "web:dev": "pnpm --filter @corehub/web dev",
     "web:e2e": "pnpm --filter @corehub/web test:e2e",
     "tokens:build": "pnpm --filter @corehub/ui-tokens build",
+    "icons:build": "node scripts/icons/build-icons.mjs",
     "graph": "node scripts/graph.mjs",
     "graph:check": "node scripts/graph-check.mjs",
     "image:sealed-check": "node scripts/image-sealed-check.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^26.6.2",
     "eslint": "^10.11.0",
     "eslint-config-prettier": "^10.1.8",

@@ -38,7 +38,8 @@ module.exports = {
   linux: {
     target: ['AppImage', 'deb'],
     category: 'Network',
-    icon: 'assets/icon.png',
+    // One PNG per size (NxN.png); made with icon.icns and icon.ico by scripts/icons/build-icons.mjs.
+    icon: 'assets/icons',
     synopsis: 'A self-hosted hub for AI agents',
     maintainer: 'twuijri <twuijri@users.noreply.github.com>',
     mimeTypes: ['x-scheme-handler/corehub'],
@@ -50,7 +51,7 @@ module.exports = {
     // Intel build could not run local mode. Proposed — owner to confirm (ADR 0023).
     target: [{ target: 'dmg', arch: ['arm64'] }],
     category: 'public.app-category.productivity',
-    icon: 'assets/icon.png',
+    icon: 'assets/icon.icns',
     // Unsigned builds open with a Gatekeeper warning; a signed one fails loudly rather than
     // falling back to unsigned.
     identity: signed ? undefined : null,
@@ -58,7 +59,7 @@ module.exports = {
   },
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],
-    icon: 'assets/icon.png',
+    icon: 'assets/icon.ico',
     // TODO(owner): Authenticode signing. Unsigned installers show a SmartScreen warning.
   },
   nsis: {
