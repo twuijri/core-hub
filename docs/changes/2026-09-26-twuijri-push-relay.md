@@ -72,11 +72,12 @@ DECISIONS **§82**:
   (+ اللقطة والسجل).
 - الاختبارات: `tests/unit/devices-push-relay.test.ts` (جديد، ١٢ حالة)، `tests/unit/config.test.ts`،
   `tests/contract/devices.contract.test.ts`.
-- الويب: مفتاح ترجمة واحد `devices.push.source.relay` (ar/en) فقط — بلا تغيير في الشاشات.
+- الويب: مفتاح الترجمة `devices.push.source.relay` (ar/en)، وبعد دمج #149 شارة «عبر مرحّل كور هب» على صف المرسِل في
+  بطاقة المرسِلين الجديدة (`PushSendersCard.tsx`، سطر واحد)، واختبارها في `tests/devices-push.test.tsx`.
 - الوثائق: `docs/adr/0024-push-relay.md`، `docs/contracts/DECISIONS.md` (§82)، `docs/domain/devices.md`،
   `docs/DEPLOY.md`، `docs/STATUS.md`، هذا السجل.
 
-**ملاحظة لطلب `feat/device-cards`** (يعيد تصميم واجهة مرسِلي الدفع): الحالة معروضة في شكل قائمة المرسِلين
+**ملاحظة لمتابعة واجهة مرسِلي الدفع** (طلب `feat/device-cards` #149 دُمج قبل هذا): الحالة معروضة في شكل قائمة المرسِلين
 نفسه — `source: relay` وحقل `relay` على صفّي FCM وAPNs — وتغيير الإعداد بـ`PUT /push/relay`. المطلوب في
 الواجهة: شارة «عبر مرحّل كور هب» (المفتاح موجود)، سطر حالة المرحّل (`relay.state` و`last_error`)، مفتاح
 «الدفع الخاص» (`private_push`)، ومفتاح «استعمال المرحّل» (`enabled`، معطّل مع `forced_off`). وتعارض
@@ -132,8 +133,27 @@ CI على #150 عند `6dbb1108` (قبل هذا الإصلاح): كل الفحو
 FAIL  tests/unit/status.test.ts > implements at least as many operations as docs/STATUS.md claims
 AssertionError: the contract grew or shrank: update docs/STATUS.md: expected 315 to be 316
 ```
-أُصلح بتحديث السطر الأول من `docs/STATUS.md` (302 من 316)، ونجح `status.test.ts` محليًا. النتيجة التالية
-تُضاف أدناه.
+أُصلح بتحديث السطر الأول من `docs/STATUS.md`، ونجح `status.test.ts` محليًا.
+
+بعد دمج #148 (`cd6ca1e4`، الترحيل `0026` آنذاك): **كل الفحوص ناجحة** على #150 — الخادم (الأجزاء الثلاثة)،
+«Lint, typecheck, contracts, client tests, build»، الويب (Playwright)، سطح المكتب، Docker، db:generate +
+db:migrate (SQLite وPostgreSQL)، أندرويد، iOS وعميل Swift، سجل التغيير، واختبارات المرحّل.
+
+بعد دمج #149 (الترحيل صار `0027` والقرار §82) أُعيد محليًا:
+```
+$ pnpm lint → All matched files use Prettier code style!      $ pnpm typecheck → exit 0
+$ pnpm contracts:lint → OK      $ pnpm contracts:check-clients → OK — 609 client file(s), 229 contract path(s)
+$ pnpm i18n:check → OK          $ pnpm nav:check → OK          $ pnpm change-record:check → OK
+$ pnpm db:generate → No schema changes, nothing to migrate
+$ vitest (server unit) devices-push-relay, devices-push, config, status, src/modules/devices
+ Test Files  6 passed (6)      Tests  62 passed (62)
+$ vitest (contract) devices, contract          Tests  324 passed (324)
+$ pnpm --filter @corehub/push-relay test       Tests  22 passed (22)
+$ vitest (web) devices-push, device-cards, push-sender-files   Tests  24 passed
+# شارة المرحّل على بطاقة main قبلها:
+     × says when APNs goes through the Core Hub relay        Tests  1 failed | 9 skipped (10)
+```
+نتيجة CI الأخيرة تُضاف عند انتهائها.
 
 ## المخاطر والرجوع
 - **الرجوع**: revert للفرع. الترحيل `0027` يضيف جدولًا فقط؛ نسخة أقدم تتجاهله.

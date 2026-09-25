@@ -331,6 +331,26 @@ describe('the device list', () => {
     expect(screen.getByTestId('push-sender-webpush').getAttribute('data-state')).toBe('ready');
   });
 
+  it('says when APNs goes through the Core Hub relay', async () => {
+    const original = SENDERS.items[2]!;
+    SENDERS.items[2] = {
+      ...original,
+      state: 'ready',
+      source: 'relay',
+      missing: [],
+      details: { relay_url: 'https://relay.example' },
+    };
+    try {
+      const { fetchImpl } = hub([]);
+      mount(fetchImpl, <DevicesPanel isAdmin />);
+      const apns = await screen.findByTestId('push-sender-apns');
+      expect(apns.getAttribute('data-state')).toBe('ready');
+      expect(apns.textContent).toContain('Through the Core Hub relay');
+    } finally {
+      SENDERS.items[2] = original;
+    }
+  });
+
   it('lets the admin paste the FCM service account, stored and never filled back in', async () => {
     const user = userEvent.setup();
     const { fetchImpl, sent } = hub([]);
