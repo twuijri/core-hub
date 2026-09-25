@@ -89,6 +89,27 @@ created_at).
 Settings only: the environment (`COREHUB_FCM_*`, `COREHUB_APNS_*`) wins over a row. The Web
 Push keys are not here: they are the hub's own, in `${DATA_DIR}/keys/vapid.json`.
 
+## push_relay (global, one row)
+
+The Core Hub push relay as this hub knows it (ADR 0024, DECISIONS §81; migration `0025`).
+
+| column | type | meaning |
+|---|---|---|
+| url | text(500)? | the relay this registration is with; another address registers again |
+| hub_id | text(64)? | this hub's id at the relay (not a secret) |
+| ciphertext / nonce / key_id | text? | **ENCRYPTED**. The secret the relay gave this hub; it signs every call |
+| enabled | bool | the admin's switch (`devices.setPushRelay`); `COREHUB_PUSH_RELAY=off` wins |
+| private_push | bool | only a generic title and the notice id go through the relay |
+| state | enum(ready, not_registered, unreachable, blocked, rate_limited)? | what the last call said |
+| last_error, checked_at | text?, ts? | |
+| synced_at | ts? | when the hub last re-stated every token it wants bound (`/v1/tokens/sync`) |
+
+FCM or APNs with no credentials on this hub (environment or Settings) is delivered through the
+relay, unless it is off; local credentials always win. A phone's token is bound to this hub at
+the relay when it registers; what the hub lets go of reaches the relay through the next sync
+(on an unregister or unlink at once, otherwise within a minute when the set of tokens changed,
+and once a day regardless).
+
 ## Push
 
 `notify` hands a written notice to the push port when the kind's `push` switch is on and the

@@ -43,9 +43,11 @@ no variable for model provider keys either — they are added once on the Models
 screen and the hub carries them to every agent (§3).
 
 **Push to phones (optional).** Browsers and the desktop app get notifications with nothing
-to set: the hub makes its own Web Push keys in `/data/keys/vapid.json`. Android (FCM) and
-iPhone (APNs) need the owner's credentials, entered in Device connections → Devices → Push
-senders, or — if you prefer them in the stack — these variables, which then win over Settings
+to set: the hub makes its own Web Push keys in `/data/keys/vapid.json`. The official Android
+(FCM) and iPhone (APNs) apps are reached through the **Core Hub push relay** (ADR 0024) once
+the hub knows its address: nothing to set when the build has it built in, otherwise
+`COREHUB_PUSH_RELAY_URL`. A hub that has its own credentials uses them instead — entered in
+Device connections → Devices → Push senders, or these variables, which then win over Settings
 (add them to the `environment:` of the service yourself; the reference file leaves them out):
 
 | Variable | Meaning |
@@ -55,6 +57,8 @@ senders, or — if you prefer them in the stack — these variables, which then 
 | `COREHUB_APNS_KEY` | The `.p8` key's contents, or a path to it. |
 | `COREHUB_APNS_ENVIRONMENT` | `production` (default) or `sandbox` for development builds. |
 | `COREHUB_PUSH_CONTACT` | A `mailto:` or `https:` contact push services may use (VAPID `sub`). |
+| `COREHUB_PUSH_RELAY_URL` | The push relay's `https://` address, when it is not the one built in. |
+| `COREHUB_PUSH_RELAY` | `off`: never use a push relay (phones then need the credentials above). |
 
 Upgrading is `docker compose pull && docker compose up -d`; the volume is
 untouched.
