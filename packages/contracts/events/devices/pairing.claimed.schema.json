@@ -120,13 +120,16 @@
         "kind",
         "brand",
         "model",
+        "os_version",
         "app_version",
         "connection",
         "online",
         "last_seen_at",
+        "paired_at",
         "app_token_id",
         "capabilities",
         "push",
+        "push_blocker",
         "this_device",
         "created_at",
         "updated_at"
@@ -156,6 +159,9 @@
         "model": {
           "type": ["string", "null"]
         },
+        "os_version": {
+          "type": ["string", "null"]
+        },
         "app_version": {
           "type": ["string", "null"]
         },
@@ -175,6 +181,9 @@
               "type": "null"
             }
           ]
+        },
+        "paired_at": {
+          "$ref": "#/$defs/Timestamp"
         },
         "app_token_id": {
           "oneOf": [
@@ -196,6 +205,16 @@
           "oneOf": [
             {
               "$ref": "#/$defs/PushStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "push_blocker": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PushBlocker"
             },
             {
               "type": "null"
@@ -338,6 +357,10 @@
       "minLength": 26,
       "maxLength": 26,
       "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    },
+    "PushBlocker": {
+      "type": "string",
+      "enum": ["none", "not_in_build", "permission_pending", "permission_denied"]
     }
   }
 }

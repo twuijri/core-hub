@@ -47,11 +47,24 @@ import {
   type DeviceConnection,
   type DeviceKind,
   type DevicePlatform,
+  type PushBlocker,
 } from './schema.js';
 
 export type DeviceRow = typeof devices.$inferSelect;
-export type { CapabilityKind, DeviceConnection, DeviceKind, DevicePlatform } from './schema.js';
-export { CAPABILITY_KINDS, DEVICE_CONNECTIONS, DEVICE_KINDS, DEVICE_PLATFORMS } from './schema.js';
+export type {
+  CapabilityKind,
+  DeviceConnection,
+  DeviceKind,
+  DevicePlatform,
+  PushBlocker,
+} from './schema.js';
+export {
+  CAPABILITY_KINDS,
+  DEVICE_CONNECTIONS,
+  DEVICE_KINDS,
+  DEVICE_PLATFORMS,
+  PUSH_BLOCKERS,
+} from './schema.js';
 export type { DeliveryResult, Sealer } from './push.js';
 export type { PushMessage, PushProvider } from './senders.js';
 export type { RequestJobHandle, RequestJobs } from './requests.js';
@@ -146,9 +159,20 @@ export interface PairedDeviceInput {
   brand: string | null;
   model: string | null;
   appVersion: string | null;
+  /** Optional: an app older than the field does not send it, and the row keeps what it had. */
+  osVersion?: string | null | undefined;
+  pushBlocker?: PushBlocker | null | undefined;
   capabilities: readonly CapabilityKind[];
   connection: DeviceConnection;
   appTokenId: string;
+}
+
+/**
+ * The name a device row takes when the device describes itself again: a name a person gave
+ * it (`devices.update`) stays; otherwise the device's own.
+ */
+export function nameAfterReport(existing: DeviceRow | undefined, reported: string): string {
+  return existing?.renamedAt ? existing.name : reported;
 }
 
 /**
@@ -169,13 +193,18 @@ export function registerPairedDevice(
     const known = existing?.capabilities.find((c) => c.kind === kind);
     return { kind, enabled: true, consentAt: known?.consentAt ?? null };
   });
+  // A row that was unlinked starts over: the name a person gave it went with it.
+  const kept = existing?.status === 'paired' ? existing : undefined;
   const values = {
-    name: input.name,
+    name: nameAfterReport(kept, input.name),
+    ...(kept ? {} : { renamedAt: null }),
     platform: input.platform,
     kind: input.kind,
     brand: input.brand,
     model: input.model,
     appVersion: input.appVersion,
+    ...(input.osVersion !== undefined ? { osVersion: input.osVersion } : {}),
+    ...(input.pushBlocker !== undefined ? { pushBlocker: input.pushBlocker } : {}),
     connection: input.connection,
     capabilities,
     status: 'paired' as const,
@@ -289,10 +318,12 @@ export function serializeDevice(row: DeviceRow, options: SerializeDeviceOptions)
     kind: row.kind,
     brand: row.brand,
     model: row.model,
+    os_version: row.osVersion,
     app_version: row.appVersion,
     connection: row.connection,
     online: options.online,
     last_seen_at: iso(row.lastSeenAt),
+    paired_at: row.pairedAt.toISOString(),
     app_token_id: row.appTokenId,
     capabilities: row.capabilities.map((c) => ({
       kind: c.kind,
@@ -307,6 +338,7 @@ export function serializeDevice(row: DeviceRow, options: SerializeDeviceOptions)
             locale: row.pushLocale === 'en' ? ('en' as const) : ('ar' as const),
             registered_at: row.pushRegisteredAt.toISOString(),
           },
+    push_blocker: row.pushBlocker ?? null,
     this_device: options.thisDevice,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
@@ -330,17 +362,42 @@ function onlineDevices(io: SocketServer | null): Set<string> {
   return online;
 }
 
-const SEEN_WRITE_INTERVAL_MS = 60_000;
+export const SEEN_WRITE_INTERVAL_MS = 60_000;
+/** Past this many entries, the throttle forgets the ones older than the interval. */
+const SEEN_MEMORY_LIMIT = 2_000;
 const lastSeenWrites = new Map<string, number>();
+
+/** Whether `key` (a device, or a sign-in) is due a `last_seen_at` write, and notes it if so. */
+function seenDue(key: string, at: number, force: boolean): boolean {
+  const last = lastSeenWrites.get(key) ?? 0;
+  if (!force && at - last < SEEN_WRITE_INTERVAL_MS) return false;
+  if (lastSeenWrites.size >= SEEN_MEMORY_LIMIT) {
+    for (const [other, when] of lastSeenWrites)
+      if (at - when >= SEEN_WRITE_INTERVAL_MS) lastSeenWrites.delete(other);
+  }
+  lastSeenWrites.set(key, at);
+  return true;
+}
 
 /** Records that a device was seen, at most once a minute (a write per request is waste). */
 function touch(db: ModuleDb, deviceId: string, at: number, force = false): void {
-  const last = lastSeenWrites.get(deviceId) ?? 0;
-  if (!force && at - last < SEEN_WRITE_INTERVAL_MS) return;
-  lastSeenWrites.set(deviceId, at);
+  if (!seenDue(`device:${deviceId}`, at, force)) return;
   db.update(devices)
     .set({ lastSeenAt: new Date(at) })
     .where(and(eq(devices.id, deviceId), eq(devices.status, 'paired')))
+    .run();
+}
+
+/**
+ * The same for a device that signed in instead of pairing (a phone with a password, a
+ * browser): the calls of the sign-in that registered it are its activity. At most once a
+ * minute per sign-in.
+ */
+function touchBySession(db: ModuleDb, tokenId: string, at: number): void {
+  if (!seenDue(`session:${tokenId}`, at, false)) return;
+  db.update(devices)
+    .set({ lastSeenAt: new Date(at) })
+    .where(and(eq(devices.seenSessionId, tokenId), eq(devices.status, 'paired')))
     .run();
 }
 
@@ -418,10 +475,14 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
           now(),
         );
 
-      // A paired device that calls the hub was seen: `last_seen_at` without a heartbeat.
+      // A device that calls the hub was seen: `last_seen_at` without a heartbeat. A paired
+      // one by its pairing token; one that signed in by the sign-in that registered it.
       app.addHook('preHandler', async (request) => {
-        const deviceId = request.principal?.deviceId;
-        if (deviceId) touch(requireSqlite(app.hub.database), deviceId, now());
+        const principal = request.principal;
+        if (!principal) return;
+        const db = requireSqlite(app.hub.database);
+        if (principal.deviceId) touch(db, principal.deviceId, now());
+        else touchBySession(db, principal.tokenId, now());
       });
 
       defineRoute(app, deps, {
@@ -471,6 +532,8 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             brand?: string | null;
             model?: string | null;
             app_version?: string | null;
+            os_version?: string | null;
+            push_blocker?: PushBlocker | null;
             capabilities?: CapabilityKind[];
           };
           const db = dbOf(request);
@@ -492,14 +555,21 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             consentAt: existing?.capabilities.find((c) => c.kind === kind)?.consentAt ?? null,
           }));
           const values = {
-            name: input.name.trim() || input.device_key.slice(0, 80),
+            name: nameAfterReport(
+              existing?.status === 'paired' ? existing : undefined,
+              input.name.trim() || input.device_key.slice(0, 80),
+            ),
             platform: input.platform,
             kind: input.kind,
             brand: input.brand ?? null,
             model: input.model ?? null,
             appVersion: input.app_version ?? null,
+            ...(input.os_version !== undefined ? { osVersion: input.os_version } : {}),
+            ...(input.push_blocker !== undefined ? { pushBlocker: input.push_blocker } : {}),
             capabilities,
             lastSeenAt: new Date(at),
+            // This sign-in's calls are this device's activity from now on.
+            seenSessionId: principal.tokenId,
           };
           if (existing && existing.status === 'paired') {
             const row = db
@@ -518,6 +588,7 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
                   ...values,
                   status: 'paired',
                   revokedAt: null,
+                  renamedAt: null,
                   pairedAt: new Date(at),
                   appTokenId: null,
                   connection: 'lan',
@@ -549,7 +620,11 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
           const row = visibleDevice(db, principalOf(request), params.device_id as string);
           const patch = body as {
             name?: string;
+            brand?: string | null;
+            model?: string | null;
+            os_version?: string | null;
             app_version?: string | null;
+            push_blocker?: PushBlocker | null;
             capabilities?: Array<{
               kind: CapabilityKind;
               enabled: boolean;
@@ -564,8 +639,15 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
           const next = db
             .update(devices)
             .set({
-              ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+              // A name given here is a person's choice: the device reporting itself keeps it.
+              ...(patch.name !== undefined
+                ? { name: patch.name.trim(), renamedAt: new Date(now()) }
+                : {}),
+              ...(patch.brand !== undefined ? { brand: patch.brand } : {}),
+              ...(patch.model !== undefined ? { model: patch.model } : {}),
+              ...(patch.os_version !== undefined ? { osVersion: patch.os_version } : {}),
               ...(patch.app_version !== undefined ? { appVersion: patch.app_version } : {}),
+              ...(patch.push_blocker !== undefined ? { pushBlocker: patch.push_blocker } : {}),
               ...(patch.capabilities
                 ? {
                     capabilities: patch.capabilities.map((c) => ({

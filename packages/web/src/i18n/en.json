@@ -610,35 +610,27 @@
     "reduced_note": "If your system asks for reduced transparency or motion, the app honours it automatically."
   },
   "devices": {
-    "tab": {
-      "app": "App",
-      "devices": "Devices"
-    },
     "pair_intro": "Pair a phone: scan the QR with the Core Hub app, or type the code. The code expires in five minutes.",
     "pair": "Pair a device",
     "pair_again": "New pairing",
     "expires_in": "Expires in {seconds} s",
-    "claimed": "Paired: {name}",
     "pairing_expired": "The pairing expired. Start a new one.",
     "pairing_cancelled": "The pairing was cancelled.",
     "pair_link": "On a computer with the Core Hub app, open this link there, or paste it into the app:",
     "copy_link": "Copy link",
     "copied": "Copied",
     "list_empty_title": "No devices yet",
-    "list_empty_body": "Pair a phone from the App tab, or enable browser notifications under Settings → Notifications.",
-    "last_seen": "Last seen {time}",
-    "never_seen": "Not seen yet",
+    "list_empty_body": "Pair a phone or computer above, or turn on browser notifications under Settings → Notifications.",
+    "never_seen": "No activity yet",
     "online": "Online",
     "this_browser": "This browser",
     "this_device": "This device",
     "owner_other": "Another person's",
-    "push_on": "Push: {provider}",
-    "push_off": "No push",
     "rename": "Rename",
     "rename_title": "Rename the device",
     "name_label": "Name",
-    "revoke": "Revoke",
-    "revoke_title": "Revoke {name}?",
+    "revoke": "Remove",
+    "revoke_title": "Remove {name}?",
     "revoke_body": "It stops receiving notifications. A paired app is signed out and has to be paired again.",
     "test_push": "Send a test",
     "test_sent": "Sent. It should appear on the device in a moment.",
@@ -670,8 +662,6 @@
         "none": "None"
       },
       "devices": "Devices: {count}",
-      "missing": "Missing:",
-      "how": "FCM and APNs are set by these environment variables (docs/DEPLOY.md):",
       "set_up": "Set up",
       "change": "Change",
       "form": {
@@ -690,8 +680,41 @@
         "private_key": ".p8 key",
         "private_key_hint": "The contents of AuthKey_….p8. Stored encrypted and never shown again.",
         "forget": "Forget"
-      }
-    }
+      },
+      "manage": "Manage",
+      "hide": "Hide",
+      "env_title": "Or set it with environment variables",
+      "env_body": "Variables set on the hub win over what is saved here. The full list is in"
+    },
+    "pair_heading": "Pair a phone or computer",
+    "list_title": "Your devices",
+    "list_title_admin": "Devices",
+    "group": {
+      "mobile": "Phones and tablets",
+      "computer": "Computers",
+      "browser": "Browsers"
+    },
+    "last_active": "Last active",
+    "paired_on": "Paired {date}",
+    "added_on": "Added {date}",
+    "just_paired": "Just paired",
+    "os": {
+      "android": "Android",
+      "ios": "iOS",
+      "ipados": "iPadOS",
+      "macos": "macOS",
+      "windows": "Windows",
+      "linux": "Linux"
+    },
+    "push_state": {
+      "on": "Push on · {provider}",
+      "not_in_build": "Push isn't available in this build of the app",
+      "permission_pending": "Waiting for notification permission",
+      "permission_denied": "Notifications are turned off on the device",
+      "no_sender": "Push off: this hub has no {provider} sender yet",
+      "off": "Push off"
+    },
+    "push_set_up": "Set up push"
   },
   "placeholder": {
     "later": "{name} arrives with its module in phase {phase}. Nothing is hidden here.",

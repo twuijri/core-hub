@@ -44,7 +44,7 @@ screen and the hub carries them to every agent (§3).
 
 **Push to phones (optional).** Browsers and the desktop app get notifications with nothing
 to set: the hub makes its own Web Push keys in `/data/keys/vapid.json`. Android (FCM) and
-iPhone (APNs) need the owner's credentials, entered in Device connections → Devices → Push
+iPhone (APNs) need the owner's credentials, entered in Device connections → Push
 senders, or — if you prefer them in the stack — these variables, which then win over Settings
 (add them to the `environment:` of the service yourself; the reference file leaves them out):
 
