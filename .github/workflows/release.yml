@@ -41,6 +41,23 @@ jobs:
             echo '::error::Release tags must point at a commit on main.'
             exit 1
           fi
+      # One version for every deliverable (docs/RELEASING.md): the root package.json's. A tag
+      # must say the same (the check fails otherwise); a manual run is a preview of it, named
+      # with its run number so two previews never report the same version.
+      - name: The version this image reports
+        id: version
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          node scripts/version-check.mjs
+          root=$(node -p "require('./package.json').version")
+          if [ "$EVENT" = workflow_dispatch ]; then
+            version="$root-preview.$GITHUB_RUN_NUMBER"
+          else
+            version="$root"
+          fi
+          echo "version=$version" | tee -a "$GITHUB_OUTPUT"
       - name: Refuse a manual run that would overwrite latest
         if: github.event_name == 'workflow_dispatch'
         run: |
@@ -66,14 +83,16 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=${{ inputs.image_tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: packages/server/Dockerfile
-          # The version the image reports and the footer prints. `meta.outputs.version` is
-          # the tag without its leading v for a release, and the chosen tag for a manual run.
+          # The version the image reports and the footer prints: the root version for a release
+          # tag (which must match it), `<root>-preview.<run>` for a manual run.
           build-args: |
-            COREHUB_VERSION=${{ steps.meta.outputs.version }}
+            COREHUB_VERSION=${{ steps.version.outputs.version }}
           platforms: ${{ github.event_name == 'workflow_dispatch' && inputs.platforms || 'linux/amd64,linux/arm64' }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}

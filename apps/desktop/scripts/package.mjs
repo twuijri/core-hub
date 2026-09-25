@@ -1,9 +1,17 @@
 #!/usr/bin/env node
 // Builds this platform's installers into release/ and prints their sizes. `pnpm build` first.
 //   node scripts/package.mjs [--linux|--mac|--win] [extra electron-builder args]
-// COREHUB_VERSION stamps the version (a release is a tag; package.json stays 0.0.0).
+// COREHUB_VERSION stamps the version (a tag, or a preview's); without it the app carries the root
+// package.json's version, the one every Core Hub deliverable carries (docs/RELEASING.md).
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, statSync, writeFileSync, appendFileSync } from 'node:fs';
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+  appendFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,14 +23,15 @@ if (!existsSync(path.join(here, 'dist/main.cjs')) || !existsSync(path.join(here,
 }
 const require = createRequire(import.meta.url);
 const cli = path.join(path.dirname(require.resolve('electron-builder/package.json')), 'cli.js');
-const version = process.env.COREHUB_VERSION?.trim().replace(/^v/, '');
+const rootVersion = JSON.parse(readFileSync(path.join(here, '../../package.json'), 'utf8')).version;
+const version = process.env.COREHUB_VERSION?.trim().replace(/^v/, '') || rootVersion;
 const args = [
   cli,
   '--config',
   'electron-builder.config.cjs',
   '--publish',
   'never',
-  ...(version ? [`-c.extraMetadata.version=${version}`] : []),
+  `-c.extraMetadata.version=${version}`,
   ...process.argv.slice(2),
 ];
 const result = spawnSync(process.execPath, args, {

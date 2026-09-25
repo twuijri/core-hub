@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to stamp (e.g. 0.1.0-alpha.17); empty keeps 0.0.0'
+        description: 'Version to stamp (e.g. 1.1.0-preview.3); empty uses the root package.json version'
         required: false
   pull_request:
     paths:

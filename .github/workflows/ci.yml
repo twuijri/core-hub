@@ -43,6 +43,8 @@ jobs:
           java-version: '21'
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
+      - name: One version everywhere (root package.json; docs/RELEASING.md)
+        run: pnpm version:check
       - run: pnpm i18n:check
       - run: pnpm nav:check
       - run: pnpm contracts:lint

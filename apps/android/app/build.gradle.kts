@@ -16,6 +16,11 @@ if (hasFirebase) apply(plugin = "com.google.gms.google-services")
 
 val repoRoot = rootProject.file("../..")
 
+// One version for every Core Hub deliverable (owner, 2026-09-26): the root package.json's.
+// `pnpm version:check` fails if versionName stops being read from it (docs/RELEASING.md).
+@Suppress("UNCHECKED_CAST")
+val rootVersion = (JsonSlurper().parse(File(repoRoot, "package.json")) as Map<String, Any?>)["version"] as String
+
 /**
  * The shared design tokens (packages/ui-tokens/tokens.json) and the product's names
  * (packages/contracts/src/product.ts) become Kotlin at build time, so the app never carries a
@@ -257,9 +262,10 @@ android {
         // notification channels the app posts to are 26+ as well. Below 26 is ~1% of devices.
         minSdk = 26
         targetSdk = 35
-        // The signed-build workflow stamps its run number so each build a store sees is newer.
+        // The signed-build workflow stamps its run number + 100 so each build a store sees is newer,
+        // and newer than the old app's (same id, up to 63). A local or pull-request build is 1.
         versionCode = providers.environmentVariable("COREHUB_ANDROID_VERSION_CODE").orNull?.toIntOrNull() ?: 1
-        versionName = "0.1.0"
+        versionName = rootVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("boolean", "FIREBASE", hasFirebase.toString())
     }

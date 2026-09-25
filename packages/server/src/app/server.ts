@@ -52,23 +52,33 @@ export interface BuildOptions {
 /**
  * The version this hub is running.
  *
- * The workspace's `package.json` files stay at `0.0.0` on purpose — a release is a git tag,
- * not a commit that bumps five files — so the number a person sees has to come from the
- * build. `COREHUB_VERSION` is stamped into the image by `packages/server/Dockerfile` from
- * the tag being released, and is what `/api/v1/health` and `/api/v1/meta` then report.
- * Outside an image there is no release, and `0.0.0` is the honest answer for a working
- * tree (owner decision, 2026-09-22: the footer must say which version is running).
+ * Every Core Hub deliverable carries one version, the root `package.json`'s (owner,
+ * 2026-09-26; docs/RELEASING.md). `COREHUB_VERSION`, stamped into the image by
+ * `packages/server/Dockerfile` from the tag being released (or `<version>-preview.<run>`),
+ * wins; without it the hub reports the root version, which is what `/api/v1/health` and
+ * `/api/v1/meta` then say. Where there is no repository root (the desktop app's embedded hub),
+ * the server's own `package.json` carries the same number (`pnpm version:check`).
  */
-export function readVersion(stamped?: string | undefined): string {
+export function readVersion(
+  stamped?: string | undefined,
+  roots: readonly string[] = [path.resolve(packageRoot, '../..'), packageRoot],
+): string {
   if (stamped && stamped.trim() !== '') return stamped.trim();
-  try {
-    const pkg = JSON.parse(readFileSync(path.join(packageRoot, 'package.json'), 'utf8')) as {
-      version?: string;
-    };
-    return pkg.version ?? '0.0.0';
-  } catch {
-    return '0.0.0';
+  for (const [index, dir] of roots.entries()) {
+    try {
+      const pkg = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')) as {
+        name?: string;
+        version?: string;
+      };
+      // The repository root is the one named `corehub`; any other package.json two levels up
+      // (an installed app's own) is not ours to report.
+      if (index < roots.length - 1 && pkg.name !== 'corehub') continue;
+      if (pkg.version) return pkg.version;
+    } catch {
+      // Not there: try the next one.
+    }
   }
+  return '0.0.0';
 }
 
 export async function buildServer(options: BuildOptions = {}): Promise<FastifyInstance> {

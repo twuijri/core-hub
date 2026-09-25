@@ -36,6 +36,10 @@ jobs:
             echo '::error::Release tags must point at a commit on main.'
             exit 1
           fi
+      # One version for every deliverable (docs/RELEASING.md): a tag must say the root's.
+      - name: The tag matches the root package.json version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node scripts/version-check.mjs
       - name: Enable pnpm
         run: corepack enable
       - uses: actions/setup-node@v4
@@ -72,13 +76,16 @@ jobs:
             printf %s "$GOOGLE_SERVICES_JSON" | base64 --decode --ignore-garbage > apps/android/app/google-services.json
           fi
           echo "COREHUB_ANDROID_KEYSTORE=$RUNNER_TEMP/corehub-release.jks" >> "$GITHUB_ENV"
+      # The run number + 100: every build is newer than the last, and newer than the old app's
+      # builds under the same id (up to 63). GitHub expressions cannot add, so a step does.
+      - name: Build number
+        run: echo "COREHUB_ANDROID_VERSION_CODE=$((GITHUB_RUN_NUMBER + 100))" | tee -a "$GITHUB_ENV"
       - name: Build the signed APK and AAB
         working-directory: apps/android
         env:
           COREHUB_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_TEST_KEYSTORE_PASSWORD }}
           COREHUB_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_TEST_KEY_ALIAS }}
           COREHUB_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_TEST_KEY_PASSWORD }}
-          COREHUB_ANDROID_VERSION_CODE: ${{ github.run_number }}
         run: ./gradlew --max-workers=2 --no-build-cache assembleRelease bundleRelease
       - name: Check the package name and the signature
         run: |
