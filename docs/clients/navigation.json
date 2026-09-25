@@ -158,6 +158,10 @@
     "back_to_agents": {
       "en": "Back to agents",
       "ar": "رجوع إلى الوكلاء"
+    },
+    "terminal": {
+      "en": "Terminal",
+      "ar": "الطرفية"
     }
   },
   "destinations": [
@@ -445,6 +449,19 @@
       "roles": ["admin"]
     },
     {
+      "id": "terminal",
+      "title": "terminal",
+      "level": "settings",
+      "module": "terminal",
+      "entry": {
+        "kind": "settings-tool"
+      },
+      "roles": ["owner"],
+      "surfaces": ["web"],
+      "global": true,
+      "note": "A shell on the hub's host (DECISIONS §60). The owner only — not admins (owner, 2026-09-25) — and only while the hub runs with COREHUB_WEB_TERMINAL=1: a client shows the entry only when GET /terminal answers 200."
+    },
+    {
       "id": "agent_skills",
       "title": "skills",
       "module": "agents",
@@ -549,7 +566,16 @@
     "about"
   ],
   "settingsManagement": ["models", "device_connections", "knowledge"],
-  "settingsTools": ["logs", "usage", "performance", "theme", "workspaces", "updates", "plugins"],
+  "settingsTools": [
+    "logs",
+    "usage",
+    "performance",
+    "theme",
+    "workspaces",
+    "updates",
+    "plugins",
+    "terminal"
+  ],
   "agentLevel": [
     "agent_skills",
     "agent_mcp",
@@ -622,6 +648,7 @@
       "workspaces": "/settings/workspaces",
       "updates": "/settings/updates",
       "plugins": "/settings/plugins",
+      "terminal": "/settings/terminal",
       "agent_skills": "/agents/:agentId/skills",
       "agent_mcp": "/agents/:agentId/mcp",
       "agent_memory": "/agents/:agentId/memory",

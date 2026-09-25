@@ -23,6 +23,7 @@ import {
 import { IconDevices, IconKnowledge, IconModels } from '../ui/icons.js';
 import { Badge, SidebarGroup, SidebarRow } from '../ui/index.js';
 import { useUnreadCount } from '../notify/queries.js';
+import { useTerminalAvailable } from '../terminal/queries.js';
 
 /**
  * Every destination that lives under Settings **and exists on the web**. `this_device` is
@@ -72,6 +73,8 @@ export function SettingsNav({
   const role = user?.role ?? 'member';
   // The one number worth carrying outside its own page: how many notices are waiting.
   const unread = useUnreadCount();
+  // The Terminal is the owner's, and only on a hub that has it on: the hub says so (§60).
+  const terminal = useTerminalAvailable();
   // The Settings index opens on Account, so Account is the row that reads as current.
   const here = current === 'settings' ? 'account' : current;
   const groups: Array<{ id: string; label?: string; ids: readonly string[] }> = [
@@ -86,7 +89,9 @@ export function SettingsNav({
   return (
     <div data-testid="settings-nav">
       {groups.map((group) => {
-        const entries = visibleEntries(group.ids, role);
+        const entries = visibleEntries(group.ids, role).filter(
+          (d) => d.id !== 'terminal' || terminal,
+        );
         if (entries.length === 0) return null;
         return (
           <SidebarGroup
