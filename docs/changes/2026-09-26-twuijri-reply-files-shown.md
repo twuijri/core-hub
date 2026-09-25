@@ -131,6 +131,19 @@ e2e/zzzzzzzzz-reply-files.spec.ts`): الصورة مرسومة في الرد (`n
 **بقية الفحوص:** `pnpm lint` → `All matched files use Prettier code style!`؛ `pnpm typecheck` → exit 0 (0 أخطاء)؛
 `pnpm i18n:check` → `i18n:check  OK` (لا نصوص جديدة: `files.open` موجود). الأجنحة الكاملة على CI.
 
+**CI على PR #154** (الدفعة `8551266a`، بعد دمج `origin/main`) — كلها `pass`:
+```
+Lint, typecheck, contracts, client tests, build	pass	5m49s
+Server unit tests (shard 1/3)	pass	4m2s
+Server unit tests (shard 2/3)	pass	2m58s
+Server unit tests (shard 3/3)	pass	2m38s
+Web smoke journeys (Playwright against the real hub)	pass	5m51s
+Desktop app smoke (Electron under Xvfb against the real hub)	pass	1m15s
+Docker image builds and answers /health	pass	2m45s
+db:generate + db:migrate (SQLite and PostgreSQL)	pass	1m2s
+PR adds or updates a change record	pass	10s
+```
+
 ## المخاطر والرجوع
 - **الهاتف:** iOS وAndroid يعرضان اسم مرفق الرد لا الصورة نفسها، ولا يخفيان مسار مجلد الدور في الكلام؛ (a) يخفّف
   الثاني. رسم الصورة على الهاتف يحتاج جلبًا بالحامل في Swift/Kotlin — مهمة منفصلة.
