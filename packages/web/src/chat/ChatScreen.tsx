@@ -49,6 +49,7 @@ import { QuestionCard } from './QuestionCard.js';
 import { RunStatus } from './RunStatus.js';
 import { RunFailureNotice } from './RunFailureNotice.js';
 import { SessionAgent } from './SessionAgent.js';
+import { SubagentsPanel } from './SubagentsPanel.js';
 import { useCatalogue, useRuntimeReport } from '../models/queries.js';
 import { activeRun, isBusy, textOf } from './transcript.js';
 import { runProgress, turnsOf } from './turns.js';
@@ -231,6 +232,20 @@ export function OpenSession({
           const out = new URLSearchParams(current);
           if (next === 'trajectory') out.set(VIEW_PARAM, 'trajectory');
           else out.delete(VIEW_PARAM);
+          return out;
+        },
+        { replace: true },
+      ),
+    [setParams],
+  );
+  /** The Trajectory tab opened at one step — a subagent's, from its panel (§47). */
+  const openStep = useCallback(
+    (stepId: string) =>
+      setParams(
+        (current) => {
+          const out = new URLSearchParams(current);
+          out.set(VIEW_PARAM, 'trajectory');
+          out.set(STEP_PARAM, stepId);
           return out;
         },
         { replace: true },
@@ -439,7 +454,11 @@ export function OpenSession({
           )}
           <TabPanel value="trajectory" testId="trajectory-panel">
             {view === 'trajectory' && messageCount > 0 && (
-              <TrajectoryView sessionId={sessionId} revision={revision} />
+              <TrajectoryView
+                sessionId={sessionId}
+                revision={revision}
+                focusStep={params.get(STEP_PARAM)}
+              />
             )}
           </TabPanel>
           <TabPanel value="chat" keepMounted flow>
@@ -523,6 +542,8 @@ export function OpenSession({
                       m.content.some((part) => part.type === 'text' && part.text.trim() !== ''),
                   )) && <RunFailureNotice failure={failedRun.error} runtime={runtime.data} />}
             </div>
+            {/* What the agent delegated, above the composer (§47); nothing until it has. */}
+            <SubagentsPanel sessionId={sessionId} onOpenTrajectory={openStep} />
             <Composer
               busy={busy}
               disabled={disabledReason !== null}
@@ -618,6 +639,8 @@ export function OpenSession({
 
 /** The address parameter that opens a conversation on its Trajectory tab. */
 const VIEW_PARAM = 'view';
+/** The step the Trajectory tab opens at (`subagent:<id>`). */
+const STEP_PARAM = 'step';
 
 /**
  * The top of a transcript that pages back: "loading older messages…" while there is more

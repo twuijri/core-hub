@@ -34,7 +34,16 @@ import { useDownloadTrajectory, useTrajectory } from './useTrajectory.js';
 /** How often running bars grow while the tab is open. */
 const TICK_MS = 500;
 
-export function TrajectoryView({ sessionId, revision }: { sessionId: string; revision: string }) {
+export function TrajectoryView({
+  sessionId,
+  revision,
+  focusStep,
+}: {
+  sessionId: string;
+  revision: string;
+  /** A step to bring into view when the tab opens (a subagent's, from its panel). */
+  focusStep?: string | null;
+}) {
   const { t } = useI18n();
   const query = useTrajectory(sessionId, true, revision);
   const data = query.data;
@@ -58,10 +67,18 @@ export function TrajectoryView({ sessionId, revision }: { sessionId: string; rev
       </div>
     );
   }
-  return <TrajectoryBody sessionId={sessionId} data={data} />;
+  return <TrajectoryBody sessionId={sessionId} data={data} focusStep={focusStep ?? null} />;
 }
 
-function TrajectoryBody({ sessionId, data }: { sessionId: string; data: Trajectory }) {
+function TrajectoryBody({
+  sessionId,
+  data,
+  focusStep: asked,
+}: {
+  sessionId: string;
+  data: Trajectory;
+  focusStep: string | null;
+}) {
   const { t } = useI18n();
   const [filter, setFilter] = useState<StepFilter>(NO_FILTER);
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
@@ -97,6 +114,17 @@ function TrajectoryBody({ sessionId, data }: { sessionId: string; data: Trajecto
     if (!shown.some((step) => step.id === id)) setFilter(NO_FILTER);
     setFocus({ id, at: Date.now() });
   };
+
+  // Opened at a step (`?step=`): once, when that step is in the document.
+  const brought = useRef<string | null>(null);
+  const hasAsked = !!asked && data.steps.some((step) => step.id === asked);
+  useEffect(() => {
+    if (!asked || !hasAsked || brought.current === asked) return;
+    brought.current = asked;
+    setFilter(NO_FILTER);
+    setOpen((current) => new Set(current).add(asked));
+    setFocus({ id: asked, at: Date.now() });
+  }, [asked, hasAsked]);
 
   const toggle = (id: string) =>
     setOpen((current) => {
@@ -262,6 +290,8 @@ function Timeline({
     >
       {LANES.map((lane) => {
         const inLane = placed.filter((entry) => entry.step.lane === lane);
+        // The subagents' lane only where the agent delegated (§47).
+        if (lane === 'subagents' && inLane.length === 0) return null;
         const rows = packRows(inLane.map((entry) => entry.span));
         const depth = Math.max(1, ...rows.map((row) => row + 1));
         return (
@@ -422,7 +452,9 @@ function StepRow({
               {t('trajectory.first_token_here', { time: formatMs(step.first_token_ms, units) })}
             </p>
           )}
-          {step.kind === 'tool' && step.tool_call ? (
+          {step.kind === 'subagent' && step.subagent ? (
+            <SubagentStepBody subagent={step.subagent} />
+          ) : step.kind === 'tool' && step.tool_call ? (
             <ToolCallBody call={step.tool_call} />
           ) : step.text ? (
             <p className="trajectory-step-text" dir="auto">
@@ -437,6 +469,46 @@ function StepRow({
         </div>
       )}
     </li>
+  );
+}
+
+/** A subagent's step opened: what it was asked, how it ended, and its recent tools (§47). */
+function SubagentStepBody({ subagent }: { subagent: NonNullable<TrajectoryStep['subagent']> }) {
+  const { t } = useI18n();
+  return (
+    <div className="trajectory-subagent" data-testid="trajectory-subagent">
+      <p className="trajectory-step-text" dir="auto">
+        {subagent.goal}
+      </p>
+      {subagent.model && <p className="trajectory-step-meta">{subagent.model}</p>}
+      {subagent.summary && (
+        <p className="trajectory-step-text" dir="auto">
+          {subagent.summary}
+        </p>
+      )}
+      {subagent.tools.length > 0 && (
+        <ol className="subagent-sheet-tools">
+          {subagent.tools.map((tool, index) => (
+            <li key={`${tool.at}-${index}`}>
+              <span className="font-medium" dir="ltr">
+                {tool.name}
+              </span>
+              {tool.preview && (
+                <span className="text-muted" dir="auto">
+                  {' '}
+                  {tool.preview}
+                </span>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+      {subagent.tool_count !== null && (
+        <p className="trajectory-step-meta">
+          {t('subagents.tools', { count: String(subagent.tool_count) })}
+        </p>
+      )}
+    </div>
   );
 }
 

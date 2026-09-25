@@ -740,3 +740,34 @@
   text-align: center;
   pointer-events: none;
 }
+
+/* ------------------------------------------------ the Background sheet (§47) */
+.background-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-2);
+}
+.background-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-1);
+  padding: var(--ch-space-3);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-surface);
+}
+.background-row-head,
+.background-row-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ch-space-2);
+}
+.background-row-title {
+  font-size: var(--ch-font-size-sm);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.background-finished {
+  margin-block-start: var(--ch-space-3);
+}

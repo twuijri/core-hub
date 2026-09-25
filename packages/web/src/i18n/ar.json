@@ -1608,13 +1608,15 @@
     "lane": {
       "input": "المُدخل",
       "model": "النموذج",
-      "tools": "الأدوات"
+      "tools": "الأدوات",
+      "subagents": "الوكلاء الفرعيون"
     },
     "kind": {
       "input": "مُدخل",
       "turn": "دور",
       "reasoning": "تفكير",
-      "tool": "استدعاء أداة"
+      "tool": "استدعاء أداة",
+      "subagent": "وكيل فرعي"
     },
     "status": {
       "running": "يعمل",
@@ -1654,6 +1656,66 @@
       "cache_hit": "من الذاكرة المؤقتة",
       "input_tokens": "رموز الإدخال",
       "output_tokens": "رموز الإخراج"
+    }
+  },
+  "subagents": {
+    "title": "الوكلاء الفرعيون",
+    "running_count": "يعمل الآن: {count}",
+    "finished": "انتهت ({count})",
+    "stop": "إيقاف",
+    "steer": "توجيه",
+    "steer_placeholder": "قل له ما يغيّره…",
+    "steer_send": "أرسل",
+    "steer_queued": "أُرسل، ويقرؤه قبل خطوته التالية.",
+    "steer_rejected": "لم يعد يقبل التوجيه.",
+    "view": "عرض",
+    "tools": "الأدوات: {count}",
+    "last_tool": "آخرها: {tool}",
+    "status": {
+      "running": "يعمل",
+      "completed": "اكتمل",
+      "failed": "فشل",
+      "interrupted": "أُوقف"
+    },
+    "observe_note": "هذا الوكيل يخبر فقط ببدء وكلائه الفرعيين وانتهائهم.",
+    "sheet_title": "وكيل فرعي",
+    "close": "إغلاق",
+    "status_label": "الحالة",
+    "model": "النموذج",
+    "elapsed": "المدة",
+    "tool_count": "الأدوات",
+    "summary": "آخر ما قاله",
+    "recent_tools": "آخر الأدوات",
+    "output": "المخرجات الحيّة",
+    "no_output": "لا شيء يُعرض بعد.",
+    "output_truncated": "يظهر الجزء الأخير فقط.",
+    "open_trajectory": "افتح في المسار"
+  },
+  "background": {
+    "open": "في الخلفية",
+    "open_count": "يعمل في الخلفية: {count}",
+    "title": "في الخلفية",
+    "close": "إغلاق",
+    "none": "لا شيء يعمل الآن.",
+    "none_body": "تظهر هنا المحادثات والمهام والجدولات وسير العمل والأعمال والوكلاء الفرعيون أثناء عملها.",
+    "finished": "انتهت خلال آخر ٢٤ ساعة ({count})",
+    "stop": "إيقاف",
+    "open_item": "افتح",
+    "untitled": "محادثة بلا عنوان",
+    "kind": {
+      "chat_run": "محادثة",
+      "task_run": "مهمة",
+      "schedule_run": "جدولة",
+      "workflow_run": "سير عمل",
+      "job": "عمل",
+      "subagent": "وكيل فرعي"
+    },
+    "status": {
+      "queued": "في الانتظار",
+      "running": "يعمل",
+      "succeeded": "اكتمل",
+      "failed": "فشل",
+      "cancelled": "أُوقف"
     }
   }
 }
