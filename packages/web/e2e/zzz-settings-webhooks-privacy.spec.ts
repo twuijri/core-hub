@@ -161,8 +161,9 @@ test('25. Privacy: a token that acts as you is listed, revoked here, and refused
   const table = page.getByTestId('app-token-table');
   await expect(table).toContainText('سكربت النسخ');
   await expect(table).toContainText('رمز تطبيق');
-  // No switch the hub would ignore: redact_pii is stored and read by nothing.
-  await expect(page.getByTestId('privacy-tab').getByRole('switch')).toHaveCount(0);
+  // One switch, and it is Hermes's own `privacy.redact_pii` (§56), not the hub's stored field.
+  await expect(page.getByTestId('privacy-tab').getByRole('switch')).toHaveCount(1);
+  await expect(page.getByTestId('privacy-redact')).toContainText('إخفاء المعرّفات');
   await shot(page, 'privacy-ar-light');
 
   await table
