@@ -1822,3 +1822,56 @@ client's); letting members in (a member's conversations are in the same folder a
 the profile, so per-person visibility would need per-session folders owned by people — a later
 ADR if wanted); following links out "because the agent made them" (a link to `/data/keys` is
 exactly what must stay closed); an mtime etag (two writes in one second would look the same).
+
+## 66. Push is the devices module's: Web Push with the hub's own keys, FCM and APNs when the owner gives credentials
+
+The phone and desktop apps poll because nothing could push to them: all seventeen `devices`
+operations answered `501`, and quiet hours were stored but silenced nothing. Proposed here —
+owner to confirm:
+
+- **notify decides whether, devices decides how.** A notice written to the inbox is handed to
+  the push port unless the kind's `push` switch is off or the moment is inside the person's
+  quiet hours (the `*` preferences row). `devices` sends it to every linked device of the
+  person with a push registration and answers per device; `notify` records one
+  `notification_deliveries` row each. Neither module imports the other: the composition root
+  lends the port (`auth` already imports `devices`, so `devices` takes its guards and token
+  revocation the same way). The `push_credentials` table moves from `notify` to `devices`
+  (same table, no migration): the credentials belong to the senders.
+- **One payload for every client**: `{ type: "notice", notice_id, kind, title, body, profile,
+  resource }` — the Web Push body (encrypted), the APNs payload beside `aps`, and FCM `data`
+  (strings: `resource_kind`, `resource_id`). A client opens `resource` the way the inbox does.
+- **Web Push needs nothing from anyone.** The hub makes a P-256 VAPID key pair on first use in
+  `${DATA_DIR}/keys/vapid.json` (0600, beside the data key) and never rotates it — replacing it
+  orphans every subscribed browser. `devices.getPushConfig` gives the public key.
+  Encryption is RFC 8291 `aes128gcm`, written from the RFC and checked byte for byte against its
+  Appendix A; VAPID is RFC 8292 with a 12-hour token and `COREHUB_PUSH_CONTACT` (or the Settings
+  `subject`, default the project's URL) as `sub`.
+- **FCM (HTTP v1) and APNs (HTTP/2, provider token)** are built and tested against fakes, and
+  stay off until the owner gives credentials: in Settings (`devices.setPushSender`, sealed with
+  the data key, read back as `[stored]`) or the environment (`COREHUB_FCM_SERVICE_ACCOUNT`,
+  `COREHUB_APNS_KEY_ID` / `_TEAM_ID` / `_BUNDLE_ID` / `_KEY` / `_ENVIRONMENT`), which wins —
+  Settings then answers `409`. `devices.listPushSenders` names what each one is missing.
+  `registerPush` for a sender that cannot deliver is `409 sender_not_configured`.
+- **A token is forgotten only when the service says it is dead** (Web Push 404/410, FCM
+  `UNREGISTERED`, APNs 410 `Unregistered`). APNs `BadDeviceToken` / `DeviceTokenNotForTopic`
+  are reported and kept: both also follow from a wrong environment or bundle id in the hub's own
+  settings, and wiping every phone's token over that would be worse.
+- **A browser is a device.** `devices.register` (`POST /devices`) registers a client that is
+  not a paired app — a browser, the desktop app signed in with a web session — under a
+  `device_key` it keeps; the same key is the same row. A paired app answers `409` (it is
+  already a device), and a browser cannot take a paired app's key. Push to a paired device is
+  registered by that device's own token only; a browser's by its owner.
+- **Who may act on a device**: its owner, the device itself, or an admin (the contract said
+  "the device itself, or an admin" for `update`; renaming your own phone from the web is the
+  common case). Someone else's device is `404`, not `403`.
+- **Web Push endpoints are checked like webhooks** (notify's address rule): `https` and not a
+  private address, at registration and again before each send.
+- `notify.sendTestNotice` writes a real `system` notice through the same path (preferences
+  included; `409` when the person turned `system` off), and `devices.testPush` sends to one
+  device and says what the service answered — the two ways an owner checks a sender.
+
+Rejected: a third-party Web Push library (a dependency for about a hundred lines the two RFCs
+specify; the RFC's own test vector is the proof); keeping push credentials only in the
+environment (ARCHITECTURE invariant 5: the rest is set from the UI); ntfy in this change — it
+needs a new `push_provider` value and so a migration, while every open PR is racing for
+`0016`; it is the next step if the owner wants a no-Google Android path.

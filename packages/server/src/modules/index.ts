@@ -12,6 +12,7 @@ import {
   ProfileMirrorError,
   RUNTIME_DEFAULT_PROFILE,
   authModule,
+  emitToUser,
   findUser,
   listWorkspacesFor,
   principalScopeResolver,
@@ -19,6 +20,11 @@ import {
   onProfileCreated,
   profileCreatedFor,
   registerProfileTransfer,
+  requireRole,
+  requireUser,
+  requireWorkspace,
+  revalidateSockets,
+  revokeToken,
   type ProfileArchiveRuntime,
   type ProfileTransferPorts,
 } from './auth/index.js';
@@ -86,9 +92,15 @@ import {
   profileArchiveFiles,
   registerAttachmentReferences,
 } from './knowledge/index.js';
-import { modelsModule, modelsServiceFor } from './models/index.js';
-import { devicesModule } from './devices/index.js';
-import { createNotifier, notifyModule } from './notify/index.js';
+import { dataKeyRingFor, modelsModule, modelsServiceFor } from './models/index.js';
+import { createDevicesModule, pushFor } from './devices/index.js';
+import {
+  checkAddress,
+  createNotifier,
+  notifyModule,
+  registerNoticePush,
+  type NoticePush,
+} from './notify/index.js';
 import { updatesModule } from './updates/index.js';
 import {
   auditFor,
@@ -107,8 +119,35 @@ import { pluginsModule } from './plugins/index.js';
  * which words. The translation between the two lives here, in the composition root, so
  * neither module has to know the other exists (ARCHITECTURE §Modules).
  */
+/**
+ * `devices` sends, `notify` decides whether to (DECISIONS §66). Neither imports the other:
+ * `auth` already imports `devices`, and `devices` must not reach back into `auth` or
+ * `notify`, so what it needs from them is lent here.
+ */
+export const devicesModule = createDevicesModule({
+  guards: { requireUser, requireWorkspace, requireRole },
+  revokeAppToken(app, tokenId, now) {
+    const db = requireSqlite(app.hub.database);
+    revokeToken(db, tokenId, now);
+    revalidateSockets(app.hub.io, db, now);
+  },
+  emitToUser,
+  checkAddress: (url, allowPrivate) => checkAddress(url, allowPrivate),
+  sealer: (app) => dataKeyRingFor(app),
+});
+
+/** A notice that passed the person's push switch and quiet hours goes to their devices. */
+export const noticePushPort = (app: FastifyInstance): NoticePush => ({
+  send: (userId, message) => pushFor(app).sendToUser(userId, message),
+});
+registerNoticePush(noticePushPort);
+
 export const notifierPort = (app: FastifyInstance): SessionsNotifier => {
-  const notifier = createNotifier(requireSqlite(app.hub.database), () => app.hub.io);
+  const notifier = createNotifier(
+    requireSqlite(app.hub.database),
+    () => app.hub.io,
+    noticePushPort(app),
+  );
   return {
     runFinished(input) {
       notifier.announce(
@@ -455,7 +494,11 @@ registerHermesCron((app) => ({
  * knows `schedules` exists; this is where they meet.
  */
 registerWorkflowPorts((app) => {
-  const notifier = createNotifier(requireSqlite(app.hub.database), () => app.hub.io);
+  const notifier = createNotifier(
+    requireSqlite(app.hub.database),
+    () => app.hub.io,
+    noticePushPort(app),
+  );
   return {
     agentTurn: async (scope, input, control) => {
       if (!control) {

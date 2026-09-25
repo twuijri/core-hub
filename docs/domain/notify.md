@@ -1,9 +1,10 @@
 # notify
 
 Owns: `notification`, `notification_delivery`, `notification_preference`,
-`webhook`, `webhook_delivery`, `push_credential`. Schema:
-`packages/server/src/modules/notify/schema.ts`. All scoped except
-`push_credentials` (global). Base columns omitted.
+`webhook`, `webhook_delivery`. Schema:
+`packages/server/src/modules/notify/schema.ts`. All scoped. Base columns omitted.
+`push_credential` moved to `devices` on 2026-09-25 (contract decision §66): notify decides
+whether a person is told, devices decides how.
 
 Other modules never insert here; they call `notify.emit(kind, recipient,
 entity, data)` and `notify.event(name, payload)`; notify fans out to in-app,
@@ -86,19 +87,6 @@ Terminal: delivered, dead.
 
 Indexes: (webhook_id, created_at); (status, next_attempt_at).
 
-## push_credential (global)
-
-| column | type | meaning |
-|---|---|---|
-| provider | enum(fcm, apns, webpush), unique | |
-| label | text(120) | |
-| ciphertext | text | **ENCRYPTED**. Service-account JSON / APNs .p8 / VAPID private key |
-| nonce | text(32) | **ENCRYPTED (metadata)** |
-| key_id | text(32) | |
-| public_meta | json<Record<string,string>> | project id, team id, key id, bundle id, VAPID public key |
-| enabled | bool | |
-| last_error | text? | |
-
 ## Queries the clients need
 
 - Inbox: `notifications where owner_id = me` in the workspace, unread first;
@@ -107,7 +95,6 @@ Indexes: (webhook_id, created_at); (status, next_attempt_at).
 - Preferences screen: rows for the user, defaults filled from `*`.
 - Webhooks screen: webhooks with last status and recent deliveries; "redeliver"
   re-queues a delivery row.
-- Admin push setup: one row per provider with `[stored]` masks.
 
 ## Not stored
 

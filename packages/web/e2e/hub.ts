@@ -19,6 +19,7 @@ import { fakeProfileRuntime } from '../../server/src/modules/auth/testing/fake-p
 import { principalScopeResolver } from '../../server/src/modules/auth/index.js';
 import { agentModelsPort, overrideAgents } from '../../server/src/modules/agents/index.js';
 import { overrideModels } from '../../server/src/modules/models/index.js';
+import { overrideDevices } from '../../server/src/modules/devices/index.js';
 import type { AgentInstaller, HermesApiCall } from '../../server/src/modules/agents/index.js';
 import { createSessionsModule } from '../../server/src/modules/sessions/index.js';
 import { attachmentsPort } from '../../server/src/modules/knowledge/index.js';
@@ -1100,6 +1101,9 @@ function silentWav(): ArrayBuffer {
   ) as ArrayBuffer;
 }
 overrideModels({ fetchImpl: scriptedProvider });
+// The browser-push journey's fake push service listens on 127.0.0.1, which a hub refuses to
+// call unless told otherwise (a Web Push endpoint is otherwise https and public).
+overrideDevices({ allowPrivateEndpoints: true });
 
 /**
  * Hermes's own board, scripted: one card Hermes finished, and a Hermes that refuses to let

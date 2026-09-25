@@ -2,7 +2,8 @@
  * devices — phones and computers linked to the hub, the capabilities they
  * expose, and the commands the hub sends them (`device://` relay).
  *
- * Global: devices (a device belongs to a user, not to a workspace).
+ * Global: devices (a device belongs to a user, not to a workspace), push_credentials
+ * (one row per push sender for the whole hub; moved here from notify, same table).
  * Scoped: device_commands (a command is requested from inside a workspace).
  *
  * Column names follow the contract's `Device` / `DeviceRegistration` schemas
@@ -19,6 +20,7 @@ import { check, index, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite
 import {
   EMPTY_ARRAY,
   EMPTY_OBJECT,
+  bool,
   globalColumns,
   inList,
   json,
@@ -32,6 +34,7 @@ export const DEVICE_KINDS = ['phone', 'tablet', 'computer', 'browser'] as const;
 export const DEVICE_CONNECTIONS = ['lan', 'relay'] as const;
 export const PUSH_PROVIDERS = ['none', 'fcm', 'apns', 'webpush'] as const;
 export const DEVICE_STATUSES = ['paired', 'revoked'] as const;
+export const PUSH_CREDENTIAL_PROVIDERS = ['fcm', 'apns', 'webpush'] as const;
 export const CAPABILITY_KINDS = [
   'location',
   'camera',
@@ -148,5 +151,32 @@ export const deviceCommands = sqliteTable(
     check('device_commands_kind_check', inList(t.kind, DEVICE_COMMAND_KINDS)),
     check('device_commands_status_check', inList(t.status, DEVICE_COMMAND_STATUSES)),
     check('device_commands_requester_check', inList(t.requestedByKind, DEVICE_REQUESTERS)),
+  ],
+);
+
+/**
+ * A push sender's credentials set from Settings (the environment wins over a row here).
+ * Web Push has no row for its keys: they are the hub's own, in `${DATA_DIR}/keys/vapid.json`;
+ * its row, when there is one, holds only the contact (`public_meta.subject`) and `enabled`.
+ */
+export const pushCredentials = sqliteTable(
+  'push_credentials',
+  {
+    ...globalColumns(),
+    provider: text('provider', { enum: PUSH_CREDENTIAL_PROVIDERS }).notNull(),
+    label: text('label', { length: 120 }).notNull(),
+    /** ENCRYPTED. Service-account JSON / APNs .p8 / VAPID private key. */
+    ciphertext: text('ciphertext').notNull(),
+    /** ENCRYPTED (metadata). GCM nonce. */
+    nonce: text('nonce', { length: 32 }).notNull(),
+    keyId: text('key_id', { length: 32 }).notNull(),
+    /** Non-secret identifiers: project id, team id, key id, bundle id, VAPID public key. */
+    publicMeta: json<Record<string, string>>('public_meta').notNull().default(EMPTY_OBJECT),
+    enabled: bool('enabled').notNull().default(true),
+    lastError: text('last_error'),
+  },
+  (t) => [
+    uniqueIndex('push_credentials_provider_uq').on(t.provider),
+    check('push_credentials_provider_check', inList(t.provider, PUSH_CREDENTIAL_PROVIDERS)),
   ],
 );

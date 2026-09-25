@@ -615,7 +615,75 @@
     "expires_in": "Expires in {seconds} s",
     "claimed": "Paired: {name}",
     "pairing_expired": "The pairing expired. Start a new one.",
-    "pairing_cancelled": "The pairing was cancelled."
+    "pairing_cancelled": "The pairing was cancelled.",
+    "list_empty_title": "No devices yet",
+    "list_empty_body": "Pair a phone from the App tab, or enable browser notifications under Settings → Notifications.",
+    "last_seen": "Last seen {time}",
+    "never_seen": "Not seen yet",
+    "online": "Online",
+    "this_browser": "This browser",
+    "this_device": "This device",
+    "owner_other": "Another person's",
+    "push_on": "Push: {provider}",
+    "push_off": "No push",
+    "rename": "Rename",
+    "rename_title": "Rename the device",
+    "name_label": "Name",
+    "revoke": "Revoke",
+    "revoke_title": "Revoke {name}?",
+    "revoke_body": "It stops receiving notifications. A paired app is signed out and has to be paired again.",
+    "test_push": "Send a test",
+    "test_sent": "Sent. It should appear on the device in a moment.",
+    "test_failed": "Not delivered: {error}",
+    "kind": {
+      "phone": "Phone",
+      "tablet": "Tablet",
+      "computer": "Computer",
+      "browser": "Browser"
+    },
+    "push": {
+      "title": "Push senders",
+      "intro": "Web Push (browsers and the desktop app) works with nothing to set up. Android (FCM) and iPhone (APNs) need the owner's credentials.",
+      "provider": {
+        "webpush": "Web Push",
+        "fcm": "FCM (Android)",
+        "apns": "APNs (iPhone)"
+      },
+      "state": {
+        "ready": "Ready",
+        "disabled": "Switched off",
+        "not_configured": "Not configured",
+        "error": "Error"
+      },
+      "source": {
+        "generated": "Keys made by the hub",
+        "environment": "From the environment",
+        "settings": "From Settings",
+        "none": "None"
+      },
+      "devices": "Devices: {count}",
+      "missing": "Missing:",
+      "how": "FCM and APNs are set by these environment variables (docs/DEPLOY.md):",
+      "set_up": "Set up",
+      "change": "Change",
+      "form": {
+        "fcm_intro": "Firebase Console → Project settings → Service accounts → Generate new private key. Paste the whole JSON file.",
+        "apns_intro": "Apple Developer → Certificates, IDs & Profiles → Keys: a key with Apple Push Notifications service (APNs).",
+        "enabled": "Send through this service",
+        "service_account": "Service account JSON",
+        "service_account_hint": "Stored encrypted and never shown again.",
+        "secret_kept": "Leave empty to keep the stored one.",
+        "key_id": "Key ID",
+        "team_id": "Team ID",
+        "bundle_id": "App bundle ID",
+        "environment": "Environment",
+        "production": "Production",
+        "sandbox": "Sandbox (development builds)",
+        "private_key": ".p8 key",
+        "private_key_hint": "The contents of AuthKey_….p8. Stored encrypted and never shown again.",
+        "forget": "Forget"
+      }
+    }
   },
   "placeholder": {
     "later": "{name} arrives with its module in phase {phase}. Nothing is hidden here.",
@@ -1419,7 +1487,7 @@
     "quiet_hint": "A window in which no notification is pushed to your devices.",
     "quiet_from": "From",
     "quiet_to": "To",
-    "push_note": "Quiet hours are about device notifications, not the inbox — what is written at night is still here in the morning. Device notifications are not built yet.",
+    "push_note": "Quiet hours are about device notifications, not the inbox — what is written at night is still here in the morning.",
     "kind": {
       "run_completed": "An agent finished",
       "approval_requested": "An approval is waiting",
@@ -1428,6 +1496,19 @@
       "schedule_failed": "A schedule failed",
       "update_available": "An update is available",
       "system": "System messages"
+    },
+    "push_switch": "Push to devices",
+    "test": "Send a test notification",
+    "test_sent": "Sent. Check this browser and your devices.",
+    "browser": {
+      "title": "Notifications in this browser",
+      "enable": "Enable browser notifications",
+      "disable": "Turn off in this browser",
+      "on": "On: what reaches your inbox also appears on this browser, even when the page is closed.",
+      "off": "Off: notices appear here only while the page is open.",
+      "denied": "The browser blocks notifications for this site. Allow them in the browser's site settings, then try again.",
+      "unsupported": "This browser cannot receive push notifications.",
+      "no_key": "Web Push is switched off on this hub. An admin can switch it on."
     }
   },
   "webhooks": {

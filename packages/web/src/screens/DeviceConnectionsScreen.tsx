@@ -1,6 +1,6 @@
 // Device connections (NAVIGATION §1): tab App pairs a phone with a QR from `auth.createPairing`
 // and waits for `pairing.claimed` on `/rt/devices` (polling `auth.getPairing` as fallback);
-// tab Devices (admin) lists linked devices once the devices module serves them.
+// tab Devices lists the person's linked devices (an admin: everyone's, and the push senders).
 import qrcode from 'qrcode-generator';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/context.js';
@@ -11,9 +11,8 @@ import { useRealtime } from '../realtime/context.js';
 import { isEnvelope } from '../realtime/envelope.js';
 import { AppShell } from '../shell/AppShell.js';
 import type { Pairing } from '../types.js';
-import { Button, Card, EmptyState, Notice, TabPanel, Tabs } from '../ui/index.js';
-import { IconDevices } from '../ui/icons.js';
-import { phaseOf } from './PlaceholderScreen.js';
+import { Button, Card, Notice, TabPanel, Tabs } from '../ui/index.js';
+import { DevicesPanel } from '../devices/DevicesPanel.js';
 
 export function qrSvgPath(text: string): { path: string; size: number } {
   const qr = qrcode(0, 'M');
@@ -113,7 +112,8 @@ export function DeviceConnectionsScreen() {
         testId="devices-tabs"
         items={[
           { value: 'app', label: t('devices.tab.app') },
-          ...(isAdmin ? [{ value: 'devices', label: t('devices.tab.devices') }] : []),
+          // Everyone's own devices; an admin sees everyone's and the push senders.
+          { value: 'devices', label: t('devices.tab.devices') },
         ]}
       >
         <TabPanel value="app">
@@ -159,18 +159,9 @@ export function DeviceConnectionsScreen() {
             )}
           </section>
         </TabPanel>
-        {isAdmin && (
-          <TabPanel value="devices">
-            <EmptyState
-              icon={<IconDevices size={20} />}
-              title={t('devices.tab.devices')}
-              body={t('placeholder.later', {
-                name: t('devices.tab.devices'),
-                phase: phaseOf('devices'),
-              })}
-            />
-          </TabPanel>
-        )}
+        <TabPanel value="devices">
+          <DevicesPanel isAdmin={isAdmin} />
+        </TabPanel>
       </Tabs>
     </AppShell>
   );
