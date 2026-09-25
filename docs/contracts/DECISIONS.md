@@ -1081,3 +1081,17 @@ Proposed — owner to confirm (rooms were "later"; built on the owner's «كمل
   gives every seat a fresh conversation (the old one archived) that is shown nothing before
   this point, and resets the summary and `total_tokens`. A restart closes replies it left
   streaming and stops chains it left active.
+- **The room's summary (part 3).** Every seat turn carries the room's summary; it is rewritten
+  when `summary_policy.every_turns` finished messages are not yet covered by it (`0` = never on
+  its own), when the manager asks (`refreshMemory`, a job of kind `run` whose ending arrives as
+  `memory.updated`; `409` while one is running), or by hand (`putMemory`). **The lead agent
+  writes it**, asked one question outside any run (the surface that names a chat), with the
+  summary's model when the room names one; when that agent has no such surface, gives up or
+  fails, **the hub writes it itself** — the previous summary and one line per new message,
+  keeping the newest 4,000 characters. `summarized_turn_count` counts the messages it covers.
+- **Task progress in the project's room** (ROADMAP Phase 1). A project whose
+  `report_room_id` names a room gets a line from the hub (`author.kind: system`) there when one
+  of its tasks' runs starts and when it ends — finished with the agent's last words, blocked
+  with the reason, or stopped — in the language of the person who started it. Nothing is said
+  into a room that is gone or archived. The web links a project to a room from the room's
+  settings.

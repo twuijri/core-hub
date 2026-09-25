@@ -46,7 +46,8 @@ import {
   sessionTurnsFor,
   workflowApprovalsFor,
 } from './sessions/index.js';
-import { registerRoomPorts, roomsModule } from './rooms/index.js';
+import { registerRoomPorts, roomsModule, roomsServiceFor } from './rooms/index.js';
+import { t as translate } from '../i18n/index.js';
 import {
   HermesApiUnavailable,
   HermesRefusal,
@@ -54,6 +55,7 @@ import {
   registerHermesBoard,
   registerTaskNames,
   registerTaskRunner,
+  TasksService,
   tasksModule,
   type HermesCardApi,
 } from './tasks/index.js';
@@ -401,8 +403,8 @@ registerTaskRunner((app) => {
   const runs = sessionRunsFor(app);
   if (!runs) return null;
   return {
-    start: (scope, input) =>
-      runs.start(scope, {
+    async start(scope, input) {
+      const handle = await runs.start(scope, {
         agentId: input.agentId,
         prompt: input.prompt,
         title: input.title,
@@ -410,11 +412,82 @@ registerTaskRunner((app) => {
         model: input.model,
         provider: input.provider,
         origin: { kind: 'task', id: input.taskId },
-      }),
+      });
+      // A task's progress goes into its project's room, when the project names one (ROADMAP
+      // Phase 1, DECISIONS §57): when its run starts, and how it ended.
+      const report = taskReporter(app, scope, input.taskId, input.agentId);
+      report?.('started');
+      if (report) {
+        void handle.done.then(
+          (outcome) => report(outcome.status, outcome.output, outcome.error),
+          () => {},
+        );
+      }
+      return handle;
+    },
     cancel: (scope, sessionId, runId) => runs.cancel(scope, sessionId, runId),
     outcome: (workspace, runId) => runs.outcome(workspace, runId),
   };
 });
+
+/**
+ * The words a project's room hears about one of its tasks, in the language of the person who
+ * started it — or `null` when the task's project reports into no room. Never throws: a report
+ * that cannot be said must not stop the task.
+ */
+function taskReporter(
+  app: FastifyInstance,
+  scope: { workspace: string; profile: string; userId: string; language: 'ar' | 'en' },
+  taskId: string,
+  agentId: string,
+): ((status: string, output?: string, error?: string | null) => void) | null {
+  try {
+    const tasks = new TasksService(requireSqlite(app.hub.database));
+    const task = tasks.many(scope, [taskId])[0];
+    if (!task) return null;
+    const project = tasks.project(scope, task.projectId);
+    const roomId = project.reportRoomId;
+    if (!roomId) return null;
+    // The agent's name as the runs know it; the id stands in when it has none.
+    const agentName =
+      seatSessionsFor(app)
+        ?.agent(scope.workspace, agentId)
+        .then((info) => info?.name ?? agentId)
+        .catch(() => agentId) ?? Promise.resolve(agentId);
+    const fill = (key: string, vars: Record<string, string>) =>
+      Object.entries(vars).reduce(
+        (text, [name, value]) => text.replaceAll(`{${name}}`, value),
+        translate(`rooms.report.${key}`, scope.language),
+      );
+    return (status, output, error) => {
+      void agentName.then((agent) => {
+        const base = { agent, task: `${project.key}-${task.number}`, title: task.title };
+        try {
+          const summary = (output ?? '').trim();
+          const text =
+            status === 'started'
+              ? fill('started', base)
+              : status === 'succeeded'
+                ? summary
+                  ? fill('succeeded', {
+                      ...base,
+                      summary: summary.length > 600 ? `…${summary.slice(-600)}` : summary,
+                    })
+                  : fill('succeeded_plain', base)
+                : status === 'cancelled'
+                  ? fill('cancelled', base)
+                  : fill('failed', { ...base, reason: (error ?? status).trim() || status });
+          roomsServiceFor(app).report(scope, roomId, text);
+        } catch (failure) {
+          app.log.warn({ err: failure, taskId }, 'rooms: a task report could not be posted');
+        }
+      });
+    };
+  } catch (error) {
+    app.log.warn({ err: error, taskId }, 'rooms: a task report could not be prepared');
+    return null;
+  }
+}
 
 /**
  * The names a card shows: an agent's from the registry (`agents`), a person's from `auth`.

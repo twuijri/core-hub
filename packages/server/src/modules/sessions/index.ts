@@ -25,6 +25,7 @@ import { SessionsService, type TurnHandle, type TurnInput, type TurnResult } fro
 import type { EngineScope } from './engine.js';
 import { SessionsStore } from './store.js';
 import type {
+  AgentAskRequest,
   AgentDirectory,
   AgentInfo,
   AgentRunner,
@@ -151,6 +152,15 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
           ),
         outcome: (workspace, runId) => serviceFor(app, app.log).turnResult(workspace, runId),
         agent: (workspace, agentId) => portsFor(app).agents.find(workspace, agentId),
+        async ask(request) {
+          const runner = portsFor(app).runner;
+          if (!runner.ask) return null;
+          try {
+            return await runner.ask(request);
+          } catch {
+            return null;
+          }
+        },
         listen: (listener) => sessionsRealtimeFor(app.hub.io)?.listen(listener) ?? (() => false),
       });
       gates.set(app, {
@@ -269,6 +279,11 @@ export interface SeatSessions {
   outcome(workspace: string, runId: string): TurnResult | null;
   /** The agent a seat would sit, as the runs see it: `null` when the profile has none. */
   agent(workspace: string, agentId: string): Promise<AgentInfo | null>;
+  /**
+   * One question to an agent outside any run (the room's summary). `null` when the agent has
+   * no one-shot surface, gave up, or failed — the caller then uses its own fallback.
+   */
+  ask(request: AgentAskRequest): Promise<string | null>;
   listen(listener: SessionEventListener): () => void;
 }
 const seats = new WeakMap<FastifyInstance, SeatSessions>();

@@ -13,6 +13,7 @@
  * - The first seat added becomes the room's lead: the one that answers a message that
  *   mentions nobody. Archiving refuses new messages; the transcript stays readable.
  */
+import { PRODUCT } from '@corehub/contracts';
 import { HubError, notFound } from '../../lib/errors.js';
 import { newUlid } from '../../db/ids.js';
 import type { EngineScope, SeatSessions } from '../sessions/index.js';
@@ -27,6 +28,7 @@ import {
   toSeat,
   type SeatStatus,
 } from './serialize.js';
+import { summarise } from './memory.js';
 import type { StoredMention } from './schema.js';
 import type { RoomsStore } from './store.js';
 import { type MemberRow, type RoomMessageRow, type RoomRow, type SeatRow } from './store.js';
@@ -642,6 +644,106 @@ export class RoomsService {
       message: this.messageOf(scope, message),
     });
     return { room, message, targets: [...targets.values()] };
+  }
+
+  // ---------------------------------------------------------------- reports
+
+  /**
+   * A line from the hub itself into a room — a task's progress into its project's room
+   * (ROADMAP Phase 1). Nothing is said into a room that is gone or archived; the answer says
+   * whether it was.
+   */
+  report(
+    scope: { workspace: string; profile: string; userId: string },
+    roomId: string,
+    text: string,
+  ): boolean {
+    const room = this.store.getRoom(scope.workspace, roomId);
+    if (!room || room.archivedAt || !text.trim()) return false;
+    const message = this.store.appendMessage({
+      workspace: room.workspace,
+      ownerId: scope.userId,
+      roomId: room.id,
+      authorKind: 'system',
+      authorName: PRODUCT.name,
+      sessionId: room.id,
+      content: text.trim(),
+      parts: [{ type: 'text', text: text.trim() }],
+    });
+    this.realtime.toRoom(scope.profile, room.id, 'message.created', {
+      message: toRoomMessage(message, scope.profile),
+    });
+    return true;
+  }
+
+  // ----------------------------------------------------------------- memory
+
+  memoryOf(scope: RoomScope, roomId: string): Json {
+    return toMemory(this.requireRoom(scope, roomId).room);
+  }
+
+  private announceMemory(scope: RoomScope, room: RoomRow): Json {
+    const memory = toMemory(room);
+    this.realtime.toRoom(scope.profile, room.id, 'memory.updated', { room_id: room.id, memory });
+    return memory;
+  }
+
+  /** `rooms.putMemory`: the manager writes the summary by hand. */
+  putMemory(scope: RoomScope, roomId: string, summary: string): Json {
+    const room = this.requireManager(scope, roomId);
+    const updated = this.store.updateRoom(scope.workspace, room.id, {
+      memory: summary.trim() || null,
+      memoryStatus: 'idle',
+      memoryError: null,
+      memoryUpdatedAt: new Date(),
+    }) as RoomRow;
+    return this.announceMemory(scope, updated);
+  }
+
+  /** How many finished messages the summary does not cover yet. */
+  uncovered(room: RoomRow): RoomMessageRow[] {
+    return this.store
+      .messagesAfter(room.id, Math.max(room.memoryUptoSeq, room.contextFromSeq), 2_000)
+      .filter((row) => row.status === 'complete' && row.content.trim().length > 0);
+  }
+
+  /**
+   * Rewrite the summary to cover every finished message up to now (`memory.ts` says who
+   * writes it). `summarizing` while it works; `error`, with the reason, when it could not.
+   */
+  async refreshMemory(scope: RoomScope, roomId: string): Promise<Json> {
+    const room = this.store.getRoom(scope.workspace, roomId);
+    if (!room) throw notFound({ resource: 'room', id: roomId });
+    const messages = this.uncovered(room);
+    if (messages.length === 0) return toMemory(room);
+    this.announceMemory(
+      scope,
+      this.store.updateRoom(scope.workspace, room.id, {
+        memoryStatus: 'summarizing',
+        memoryError: null,
+      }) as RoomRow,
+    );
+    try {
+      const seats = this.store.seats(room.id);
+      const lead = seats.find((seat) => seat.id === room.leadSeatId) ?? seats[0] ?? null;
+      const { summary } = await summarise({ scope, room, lead, messages, seats: this.ports.seats });
+      const updated = this.store.updateRoom(scope.workspace, room.id, {
+        memory: summary,
+        memoryStatus: 'idle',
+        memoryError: null,
+        memoryTurnCount: room.memoryTurnCount + messages.length,
+        memoryUptoSeq: messages.at(-1)!.seq,
+        memoryUpdatedAt: new Date(),
+      }) as RoomRow;
+      return this.announceMemory(scope, updated);
+    } catch (error) {
+      const failed = this.store.updateRoom(scope.workspace, room.id, {
+        memoryStatus: 'error',
+        memoryError: error instanceof Error ? error.message : String(error),
+      }) as RoomRow;
+      this.announceMemory(scope, failed);
+      throw error;
+    }
   }
 
   // ---------------------------------------------------------------- context

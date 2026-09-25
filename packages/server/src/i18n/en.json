@@ -183,5 +183,14 @@
     "plugins": {
       "duplicate": "Hermes lists more than one plugin by this name; the one shown is the one its commands act on."
     }
+  },
+  "rooms": {
+    "report": {
+      "started": "{agent} started {task} “{title}”.",
+      "succeeded": "{agent} finished {task} “{title}”: {summary}",
+      "succeeded_plain": "{agent} finished {task} “{title}”.",
+      "failed": "{task} “{title}” is blocked: {reason}",
+      "cancelled": "{task} “{title}” was stopped."
+    }
   }
 }

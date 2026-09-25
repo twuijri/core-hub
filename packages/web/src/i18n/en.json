@@ -1778,7 +1778,18 @@
       "mention_all": "Allow @all (every agent at once)",
       "handoff": "Agents may pass the turn to each other",
       "max_depth": "Most passes in a row",
-      "max_depth_hint": "1–20; empty for no limit. A pass repeated in the same run always stops."
+      "max_depth_hint": "1–20; empty for no limit. A pass repeated in the same run always stops.",
+      "project": "Project reporting here",
+      "project_none": "No project",
+      "project_hint": "When a task of this project starts or ends, the room is told."
+    },
+    "memory": {
+      "title": "Summary",
+      "none": "No summary yet. It is written every few messages, and agents are told it on every turn.",
+      "refresh": "Summarise now",
+      "edit": "Edit summary",
+      "working": "Summarising…",
+      "failed": "Could not summarise"
     }
   }
 }

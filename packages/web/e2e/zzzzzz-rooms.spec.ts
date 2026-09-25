@@ -127,5 +127,11 @@ test.describe('rooms', () => {
     await expect(coder).toHaveAttribute('data-status', 'complete');
     await expect(page.getByTestId('room-activity')).toHaveCount(0);
     await page.screenshot({ path: path.join(shots, 'rooms-handoff-ar-light.png') });
+
+    // The room's summary, written now on request, is what the agents are told next time.
+    const memory = page.getByTestId('room-memory');
+    await expect(memory.getByTestId('room-memory-text')).toContainText('لا ملخّص بعد');
+    await memory.getByTestId('room-memory-refresh').click();
+    await expect(memory.getByTestId('room-memory-text')).not.toContainText('لا ملخّص بعد');
   });
 });
