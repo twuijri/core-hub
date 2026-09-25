@@ -1,5 +1,5 @@
 /**
- * The composer's commands over Hermes's TUI gateway (decision §50), against a scripted
+ * The composer's commands over Hermes's TUI gateway (decision §52), against a scripted
  * process speaking the gateway's frames: which JSON-RPC method each command becomes, what
  * the adapter does with Hermes's answer, and how compression inside a turn is reported.
  */

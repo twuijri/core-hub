@@ -1,4 +1,4 @@
-// The composer's `/` commands (decision §50): which are offered for which agent, how the
+// The composer's `/` commands (decision §52): which are offered for which agent, how the
 // menu filters and is walked with the keyboard, and what a finished `/text` becomes.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';

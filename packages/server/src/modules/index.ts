@@ -232,7 +232,7 @@ registerProfileMirror((app) => {
       }
     },
     // The profile's `compression.*` and `model.context_length` in its own `config.yaml`
-    // (decision §50): the home Hermes binds for that profile's sessions.
+    // (decision §52): the home Hermes binds for that profile's sessions.
     readCompression(name) {
       const folder = profileHome(home, { slug: name, isDefault: name === 'default' });
       if (!folder) return null;

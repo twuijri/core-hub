@@ -34,7 +34,7 @@ export interface ProfileMirror {
    */
   setDisplayName(name: string, displayName: string): Promise<void>;
   /**
-   * The profile's automatic context compression as the runtime will use it (decision §50),
+   * The profile's automatic context compression as the runtime will use it (decision §52),
    * or `null` when the runtime has no such profile. Throws `ProfileMirrorError` when its
    * configuration cannot be read.
    */

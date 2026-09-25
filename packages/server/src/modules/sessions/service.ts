@@ -834,7 +834,7 @@ export class SessionsService {
     return this.runOf(scope, this.store.getRun(scope.workspace, row.id) as RunRow);
   }
 
-  // --------------------------------------------------- commands (decision §50)
+  // --------------------------------------------------- commands (decision §52)
 
   /** Sessions being compressed right now: a second request waits for nothing, it is refused. */
   private readonly compressing = new Set<string>();

@@ -125,7 +125,7 @@ export interface RunState {
   turns: ModelTurnState[];
   usage: UsageState[];
   context: { usedTokens: number; windowTokens: number | null; estimated: boolean } | null;
-  /** The agent is compressing the context inside this run (decision §50). */
+  /** The agent is compressing the context inside this run (decision §52). */
   compressing: boolean;
   interruptRequested: boolean;
   error: { code: string; message: string } | null;

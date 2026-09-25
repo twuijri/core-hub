@@ -1154,7 +1154,7 @@
         },
         "compression": {
           "type": "object",
-          "description": "Automatic context compression for this profile's conversations (decision §50).\nWhere the hub supervises Hermes these are Hermes's own keys in the profile's\n`config.yaml` — `compression.enabled`, `compression.threshold`,\n`compression.target_ratio`, `compression.protect_first_n`,\n`compression.protect_last_n` and `model.context_length` — read from there and\nwritten there, and Hermes applies them from the next turn on.\n",
+          "description": "Automatic context compression for this profile's conversations (decision §52).\nWhere the hub supervises Hermes these are Hermes's own keys in the profile's\n`config.yaml` — `compression.enabled`, `compression.threshold`,\n`compression.target_ratio`, `compression.protect_first_n`,\n`compression.protect_last_n` and `model.context_length` — read from there and\nwritten there, and Hermes applies them from the next turn on.\n",
           "required": [
             "enabled",
             "threshold",
@@ -2869,7 +2869,7 @@
         "learn",
         "skill_commands"
       ],
-      "description": "What an agent can do. The last six are the composer's `/` commands the agent itself\ncarries out (decision §50): `compress` (`sessions.compress`), `steer`\n(`sessions.steerRun`), and `goals`, `plans`, `learn`, `skill_commands` — a message\nthat starts with `/goal`, `/plan`, `/learn` or `/skill <name>` is the agent's\ncommand rather than text for the model. A client offers a command only when the\nsession's agent has its capability.\n"
+      "description": "What an agent can do. The last six are the composer's `/` commands the agent itself\ncarries out (decision §52): `compress` (`sessions.compress`), `steer`\n(`sessions.steerRun`), and `goals`, `plans`, `learn`, `skill_commands` — a message\nthat starts with `/goal`, `/plan`, `/learn` or `/skill <name>` is the agent's\ncommand rather than text for the model. A client offers a command only when the\nsession's agent has its capability.\n"
     },
     "AgentSection": {
       "type": "string",

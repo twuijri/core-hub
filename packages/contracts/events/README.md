@@ -132,7 +132,7 @@ message.
 | `approval.requested` | sessions module when an adapter asks for a decision; schedules module for workflow-step gates | `approval`: `Approval` | The agent is blocked on a decision. Profile-wide so the pending-actions bar can show it anywhere. |
 | `approval.resolved` | sessions module | `approval`: `Approval` | A decision was recorded (by any client) or the approval expired. Profile-wide. |
 | `context.updated` | sessions module after each run and after compression | `session_id`: `Ulid`, `context`: `ContextUsage`, `usage`: `Usage | null` | The context-window usage of a session changed. |
-| `context.compression` | sessions module: `sessions.compress`, or the agent compressing on its own during a run | `session_id`: `Ulid`, `run_id`: `Ulid | null`, `phase`: `started` / `finished` / `failed`, `trigger`: `manual` / `auto`, `before_tokens`, `after_tokens`: `integer | null`, `message`: `string | null` | The agent is compressing (or finished compressing) the conversation's context; `context.updated` follows with the new window (decision §50). |
+| `context.compression` | sessions module: `sessions.compress`, or the agent compressing on its own during a run | `session_id`: `Ulid`, `run_id`: `Ulid | null`, `phase`: `started` / `finished` / `failed`, `trigger`: `manual` / `auto`, `before_tokens`, `after_tokens`: `integer | null`, `message`: `string | null` | The agent is compressing (or finished compressing) the conversation's context; `context.updated` follows with the new window (decision §52). |
 
 ### `/rt/rooms` — 25 events
 

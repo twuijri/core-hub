@@ -126,7 +126,7 @@ export interface SessionView {
 }
 
 /**
- * `Session.context`: the window as the agent last reported it (decision §50), kept in the
+ * `Session.context`: the window as the agent last reported it (decision §52), kept in the
  * session's metadata by the engine. `null` until an agent has reported one.
  */
 export function contextOf(metadata: SessionRow['metadata'] | null | undefined): {

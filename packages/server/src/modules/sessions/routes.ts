@@ -340,7 +340,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     return deps.service(request).cancelRun(scope, params.session_id, params.run_id);
   });
 
-  // ------------------------------------------- commands (decision §50)
+  // ------------------------------------------- commands (decision §52)
 
   app.post('/sessions/:session_id/compress', async (request) => {
     const scope = await scopeOf(request);

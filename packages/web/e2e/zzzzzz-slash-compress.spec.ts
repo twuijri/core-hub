@@ -1,5 +1,5 @@
 /**
- * 32. The composer's `/` commands and the context meter (decision §50): a conversation whose
+ * 32. The composer's `/` commands and the context meter (decision §52): a conversation whose
  *     agent reports a window three quarters full shows it on the meter; typing `/` opens the
  *     menu of the agent's commands, `/compress` is picked from it with the keyboard, the chat
  *     says the context is being compressed, and the meter drops to what the agent reports

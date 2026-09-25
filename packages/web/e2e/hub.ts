@@ -365,7 +365,7 @@ class ScriptedRunner implements AgentRunner {
   }
 
   /**
-   * `/compress` (journey 32, decision §50): long enough that the progress is seen, then the
+   * `/compress` (journey 32, decision §52): long enough that the progress is seen, then the
    * window as a real Hermes reports it after compressing — much emptier.
    */
   async compress(request: AgentCompressRequest): Promise<AgentCompressResult> {

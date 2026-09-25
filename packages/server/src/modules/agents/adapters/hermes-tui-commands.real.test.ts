@@ -1,5 +1,5 @@
 /**
- * The composer's commands against **the real Hermes** over its TUI gateway (decision §50):
+ * The composer's commands against **the real Hermes** over its TUI gateway (decision §52):
  * the image's own `python -m tui_gateway.entry`, a scripted OpenAI-compatible model on this
  * machine, no key and no network beyond the loopback. Skipped unless an image is named:
  *
@@ -93,7 +93,7 @@ describe.skipIf(!image)(
           '',
         ].join('\n'),
       );
-      // What the profile settings write (decision §50), in the file Hermes is about to read.
+      // What the profile settings write (decision §52), in the file Hermes is about to read.
       writeHermesCompression(home, {
         enabled: true,
         threshold: 0.8,

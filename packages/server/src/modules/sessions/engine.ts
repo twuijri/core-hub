@@ -601,7 +601,7 @@ export class RunEngine {
         }
 
         case 'compression': {
-          // The agent compressing on its own inside the run (decision §50).
+          // The agent compressing on its own inside the run (decision §52).
           this.emitToSession(scope, sessionId, 'context.compression', {
             session_id: sessionId,
             run_id: run.runId,
@@ -818,7 +818,7 @@ export class RunEngine {
 
   /**
    * The window as the agent last reported it: kept on the session, so `Session.context`
-   * answers after a reload, and announced as `context.updated` (decision §50).
+   * answers after a reload, and announced as `context.updated` (decision §52).
    */
   recordContext(
     scope: EngineScope,
