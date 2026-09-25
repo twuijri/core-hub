@@ -24,6 +24,8 @@ export const LIVE_HISTORY_POINTS = 72;
 const BASELINE_MAX_AGE_MS = 30_000;
 /** How long the first look waits between its two samples. */
 const BASELINE_WAIT_MS = 250;
+/** How often the event-loop monitor's own timer fires. */
+const LOOP_RESOLUTION_MS = 10;
 /** Two viewers asking within this share one sample rather than halving each other's window. */
 const REUSE_WITHIN_MS = 2_000;
 
@@ -308,13 +310,16 @@ export class LiveSampler {
 
   private defaultLoopLag(): number | null {
     if (!this.histogram) {
-      this.histogram = monitorEventLoopDelay({ resolution: 10 });
+      this.histogram = monitorEventLoopDelay({ resolution: LOOP_RESOLUTION_MS });
       this.histogram.enable();
       return null;
     }
     const mean = this.histogram.mean;
     this.histogram.reset();
-    return Number.isFinite(mean) && mean > 0 ? Math.round((mean / 1e6) * 100) / 100 : null;
+    if (!Number.isFinite(mean) || mean <= 0) return null;
+    // The histogram times its own timer, which fires every `resolution` ms: an idle loop
+    // reads as the resolution itself, so that is taken off to leave the lag.
+    return Math.max(0, Math.round((mean / 1e6 - LOOP_RESOLUTION_MS) * 100) / 100);
   }
 }
 

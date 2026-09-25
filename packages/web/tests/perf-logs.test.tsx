@@ -195,14 +195,18 @@ describe('Performance', () => {
     mount(<PerformanceTool />, fetchImpl);
     await waitFor(() => expect(screen.getByTestId('performance-live')).toBeTruthy());
     expect(within(screen.getByTestId('perf-host-cpu')).getByText('12.5%')).toBeTruthy();
-    expect(within(screen.getByTestId('perf-host-memory')).getByText('6 GB of 16 GB')).toBeTruthy();
+    expect(
+      within(screen.getByTestId('perf-host-memory')).getByText(
+        '\u20666 GB\u2069 of \u206616 GB\u2069',
+      ),
+    ).toBeTruthy();
     expect(within(screen.getByTestId('perf-hub-lag')).getByText('1.2 ms')).toBeTruthy();
     expect(screen.getByTestId('perf-host-cpu-spark').getAttribute('data-points')).toBe('2');
 
     const hermes = screen.getByTestId('perf-hermes');
     expect(within(hermes).getByText('TUI gateway (conversations)')).toBeTruthy();
     expect(within(hermes).getByText('Messaging gateway · work')).toBeTruthy();
-    expect(within(hermes).getByText('217 MB')).toBeTruthy();
+    expect(within(hermes).getByText('\u2066217 MB\u2069')).toBeTruthy();
     // A gateway that is not running has no numbers: a dash, never a zero.
     expect(within(hermes).getAllByText('—').length).toBeGreaterThanOrEqual(3);
 

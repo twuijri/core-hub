@@ -327,7 +327,8 @@ function useFormat(language: string) {
         size /= 1024;
         unit += 1;
       }
-      return `${new Intl.NumberFormat(locale, { maximumFractionDigits: unit >= 3 ? 1 : 0 }).format(size)} ${units[unit]}`;
+      // Isolated left-to-right, so "484 MB" does not read "MB 484" inside an Arabic line.
+      return `\u2066${new Intl.NumberFormat(locale, { maximumFractionDigits: unit >= 3 ? 1 : 0 }).format(size)} ${units[unit]}\u2069`;
     },
     duration(seconds: number) {
       const days = Math.floor(seconds / 86_400);
