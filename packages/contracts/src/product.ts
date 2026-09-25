@@ -28,6 +28,17 @@ export const PRODUCT = {
   repository: 'twuijri/core-hub',
 } as const;
 
+/**
+ * The apps' store identities: the iOS bundle id (APNs's `apns-topic`) and the Android
+ * application id. They are not renamed with the product — a store knows an app by these
+ * for good — so they live beside `PRODUCT`, not in it. The hub offers the bundle id as the
+ * APNs sender's default (apps/ios/project.yml, apps/android/app/build.gradle.kts say the same).
+ */
+export const APP_IDS = {
+  apple: 'com.twuijri.corehub',
+  android: 'com.twuijri.corehub',
+} as const;
+
 /** The conventions named after the product. One rename moves all of them together. */
 export const derived = {
   /** `$XDG_CONFIG_HOME/<id>/config.json` — where the terminal client keeps its token. */

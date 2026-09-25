@@ -5,8 +5,10 @@ import hub.core.android.data.TokenKind
 import hub.core.android.memoryStore
 import hub.core.android.storedSession
 import hub.core.client.model.DeviceKind
+import hub.core.client.model.DevicePatch
 import hub.core.client.model.DevicePlatform
 import hub.core.client.model.DeviceRegistration
+import hub.core.client.model.PushBlocker
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
@@ -28,6 +30,7 @@ class PushTest {
     private val bodies = mutableMapOf<String, String>()
     private var providers = """["webpush","fcm"]"""
     private var registerPushStatus = 200
+    private var patchStatus = 200
     private val devices = mutableListOf<String>()
 
     private val registrar = PushRegistrar(store, { HubApis(it.hub, OkHttpClient()) }) {
@@ -66,6 +69,10 @@ class PushTest {
                         else -> json("""{"error":"Not found","code":"not_found"}""", registerPushStatus).also { registerPushStatus = 200 }
                     }
                     call.startsWith("DELETE /api/v1/devices/") -> MockResponse().setResponseCode(204)
+                    call.startsWith("PATCH /api/v1/devices/") -> when (patchStatus) {
+                        200 -> json(device(call.substringAfterLast('/'), thisDevice = true))
+                        else -> json("""{"error":"Not found","code":"not_found"}""", patchStatus).also { patchStatus = 200 }
+                    }
                     else -> json("""{"error":"unexpected $call"}""", 500)
                 }
             }
@@ -143,6 +150,33 @@ class PushTest {
         assertTrue(calls.isEmpty())
         registrar.unregister(storedSession(hub = hub()).copy(deviceId = "01J8QK3ZR2W7M5N4P6T8V9X0D0"))
         assertEquals(listOf("DELETE /api/v1/devices/${ID_D0}/push"), calls)
+    }
+
+    private val report = DevicePatch(
+        brand = "Google", model = "Pixel 9", osVersion = "16", appVersion = "0.2.0", pushBlocker = PushBlocker.PERMISSION_PENDING,
+    )
+
+    @Test fun `at launch a paired phone tells the hub its model, versions and push blocker`() = runTest {
+        store.save(storedSession(hub = hub(), kind = TokenKind.APP, refresh = null).copy(deviceId = ID_DV))
+        assertTrue(registrar.report(report))
+        assertEquals(listOf("PATCH /api/v1/devices/$ID_DV"), calls)
+        val body = bodies.getValue(calls.single())
+        assertTrue(body, body.contains("\"os_version\":\"16\"") && body.contains("\"push_blocker\":\"permission_pending\""))
+        assertTrue(body, body.contains("\"model\":\"Pixel 9\"") && body.contains("\"app_version\":\"0.2.0\""))
+        // Its name is the person's to change on the hub: the launch report never sends one.
+        assertTrue(body, !body.contains("\"name\""))
+    }
+
+    @Test fun `a password sign-in without a device row registers once, and a removed row again`() = runTest {
+        store.save(storedSession(hub = hub()))
+        assertTrue(registrar.report(report))
+        assertEquals(listOf("POST /api/v1/devices"), calls)
+        assertEquals(ID_D0, store.current!!.deviceId)
+
+        calls.clear()
+        patchStatus = 404
+        assertTrue(registrar.report(report))
+        assertEquals(listOf("PATCH /api/v1/devices/$ID_D0", "POST /api/v1/devices"), calls)
     }
 
     @Test fun `signed out, nothing is registered`() = runTest {

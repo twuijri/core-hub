@@ -2440,3 +2440,33 @@ The owner, 2026-09-25, on the rest of the 501 inventory:
   (a preset swaps an agent's whole configuration; a peer is another hub reaching into this one).
   Not built and not deleted; they stay 501 until a decision says what they may do and what they
   may not.
+
+## 81. A device says what it is and what stops its push; a name a person gives it stays
+
+The owner (2026-09-25): a pill that said only "Paired: iPhone" told two phones apart by nothing,
+and since iOS 16 every iPhone calls itself "iPhone". Proposed — owner to confirm:
+
+- `Device` gains `os_version` (string or null), `paired_at` (when the row was last paired or
+  registered; nullable only so an app reading an older hub still decodes the device) and
+  `push_blocker` (`PushBlocker`: `none`, `not_in_build`, `permission_pending`,
+  `permission_denied`, or null when the device never said — an older app, a browser).
+  `DeviceRegistration` (pairing, `devices.register`) takes `os_version` and `push_blocker`;
+  `DevicePatch` takes `brand`, `model`, `os_version` and `push_blocker` beside `app_version`. All
+  optional: an app older than them sends none and the row keeps what it had.
+- `model` is the model's marketing name when the device knows it (iOS maps `utsname.machine`,
+  `iPhone17,1` → `iPhone 16 Pro`; an identifier newer than the app's table is sent as it is).
+- Apps send them when pairing or registering and again at each launch with `devices.update` —
+  **never the name** there. A name set with `devices.update` is the person's (`renamed_at`,
+  migration `0026`): pairing or registering the same device again keeps it; unlinking forgets it.
+- `last_seen_at` also counts the calls of the sign-in that registered a device with
+  `devices.register` (`seen_session_id`, same migration) — a phone signed in with a password, a
+  browser — at most once a minute per sign-in, as a paired device's calls already counted.
+- The hub offers its own app's bundle id (`APP_IDS.apple` in `packages/contracts/src/product.ts`,
+  `com.twuijri.corehub`) as the APNs sender's default, so `bundle_id` is no longer missing on a
+  new hub; it checks an APNs key signs an ES256 token (an EC P-256 key) before storing it, and
+  names `google-services.json` when it is given one for FCM.
+
+Rejected: a separate `reported_name` beside `name` (two names on one card for a rare case);
+a heartbeat call for `last_seen_at` (any authenticated call is already a sign of life); asking
+Apple to verify an APNs key on save (Apple answers only a real push to a real token —
+`devices.testPush` does that).

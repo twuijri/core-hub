@@ -1,7 +1,10 @@
-// Device connections (NAVIGATION §1): tab App pairs a phone with a QR from `auth.createPairing`
-// and waits for `pairing.claimed` on `/rt/devices` (polling `auth.getPairing` as fallback);
-// tab Devices lists the person's linked devices (an admin: everyone's, and the push senders).
+// Device connections (NAVIGATION §1), one page since 2026-09-26 (it had tabs App / Devices, and
+// a phone paired on App vanished from App once the page was left): at the top, pairing a phone
+// or computer with a QR from `auth.createPairing`, waiting for `pairing.claimed` on
+// `/rt/devices` (polling `auth.getPairing` as fallback); below it, every linked device as a
+// card, loaded from the hub (an admin: everyone's, and the push senders folded at the bottom).
 import { PRODUCT } from '@corehub/contracts';
+import { useQueryClient } from '@tanstack/react-query';
 import qrcode from 'qrcode-generator';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/context.js';
@@ -12,8 +15,9 @@ import { useRealtime } from '../realtime/context.js';
 import { isEnvelope } from '../realtime/envelope.js';
 import { AppShell } from '../shell/AppShell.js';
 import type { Pairing } from '../types.js';
-import { Button, Card, Notice, TabPanel, Tabs } from '../ui/index.js';
+import { Button, Card, Notice } from '../ui/index.js';
 import { DevicesPanel } from '../devices/DevicesPanel.js';
+import { deviceKeys } from '../devices/queries.js';
 
 export function qrSvgPath(text: string): { path: string; size: number } {
   const qr = qrcode(0, 'M');
@@ -102,17 +106,25 @@ export function DeviceConnectionsScreen() {
   const { t } = useI18n();
   const { client, user } = useAuth();
   const realtime = useRealtime();
-  const [tab, setTab] = useState<'app' | 'devices'>('app');
+  const queryClient = useQueryClient();
   const [pairing, setPairing] = useState<Pairing | null>(null);
-  const [claimedName, setClaimedName] = useState<string | null>(null);
+  const [justPaired, setJustPaired] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [now, setNow] = useState(Date.now());
   const title = t(termKey('device_connections'));
   const isAdmin = user?.role === 'admin' || user?.role === 'owner';
 
+  // A claimed pairing is not shown as such: the device it made joins the list below (fetched
+  // again from the hub) and is marked there.
+  const claimed = (next: Pairing) => {
+    setPairing(null);
+    setJustPaired(next.device_id);
+    void queryClient.invalidateQueries({ queryKey: deviceKeys.list });
+  };
+
   const start = async () => {
     setError(null);
-    setClaimedName(null);
+    setJustPaired(null);
     try {
       const { data } = await client.request('post', '/auth/pairings', {
         body: { connection: 'lan', ttl_seconds: 300 },
@@ -128,10 +140,10 @@ export function DeviceConnectionsScreen() {
     const socket = realtime.socket('devices');
     const onClaimed = (raw: unknown) => {
       if (!isEnvelope(raw)) return;
-      const payload = raw.payload as { pairing?: Pairing; device?: { name: string } };
+      const payload = raw.payload as { pairing?: Pairing };
       if (payload.pairing?.id === pairing.id) {
-        setPairing(payload.pairing);
-        setClaimedName(payload.device?.name ?? null);
+        if (payload.pairing.status === 'claimed') claimed(payload.pairing);
+        else setPairing(payload.pairing);
       }
     };
     socket.on('pairing.claimed', onClaimed);
@@ -141,7 +153,8 @@ export function DeviceConnectionsScreen() {
       client
         .request('get', '/auth/pairings/{pairing_id}', { params: { pairing_id: pairing.id } })
         .then(({ data }) => {
-          if (data.status !== 'pending') setPairing(data);
+          if (data.status === 'claimed') claimed(data);
+          else if (data.status !== 'pending') setPairing(data);
         })
         .catch(() => undefined);
     }, 5_000);
@@ -160,68 +173,52 @@ export function DeviceConnectionsScreen() {
   return (
     <AppShell title={title}>
       <h1 className="sr-only">{title}</h1>
-      {/* Two sections of one page, switched in place: that is a tab set, and it carries
-          the tab semantics (`role="tablist"`, arrow keys, `aria-controls`) a segmented
-          control must not claim. */}
-      <Tabs
-        label={title}
-        value={tab}
-        onValueChange={(next) => setTab(next as 'app' | 'devices')}
-        testId="devices-tabs"
-        items={[
-          { value: 'app', label: t('devices.tab.app') },
-          // Everyone's own devices; an admin sees everyone's and the push senders.
-          { value: 'devices', label: t('devices.tab.devices') },
-        ]}
-      >
-        <TabPanel value="app">
-          <section className="flex flex-col items-start gap-3">
-            <p className="text-sm text-muted">{t('devices.pair_intro')}</p>
-            <Button variant="primary" onClick={() => void start()} data-testid="start-pairing">
-              {pairing ? t('devices.pair_again') : t('devices.pair')}
-            </Button>
-            {error !== null && <Notice tone="danger">{describeError(error, t)}</Notice>}
-            {pairing && (
-              <Card
-                tone="raised"
-                className="items-center self-stretch sm:self-start"
-                testId="pairing"
-                data-status={pairing.status}
-              >
-                {pairing.status === 'pending' && secondsLeft > 0 ? (
-                  <>
-                    <QrCode text={pairing.qr_payload} />
-                    <p
-                      className="font-mono text-2xl tracking-widest"
-                      dir="ltr"
-                      data-testid="pairing-code"
-                    >
-                      {pairing.code}
-                    </p>
-                    <p className="text-xs text-muted">
-                      {t('devices.expires_in', { seconds: secondsLeft })}
-                    </p>
-                    <PairingLink qrPayload={pairing.qr_payload} />
-                  </>
-                ) : pairing.status === 'claimed' ? (
-                  <Notice tone="success">
-                    {t('devices.claimed', { name: claimedName ?? pairing.device_id ?? '' })}
-                  </Notice>
-                ) : (
-                  <Notice tone="warning">
-                    {t(
-                      `devices.pairing_${pairing.status === 'cancelled' ? 'cancelled' : 'expired'}`,
-                    )}
-                  </Notice>
-                )}
-              </Card>
-            )}
-          </section>
-        </TabPanel>
-        <TabPanel value="devices">
-          <DevicesPanel isAdmin={isAdmin} />
-        </TabPanel>
-      </Tabs>
+      <div className="flex flex-col gap-8">
+        <section
+          className="flex flex-col items-start gap-3"
+          data-testid="pairing-section"
+          aria-labelledby="pair-heading"
+        >
+          <h2 id="pair-heading" className="text-base font-semibold">
+            {t('devices.pair_heading')}
+          </h2>
+          <p className="text-sm text-muted">{t('devices.pair_intro')}</p>
+          <Button variant="primary" onClick={() => void start()} data-testid="start-pairing">
+            {pairing ? t('devices.pair_again') : t('devices.pair')}
+          </Button>
+          {error !== null && <Notice tone="danger">{describeError(error, t)}</Notice>}
+          {pairing && (
+            <Card
+              tone="raised"
+              className="mt-2 items-center self-stretch sm:self-start"
+              testId="pairing"
+              data-status={pairing.status}
+            >
+              {pairing.status === 'pending' && secondsLeft > 0 ? (
+                <>
+                  <QrCode text={pairing.qr_payload} />
+                  <p
+                    className="font-mono text-2xl tracking-widest"
+                    dir="ltr"
+                    data-testid="pairing-code"
+                  >
+                    {pairing.code}
+                  </p>
+                  <p className="text-xs text-muted">
+                    {t('devices.expires_in', { seconds: secondsLeft })}
+                  </p>
+                  <PairingLink qrPayload={pairing.qr_payload} />
+                </>
+              ) : (
+                <Notice tone="warning">
+                  {t(`devices.pairing_${pairing.status === 'cancelled' ? 'cancelled' : 'expired'}`)}
+                </Notice>
+              )}
+            </Card>
+          )}
+        </section>
+        <DevicesPanel isAdmin={isAdmin} justPaired={justPaired} />
+      </div>
     </AppShell>
   );
 }
