@@ -52,7 +52,7 @@ tags:
   - name: knowledge
     description: 'Phase 4 stub: journal, notes and files. One endpoint reserved so clients can be generated against it.'
   - name: audit
-    description: 'Phase 4 stub: usage, costs, logs and performance reports. One endpoint reserved.'
+    description: Usage and cost, skills usage, logs and performance reports.
   - name: plugins
     description: 'Phase 4 stub: hub plugins (Docker / MCP based). One endpoint reserved.'
 security:
@@ -12533,8 +12533,12 @@ paths:
     get:
       operationId: audit.getReport
       tags: [audit]
-      summary: 'Reserved: the Logs, Usage, Performance and Skills Usage screens (Phase 4)'
-      description: Returns `501 not_implemented` until Phase 4. Global for `logs` and `performance` (admin); workspace-scoped for `usage` and `skills`.
+      summary: The Logs, Usage, Performance and Skills usage reports in one open shape
+      description: |
+        Global for `logs` and `performance` (admin); workspace-scoped for `usage` and `skills`.
+        The Usage and Skills usage screens read the typed `audit.getUsage` and
+        `audit.getSkillUsage` (contract decision §50); `skills` here answers the header's profile
+        with the same body as `audit.getSkillUsage` in `data`.
       parameters:
         - name: X-Hub-Profile
           in: header
@@ -12585,6 +12589,161 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '501':
           $ref: '#/components/responses/NotImplemented'
+  /audit/usage:
+    get:
+      operationId: audit.getUsage
+      tags: [audit]
+      summary: The Usage screen — tokens, cache, estimated cost and conversations by day, model and agent
+      description: |
+        Aggregated on the hub from the usage ledger (one record per run and model) and the runs
+        themselves (contract decision §50). A day is the caller's calendar day
+        (`utc_offset_minutes`); `days=7` is today and the six days before it, and `by_day` has
+        one entry for every one of them, oldest first, zeros included.
+
+        **Only what was measured is a number.** `cache_read_tokens`, `cache_write_tokens` and
+        `cache_hit_rate` are `null` when no record in the period reported the cache (Hermes
+        reports none today); `cost` is `null` when no record was priced. An agent that ran but
+        reported no usage at all — coding agents over ACP — is in `by_agent` with
+        `reports_usage: false` and `null` tokens, never zeros.
+
+        With `profiles=all` the report covers every profile the caller may enter (ADR 0016);
+        the header must still name one of them. `agent_id` narrows everything to one agent;
+        `agents` still lists every agent active in the period, so a filter can be changed back.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - $ref: '#/components/parameters/ReportDays'
+        - $ref: '#/components/parameters/ReportProfiles'
+        - $ref: '#/components/parameters/ReportAgent'
+        - $ref: '#/components/parameters/UtcOffset'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The usage report.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageReport'
+              example:
+                period: { from: '2026-09-19', to: '2026-09-25', days: 7 }
+                generated_at: '2026-09-25T09:00:00Z'
+                profiles: [default]
+                agents:
+                  - { agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0YA, name: Hermes, reports_usage: true }
+                totals:
+                  input_tokens: 182030
+                  output_tokens: 42100
+                  cache_read_tokens: 91000
+                  cache_write_tokens: null
+                  reasoning_tokens: 0
+                  total_tokens: 315130
+                  cache_hit_rate: 0.3333
+                  runs: 48
+                  unreported_runs: 0
+                  conversations: 12
+                  conversations_per_day: 2.4
+                  cost: { amount: '0.912000', currency: USD }
+                  cost_source: estimated
+                by_day:
+                  - date: '2026-09-25'
+                    input_tokens: 18203
+                    output_tokens: 4210
+                    cache_read_tokens: 9100
+                    cache_write_tokens: 0
+                    total_tokens: 31513
+                    runs: 5
+                    conversations: 2
+                    cost: { amount: '0.091200', currency: USD }
+                by_model:
+                  - model: gpt-5.1
+                    input_tokens: 182030
+                    output_tokens: 42100
+                    cache_read_tokens: 91000
+                    cache_write_tokens: 0
+                    total_tokens: 315130
+                    share: 1
+                    runs: 48
+                    cost: { amount: '0.912000', currency: USD }
+                by_agent:
+                  - agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0YA
+                    name: Hermes
+                    reports_usage: true
+                    runs: 48
+                    conversations: 12
+                    input_tokens: 182030
+                    output_tokens: 42100
+                    total_tokens: 315130
+                    share: 1
+                    cost: { amount: '0.912000', currency: USD }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /audit/skills:
+    get:
+      operationId: audit.getSkillUsage
+      tags: [audit]
+      summary: The Skills usage screen — which skills the agents loaded, how often, and which never
+      description: |
+        One use is a skill an agent loaded in a run: Hermes's `skill_view` tool opening the
+        skill itself (a linked file of an already-loaded skill is the same use), counted once
+        per run and skill (contract decision §50). Recording started with this version and
+        cannot be rebuilt for the past: `counting_since` says from when. Coding agents over ACP
+        do not say which skill a tool call loaded, so they are not counted.
+
+        `by_day` has one entry per calendar day of the period with the uses of the six most
+        used skills of the period (`top_series`) and the rest as `other`. `never_used` lists
+        the enabled skills of the hub's Hermes in the covered profiles that no run loaded in
+        the period; `null` when the hub cannot see those skills (an external Hermes).
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - $ref: '#/components/parameters/ReportDays'
+        - $ref: '#/components/parameters/ReportProfiles'
+        - $ref: '#/components/parameters/ReportAgent'
+        - $ref: '#/components/parameters/UtcOffset'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The skills usage report.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillUsageReport'
+              example:
+                period: { from: '2026-09-19', to: '2026-09-25', days: 7 }
+                generated_at: '2026-09-25T09:00:00Z'
+                profiles: [default]
+                counting_since: '2026-09-25T08:00:00Z'
+                agents:
+                  - { agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0YA, name: Hermes, reports_usage: true }
+                totals:
+                  uses: 9
+                  distinct_skills: 2
+                  top_skill: { skill: arxiv, uses: 7 }
+                  never_used_count: 1
+                top_series: [arxiv, github-pr-workflow]
+                by_day:
+                  - date: '2026-09-25'
+                    uses: 3
+                    skills: { arxiv: 2, github-pr-workflow: 1 }
+                    other: 0
+                top_skills:
+                  - skill: arxiv
+                    uses: 7
+                    share: 0.7778
+                    last_used_at: '2026-09-25T08:40:00Z'
+                  - skill: github-pr-workflow
+                    uses: 2
+                    share: 0.2222
+                    last_used_at: '2026-09-24T17:02:00Z'
+                never_used: [ocr-and-documents]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /plugins:
     get:
       operationId: plugins.list
@@ -12804,6 +12963,45 @@ components:
         type: string
         enum: [ar, en]
         default: en
+    ReportDays:
+      name: days
+      in: query
+      required: false
+      description: How many calendar days the report covers, today included. Clients offer 7, 30, 90 and 365.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 365
+        default: 30
+    ReportProfiles:
+      name: profiles
+      in: query
+      required: false
+      description: >-
+        `all` covers every profile the caller may enter instead of the one in the header
+        (ADR 0016). Absent, the report is the header's profile alone.
+      schema:
+        type: string
+        enum: [all]
+    ReportAgent:
+      name: agent_id
+      in: query
+      required: false
+      description: Narrows the report to one agent.
+      schema:
+        $ref: '#/components/schemas/Ulid'
+    UtcOffset:
+      name: utc_offset_minutes
+      in: query
+      required: false
+      description: >-
+        The caller's offset from UTC in minutes (east positive; Riyadh is `180`). Days are
+        counted in that calendar. Absent, days are UTC days.
+      schema:
+        type: integer
+        minimum: -720
+        maximum: 840
+        default: 0
   headers:
     RateLimitLimit:
       description: Requests allowed in the current window.
@@ -19057,6 +19255,340 @@ components:
           type: object
           description: Kind-specific; fixed in Phase 4 (usage totals and breakdowns, runtime processes, skill counts, log entries with ISO timestamps and byte sizes).
           additionalProperties: true
+    ReportPeriod:
+      type: object
+      description: The calendar days a report covers, both ends included, in the caller's calendar.
+      required: [from, to, days]
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        days:
+          type: integer
+          minimum: 1
+    ActiveAgent:
+      type: object
+      description: An agent active in the period, and whether it reports what it used.
+      required: [agent_id, name, reports_usage]
+      properties:
+        agent_id:
+          $ref: '#/components/schemas/Ulid'
+        name:
+          type: [string, 'null']
+          description: The agent's name, or `null` for an agent since removed.
+        reports_usage:
+          type: boolean
+          description: False when none of its runs in the period reported tokens (coding agents over ACP).
+    UsageReport:
+      type: object
+      required: [period, generated_at, profiles, agents, totals, by_day, by_model, by_agent]
+      properties:
+        period:
+          $ref: '#/components/schemas/ReportPeriod'
+        generated_at:
+          $ref: '#/components/schemas/Timestamp'
+        profiles:
+          type: array
+          description: The profiles the report covers.
+          items:
+            $ref: '#/components/schemas/ProfileSlug'
+        agents:
+          type: array
+          description: Every agent with a run in the period, whatever `agent_id` narrows to.
+          items:
+            $ref: '#/components/schemas/ActiveAgent'
+        totals:
+          type: object
+          required:
+            [
+              input_tokens,
+              output_tokens,
+              cache_read_tokens,
+              cache_write_tokens,
+              reasoning_tokens,
+              total_tokens,
+              cache_hit_rate,
+              runs,
+              unreported_runs,
+              conversations,
+              conversations_per_day,
+              cost,
+              cost_source,
+            ]
+          properties:
+            input_tokens:
+              type: integer
+              description: Input tokens not read from the cache.
+            output_tokens:
+              type: integer
+            cache_read_tokens:
+              type: [integer, 'null']
+              description: '`null` when no record in the period reported cache reads.'
+            cache_write_tokens:
+              type: [integer, 'null']
+              description: '`null` when no record in the period reported cache writes.'
+            reasoning_tokens:
+              type: integer
+            total_tokens:
+              type: integer
+              description: Input + output + cache reads + cache writes.
+            cache_hit_rate:
+              type: [number, 'null']
+              minimum: 0
+              maximum: 1
+              description: Cache reads over all input read (fresh input + cache reads); `null` when cache reads are unknown.
+            runs:
+              type: integer
+              description: Runs started in the period.
+            unreported_runs:
+              type: integer
+              description: Runs in the period that reported no usage (every run of a coding agent over ACP; any run of another agent that ended before reporting).
+            conversations:
+              type: integer
+              description: Conversations with at least one run in the period.
+            conversations_per_day:
+              type: number
+              description: The average, over the period's days, of the conversations active that day.
+            cost:
+              oneOf:
+                - $ref: '#/components/schemas/Money'
+                - type: 'null'
+              description: The hub's price-based estimate (or the provider's figure); `null` when nothing was priced.
+            cost_source:
+              type: string
+              enum: [provider, estimated, unknown]
+        by_day:
+          type: array
+          items:
+            $ref: '#/components/schemas/UsageDay'
+        by_model:
+          type: array
+          description: Most tokens first.
+          items:
+            $ref: '#/components/schemas/UsageModelShare'
+        by_agent:
+          type: array
+          description: Most tokens first; agents that report no usage last.
+          items:
+            $ref: '#/components/schemas/UsageAgentShare'
+    UsageDay:
+      type: object
+      required:
+        [
+          date,
+          input_tokens,
+          output_tokens,
+          cache_read_tokens,
+          cache_write_tokens,
+          total_tokens,
+          runs,
+          conversations,
+          cost,
+        ]
+      properties:
+        date:
+          type: string
+          format: date
+        input_tokens:
+          type: integer
+        output_tokens:
+          type: integer
+        cache_read_tokens:
+          type: integer
+        cache_write_tokens:
+          type: integer
+        total_tokens:
+          type: integer
+        runs:
+          type: integer
+        conversations:
+          type: integer
+        cost:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+    UsageModelShare:
+      type: object
+      required:
+        [
+          model,
+          input_tokens,
+          output_tokens,
+          cache_read_tokens,
+          cache_write_tokens,
+          total_tokens,
+          share,
+          runs,
+          cost,
+        ]
+      properties:
+        model:
+          type: string
+        input_tokens:
+          type: integer
+        output_tokens:
+          type: integer
+        cache_read_tokens:
+          type: integer
+        cache_write_tokens:
+          type: integer
+        total_tokens:
+          type: integer
+        share:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: This model's part of all tokens in the report.
+        runs:
+          type: integer
+        cost:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+    UsageAgentShare:
+      type: object
+      required:
+        [
+          agent_id,
+          name,
+          reports_usage,
+          runs,
+          conversations,
+          input_tokens,
+          output_tokens,
+          total_tokens,
+          share,
+          cost,
+        ]
+      properties:
+        agent_id:
+          $ref: '#/components/schemas/Ulid'
+        name:
+          type: [string, 'null']
+        reports_usage:
+          type: boolean
+        runs:
+          type: integer
+        conversations:
+          type: integer
+        input_tokens:
+          type: [integer, 'null']
+          description: '`null` when the agent reported no usage — not zero.'
+        output_tokens:
+          type: [integer, 'null']
+        total_tokens:
+          type: [integer, 'null']
+        share:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 1
+        cost:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+    SkillUsageReport:
+      type: object
+      required:
+        [
+          period,
+          generated_at,
+          profiles,
+          counting_since,
+          agents,
+          totals,
+          top_series,
+          by_day,
+          top_skills,
+          never_used,
+        ]
+      properties:
+        period:
+          $ref: '#/components/schemas/ReportPeriod'
+        generated_at:
+          $ref: '#/components/schemas/Timestamp'
+        profiles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfileSlug'
+        counting_since:
+          type: [string, 'null']
+          format: date-time
+          description: When this hub started recording skill use; earlier use was never recorded.
+        agents:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActiveAgent'
+        totals:
+          type: object
+          required: [uses, distinct_skills, top_skill, never_used_count]
+          properties:
+            uses:
+              type: integer
+            distinct_skills:
+              type: integer
+            top_skill:
+              oneOf:
+                - type: object
+                  required: [skill, uses]
+                  properties:
+                    skill:
+                      type: string
+                    uses:
+                      type: integer
+                - type: 'null'
+            never_used_count:
+              type: [integer, 'null']
+              description: '`null` when the hub cannot see the installed skills.'
+        top_series:
+          type: array
+          maxItems: 6
+          description: The six most used skills of the period, most used first; the series of `by_day`.
+          items:
+            type: string
+        by_day:
+          type: array
+          items:
+            type: object
+            required: [date, uses, skills, other]
+            properties:
+              date:
+                type: string
+                format: date
+              uses:
+                type: integer
+              skills:
+                type: object
+                description: Uses that day of each skill in `top_series` (absent means none).
+                additionalProperties:
+                  type: integer
+              other:
+                type: integer
+                description: Uses that day of every other skill.
+        top_skills:
+          type: array
+          description: Every skill used in the period, most used first.
+          items:
+            type: object
+            required: [skill, uses, share, last_used_at]
+            properties:
+              skill:
+                type: string
+              uses:
+                type: integer
+              share:
+                type: number
+                minimum: 0
+                maximum: 1
+              last_used_at:
+                $ref: '#/components/schemas/Timestamp'
+        never_used:
+          type: [array, 'null']
+          description: Enabled skills no run loaded in the period, by name; `null` when unknown.
+          items:
+            type: string
     HubPlugin:
       type: object
       required: [id, slug, name, version, kind, status, url, created_at, updated_at]

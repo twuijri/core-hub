@@ -272,3 +272,5 @@ export type { ProducedFile, ProducedFiles, ProducedRefusal } from './run-files.j
 export type { ScopeResolver, RequestScope } from './scope.js';
 export type { TurnHandle, TurnInput, TurnResult } from './service.js';
 export type { EngineScope } from './engine.js';
+export { runActivity } from './activity.js';
+export { skillUseOf } from './skill-use.js';

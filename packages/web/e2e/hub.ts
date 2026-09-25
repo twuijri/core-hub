@@ -304,6 +304,34 @@ function scriptFor(prompt: string): Step[] {
       { type: 'completed' },
     ];
   }
+  if (/حمّل المهارة|load the skill/i.test(prompt)) {
+    // Usage and Skills usage (journey 32, decision §50): the agent loads a skill the way
+    // Hermes does — `skill_view` with the skill's name — then a linked file of it (the same
+    // use), and reports its tokens with a cache read.
+    return [
+      {
+        type: 'tool_started',
+        ref: 'k1',
+        name: 'skill_view',
+        kind: 'custom',
+        title: 'arxiv',
+        input: { name: 'arxiv' },
+      },
+      { type: 'tool_completed', ref: 'k1', output: '{"success": true, "name": "arxiv"}' },
+      {
+        type: 'tool_started',
+        ref: 'k2',
+        name: 'skill_view',
+        kind: 'custom',
+        title: 'arxiv',
+        input: { name: 'arxiv', file_path: 'references/api.md' },
+      },
+      { type: 'tool_completed', ref: 'k2', output: '{"success": true}' },
+      { type: 'message_delta', text: 'وجدت ثلاث أوراق عن الموضوع.' },
+      { type: 'usage', inputTokens: 3000, outputTokens: 400, cacheReadTokens: 1000 },
+      { type: 'completed' },
+    ];
+  }
   if (/slow|بطيء/i.test(prompt)) {
     // The pause has to outlast creating the session, navigating and hydrating the screen,
     // or the journey would be racing the script instead of testing the resume.

@@ -32,6 +32,14 @@ export {
   type CardPadding,
   type CardTone,
 } from './Card.js';
+export {
+  ShareBars,
+  StackedBarChart,
+  type ChartBar,
+  type ChartSeries,
+  type ChartTone,
+  type ShareRow,
+} from './Chart.js';
 export { Checkbox } from './Checkbox.js';
 export { Combobox, type ComboboxOption } from './Combobox.js';
 export { useConfirm, type ConfirmRequest } from './ConfirmDialog.js';

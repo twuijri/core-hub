@@ -9,6 +9,7 @@ import { createInterface } from 'node:readline';
 import { describe, expect, it } from 'vitest';
 import { HermesTuiSession, stdioTuiChannel, type Spawned } from './hermes-tui.js';
 import type { AgentEvent } from './types.js';
+import { skillUseOf } from '../../sessions/index.js';
 
 type Json = Record<string, unknown>;
 
@@ -249,6 +250,61 @@ describe('Hermes over the TUI gateway', () => {
     });
     expect(events[2]).toMatchObject({ output: '# Core Hub' });
     expect(events[4]).toMatchObject({ inputTokens: 12, outputTokens: 3 });
+  });
+
+  it('carries the skill a skill_view call loads, which is what counts as its use (§50)', async () => {
+    // Frames as tui_gateway/tool_progress.py sends them for Hermes's `skill_view` tool:
+    // the full arguments with `tool.start`, the parsed result with `tool.complete`.
+    const gateway = fakeGateway((method, _params, api) => {
+      if (method === 'session.create') return { session_id: 's', stored_session_id: 'st' };
+      if (method === 'prompt.submit') {
+        setImmediate(() => {
+          api.event('s', 'tool.start', {
+            tool_id: 'k1',
+            name: 'skill_view',
+            context: 'arxiv',
+            args: { name: 'arxiv' },
+          });
+          api.event('s', 'tool.complete', {
+            tool_id: 'k1',
+            name: 'skill_view',
+            args: { name: 'arxiv' },
+            result: { success: true, name: 'arxiv' },
+          });
+          api.event('s', 'tool.start', {
+            tool_id: 'k2',
+            name: 'skill_view',
+            args: { name: 'missing' },
+          });
+          api.event('s', 'tool.complete', {
+            tool_id: 'k2',
+            name: 'skill_view',
+            args: { name: 'missing' },
+            result: { success: false, error: 'Skill not found' },
+          });
+          api.event('s', 'message.complete', { text: '', status: 'complete' });
+        });
+        return { status: 'streaming' };
+      }
+      return {};
+    });
+    const session = await HermesTuiSession.open(channelOver(gateway), null);
+    const reading = collect(session, terminal);
+    await session.send({ text: 'use arxiv' });
+    const events = await reading;
+    const uses = events
+      .filter((e): e is Extract<AgentEvent, { type: 'tool.started' }> => e.type === 'tool.started')
+      .map((started) => {
+        const finished = events.find(
+          (e) => (e.type === 'tool.completed' || e.type === 'tool.failed') && e.id === started.id,
+        );
+        return skillUseOf({
+          name: started.name,
+          input: started.input ?? {},
+          status: finished?.type === 'tool.completed' ? 'succeeded' : 'failed',
+        });
+      });
+    expect(uses).toEqual(['arxiv', null]);
   });
 
   it("records each turn's own tokens, though Hermes reports its session's running total", async () => {

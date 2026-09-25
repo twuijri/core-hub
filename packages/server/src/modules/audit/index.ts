@@ -5,9 +5,10 @@
  * Implemented: `jobs.list`, `jobs.get`, `jobs.cancel`, the `/rt/jobs` namespace, and the
  * `AuditService` / `JobRunner` other modules import from here.
  *
- * Also implemented (Phase 4): `audit.getReport` for `usage`, `logs` and `performance`.
- * `skills` still answers `501` with its operation id, because nothing records skill use
- * yet and a page of zeros would read as "no skills were used" — see `reports.ts`.
+ * Also implemented (Phase 4): `audit.getReport` for `usage`, `logs`, `performance` and
+ * `skills`, and the typed Usage and Skills usage screens `audit.getUsage` /
+ * `audit.getSkillUsage` (contract decision §50, `analytics.ts`). Skill use is recorded from
+ * the version that added it (`skill_uses`); the reports say from when.
  *
  * Composition note: the module object is a singleton shared by every `buildServer()` in a
  * test process, so the service is kept per Socket.IO server (one per app), the same way
@@ -23,7 +24,8 @@ import { createContractIndex } from '../../lib/contract.js';
 import { defineModule, REALTIME_NAMESPACES } from '../../lib/module.js';
 import { createRealtime, type Realtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
-import { requireRole, requireUser, requireWorkspace } from '../auth/index.js';
+import { listWorkspacesFor, requireRole, requireUser, requireWorkspace } from '../auth/index.js';
+import { UsageAnalytics, type AnalyticsProfile, type AnalyticsSources } from './analytics.js';
 import { createJobRunner, type JobRunner } from './jobs.js';
 import { ReportService, type LogLevel, type ReportKind } from './reports.js';
 import { AuditService, serializeJob } from './service.js';
@@ -37,6 +39,7 @@ export type {
   JobCreate,
   JobRow,
   JobStatus,
+  SkillUseWrite,
   UsageOrigin,
   UsageTotals,
   UsageWrite,
@@ -44,6 +47,14 @@ export type {
 export { createJobRunner } from './jobs.js';
 export { ReportService, isoDate, moneyOf, windowOf } from './reports.js';
 export type { LogLevel, Report, ReportKind, ReportRequest } from './reports.js';
+export { UsageAnalytics, calendarPeriod } from './analytics.js';
+export type {
+  AnalyticsProfile,
+  AnalyticsQuery,
+  AnalyticsSources,
+  RunActivityQuery,
+  RunActivityRow,
+} from './analytics.js';
 export type { JobHandle, JobRunner, JobWorker, NewJob } from './jobs.js';
 
 interface AuditContext {
@@ -51,6 +62,21 @@ interface AuditContext {
   runner: JobRunner;
   realtime: Realtime;
   reports: ReportService;
+  analytics: UsageAnalytics;
+}
+
+/**
+ * What the Usage and Skills usage reports read from other modules (runs, agent names,
+ * installed skills). Joined once for the process by the composition root, like the other
+ * cross-module ports; without it the reports fall back to what the ledgers know.
+ */
+let analyticsSources: ((app: FastifyInstance) => AnalyticsSources) | null = null;
+export function registerAnalyticsSources(
+  factory: ((app: FastifyInstance) => AnalyticsSources) | null,
+): ((app: FastifyInstance) => AnalyticsSources) | null {
+  const previous = analyticsSources;
+  analyticsSources = factory;
+  return previous;
 }
 
 /** One context per Socket.IO server, so several hubs in one process (tests) do not mix. */
@@ -72,6 +98,7 @@ function contextOf(app: FastifyInstance): AuditContext {
     realtime,
     runner: createJobRunner({ audit, log: app.log }),
     reports,
+    analytics: new UsageAnalytics(db, analyticsSources?.(app) ?? {}),
   };
   contexts.set(hub.io, created);
   startSampler(app, reports);
@@ -201,15 +228,31 @@ export const auditModule = defineModule({
             details: { reason: 'profile_required', header: 'X-Hub-Profile' },
           });
         }
-        const report = contextOf(request.server).reports.build({
+        const context = contextOf(request.server);
+        if (kind === 'skills') {
+          // The same body the Skills usage screen reads, for the header's profile alone.
+          const here = request.workspace!;
+          const data = context.analytics.skills({
+            profiles: [{ id: here.id, slug: here.slug, isDefault: here.isDefault }],
+            days: (query.days as number | undefined) ?? 30,
+          });
+          const period = data.period as { from: string; to: string };
+          return {
+            kind,
+            period: { from: period.from, to: period.to },
+            generated_at: data.generated_at,
+            data,
+          };
+        }
+        const report = context.reports.build({
           kind,
           workspace,
           days: (query.days as number | undefined) ?? 30,
           q: query.q as string | undefined,
           level: query.level as LogLevel | undefined,
         });
-        // The one kind with nothing behind it says so with the hub's own 501, rather than
-        // answering zeros that would read as a measurement.
+        // Every kind has a builder now; a kind without one would say so with the hub's 501
+        // rather than answer zeros that read as a measurement.
         if (!report) {
           throw new HubError('not_implemented', {
             details: { operationId: 'audit.getReport', kind },
@@ -217,6 +260,37 @@ export const auditModule = defineModule({
         }
         return report;
       },
+    });
+
+    /** The profiles a Usage / Skills usage report covers: the header's, or every one enterable. */
+    const profilesOf = (request: FastifyRequest, all: boolean): AnalyticsProfile[] => {
+      const here = request.workspace;
+      const principal = request.principal;
+      if (!here || !principal) throw new HubError('internal', { message: 'route has no scope' });
+      contextOf(request.server).audit.rememberWorkspace(here.id, here.slug);
+      if (!all) return [{ id: here.id, slug: here.slug, isDefault: here.isDefault }];
+      // Which profiles "all" means is `auth`'s rule (ADR 0016), never a list the client sends.
+      return listWorkspacesFor(requireSqlite(request.server.hub.database), principal.user).map(
+        (row) => ({ id: row.id, slug: row.slug, isDefault: row.isDefault }),
+      );
+    };
+    const analyticsQuery = (request: FastifyRequest, query: Record<string, unknown>) => ({
+      profiles: profilesOf(request, query.profiles === 'all'),
+      days: (query.days as number | undefined) ?? 30,
+      agentId: query.agent_id as string | undefined,
+      utcOffsetMinutes: (query.utc_offset_minutes as number | undefined) ?? 0,
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'audit.getUsage',
+      handler: (request, { query }) =>
+        contextOf(request.server).analytics.usage(analyticsQuery(request, query)),
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'audit.getSkillUsage',
+      handler: (request, { query }) =>
+        contextOf(request.server).analytics.skills(analyticsQuery(request, query)),
     });
   },
   registerEvents(io: SocketServer) {

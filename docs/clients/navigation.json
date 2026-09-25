@@ -87,6 +87,10 @@
       "en": "Usage",
       "ar": "الاستخدام"
     },
+    "skills_usage": {
+      "en": "Skills usage",
+      "ar": "استخدام المهارات"
+    },
     "performance": {
       "en": "Performance",
       "ar": "الأداء"
@@ -390,6 +394,17 @@
       "note": "Tokens and costs."
     },
     {
+      "id": "skills_usage",
+      "title": "skills_usage",
+      "module": "audit",
+      "level": "settings",
+      "entry": {
+        "kind": "settings-tool"
+      },
+      "roles": ["member"],
+      "note": "Which skills the agents loaded, and which never (contract decision §50)."
+    },
+    {
       "id": "performance",
       "title": "performance",
       "module": "audit",
@@ -549,7 +564,16 @@
     "about"
   ],
   "settingsManagement": ["models", "device_connections", "knowledge"],
-  "settingsTools": ["logs", "usage", "performance", "theme", "workspaces", "updates", "plugins"],
+  "settingsTools": [
+    "logs",
+    "usage",
+    "skills_usage",
+    "performance",
+    "theme",
+    "workspaces",
+    "updates",
+    "plugins"
+  ],
   "agentLevel": [
     "agent_skills",
     "agent_mcp",
@@ -617,6 +641,7 @@
       "about": "/settings/about",
       "logs": "/settings/logs",
       "usage": "/settings/usage",
+      "skills_usage": "/settings/skills-usage",
       "performance": "/settings/performance",
       "theme": "/settings/theme",
       "workspaces": "/settings/workspaces",
