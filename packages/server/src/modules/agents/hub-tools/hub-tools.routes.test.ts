@@ -12,23 +12,29 @@
  */
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { authed, signedInHub, type TestHub } from '../../../../tests/unit/helpers.js';
 import { runLeasesFor } from '../index.js';
 
 type Hub = TestHub & { token: string; userId: string };
-let hub: Hub | null = null;
-afterEach(async () => {
-  await hub?.close();
-  hub = null;
-});
+
+/**
+ * One hub per `describe`, its tests in order: booting a hub (migrations, Argon2id) is most of
+ * a test's time, and these tests leave the state the next one expects.
+ */
+let current: { hub: Hub; agent: string; root: string } | null = null;
+async function closeHub(): Promise<void> {
+  await current?.hub.close();
+  current = null;
+}
 
 /** A gateway that answers its health probe, so the runtime is `external` and has a home. */
 const healthy: typeof fetch = async () =>
   new Response('{"status":"ok"}', { status: 200, headers: { 'content-type': 'application/json' } });
 
 async function boot(): Promise<{ hub: Hub; agent: string; root: string }> {
-  hub = await signedInHub(
+  if (current) return current;
+  const hub = await signedInHub(
     { PORT: '8123' },
     { agents: { adapterOptions: { hermes: { fetchImpl: healthy } } } },
   );
@@ -38,7 +44,8 @@ async function boot(): Promise<{ hub: Hub; agent: string; root: string }> {
   )!.id;
   const root = path.join(hub.dataDir, 'hermes');
   mkdirSync(root, { recursive: true });
-  return { hub, agent, root };
+  current = { hub, agent, root };
+  return current;
 }
 
 interface Rpc {
@@ -100,6 +107,8 @@ async function enable(h: Hub, agent: string, profile: string, groups?: unknown) 
 }
 
 describe("the hub's own tools: the card and the profile's Hermes config", () => {
+  afterAll(closeHub);
+
   it('is off until an admin switches it on; on writes the block and the key, off removes both', async () => {
     const { hub: h, agent, root } = await boot();
     const before = await authed(h, h.token, {
@@ -180,23 +189,7 @@ describe("the hub's own tools: the card and the profile's Hermes config", () => 
     expect(res.statusCode).toBe(403);
   });
 
-  it('puts a block a person edited back at boot, with a new key when the old one is gone', async () => {
-    const { hub: h, agent, root } = await boot();
-    await enable(h, agent, 'default');
-    const first = keyOf(root);
-    writeFileSync(path.join(root, 'config.yaml'), 'mcp_servers: {}\n');
-    writeFileSync(path.join(root, '.env'), '');
-    const { hubToolsFor } = await import('../index.js');
-    hubToolsFor(h.app).syncAll();
-    expect(readFileSync(path.join(root, 'config.yaml'), 'utf8')).toContain('corehub');
-    const second = keyOf(root);
-    expect(second).not.toBe(first);
-    expect((await rpc(h, first, 'ping')).statusCode).toBe(401);
-    expect((await rpc(h, second, 'ping')).statusCode).toBe(200);
-  });
-});
-
-describe("the hub's own tools: a coding agent over ACP", () => {
+  // A coding agent over ACP is handed the same server.
   it('is given the same server with the profile key while the tools are on, and nothing when off', async () => {
     const { hub: h, agent, root } = await boot();
     const { hubToolsFor } = await import('../index.js');
@@ -220,9 +213,26 @@ describe("the hub's own tools: a coding agent over ACP", () => {
     });
     expect(hubToolsFor(h.app).acpServersFor(workspace)).toEqual([]);
   });
+
+  it('puts a block a person edited back at boot, with a new key when the old one is gone', async () => {
+    const { hub: h, agent, root } = await boot();
+    await enable(h, agent, 'default');
+    const first = keyOf(root);
+    writeFileSync(path.join(root, 'config.yaml'), 'mcp_servers: {}\n');
+    writeFileSync(path.join(root, '.env'), '');
+    const { hubToolsFor } = await import('../index.js');
+    hubToolsFor(h.app).syncAll();
+    expect(readFileSync(path.join(root, 'config.yaml'), 'utf8')).toContain('corehub');
+    const second = keyOf(root);
+    expect(second).not.toBe(first);
+    expect((await rpc(h, first, 'ping')).statusCode).toBe(401);
+    expect((await rpc(h, second, 'ping')).statusCode).toBe(200);
+  });
 });
 
 describe("the hub's own tools: the MCP endpoint", () => {
+  afterAll(closeHub);
+
   it('speaks the protocol with the key alone and lists only what the groups offer', async () => {
     const { hub: h, agent, root } = await boot();
     expect((await rpc(h, null, 'ping')).statusCode).toBe(401);
@@ -442,10 +452,14 @@ describe("the hub's own tools: the MCP endpoint", () => {
       session_id: 'SB',
     });
     leases.toolEnded('B', 'mcp__corehub__conversations_list');
+    leases.close('A');
+    leases.close('B');
   }, 20_000);
 });
 
 describe("the hub's own tools: each group", () => {
+  afterAll(closeHub);
+
   async function live(h: Hub, profile = 'default') {
     const workspace = (await authed(h, h.token, { method: 'GET', url: '/api/v1/profiles' }))
       .json()
