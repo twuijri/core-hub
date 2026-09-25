@@ -113,6 +113,13 @@ pnpm typecheck  TC_EXIT 0
 pnpm contract:test                 Tests  274 passed (274)
 ```
 
+CI الأول بعد الدمج: كل الوظائف خضراء (ومنها Playwright الكامل) إلا `status.test.ts`، لأن
+`docs/STATUS.md` ما زال يقول 205 من 263 عملية والعقد صار 264. صُحّح إلى 206 من 264:
+
+```
+(server) vitest run tests/unit/status.test.ts   Tests  1 passed (1)
+```
+
 CI: يُحدَّث بعد الدفع.
 
 ## المخاطر والرجوع
