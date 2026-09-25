@@ -140,7 +140,16 @@ $ pnpm build && PLAYWRIGHT_CHANNEL=chrome playwright test e2e/zzzzzz-slash-compr
   1 passed (8.9s)
 ```
 
-CI: يُحدَّث هنا بعد الدفع.
+CI على طلب الدمج #118 (التشغيل 36087621283):
+
+```
+Docker image builds and answers /health                 pass  2m58s
+Lint, typecheck, contracts, tests, build                pass  17m50s
+PR adds or updates a change record                      pass  12s
+PR leaves graphify-out/ to the code-map bot             pass  8s
+Web smoke journeys (Playwright against the real hub)    pass  5m18s
+db:generate + db:migrate (SQLite and PostgreSQL)        pass  1m32s
+```
 
 ## المخاطر والرجوع
 - الأوامر والضغط والتوجيه تعمل عبر بوابة TUI فقط. Hermes مُتاح عبر الشبكة فقط (بلا `hermes`
