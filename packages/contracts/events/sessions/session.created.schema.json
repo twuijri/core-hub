@@ -97,6 +97,10 @@
           "type": ["integer", "null"],
           "minimum": 1,
           "description": "`null` when the model's window is unknown."
+        },
+        "estimated": {
+          "type": "boolean",
+          "description": "`true` when the agent counted `used_tokens` roughly rather than taking it from\nthe provider's own report of the last request. Absent is `false`.\n"
         }
       }
     },

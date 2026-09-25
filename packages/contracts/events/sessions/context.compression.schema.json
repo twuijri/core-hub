@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/sessions/context.compression.schema.json",
+  "title": "/rt/sessions · context.compression",
+  "description": "The agent started or finished compressing a conversation's context: on request (`sessions.compress`, `trigger: manual`) or on its own during a run because the window was filling up (`trigger: auto`). Emitted by: sessions module. A client shows a progress indicator between `started` and `finished`/`failed`; the new window follows as `context.updated`.",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "context.compression"
+    },
+    "namespace": {
+      "const": "/rt/sessions"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "session_id",
+        "run_id",
+        "phase",
+        "trigger",
+        "before_tokens",
+        "after_tokens",
+        "message"
+      ],
+      "properties": {
+        "session_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "run_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The run it happened in, for `trigger: auto`; `null` for a compression asked for between runs."
+        },
+        "phase": {
+          "type": "string",
+          "enum": ["started", "finished", "failed"]
+        },
+        "trigger": {
+          "type": "string",
+          "enum": ["manual", "auto"]
+        },
+        "before_tokens": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "after_tokens": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "message": {
+          "type": ["string", "null"],
+          "description": "The agent's own words about it (untranslated), or why it failed; `null` when there are none."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "context.compression",
+      "namespace": "/rt/sessions",
+      "profile": "work",
+      "ts": "2026-09-25T10:15:04Z",
+      "seq": 8813,
+      "payload": {
+        "session_id": "01J8QK3ZR2W7M5N4P6T8V9X0YA",
+        "run_id": null,
+        "phase": "finished",
+        "trigger": "manual",
+        "before_tokens": 118400,
+        "after_tokens": 21900,
+        "message": null
+      }
+    }
+  ],
+  "$defs": {
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}
