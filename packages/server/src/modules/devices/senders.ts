@@ -37,6 +37,8 @@ export interface PushMessage {
   resource: { kind: string; id: string } | null;
   /** An approval waiting: delivered at high priority. */
   urgent: boolean;
+  /** The device's language, for the relay's generic private-push title (`relay.ts`). */
+  locale?: string | null;
 }
 
 export interface PushOutcome {

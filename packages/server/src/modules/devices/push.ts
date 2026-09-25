@@ -12,6 +12,9 @@
  *
  * A device token is sealed too (`devices.push_token`): it is the address of somebody's
  * phone, and nothing but the sender ever reads it back.
+ *
+ * FCM or APNs with no credentials here goes through the Core Hub push relay instead
+ * (`relay.ts`, ADR 0024), unless it is turned off. Local credentials always win.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { and, eq } from 'drizzle-orm';
@@ -31,6 +34,15 @@ import {
   type PushSender,
 } from './senders.js';
 import { loadOrCreateVapidKeys, type VapidKeys } from './webpush.js';
+import {
+  PushRelay,
+  relaySender,
+  type BindResult,
+  type RelayEnvInput,
+  type RelayPlatform,
+  type RelayProof,
+  type RelayStatusView,
+} from './relay.js';
 
 /** The `PushEnv` of `app/config.ts`, restated so this module does not import `app/`. */
 export interface PushEnvInput {
@@ -43,6 +55,7 @@ export interface PushEnvInput {
     key: string | undefined;
     environment: 'production' | 'sandbox' | undefined;
   };
+  relay?: RelayEnvInput;
 }
 
 /** The data key ring's two verbs, lent by the composition root (models owns the ring). */
@@ -66,11 +79,13 @@ export interface PushServiceOptions {
   fetchImpl?: typeof fetch;
   fcmBaseUrl?: string;
   apnsOrigin?: string;
+  /** The relay's `fetch` (tests: a fake relay). */
+  relayFetch?: typeof fetch;
   now?: () => number;
 }
 
 export type SenderState = 'ready' | 'disabled' | 'not_configured' | 'error';
-export type SenderSource = 'generated' | 'environment' | 'settings' | 'none';
+export type SenderSource = 'generated' | 'environment' | 'settings' | 'relay' | 'none';
 
 /** The contract's `PushSender`. */
 export interface SenderView {
@@ -82,6 +97,8 @@ export interface SenderView {
   devices: number;
   last_error: string | null;
   last_sent_at: string | null;
+  /** The contract's `PushRelayStatus` (FCM and APNs rows), null for Web Push. */
+  relay: RelayStatusView | null;
 }
 
 /** The contract's `PushSenderUpdate`. */
@@ -122,7 +139,7 @@ function contentOrFile(value: string, looksLikeContent: (text: string) => boolea
 }
 
 interface Resolved {
-  view: Omit<SenderView, 'devices' | 'last_sent_at'>;
+  view: Omit<SenderView, 'devices' | 'last_sent_at' | 'relay'>;
   sender: PushSender | null;
 }
 
@@ -131,8 +148,19 @@ export class PushService {
   private readonly cache = new Map<PushProvider, Resolved>();
   private readonly lastSent = new Map<PushProvider, number>();
   private readonly lastError = new Map<PushProvider, string | null>();
+  private syncing: Promise<void> | null = null;
+  /** The Core Hub push relay (ADR 0024). */
+  readonly relay: PushRelay;
 
-  constructor(private readonly options: PushServiceOptions) {}
+  constructor(private readonly options: PushServiceOptions) {
+    this.relay = new PushRelay({
+      db: options.db,
+      sealer: options.sealer,
+      env: options.env?.relay,
+      ...(options.relayFetch ? { fetchImpl: options.relayFetch } : {}),
+      now: () => this.now(),
+    });
+  }
 
   private now(): number {
     return this.options.now?.() ?? Date.now();
@@ -220,10 +248,33 @@ export class PushService {
     };
   }
 
+  /** FCM or APNs with no credentials here: the relay, when it may be used. */
+  private relayResolved(provider: RelayPlatform): Resolved | null {
+    if (!this.relay.usable()) return null;
+    return {
+      view: {
+        provider,
+        state: 'ready',
+        source: 'relay',
+        missing: [],
+        details: { relay_url: this.relay.url() ?? '' },
+        last_error: null,
+      },
+      sender: relaySender(this.relay, provider),
+    };
+  }
+
+  /** Is this sender delivered through the relay? */
+  viaRelay(provider: PushProvider): boolean {
+    return provider !== 'webpush' && this.resolve(provider).view.source === 'relay';
+  }
+
   private resolveFcm(): Resolved {
     const fromEnv = this.options.env?.fcmServiceAccount;
     const row = fromEnv ? null : this.row('fcm');
     if (!fromEnv && !row) {
+      const viaRelay = this.relayResolved('fcm');
+      if (viaRelay) return viaRelay;
       return {
         view: {
           provider: 'fcm',
@@ -284,6 +335,8 @@ export class PushService {
     const envSet = !!(env && (env.keyId || env.teamId || env.bundleId || env.key));
     const row = envSet ? null : this.row('apns');
     if (!envSet && !row) {
+      const viaRelay = this.relayResolved('apns');
+      if (viaRelay) return viaRelay;
       return {
         view: {
           provider: 'apns',
@@ -388,11 +441,15 @@ export class PushService {
     const { view } = this.resolve(provider);
     const sent = this.lastSent.get(provider);
     const error = this.lastError.has(provider) ? this.lastError.get(provider)! : view.last_error;
+    const relay = provider === 'webpush' ? null : this.relay.status();
     return {
       ...view,
+      // Through the relay, a blocked hub cannot deliver at all.
+      ...(view.source === 'relay' && relay?.state === 'blocked' ? { state: 'error' as const } : {}),
       devices: this.deviceCount(provider),
-      last_error: error,
+      last_error: error ?? (view.source === 'relay' ? (relay?.last_error ?? null) : null),
       last_sent_at: sent ? new Date(sent).toISOString() : null,
+      relay,
     };
   }
 
@@ -400,9 +457,74 @@ export class PushService {
     return PUSH_PROVIDERS.map((provider) => this.view(provider));
   }
 
-  /** The senders that can deliver right now. */
+  /** The senders that can deliver right now (not a relay that blocked this hub). */
   ready(): PushProvider[] {
-    return PUSH_PROVIDERS.filter((provider) => this.resolve(provider).sender !== null);
+    return PUSH_PROVIDERS.filter((provider) => {
+      const { sender, view } = this.resolve(provider);
+      if (!sender) return false;
+      return view.source !== 'relay' || this.relay.status().state !== 'blocked';
+    });
+  }
+
+  // ------------------------------------------------------------------- the relay
+
+  /** The contract's `PushRelayStatus`. */
+  relayStatus(): RelayStatusView {
+    return this.relay.status();
+  }
+
+  /** The admin's switch and private push; the senders follow at once. */
+  updateRelay(input: { enabled?: boolean; private_push?: boolean }): RelayStatusView {
+    const status = this.relay.update(input);
+    this.reset('fcm');
+    this.reset('apns');
+    return status;
+  }
+
+  /**
+   * A phone registered its token with a sender that goes through the relay: bind it to this
+   * hub there. Never throws — a relay that cannot be reached is bound at the next send.
+   */
+  async relayBind(
+    provider: PushProvider,
+    token: string,
+    proof?: RelayProof,
+  ): Promise<BindResult | null> {
+    if (provider === 'webpush' || !this.viaRelay(provider)) return null;
+    return this.relay.bind(provider, token, proof);
+  }
+
+  /**
+   * Tells the relay every token this hub still wants (its clean-ups: sign-outs, revoked
+   * sign-ins, unlinked devices, local credentials that took over). One at a time; never throws.
+   */
+  syncRelay(): Promise<void> {
+    this.syncing ??= (async () => {
+      try {
+        if (!this.relay.usable()) return;
+        const platforms = (['fcm', 'apns'] as const).filter((p) => this.viaRelay(p));
+        const tokens: Array<{ platform: RelayPlatform; token: string }> = [];
+        for (const row of this.options.db
+          .select()
+          .from(devices)
+          .where(eq(devices.status, 'paired'))
+          .all()) {
+          const platform = platforms.find((p) => p === row.pushProvider);
+          if (!platform || !row.pushToken) continue;
+          try {
+            tokens.push({ platform, token: this.openToken(row.pushToken) });
+          } catch {
+            // An unreadable token is not wanted.
+          }
+        }
+        await this.relay.sync(tokens);
+      } catch {
+        // Recorded in the relay's status; the next change or send tries again.
+      } finally {
+        this.syncing = null;
+      }
+    })();
+    return this.syncing;
   }
 
   /** The contract's `PushConfig`. */
@@ -584,7 +706,7 @@ export class PushService {
         gone: true,
       } satisfies DeliveryResult;
     }
-    const outcome = await sender.send(token, message);
+    const outcome = await sender.send(token, { ...message, locale: device.pushLocale });
     if (outcome.ok) {
       this.lastSent.set(provider, this.now());
       this.lastError.set(provider, null);
@@ -612,6 +734,14 @@ export class PushService {
       .all()
       .filter((row) => row.pushProvider !== 'none' && row.pushToken);
     const results = await Promise.all(rows.map((row) => this.sendToDevice(row, message)));
+    // Clean-ups made without a call to the relay (a sign-in ended) reach it here, now and then.
+    if (
+      (this.viaRelay('fcm') || this.viaRelay('apns')) &&
+      this.relay.isRegistered() &&
+      this.relay.syncDue()
+    ) {
+      void this.syncRelay();
+    }
     return results.filter((result): result is DeliveryResult => result !== null);
   }
 }

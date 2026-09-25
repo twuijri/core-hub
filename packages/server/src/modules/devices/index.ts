@@ -40,6 +40,7 @@ import {
 } from './requests.js';
 import type { Language } from '../../i18n/index.js';
 import type { PushMessage, PushProvider } from './senders.js';
+import type { RelayProof } from './relay.js';
 import {
   devices,
   type DeviceRequestStatus,
@@ -93,6 +94,8 @@ export interface DevicesOverrides {
   fetchImpl?: typeof fetch;
   fcmBaseUrl?: string;
   apnsOrigin?: string;
+  /** The push relay's `fetch`: a fake relay (`testing/fake-relay.ts`). */
+  relayFetch?: typeof fetch;
   /** Lets a Web Push endpoint be `http:` and private (tests and the e2e fake push service). */
   allowPrivateEndpoints?: boolean;
   now?: () => number;
@@ -128,6 +131,7 @@ export function pushFor(app: FastifyInstance): PushService {
     ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}),
     ...(overrides.fcmBaseUrl ? { fcmBaseUrl: overrides.fcmBaseUrl } : {}),
     ...(overrides.apnsOrigin ? { apnsOrigin: overrides.apnsOrigin } : {}),
+    ...(overrides.relayFetch ? { relayFetch: overrides.relayFetch } : {}),
     ...(overrides.now ? { now: overrides.now } : {}),
   });
   services.set(app.hub.io, service);
@@ -597,6 +601,9 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             .run();
           // Unlinking a paired device takes its token too: a device that is gone cannot call.
           if (row.appTokenId) lent.revokeAppToken(request.server, row.appTokenId, at);
+          if (row.pushProvider === 'fcm' || row.pushProvider === 'apns') {
+            void pushFor(request.server).syncRelay();
+          }
           emit(request, row, 'device.unlinked', { device_id: row.id });
           return null;
         },
@@ -614,7 +621,12 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             ? principal.deviceId === row.id
             : row.ownerId === principal.user.id;
           if (!allowed) throw new HubError('forbidden', { details: { reason: 'not_this_device' } });
-          const input = body as { provider: PushProvider; token: string; locale?: 'ar' | 'en' };
+          const input = body as {
+            provider: PushProvider;
+            token: string;
+            locale?: 'ar' | 'en';
+            relay_proof?: RelayProof;
+          };
           const push = pushFor(request.server);
           if (!push.ready().includes(input.provider)) {
             throw conflict({ reason: 'sender_not_configured', provider: input.provider });
@@ -658,6 +670,13 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             .where(eq(devices.id, row.id))
             .returning()
             .get()!;
+          // Through the relay the token is bound to this hub there (ADR 0024); a relay that
+          // cannot be reached now binds it at the first send.
+          await push.relayBind(input.provider, token, input.relay_proof);
+          if (row.pushToken && (row.pushProvider === 'fcm' || row.pushProvider === 'apns')) {
+            // The token it replaces is let go of.
+            void push.syncRelay();
+          }
           emit(request, next, 'device.updated');
           return view(request, next).push;
         },
@@ -675,6 +694,9 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             .where(eq(devices.id, row.id))
             .returning()
             .get()!;
+          if (row.pushProvider === 'fcm' || row.pushProvider === 'apns') {
+            void pushFor(request.server).syncRelay();
+          }
           emit(request, next, 'device.updated');
           return null;
         },
@@ -856,6 +878,14 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             return configError(error);
           }
         },
+      });
+
+      defineRoute(app, deps, {
+        operationId: 'devices.setPushRelay',
+        handler: (request, { body }) =>
+          pushFor(request.server).updateRelay(
+            body as { enabled?: boolean; private_push?: boolean },
+          ),
       });
 
       defineRoute(app, deps, {

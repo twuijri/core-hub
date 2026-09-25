@@ -187,3 +187,49 @@ export const pushCredentials = sqliteTable(
     check('push_credentials_provider_check', inList(t.provider, PUSH_CREDENTIAL_PROVIDERS)),
   ],
 );
+
+/** The contract's `PushRelayStatus.state`, as last seen (ADR 0024). */
+export const PUSH_RELAY_STATES = [
+  'ready',
+  'not_registered',
+  'unreachable',
+  'blocked',
+  'rate_limited',
+] as const;
+
+/**
+ * The Core Hub push relay as this hub knows it (ADR 0024): one row. Its registration (`hub_id`
+ * and the secret the relay gave it, for the relay at `url`), the admin's switch and private
+ * push, and what the last call said. A registration belongs to the relay at `url`: another
+ * address registers again.
+ */
+export const pushRelay = sqliteTable(
+  'push_relay',
+  {
+    id: ulid('id').primaryKey(),
+    /** The relay this registration is with. */
+    url: text('url', { length: 500 }),
+    /** This hub's id at the relay (not a secret). */
+    hubId: text('hub_id', { length: 64 }),
+    /** ENCRYPTED. The secret the relay gave this hub; it signs every call. */
+    ciphertext: text('ciphertext'),
+    nonce: text('nonce', { length: 32 }),
+    keyId: text('key_id', { length: 32 }),
+    enabled: bool('enabled').notNull().default(true),
+    privatePush: bool('private_push').notNull().default(false),
+    state: text('state', { enum: PUSH_RELAY_STATES }),
+    lastError: text('last_error'),
+    checkedAt: timestampMs('checked_at'),
+    /** When the hub last told the relay every token it still wants (`/v1/tokens/sync`). */
+    syncedAt: timestampMs('synced_at'),
+    createdAt: timestampMs('created_at')
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: timestampMs('updated_at')
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdate(() => new Date()),
+  },
+  // NULL (never called yet) passes a CHECK in SQLite and PostgreSQL alike.
+  (t) => [check('push_relay_state_check', inList(t.state, PUSH_RELAY_STATES))],
+);
