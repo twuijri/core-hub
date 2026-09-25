@@ -25,17 +25,23 @@ struct NewChatScreen: View {
 
     var body: some View {
         VStack(spacing: Space.s3) {
-            Spacer()
-            BrandMark(size: 48)
-            Text(l10n("chat.new_in_profile", ["profile": app.profileName(app.currentProfile)]))
-                .font(.system(size: FontSize.sizeXl, weight: .semibold))
-                .foregroundStyle(Tone.text)
-                .multilineTextAlignment(.center)
-            Text(l10n("chat.start_hint"))
-                .font(.system(size: FontSize.sizeSm))
-                .foregroundStyle(Tone.textMuted)
-                .multilineTextAlignment(.center)
-            Spacer()
+            // The empty part of the screen above the composer: a tap there puts the keyboard away.
+            VStack(spacing: Space.s3) {
+                Spacer()
+                BrandMark(size: 48)
+                Text(l10n("chat.new_in_profile", ["profile": app.profileName(app.currentProfile)]))
+                    .font(.system(size: FontSize.sizeXl, weight: .semibold))
+                    .foregroundStyle(Tone.text)
+                    .multilineTextAlignment(.center)
+                Text(l10n("chat.start_hint"))
+                    .font(.system(size: FontSize.sizeSm))
+                    .foregroundStyle(Tone.textMuted)
+                    .multilineTextAlignment(.center)
+                Spacer()
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .dismissesKeyboardOnTap()
             if usable.isEmpty {
                 NoticeView(text: l10n("chat.no_agent"), tone: .warning)
             } else {

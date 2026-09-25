@@ -284,6 +284,26 @@ put(
   }),
 );
 
+// The mark inside the apps (the drawer's header, sign-in, the new chat), as on the web: the bare
+// mark, drawn by the app in its accent. iOS gets a template SVG in the asset catalog (kept as a
+// vector, so it is sharp at every size); Android a vector drawable the app tints.
+put(
+  `${ios}/BrandMark.imageset/BrandMark.svg`,
+  `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 -25 895 895">` +
+    `<path fill="#000000" fill-rule="evenodd" d="${MARK}"/></svg>\n`,
+);
+put(
+  `${ios}/BrandMark.imageset/Contents.json`,
+  json({
+    images: [{ filename: 'BrandMark.svg', idiom: 'universal' }],
+    info: { author: 'xcode', version: 1 },
+    properties: {
+      'preserves-vector-representation': true,
+      'template-rendering-intent': 'template',
+    },
+  }),
+);
+
 // Android: the adaptive icon's foreground (also its monochrome layer; the background is
 // @color/icon_bg = accent) keeps the mark at 45 of the 72 dp a mask shows, like the favicon;
 // the notification icon fills 20 of 24 dp. The Play listing wants a 512 px square.
@@ -304,6 +324,16 @@ put(
     viewport: 24,
     markWidth: 20,
     comment: "The notification's small icon: the Core Hub mark, white on transparent.",
+  }),
+);
+put(
+  `${res}/drawable/ic_brand_mark.xml`,
+  vector({
+    size: 28,
+    viewport: 28,
+    markWidth: 28,
+    comment:
+      'The mark inside the app (drawer, sign-in): white here, tinted with the accent by the app.',
   }),
 );
 put('apps/android/store/icon-512.png', png(rasterize(pictures.square(512))));

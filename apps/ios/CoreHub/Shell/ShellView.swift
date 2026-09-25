@@ -17,7 +17,7 @@ struct ShellView: View {
     @Environment(\.l10n) private var l10n
     @State private var main: MainContent = .newChat
     @State private var beforeSettings: MainContent = .newChat
-    @State private var drawerOpen = false
+    @State private var drawer = DrawerState()
     @State private var segment: DestinationID = .chat
     @State private var sessionList: SessionListModel?
     /// The first message of a chat made from the draft, handed to its conversation once.
@@ -30,7 +30,7 @@ struct ShellView: View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 page
-                if drawerOpen, let sessionList {
+                if drawer.isOpen, let sessionList {
                     Tone.scrim
                         .ignoresSafeArea()
                         .onTapGesture { setDrawer(false) }
@@ -156,7 +156,7 @@ struct ShellView: View {
     }
 
     private func setDrawer(_ open: Bool) {
-        withAnimation(.easeInOut(duration: Motion.normal)) { drawerOpen = open }
+        drawer.set(open)
     }
 }
 

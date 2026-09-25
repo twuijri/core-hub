@@ -3,6 +3,7 @@
 // left-to-right frame, and the text inside decides its own direction.
 import CoreHubClient
 import SwiftUI
+import UIKit
 
 struct ChatScreen: View {
     @State var model: ChatModel
@@ -11,6 +12,10 @@ struct ChatScreen: View {
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @State private var draft = ""
+    /// The latest message is on screen (the list's bottom marker is laid out).
+    @State private var atBottom = true
+    /// The keyboard started opening while the reader was at the latest message.
+    @State private var keepBottom = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -71,12 +76,28 @@ struct ChatScreen: View {
                         .id(message.id)
                     }
                     Color.clear.frame(height: 1).id("bottom")
+                        .onAppear { atBottom = true }
+                        .onDisappear { atBottom = false }
                 }
                 .padding(.horizontal, Space.s4)
                 .padding(.vertical, Space.s3)
             }
+            // Dragging the list pulls the keyboard down with the finger, and a tap on the
+            // conversation puts it away (buttons, links and selection inside keep working).
             .scrollDismissesKeyboard(.interactively)
+            .dismissesKeyboardOnTap()
             .defaultScrollAnchor(.bottom)
+            // The keyboard takes the bottom of the screen: a reader at the latest message stays
+            // there, above the composer, instead of the list shrinking over it.
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                keepBottom = atBottom
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
+                if keepBottom {
+                    withAnimation(.easeOut(duration: Motion.fast)) { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
+                keepBottom = false
+            }
             .onChange(of: model.state.messages.last?.text.count) { _, _ in
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
