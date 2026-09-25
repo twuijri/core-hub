@@ -2,7 +2,7 @@
 // by its credentials, its settings and unlinking it — every answer validated against the schema
 // the contract documents for its status. Discord's `/users/@me` is scripted; Hermes is a fake
 // `hermes` on PATH with a fake spawner, so nothing leaves the machine.
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { EventEmitter } from 'node:events';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -123,5 +123,37 @@ describe.skipIf(!doc)('contract: messaging platforms linked by credentials', () 
       url: `/agents/${agent}/channels/discord/unlink`,
     });
     expect(unlinked).toMatchObject({ link: { linked: false } });
+  });
+
+  it("changes a linked WhatsApp's mode, and refuses where there is none", async () => {
+    await call('agents.setChannelMode', 409, {
+      url: `/agents/${agent}/channels/whatsapp/mode`,
+      payload: { mode: 'self-chat' },
+    });
+    // What Hermes's bridge leaves in the default profile after a scan.
+    const session = path.join(hub.dataDir, 'hermes', 'platforms', 'whatsapp', 'session');
+    mkdirSync(session, { recursive: true });
+    writeFileSync(
+      path.join(session, 'creds.json'),
+      JSON.stringify({ me: { id: '966500000000:3@s.whatsapp.net' } }),
+    );
+    writeFileSync(
+      path.join(hub.dataDir, 'hermes', '.env'),
+      'WHATSAPP_ENABLED=true\nWHATSAPP_MODE=bot\n',
+    );
+    const changed = await call('agents.setChannelMode', 200, {
+      url: `/agents/${agent}/channels/whatsapp/mode`,
+      payload: { mode: 'self-chat' },
+    });
+    expect(changed).toMatchObject({ link: { linked: true, mode: 'self-chat' } });
+    await call('agents.listChannels', 200, { url: `/agents/${agent}/channels` });
+    await call('agents.setChannelMode', 400, {
+      url: `/agents/${agent}/channels/whatsapp/mode`,
+      payload: { mode: 'personal' },
+    });
+    await call('agents.setChannelMode', 409, {
+      url: `/agents/${agent}/channels/telegram/mode`,
+      payload: { mode: 'bot' },
+    });
   });
 });
