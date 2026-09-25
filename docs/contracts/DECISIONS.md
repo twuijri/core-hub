@@ -1255,3 +1255,41 @@ Rejected: a database table of log lines (write amplification for lines nobody re
 background sampler every 5 s (work while nobody watches); a new realtime namespace (a poll every
 few seconds of one small document is simpler and pauses by itself). `audit.getReport` keeps its
 `logs` and `performance` kinds unchanged for the CLI and older clients.
+
+## 52. A workflow is drawn against the hub's own check, and a run says what each step produced
+
+The web gets a canvas for workflows (the Workflows section of the Schedules page). A canvas
+needs three things the contract did not have. Proposed here — owner to confirm:
+
+- **`schedules.validateWorkflow`** (`POST /workflows/validate`, body `WorkflowWrite`) runs the
+  check `createWorkflow`/`updateWorkflow` apply on a drawing that is **not saved** and answers
+  `200 WorkflowValidation { valid, problems, warnings }`. Nothing is written or announced. Each
+  finding is a `WorkflowIssue { code, node_id, edge_id, detail, message }`: a stable `code` a
+  client translates (the list is in the schema), the node or edge it is about so an editor can
+  mark it, and `message` — the same English words `409 workflow_invalid` has always carried in
+  `details.problems`, which is unchanged. `problems` are what saving would refuse; `warnings`
+  (no steps, no start, several starts, an agent step with no agent) are saved anyway. A client
+  that meets a code it does not know shows `message`. The client never re-implements the check.
+- **`schedules.listWorkflows` takes `profiles=all`**: every profile the caller may enter (the
+  server's rule, as `schedules.list`, §32), each workflow with its own `profile`, newest first.
+  Without it the list is the header's profile, as before. The Schedules page shows every
+  profile (ADR 0016), so its Workflows section uses it; acting on a workflow is a call in that
+  workflow's `profile`.
+- **`WorkflowStep` gains `output` and `route`** (both required, both nullable). `output` is what
+  the step produced as text — the agent's answer, the notice's words, a condition's
+  `true`/`false`, a delay's seconds, an approval's answer — capped at 20 000 characters; `route`
+  is which edges it follows (`success`/`failure`; `always` edges follow either), written by the
+  engine when the step ends. A condition's "no" is a `succeeded` step with `route: failure`, which
+  is why the client cannot infer the route from the status alone. Steps finished before this
+  read their route from their status. The `step.waiting` event carries the same two fields.
+- **An agent step's own `model`/`provider` now reach its turn.** The node always had the fields;
+  the engine ignored them. Null still means the agent's model.
+- **Positions and direction.** A node's `position` (already in the contract) is **logical**: `x`
+  is the distance along the reading direction. The web canvas mirrors itself in a right-to-left
+  language, so a flow drawn in Arabic runs right-to-left and the same workflow opened in English
+  runs left-to-right; no second layout is stored. Other clients should do the same.
+
+Not added: recipients for `notify` (a notice reaches the inbox of whoever the run belongs to)
+and a timeout for `approval` (it waits until answered) — the engine has neither, and a form
+field that does nothing would be a promise. Rejected: validating in the client (two rules that
+drift), and a separate `layout` object (positions already live on the nodes).

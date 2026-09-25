@@ -71,6 +71,10 @@ export const SCHEDULE_EVENTS = [
   'step.completed',
   'step.failed',
   'step.waiting',
+  // A workflow drawn, changed or deleted elsewhere: the Workflows section follows it.
+  'workflow.created',
+  'workflow.updated',
+  'workflow.deleted',
 ] as const;
 
 export const JOB_EVENTS = [

@@ -10,8 +10,11 @@
  *
  * A schedule the hub fires has two run options (`RunOptions.tsx`): set when it is made, and
  * changed from its card. Hermes decides both for its own jobs, so its schedules have none.
+ *
+ * The page has two sections: Schedules, and Workflows — every workflow of every profile,
+ * each drawn and run on a canvas (`workflows/`, DECISIONS §52).
  */
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/context.js';
@@ -27,6 +30,7 @@ import { ProfileBadge } from '../shell/ProfileBadge.js';
 import { useManyProfiles, useProfileInLink, useProfileName } from '../shell/profiles.js';
 import { chatHref } from '../chat/anchor.js';
 import { ScheduleHistory, WorkflowRunDialog } from './ScheduleRuns.js';
+import { WorkflowsSection } from './workflows/WorkflowsSection.js';
 import {
   DEFAULT_RUN_OPTIONS,
   RunOptions,
@@ -46,11 +50,16 @@ import {
   Skeleton,
   SkeletonGroup,
   Switch,
+  TabPanel,
+  Tabs,
   useConfirm,
 } from '../ui/index.js';
 import { agentMark } from '../ui/brand/marks.js';
 import { IconSchedules, IconTrash } from '../ui/icons.js';
 import { Tooltip } from '../ui/Tooltip.js';
+
+// The canvas is loaded only when a workflow is opened.
+const WorkflowEditor = lazy(() => import('./workflows/WorkflowEditor.js'));
 
 interface Schedule {
   id: string;
@@ -284,7 +293,38 @@ export function SchedulesScreen() {
     setParams((current) => {
       const next = new URLSearchParams(current);
       next.delete('workflow_run');
-      next.delete('profile');
+      // The editor keeps its workflow's profile in the same place.
+      if (!next.get('workflow')) next.delete('profile');
+      return next;
+    });
+  // Schedules or Workflows, and the workflow open on the canvas (`?section=workflows&
+  // workflow=<id|new>&profile=<slug>[&run=<id|latest>]`): one destination, no new page.
+  const section = params.get('section') === 'workflows' ? 'workflows' : 'schedules';
+  const editing = section === 'workflows' ? params.get('workflow') : null;
+  const editingProfile = params.get('profile') ?? homeProfile;
+  const showSection = (value: string) =>
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      if (value === 'workflows') next.set('section', 'workflows');
+      else next.delete('section');
+      return next;
+    });
+  const showWorkflow = (
+    workflow: { id: string; profile: string } | null,
+    run: string | null = null,
+  ) =>
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set('section', 'workflows');
+      if (workflow) {
+        next.set('workflow', workflow.id);
+        next.set('profile', workflow.profile);
+      } else {
+        next.delete('workflow');
+        next.delete('profile');
+      }
+      if (run) next.set('run', run);
+      else next.delete('run');
       return next;
     });
   // Hermes is the one agent with a scheduler of its own, so it is the default.
@@ -347,343 +387,414 @@ export function SchedulesScreen() {
     <AppShell title={title}>
       <h1 className="sr-only">{title}</h1>
 
-      <Card className="mb-4">
-        <CardHeader title={t('schedules.new')} subtitle={t('schedules.new_hint')} />
-        <div className="flex flex-col gap-3">
-          <Field label={t('schedules.name')}>
-            {(props) => (
-              <Input
-                {...props}
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                data-testid="schedule-name"
-              />
-            )}
-          </Field>
-          <Field label={t('schedules.kind')}>
-            {() => (
-              <Select
-                value={kind}
-                onValueChange={(next) => {
-                  const chosen = (next ?? 'cron') as 'cron' | 'interval' | 'once';
-                  setKind(chosen);
-                  setValue(chosen === 'cron' ? '0 9 * * *' : chosen === 'interval' ? '60' : '');
-                }}
-                options={[
-                  { value: 'cron', label: t('schedules.kinds.cron') },
-                  { value: 'interval', label: t('schedules.kinds.interval') },
-                  { value: 'once', label: t('schedules.kinds.once') },
-                ]}
-                label={t('schedules.kind')}
-                testId="schedule-kind"
-              />
-            )}
-          </Field>
-          <Field
-            label={t(`schedules.value.${kind}`)}
-            {...(kind === 'cron' ? { hint: t('schedules.cron_hint') } : {})}
-          >
-            {(props) => (
-              <Input
-                {...props}
-                value={value}
-                onChange={(event) => setValue(event.target.value)}
-                dir="ltr"
-                data-testid="schedule-value"
-              />
-            )}
-          </Field>
-          {many && (
-            <p
-              className="text-xs text-muted"
-              data-testid="schedule-new-profile"
-              data-profile={target}
-            >
-              {t('schedules.in_profile', { name: profileName(target) })}
-            </p>
-          )}
-          {agentOptions.length > 0 && (
-            <Field label={t('schedules.agent')}>
-              {() => (
-                <Select
-                  value={chosenAgent ?? ''}
-                  onValueChange={(next) => setAgentId(next ?? null)}
-                  options={agentOptions}
-                  label={t('schedules.agent')}
-                  testId="schedule-agent"
-                />
-              )}
-            </Field>
-          )}
-          <Field label={t('schedules.prompt')}>
-            {(props) => (
-              <Input
-                {...props}
-                value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-                data-testid="schedule-prompt"
-              />
-            )}
-          </Field>
-          {!forHermes && (
-            <fieldset className="flex flex-col gap-3 rounded-md border border-line p-3">
-              <legend className="px-1 text-sm font-medium">{t('schedules.options.title')}</legend>
-              <RunOptions
-                value={options}
-                onChange={(patch) => setOptions((current) => ({ ...current, ...patch }))}
-                testId="schedule-new-options"
-              />
-            </fieldset>
-          )}
-          {create.isError && (
-            <Notice tone="danger">
-              <span className="flex flex-wrap items-center gap-2">
-                {describeScheduleError(create.error, t)}
-                {zoneAsked && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      setZone(zoneAsked);
-                      save(zoneAsked);
-                    }}
-                    data-testid="schedule-use-zone"
-                  >
-                    {t('schedules.hermes.use_zone', { zone: zoneAsked })}
-                  </Button>
-                )}
-              </span>
-            </Notice>
-          )}
-          <Button
-            className="self-start"
-            disabled={name.trim() === ''}
-            loading={create.isPending}
-            onClick={() => save(zone)}
-            data-testid="schedule-save"
-          >
-            {t('common.save')}
-          </Button>
-        </div>
-      </Card>
-
-      {schedules.isPending && (
-        <SkeletonGroup label={t('common.loading')}>
-          {[0, 1].map((i) => (
-            <Skeleton key={i} height="5rem" radius="md" />
-          ))}
-        </SkeletonGroup>
-      )}
-      {schedules.isError && <Notice tone="danger">{describeError(schedules.error, t)}</Notice>}
-      {(update.isError || run.isError || remove.isError) && (
-        <Notice tone="danger">
-          {describeScheduleError(update.error ?? run.error ?? remove.error, t)}
-        </Notice>
-      )}
-      {fired && (
-        <Notice tone="success">
-          <span className="flex flex-wrap items-center gap-2" data-testid="schedule-fired">
-            {fired.schedule.external?.source === 'hermes'
-              ? t('schedules.hermes.fired')
-              : t('schedules.fired', { name: fired.schedule.name })}
-            {fired.started.session_id && (
-              <Link
-                to={chatHref(
-                  fired.started.session_id,
-                  null,
-                  undefined,
-                  inLink(fired.schedule.profile),
-                )}
-                data-testid="schedule-fired-session"
-              >
-                {t('schedules.history.open_session')}
-              </Link>
-            )}
-            {fired.started.workflow_run_id && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => showRun(fired.started.workflow_run_id!, fired.schedule.profile)}
-                data-testid="schedule-fired-run"
-              >
-                {t('schedules.history.open_run')}
-              </Button>
-            )}
-          </span>
-        </Notice>
-      )}
-      {schedules.data && items.length === 0 && (
-        <EmptyState icon={<IconSchedules size={20} />} title={t('schedules.empty')} />
-      )}
-
-      <ul className="flex flex-col gap-3" data-testid="schedule-list">
-        {items.map((schedule) => {
-          const fromHermes = schedule.external?.source === 'hermes';
-          return (
-            <li key={schedule.id}>
-              <Card testId="schedule-card" data-external={fromHermes ? 'hermes' : undefined}>
-                <CardHeader
-                  title={
-                    <span className="inline-flex items-center gap-2">
-                      {fromHermes && (
-                        <Tooltip label={t('schedules.hermes.origin')}>
-                          <span
-                            className="inline-grid place-items-center text-muted"
-                            role="img"
-                            aria-label={t('schedules.hermes.origin')}
-                            data-testid="schedule-origin-hermes"
-                          >
-                            {agentMark('hermes', 16)}
-                          </span>
-                        </Tooltip>
+      {editing ? (
+        <Suspense fallback={<Skeleton height="30rem" radius="md" />}>
+          <WorkflowEditor
+            workflowId={editing === 'new' ? null : editing}
+            profile={editingProfile}
+            runId={params.get('run')}
+            onBack={() => showWorkflow(null)}
+            onSaved={(id) => showWorkflow({ id, profile: editingProfile })}
+            onShowRun={(run, id) =>
+              showWorkflow({ id: id ?? editing, profile: editingProfile }, run)
+            }
+          />
+        </Suspense>
+      ) : (
+        <Tabs
+          value={section}
+          onValueChange={showSection}
+          items={[
+            { value: 'schedules', label: t('workflows.schedules_section') },
+            { value: 'workflows', label: t('workflows.section') },
+          ]}
+          label={t('workflows.sections_label')}
+          testId="schedules-sections"
+        >
+          <TabPanel value="schedules">
+            {section === 'schedules' && (
+              <>
+                <Card className="mb-4">
+                  <CardHeader title={t('schedules.new')} subtitle={t('schedules.new_hint')} />
+                  <div className="flex flex-col gap-3">
+                    <Field label={t('schedules.name')}>
+                      {(props) => (
+                        <Input
+                          {...props}
+                          value={name}
+                          onChange={(event) => setName(event.target.value)}
+                          data-testid="schedule-name"
+                        />
                       )}
-                      <span dir="auto">{schedule.name}</span>
-                    </span>
-                  }
-                  subtitle={
-                    schedule.trigger.kind === 'cron'
-                      ? `${schedule.trigger.expression ?? ''} · ${schedule.trigger.timezone}`
-                      : schedule.trigger.kind === 'interval'
-                        ? t('schedules.every', { minutes: schedule.trigger.every_minutes ?? 0 })
-                        : when(schedule.trigger.run_at)
-                  }
-                  actions={
-                    <span className="flex items-center gap-1">
-                      {/* Whose schedule this is, once there is more than one profile. */}
-                      {many && (
-                        <ProfileBadge profile={schedule.profile} testId="schedule-profile" />
+                    </Field>
+                    <Field label={t('schedules.kind')}>
+                      {() => (
+                        <Select
+                          value={kind}
+                          onValueChange={(next) => {
+                            const chosen = (next ?? 'cron') as 'cron' | 'interval' | 'once';
+                            setKind(chosen);
+                            setValue(
+                              chosen === 'cron' ? '0 9 * * *' : chosen === 'interval' ? '60' : '',
+                            );
+                          }}
+                          options={[
+                            { value: 'cron', label: t('schedules.kinds.cron') },
+                            { value: 'interval', label: t('schedules.kinds.interval') },
+                            { value: 'once', label: t('schedules.kinds.once') },
+                          ]}
+                          label={t('schedules.kind')}
+                          testId="schedule-kind"
+                        />
                       )}
-                      <Badge tone={schedule.state === 'scheduled' ? 'accent' : 'neutral'}>
-                        {t(`schedules.state.${schedule.state}`)}
-                      </Badge>
-                    </span>
-                  }
-                />
-                <p className="text-xs text-muted">
-                  {t('schedules.next', { at: when(schedule.next_run_at) })}
-                  {schedule.delivery?.kind === 'channel' && schedule.delivery.channel && (
-                    <> · {t('schedules.delivers_to', { channel: schedule.delivery.channel })}</>
-                  )}
-                </p>
-                {schedule.last_error && (
-                  <p className="text-xs text-danger-soft-text" dir="auto">
-                    {t('schedules.last_error', { error: schedule.last_error })}
-                  </p>
-                )}
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Switch
-                    checked={schedule.enabled}
-                    onChange={(next) => update.mutate({ schedule, patch: { enabled: next } })}
-                    label={t('schedules.enabled')}
-                    testId="schedule-enabled"
-                  />
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    loading={run.isPending && run.variables?.id === schedule.id}
-                    onClick={() => {
-                      setFired(null);
-                      run.mutate(schedule, {
-                        onSuccess: (started) => {
-                          setFired({ schedule, started });
-                          // The run is in the history now: show it.
-                          setHistory((open) => new Set(open).add(schedule.id));
-                        },
-                      });
-                    }}
-                    data-testid="schedule-run"
-                  >
-                    {t('schedules.run_now')}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-expanded={history.has(schedule.id)}
-                    onClick={() =>
-                      setHistory((open) => {
-                        const next = new Set(open);
-                        if (next.has(schedule.id)) next.delete(schedule.id);
-                        else next.add(schedule.id);
-                        return next;
-                      })
-                    }
-                    data-testid="schedule-history-toggle"
-                  >
-                    {t(
-                      history.has(schedule.id)
-                        ? 'schedules.history.hide'
-                        : 'schedules.history.show',
-                    )}
-                  </Button>
-                  {!fromHermes && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      aria-expanded={optionsOpen.has(schedule.id)}
-                      onClick={() =>
-                        setOptionsOpen((open) => {
-                          const next = new Set(open);
-                          if (next.has(schedule.id)) next.delete(schedule.id);
-                          else next.add(schedule.id);
-                          return next;
-                        })
-                      }
-                      data-testid="schedule-options-toggle"
+                    </Field>
+                    <Field
+                      label={t(`schedules.value.${kind}`)}
+                      {...(kind === 'cron' ? { hint: t('schedules.cron_hint') } : {})}
                     >
-                      {t(
-                        optionsOpen.has(schedule.id)
-                          ? 'schedules.options.hide'
-                          : 'schedules.options.show',
+                      {(props) => (
+                        <Input
+                          {...props}
+                          value={value}
+                          onChange={(event) => setValue(event.target.value)}
+                          dir="ltr"
+                          data-testid="schedule-value"
+                        />
                       )}
+                    </Field>
+                    {many && (
+                      <p
+                        className="text-xs text-muted"
+                        data-testid="schedule-new-profile"
+                        data-profile={target}
+                      >
+                        {t('schedules.in_profile', { name: profileName(target) })}
+                      </p>
+                    )}
+                    {agentOptions.length > 0 && (
+                      <Field label={t('schedules.agent')}>
+                        {() => (
+                          <Select
+                            value={chosenAgent ?? ''}
+                            onValueChange={(next) => setAgentId(next ?? null)}
+                            options={agentOptions}
+                            label={t('schedules.agent')}
+                            testId="schedule-agent"
+                          />
+                        )}
+                      </Field>
+                    )}
+                    <Field label={t('schedules.prompt')}>
+                      {(props) => (
+                        <Input
+                          {...props}
+                          value={prompt}
+                          onChange={(event) => setPrompt(event.target.value)}
+                          data-testid="schedule-prompt"
+                        />
+                      )}
+                    </Field>
+                    {!forHermes && (
+                      <fieldset className="flex flex-col gap-3 rounded-md border border-line p-3">
+                        <legend className="px-1 text-sm font-medium">
+                          {t('schedules.options.title')}
+                        </legend>
+                        <RunOptions
+                          value={options}
+                          onChange={(patch) => setOptions((current) => ({ ...current, ...patch }))}
+                          testId="schedule-new-options"
+                        />
+                      </fieldset>
+                    )}
+                    {create.isError && (
+                      <Notice tone="danger">
+                        <span className="flex flex-wrap items-center gap-2">
+                          {describeScheduleError(create.error, t)}
+                          {zoneAsked && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => {
+                                setZone(zoneAsked);
+                                save(zoneAsked);
+                              }}
+                              data-testid="schedule-use-zone"
+                            >
+                              {t('schedules.hermes.use_zone', { zone: zoneAsked })}
+                            </Button>
+                          )}
+                        </span>
+                      </Notice>
+                    )}
+                    <Button
+                      className="self-start"
+                      disabled={name.trim() === ''}
+                      loading={create.isPending}
+                      onClick={() => save(zone)}
+                      data-testid="schedule-save"
+                    >
+                      {t('common.save')}
                     </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    iconOnly
-                    className="ms-auto"
-                    tooltip={t('common.delete')}
-                    aria-label={t('common.delete')}
-                    icon={<IconTrash size={14} />}
-                    onClick={() => {
-                      void ask({
-                        title: t('schedules.confirm_delete', { name: schedule.name }),
-                        confirmLabel: t('common.delete'),
-                      }).then((sure) => {
-                        if (sure) remove.mutate(schedule);
-                      });
-                    }}
-                    data-testid="schedule-delete"
-                  />
-                </div>
-                {!fromHermes && optionsOpen.has(schedule.id) && (
-                  <div className="mt-3 rounded-md border border-line p-3">
-                    {/* Each change is saved at once, like the switch beside it. */}
-                    <RunOptions
-                      value={{
-                        run_if_missed: schedule.run_if_missed ?? DEFAULT_RUN_OPTIONS.run_if_missed,
-                        overlap: schedule.overlap ?? DEFAULT_RUN_OPTIONS.overlap,
-                      }}
-                      onChange={(patch) => update.mutate({ schedule, patch: { ...patch } })}
-                      disabled={update.isPending && update.variables?.schedule.id === schedule.id}
-                      testId="schedule-options"
-                    />
                   </div>
+                </Card>
+
+                {schedules.isPending && (
+                  <SkeletonGroup label={t('common.loading')}>
+                    {[0, 1].map((i) => (
+                      <Skeleton key={i} height="5rem" radius="md" />
+                    ))}
+                  </SkeletonGroup>
                 )}
-                {history.has(schedule.id) && (
-                  <div className="mt-3">
-                    <ScheduleHistory
-                      scheduleId={schedule.id}
-                      profile={schedule.profile}
-                      onOpenRun={(id) => showRun(id, schedule.profile)}
-                    />
-                  </div>
+                {schedules.isError && (
+                  <Notice tone="danger">{describeError(schedules.error, t)}</Notice>
                 )}
-              </Card>
-            </li>
-          );
-        })}
-      </ul>
+                {(update.isError || run.isError || remove.isError) && (
+                  <Notice tone="danger">
+                    {describeScheduleError(update.error ?? run.error ?? remove.error, t)}
+                  </Notice>
+                )}
+                {fired && (
+                  <Notice tone="success">
+                    <span
+                      className="flex flex-wrap items-center gap-2"
+                      data-testid="schedule-fired"
+                    >
+                      {fired.schedule.external?.source === 'hermes'
+                        ? t('schedules.hermes.fired')
+                        : t('schedules.fired', { name: fired.schedule.name })}
+                      {fired.started.session_id && (
+                        <Link
+                          to={chatHref(
+                            fired.started.session_id,
+                            null,
+                            undefined,
+                            inLink(fired.schedule.profile),
+                          )}
+                          data-testid="schedule-fired-session"
+                        >
+                          {t('schedules.history.open_session')}
+                        </Link>
+                      )}
+                      {fired.started.workflow_run_id && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            showRun(fired.started.workflow_run_id!, fired.schedule.profile)
+                          }
+                          data-testid="schedule-fired-run"
+                        >
+                          {t('schedules.history.open_run')}
+                        </Button>
+                      )}
+                    </span>
+                  </Notice>
+                )}
+                {schedules.data && items.length === 0 && (
+                  <EmptyState icon={<IconSchedules size={20} />} title={t('schedules.empty')} />
+                )}
+
+                <ul className="flex flex-col gap-3" data-testid="schedule-list">
+                  {items.map((schedule) => {
+                    const fromHermes = schedule.external?.source === 'hermes';
+                    return (
+                      <li key={schedule.id}>
+                        <Card
+                          testId="schedule-card"
+                          data-external={fromHermes ? 'hermes' : undefined}
+                        >
+                          <CardHeader
+                            title={
+                              <span className="inline-flex items-center gap-2">
+                                {fromHermes && (
+                                  <Tooltip label={t('schedules.hermes.origin')}>
+                                    <span
+                                      className="inline-grid place-items-center text-muted"
+                                      role="img"
+                                      aria-label={t('schedules.hermes.origin')}
+                                      data-testid="schedule-origin-hermes"
+                                    >
+                                      {agentMark('hermes', 16)}
+                                    </span>
+                                  </Tooltip>
+                                )}
+                                <span dir="auto">{schedule.name}</span>
+                              </span>
+                            }
+                            subtitle={
+                              schedule.trigger.kind === 'cron'
+                                ? `${schedule.trigger.expression ?? ''} · ${schedule.trigger.timezone}`
+                                : schedule.trigger.kind === 'interval'
+                                  ? t('schedules.every', {
+                                      minutes: schedule.trigger.every_minutes ?? 0,
+                                    })
+                                  : when(schedule.trigger.run_at)
+                            }
+                            actions={
+                              <span className="flex items-center gap-1">
+                                {/* Whose schedule this is, once there is more than one profile. */}
+                                {many && (
+                                  <ProfileBadge
+                                    profile={schedule.profile}
+                                    testId="schedule-profile"
+                                  />
+                                )}
+                                <Badge tone={schedule.state === 'scheduled' ? 'accent' : 'neutral'}>
+                                  {t(`schedules.state.${schedule.state}`)}
+                                </Badge>
+                              </span>
+                            }
+                          />
+                          <p className="text-xs text-muted">
+                            {t('schedules.next', { at: when(schedule.next_run_at) })}
+                            {schedule.delivery?.kind === 'channel' && schedule.delivery.channel && (
+                              <>
+                                {' '}
+                                ·{' '}
+                                {t('schedules.delivers_to', { channel: schedule.delivery.channel })}
+                              </>
+                            )}
+                          </p>
+                          {schedule.last_error && (
+                            <p className="text-xs text-danger-soft-text" dir="auto">
+                              {t('schedules.last_error', { error: schedule.last_error })}
+                            </p>
+                          )}
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <Switch
+                              checked={schedule.enabled}
+                              onChange={(next) =>
+                                update.mutate({ schedule, patch: { enabled: next } })
+                              }
+                              label={t('schedules.enabled')}
+                              testId="schedule-enabled"
+                            />
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              loading={run.isPending && run.variables?.id === schedule.id}
+                              onClick={() => {
+                                setFired(null);
+                                run.mutate(schedule, {
+                                  onSuccess: (started) => {
+                                    setFired({ schedule, started });
+                                    // The run is in the history now: show it.
+                                    setHistory((open) => new Set(open).add(schedule.id));
+                                  },
+                                });
+                              }}
+                              data-testid="schedule-run"
+                            >
+                              {t('schedules.run_now')}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              aria-expanded={history.has(schedule.id)}
+                              onClick={() =>
+                                setHistory((open) => {
+                                  const next = new Set(open);
+                                  if (next.has(schedule.id)) next.delete(schedule.id);
+                                  else next.add(schedule.id);
+                                  return next;
+                                })
+                              }
+                              data-testid="schedule-history-toggle"
+                            >
+                              {t(
+                                history.has(schedule.id)
+                                  ? 'schedules.history.hide'
+                                  : 'schedules.history.show',
+                              )}
+                            </Button>
+                            {!fromHermes && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                aria-expanded={optionsOpen.has(schedule.id)}
+                                onClick={() =>
+                                  setOptionsOpen((open) => {
+                                    const next = new Set(open);
+                                    if (next.has(schedule.id)) next.delete(schedule.id);
+                                    else next.add(schedule.id);
+                                    return next;
+                                  })
+                                }
+                                data-testid="schedule-options-toggle"
+                              >
+                                {t(
+                                  optionsOpen.has(schedule.id)
+                                    ? 'schedules.options.hide'
+                                    : 'schedules.options.show',
+                                )}
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              iconOnly
+                              className="ms-auto"
+                              tooltip={t('common.delete')}
+                              aria-label={t('common.delete')}
+                              icon={<IconTrash size={14} />}
+                              onClick={() => {
+                                void ask({
+                                  title: t('schedules.confirm_delete', { name: schedule.name }),
+                                  confirmLabel: t('common.delete'),
+                                }).then((sure) => {
+                                  if (sure) remove.mutate(schedule);
+                                });
+                              }}
+                              data-testid="schedule-delete"
+                            />
+                          </div>
+                          {!fromHermes && optionsOpen.has(schedule.id) && (
+                            <div className="mt-3 rounded-md border border-line p-3">
+                              {/* Each change is saved at once, like the switch beside it. */}
+                              <RunOptions
+                                value={{
+                                  run_if_missed:
+                                    schedule.run_if_missed ?? DEFAULT_RUN_OPTIONS.run_if_missed,
+                                  overlap: schedule.overlap ?? DEFAULT_RUN_OPTIONS.overlap,
+                                }}
+                                onChange={(patch) =>
+                                  update.mutate({ schedule, patch: { ...patch } })
+                                }
+                                disabled={
+                                  update.isPending && update.variables?.schedule.id === schedule.id
+                                }
+                                testId="schedule-options"
+                              />
+                            </div>
+                          )}
+                          {history.has(schedule.id) && (
+                            <div className="mt-3">
+                              <ScheduleHistory
+                                scheduleId={schedule.id}
+                                profile={schedule.profile}
+                                onOpenRun={(id) => showRun(id, schedule.profile)}
+                              />
+                            </div>
+                          )}
+                        </Card>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+          </TabPanel>
+          <TabPanel value="workflows">
+            {section === 'workflows' && (
+              <WorkflowsSection
+                onOpen={(workflow) => showWorkflow(workflow)}
+                onNew={(profile) => showWorkflow({ id: 'new', profile })}
+                onShowRun={(workflow, run) => showWorkflow(workflow, run)}
+              />
+            )}
+          </TabPanel>
+        </Tabs>
+      )}
       {openRun && <WorkflowRunDialog runId={openRun} profile={openRunProfile} onClose={closeRun} />}
       {dialog}
     </AppShell>

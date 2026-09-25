@@ -280,15 +280,20 @@ export function WorkflowRunDialog({
   );
 }
 
-/** The question a waiting step asks, and the two answers. */
-function ApprovalGate({
+/**
+ * The question a waiting step asks, and the two answers. Also drawn on the workflow canvas
+ * (`workflows/WorkflowEditor.tsx`): `compact` there is the two answers alone, on the node.
+ */
+export function ApprovalGate({
   approvalId,
   profile,
   onAnswered,
+  compact = false,
 }: {
   approvalId: string;
   profile: string;
   onAnswered: () => void;
+  compact?: boolean;
 }) {
   const { t } = useI18n();
   const { client } = useAuth();
@@ -320,23 +325,25 @@ function ApprovalGate({
 
   return (
     <div
-      className="flex flex-col gap-2 rounded-md bg-warning-soft p-3"
+      className={`flex flex-col gap-2 rounded-md bg-warning-soft ${compact ? 'p-1.5' : 'p-3'}`}
       data-testid="workflow-approval"
     >
-      <p className="text-sm font-medium">{t('schedules.run.waiting')}</p>
-      {approval.data && (
+      {!compact && <p className="text-sm font-medium">{t('schedules.run.waiting')}</p>}
+      {!compact && approval.data && (
         <p className="text-sm" dir="auto" data-testid="workflow-approval-question">
           {approval.data.description ?? approval.data.title}
         </p>
       )}
-      <Input
-        value={reason}
-        onChange={(event) => setReason(event.target.value)}
-        placeholder={t('schedules.run.reason')}
-        aria-label={t('schedules.run.reason')}
-        dir="auto"
-        data-testid="workflow-approval-reason"
-      />
+      {!compact && (
+        <Input
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          placeholder={t('schedules.run.reason')}
+          aria-label={t('schedules.run.reason')}
+          dir="auto"
+          data-testid="workflow-approval-reason"
+        />
+      )}
       {answer.isError && <Notice tone="danger">{describeError(answer.error, t)}</Notice>}
       <span className="flex gap-2">
         <Button
