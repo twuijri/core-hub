@@ -24,6 +24,9 @@ final class RealtimeClient {
     private let session: URLSession
     private var hubURL: URL?
     private var socket: URLSessionWebSocketTask?
+    /// The Engine.IO `open` packet arrived on the current socket: namespaces may connect. A
+    /// namespace connected twice on one socket would hear every event twice.
+    private var engineOpen = false
     private var namespaces: [String: RealtimeNamespace] = [:]
     private var generation = 0
     private var attempt = 0
@@ -51,6 +54,7 @@ final class RealtimeClient {
     /// Closes everything; `keepNamespaces: false` also forgets every listener (sign-out).
     func stop(keepNamespaces: Bool = false) {
         generation += 1
+        engineOpen = false
         reconnectTask?.cancel()
         watchdog?.cancel()
         socket?.cancel(with: .normalClosure, reason: nil)
@@ -81,13 +85,13 @@ final class RealtimeClient {
         }
         let namespace = RealtimeNamespace(path: path, client: self, auth: auth)
         namespaces[path] = namespace
-        if state != .offline, socket != nil { connectNamespace(namespace) }
+        if engineOpen { connectNamespace(namespace) }
         return namespace
     }
 
     /// Reconnects one namespace with a fresh handshake (the profile changed).
     func reconnect(_ namespace: RealtimeNamespace) {
-        guard socket != nil else { return }
+        guard engineOpen else { return }
         send(SocketIOPacket(kind: .disconnect, namespace: namespace.path))
         namespace.markDisconnected()
         connectNamespace(namespace)
@@ -99,6 +103,7 @@ final class RealtimeClient {
         guard let hubURL, let url = HubAddress.realtimeURL(for: hubURL) else { return }
         generation += 1
         let current = generation
+        engineOpen = false
         state = .connecting
         let task = session.webSocketTask(with: url)
         task.maximumMessageSize = 16 * 1024 * 1024
@@ -135,6 +140,7 @@ final class RealtimeClient {
                 deadline = TimeInterval(handshake.pingInterval + handshake.pingTimeout) / 1000 + 5
             }
             attempt = 0
+            engineOpen = true
             startWatchdog()
             for namespace in namespaces.values { connectNamespace(namespace) }
         case .ping(let data):
@@ -191,12 +197,13 @@ final class RealtimeClient {
         let current = generation
         Task {
             let auth = await namespace.authProvider()
-            guard current == self.generation, self.socket != nil else { return }
+            guard current == self.generation, self.engineOpen else { return }
             self.send(SocketIOPacket(kind: .connect, namespace: namespace.path, payload: JSON.text(auth)))
         }
     }
 
     private func dropped() {
+        engineOpen = false
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
         watchdog?.cancel()
