@@ -10,7 +10,12 @@ pnpm build                                          # web client first, then dis
 pnpm --filter @corehub/desktop exec electron .      # run it
 pnpm --filter @corehub/desktop test                 # unit tests (no Electron needed)
 xvfb-run -a pnpm --filter @corehub/desktop test:smoke   # Electron against the e2e hub
+pnpm --filter @corehub/desktop package              # this platform's installers → release/
 ```
+
+Installers (ADR 0023): AppImage + deb on Linux, dmg on macOS, NSIS on Windows, unsigned
+(signing is the owner's TODO). `COREHUB_VERSION` stamps the version. CI builds all three in
+`.github/workflows/desktop.yml` as artifacts; nothing is published.
 
 - `src/main` — the main process: first-run window, app window, tray, menus, IPC, and the
   loopback origin (`proxy.ts`) that serves the web client and forwards `/api` and `/rt`.
@@ -22,4 +27,6 @@ xvfb-run -a pnpm --filter @corehub/desktop test:smoke   # Electron against the e
 
 Environment for tests and portable setups: `COREHUB_DESKTOP_USER_DATA` (where settings and
 each hub's storage live), `COREHUB_DESKTOP_NO_TRAY=1`, `COREHUB_DESKTOP_WEB_DIR`,
-`COREHUB_DESKTOP_DEVTOOLS=1`.
+`COREHUB_DESKTOP_DEVTOOLS=1`, `COREHUB_DESKTOP_NO_AUTO_UPDATE=1`,
+`COREHUB_DESKTOP_HERMES_GATEWAY` (where to look for a running Hermes gateway),
+`COREHUB_DESKTOP_SMOKE_EXECUTABLE` (run the smoke journeys against a packaged app).

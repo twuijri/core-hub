@@ -11,7 +11,11 @@ import { hubPort } from './playwright.config.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appDir = path.resolve(here, '../..');
-const executablePath = createRequire(import.meta.url)('electron') as unknown as string;
+// COREHUB_DESKTOP_SMOKE_EXECUTABLE runs the same journeys against a packaged app
+// (release/linux-unpacked/corehub) instead of the development runtime.
+const packaged = process.env.COREHUB_DESKTOP_SMOKE_EXECUTABLE;
+const executablePath =
+  packaged ?? (createRequire(import.meta.url)('electron') as unknown as string);
 const hub = `http://127.0.0.1:${hubPort}`;
 const PASSWORD = 'e2e-owner-password';
 const shots = path.join(appDir, 'test-results', 'shots');
@@ -31,7 +35,7 @@ async function launch(
     // On Linux the test draws on the X server xvfb-run gives it, never on the desktop session
     // of whoever runs it (a Wayland session would otherwise be picked up from the env).
     args: [
-      appDir,
+      ...(packaged ? [] : [appDir]),
       ...(process.platform === 'linux' ? ['--no-sandbox', '--ozone-platform=x11'] : []),
     ],
     env: {
@@ -39,6 +43,7 @@ async function launch(
       WAYLAND_DISPLAY: '',
       COREHUB_DESKTOP_USER_DATA: userData,
       COREHUB_DESKTOP_NO_TRAY: '1',
+      COREHUB_DESKTOP_NO_AUTO_UPDATE: '1',
       ...env,
     },
   });

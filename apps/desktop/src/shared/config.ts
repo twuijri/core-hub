@@ -45,6 +45,14 @@ export interface DesktopConfig {
   closeToTray: boolean;
   /** The local helper (MCP): off, no folders, until the person says otherwise. */
   helper: HelperConfig;
+  /** The update check (ADR 0023): a notice and a link, never an install. */
+  updates: {
+    /** Look once a day on its own (a request to GitHub's API, nothing else). */
+    auto: boolean;
+    lastCheckedAt: string | null;
+    /** The version the OS was last told about, so it is said once. */
+    notified: string | null;
+  };
 }
 
 export const RECENT_LIMIT = 5;
@@ -65,6 +73,7 @@ export function defaultConfig(
     deviceKey: makeId(),
     closeToTray: true,
     helper: defaultHelper(makeToken),
+    updates: { auto: true, lastCheckedAt: null, notified: null },
   };
 }
 
@@ -124,6 +133,17 @@ export function parseConfig(
         : base.deviceKey,
     closeToTray: typeof raw.closeToTray === 'boolean' ? raw.closeToTray : base.closeToTray,
     helper: parseHelper(raw.helper, () => base.helper.token),
+    updates: parseUpdates(raw.updates),
+  };
+}
+
+function parseUpdates(raw: unknown): DesktopConfig['updates'] {
+  const r = isRecord(raw) ? raw : {};
+  const text = (v: unknown) => (typeof v === 'string' && v.length <= 64 ? v : null);
+  return {
+    auto: typeof r.auto === 'boolean' ? r.auto : true,
+    lastCheckedAt: text(r.lastCheckedAt),
+    notified: text(r.notified),
   };
 }
 

@@ -1727,5 +1727,21 @@
     "no_activity": "Nothing has used the helper yet.",
     "refused": "refused",
     "not_running": "The helper is on but not running: {message}"
+  },
+  "desktop_updates": {
+    "title": "Updates",
+    "auto": "Check for a new version once a day",
+    "auto_hint": "Asks GitHub for Core Hub's releases; nothing is downloaded or installed without you.",
+    "check": "Check now",
+    "checking": "Checking…",
+    "current": "This version: {version}",
+    "available": "Core Hub {version} is available.",
+    "download": "Download",
+    "notes": "What's new",
+    "up_to_date": "This is the newest version for this computer.",
+    "failed": "Could not check: {message}",
+    "checked_at": "Checked {time}",
+    "all_releases": "All releases",
+    "size": "{size} MB"
   }
 }

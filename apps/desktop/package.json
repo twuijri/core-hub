@@ -4,6 +4,10 @@
   "version": "0.0.0",
   "private": true,
   "description": "Core Hub desktop app: the web client in an Electron shell, in remote or local mode (ADR 0009, ADR 0020).",
+  "homepage": "https://github.com/twuijri/core-hub",
+  "author": "twuijri <twuijri@users.noreply.github.com>",
+  "license": "Apache-2.0",
+  "desktopName": "corehub.desktop",
   "type": "module",
   "main": "dist/main.cjs",
   "scripts": {
@@ -12,17 +16,17 @@
     "test": "pnpm --filter @corehub/contracts build && vitest run",
     "electron:install": "node scripts/electron-install.mjs",
     "start": "node scripts/build.mjs && electron .",
-    "test:smoke": "playwright test -c tests/smoke/playwright.config.ts"
-  },
-  "dependencies": {
-    "@corehub/contracts": "workspace:*"
+    "test:smoke": "playwright test -c tests/smoke/playwright.config.ts",
+    "package": "node scripts/package.mjs"
   },
   "devDependencies": {
+    "@corehub/contracts": "workspace:*",
     "@corehub/server": "workspace:*",
     "@corehub/web": "workspace:*",
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.2",
     "electron": "44.4.5",
+    "electron-builder": "26.15.3",
     "esbuild": "^0.28.2",
     "typescript": "^5.9.3",
     "vitest": "^5.0.1"

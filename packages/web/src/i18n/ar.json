@@ -1727,5 +1727,21 @@
     "no_activity": "لم يستخدم أحد المساعد بعد.",
     "refused": "رُفض",
     "not_running": "المساعد مفعَّل لكنه لا يعمل: {message}"
+  },
+  "desktop_updates": {
+    "title": "التحديثات",
+    "auto": "البحث عن إصدار جديد مرة في اليوم",
+    "auto_hint": "يسأل GitHub عن إصدارات كور هب؛ لا يُنزَّل شيء ولا يُثبَّت دونك.",
+    "check": "تحقّق الآن",
+    "checking": "جارٍ التحقق…",
+    "current": "هذا الإصدار: {version}",
+    "available": "كور هب {version} متاح.",
+    "download": "تنزيل",
+    "notes": "ما الجديد",
+    "up_to_date": "هذا أحدث إصدار لهذا الحاسوب.",
+    "failed": "تعذّر التحقق: {message}",
+    "checked_at": "آخر تحقق {time}",
+    "all_releases": "كل الإصدارات",
+    "size": "{size} MB"
   }
 }

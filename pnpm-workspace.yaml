@@ -13,3 +13,5 @@ allowBuilds:
   argon2: true
   '@openapitools/openapi-generator-cli': false
   electron: false
+  # electron-builder's Squirrel.Windows helper; the app builds NSIS installers, not Squirrel.
+  electron-winstaller: false

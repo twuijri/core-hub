@@ -40,6 +40,8 @@ const SESSION: StoredSession = {
   user: { id: 'u', username: 'owner', display_name: 'Owner', role: 'owner' },
 };
 
+const RELEASES = 'https://github.com/twuijri/core-hub/releases';
+
 function fakeHelper(over: Partial<DesktopHelperState> = {}) {
   let helper: DesktopHelperState = {
     enabled: false,
@@ -102,6 +104,29 @@ function fakeBridge(
     setUnreadCount: vi.fn(),
     onOpenPath: vi.fn(() => () => {}),
     helper: fakeHelper(helperOver),
+    updates: {
+      get: vi.fn(async () => ({ auto: true, last: null, releasesPage: RELEASES })),
+      check: vi.fn(async () => ({
+        auto: true,
+        releasesPage: RELEASES,
+        last: {
+          status: 'available' as const,
+          current: '1.2.3',
+          checkedAt: '2026-09-25T10:00:00Z',
+          update: {
+            version: '1.3.0',
+            download: 'https://dl.example/Core-Hub-1.3.0-x86_64.AppImage',
+            size: 125_800_000,
+            page: `${RELEASES}/tag/v1.3.0`,
+          },
+        },
+      })),
+      setAuto: vi.fn(async (value: boolean) => ({
+        auto: value,
+        last: null,
+        releasesPage: RELEASES,
+      })),
+    },
   } satisfies DesktopBridge;
   return bridge;
 }
@@ -379,6 +404,30 @@ describe('local helper permission screen', () => {
     await screen.findByTestId('helper-url');
     expect(screen.getByText(/cannot reach it/)).toBeTruthy();
     expect(screen.queryByTestId('helper-add-to-hermes')).toBeNull();
+  });
+});
+
+describe('desktop updates', () => {
+  it('checks when asked and links the installer — it never installs by itself', async () => {
+    const bridge = fakeBridge();
+    withBridge(bridge);
+    mountThisDevice();
+    await screen.findByTestId('desktop-updates');
+    expect(screen.getByTestId('updates-auto').getAttribute('aria-checked')).toBe('true');
+    await userEvent.click(screen.getByTestId('updates-check'));
+    expect(bridge.updates.check).toHaveBeenCalledOnce();
+    const link = await screen.findByTestId('updates-download');
+    expect(link.getAttribute('href')).toBe('https://dl.example/Core-Hub-1.3.0-x86_64.AppImage');
+    expect(link.textContent).toContain('126 MB');
+    expect(screen.getByTestId('updates-available').textContent).toContain('1.3.0');
+  });
+
+  it('turns the daily check off through the app', async () => {
+    const bridge = fakeBridge();
+    withBridge(bridge);
+    mountThisDevice();
+    await userEvent.click(await screen.findByTestId('updates-auto'));
+    expect(bridge.updates.setAuto).toHaveBeenCalledWith(false);
   });
 });
 

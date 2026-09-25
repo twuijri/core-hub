@@ -50,6 +50,11 @@ const bridge: DesktopBridge = {
     setAllowOpen: (value) => ipcRenderer.invoke(CHANNELS.helperAllowOpen, value === true),
     newToken: () => ipcRenderer.invoke(CHANNELS.helperNewToken),
   },
+  updates: {
+    get: () => ipcRenderer.invoke(CHANNELS.updatesGet),
+    check: () => ipcRenderer.invoke(CHANNELS.updatesCheck),
+    setAuto: (value) => ipcRenderer.invoke(CHANNELS.updatesAuto, value === true),
+  },
 };
 
 contextBridge.exposeInMainWorld('corehubDesktop', bridge);
