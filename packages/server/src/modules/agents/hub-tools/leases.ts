@@ -1,5 +1,5 @@
 /**
- * Which run a call to the hub's own tools belongs to (contract decision §58).
+ * Which run a call to the hub's own tools belongs to (contract decision §67).
  *
  * Hermes keeps **one MCP connection per profile** and says nothing on a tool call about
  * which conversation made it (`tools/mcp_tool_scope.py`: connections are keyed by profile

@@ -1,6 +1,6 @@
 /**
  * Run tokens: the principal an agent's call to the hub's own tools acts as (contract
- * decision §58).
+ * decision §67).
  *
  * A run token is minted when a run of the hub's starts and revoked when it ends. It names
  * **one person in one profile**, and nothing more: the principal it resolves to

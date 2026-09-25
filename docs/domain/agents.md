@@ -163,7 +163,7 @@ with, so the `models` module writes `${HERMES_HOME}/.env` and `${HERMES_HOME}/co
 and then recycles the same child (ADR 0010 §3). That is why the `hermes` catalog entry
 declares no `credentials`: two paths to one setting would eventually disagree.
 
-## The hub's own tools (contract decision §58)
+## The hub's own tools (contract decision §67)
 
 `hub_tool_settings` (scoped, one row per workspace): `enabled`, `groups` (per group
 `{enabled, allowWrites}`; a missing group reads, never writes) and `key_hash` — the SHA-256 of

@@ -1025,7 +1025,7 @@ Rejected: a new `source` field on `SessionCreate` (a client could then make any 
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
 
-## 58. The hub serves its own tools to its agents over MCP, as the person whose run it is
+## 67. The hub serves its own tools to its agents over MCP, as the person whose run it is
 
 An agent in Core Hub could not drive the hub: it did not see the board, could not schedule, read
 its profile's conversations or tell the person anything. The hub now offers itself to its agents

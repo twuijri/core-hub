@@ -142,7 +142,7 @@ export class AgentRunner implements AgentRunnerPort {
     };
     this.runs.set(request.runId, run);
     // From here until the run ends, a call to the hub's own tools from this profile may act
-    // for the run's owner (contract decision §58).
+    // for the run's owner (contract decision §67).
     this.deps.leases?.open({
       runId: request.runId,
       sessionId: request.sessionId,

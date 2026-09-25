@@ -1,5 +1,5 @@
 /**
- * The part of MCP the hub's server speaks (contract decision §58): JSON-RPC 2.0 over
+ * The part of MCP the hub's server speaks (contract decision §67): JSON-RPC 2.0 over
  * Streamable HTTP, one message per POST, answered as `application/json` — which the MCP
  * transport allows a server to do instead of a stream when it has nothing to push. No
  * session id, no server-to-client stream: the hub sends no notifications, and every call

@@ -1,5 +1,5 @@
 /**
- * The hub's own tools against **the real Hermes** from the image (contract decision §58).
+ * The hub's own tools against **the real Hermes** from the image (contract decision §67).
  *
  * The whole path a person would take: the hub listens on the loopback, the card switches its
  * tools on (the hub writes the `corehub` block into Hermes's `config.yaml` and the key into

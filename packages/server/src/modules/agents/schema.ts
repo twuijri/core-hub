@@ -187,7 +187,7 @@ export const agentSettings = sqliteTable(
 );
 
 /**
- * The hub's own tools, per profile (contract decision §58): whether the profile offers them
+ * The hub's own tools, per profile (contract decision §67): whether the profile offers them
  * to its Hermes, which groups are on and which may write, and the hash of the key written
  * into the profile's `.env` (the key itself is never stored). One row per workspace, made
  * the first time an admin opens or changes the card; no row means off.

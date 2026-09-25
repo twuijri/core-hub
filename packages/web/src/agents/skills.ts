@@ -213,7 +213,7 @@ export function useDeleteMcpServer(agentId: string | undefined) {
 
 // ------------------------------------------------------- the hub's own tools
 //
-// Core Hub offers itself to the agent as an MCP server (contract decision §58). The card on
+// Core Hub offers itself to the agent as an MCP server (contract decision §67). The card on
 // the MCP page reads and switches it per profile; the block it writes is tested like any
 // other server, by name.
 

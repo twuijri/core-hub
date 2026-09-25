@@ -1,5 +1,5 @@
 /**
- * The three operations of the hub's own tools (contract decision §58): the card's read and
+ * The three operations of the hub's own tools (contract decision §67): the card's read and
  * write (`agents.getHubTools`, `agents.updateHubTools`) and the MCP endpoint Hermes talks to
  * (`agents.hubMcp`). Mounted by the `agents` module, which lends what they need.
  */

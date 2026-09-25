@@ -1,5 +1,5 @@
 /**
- * The pure parts of the hub's own tools (contract decision §58): the protocol, the way a call
+ * The pure parts of the hub's own tools (contract decision §67): the protocol, the way a call
  * is attributed to a run, and the runner opening and closing that attribution as a run lives.
  */
 import { describe, expect, it } from 'vitest';

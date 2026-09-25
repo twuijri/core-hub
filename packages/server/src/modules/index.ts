@@ -135,7 +135,7 @@ registerAgentAttachments((app) => ({
 }));
 
 /**
- * `notifications.notify`, a tool of the hub's own (contract decision §58): `agents` serves
+ * `notifications.notify`, a tool of the hub's own (contract decision §67): `agents` serves
  * the tool, `notify` owns the inbox. A notice to the run's owner, in the run's profile.
  */
 registerHubToolsNotify((app) => {

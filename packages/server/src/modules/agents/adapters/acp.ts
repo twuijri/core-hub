@@ -147,7 +147,7 @@ export class AcpSession implements AgentSession {
       timeoutMs?: number;
       /**
        * MCP servers the hub hands the agent for this session — the hub's own tools (contract
-       * decision §58). An HTTP server goes only to an agent that says it can reach one
+       * decision §67). An HTTP server goes only to an agent that says it can reach one
        * (`agentCapabilities.mcpCapabilities.http`); ACP requires every agent to take stdio.
        */
       mcpServers?: readonly AcpMcpServer[];

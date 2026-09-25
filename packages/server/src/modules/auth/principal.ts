@@ -69,7 +69,7 @@ export async function resolvePrincipal(
   const now = ctx.now();
   const db = ctx.db;
   if (isRunToken(bearer)) {
-    // An agent acting for the person whose run it is (contract decision §58): that person,
+    // An agent acting for the person whose run it is (contract decision §67): that person,
     // in that run's profile only, and never with more than a member's reach.
     const grant = runGrantOf(bearer, now);
     if (!grant) throw new HubError('unauthorized', { messageKey: 'auth.token_invalid' });
