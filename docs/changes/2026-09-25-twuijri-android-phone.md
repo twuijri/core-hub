@@ -83,7 +83,22 @@ live: board 9 columns; 0 schedules; 7 notices; 1 profiles; 1 users; 0 app tokens
 
 ما لم يُجرَّب: على جهاز حقيقي أو محاكٍ — لا صلاحية `/dev/kvm` هنا — فلم يُرَ الإشعار ولا ورقة
 المشاركة ولا الميكروفون ولا المثبّت على شاشة؛ المنطق خلفها مختبَر بالوحدات، و`notice.created` رُئي
-يصل من مركز حقيقي. CI: يُضاف بعد الدفع.
+يصل من مركز حقيقي.
+
+CI على #127 (قاعدته `feat/android-app-destinations`):
+
+```
+Android build, unit tests, lint                       pass   (run 36095032304, BUILD SUCCESSFUL in 5m 13s)
+  Debug APK: 15M (15393662 bytes) · artifact corehub-android-debug-apk (14,799,747 bytes zipped)
+Lint, typecheck, contracts, tests, build              pass
+Web smoke journeys (Playwright against the real hub)  pass
+Docker image builds and answers /health               pass
+db:generate + db:migrate (SQLite and PostgreSQL)      pass
+PR adds or updates a change record                    pass
+PR leaves graphify-out/ to the code-map bot           pass
+```
+
+نسخة الإصدار (R8، غير موقّعة) بعد الأجزاء الثلاثة، مبنية محليًا للقياس: ‏2,564,370 بايت (٢٫٦ م.ب).
 
 ## المخاطر والرجوع
 - الفحص في الخلفية كل ١٥ دقيقة يستهلك قليلًا من البطارية والشبكة؛ يُطفأ من «هذا الجهاز».
