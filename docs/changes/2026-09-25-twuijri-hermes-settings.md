@@ -95,7 +95,8 @@
   والخيار الفارغ = افتراضي هرمز)، `src/agents/PendingWritesCard.tsx` (جديد)، `src/settings/PrivacyTab.tsx`
   (مفتاح `redact_pii` لهرمز)، `src/chat/useComposerControls.ts`، والنصوص في `src/i18n/{ar,en}.json`
   (`agents.*`، `agents.pending.*`، `composer.approval_mode/hint.manual|smart`، `privacy.redact_*`).
-  الاختبارات: `tests/hermes-settings.test.tsx` (جديد)، وتعليق في `tests/webhooks-privacy.test.tsx`.
+  الاختبارات: `tests/hermes-settings.test.tsx` (جديد)، وتعليق في `tests/webhooks-privacy.test.tsx`، ورحلة
+  ‏25 في `e2e/zzz-settings-webhooks-privacy.spec.ts` (المفتاح الوحيد هو مفتاح هرمز) ولقطة `privacy-ar-light`.
   رحلة Playwright ‏45: `e2e/zzzzzz-hermes-settings.spec.ts` ولقطة `hermes-settings-ar-light`.
 - الوثائق: `docs/STATUS.md`، `docs/contracts/DECISIONS.md`، `docs/contracts/COVERAGE.md`.
 
@@ -151,7 +152,17 @@ change-record  OK — 1 record(s) valid
 في هرمز **يؤجّلان** الكتابة، والمركز يسردها ويوافق على واحدة من كل نوع (فتظهر في `memories/MEMORY.md`
 و`skills/deploy-notes/SKILL.md`) ويرفض الثالثة. لم يُلمس هرمز المالك على المنفذ 8642.
 
-نتيجة CI: تُضاف بعد الدفع.
+نتيجة CI على #131: الدفعة الأولى فشلت في رحلة Playwright ‏25 (صفحة الخصوصية كانت تتوقع «لا مفتاح»؛ صار
+فيها مفتاح هرمز عن قصد) — عُدّلت الرحلة لتتحقق أن المفتاح الوحيد هو `redact_pii` لهرمز، وأُعيد توليد لقطة
+`privacy-ar-light`، وشُغّلت محليًا (`1 passed`). الدفعة التالية (run 36100813205):
+```
+Docker image builds and answers /health               pass
+Lint, typecheck, contracts, tests, build              pass
+PR adds or updates a change record                    pass
+PR leaves graphify-out/ to the code-map bot           pass
+Web smoke journeys (Playwright against the real hub)  pass
+db:generate + db:migrate (SQLite and PostgreSQL)      pass
+```
 
 ## المخاطر والرجوع
 - **تغيير سلوك:** صفحة إعدادات هرمز لم تعد تعمل بلا مجلد هرمز (مركز بلا هرمز أصلًا يجيب `409 runtime_absent`
