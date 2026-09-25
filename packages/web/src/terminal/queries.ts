@@ -1,5 +1,5 @@
 /**
- * The owner's web terminal (DECISIONS §60), as the hub reports it.
+ * The owner's web terminal (DECISIONS §70), as the hub reports it.
  *
  * The hub decides who may use it; the web only mirrors the answer. `GET /terminal` answers
  * `200` to the owner of a hub started with `COREHUB_WEB_TERMINAL=1`, and `403` to anyone else

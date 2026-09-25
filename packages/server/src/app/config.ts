@@ -80,7 +80,7 @@ const envSchema = z.object({
     .max(50, 'COREHUB_TASK_AUTO_START_MAX must be at most 50')
     .default(2),
   /**
-   * The owner's web terminal (DECISIONS §60): a shell on this host, as the hub's own user,
+   * The owner's web terminal (DECISIONS §70): a shell on this host, as the hub's own user,
    * reachable from the browser by the owner account only. Off unless this is `1`.
    */
   COREHUB_WEB_TERMINAL: z
@@ -137,7 +137,7 @@ export interface HubConfig {
   resetOwner: boolean;
   /** Runs started by `auto_start` at once per profile (`COREHUB_TASK_AUTO_START_MAX`, 2). */
   taskAutoStartMax: number;
-  /** The owner's web terminal: off unless `COREHUB_WEB_TERMINAL=1` (DECISIONS §60). */
+  /** The owner's web terminal: off unless `COREHUB_WEB_TERMINAL=1` (DECISIONS §70). */
   webTerminal: WebTerminalConfig;
 }
 

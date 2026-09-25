@@ -1,5 +1,5 @@
 /**
- * Module `terminal`: the owner's web terminal (DECISIONS §60).
+ * Module `terminal`: the owner's web terminal (DECISIONS §70).
  *
  * The owner asked for a terminal in the web and said who it is for (2026-09-25): «الا خله
  * للمشرف الرئيسي بس» — the one account with role `owner`; not admins, not members.

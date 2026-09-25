@@ -12356,7 +12356,7 @@ paths:
       summary: The web terminal's state and the owner's live terminal sessions
       description: |
         The web terminal is a shell on the hub's host, running as the hub's own user, in
-        `DATA_DIR/workspaces/<profile>` (DECISIONS §60). It exists only when the hub runs with
+        `DATA_DIR/workspaces/<profile>` (DECISIONS §70). It exists only when the hub runs with
         `COREHUB_WEB_TERMINAL=1`, and only the owner — not an admin, not a member — may use it.
         An admin or a member gets `403 forbidden` (`required_role: owner`); the owner of a hub
         where it is off gets `403 forbidden` with `details.reason: terminal_disabled`. A client

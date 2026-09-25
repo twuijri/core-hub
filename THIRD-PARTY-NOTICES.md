@@ -39,7 +39,7 @@ of them. The sixth mark, for our own `direct` agent, is drawn by us.
 
 ## The web terminal's two libraries
 
-The owner's web terminal (DECISIONS §60) is built on two npm packages. They are dependencies,
+The owner's web terminal (DECISIONS §70) is built on two npm packages. They are dependencies,
 not copied source — the rule at the end of this file would leave them out — but both are
 **redistributed** in a form their `node_modules` copy does not travel with, so they are noted
 here on the owner's request (2026-09-25):

@@ -73,7 +73,7 @@ export function SettingsNav({
   const role = user?.role ?? 'member';
   // The one number worth carrying outside its own page: how many notices are waiting.
   const unread = useUnreadCount();
-  // The Terminal is the owner's, and only on a hub that has it on: the hub says so (§60).
+  // The Terminal is the owner's, and only on a hub that has it on: the hub says so (§70).
   const terminal = useTerminalAvailable();
   // The Settings index opens on Account, so Account is the row that reads as current.
   const here = current === 'settings' ? 'account' : current;

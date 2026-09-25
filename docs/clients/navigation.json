@@ -459,7 +459,7 @@
       "roles": ["owner"],
       "surfaces": ["web"],
       "global": true,
-      "note": "A shell on the hub's host (DECISIONS §60). The owner only — not admins (owner, 2026-09-25) — and only while the hub runs with COREHUB_WEB_TERMINAL=1: a client shows the entry only when GET /terminal answers 200."
+      "note": "A shell on the hub's host (DECISIONS §70). The owner only — not admins (owner, 2026-09-25) — and only while the hub runs with COREHUB_WEB_TERMINAL=1: a client shows the entry only when GET /terminal answers 200."
     },
     {
       "id": "agent_skills",

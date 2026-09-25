@@ -1,5 +1,5 @@
 /**
- * The owner's web terminal (DECISIONS §60; owner, 2026-09-25: «الا خله للمشرف الرئيسي بس»)
+ * The owner's web terminal (DECISIONS §70; owner, 2026-09-25: «الا خله للمشرف الرئيسي بس»)
  * against a real hub started with COREHUB_WEB_TERMINAL=1 (the third web server in
  * playwright.config.ts) and a real shell: the owner opens Settings → Terminal, sees the
  * warning, opens a terminal, runs `echo hi` and reads `hi`; after a reload the same terminal

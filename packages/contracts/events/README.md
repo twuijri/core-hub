@@ -76,7 +76,7 @@ same token cannot bring it back.
 
 ### The owner's terminal (`/rt/terminal`)
 
-The web terminal (DECISIONS §60) is a shell on the hub's host. It is the one namespace where
+The web terminal (DECISIONS §70) is a shell on the hub's host. It is the one namespace where
 typing goes over the socket rather than HTTP — a keystroke is not an action with an
 idempotency key. Its handshake is refused with `forbidden` unless the hub runs with
 `COREHUB_WEB_TERMINAL=1` **and** the token is the owner's: an admin or a member never

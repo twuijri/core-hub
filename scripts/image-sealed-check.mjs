@@ -7,7 +7,7 @@
 // channels the hub links itself need no download (docs/changes/2026-09-25-twuijri-image-channel-deps.md):
 // Hermes's Telegram client imports with no network at all, and a profile's WhatsApp bridge,
 // prepared the way the hub prepares it, resolves Baileys from the image through its link. The
-// owner's web terminal (DECISIONS §60) gets a shell on a real PTY there, as the hub's own user,
+// owner's web terminal (DECISIONS §70) gets a shell on a real PTY there, as the hub's own user,
 // and that shell cannot write the sealed code either.
 //
 //   node scripts/image-sealed-check.mjs <image>        (CI: core-hub:ci)
@@ -111,7 +111,7 @@ console.log(JSON.stringify(result));
 
 /**
  * Runs inside the container, from the hub's own package: open a shell on a real PTY the way the
- * owner's web terminal does (DECISIONS §60) and, in it, try to change the sealed code. Prints
+ * owner's web terminal does (DECISIONS §70) and, in it, try to change the sealed code. Prints
  * `uid=… app=… hermes=…`.
  */
 const PTY_PROBE = `

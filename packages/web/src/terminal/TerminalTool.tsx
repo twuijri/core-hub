@@ -1,5 +1,5 @@
 /**
- * Settings → Terminal: a shell on the hub's host, for the owner only (DECISIONS §60).
+ * Settings → Terminal: a shell on the hub's host, for the owner only (DECISIONS §70).
  *
  * The owner asked for it, and for whom (2026-09-25): «الا خله للمشرف الرئيسي بس». The hub
  * enforces that; this page only mirrors it — the entry exists when `GET /terminal` answers

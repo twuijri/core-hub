@@ -1,4 +1,4 @@
-// The owner's web terminal in the web client (DECISIONS §60; owner, 2026-09-25: «الا خله
+// The owner's web terminal in the web client (DECISIONS §70; owner, 2026-09-25: «الا خله
 // للمشرف الرئيسي بس»). The hub is the gate; what the client must get right is that nobody
 // but the owner of a hub that has it on ever sees the entry — and that an admin or a member
 // is not even asked about it.

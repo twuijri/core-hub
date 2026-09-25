@@ -51,7 +51,7 @@ const SECTIONS: Record<string, () => ReactElement> = {
   usage: () => <AuditReport kind="usage" />,
   logs: () => <AuditReport kind="logs" />,
   performance: () => <AuditReport kind="performance" />,
-  // The owner's shell on the hub (DECISIONS §60); the emulator itself loads only here.
+  // The owner's shell on the hub (DECISIONS §70); the emulator itself loads only here.
   terminal: () => <TerminalTool />,
 };
 

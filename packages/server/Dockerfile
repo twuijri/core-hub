@@ -62,7 +62,7 @@ RUN set -eu; \
       find "$pkg/prebuilds" -type f ! -name 'linux-x64.node' ! -name 'linux-arm64.node' -delete; \
     done; \
     cd packages/server && node -e "const db=require('better-sqlite3')(':memory:'); if (db.prepare('select 1 as ok').get().ok!==1) process.exit(1)"
-# node-pty (MIT) is the owner's web terminal (DECISIONS §60). It ships prebuilt binaries only for
+# node-pty (MIT) is the owner's web terminal (DECISIONS §70). It ships prebuilt binaries only for
 # macOS and Windows (~58 MB), so on Linux `pnpm install` above compiled it with node-gyp — the
 # build tools (python3, make, g++) come with this node:24-bookworm stage and never reach the
 # runtime image. At runtime lib/utils.js loads build/Release/pty.node; everything else — the

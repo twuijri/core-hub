@@ -1070,7 +1070,7 @@ would work on an empty folder and look successful); a per-project limit (the own
 profile); a migration to make `worktrees.path` unique only among live rows — a task's removed
 worktree row is reused instead, which also keeps one history per task.
 
-## 60. The web terminal is the owner's, off by default, and every session is audited
+## 70. The web terminal is the owner's, off by default, and every session is audited
 
 The owner asked for a terminal in the web and said who it is for (2026-09-25): «الا خله للمشرف
 الرئيسي بس» — the one account with role `owner`; not admins, not members. What the contract now

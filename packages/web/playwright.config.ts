@@ -12,7 +12,7 @@ const baseURL = `http://127.0.0.1:${port}`;
 export const setupPort = Number(process.env.COREHUB_E2E_SETUP_PORT ?? 8792);
 export const setupBaseURL = `http://127.0.0.1:${setupPort}`;
 export const setupDataDir = path.resolve('e2e/.setup-data');
-// A third hub for the owner's web terminal (DECISIONS §60), started with COREHUB_WEB_TERMINAL=1:
+// A third hub for the owner's web terminal (DECISIONS §70), started with COREHUB_WEB_TERMINAL=1:
 // the terminal is off by default, and the other journeys run against a hub that has it off.
 export const terminalPort = Number(process.env.COREHUB_E2E_TERMINAL_PORT ?? 8793);
 export const terminalBaseURL = `http://127.0.0.1:${terminalPort}`;
