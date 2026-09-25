@@ -19,8 +19,8 @@
  *   it was written with. That is why `level` filters the merged list rather than one table.
  * - **performance** (global, admin): the snapshots the sampler writes, plus this
  *   process's own numbers at the moment of asking.
- * - **skills**: nothing records skill use yet. It answers `501` with its operation id
- *   rather than a page of zeros that would read as "no skills were used".
+ * - **skills**: built by `analytics.ts` from `skill_uses` (contract decision §47) and answered
+ *   by the route itself, so `build` has nothing to say about it.
  */
 import { and, desc, eq, gte, inArray, like, lte, sql } from 'drizzle-orm';
 import type { ModuleDb } from '../../lib/db.js';
@@ -86,7 +86,7 @@ export class ReportService {
     if (request.kind === 'usage') return { ...shell, data: this.usage(request.workspace, period) };
     if (request.kind === 'logs') return { ...shell, data: this.logs(request, period) };
     if (request.kind === 'performance') return { ...shell, data: this.performance(period, now) };
-    // `skills`: nothing writes skill usage yet. The caller answers 501.
+    // `skills` is `analytics.ts`'s; the route answers it before asking here.
     return null;
   }
 

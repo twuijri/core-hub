@@ -480,6 +480,24 @@ export function agentsServiceFor(app: FastifyInstance): AgentsService {
   return contextOf(app).service;
 }
 
+/**
+ * The enabled skills of the hub's Hermes in one profile, by name — what the Skills usage
+ * report compares with the skills actually loaded (contract decision §47). `null` when the
+ * hub cannot see them: no Hermes home, or a profile Hermes does not have.
+ */
+export function installedSkillNames(
+  app: FastifyInstance,
+  profile: { slug: string; isDefault: boolean },
+): string[] | null {
+  const root = contextOf(app).runtime.status().home;
+  if (!root) return null;
+  const home = profileHome(root, profile);
+  if (!home) return null;
+  return listSkills(home)
+    .filter((skill) => skill.enabled && !skill.broken)
+    .map((skill) => skill.name);
+}
+
 /** The Hermes runtime this hub supervises or found (ADR 0008). */
 export function hermesRuntimeFor(app: FastifyInstance): HermesRuntime {
   return contextOf(app).runtime;

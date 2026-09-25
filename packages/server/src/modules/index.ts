@@ -35,12 +35,14 @@ import {
   hermesDashboardFor,
   hermesProfileRunner,
   hermesRuntimeFor,
+  installedSkillNames,
   registerAgentAttachments,
 } from './agents/index.js';
 import {
   attachmentReferences,
   createSessionsModule,
   registerWorkflowGate,
+  runActivity,
   sessionRunsFor,
   sessionTurnsFor,
   workflowApprovalsFor,
@@ -75,7 +77,7 @@ import { modelsModule, modelsServiceFor } from './models/index.js';
 import { devicesModule } from './devices/index.js';
 import { createNotifier, notifyModule } from './notify/index.js';
 import { updatesModule } from './updates/index.js';
-import { auditModule } from './audit/index.js';
+import { auditModule, registerAnalyticsSources } from './audit/index.js';
 import { pluginsModule } from './plugins/index.js';
 
 // The one wiring line the sessions module asked for: its ports come from `agents` (the
@@ -426,6 +428,17 @@ registerTaskNames((app) => (kind, id) => {
   const user = findUser(requireSqlite(app.hub.database), id);
   return user ? user.displayName?.trim() || user.username : null;
 });
+
+/**
+ * The Usage and Skills usage reports (contract decision §47) count runs, name agents and
+ * compare with the installed skills: runs are `sessions`'s, agents and skills `agents`'s, and
+ * `audit` reads neither module's tables — it is lent the three answers here.
+ */
+registerAnalyticsSources((app) => ({
+  runActivity: (query) => runActivity(requireSqlite(app.hub.database), query),
+  agentName: (agentId) => agentsServiceFor(app).loadAgent(agentId).name,
+  installedSkills: (profile) => installedSkillNames(app, profile),
+}));
 
 export const modules: readonly HubModule[] = [
   authModule,

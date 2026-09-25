@@ -35,6 +35,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import { t, type Language } from '../../i18n/index.js';
 import { newUlid } from '../../db/ids.js';
 import type { AuditService } from '../audit/index.js';
+import { skillUseOf } from './skill-use.js';
 import {
   toApproval,
   toMessage,
@@ -534,6 +535,25 @@ export class RunEngine {
           const call = state.toolCalls.find((c) => c.id === action.toolCallId);
           if (!call) break;
           const row = this.writeToolCall(run, call);
+          // A skill the agent loaded is a use of it (contract decision §47).
+          if (action.type === 'tool_completed') {
+            const skill = skillUseOf(call);
+            if (skill) {
+              try {
+                audit.recordSkillUse({
+                  workspace: scope.workspace,
+                  ownerId: scope.userId,
+                  runId: run.runId,
+                  sessionId,
+                  agentId: run.agent.id,
+                  skill,
+                });
+              } catch (error) {
+                // A count nobody could write is not worth failing a run over.
+                this.deps.log.warn({ err: error, runId: run.runId }, 'sessions: skill use not recorded');
+              }
+            }
+          }
           this.emitToSession(
             scope,
             sessionId,

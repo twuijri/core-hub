@@ -1024,3 +1024,49 @@ did not say how many there are or who owns one. Proposed here — owner to confi
 Rejected: a new `source` field on `SessionCreate` (a client could then make any number of
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
+
+## 47. Usage and Skills usage are typed reports aggregated on the hub; a number only where one was measured
+
+`audit.getReport` answered Usage with an open `data` block over a rolling window, and `skills`
+with `501` because nothing recorded skill use. The Usage page now needs a period choice,
+summary cards, a daily chart, per-model and per-agent shares and filters, and Skills usage needs
+data at all. Proposed here — owner to confirm:
+
+- **Two typed operations.** `audit.getUsage` (`GET /audit/usage`, `UsageReport`) and
+  `audit.getSkillUsage` (`GET /audit/skills`, `SkillUsageReport`), with the same parameters:
+  `days` (1–365; clients offer 7, 30, 90 and 365), `profiles=all` (every profile the caller may
+  enter, ADR 0016; the header must still name one), `agent_id`, and `utc_offset_minutes`. Both are
+  aggregated in SQL grouped by calendar day over the ledgers' time indexes and a new
+  `runs (workspace, created_at)` index — never shipped as raw rows. `audit.getReport` stays for
+  the other kinds; its `skills` now answers the Skills usage body for the header's profile.
+- **A day is the caller's calendar day.** `days=7` is today and the six days before it in the
+  calendar `utc_offset_minutes` east of UTC; `by_day` has every day, zeros included. A fixed
+  offset rather than a time zone name, because the hub's SQLite cannot convert zones; a period
+  across a daylight-saving change is off by that hour at most.
+- **Only what was measured is a number.** The ledger stores an unreported cache as `0`, so a
+  period with no cache read (or write) at all answers `null` for it and for `cache_hit_rate`
+  (Hermes reports no cache today). `cost` is `null` where nothing was priced. An agent that ran
+  but reported no usage (coding agents over ACP) is listed with `reports_usage: false` and `null`
+  tokens, and its runs are `unreported_runs`. `total_tokens` is input + output + cache reads +
+  cache writes; `cache_hit_rate` is cache reads over (fresh input + cache reads), because input
+  tokens exclude cached ones (decision §43). "Conversations per day" is the mean over the
+  period's days of the conversations active that day.
+- **A skill use is a skill a run loaded.** Read from Hermes's MIT source (v2026.9.14): Hermes
+  loads a skill with the `skill_view(name, file_path?)` tool and counts a successful call as a use
+  (`tools/skills_tool.py`, `bump_use`). The hub records one `skill_uses` row per run and skill when
+  such a call completes — a linked file of the same skill, or loading it again in the same run, is
+  the same use; a failed call and `skill_manage` (an edit) are not uses. Coding agents over ACP
+  name a tool call by title and kind only, so their skill use is not counted. Past use cannot be
+  rebuilt: the migration writes this install's start into `audit_counters`, and the report says
+  `counting_since`.
+- **Never used** is the enabled skills of the hub's Hermes in the covered profiles that no run
+  loaded in the period, `null` when the hub cannot see those skills (an external Hermes, a profile
+  Hermes lacks). The daily chart carries the six most used skills of the period and the rest as
+  `other`.
+- **"Show cost"** on the Usage page is the existing `Preferences.show_cost`, the same one the chat
+  uses; no new preference.
+
+Rejected: keeping `data` open on `getReport` (three clients would read a shape nobody declared);
+reading Hermes's own `skill_usage` counters (one number per skill with no profile, agent, session
+or day, and invisible for an external Hermes); a stored day column (it would freeze one calendar
+for every reader).
