@@ -5,7 +5,12 @@ import { randomInt } from 'node:crypto';
 import { and, eq, lt } from 'drizzle-orm';
 import type { ModuleDb } from '../../lib/db.js';
 import { HubError } from '../../lib/errors.js';
-import { registerPairedDevice, type DeviceRow, type PairedDeviceInput } from '../devices/index.js';
+import {
+  endPushForSessions,
+  registerPairedDevice,
+  type DeviceRow,
+  type PairedDeviceInput,
+} from '../devices/index.js';
 import { assertNotLocked, clearFailures, recordFailure } from './lockouts.js';
 import { appTokens, pairingCodes, users, type PairingConnection } from './schema.js';
 import { pairingStatus, type PairingRow, type UserRow } from './serialize.js';
@@ -150,6 +155,8 @@ export function claimPairing(db: ModuleDb, input: ClaimInput, now: number): Clai
         .set({ revokedAt: new Date(now) })
         .where(eq(appTokens.id, previousTokenId))
         .run();
+      // The old pairing's push registration goes with it; the app registers again.
+      endPushForSessions(t, [previousTokenId]);
     }
     t.update(appTokens).set({ deviceId: device.id }).where(eq(appTokens.id, tokenRow.id)).run();
     const claimed = t

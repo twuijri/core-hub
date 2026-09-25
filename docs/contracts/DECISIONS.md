@@ -2246,7 +2246,32 @@ Known limit: a hub that restarts while a request is pending leaves that request'
 `running` (the runner has no restart recovery); the request itself still expires on its next
 read. No push wakes a device that is not connected; it sees the request when it next connects.
 
-## 75. An agent's picture is a file beside the people's and profiles', one per agent for the hub
+## 75. `audit.getReport` loses its `logs` and `performance` kinds
+
+Since §51 the web's Logs and Performance read `audit.listLogLines` and `audit.getLivePerformance`,
+and §51 kept the old kinds "for the CLI and older clients". On 2026-09-26 the Android and iOS apps
+moved to the live endpoints too (Android had no Logs or Performance screen; iOS read the old
+kinds). Nothing in the repository asks for `logs` or `performance` any more — not the web, the
+CLI, the desktop shell or either app — and the apps only talk to hubs of their own version.
+Proposed here — owner to confirm:
+
+- **`audit.getReport` answers `usage` and `skills` only.** The `kind` enum (path and
+  `AuditReport.kind`) is `[usage, skills]`; asking for `logs` or `performance` is `400`. Both
+  kinds are a profile's own, so `X-Hub-Profile` is now the required `Profile` parameter, as on
+  every scoped operation. The `q` and `level` query parameters, which only the logs kind read, are
+  gone.
+- **The minute-by-minute sampler stops, and `performance_snapshots` is dropped** (migration
+  `0024`). Its rows fed only the old performance kind; Performance is measured when asked (§51).
+  The audit trail and job events the logs kind merged are unchanged — they are still written and
+  still read by everything else that reads them.
+- Swift and Kotlin clients are regenerated from the contract; the iOS Usage page is the only
+  caller left and passes its profile, as it did.
+
+Rejected: keeping the kinds deprecated (a shape nobody calls is a shape nobody tests); keeping the
+sampler for a future history screen (history is the live endpoint's `history`, and a table that
+fills itself for nobody is waste).
+
+## 76. An agent's picture is a file beside the people's and profiles', one per agent for the hub
 
 `agents.getAvatar` was 501 and `agents.update` refused any `avatar` "until attachments exist"
 (Phase 4, done). People and profiles already keep an uploaded picture as a file

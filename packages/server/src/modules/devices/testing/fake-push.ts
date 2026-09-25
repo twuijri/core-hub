@@ -150,6 +150,10 @@ export interface FakeFcm {
   assertions: string[];
   /** FCM answers `UNREGISTERED` for these tokens. */
   unregistered: Set<string>;
+  /** FCM answers `INVALID_ARGUMENT` "not a valid FCM registration token" for these. */
+  invalid: Set<string>;
+  /** FCM answers `INVALID_ARGUMENT` about the message itself (not the token) for these. */
+  badMessage: Set<string>;
 }
 
 export function fakeFcm(): FakeFcm {
@@ -158,6 +162,8 @@ export function fakeFcm(): FakeFcm {
     signIns: 0,
     assertions: [],
     unregistered: new Set(),
+    invalid: new Set(),
+    badMessage: new Set(),
     fetchImpl: (async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith('/token')) {
@@ -190,6 +196,22 @@ export function fakeFcm(): FakeFcm {
             },
           },
           { status: 404 },
+        );
+      }
+      const invalid = state.invalid.has(body.message.token);
+      if (invalid || state.badMessage.has(body.message.token)) {
+        return Response.json(
+          {
+            error: {
+              code: 400,
+              status: 'INVALID_ARGUMENT',
+              message: invalid
+                ? 'The registration token is not a valid FCM registration token'
+                : "Invalid value at 'message.data[0].value'",
+              details: [{ errorCode: 'INVALID_ARGUMENT' }],
+            },
+          },
+          { status: 400 },
         );
       }
       return Response.json({ name: `projects/${match[1]}/messages/${state.sent.length}` });

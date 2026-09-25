@@ -4,6 +4,7 @@ import type { ModuleDb } from '../../lib/db.js';
 import { HubError } from '../../lib/errors.js';
 import { newUlid } from '../../db/ids.js';
 import { decodeAvatarDataUrl, deleteAvatar, writeAvatar, type DecodedAvatar } from './avatars.js';
+import { endPushForOwners, endPushForSessions } from '../devices/index.js';
 import { hashPassword, verifyPassword } from './passwords.js';
 import {
   appTokens,
@@ -179,6 +180,32 @@ export function revokeToken(db: ModuleDb, tokenId: string, now: number): void {
     .set({ revokedAt: new Date(now) })
     .where(and(eq(appTokens.id, tokenId), isNull(appTokens.revokedAt)))
     .run();
+  // Whatever that sign-in registered for push is forgotten with it.
+  endPushForSessions(db, [tokenId]);
+}
+
+/**
+ * Is this `app_tokens` row still good: not revoked, not expired, and its person active? A
+ * phone's push registration lives as long as the sign-in that made it (devices lends this).
+ */
+export function tokenLive(db: ModuleDb, tokenId: string, now: number): boolean {
+  const row = db
+    .select({
+      revokedAt: appTokens.revokedAt,
+      expiresAt: appTokens.expiresAt,
+      userId: appTokens.userId,
+    })
+    .from(appTokens)
+    .where(eq(appTokens.id, tokenId))
+    .get();
+  if (!row || row.revokedAt) return false;
+  if (row.expiresAt && row.expiresAt.getTime() <= now) return false;
+  const user = db
+    .select({ status: users.status })
+    .from(users)
+    .where(eq(users.id, row.userId))
+    .get();
+  return user?.status === 'active';
 }
 
 /** Revokes every web session of the user except `keepTokenId` (password change). */
@@ -196,10 +223,16 @@ export function revokeOtherSessions(
         ne(appTokens.id, keepTokenId),
       )
     : and(eq(appTokens.userId, userId), eq(appTokens.kind, 'web'), isNull(appTokens.revokedAt));
-  db.update(appTokens)
+  const ended = db
+    .update(appTokens)
     .set({ revokedAt: new Date(now) })
     .where(where)
-    .run();
+    .returning({ id: appTokens.id })
+    .all();
+  endPushForSessions(
+    db,
+    ended.map((row) => row.id),
+  );
 }
 
 export function touchLogin(db: ModuleDb, userId: string, now: number): void {
@@ -380,6 +413,10 @@ export async function updateUserAsAdmin(
     if (Object.keys(patch).length > 0) {
       tx.update(users).set(patch).where(eq(users.id, target.id)).run();
     }
+    // A disabled person is signed out everywhere at once: nothing is pushed to their devices.
+    if (input.status === 'disabled' && target.status !== 'disabled') {
+      endPushForOwners(tx as ModuleDb, [target.id]);
+    }
     // Every other session of that person ends; the one making the change stays when it is
     // their own account, as on the Account page.
     if (passwordHash)
@@ -398,6 +435,8 @@ export function deleteUser(db: ModuleDb, actorId: string, target: UserRow): void
     throw new HubError('forbidden', { messageKey: 'auth.owner_immutable' });
   if (target.id === actorId) throw new HubError('forbidden', { messageKey: 'auth.self_immutable' });
   // app_tokens, workspace_members and pairing_codes cascade (schema.ts); avatar file is removed by the caller.
+  // Device rows are the devices module's and stay, but nothing is pushed to them any more.
+  endPushForOwners(db, [target.id]);
   db.delete(users).where(eq(users.id, target.id)).run();
 }
 

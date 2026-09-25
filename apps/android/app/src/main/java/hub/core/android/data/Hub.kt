@@ -1,6 +1,7 @@
 package hub.core.android.data
 
 import hub.core.client.api.AgentsApi
+import hub.core.client.api.AuditApi
 import hub.core.client.api.AuthApi
 import hub.core.client.api.DevicesApi
 import hub.core.client.api.MetaApi
@@ -47,6 +48,7 @@ class HubApis(hub: String, client: OkHttpClient) {
     val rooms = RoomsApi(base, client)
     val updates = UpdatesApi(base, client)
     val devices = DevicesApi(base, client)
+    val audit = AuditApi(base, client)
 }
 
 /** A failed call, with the hub's own `{ error, code }` when it sent one. */

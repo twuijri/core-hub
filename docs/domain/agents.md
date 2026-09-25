@@ -76,7 +76,7 @@ claims `installed` without a directory becomes `not_installed`.
 Indexes: `slug` unique; `adapter_id`.
 
 The agent's picture is not a column: an uploaded PNG or JPEG is the file
-`<DATA_DIR>/avatars/agents/<id>` (`avatars.ts`, contract decision §75); its type is read from
+`<DATA_DIR>/avatars/agents/<id>` (`avatars.ts`, contract decision §76); its type is read from
 its first bytes. No file, and the client draws the agent from its slug.
 
 ## agent_settings (scoped)

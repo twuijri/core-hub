@@ -10,7 +10,7 @@
 // `auth` imports this module (pairing creates the device row), so this module does not
 // import `auth`: what it needs from it — the route guards, revoking a token, reaching a
 // person's sockets — is lent by the composition root (`createDevicesModule`).
-import { and, asc, eq, gt } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, ne, or } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
 import { loadOpenApiDocument } from '@corehub/contracts';
@@ -81,6 +81,11 @@ export interface DevicesPorts {
   jobs(app: FastifyInstance): RequestJobs;
   /** A person's language, for the hub's own sentences in a request (auth). */
   userLanguage(app: FastifyInstance, userId: string): Language;
+  /**
+   * Is this `app_tokens` row (a sign-in session or a pairing token) still good — not revoked,
+   * not expired, its person active (auth)? A push registration lives only as long as it.
+   */
+  sessionLive(db: ModuleDb, tokenId: string, now: number): boolean;
 }
 
 /** Test seams: fakes for the push services, and permission to call 127.0.0.1. */
@@ -114,6 +119,7 @@ export function pushFor(app: FastifyInstance): PushService {
     dataDir: app.hub.config.dataDir,
     env: (app.hub.config as { push?: PushEnvInput }).push,
     sealer: lent.sealer(app),
+    sessionLive: (tokenId, at) => lent.sessionLive(requireSqlite(app.hub.database), tokenId, at),
     checkEndpoint: async (endpoint) => {
       if (!allowPrivate && !endpoint.startsWith('https://')) return 'the endpoint is not https';
       const verdict = await lent.checkAddress(endpoint, allowPrivate);
@@ -200,7 +206,50 @@ export function findDevice(db: ModuleDb, id: string): DeviceRow | null {
 }
 
 /** Nothing is pushed to a device that is gone: its push registration goes with it. */
-const REVOKED_PUSH = { pushProvider: 'none' as const, pushToken: null, pushRegisteredAt: null };
+const REVOKED_PUSH = {
+  pushProvider: 'none' as const,
+  pushToken: null,
+  pushRegisteredAt: null,
+  pushSessionId: null,
+};
+
+/**
+ * A sign-in ended (sign-out, a revoked token, a password change, a re-pair): the push
+ * registrations it made are forgotten, so nothing reaches a phone that is no longer signed
+ * in. A row registered before `push_session_id` existed answers to its pairing token.
+ * Returns the devices that lost their registration.
+ */
+export function endPushForSessions(db: ModuleDb, tokenIds: readonly string[]): DeviceRow[] {
+  if (tokenIds.length === 0) return [];
+  return db
+    .update(devices)
+    .set(REVOKED_PUSH)
+    .where(
+      and(
+        ne(devices.pushProvider, 'none'),
+        or(
+          inArray(devices.pushSessionId, [...tokenIds]),
+          and(isNull(devices.pushSessionId), inArray(devices.appTokenId, [...tokenIds])),
+        ),
+      ),
+    )
+    .returning()
+    .all();
+}
+
+/**
+ * A person can no longer sign in at all (disabled, deleted, the owner reset): every push
+ * registration of theirs goes, a browser's included.
+ */
+export function endPushForOwners(db: ModuleDb, userIds: readonly string[]): DeviceRow[] {
+  if (userIds.length === 0) return [];
+  return db
+    .update(devices)
+    .set(REVOKED_PUSH)
+    .where(and(ne(devices.pushProvider, 'none'), inArray(devices.ownerId, [...userIds])))
+    .returning()
+    .all();
+}
 
 /** Marks the device revoked when its pairing token is revoked; null when no device holds it. */
 export function revokeDeviceByToken(
@@ -599,6 +648,9 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             .set({
               pushProvider: input.provider,
               pushToken: push.sealToken(token),
+              // A phone's token lives as long as the sign-in that registered it. A browser's
+              // subscription is the browser's own: it stays until turned off or unlinked.
+              pushSessionId: input.provider === 'webpush' ? null : principal.tokenId,
               pushLocale: input.locale ?? principal.user.locale ?? 'ar',
               pushRegisteredAt: new Date(at),
               lastSeenAt: new Date(at),

@@ -66,7 +66,10 @@ object SettingsList {
         groups.map { (title, rows) -> title to rows.filter { Screens.visible(it, isAdmin) } }
 
     /** The pages the phone draws itself; the rest open the same page on the web. */
-    val native = setOf("account", "display", "notifications", "privacy", "this_device", "about", "theme", "workspaces", "users")
+    val native = setOf(
+        "account", "display", "notifications", "privacy", "this_device", "about", "theme", "workspaces", "users",
+        "logs", "performance",
+    )
 }
 
 /**
@@ -105,6 +108,8 @@ fun SettingsPageScreen(destination: String, shell: ShellViewModel, onOpen: (Rout
         "users" -> UsersPage()
         "privacy" -> PrivacyPage()
         "this_device" -> thisDevice()
+        "logs" -> LogsPage()
+        "performance" -> PerformancePage()
         else -> OnTheWebPage(destination)
     }
 }

@@ -127,6 +127,16 @@ devices.createPeerInvite	POST /peer-invites
 6. **الجدول `device_requests`** (الترحيل `0022`) بشكل العقد، ويحذف `device_commands` الذي لم يُكتب فيه شيء.
 7. أُزيل `message.created` من أحداث `respondRequest`: لا شيء يكتب الجواب في محادثة بعد.
 
+### المجموعة ٣ — صورة الوكيل (`agents.getAvatar`)
+**القرار (مقترح — للمالك أن يؤكّد؛ DECISIONS §76):**
+1. `agents.update` بـ`avatar: {kind: image, data_url}` يحفظ `<DATA_DIR>/avatars/agents/<id>` بقاعدة `auth` نفسها (المفكّك
+   نفسه: PNG أو JPEG، ٥١٢ ك.ب)؛ `generated` أو `null` يحذفها. صورة غير صالحة `400` ولا يُطبَّق شيء آخر من الطلب.
+2. يقرأ الوكيل `avatar: {kind: image, url: /api/v1/agents/<id>/avatar}`، و`agents.getAvatar` يعيد البايتات (`image/png` أو
+   `image/jpeg`؛ حُذف `image/svg+xml` من العقد: المركز لا يرسم صورة، والعميل يرسم المولَّدة من `seed`). بلا صورة: `404`.
+3. **بلا عمود ولا ترحيل**: وجود الملف هو الجواب، ونوعه من أول بايتاته. صف الوكيل للمركز كله، فالصورة واحدة لكل البروفايلات
+   كاسمه.
+4. لا زر في الويب لتعيينها بعد: لا سطح مخطَّط (بطاقة الوكيل بلا ورقة تحرير)؛ الواجهة البرمجية وCLI والهواتف تستطيع.
+
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 - **المجموعة ١:** `agents.getJourney` صار له وصف، ومثال من هرمز الحقيقي، وردّا `409` و`503`. المخطط `Journey`: `kind`
   ‏`skill | memory`، والحقول المطلوبة الجديدة `state` و`agent_created` و`memory_source` و`learned_at`، ووصف للمعرّفات
@@ -134,6 +144,8 @@ devices.createPeerInvite	POST /peer-invites
 - **المجموعة ٢:** أوصاف `devices.listRequests` و`createRequest` و`respondRequest` تقول الآن من يسأل ومن يجيب وماذا تحمل
   المهمة ومتى `403`/`404`/`409`/`400`؛ وحُذف `message.created` من `x-rt-events` لـ`respondRequest`. لا مخطط تغيّر.
   DECISIONS §74.
+- **المجموعة ٣:** `agents.getAvatar` له وصف، ونوعا الرد `image/png` و`image/jpeg` (بدل `image/svg+xml`)؛ و`AgentPatch.avatar`
+  له وصف (يحفظ أو يحذف، و`400` لصورة غير صالحة). DECISIONS §76.
 
 ## الملفات والتأثير
 - **المجموعة ١:** `packages/server/src/modules/agents/hermes-journey.ts` (جديد: السؤال والتحويل)،
@@ -146,6 +158,10 @@ devices.createPeerInvite	POST /peer-invites
   (يُعير `jobRunnerFor` ولغة الشخص)، `packages/server/src/i18n/{ar,en}.json` (خمس جمل)،
   `packages/server/tests/unit/device-requests.test.ts` (جديد)، `packages/contracts/openapi.yaml`، `docs/domain/devices.md`
   و`docs/domain/README.md`، `docs/contracts/DECISIONS.md` (§74)، `docs/STATUS.md` (300 من 315؛ `devices` 16 من 23).
+- **المجموعة ٣:** `packages/server/src/modules/agents/avatars.ts` (جديد: الملفات ونوعها من بايتاتها)، `…/agents/service.ts`
+  (قبول الصورة وحذفها بدل الرفض)، `…/agents/serialize.ts` (`kind: image` حين يوجد الملف)، `…/agents/index.ts` (المسار)،
+  `…/auth/index.ts` (يصدّر `decodeAvatarDataUrl`)، `…/agents/avatar.routes.test.ts` (جديد)، `packages/contracts/openapi.yaml`،
+  `docs/domain/agents.md`، `docs/contracts/DECISIONS.md` (§76)، `docs/STATUS.md` (301 من 315؛ `agents` 52 من 59).
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 كلها عبر `mj-run`، محليًا، على ما مسّته كل مجموعة فقط؛ الحزم الكاملة يشغّلها CI على #144.
@@ -213,6 +229,27 @@ $ pnpm --filter @corehub/server typecheck   # بلا أخطاء
 $ pnpm lint                      → All matched files use Prettier code style!
 $ pnpm i18n:check                → i18n:check  OK
 ```
+**المجموعة ٣ (صورة الوكيل):**
+```
+$ npx vitest run --project unit src/modules/agents/avatar.routes.test.ts src/modules/agents/agents.test.ts \
+    tests/unit/status.test.ts src/modules/agents/journey.routes.test.ts
+ Test Files  4 passed (4)
+      Tests  36 passed (36)
+
+# الاختبار الجديد على الشيفرة القديمة (git stash)
+     × stores an uploaded picture, serves it, and goes back to the drawn one 1107ms
+     × refuses a picture that is not a PNG or JPEG data URL, and changes nothing 758ms
+AssertionError: expected 501 to be 404 // Object.is equality
+AssertionError: expected 409 to be 400 // Object.is equality
+      Tests  2 failed | 1 passed (3)
+
+$ npx vitest run --project contract tests/contract/contract.test.ts
+      Tests  316 passed (316)
+$ pnpm --filter @corehub/server typecheck   # بلا أخطاء
+$ pnpm lint                      → All matched files use Prettier code style!
+$ pnpm contracts:check-clients   → check-clients  OK — 576 client file(s) scanned, 222 contract path(s) known.
+```
+
 توليد الترحيل: drizzle-kit يسأل تفاعليًا «إعادة تسمية أم جدول جديد؟» حين يختفي جدول ويظهر آخر، فوُلّد على خطوتين (حذف
 `device_commands` ثم إنشاء `device_requests`) ودُمجتا يدويًا في `0022` بلقطة الخطوة الثانية؛ التوليد بعدها لا يجد فرقًا.
 
@@ -227,6 +264,8 @@ $ pnpm i18n:check                → i18n:check  OK
   عكسي بسيط. حدود معروفة: مركز يُعاد تشغيله وطلبٌ معلّق تبقى مهمته `running` (مشغّل المهام لا يستعيد بعد إعادة التشغيل)،
   والطلب نفسه ينتهي عند أول قراءة. لا إشعار دفع يوقظ جهازًا غير متصل؛ يرى الطلب حين يتصل. الموقع لا يدخل المهمة
   ولا حدثًا يصل إلى غير صاحبه وجهازه.
+- **المجموعة ٣:** ملف في مجلد البيانات، لا يمس القاعدة. الرجوع: إعادة رفض `avatar` وحذف المسار؛ الملفات تبقى بلا ضرر.
+  الصورة لا تُنقل مع تصدير البروفايل (صف الوكيل للمركز لا للبروفايل).
 
 ## التسليم والخطوة التالية
 الجرد مكتوب؛ المجموعة الأولى قيد البناء.

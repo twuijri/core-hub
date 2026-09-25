@@ -14,6 +14,7 @@
  * (`connection`) and its capabilities as `{ kind, enabled, consent_at }`.
  *
  * Cross-module id columns: devices.app_token_id -> auth.app_tokens,
+ * devices.push_session_id -> auth.app_tokens,
  * device_requests.session_id -> sessions.sessions, device_requests.run_id -> sessions.runs,
  * device_requests.job_id -> audit.jobs.
  */
@@ -100,6 +101,13 @@ export const devices = sqliteTable(
     pushToken: text('push_token'),
     pushLocale: text('push_locale', { length: 8 }),
     pushRegisteredAt: timestampMs('push_registered_at'),
+    /**
+     * The `auth.app_tokens` row (a sign-in session or the pairing token) that registered the
+     * push token. The registration lives only as long as it: when that session ends, however
+     * it ends, nothing more is pushed to this device
+     * (docs/changes/2026-09-26-twuijri-push-cleanup-mobile-logs.md).
+     */
+    pushSessionId: ulid('push_session_id'),
     capabilities: json<DeviceCapability[]>('capabilities').notNull().default(EMPTY_ARRAY),
     status: text('status', { enum: DEVICE_STATUSES }).notNull().default('paired'),
     /** The device token issued at pairing (auth module). */

@@ -19,6 +19,8 @@
 - أيقونات التطبيقات من شعار كور هب: iOS (`AppIcon` مع الداكن والملوّن)، أندرويد (التكيفية والإشعار)، سطح المكتب (`.icns` و`.ico` ولينكس والصينية) و`apple-touch-icon` — `feat/app-icons` — `docs/changes/2026-09-26-twuijri-app-icons.md`
 - جرد ردود ‎501‎ (٢٠ عملية: ٦ تُبنى، ٥ تنتظر قرار المالك، ٩ مرشّحة للحذف) ورحلة الوكيل `agents.getJourney` من رسم التعلّم في هرمز نفسه — `feat/close-501-stubs` — `docs/changes/2026-09-26-twuijri-close-501-stubs.md`
 - طلبات قدرات الجهاز (`/device-requests`): يسأل الشخص جهازه، يسمع الجهاز وحده ويجيب مرة، والمهمة تتبعه بلا الموقع؛ جدول `device_requests` (الترحيل `0022`) — `feat/close-501-stubs` — `docs/changes/2026-09-26-twuijri-close-501-stubs.md`
+- تسجيل الدفع يُمسح حين ينهي المركز الجلسة التي سجّلته (وFCM يقول إن الرمز غير صالح)، وسجلات الجوال وأداؤه من المسارين الحيين، وإزالة نوعي `logs`/`performance` من `audit.getReport` (§75) — `feat/push-cleanup-mobile-logs` — `docs/changes/2026-09-26-twuijri-push-cleanup-mobile-logs.md`
+- صورة الوكيل: `agents.update` يحفظ صورة PNG/JPEG و`agents.getAvatar` يعيدها (ملف بجانب صور الأشخاص، بلا ترحيل) — `feat/close-501-stubs` — `docs/changes/2026-09-26-twuijri-close-501-stubs.md`
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 انظر سجل كل مهمة.

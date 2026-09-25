@@ -312,7 +312,14 @@ export function fcmSender(credentials: FcmCredentials, options: FcmOptions = {})
           body.error?.details?.find((detail) => detail.errorCode)?.errorCode ??
           body.error?.status ??
           '';
-        const gone = response.status === 404 || code === 'UNREGISTERED';
+        // `UNREGISTERED`: the app was uninstalled or the token deleted. `INVALID_ARGUMENT` is
+        // a dead token only when FCM says the token itself is not valid — it also answers a
+        // message the hub built wrong, and forgetting a good token over that would be worse.
+        // `SENDER_ID_MISMATCH` is the hub's own settings (another Firebase project): kept.
+        const gone =
+          response.status === 404 ||
+          code === 'UNREGISTERED' ||
+          (code === 'INVALID_ARGUMENT' && /registration token/i.test(body.error?.message ?? ''));
         return failed(
           `FCM: ${code || response.status}${body.error?.message ? ` ${body.error.message}` : ''}`,
           gone,

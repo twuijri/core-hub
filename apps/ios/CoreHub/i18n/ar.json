@@ -352,5 +352,52 @@
     "stop": "أوقف الإملاء",
     "denied": "لا يُسمح لكور هب باستخدام الميكروفون أو التعرّف على الكلام. اسمح بهما من إعدادات الآيفون.",
     "unavailable": "الإملاء غير متاح بهذه اللغة على هذا الهاتف."
+  },
+  "tools": {
+    "refresh": "تحديث"
+  },
+  "logs": {
+    "kept": "آخر أسطر الهب وكل بوابات Hermes، محفوظة في ذاكرة الهب — إعادة التشغيل تمسحها. اسحب للأسفل لتجلب الأحدث.",
+    "source": "المصدر",
+    "level": "المستوى",
+    "empty": "لا أسطر بعد.",
+    "from_hub": "الهب",
+    "from_tui": "Hermes · بوابة TUI",
+    "from_hermes": "Hermes · {profile}",
+    "source_all": "الكل",
+    "source_hub": "الهب",
+    "source_hermes": "Hermes",
+    "source_errors": "الأخطاء فقط",
+    "level_debug": "كل شيء",
+    "level_info": "معلومات فما فوق",
+    "level_warn": "التحذيرات والأخطاء",
+    "level_error": "الأخطاء",
+    "short_debug": "تفصيل",
+    "short_info": "معلومة",
+    "short_warn": "تحذير",
+    "short_error": "خطأ"
+  },
+  "perf": {
+    "every": "يتحدّث كل {count} ثوانٍ · قيس {time}",
+    "host": "الجهاز",
+    "cpu": "المعالج",
+    "cores": "{value} · {count} أنوية",
+    "memory": "الذاكرة",
+    "of": "{used} من {total}",
+    "load": "الحِمل (١ · ٥ · ١٥ دقيقة)",
+    "no_proc": "لا يوجد ‎/proc‎ على هذا الجهاز، لذا تظهر عمليات Hermes بلا أرقامها.",
+    "hub": "عملية الهب",
+    "rss": "الذاكرة (RSS)",
+    "heap": "{rss} · الكومة {heap}",
+    "lag": "تأخّر حلقة الأحداث",
+    "ms": "{count} ملّي ثانية",
+    "uptime": "مدة التشغيل",
+    "hermes": "عمليات Hermes",
+    "no_hermes": "لا يشغّل الهب أي عملية Hermes الآن.",
+    "kind_tui": "بوابة TUI (المحادثات)",
+    "kind_dashboard": "hermes serve",
+    "kind_gateway": "بوابة المراسلة · {profile}",
+    "profiles": "البروفايلات",
+    "profile_counts": "{runs} تشغيلات جارية · {sessions} محادثات · {sockets} اتصالات"
   }
 }

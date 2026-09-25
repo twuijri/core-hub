@@ -1,11 +1,9 @@
 /**
- * The four reports behind the Logs, Usage, Performance and Skills screens
- * (`audit.getReport`).
+ * The reports behind `audit.getReport`: `usage` and `skills`, one profile each.
  *
- * The contract leaves `data` open (`additionalProperties: true`) and says Phase 4 fixes
- * its shape. This file is that fixing, and the rule it follows is the hub's rule
- * everywhere else: **a report only ever contains what was actually recorded.** A period
- * with no runs is a report of zeros, not an absent report; a number nobody measured is
+ * The contract leaves `data` open (`additionalProperties: true`). The rule it follows is the
+ * hub's rule everywhere else: **a report only ever contains what was actually recorded.** A
+ * period with no runs is a report of zeros, not an absent report; a number nobody measured is
  * absent, not zero.
  *
  * - **usage** (workspace): the ledger `audit.usage_records`, which every finished run
@@ -13,28 +11,23 @@
  *   agent and by day, so a screen can draw any of the three without asking again.
  *   `cost_source` travels with the numbers because an estimate must never be shown as an
  *   invoice (see `modules/models/service.ts` §costOf).
- * - **logs** (global, admin): the audit trail and the job events, merged into one
- *   time-ordered list. Audit events carry no level of their own — they are things that
- *   happened, not complaints — so they read as `info`, while a job event keeps the level
- *   it was written with. That is why `level` filters the merged list rather than one table.
- * - **performance** (global, admin): the snapshots the sampler writes, plus this
- *   process's own numbers at the moment of asking.
  * - **skills**: built by `analytics.ts` from `skill_uses` (contract decision §50) and answered
  *   by the route itself, so `build` has nothing to say about it.
+ *
+ * `logs` and `performance` were here until contract decision §75: the Logs and Performance
+ * screens of every client read the live `audit.listLogLines` and `audit.getLivePerformance`
+ * (§51), and nothing asked for the old ones any more.
  */
-import { and, desc, eq, gte, inArray, like, lte, sql } from 'drizzle-orm';
+import { and, eq, gte, lte } from 'drizzle-orm';
 import type { ModuleDb } from '../../lib/db.js';
-import { auditEvents, jobEvents, jobs, performanceSnapshots, usageRecords } from './schema.js';
+import { usageRecords } from './schema.js';
 
-export type ReportKind = 'logs' | 'usage' | 'performance' | 'skills';
-export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
+export type ReportKind = 'usage' | 'skills';
 
 export interface ReportRequest {
   kind: ReportKind;
   workspace: string | null;
   days: number;
-  q?: string | undefined;
-  level?: LogLevel | undefined;
   now?: number;
 }
 
@@ -84,8 +77,6 @@ export class ReportService {
       generated_at: new Date(now).toISOString(),
     };
     if (request.kind === 'usage') return { ...shell, data: this.usage(request.workspace, period) };
-    if (request.kind === 'logs') return { ...shell, data: this.logs(request, period) };
-    if (request.kind === 'performance') return { ...shell, data: this.performance(period, now) };
     // `skills` is `analytics.ts`'s; the route answers it before asking here.
     return null;
   }
@@ -149,150 +140,6 @@ export class ReportService {
       by_agent: listOf(byAgent, 'agent_id'),
       by_day: listOf(byDay, 'date').sort((a, b) => String(a.date).localeCompare(String(b.date))),
     };
-  }
-
-  // ------------------------------------------------------------------- logs
-
-  private logs(request: ReportRequest, period: PeriodWindow): Record<string, unknown> {
-    const needle = request.q?.trim();
-    const auditRows = this.db
-      .select()
-      .from(auditEvents)
-      .where(
-        and(
-          gte(auditEvents.createdAt, new Date(period.from)),
-          lte(auditEvents.createdAt, new Date(period.to)),
-          needle ? like(auditEvents.action, `%${needle}%`) : undefined,
-        ),
-      )
-      .orderBy(desc(auditEvents.createdAt))
-      .limit(500)
-      .all();
-
-    const jobRows = this.db
-      .select({
-        at: jobEvents.createdAt,
-        level: jobEvents.level,
-        message: jobEvents.message,
-        jobId: jobEvents.jobId,
-        kind: jobs.kind,
-      })
-      .from(jobEvents)
-      .leftJoin(jobs, eq(jobs.id, jobEvents.jobId))
-      .where(
-        and(
-          gte(jobEvents.createdAt, new Date(period.from)),
-          lte(jobEvents.createdAt, new Date(period.to)),
-          needle ? like(jobEvents.message, `%${needle}%`) : undefined,
-        ),
-      )
-      .orderBy(desc(jobEvents.createdAt))
-      .limit(500)
-      .all();
-
-    const entries = [
-      ...auditRows.map((row) => ({
-        at: row.createdAt.toISOString(),
-        level: 'info' as LogLevel,
-        source: 'audit',
-        action: row.action,
-        message: row.summary ?? row.action,
-        actor: { kind: row.actorKind, id: row.actorId },
-        entity: { kind: row.entityKind, id: row.entityId },
-        workspace: row.workspace,
-      })),
-      ...jobRows.map((row) => ({
-        at: row.at.toISOString(),
-        // `progress` is a job's own level and not a log level; it reads as debug.
-        level: (row.level === 'progress' ? 'debug' : row.level) as LogLevel,
-        source: 'job',
-        action: row.kind ?? 'job',
-        message: row.message ?? '',
-        actor: { kind: 'system', id: null },
-        entity: { kind: 'job', id: row.jobId },
-        workspace: null,
-      })),
-    ]
-      .filter((entry) => !request.level || entry.level === request.level)
-      .sort((a, b) => b.at.localeCompare(a.at))
-      .slice(0, 500);
-
-    return { entries, truncated: entries.length === 500 };
-  }
-
-  // ------------------------------------------------------------ performance
-
-  private performance(period: PeriodWindow, now: number): Record<string, unknown> {
-    const snapshots = this.db
-      .select()
-      .from(performanceSnapshots)
-      .where(
-        and(
-          gte(performanceSnapshots.capturedAt, new Date(period.from)),
-          lte(performanceSnapshots.capturedAt, new Date(period.to)),
-        ),
-      )
-      .orderBy(desc(performanceSnapshots.capturedAt))
-      .limit(500)
-      .all();
-
-    const memory = process.memoryUsage();
-    return {
-      // What this process knows about itself right now, measured and not stored.
-      current: {
-        at: new Date(now).toISOString(),
-        uptime_seconds: Math.floor(process.uptime()),
-        rss_bytes: memory.rss,
-        heap_used_bytes: memory.heapUsed,
-        node_version: process.version,
-      },
-      samples: snapshots.map((row) => ({
-        at: row.capturedAt.toISOString(),
-        cpu_percent: row.cpuPercent,
-        memory_bytes: row.memoryBytes,
-        disk_free_bytes: row.diskFreeBytes,
-        db_bytes: row.dbBytes,
-        active_runs: row.activeRuns,
-        queued_jobs: row.queuedJobs,
-        connected_clients: row.connectedClients,
-      })),
-    };
-  }
-
-  /** One measurement of this hub, for the Performance screen's history. */
-  sample(input: {
-    id: string;
-    ownerId: string;
-    at?: number;
-    activeRuns?: number;
-    queuedJobs?: number;
-    connectedClients?: number;
-    dbBytes?: number | null;
-  }): void {
-    const memory = process.memoryUsage();
-    this.db
-      .insert(performanceSnapshots)
-      .values({
-        id: input.id,
-        ownerId: input.ownerId,
-        capturedAt: new Date(input.at ?? Date.now()),
-        memoryBytes: memory.rss,
-        dbBytes: input.dbBytes ?? null,
-        activeRuns: input.activeRuns ?? 0,
-        queuedJobs: input.queuedJobs ?? 0,
-        connectedClients: input.connectedClients ?? 0,
-      })
-      .run();
-  }
-
-  /** How many jobs are waiting right now — the one number a sampler cannot guess. */
-  queuedJobs(): number {
-    const row = this.db
-      .select({ n: sql<number>`count(*)` })
-      .from(jobs)
-      .where(inArray(jobs.status, ['queued', 'running']))
-      .get();
-    return row?.n ?? 0;
   }
 }
 

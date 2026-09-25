@@ -23,7 +23,7 @@ words name the same things in a table, a route and a realtime event.
   ADR 0005 calls admin-only or host-level: `workspaces`, `users`,
   `app_tokens`, `pairing_codes`, `login_lockouts`, `agent_adapters`, `agents`,
   `devices`, `release_channels`, `releases`, `channel_subscriptions`,
-  `push_credentials`, `performance_snapshots`, `plugins`, `plugin_tools`.
+  `push_credentials`, `plugins`, `plugin_tools`.
   Three more carry a **nullable** `workspace` because the same table records
   both hub-level and workspace-level facts: `audit_events`, `jobs`,
   `job_events`.

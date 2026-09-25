@@ -25,6 +25,7 @@ import {
   requireWorkspace,
   revalidateSockets,
   revokeToken,
+  tokenLive,
   type ProfileArchiveRuntime,
   type ProfileTransferPorts,
 } from './auth/index.js';
@@ -144,6 +145,7 @@ export const devicesModule = createDevicesModule({
   jobs: (app) => jobRunnerFor(app),
   userLanguage: (app, userId) =>
     findUser(requireSqlite(app.hub.database), userId)?.locale === 'en' ? 'en' : 'ar',
+  sessionLive: (db, tokenId, now) => tokenLive(db, tokenId, now),
 });
 
 /** A notice that passed the person's push switch and quiet hours goes to their devices. */
