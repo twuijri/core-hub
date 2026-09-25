@@ -102,9 +102,15 @@ its approval.
   (the sidebar), the profile switcher at its top, the chats list with its «all profiles» filter,
   archive filter and search; the conversation with realtime streaming (resume with `after_seq`),
   Markdown and code, tool-call cards, approvals and the agent's questions, the thinking indicator;
-  Arabic (RTL) and English. Search, Agents, Tasks, Schedules and Settings say they are not on the
-  phone yet. The generated Kotlin client reads all 219 response examples of the contract. CI builds
-  the debug APK (`.github/workflows/android.yml`); nothing is published.
+  Arabic (RTL) and English. The generated Kotlin client reads all 219 response examples of the
+  contract. CI builds the debug APK (`.github/workflows/android.yml`); nothing is published.
+  Part 2 (2026-09-25): search across every profile (a global-agent hit opens the global agent),
+  the Agents cards and each agent's pages (read-only), the Tasks board one column at a time (move,
+  assign, start, open the conversation), Schedules (run now, pause, resume, history), and Settings
+  as a list: Account, Display, the notifications inbox, Privacy, This device (the hub connection),
+  About, Theme, Profiles and Users on the phone; the other pages open the same page on the web.
+  `corehub://open/<path>` opens the page the web path names (`surfaceRoutes.android`), and a
+  parity test checks the app against `navigation.json`.
 - Desktop and iOS: not started (ADR 0007, ADR 0009).
 
 ## Name
