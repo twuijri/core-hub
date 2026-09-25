@@ -600,7 +600,9 @@ export class RunEngine {
           if (!state.fallback) break;
           const { answered, failed } = state.fallback;
           store.updateRun(scope.workspace, run.runId, {
-            modelLabel: answered.provider ? `${answered.provider}/${answered.model}` : answered.model,
+            modelLabel: answered.provider
+              ? `${answered.provider}/${answered.model}`
+              : answered.model,
             provider: answered.provider,
             timing: { turns: state.turns, fallback: { failed } },
           });

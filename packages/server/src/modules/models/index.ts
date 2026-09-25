@@ -7,14 +7,11 @@
  * `models.putModel`, `models.deleteModel`, `models.listCatalogue`, `models.getDefaults`,
  * `models.setDefaults`, `models.listEnsembles`, `models.createEnsemble`,
  * `models.updateEnsemble`, `models.deleteEnsemble`, `models.getSpeech`,
- * `models.updateSpeech`, `models.listVoices`, `models.synthesize`.
+ * `models.updateSpeech`, `models.listVoices`, `models.synthesize`, and — through Hermes's
+ * own server, where the hub supervises Hermes (contract decision §50) —
+ * `models.startProviderSignIn`, `models.getProviderSignIn`, `models.completeProviderSignIn`.
  *
  * Still documented 501 stubs, with the reason:
- * - `models.startProviderSignIn`, `models.getProviderSignIn`,
- *   `models.completeProviderSignIn` — no provider in the bundled catalogue authenticates
- *   by OAuth device code. Every one of them takes an API key, and answering `201` with
- *   an invented `verification_url` would be a lie the client would render. The operations
- *   land with the first OAuth provider (Anthropic's subscription sign-in, GitHub Copilot).
  * - `models.transcribe` — the audio arrives as `multipart/form-data` and the hub has no
  *   multipart reader wired (`packages/server` deliberately has one body parser). Adding
  *   one is its own change; until then the operation says so rather than returning an
@@ -46,6 +43,7 @@ import {
 import { auditFor, jobRunnerFor } from '../audit/index.js';
 import {
   agentRunnerFor,
+  hermesDashboardFor,
   hermesRuntimeFor,
   namedHermesProfiles,
   registerAgentModelsPort,
@@ -54,6 +52,7 @@ import {
 import { DataKeyRing } from './crypto.js';
 import { SecretStore } from './secrets.js';
 import { roleForAdapter } from './defaults.js';
+import { hermesSignInRuntime, type SignInRuntime } from './sign-in.js';
 import {
   ModelsService,
   type HermesTarget,
@@ -88,6 +87,8 @@ export type {
   TestOutcome,
 } from './service.js';
 export { LOOPBACK_ALIAS, hostInfo } from './service.js';
+export { hermesSignInRuntime, signInStatusOf } from './sign-in.js';
+export type { SignInPoll, SignInRuntime, SignInStarted } from './sign-in.js';
 export { DataKeyRing, MASKED, hintOf, isMask, maskSecret } from './crypto.js';
 export type { SealedSecret } from './crypto.js';
 export { SecretStore } from './secrets.js';
@@ -142,6 +143,11 @@ export interface ModelsOverrides {
    * 0 so a restart is one macrotask away instead of a second and a half.
    */
   restartDelayMs?: number;
+  /**
+   * The runtime that performs provider sign-ins (contract decision §50). Tests hand a scripted
+   * one; absent, it is Hermes's own server where the hub supervises Hermes.
+   */
+  signIn?: SignInRuntime | null;
 }
 
 let pendingOverrides: ModelsOverrides | null = null;
@@ -212,6 +218,15 @@ function contextOf(app: FastifyInstance): ModelsService {
     },
     ...(own.fetchImpl ? { fetchImpl: own.fetchImpl } : {}),
     ...(own.restartDelayMs === undefined ? {} : { restartDelayMs: own.restartDelayMs }),
+    // Hermes signs in to a provider account through its own server (ADR 0015), which only a
+    // hub that supervises Hermes runs (decision §50).
+    signIn: () => {
+      if (own.signIn !== undefined) return own.signIn;
+      const dashboard = hermesDashboardFor(app);
+      return dashboard
+        ? hermesSignInRuntime((method, route, body) => dashboard.request(method, route, body))
+        : null;
+    },
   });
   contexts.set(hub.io, service);
   return service;
@@ -620,6 +635,37 @@ export const modelsModule = defineModule({
       },
     });
 
+    // ---------------------------------------------- provider sign-in (§50)
+
+    defineRoute(app, deps, {
+      operationId: 'models.startProviderSignIn',
+      handler: async (request, { params }, reply: FastifyReply) => {
+        const { service, scope, actor } = enter(request);
+        const signIn = await service.startSignIn(scope, actor, params.provider_id as string);
+        return reply.code(201).send(signIn);
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.getProviderSignIn',
+      handler: (request, { params }) => {
+        const { service, scope } = enter(request);
+        return service.pollSignIn(scope, params.provider_id as string, params.sign_in_id as string);
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.completeProviderSignIn',
+      handler: (request, { params }) => {
+        const { service, scope } = enter(request);
+        return service.completeSignIn(
+          scope,
+          params.provider_id as string,
+          params.sign_in_id as string,
+        );
+      },
+    });
+
     // ------------------------------------------------- the documented gaps
 
     /**
@@ -628,9 +674,6 @@ export const modelsModule = defineModule({
      * client gets the reason, not just "not implemented yet".
      */
     const gaps: Record<string, string> = {
-      'models.startProviderSignIn': 'models.signin.not_implemented',
-      'models.getProviderSignIn': 'models.signin.not_implemented',
-      'models.completeProviderSignIn': 'models.signin.not_implemented',
       'models.transcribe': 'models.transcribe.not_implemented',
     };
     for (const [operationId, messageKey] of Object.entries(gaps)) {

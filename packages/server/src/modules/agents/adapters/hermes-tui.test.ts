@@ -7,7 +7,12 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { createInterface } from 'node:readline';
 import { describe, expect, it } from 'vitest';
-import { HermesTuiSession, stdioTuiChannel, type Spawned } from './hermes-tui.js';
+import {
+  HermesTuiSession,
+  parseFallbackNote,
+  stdioTuiChannel,
+  type Spawned,
+} from './hermes-tui.js';
 import type { AgentEvent } from './types.js';
 
 type Json = Record<string, unknown>;
@@ -546,5 +551,105 @@ describe('Hermes over the TUI gateway', () => {
     // Gone for callers at once, even while its last words are still being read.
     expect(channel.alive).toBe(false);
     expect(await reason).toBe('the Hermes TUI gateway exited (code 0: broken stdout pipe)');
+  });
+});
+
+describe('Hermes moving down its fallback chain (contract decision §49)', () => {
+  const chain = [
+    { providerId: 'P2', provider: 'openai-codex', slug: 'openai-codex', model: 'gpt-5.5' },
+  ];
+
+  function answeringOn(model: string, notes: string[]) {
+    return fakeGateway((method, _params, api) => {
+      if (method === 'session.create') return { session_id: 's', stored_session_id: 'st' };
+      if (method === 'prompt.submit') {
+        setImmediate(() => {
+          for (const text of notes) api.event('s', 'status.update', { kind: 'status', text });
+          api.event('s', 'message.delta', { text: 'answered' });
+          api.event('s', 'message.complete', {
+            text: 'answered',
+            status: 'complete',
+            usage: { model, input: 5, output: 1 },
+          });
+        });
+        return { status: 'streaming' };
+      }
+      return {};
+    });
+  }
+
+  it("names the switch in the hub's words, with Hermes's reason", async () => {
+    const gateway = answeringOn('gpt-5.5', [
+      '⚠️ Model fallback: gemini-3.8-flash-high via corehub-proxy unavailable (HTTP 503: auth_unavailable); using gpt-5.5 via openai-codex.',
+    ]);
+    const session = await HermesTuiSession.open(channelOver(gateway), null);
+    const reading = collect(session, terminal);
+    await session.send({
+      text: 'hi',
+      model: 'gemini-3.8-flash-high',
+      modelProvider: 'corehub-proxy',
+      modelProviderSlug: 'proxy',
+      fallbacks: chain,
+    });
+    const events = await reading;
+    const fallback = events.find((e) => e.type === 'model.fallback');
+    expect(fallback).toEqual({
+      type: 'model.fallback',
+      failed: [
+        {
+          model: 'gemini-3.8-flash-high',
+          provider: 'proxy',
+          code: null,
+          error: 'HTTP 503: auth_unavailable',
+        },
+      ],
+      answered: { model: 'gpt-5.5', provider: 'openai-codex' },
+    });
+    // Said before the turn ends, so the run is the answering model's when it does.
+    expect(events.map((e) => e.type).indexOf('model.fallback')).toBeLessThan(
+      events.map((e) => e.type).indexOf('run.completed'),
+    );
+  });
+
+  it('reads a switch from the usage when Hermes said nothing about it', async () => {
+    const gateway = answeringOn('gpt-5.5', []);
+    const session = await HermesTuiSession.open(channelOver(gateway), null);
+    const reading = collect(session, terminal);
+    await session.send({
+      text: 'hi',
+      model: 'primary-model',
+      modelProvider: 'corehub-proxy',
+      modelProviderSlug: 'proxy',
+      fallbacks: chain,
+    });
+    const fallback = (await reading).find((e) => e.type === 'model.fallback');
+    expect(fallback).toMatchObject({
+      failed: [{ model: 'primary-model', provider: 'proxy', code: null, error: null }],
+      answered: { model: 'gpt-5.5', provider: 'openai-codex' },
+    });
+  });
+
+  it('says nothing when the chosen model answered', async () => {
+    const gateway = answeringOn('primary-model', []);
+    const session = await HermesTuiSession.open(channelOver(gateway), null);
+    const reading = collect(session, terminal);
+    await session.send({ text: 'hi', model: 'primary-model', fallbacks: chain });
+    expect((await reading).some((e) => e.type === 'model.fallback')).toBe(false);
+  });
+
+  it("reads Hermes's line back into its parts, and nothing else", () => {
+    expect(
+      parseFallbackNote(
+        '⚠️ Model fallback: a/b-1.5 via openrouter unavailable (rate limit (429)); using c via nous. Primary retry eligible in ~30 s; recovery is not guaranteed.',
+      ),
+    ).toEqual({
+      from: 'a/b-1.5',
+      fromProvider: 'openrouter',
+      reason: 'rate limit (429)',
+      to: 'c',
+      toProvider: 'nous',
+    });
+    expect(parseFallbackNote('✓ Context compression complete')).toBeNull();
+    expect(parseFallbackNote(null)).toBeNull();
   });
 });
