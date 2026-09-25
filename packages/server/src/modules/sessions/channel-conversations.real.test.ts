@@ -98,12 +98,7 @@ describe.skipIf(!image)(
         );
       });
     const seed = (which: string) =>
-      inImage(PYTHON, [
-        '-c',
-        SEED,
-        which === 'designer' ? '/hh/profiles/designer' : '/hh',
-        which,
-      ]);
+      inImage(PYTHON, ['-c', SEED, which === 'designer' ? '/hh/profiles/designer' : '/hh', which]);
 
     const spawnImpl: DashboardSpawner = (_command, args, options) => {
       const name = `corehub-channels-real-${process.pid}-${containers.length}`;
