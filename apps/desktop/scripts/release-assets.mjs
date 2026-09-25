@@ -3,12 +3,16 @@
 // notes (docs/RELEASING.md). Used by package.mjs (the MSIX version) and by the release workflow
 // (.github/workflows/publish-release.yml):
 //
-//   node scripts/release-assets.mjs collect <version> <artifacts dir> <out dir>
+//   node scripts/release-assets.mjs collect <version> <artifacts dir> <out dir> [--without=<key>]
 //       finds each release file in the downloaded workflow artifacts and copies it to <out dir>
 //       under its release name; fails when one is missing.
 //   node scripts/release-assets.mjs notes <tag> <generated notes file> <out file> [repository]
+//                                         [--without=<key>]
 //       writes the release notes: downloads, the SmartScreen step, and the merged pull requests
 //       GitHub lists for the tag (its "generate release notes" answer), kept short.
+//
+// `--without=windows-msix` is for a tag whose code predates the MSIX (v1.1.0): its release has
+// no Store package, and the notes say so.
 //
 // The desktop app's update check (src/shared/updates.ts, assetFor) picks the installer for its
 // platform from these names; tests/unit/release-assets.test.ts keeps the two in step.
@@ -101,15 +105,16 @@ function walk(dir) {
 
 /**
  * Copies each release file from the downloaded artifacts to `to`, under its release name.
- * @param {{ version: string, from: string, to: string }} options
+ * @param {{ version: string, from: string, to: string, without?: string[] }} options
  * @returns {string[]} the files written
  */
-export function collect({ version, from, to }) {
+export function collect({ version, from, to, without = [] }) {
   const files = walk(from);
   const missing = [];
   const written = [];
   mkdirSync(to, { recursive: true });
   for (const asset of releaseAssets(version)) {
+    if (without.includes(asset.key)) continue;
     const found = files.filter((f) => path.basename(f) === asset.source);
     if (found.length !== 1) {
       missing.push(`${asset.source} (${found.length === 0 ? 'not found' : 'found twice'})`);
@@ -129,10 +134,10 @@ const MAX_CHANGES = 20;
  * The release notes: a short English page. `generated` is the body GitHub's "generate release
  * notes" returns for the tag (the merged pull requests since the previous tag); only its pull
  * request lines are kept, as `- Title (#n)`, at most MAX_CHANGES of them.
- * @param {{ tag: string, generated: string, repository: string }} options
+ * @param {{ tag: string, generated: string, repository: string, without?: string[] }} options
  * @returns {string}
  */
-export function releaseNotes({ tag, generated, repository }) {
+export function releaseNotes({ tag, generated, repository, without = [] }) {
   const version = tag.replace(/^v/, '');
   const changes = [];
   for (const line of generated.split(/\r?\n/)) {
@@ -140,7 +145,10 @@ export function releaseNotes({ tag, generated, repository }) {
     if (m) changes.push(`- ${m[1]} (#${m[3]})`);
   }
   const compare = /\*\*Full Changelog\*\*:\s*(\S+)/.exec(generated)?.[1];
-  const rows = releaseAssets(version).map((a) => `| ${a.label} | \`${a.name}\` |`);
+  const rows = releaseAssets(version)
+    .filter((a) => !without.includes(a.key))
+    .map((a) => `| ${a.label} | \`${a.name}\` |`);
+  const msix = !without.includes('windows-msix');
   const lines = [
     `## Core Hub ${version}`,
     '',
@@ -155,9 +163,14 @@ export function releaseNotes({ tag, generated, repository }) {
     '### Windows: the SmartScreen warning',
     '',
     'The `.exe` installer is not code-signed yet, so Windows SmartScreen may say "Windows protected',
-    'your PC". Click **More info**, then **Run anyway**. The Microsoft Store version is signed by the',
-    'Store and updates from there. The `.msix` here is the Store package: Windows installs it only',
-    'once it is signed, so use the `.exe` or the Store.',
+    'your PC". Click **More info**, then **Run anyway**.',
+    ...(msix
+      ? [
+          'The Microsoft Store version is signed by the Store and updates from there. The `.msix` here',
+          'is the Store package: Windows installs it only once it is signed, so use the `.exe` or the',
+          'Store.',
+        ]
+      : ['The Microsoft Store package starts with a later version.']),
     '',
     '### Changes',
     '',
@@ -172,10 +185,11 @@ export function releaseNotes({ tag, generated, repository }) {
 }
 
 function main(argv) {
-  const [command, ...rest] = argv;
+  const without = argv.filter((a) => a.startsWith('--without=')).map((a) => a.slice(10));
+  const [command, ...rest] = argv.filter((a) => !a.startsWith('--without='));
   if (command === 'collect' && rest.length === 3) {
     const [version, from, to] = /** @type {[string, string, string]} */ (rest);
-    for (const file of collect({ version: version.replace(/^v/, ''), from, to }))
+    for (const file of collect({ version: version.replace(/^v/, ''), from, to, without }))
       console.log(`release: ${path.basename(file)}`);
     return;
   }
@@ -184,7 +198,7 @@ function main(argv) {
     const generated = readFileSync(/** @type {string} */ (generatedFile), 'utf8');
     writeFileSync(
       /** @type {string} */ (out),
-      releaseNotes({ tag: /** @type {string} */ (tag), generated, repository }),
+      releaseNotes({ tag: /** @type {string} */ (tag), generated, repository, without }),
     );
     return;
   }

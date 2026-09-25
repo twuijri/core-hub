@@ -151,6 +151,30 @@ describe('collecting the release files', () => {
     );
   });
 
+  it('leaves the MSIX out only when told to', () => {
+    dir = mkdtempSync(path.join(os.tmpdir(), 'corehub-release-'));
+    const from = path.join(dir, 'a');
+    mkdirSync(from);
+    for (const name of [
+      'Core-Hub-Setup-1.1.0-x64.exe',
+      'Core-Hub-1.1.0-x86_64.AppImage',
+      'corehub_1.1.0_amd64.deb',
+      'Core-Hub-1.1.0-arm64.dmg',
+      'app-release.apk',
+    ])
+      writeFileSync(path.join(from, name), name);
+    expect(() => collect({ version: '1.1.0', from, to: path.join(dir, 'b') })).toThrow(
+      /missing Core-Hub-1\.1\.0-x64\.msix/,
+    );
+    const written = collect({
+      version: '1.1.0',
+      from,
+      to: path.join(dir, 'c'),
+      without: ['windows-msix'],
+    });
+    expect(written).toHaveLength(5);
+  });
+
   it('fails, naming what is missing, rather than make a release without it', () => {
     dir = mkdtempSync(path.join(os.tmpdir(), 'corehub-release-'));
     mkdirSync(path.join(dir, 'a'));
@@ -182,6 +206,17 @@ describe('release notes', () => {
     expect(notes).toContain(
       'Full changelog: https://github.com/twuijri/core-hub/compare/v1.0.0...v1.1.0',
     );
+  });
+
+  it('leave the MSIX out for a tag whose code predates it (v1.1.0)', () => {
+    const notes = releaseNotes({
+      tag: 'v1.1.0',
+      generated,
+      repository: 'twuijri/core-hub',
+      without: ['windows-msix'],
+    });
+    expect(notes).not.toContain('.msix`');
+    expect(notes).toContain('The Microsoft Store package starts with a later version.');
   });
 
   it('keep at most twenty changes', () => {

@@ -10,9 +10,16 @@ export interface ReleaseAsset {
 
 export function msixVersion(version: string): string;
 export function releaseAssets(version: string): ReleaseAsset[];
-export function collect(options: { version: string; from: string; to: string }): string[];
+export function collect(options: {
+  version: string;
+  from: string;
+  to: string;
+  /** Keys of files this release does not carry (`windows-msix` for a tag before the MSIX). */
+  without?: string[];
+}): string[];
 export function releaseNotes(options: {
   tag: string;
   generated: string;
   repository: string;
+  without?: string[];
 }): string;

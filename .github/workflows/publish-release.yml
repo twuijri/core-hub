@@ -109,9 +109,10 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
     steps:
+      # This workflow's own commit (the tag's, or main's on a manual run) for the release tooling,
+      # with every tag for the notes' range.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.resolve.outputs.ref }}
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
@@ -120,8 +121,17 @@ jobs:
         with:
           path: ${{ runner.temp }}/artifacts
           pattern: corehub-*
+      # A tag whose code predates the Microsoft Store package (v1.1.0) has no .msix to attach.
+      - name: What this tag's code builds
+        run: |
+          if git cat-file -e "$TAG:apps/desktop/scripts/msix-smoke.ps1" 2>/dev/null; then
+            echo 'WITHOUT=' >> "$GITHUB_ENV"
+          else
+            echo "::notice::$TAG predates the MSIX: its release has no Microsoft Store package."
+            echo 'WITHOUT=--without=windows-msix' >> "$GITHUB_ENV"
+          fi
       - name: The release files, under their release names
-        run: node apps/desktop/scripts/release-assets.mjs collect "$VERSION" "$RUNNER_TEMP/artifacts" "$RUNNER_TEMP/release"
+        run: node apps/desktop/scripts/release-assets.mjs collect "$VERSION" "$RUNNER_TEMP/artifacts" "$RUNNER_TEMP/release" $WITHOUT
       # The merged pull requests since the previous version tag, as GitHub lists them, kept short
       # under an English heading with the downloads and the SmartScreen step.
       - name: Release notes
@@ -131,7 +141,7 @@ jobs:
           args=(-f "tag_name=$TAG")
           if [ -n "$previous" ]; then args+=(-f "previous_tag_name=$previous"); fi
           gh api "repos/$GH_REPO/releases/generate-notes" "${args[@]}" --jq .body > "$RUNNER_TEMP/generated.md"
-          node apps/desktop/scripts/release-assets.mjs notes "$TAG" "$RUNNER_TEMP/generated.md" "$RUNNER_TEMP/notes.md" "$GH_REPO"
+          node apps/desktop/scripts/release-assets.mjs notes "$TAG" "$RUNNER_TEMP/generated.md" "$RUNNER_TEMP/notes.md" "$GH_REPO" $WITHOUT
           cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Create or update the release and mark it latest
         run: |
