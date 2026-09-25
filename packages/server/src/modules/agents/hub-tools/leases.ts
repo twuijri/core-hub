@@ -77,17 +77,21 @@ export class RunLeases {
     this.leases.delete(runId);
   }
 
-  /** The agent announced a tool call (`tool.started`); only the hub's own count. */
-  toolStarted(runId: string, name: string | undefined): void {
+  /**
+   * The agent announced a tool call (`tool.started`); only the hub's own count — called by
+   * name, or through Hermes's `tool_call` bridge, which is how a model reaches an MCP tool
+   * Hermes lists on demand (`tools/tool_search.py`: `{calls: [{name, arguments}]}`).
+   */
+  toolStarted(runId: string, name: string | undefined, input?: unknown): void {
     const lease = this.leases.get(runId);
-    if (!lease || !name?.startsWith(HUB_TOOL_PREFIX)) return;
+    if (!lease || !isHubCall(name, input)) return;
     lease.pending += 1;
     lease.lastAnnouncedAt = this.now();
   }
 
-  toolEnded(runId: string, name: string | undefined): void {
+  toolEnded(runId: string, name: string | undefined, input?: unknown): void {
     const lease = this.leases.get(runId);
-    if (!lease || !name?.startsWith(HUB_TOOL_PREFIX)) return;
+    if (!lease || !isHubCall(name, input)) return;
     lease.pending = Math.max(0, lease.pending - 1);
   }
 
@@ -119,6 +123,25 @@ export class RunLeases {
       await new Promise((resolve) => setTimeout(resolve, POLL_MS));
     }
   }
+}
+
+/** Hermes's bridge to the tools it lists on demand. */
+const BRIDGE_CALL = 'tool_call';
+
+export function isHubCall(name: string | undefined, input?: unknown): boolean {
+  if (name?.startsWith(HUB_TOOL_PREFIX)) return true;
+  if (name !== BRIDGE_CALL || !input || typeof input !== 'object') return false;
+  const calls = (input as { calls?: unknown }).calls;
+  return (
+    Array.isArray(calls) &&
+    calls.some(
+      (call) =>
+        !!call &&
+        typeof call === 'object' &&
+        typeof (call as { name?: unknown }).name === 'string' &&
+        (call as { name: string }).name.startsWith(HUB_TOOL_PREFIX),
+    )
+  );
 }
 
 function newest(leases: Lease[]): Lease {

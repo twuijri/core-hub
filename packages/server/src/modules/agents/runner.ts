@@ -72,8 +72,8 @@ interface LiveRun {
   decisions: Map<string, DecisionMap>;
   /** Questions the agent asked in this run and still waits on (`question.asked`). */
   questions: Set<string>;
-  /** Tools in flight, id -> name, so an end can be matched to what started. */
-  tools: Map<string, string>;
+  /** Tools in flight, by id, so an end can be matched to what started. */
+  tools: Map<string, { name: string; input: unknown }>;
 }
 
 export interface AgentRunnerDeps {
@@ -348,11 +348,13 @@ export class AgentRunner implements AgentRunnerPort {
 
   private translate(run: LiveRun, event: AgentEvent): RunnerEvent[] {
     if (event.type === 'tool.started') {
-      this.deps.leases?.toolStarted(run.runId, event.name ?? event.title);
-      run.tools.set(event.id, event.name ?? event.title);
+      const started = { name: event.name ?? event.title, input: event.input };
+      this.deps.leases?.toolStarted(run.runId, started.name, started.input);
+      run.tools.set(event.id, started);
     }
     if (event.type === 'tool.completed' || event.type === 'tool.failed') {
-      this.deps.leases?.toolEnded(run.runId, run.tools.get(event.id));
+      const started = run.tools.get(event.id);
+      this.deps.leases?.toolEnded(run.runId, started?.name, started?.input);
       run.tools.delete(event.id);
     }
     if (event.type === 'question.asked') {

@@ -163,6 +163,19 @@ describe('hub tools: which run a call belongs to', () => {
     leases.close('b');
   });
 
+  it("counts a call through Hermes's tool_call bridge as the hub's, and no other", () => {
+    const leases = new RunLeases();
+    leases.open({ runId: 'a', sessionId: 'sa', workspaceId: 'W', userId: 'U1' });
+    leases.toolStarted('a', 'tool_call', { calls: [{ name: 'mcp__github__x', arguments: {} }] });
+    expect(leases.live('W')[0]!.pending).toBe(0);
+    const bridged = { calls: [{ name: 'mcp__corehub__tasks_create', arguments: {} }] };
+    leases.toolStarted('a', 'tool_call', bridged);
+    expect(leases.live('W')[0]!.pending).toBe(1);
+    leases.toolEnded('a', 'tool_call', bridged);
+    expect(leases.live('W')[0]!.pending).toBe(0);
+    leases.close('a');
+  });
+
   it('a lease without an owner is never opened', async () => {
     const leases = new RunLeases();
     leases.open({ runId: 'x', sessionId: 's', workspaceId: 'W', userId: null });
