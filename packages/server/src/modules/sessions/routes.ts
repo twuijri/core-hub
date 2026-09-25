@@ -74,6 +74,11 @@ const runCreate = z.object({
   reply_to_message_id: ulid.nullish(),
 });
 
+const channelContinue = z.object({
+  agent_id: ulid,
+  note: z.string().max(4000).nullish(),
+});
+
 const approvalResponse = z.object({
   decision: z.enum(['approve_once', 'approve_session', 'approve_always', 'deny']).nullish(),
   answer: z.string().max(4000).nullish(),
@@ -460,5 +465,21 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
         { workspace: scope.workspace, profile: scope.profile },
         typeof id === 'string' ? id : '',
       );
+  });
+
+  // "Continue in Core Hub" (§58): read the conversation as above, then make the chat.
+  app.post('/channel-conversations/:conversation_id/continue', async (request, reply) => {
+    const scope = await scopeOf(request);
+    const body = parse(channelContinue, request.body);
+    const id = (request.params as { conversation_id?: unknown }).conversation_id;
+    const read = await deps
+      .channels(request)
+      .messages(
+        { workspace: scope.workspace, profile: scope.profile },
+        typeof id === 'string' ? id : '',
+      );
+    const answer = await deps.service(request).continueChannel(scope, read, body);
+    reply.code(201);
+    return answer;
   });
 }

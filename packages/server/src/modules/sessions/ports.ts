@@ -106,6 +106,14 @@ export interface AttachmentsPort {
     file: { path: string; relativePath: string; sizeBytes: number },
     sourceId: string,
   ): Promise<Omit<AttachmentSummary, 'url'>>;
+  /**
+   * Keep bytes the hub itself wrote as an attachment of the caller — a channel
+   * conversation's transcript for "Continue in Core Hub" (contract decision §58).
+   */
+  store(
+    scope: { workspace: string; userId: string },
+    file: { name: string; mime: string; bytes: Buffer },
+  ): Promise<Omit<AttachmentSummary, 'url'>>;
 }
 
 export interface AgentRunRequest {
