@@ -12,6 +12,7 @@
 ## المهام
 (تُضاف هنا مع كل مهمة تُدمج في الفرع.)
 - صفحة النماذج: الصوت في تبويباته، وتبويب «الصور» (دور نموذج الصور، أداة هرمز والمهارتان، إزالة الخلفية) — `feat/models-page-roles` — `docs/changes/2026-09-26-twuijri-models-page-roles.md`
+- معرّفات التطبيقات `com.twuijri.corehub` والبناء الموقّع لأندرويد وiOS وماك (يدويًا أو بوسم فقط) — `feat/app-ids-signing` — `docs/changes/2026-09-26-twuijri-app-ids-signing.md`
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 انظر سجل كل مهمة.
