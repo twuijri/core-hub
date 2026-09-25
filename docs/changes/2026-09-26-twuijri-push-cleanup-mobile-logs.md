@@ -148,6 +148,10 @@ iOS 36160236585 — success
   تكلّم مراكز نسختها.
 
 ## التسليم والخطوة التالية
-- دُمج في `night/2026-09-26` (#144)؛ نتيجة CI هناك تُضاف أدناه.
+- دُمج في `night/2026-09-26` (#144) عند `be82a4f`. CI على #144 عند `a21b1fc` (يحويه، ومعه مهمة لاحقة): كل
+  الفحوص ناجحة (١٧ pass)، ومنها «Android build, unit tests, lint» و«Build and test on the iOS simulator» و
+  «Generate the Swift client (CoreHubClient)» و«db:generate + db:migrate (SQLite and PostgreSQL)» وأجزاء
+  اختبارات الخادم الثلاثة و«Web smoke journeys».
+- لم يُجرَّب على هاتف ولا على مركز المالك، ولم يُرسل دفع حقيقي (المرسِلان مطفآن حتى يُدخل المالك بياناتهما).
 - متابعة مقترحة: يعيد الويب تسجيل اشتراك Web Push بعد كل دخول، ثم يُربط المتصفح بجلسته أيضًا؛ حدث
   `device.updated` حين يمسح المركز رمزًا.
