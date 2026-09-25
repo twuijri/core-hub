@@ -1632,10 +1632,7 @@ export class ModelsService {
       return { supported: false, reason: 'Hermes is not supervised by this hub' };
     }
     try {
-      const listed = await runtime.models(
-        entry.hermesProvider,
-        this.signInProfileOf(scope, row),
-      );
+      const listed = await runtime.models(entry.hermesProvider, this.signInProfileOf(scope, row));
       if (listed.models.length === 0) {
         return {
           supported: false,

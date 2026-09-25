@@ -2509,3 +2509,69 @@ which stays parked.) The contract's part:
 Local credentials always win; nothing changes for a hub that has them. Rejected: a separate
 `relay` row in the senders list (`PushProvider` names services a device registers with, and a
 device never registers with "relay"); a `GET /push/relay` (the senders list already carries it).
+
+## 83. A model list is what the provider offers the account, never a list kept in code
+
+**Approved by the owner (2026-09-26)**, in his words: «كل الموديلات خله هو يسحب الي يقدمه المزود ما
+يخترع من نفسه» — every provider's models are what the provider's API returns for that account, not
+a list the hub or Hermes keeps.
+
+What was observed: a provider with a key was already asked by the hub's own adapters
+(`adapters/`: `GET /models`, Anthropic's and Google's lists, Ollama's tags). A provider signed in
+through Hermes (§55) was listed from Hermes's picker (`/api/model/options`), which asks the provider
+when it can and otherwise **silently** answers a list from its code: for the ChatGPT subscription a
+curated eight plus `-900k` names Hermes makes up itself (a large-context switch it strips before the
+request — no model the backend lists); for Nous Portal only its curated agentic list. The owner's Pro
+account was shown nine models without the `gpt-6-*` family the backend offers it.
+
+- **Signed-in providers are asked directly** (`live-models.ts`): Hermes's own Python, in the Hermes
+  home the provider was signed in to, resolves the account's token with Hermes's resolver (refreshed
+  when it is about to expire, and once more after a `401`) and calls the provider's own models
+  endpoint — the ChatGPT subscription's `GET …/backend-api/codex/models?client_version=0.0.0` with
+  the account id from the token (`ChatGPT-Account-Id`; hidden models left out, the backend's
+  order kept), every other one the OpenAI-shaped `GET {base}/models`. The token never leaves that
+  process; the hub reads only the ids. The list is per account, so it is per plan.
+- **A list kept in code is only a labelled fallback**: when the provider cannot be asked (no
+  supervised Hermes, the sign-in lapsed, the endpoint failed or listed nothing), Hermes's list is
+  used and `Provider.catalogue.source` is `fallback`, with `fallback_reason`; a client says so on
+  the provider. `source: provider` is what the provider returned. "Refresh models" asks again.
+- **Display names and hiding stay the person's**: aliases and the visible list apply on top of
+  whatever the list is, as before.
+- Where it is kept: `providers.capabilities` (JSON) carries the source and reason, so no migration.
+
+Not changed here: the speech providers (ElevenLabs lists voices, not models; its default model id
+is a setting, not a list) and the presets' default model settings. The hub's adapters for key
+providers already ask the provider; none keeps a list.
+
+## 84. The ChatGPT subscription draws through the Codex backend's image tool
+
+The owner (2026-09-25): his CLI Proxy API instance on the same ChatGPT account offers `gpt-image-2`
+and draws; a friend signed in only through Core Hub gets no images. Observed: the Codex backend
+lists no image model; it draws when a chat model it serves is given the Responses API's
+`image_generation` tool with an image model named in it (Hermes v2026.9.14 ships the same as its
+own `openai-codex` image backend, MIT; OpenAI's Codex draws with `gpt-image-2` for signed-in paid
+plans, not Free, against the plan's Codex usage). Proposed, owner to confirm:
+
+- **One model is added to the subscription's list**: `gpt-image-2` with `image_output` — the only
+  model the hub adds to a provider, because there is no other way to choose it; a client labels it
+  «الصور عبر اشتراك ChatGPT» / "Images via your … subscription". `Provider.draws_images` says
+  which providers the Images role may take a model from; the subscription is the one signed-in
+  provider that does, and only with that model (§72 is amended: it refused every signed-in one).
+- **The skills and Hermes's tool draw with it** through `image_api.py`'s new `codex` protocol:
+  `POST {base}/responses`, streamed, the chat model `gpt-5.5` carrying the tool (`model`,
+  `size`, `output_format: png`, `background: transparent` for a cut-out), no `tool_choice` (the
+  backend reads it as a function name and refuses it), the source images as `input_image` parts
+  for an edit; the picture is the last finished `image_generation_call` result. The PNG lands in
+  the run's folder like any other (§72).
+- **No key is written**: `COREHUB_IMAGE_PROVIDER=codex`, the base URL and the model only; the
+  script asks Hermes's resolver for the token at the moment it draws, retries once with a refreshed
+  one after a `401`, and never prints it. A plan without images (`402`/`403`, or the backend saying
+  so) is `image_not_in_plan`; a used-up limit is `usage_limit`.
+- **Allowed?** OpenAI publishes no rule for third-party clients of the ChatGPT sign-in either way;
+  Hermes ships both chat and images on it and identifies itself with its own headers, which the
+  script reuses. Images are part of Codex on the same endpoint and count against the same plan
+  limits, so they are covered exactly as far as chat is.
+
+Rejected: an OpenAI-Images-API shim in the hub (CLI Proxy API's shape — the hub would hold the
+token); pointing Hermes at its own `openai-codex` image backend (the skills would then draw with a
+different implementation than the tool, which §72 rejected).

@@ -837,7 +837,10 @@ function ImagesTab({ onProviders }: { onProviders(): void }) {
     const option = modelOption(model, refValue(model));
     const via = subscriptions.get(model.provider_id);
     return via && !model.alias
-      ? { ...option, label: t('models.images.via_subscription', { provider: via, model: model.model }) }
+      ? {
+          ...option,
+          label: t('models.images.via_subscription', { provider: via, model: model.model }),
+        }
       : option;
   };
   const images = (catalogue.data ?? []).filter(

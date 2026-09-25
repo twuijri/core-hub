@@ -134,7 +134,12 @@ beforeAll(async () => {
     let body = '';
     request.on('data', (chunk: Buffer) => (body += chunk.toString()));
     request.on('end', () => {
-      const entry = { method: request.method ?? '', url: request.url ?? '', headers: request.headers, body };
+      const entry = {
+        method: request.method ?? '',
+        url: request.url ?? '',
+        headers: request.headers,
+        body,
+      };
       seen.push(entry);
       const token = bearerOf(request.headers);
       const json = (status: number, value: unknown) => {
@@ -164,7 +169,11 @@ beforeAll(async () => {
           },
           { type: 'response.completed', response: { id: 'resp_1', status: 'completed' } },
         ];
-        response.end(events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''));
+        response.end(
+          events
+            .map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
+            .join(''),
+        );
         return;
       }
       return json(404, { error: { message: 'not part of this test' } });
@@ -184,7 +193,12 @@ afterAll(async () => {
 function runner(env: () => Record<string, string>) {
   return hermesPythonRunner({
     python: PY ?? 'python3',
-    env: () => ({ PATH: process.env.PATH ?? '', PYTHONPATH: stubs, STUB_BASE: `${base}/codex`, ...env() }),
+    env: () => ({
+      PATH: process.env.PATH ?? '',
+      PYTHONPATH: stubs,
+      STUB_BASE: `${base}/codex`,
+      ...env(),
+    }),
   });
 }
 
@@ -192,7 +206,11 @@ describe.skipIf(!PY)('the provider’s own model list for a signed-in account (�
   it('lists what the backend offers this account, in its order, hidden ones left out, nothing invented', async () => {
     const home = mkdtempSync(path.join(work, 'home-'));
     seen.length = 0;
-    const pro = await liveModels(runner(() => ({ STUB_TOKEN: PRO })), home, 'openai-codex');
+    const pro = await liveModels(
+      runner(() => ({ STUB_TOKEN: PRO })),
+      home,
+      'openai-codex',
+    );
     expect(pro).toEqual({
       ok: true,
       models: ['gpt-6-sol', 'gpt-6-astra', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.5'].map((id) => ({
@@ -206,7 +224,11 @@ describe.skipIf(!PY)('the provider’s own model list for a signed-in account (�
     expect(asked?.headers['chatgpt-account-id']).toBe('acct-pro');
     expect(asked?.headers.authorization).toBe(`Bearer ${PRO}`);
 
-    const plus = await liveModels(runner(() => ({ STUB_TOKEN: PLUS })), home, 'openai-codex');
+    const plus = await liveModels(
+      runner(() => ({ STUB_TOKEN: PLUS })),
+      home,
+      'openai-codex',
+    );
     expect(plus.ok && plus.models.map((model) => model.id)).toEqual(['gpt-5.6-sol', 'gpt-5.5']);
   });
 
@@ -270,7 +292,9 @@ function fakeDashboard(): DashboardRequest {
     if (url.pathname === '/api/model/options') {
       // What Hermes falls back to when it cannot ask: its curated list, `-900k` names and all.
       return Promise.resolve({
-        providers: [{ slug: 'openai-codex', models: ['gpt-5.6-sol', 'gpt-5.6-sol-900k', 'gpt-5.5'] }],
+        providers: [
+          { slug: 'openai-codex', models: ['gpt-5.6-sol', 'gpt-5.6-sol-900k', 'gpt-5.5'] },
+        ],
       } as T);
     }
     return Promise.resolve({ ok: true } as T);
@@ -324,7 +348,10 @@ describe.skipIf(!PY)('the ChatGPT subscription in the hub (§83, §84)', () => {
       expect(created.statusCode).toBe(201);
       const { id } = created.json() as { id: string };
       const started = (
-        await authed(hub, hub.token, { method: 'POST', url: `/api/v1/models/providers/${id}/sign-in` })
+        await authed(hub, hub.token, {
+          method: 'POST',
+          url: `/api/v1/models/providers/${id}/sign-in`,
+        })
       ).json() as { id: string };
       await authed(hub, hub.token, {
         method: 'GET',
@@ -333,7 +360,11 @@ describe.skipIf(!PY)('the ChatGPT subscription in the hub (§83, §84)', () => {
       await drainJobs(hub.app);
 
       const provider = await providerIn(hub, id);
-      expect(provider.catalogue).toMatchObject({ status: 'ready', source: 'provider', fallback_reason: null });
+      expect(provider.catalogue).toMatchObject({
+        status: 'ready',
+        source: 'provider',
+        fallback_reason: null,
+      });
       expect(provider.draws_images).toBe(true);
       expect(provider.models.map((model) => model.model)).toEqual([
         'gpt-5.5',
@@ -343,9 +374,9 @@ describe.skipIf(!PY)('the ChatGPT subscription in the hub (§83, §84)', () => {
         'gpt-6-sol',
         'gpt-image-2',
       ]);
-      expect(provider.models.find((model) => model.model === 'gpt-image-2')?.capabilities).toContain(
-        'image_output',
-      );
+      expect(
+        provider.models.find((model) => model.model === 'gpt-image-2')?.capabilities,
+      ).toContain('image_output');
 
       // The Images role takes the subscription's image model, and nothing else of it.
       const refused = await authed(hub, hub.token, {
@@ -391,31 +422,37 @@ describe.skipIf(!PY)('the ChatGPT subscription in the hub (§83, §84)', () => {
 
 /** `image_api.py` run as the skills run it, in Hermes's Python (here: with the stand-in). */
 function runScript(args: string[], env: Record<string, string>) {
-  return new Promise<{ code: number; out: Record<string, unknown>; raw: string }>((resolve, reject) => {
-    const child = spawn(PY!, [SCRIPT, ...args], {
-      env: {
-        PATH: process.env.PATH ?? '',
-        PYTHONPATH: stubs,
-        STUB_BASE: `${base}/codex`,
-        COREHUB_IMAGE_PROVIDER: 'codex',
-        COREHUB_IMAGE_BASE_URL: `${base}/codex`,
-        COREHUB_IMAGE_MODEL: 'gpt-image-2',
-        ...env,
-      },
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
-    child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
-    child.on('error', reject);
-    child.on('close', (code) => {
-      try {
-        resolve({ code: code ?? 1, out: JSON.parse(stdout) as Record<string, unknown>, raw: stdout + stderr });
-      } catch {
-        reject(new Error(`image_api.py printed no JSON: ${stderr}`));
-      }
-    });
-  });
+  return new Promise<{ code: number; out: Record<string, unknown>; raw: string }>(
+    (resolve, reject) => {
+      const child = spawn(PY!, [SCRIPT, ...args], {
+        env: {
+          PATH: process.env.PATH ?? '',
+          PYTHONPATH: stubs,
+          STUB_BASE: `${base}/codex`,
+          COREHUB_IMAGE_PROVIDER: 'codex',
+          COREHUB_IMAGE_BASE_URL: `${base}/codex`,
+          COREHUB_IMAGE_MODEL: 'gpt-image-2',
+          ...env,
+        },
+      });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+      child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+      child.on('error', reject);
+      child.on('close', (code) => {
+        try {
+          resolve({
+            code: code ?? 1,
+            out: JSON.parse(stdout) as Record<string, unknown>,
+            raw: stdout + stderr,
+          });
+        } catch {
+          reject(new Error(`image_api.py printed no JSON: ${stderr}`));
+        }
+      });
+    },
+  );
 }
 
 describe.skipIf(!PY)('image_api.py draws through the subscription (§84)', () => {
@@ -439,7 +476,9 @@ describe.skipIf(!PY)('image_api.py draws through the subscription (§84)', () =>
       model: 'gpt-5.5',
       stream: true,
       store: false,
-      tools: [{ type: 'image_generation', model: 'gpt-image-2', size: '1536x1024', output_format: 'png' }],
+      tools: [
+        { type: 'image_generation', model: 'gpt-image-2', size: '1536x1024', output_format: 'png' },
+      ],
     });
     expect(body).not.toHaveProperty('tool_choice');
     expect(result.raw).not.toContain(PRO);
@@ -461,10 +500,9 @@ describe.skipIf(!PY)('image_api.py draws through the subscription (§84)', () =>
     expect(editBody.input[0]!.content[1]!.image_url).toMatch(/^data:image\/png;base64,/);
 
     seen.length = 0;
-    const cut = await runScript(
-      ['remove-bg', '--image', source, '--out', path.join(work, 'cut')],
-      { STUB_TOKEN: PRO },
-    );
+    const cut = await runScript(['remove-bg', '--image', source, '--out', path.join(work, 'cut')], {
+      STUB_TOKEN: PRO,
+    });
     expect(cut.code).toBe(0);
     expect(cut.out).toMatchObject({ ok: true, command: 'remove-bg' });
     const cutBody = JSON.parse(seen.find((entry) => entry.url === '/codex/responses')!.body) as {
