@@ -19,7 +19,7 @@ import org.junit.Before
 import org.junit.Test
 
 /** Logs and Performance on the phone read the live endpoints (§51), against a scripted hub. */
-class HubToolsTest {
+class LiveToolsTest {
     private val server = MockWebServer()
     private val requests = mutableListOf<RecordedRequest>()
     private var logs: (RecordedRequest) -> MockResponse = { json(page(listOf(line(1, "info", "hub started")), 1)) }
