@@ -55,6 +55,8 @@ export interface TuiSessionHandlers {
 /** One running `tui_gateway`, shared by every conversation. */
 export interface TuiChannel {
   readonly alive: boolean;
+  /** The process's id, for the Performance screen; absent for a scripted channel. */
+  readonly pid?: number | null;
   /**
    * Whether closing it now would cut something short: a conversation on it has a turn in
    * flight, or a call is still waiting for its answer. The runtime asks before it recycles
@@ -70,6 +72,7 @@ export interface TuiChannel {
 }
 
 export interface Spawned {
+  pid?: number | undefined;
   stdin: NodeJS.WritableStream;
   stdout: NodeJS.ReadableStream;
   stderr?: NodeJS.ReadableStream | null;
@@ -97,6 +100,11 @@ export interface StdioChannelOptions {
    */
   exitGraceMs?: number;
   log?: (message: string, detail?: unknown) => void;
+  /**
+   * Every line of the gateway's stderr — Hermes's own log — for the Logs screen's ring
+   * (`lib/log-ring.ts`), which is bounded; it still never reaches the hub's log volume.
+   */
+  onStderrLine?: (line: string) => void;
 }
 
 const defaultSpawn = (
@@ -160,7 +168,7 @@ export function stdioTuiChannel(options: StdioChannelOptions): TuiChannel {
   // except the one line the gateway prints on its way out. Every exit path of
   // `tui_gateway/entry.py` is `sys.exit(0)`, so the code says nothing; the reason is the
   // `[gateway-exit] …` or `[gateway-signal] …` line it writes to stderr just before.
-  const exitReasons = stderrExitReasons(child.stderr);
+  const exitReasons = stderrExitReasons(child.stderr, options.onStderrLine);
 
   child.on('exit', (code, signal) => {
     const report = () => {
@@ -231,6 +239,9 @@ export function stdioTuiChannel(options: StdioChannelOptions): TuiChannel {
     get alive() {
       return alive && !exiting;
     },
+    get pid() {
+      return child.pid ?? null;
+    },
     get busy() {
       if (!alive || exiting) return false;
       if (pending.size > 0) return true;
@@ -274,10 +285,14 @@ const EXIT_REASON_MAX = 200;
 const STDERR_LINE_MAX = 4096;
 
 /**
- * Reads the gateway's stderr for its exit markers only, keeping the last few — nothing
- * else of the stream is kept or logged, and memory stays bounded however much it writes.
+ * Reads the gateway's stderr for its exit markers, keeping the last few, and hands every
+ * line to `onLine` (the Logs screen's bounded ring) — nothing else of the stream is kept or
+ * logged, and memory stays bounded however much it writes.
  */
-function stderrExitReasons(stream: NodeJS.ReadableStream | null | undefined): {
+function stderrExitReasons(
+  stream: NodeJS.ReadableStream | null | undefined,
+  onLine?: (line: string) => void,
+): {
   last(): string | null;
   /** Resolves once stderr has ended, or after `graceMs`, whichever is first. */
   drained(graceMs: number): Promise<void>;
@@ -290,6 +305,14 @@ function stderrExitReasons(stream: NodeJS.ReadableStream | null | undefined): {
     let carry = '';
     let skipping = false;
     const line = (text: string) => {
+      const trimmed = text.trimEnd();
+      if (trimmed && onLine) {
+        try {
+          onLine(trimmed);
+        } catch {
+          // the ring is a convenience; the exit reason is not
+        }
+      }
       const match = EXIT_MARKER.exec(text.trim());
       if (!match) return;
       const detail = (match[2] ?? '').slice(0, EXIT_REASON_MAX);

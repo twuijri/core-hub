@@ -103,6 +103,8 @@ export interface HermesRuntimeOptions {
    * moment with no turn in flight, when it is closed.
    */
   tuiRetireIntervalMs?: number;
+  /** Each line of the TUI gateway's stderr (Hermes's log), for the Logs screen's ring. */
+  tuiLogLine?: (line: string) => void;
   /** Called on every state change (the registry row follows it). */
   onState?: (status: HermesRuntimeStatus) => void;
   /** Injected in tests: a scripted `hermes <argv>` instead of the executable. */
@@ -245,6 +247,40 @@ export class HermesRuntime {
   }
 
   /**
+   * Every Hermes process this hub runs, for the Performance screen: the TUI gateway (and one
+   * being retired, while it finishes a turn) and every messaging gateway. Empty when the hub
+   * does not run Hermes — an external gateway's processes are somebody else's.
+   */
+  processes(): Array<{
+    kind: 'tui_gateway' | 'gateway';
+    profile: string | null;
+    pid: number | null;
+    state: string;
+  }> {
+    if (this.mode !== 'managed') return [];
+    const tuis = [
+      ...(this.tui?.alive ? [{ channel: this.tui, state: 'running' }] : []),
+      ...[...this.retiredTui]
+        .filter((channel) => channel.alive)
+        .map((channel) => ({ channel, state: 'retiring' })),
+    ];
+    return [
+      ...tuis.map(({ channel, state }) => ({
+        kind: 'tui_gateway' as const,
+        profile: null,
+        pid: channel.pid ?? null,
+        state,
+      })),
+      ...this.gateways().map((gateway) => ({
+        kind: 'gateway' as const,
+        profile: gateway.profile,
+        pid: gateway.pid,
+        state: gateway.state,
+      })),
+    ];
+  }
+
+  /**
    * What Hermes itself reports about the gateway serving `profile` — its platforms' states —
    * when that gateway is the one this hub started. `null` otherwise, including for a record a
    * stopped gateway left behind.
@@ -374,6 +410,7 @@ export class HermesRuntime {
       env: this.cliEnv(),
       cwd: home,
       ...(this.options.tuiSpawn ? { spawn: this.options.tuiSpawn } : {}),
+      ...(this.options.tuiLogLine ? { onStderrLine: this.options.tuiLogLine } : {}),
     });
     const channel = this.tui;
     channel.onExit((reason) => {

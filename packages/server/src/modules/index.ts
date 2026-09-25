@@ -33,6 +33,7 @@ import {
   createHermesProfileArchives,
   createHermesProfiles,
   hermesDashboardFor,
+  hermesProcessesFor,
   hermesProfileRunner,
   hermesRuntimeFor,
   registerAgentAttachments,
@@ -41,6 +42,7 @@ import {
   attachmentReferences,
   createSessionsModule,
   registerWorkflowGate,
+  sessionActivityFor,
   sessionRunsFor,
   sessionTurnsFor,
   workflowApprovalsFor,
@@ -75,7 +77,7 @@ import { modelsModule, modelsServiceFor } from './models/index.js';
 import { devicesModule } from './devices/index.js';
 import { createNotifier, notifyModule } from './notify/index.js';
 import { updatesModule } from './updates/index.js';
-import { auditModule } from './audit/index.js';
+import { auditModule, registerLiveSources } from './audit/index.js';
 import { pluginsModule } from './plugins/index.js';
 
 // The one wiring line the sessions module asked for: its ports come from `agents` (the
@@ -426,6 +428,25 @@ registerTaskNames((app) => (kind, id) => {
   const user = findUser(requireSqlite(app.hub.database), id);
   return user ? user.displayName?.trim() || user.username : null;
 });
+
+/**
+ * The live Performance screen measures processes and counts it does not own: `agents` knows
+ * which Hermes processes run, `sessions` what each profile is doing, `auth` which profiles
+ * there are. Joined here so `audit` imports none of them (contract decision §51).
+ */
+registerLiveSources((app) => ({
+  hermesProcesses: () => hermesProcessesFor(app),
+  profileActivity: () => {
+    const db = requireSqlite(app.hub.database);
+    const activity = sessionActivityFor(app);
+    // Every profile, the quiet ones too: a row of zeros is an answer.
+    return listWorkspacesFor(db, { id: '', role: 'owner' }).map((workspace) => ({
+      profile: workspace.slug,
+      active_runs: activity.get(workspace.id)?.activeRuns ?? 0,
+      sessions: activity.get(workspace.id)?.sessions ?? 0,
+    }));
+  },
+}));
 
 export const modules: readonly HubModule[] = [
   authModule,

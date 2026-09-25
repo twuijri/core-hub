@@ -5,7 +5,9 @@
  * Implemented: `jobs.list`, `jobs.get`, `jobs.cancel`, the `/rt/jobs` namespace, and the
  * `AuditService` / `JobRunner` other modules import from here.
  *
- * Also implemented (Phase 4): `audit.getReport` for `usage`, `logs` and `performance`.
+ * Also implemented (Phase 4): `audit.getReport` for `usage`, `logs` and `performance`; and
+ * the live screens (contract decision §51): `audit.getLivePerformance` (`live.ts`, measured
+ * when asked) and `audit.listLogLines` (the hub's log rings, `lib/log-ring.ts`).
  * `skills` still answers `501` with its operation id, because nothing records skill use
  * yet and a page of zeros would read as "no skills were used" — see `reports.ts`.
  *
@@ -26,6 +28,7 @@ import { defineRoute } from '../../lib/route.js';
 import { requireRole, requireUser, requireWorkspace } from '../auth/index.js';
 import { createJobRunner, type JobRunner } from './jobs.js';
 import { ReportService, type LogLevel, type ReportKind } from './reports.js';
+import { LiveSampler, liveSourcesFor, socketsPerProfile } from './live.js';
 import { AuditService, serializeJob } from './service.js';
 
 export { AuditService, serializeJob } from './service.js';
@@ -45,12 +48,22 @@ export { createJobRunner } from './jobs.js';
 export { ReportService, isoDate, moneyOf, windowOf } from './reports.js';
 export type { LogLevel, Report, ReportKind, ReportRequest } from './reports.js';
 export type { JobHandle, JobRunner, JobWorker, NewJob } from './jobs.js';
+export { LiveSampler, registerLiveSources, socketsPerProfile } from './live.js';
+export type {
+  HermesProcessInfo,
+  HermesProcessKind,
+  LivePerformance,
+  LiveSources,
+  ProfileActivity,
+} from './live.js';
+export { ProcFs } from './procfs.js';
 
 interface AuditContext {
   audit: AuditService;
   runner: JobRunner;
   realtime: Realtime;
   reports: ReportService;
+  live: LiveSampler;
 }
 
 /** One context per Socket.IO server, so several hubs in one process (tests) do not mix. */
@@ -72,9 +85,13 @@ function contextOf(app: FastifyInstance): AuditContext {
     realtime,
     runner: createJobRunner({ audit, log: app.log }),
     reports,
+    live: new LiveSampler(),
   };
   contexts.set(hub.io, created);
   startSampler(app, reports);
+  app.addHook('onClose', () => {
+    created.live.close();
+  });
   return created;
 }
 
@@ -217,6 +234,45 @@ export const auditModule = defineModule({
         }
         return report;
       },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'audit.getLivePerformance',
+      handler: async (request) => {
+        const server = request.server;
+        const sources = liveSourcesFor(server);
+        // A source that fails is an empty list on the screen, not a failed screen: the
+        // host and the hub can still be measured.
+        const listed = <T>(what: string, read: (() => T[]) | undefined): T[] => {
+          try {
+            return read?.() ?? [];
+          } catch (error) {
+            request.log.warn({ err: error }, `audit: could not list ${what}`);
+            return [];
+          }
+        };
+        const io = server.hub.io;
+        return contextOf(server).live.measure({
+          processes: listed('the Hermes processes', sources.hermesProcesses?.bind(sources)),
+          profiles: listed('the profiles', sources.profileActivity?.bind(sources)),
+          sockets: socketsPerProfile(
+            Object.values(REALTIME_NAMESPACES).map((namespace) => io.of(namespace)),
+          ),
+        });
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'audit.listLogLines',
+      handler: (request, { query }) =>
+        request.server.hub.logs.query({
+          source: (query.source as 'all' | 'hub' | 'hermes' | 'errors' | undefined) ?? 'all',
+          profile: query.profile as string | undefined,
+          level: query.level as LogLevel | undefined,
+          q: query.q as string | undefined,
+          limit: (query.limit as number | undefined) ?? 200,
+          after: query.after as number | undefined,
+        }),
     });
   },
   registerEvents(io: SocketServer) {

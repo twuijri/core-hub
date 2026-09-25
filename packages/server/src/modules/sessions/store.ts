@@ -337,6 +337,34 @@ export class SessionsStore {
    * is a JSON array, so the test is a substring of the serialised form — which is exact
    * here because a ULID is 26 fixed characters and cannot be a prefix of another id.
    */
+  /**
+   * Per workspace: runs not yet finished and conversations not archived — the Performance
+   * screen's "what is each profile doing". Two grouped counts, whatever the number of rows.
+   */
+  activityByWorkspace(): Map<string, { activeRuns: number; sessions: number }> {
+    const out = new Map<string, { activeRuns: number; sessions: number }>();
+    const entry = (workspace: string) => {
+      const found = out.get(workspace) ?? { activeRuns: 0, sessions: 0 };
+      out.set(workspace, found);
+      return found;
+    };
+    const live = this.db
+      .select({ workspace: runs.workspace, n: sql<number>`count(*)` })
+      .from(runs)
+      .where(sql`${runs.status} not in ('succeeded', 'failed', 'cancelled', 'timed_out')`)
+      .groupBy(runs.workspace)
+      .all();
+    for (const row of live) entry(row.workspace).activeRuns = Number(row.n);
+    const open = this.db
+      .select({ workspace: sessions.workspace, n: sql<number>`count(*)` })
+      .from(sessions)
+      .where(isNull(sessions.archivedAt))
+      .groupBy(sessions.workspace)
+      .all();
+    for (const row of open) entry(row.workspace).sessions = Number(row.n);
+    return out;
+  }
+
   isAttachmentReferenced(workspace: string, attachmentId: string): boolean {
     const row = this.db
       .select({ id: messages.id })
