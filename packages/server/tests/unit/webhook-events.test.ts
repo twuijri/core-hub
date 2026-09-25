@@ -1,5 +1,5 @@
 /**
- * Webhooks receive the hub's events (contract decision §52), end to end: the real modules
+ * Webhooks receive the hub's events (contract decision §53), end to end: the real modules
  * emit, the notify queue matches, and a real HTTP receiver on this machine records what
  * arrives — so the signature, the headers, the retries and the give-up are checked on the
  * wire, not on a stub.

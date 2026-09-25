@@ -2,7 +2,7 @@
  * Webhooks: addresses the hub calls on its own (admin, `notify`).
  *
  * **What it says is what the hub does.** A webhook receives the events it subscribed to,
- * from the profiles it names, as they happen (contract decision §52): queued, signed, sent
+ * from the profiles it names, as they happen (contract decision §53): queued, signed, sent
  * in the background, retried with backoff and finally given up on. The deliveries table
  * shows each one's attempts, status, answer and next try, and sends a failed one again.
  * Message text is left out unless the webhook asks for it.

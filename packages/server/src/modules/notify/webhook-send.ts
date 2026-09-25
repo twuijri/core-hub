@@ -1,5 +1,5 @@
 /**
- * One HTTP attempt at a webhook (decision §52).
+ * One HTTP attempt at a webhook (decision §53).
  *
  * **The address is checked again at every attempt.** It was checked when the webhook was
  * saved, but a name can be pointed somewhere else afterwards (DNS rebinding): a public

@@ -11581,7 +11581,7 @@ paths:
       operationId: notify.listWebhookEvents
       tags: [notify]
       summary: The catalogue of events a webhook can subscribe to (served, never hard-coded)
-      description: 'The names of `WebhookEventName`, with the descriptions its `x-webhook-events` gives (decision §52). Only these events are sent to webhooks.'
+      description: 'The names of `WebhookEventName`, with the descriptions its `x-webhook-events` gives (decision §53). Only these events are sent to webhooks.'
       x-scope: global
       x-rt-events: []
       responses:
@@ -11663,7 +11663,7 @@ paths:
       operationId: notify.createWebhook
       tags: [notify]
       summary: Register a webhook (admin)
-      description: 'The hub then sends every subscribed event from the listed profiles as a `WebhookPayload`, signed `X-CoreHub-Signature: sha256=<hmac>` when `secret` is set (decisions §42, §52). A delivery is queued and sent in the background; a failed attempt is retried `max_retries` times with exponential backoff, each attempt within 10 s, and the address is checked again at each attempt.'
+      description: 'The hub then sends every subscribed event from the listed profiles as a `WebhookPayload`, signed `X-CoreHub-Signature: sha256=<hmac>` when `secret` is set (decisions §42, §53). A delivery is queued and sent in the background; a failed attempt is retried `max_retries` times with exponential backoff, each attempt within 10 s, and the address is checked again at each attempt.'
       x-scope: global
       x-roles: [owner, admin]
       requestBody:
@@ -11896,7 +11896,7 @@ paths:
       operationId: notify.redeliverWebhookDelivery
       tags: [notify]
       summary: Send a failed delivery again (admin)
-      description: 'Queues a new delivery with the same body (decision §52) and answers it. Only a delivery that is `dead`, or `failed` with no retry pending, can be redelivered (`409 state_invalid` otherwise); the webhook must still exist.'
+      description: 'Queues a new delivery with the same body (decision §53) and answers it. Only a delivery that is `dead`, or `failed` with no retry pending, can be redelivered (`409 state_invalid` otherwise); the webhook must still exist.'
       x-scope: global
       x-roles: [owner, admin]
       x-rt-events: []
@@ -12368,7 +12368,7 @@ webhooks:
     post:
       operationId: webhook.hubEvent
       tags: [notify]
-      summary: What the hub sends to a webhook (decision §52)
+      summary: What the hub sends to a webhook (decision §53)
       description: 'One request per event and webhook, as `WebhookPayload`. Any `2xx` answer is delivered; anything else, a redirect, no answer within 10 s, or an address that now resolves somewhere private is a failed attempt, retried `max_retries` times with exponential backoff.'
       parameters:
         - name: X-CoreHub-Signature
@@ -18411,7 +18411,7 @@ components:
         status:
           type: string
           enum: [queued, delivered, failed, dead]
-          description: '`queued` = not tried yet. `failed` = the last attempt failed; `next_attempt_at` says when it is tried again, or is null when it will not be (a test delivery, or a webhook switched off or removed). `dead` = the hub gave up after `max_retries` retries (decision §52).'
+          description: '`queued` = not tried yet. `failed` = the last attempt failed; `next_attempt_at` says when it is tried again, or is null when it will not be (a test delivery, or a webhook switched off or removed). `dead` = the hub gave up after `max_retries` retries (decision §53).'
         attempts:
           type: integer
           minimum: 0
@@ -18434,7 +18434,7 @@ components:
     WebhookEventName:
       type: string
       description: >-
-        An event a webhook can subscribe to (decision §52). `x-webhook-events` is the catalogue
+        An event a webhook can subscribe to (decision §53). `x-webhook-events` is the catalogue
         `notify.listWebhookEvents` serves: for each name, the realtime schema its `data` follows
         (`events/<source>/<name>.schema.json`, the envelope's `payload`), its description, and the
         fields of `data` left out unless the webhook says `include_content` (dotted paths).
@@ -18578,7 +18578,7 @@ components:
     WebhookPayload:
       type: object
       description: >-
-        The JSON body of every delivery (decision §52). Sent as `POST` with
+        The JSON body of every delivery (decision §53). Sent as `POST` with
         `X-CoreHub-Signature: sha256=<hex HMAC-SHA256 of the body>` when the webhook has a secret,
         `X-CoreHub-Event: <event>` and `X-CoreHub-Delivery: <delivery id>`. A retry sends the same
         body; a redelivery sends the same body under a new delivery id.

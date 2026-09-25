@@ -1,5 +1,5 @@
 /**
- * Webhooks receive the hub's events (2026-09-25, contract decision §52), against the real
+ * Webhooks receive the hub's events (2026-09-25, contract decision §53), against the real
  * hub: a webhook subscribed to "An agent run finished" is added from Settings, a scripted
  * chat runs, and the delivery arrives at a receiver started by this test — signed with the
  * secret the page showed, without the message text — and is listed as delivered with the

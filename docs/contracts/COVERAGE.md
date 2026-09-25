@@ -55,7 +55,7 @@ Legend: **reads** = data the screen shows · **acts** = what the person can do
 |---|---|---|---|---|
 | 10 | `settings` › **Current Account** | `auth.getMe`, `auth.getUserAvatar`, `auth.listLockouts` (admin), `auth.listAppTokens` | `auth.updateMe` (display name, username, avatar, locale), `auth.changePassword`, `auth.clearLockouts`, `auth.createAppToken`, `auth.revokeAppToken`, `auth.logout` | — |
 | 10 | `settings` › **Account Management** (admin) | `auth.listUsers`, `auth.getUser`, `auth.listProfiles` (profile chips) | `auth.createUser`, `auth.updateUser`, `auth.deleteUser` | — |
-| 10 | `settings` › **Webhooks** (admin) | `notify.listWebhooks`, `notify.listWebhookEvents`, `notify.listWebhookDeliveries` | `notify.createWebhook`, `notify.updateWebhook`, `notify.deleteWebhook`, `notify.testWebhook`, `notify.redeliverWebhookDelivery` | `job.completed` (test); outgoing: `webhooks.hubEvent` (§52) |
+| 10 | `settings` › **Webhooks** (admin) | `notify.listWebhooks`, `notify.listWebhookEvents`, `notify.listWebhookDeliveries` | `notify.createWebhook`, `notify.updateWebhook`, `notify.deleteWebhook`, `notify.testWebhook`, `notify.redeliverWebhookDelivery` | `job.completed` (test); outgoing: `webhooks.hubEvent` (§53) |
 | 10 | `settings` › **Display** | `auth.getPreferences` (theme, locale, text scale, link target, busy-input mode, streaming, compact, reasoning, tool calls, cost, diffs, sounds, notify flags) | `auth.setPreferences` | — |
 | 10 | `settings` › **Proxy** / **Compression** / **Privacy** | `auth.getProfileSettings` | `auth.updateProfileSettings` (one section per save; proxy returns a restart job) | `job.*` |
 | 10 | `settings` › **Models** (provider keys only) | `models.listProviders` | `models.updateProvider` (`api_key`) | — |

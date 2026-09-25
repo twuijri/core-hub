@@ -1,4 +1,4 @@
-// `pnpm contract:test`: webhooks receive the hub's events (decision §52), driven through the
+// `pnpm contract:test`: webhooks receive the hub's events (decision §53), driven through the
 // generated TypeScript client. Every answer is validated against the schema the contract
 // documents for its status, and every body a receiver gets against `WebhookPayload` — with
 // its `data` against the realtime event schema it says it follows, and its headers against

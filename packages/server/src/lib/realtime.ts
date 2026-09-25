@@ -50,7 +50,7 @@ export const userRoom = (userId: string): string => `user:${userId}`;
 
 /**
  * An event as it left the hub, for a listener that is not a socket (the webhooks of
- * `notify`, contract decision §52). `profile` is the workspace slug, or null for a
+ * `notify`, contract decision §53). `profile` is the workspace slug, or null for a
  * user-level event; `payload` is the envelope's, exactly as the clients receive it.
  */
 export interface TappedEvent {

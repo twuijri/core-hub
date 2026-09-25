@@ -5,7 +5,7 @@
  * but the hub keeps each webhook in the profile the request came from, so switching
  * profiles lists a different set — the key carries the profile for that reason.
  *
- * **Deliveries happen in the background** (contract decision §52): an event is queued,
+ * **Deliveries happen in the background** (contract decision §53): an event is queued,
  * sent, and retried with backoff by the hub; the table here follows it and can send a
  * failed one again.
  *

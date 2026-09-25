@@ -16,7 +16,7 @@
 
 ## القرار والموافقات
 المهمة من المنسّق نيابة عن المالك (المالك نائم؛ القرارات أدناه **مقترحة — بانتظار تأكيد المالك**)،
-ومدوّنة في `docs/contracts/DECISIONS.md` §52:
+ومدوّنة في `docs/contracts/DECISIONS.md` §53:
 
 - **قائمة أحداث مختارة في العقد، لا كل أحداث الوقت الحقيقي.** `WebhookEventName` فيه ١٤ حدثًا (الستة
   المطلوبة وما يكمّلها: `run.cancelled` و`approval.resolved` و`task.created` و`schedule_run.failed`
@@ -60,7 +60,7 @@
 - عملية جديدة `notify.redeliverWebhookDelivery` — `POST /notify/webhooks/{webhook_id}/deliveries/{delivery_id}/redeliver`
   (مشرف) → `202 WebhookDelivery`، و`404`، و`409`.
 - `derived.webhookEventHeader` و`derived.webhookDeliveryHeader` في `src/product.ts`.
-- `docs/contracts/DECISIONS.md` §52، و`COVERAGE.md` (صف الخطافات)، والعدد في `STATUS.md`: ‏207 من 265،
+- `docs/contracts/DECISIONS.md` §53، و`COVERAGE.md` (صف الخطافات)، والعدد في `STATUS.md`: ‏207 من 265،
   و`notify` ‏13 من 13.
 
 ## الملفات والتأثير
@@ -127,7 +127,7 @@ CI: يُملأ بعد الدفع (انظر «التسليم»).
 - المستمع لا يكسر الإرسال: خطأ فيه يُبتلع بعد وصول الحدث للمقابس.
 - خلل معروف خارج النطاق: مسار نقل المهمة (`tasks.moveTask`) يرسل `task.moved` بـ`task` فقط، والمخطط
   يطلب `from` و`to` و`actor` أيضًا؛ الخطاف يستلمه كما هو.
-- ملفات مشتركة: `STATUS.md` (سطر العدد)، ملفات اللغة، `DECISIONS.md` (§52 بعد §47–§51 في PRs مفتوحة).
+- ملفات مشتركة: `STATUS.md` (سطر العدد)، ملفات اللغة، `DECISIONS.md` (§53 بعد §47–§51 في PRs مفتوحة).
 - الرجوع: استرجاع الـcommits؛ لا ترحيل قاعدة بيانات (الأعمدة كانت موجودة: `next_attempt_at`…).
 
 ## التسليم والخطوة التالية
