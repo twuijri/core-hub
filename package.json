@@ -1,6 +1,6 @@
 {
   "name": "corehub",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "Core Hub — a self-hosted hub for AI agents. Server first; every client renders one contract.",
   "license": "Apache-2.0",
