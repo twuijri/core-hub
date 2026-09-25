@@ -13,8 +13,9 @@
  * - the hub can reconcile the table against the volume on start, because the volume is
  *   the truth about what is actually installed (`reconcile()` in `service.ts`).
  *
- * The version comes from the catalog entry's pin, never from `latest`: what gets installed
- * is what the owner reviewed. Every command is an argv array (AGENTS.md hard rules), and a
+ * The version comes from the catalog entry's pin, never from `latest`: what a fresh install
+ * gets is what the owner reviewed. An update may name a newer exact version the registry
+ * published (`update-policy.ts`, DECISIONS §59); the pin stays the tested baseline. Every command is an argv array (AGENTS.md hard rules), and a
  * failure is thrown carrying npm's own message so the job ends `job.failed` — never a
  * success with an empty result.
  */
