@@ -1,4 +1,4 @@
-// `pnpm contract:test`: what the web's workflow editor calls (DECISIONS §48), driven through
+// `pnpm contract:test`: what the web's workflow editor calls (DECISIONS §52), driven through
 // the generated TypeScript client — the live check of an unsaved drawing, every profile's
 // workflows, and a run whose steps say what they produced and which way they went. Every
 // answer is validated against the schema the contract documents for its status.

@@ -152,7 +152,7 @@
         },
         "output": {
           "type": ["string", "null"],
-          "description": "What the step produced, as text; `null` while it has not finished (DECISIONS §48)."
+          "description": "What the step produced, as text; `null` while it has not finished (DECISIONS §52)."
         },
         "route": {
           "oneOf": [

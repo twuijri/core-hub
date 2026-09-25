@@ -1228,7 +1228,7 @@ export function definitionOf(input: Record<string, unknown>): WorkflowDefinition
 /**
  * One thing worth saying about a drawing: a stable `code` a client translates, the node or
  * edge it is about (so an editor can mark it), and the same thing in English words — which
- * is what `workflow_invalid` has always carried (contract `WorkflowIssue`, DECISIONS §48).
+ * is what `workflow_invalid` has always carried (contract `WorkflowIssue`, DECISIONS §52).
  */
 export interface WorkflowIssue {
   code: string;

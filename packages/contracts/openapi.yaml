@@ -8878,7 +8878,7 @@ paths:
         The workflows of the profile in `X-Hub-Profile`. With `profiles=all` the list is every
         profile the caller may enter instead (the server's rule, as `schedules.list`), each
         workflow carrying its own `profile`, newest first — the Schedules page shows every
-        profile (ADR 0016, DECISIONS §48). A client then acts on a workflow with that
+        profile (ADR 0016, DECISIONS §52). A client then acts on a workflow with that
         workflow's `profile` in `X-Hub-Profile`.
       parameters:
         - $ref: '#/components/parameters/Profile'
@@ -9042,7 +9042,7 @@ paths:
         not saved: `problems` are what saving would refuse (`409 workflow_invalid`), and
         `warnings` are worth saying but saved anyway. Each names the node or edge it is
         about, so an editor can mark it, and carries a stable `code` a client translates
-        (DECISIONS §48). Nothing is written and nothing is announced.
+        (DECISIONS §52). Nothing is written and nothing is announced.
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -17236,7 +17236,7 @@ components:
             What the step produced, as text — the agent's answer, the notice's words, a
             condition's `true`/`false`, a delay's seconds, an approval's answer — at most
             20 000 characters; `null` while it has not finished or when it produced nothing
-            (DECISIONS §48).
+            (DECISIONS §52).
         route:
           description: >-
             Which of the step's edges it follows: `success` after a step that succeeded or a

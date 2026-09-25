@@ -1025,7 +1025,7 @@ Rejected: a new `source` field on `SessionCreate` (a client could then make any 
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
 
-## 48. A workflow is drawn against the hub's own check, and a run says what each step produced
+## 52. A workflow is drawn against the hub's own check, and a run says what each step produced
 
 The web gets a canvas for workflows (the Workflows section of the Schedules page). A canvas
 needs three things the contract did not have. Proposed here — owner to confirm:

@@ -1,5 +1,5 @@
 /**
- * The Workflows section of the Schedules page and its canvas (DECISIONS §48).
+ * The Workflows section of the Schedules page and its canvas (DECISIONS §52).
  *
  * Asserted: every profile's workflows are listed (`profiles=all`); a new workflow is drawn
  * from the palette, connected from the side panel, checked by the hub as it changes (its

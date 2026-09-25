@@ -4,7 +4,7 @@
  * pointer events — no canvas library (the editor needs a few hundred lines of this, not a
  * framework, and our own controls stay ours: DESIGN.md §UI policy).
  *
- * Direction (DECISIONS §48): a flow runs the way the page reads. The drawing's `x` is
+ * Direction (DECISIONS §52): a flow runs the way the page reads. The drawing's `x` is
  * logical, and in a right-to-left language the whole drawing is mirrored by one transform
  * (`geometry.ts`); each node mirrors its own content back, so words read normally while the
  * steps run right-to-left. The same workflow opened in English runs left-to-right. The

@@ -1,7 +1,7 @@
 /**
  * The workflow editor's calls. Every call about a workflow goes to that workflow's own
  * profile (`X-Hub-Profile`), whichever one the top selector shows (ADR 0016); the list is
- * every profile the person may enter (`profiles=all`, DECISIONS §48).
+ * every profile the person may enter (`profiles=all`, DECISIONS §52).
  *
  * Keys start with `schedules`, so the page's realtime handler (`/rt/schedules`: runs,
  * steps, workflows) refreshes them with everything else on the page.

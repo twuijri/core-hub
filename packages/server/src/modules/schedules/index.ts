@@ -881,7 +881,7 @@ export const schedulesModule = defineModule({
         const scope = scopeOf(request);
         const service = serviceOf(request);
         // `profiles=all`: every profile this person may enter, as the Schedules page shows
-        // them (ADR 0016, DECISIONS §48); otherwise the header's profile, as before.
+        // them (ADR 0016, DECISIONS §52); otherwise the header's profile, as before.
         let scopes: Scope[] = [scope];
         if (query.profiles === 'all') {
           const principal = request.principal;

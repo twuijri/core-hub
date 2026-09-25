@@ -1,5 +1,5 @@
 /**
- * What the web's workflow editor needs from the hub (DECISIONS §48): a check of a drawing
+ * What the web's workflow editor needs from the hub (DECISIONS §52): a check of a drawing
  * nobody saved, whose findings name the node they are about; every profile's workflows on
  * one page; and, in a run, what each step produced and which way it went — so the canvas
  * can show the output and the edges taken. And an agent step's own model reaches its turn.

@@ -12,7 +12,7 @@
  * changed from its card. Hermes decides both for its own jobs, so its schedules have none.
  *
  * The page has two sections: Schedules, and Workflows — every workflow of every profile,
- * each drawn and run on a canvas (`workflows/`, DECISIONS §48).
+ * each drawn and run on a canvas (`workflows/`, DECISIONS §52).
  */
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';

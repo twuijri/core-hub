@@ -9,7 +9,7 @@
  *
  * Positions are *logical*: `x` is the distance along the reading direction, so a flow
  * drawn in Arabic runs right-to-left and the same workflow opened in English runs
- * left-to-right (the canvas mirrors itself; `WorkflowCanvas.tsx`, DECISIONS §48).
+ * left-to-right (the canvas mirrors itself; `WorkflowCanvas.tsx`, DECISIONS §52).
  */
 
 export const NODE_KINDS = ['agent', 'condition', 'delay', 'notify', 'approval'] as const;

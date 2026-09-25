@@ -1,5 +1,5 @@
 /**
- * 32. A workflow drawn on the canvas, against the real hub (2026-09-25, DECISIONS §48).
+ * 32. A workflow drawn on the canvas, against the real hub (2026-09-25, DECISIONS §52).
  *
  * In Arabic, so the canvas runs right-to-left: a new workflow in the Workflows section of
  * the Schedules page, an Agent step and a Notify step added from the palette, connected by

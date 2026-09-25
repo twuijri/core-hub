@@ -1,5 +1,5 @@
 /**
- * The workflow editor's state (DECISIONS §48): adding, connecting and deleting keep the
+ * The workflow editor's state (DECISIONS §52): adding, connecting and deleting keep the
  * drawing consistent, the drawing is the contract's `WorkflowWrite` both ways, a condition
  * form round-trips the engine's text, and a run is read onto the canvas — each node's state
  * and the edges taken. And the canvas arithmetic: a flow runs the way the page reads.
