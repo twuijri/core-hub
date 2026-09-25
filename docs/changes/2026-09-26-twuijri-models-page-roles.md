@@ -169,7 +169,12 @@ $ vitest run tests/navigation.parity.test.tsx tests/voice-dictation.test.tsx tes
 (لم أضف رحلة جديدة)، والاختبار الحقيقي مع هرمز في الصورة (`skill-library.real.test.ts` يحتاج Docker، وليس
 معي في هذه المهمة) — فالإضافة لم تُجرَّب بعد داخل هرمز حقيقي.
 
-نتيجة CI على #144: تُضاف بعد الدفع.
+نتيجة CI على #144 عند `800c436` (فيه هذه المهمة): كلها ناجحة — CI (lint وtypecheck والعقد واختبارات العملاء
+والبناء، وشرائح الخادم الثلاث، وdb:migrate على SQLite وPostgreSQL، وصورة Docker، ورحلات الويب، وسطح المكتب)،
+وAndroid وiOS وDesktop installers وChange record. التشغيل السابق عند `7874c94` فشل في اختبار ويب واحد لا تلمسه
+المهمة: `voice-dictation.test.tsx` «falls back to the browser’s recognizer…» (`expected 'en-US' to be 'ar-SA'`).
+يفشل أيضًا على `origin/integration/2026-09-25` تحت الضغط (1 من 12 تشغيلًا مع إشغال كل الأنوية، و3 من 12 على هذا
+الفرع): سباق في الاختبار نفسه، ينتظر أن يُطلب `preferences` لا أن يُطبَّق قبل النقر على الميكروفون.
 
 ## المخاطر والرجوع
 - **أنماط الأسماء** (أي نموذج للصور، وأي بروتوكول) تخمين من الاسم حين لا يقول المزوّد؛ نموذج صور باسم غريب
