@@ -67,6 +67,7 @@ Legend: **reads** = data the screen shows · **acts** = what the person can do
 | 14 | `skillsUsage` — Skills Usage | `audit.getReport` (`kind=skills`, `days`) — Phase 4 stub | — | — |
 | 15 | `theme` — Theme (server theme and background, per workspace) | `auth.getProfileSettings` (`appearance`), `sessions.getAttachment` (background) | `auth.updateProfileSettings` (`appearance`), `sessions.uploadAttachment` (`purpose=background`), `sessions.deleteAttachment` | — |
 | 16 | `profiles` — Profiles (admin) | `auth.listProfiles`, `auth.getProfile`, `agents.list` (`runtime.state` per agent) | `auth.createProfile` (incl. clone), `auth.updateProfile` (rename, slug, avatar, default model), `auth.deleteProfile`, `auth.exportProfile`, `auth.importProfile`, `agents.restart` (runtime restart), "Edit config" → `files` | `agent.updated`, `job.*` |
+| 16b | `files` — Files (owner and admin; the selected profile's working folder, DECISIONS §56) | `knowledge.listWorkspaceFiles`, `knowledge.readWorkspaceText`, `knowledge.downloadWorkspaceFile` (preview and save), `knowledge.downloadWorkspaceFolder` (zip), `sessions.list` (Attach to chat targets) | `knowledge.uploadWorkspaceFile`, `knowledge.createWorkspaceFolder`, `knowledge.writeWorkspaceText` (edit with etag, new file with `null`), `knowledge.moveWorkspaceFile` (rename, move), `knowledge.copyWorkspaceFile`, `knowledge.deleteWorkspaceFile`, `knowledge.attachWorkspaceFile` (then the composer) | — |
 
 ## Root content with a payload
 

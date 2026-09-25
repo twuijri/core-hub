@@ -95,7 +95,7 @@ function hub(options: { conflictOnce?: boolean } = {}) {
   let etag = '"v1"';
   const fetchImpl = ((url: string, init: RequestInit = {}) => {
     const parsed = new URL(String(url));
-    const path = parsed.pathname.replace('/api/v1', '');
+    const path = parsed.pathname.replace(/^\/api\/v\d+/, '');
     const method = (init.method ?? 'GET').toUpperCase();
     const body = typeof init.body === 'string' ? JSON.parse(init.body) : null;
     sent.push({ path, query: parsed.search, method, body });
