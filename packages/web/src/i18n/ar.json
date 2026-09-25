@@ -181,7 +181,33 @@
     "select_none": "إلغاء التحديد",
     "select_one": "حدّد {title}",
     "selected_count": "{count} محدّدة",
-    "confirm_delete_many": "حذف {count} محادثة؟"
+    "confirm_delete_many": "حذف {count} محادثة؟",
+    "categories": {
+      "new": "تصنيف جديد",
+      "new_label": "اسم التصنيف",
+      "new_in_profile": "يُنشأ في البروفايل {profile}، ويراه كل من يدخل هذا البروفايل.",
+      "create": "إنشاء",
+      "rename": "إعادة تسمية التصنيف",
+      "move_up": "نقل لأعلى",
+      "move_down": "نقل لأسفل",
+      "delete": "حذف التصنيف",
+      "confirm_delete": "حذف التصنيف «{name}»؟",
+      "confirm_delete_body": "تبقى محادثاته، وتعود إلى القائمة بلا تصنيف.",
+      "more": "المزيد لـ {name}",
+      "count": "{count} محادثة",
+      "move_to": "نقل إلى تصنيف",
+      "move_title": "نقل «{title}» إلى تصنيف",
+      "move_hint": "تصنيفات البروفايل {profile}.",
+      "none": "بلا تصنيف",
+      "current": "الحالي",
+      "new_and_move": "تصنيف جديد…",
+      "empty_group": "اسحب محادثة إلى هنا، أو استخدم قائمتها."
+    },
+    "channels": {
+      "telegram": "تيليجرام",
+      "whatsapp": "واتساب",
+      "other": "القنوات: {name}"
+    }
   },
   "search": {
     "placeholder": "ابحث في العناوين والرسائل…",
