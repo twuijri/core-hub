@@ -926,7 +926,7 @@ describe('models: speech', () => {
     }
   });
 
-  it('is still a documented 501 for OAuth sign-in, because no provider uses it yet', async () => {
+  it('refuses a sign-in for a provider used with a key (decision §55)', async () => {
     const hub = await signedInHub();
     try {
       const anthropic = await addProvider(hub, 'anthropic', { api_key: 'sk-ant-for-signin' });
@@ -934,9 +934,10 @@ describe('models: speech', () => {
         method: 'POST',
         url: `/api/v1/models/providers/${anthropic.id}/sign-in`,
       });
-      expect(response.statusCode).toBe(501);
+      expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({
-        code: 'not_implemented',
+        code: 'state_invalid',
+        details: { reason: 'sign_in_unsupported' },
         error: expect.stringContaining('API key') as unknown as string,
       });
     } finally {

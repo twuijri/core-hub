@@ -1339,3 +1339,65 @@ under); cost budgets in any currency (the hub has no exchange rate); a step time
 the whole run (a timeout is a failure a drawing may want to handle, like any other); counting
 the wait at an approval (a budget protects against runaway work, not a slow person); computing
 the next times in the browser (a second cron reader that could disagree with the hub's).
+
+## 54. A turn moves down the profile's fallback chain when the provider, not the request, failed
+
+`ModelDefaults.fallbacks` was declared from the start ("tried in order when the chosen model
+fails") and stored, but nothing tried it: a `503 auth_unavailable` from the owner's proxy ended
+the whole run (2026-09-25). What it means now — proposed, owner to confirm:
+
+- **When it moves on.** Only on an error another model could get past: the provider is
+  unavailable (any 5xx, or a body saying `auth_unavailable`), rate limited (429), timed out
+  (408, or no answer in time) or could not be reached at all. Never on another 4xx — a request
+  the provider refused as invalid (400, 404 unknown model, 413, 422) would be refused by the
+  next one too — and not on 401/403, which say this provider's key is wrong, something the
+  person must fix rather than something to hide. Never once the model has started answering:
+  a second model finishing the first one's half-sentence would read as one voice.
+- **Which chain.** The profile's, with its chat model (inherited from `default` together with
+  it, §37). Every agent of the profile uses it after the model that agent runs on — the one
+  chosen in the composer, the agent's own, or the profile's; a model already tried is skipped.
+  A per-agent chain is not in this decision.
+- **Where it runs.** For Hermes, in Hermes: the hub writes the chain as `fallback_providers`
+  in the profile's `config.yaml` (Hermes's own failover, MIT source
+  `hermes_cli/fallback_config.py`), the key the hub then owns wherever it owns the model
+  selection; which errors move on is then Hermes's own classification of them. For the hub's
+  own `direct` agent, in the hub, by the rule above.
+- **What a client sees.** `Run.fallback` (absent or `null` when the chosen model answered) lists
+  the models that failed, in order, with the contract's error code and the provider's words;
+  `Run.model` / `Run.provider` then name the model that answered. The first `turn` step of that
+  run in the trajectory carries the same `fallback`, and every `turn` step its `model`. Hermes
+  does not say why it switched, so its attempts have `code: null`.
+
+Rejected: a new `run.fallback` realtime event (the switch happens before the first word, and
+`run.completed` already carries the run); retrying the same model first (Hermes already does;
+the direct agent's providers answer an outage for longer than a retry waits).
+
+## 55. A provider signed in to by device code is signed in through Hermes, where Hermes can
+
+`models.startProviderSignIn` / `getProviderSignIn` / `completeProviderSignIn` were declared and
+answered `501` because no provider in the catalogue used a sign-in. Hermes can sign in to four
+by device code from its own server (MIT source `hermes_cli/web_routers/oauth.py`): Nous Portal,
+a ChatGPT/Codex subscription, xAI Grok (SuperGrok / Premium+) and MiniMax. Proposed, owner to
+confirm:
+
+- **Those four are presets with `sign_in: true`** (`ProviderPreset.sign_in`, new, required):
+  added with no key, `auth.kind = oauth`, `signed_in` false until a sign-in is approved. No
+  other provider offers a sign-in, so a client shows the button only for these. Anthropic's
+  subscription is not one of them: Hermes deliberately keeps it to its terminal, and the hub
+  follows it.
+- **Hermes does the sign-in and keeps the credential**, through its server (ADR 0015): the hub
+  starts it for the provider's scope — a shared provider in Hermes's root (the `default`
+  profile), a profile's own provider in that Hermes profile — shows Hermes's code and link, and
+  answers each poll with Hermes's state. No token passes through the hub. So the hub offers it
+  only where it supervises Hermes (`409 state_invalid`, `details.reason = hermes_not_supervised`
+  elsewhere), and a signed-in provider is used by Hermes alone: the `direct` agent refuses it by
+  name, and its models are the ones Hermes lists for it.
+- **`ProviderSignIn`** gains `failed` (the sign-in could not finish) and `error` (why, in
+  Hermes's words). `accepts_code` is false for every one of them, so `completeProviderSignIn`
+  is `409 state_invalid` (`details.reason = code_not_accepted`). A sign-in the hub no longer
+  holds — its code ran out, or the hub restarted — is `404`.
+
+Rejected: the hub running the device-code exchange itself (it would hold subscription tokens
+Hermes then has to be handed, and Hermes's refresh logic per provider is not ours to copy);
+offering the sign-in where the hub does not supervise Hermes (the credential would land in a
+home it does not write to).

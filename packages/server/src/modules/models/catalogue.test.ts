@@ -112,7 +112,10 @@ describe('provider catalogue', () => {
         expect(['required', 'optional']).toContain(preset.keyRequirement);
         // `auth.kind: none` is "no key required", which is exactly what lets a client
         // keep offering the field (the defect of 2026-09-22).
-        expect(authKindOf(preset)).toBe(preset.keyRequirement === 'required' ? 'api_key' : 'none');
+        // A provider used by signing in is `oauth` (contract decision §55): still no key refused.
+        expect(authKindOf(preset)).toBe(
+          preset.signIn ? 'oauth' : preset.keyRequirement === 'required' ? 'api_key' : 'none',
+        );
       }
     });
   });

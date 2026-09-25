@@ -81,6 +81,13 @@ export interface PropagationState {
   /** Why `hermesModel` is null, when the owner did choose a default. */
   hermesModelBlocked: string | null;
   /**
+   * The chat fallback chain in Hermes's vocabulary (contract decision §54), for its
+   * `fallback_providers`. `null` leaves the key alone — the hub owns it only where it owns the
+   * model selection, so it is null whenever `hermesModel` is. Members Hermes cannot be told
+   * about are left out. Absent means null.
+   */
+  hermesFallbacks?: HermesModelChoice[] | null;
+  /**
    * Every variable name the hub writes a key under, including those of providers it had and
    * removed. The hub owns these names in Hermes's `.env`: one with no key any more is removed
    * from the file (contract decision §37 — removing a provider applies everywhere). Absent,
@@ -228,8 +235,12 @@ export function writeHermesModel(
 export function writeHermesProviders(
   home: string,
   routes: readonly HermesProviderRoute[],
+  fallbacks: readonly HermesModelChoice[] | null = null,
 ): HermesWriteResult {
-  return editHermesConfig(home, (document, result) => applyProviders(document, routes, result));
+  return editHermesConfig(home, (document, result) => {
+    applyProviders(document, routes, result);
+    applyFallbacks(document, fallbacks, result);
+  });
 }
 
 export interface HermesPropagation {
@@ -252,6 +263,7 @@ export function writeHermesConfiguration(home: string, state: PropagationState):
   const config = editHermesConfig(home, (document, result) => {
     applyProviders(document, state.hermesProviders, result);
     applyModel(document, state.hermesModel, result);
+    applyFallbacks(document, state.hermesFallbacks ?? null, result);
   });
   return { env, config, dirty: env.dirty || config.dirty };
 }
@@ -266,6 +278,7 @@ export function writeHermesRoute(home: string, state: PropagationState): HermesW
   return editHermesConfig(home, (document, result) => {
     applyProviders(document, state.hermesProviders, result);
     applyModel(document, state.hermesModel, result);
+    applyFallbacks(document, state.hermesFallbacks ?? null, result);
   });
 }
 
@@ -338,6 +351,36 @@ function applyModel(
       }
     }
   }
+}
+
+/**
+ * `fallback_providers`: the chain Hermes walks when the model fails (contract decision §54),
+ * each entry the `provider` + `model` pair Hermes's own `hermes fallback` writes (MIT source
+ * `hermes_cli/fallback_cmd.py`). Rewritten only when the pairs differ, so an entry somebody
+ * gave more keys by hand keeps them while it still names the same model. `null` leaves the key
+ * alone; an empty chain empties a list that has entries, and writes nothing where there is none.
+ * The legacy single `fallback_model` is Hermes's to merge and is never touched.
+ */
+function applyFallbacks(
+  document: YAML.Document,
+  fallbacks: readonly HermesModelChoice[] | null,
+  result: HermesWriteResult,
+): void {
+  if (fallbacks === null) return;
+  const current = document.get('fallback_providers');
+  const plain = YAML.isSeq(current) ? (current.toJSON() as unknown[]) : null;
+  const pairs = (plain ?? []).map((entry) => {
+    const item = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>;
+    return `${String(item.provider ?? '')}\u0000${String(item.model ?? '')}`;
+  });
+  const wanted = fallbacks.map((choice) => `${choice.provider}\u0000${choice.model}`);
+  if (fallbacks.length === 0 && pairs.length === 0) return;
+  if (plain !== null && pairs.join('\n') === wanted.join('\n')) return;
+  document.set(
+    'fallback_providers',
+    fallbacks.map((choice) => ({ provider: choice.provider, model: choice.model })),
+  );
+  result.changed.push('fallback_providers');
 }
 
 /**

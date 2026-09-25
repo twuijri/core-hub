@@ -147,6 +147,14 @@ export interface AgentChoice {
  * transport-free: an ACP notification, a Hermes gateway frame and a parsed
  * PTY line all become one of these.
  */
+/** One model of the fallback chain that failed a turn (contract `RunFallbackAttempt`). */
+export interface AgentFallbackAttempt {
+  model: string;
+  provider: string | null;
+  code: string | null;
+  error: string | null;
+}
+
 export type AgentEvent =
   | { type: 'message_delta'; text: string }
   | { type: 'reasoning_delta'; text: string }
@@ -188,6 +196,17 @@ export type AgentEvent =
       costSource?: 'provider' | 'estimated' | 'unknown';
     }
   | { type: 'context'; usedTokens: number; windowTokens?: number | null }
+  | {
+      /**
+       * The turn moved down the fallback chain (contract decision §54): the models in
+       * `failed` refused it, in order, with an error another model could get past, and
+       * `answered` is the one that took it — or, when the run then failed, the last tried.
+       * `provider` is the hub's provider slug, when known.
+       */
+      type: 'model_fallback';
+      failed: AgentFallbackAttempt[];
+      answered: { model: string; provider: string | null };
+    }
   | { type: 'completed' }
   | { type: 'failed'; code?: string; message: string };
 

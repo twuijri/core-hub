@@ -13,6 +13,7 @@ import { useI18n } from '../i18n/context.js';
 import { Badge, Button, EmptyState, Input, Notice, SkeletonText, Tooltip } from '../ui/index.js';
 import { IconDownload, IconSearch, IconSpark, IconTool } from '../ui/icons.js';
 import { ToolCallBody } from './ToolCallCard.js';
+import { failedNames, failureReasons } from './fallback.js';
 import {
   LANES,
   NO_FILTER,
@@ -359,7 +360,7 @@ function StepRow({
   flash: number | null;
   onToggle(): void;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const ms = durationOf(step, now);
   const summary = summaryOf(step);
   const result = resultOf(step);
@@ -408,6 +409,12 @@ function StepRow({
             </span>
           )}
         </span>
+        {step.fallback && step.fallback.failed.length > 0 && (
+          // The turn was answered by a fallback model (contract decision §54).
+          <Badge tone="warning" testId="trajectory-fallback">
+            {t('trajectory.fallback', { failed: failedNames(step.fallback, language) })}
+          </Badge>
+        )}
         {step.status !== 'succeeded' && (
           <Badge tone={STATUS_TONE[step.status]} dot={step.status === 'running'}>
             {t(`trajectory.status.${step.status}`)}
@@ -417,6 +424,16 @@ function StepRow({
       </button>
       {expanded && (
         <div className="trajectory-step-body" id={bodyId} data-testid="trajectory-step-body">
+          {step.kind === 'turn' && step.model && (
+            <p className="trajectory-step-meta" dir="auto" data-testid="trajectory-step-model">
+              {t('trajectory.model', { model: step.model })}
+            </p>
+          )}
+          {step.fallback && failureReasons(step.fallback) && (
+            <p className="trajectory-step-meta" dir="auto">
+              {t('chat.fallback_reason', { reason: failureReasons(step.fallback) as string })}
+            </p>
+          )}
           {step.first_token_ms !== null && (
             <p className="trajectory-step-meta">
               {t('trajectory.first_token_here', { time: formatMs(step.first_token_ms, units) })}

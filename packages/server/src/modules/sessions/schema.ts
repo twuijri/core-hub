@@ -115,8 +115,21 @@ export type MessagePart =
   | { type: 'tool_call'; toolCallId: string }
   | { type: 'approval'; approvalId: string };
 
-/** `runs.timing`: epoch milliseconds and offsets into the run's text and reasoning. */
+/**
+ * `runs.timing`: epoch milliseconds and offsets into the run's text and reasoning — and, since
+ * contract decision §54, the models the run moved past (`fallback`), which is what the hub saw
+ * of the run the same way its turns are.
+ */
 export interface RunTiming {
+  /** The models of the fallback chain that failed the run, in order (`Run.fallback`). */
+  fallback?: {
+    failed: Array<{
+      model: string;
+      provider: string | null;
+      code: string | null;
+      error: string | null;
+    }>;
+  } | null;
   turns: Array<{
     startedAt: number;
     endedAt: number | null;

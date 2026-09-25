@@ -44,6 +44,10 @@ export interface TrajectoryStep {
   tool_call_only: boolean;
   first_token_ms: number | null;
   tool_call: Record<string, unknown> | null;
+  /** On a `turn`: the model that spoke, when the run names one (contract decision §54). */
+  model?: string | null;
+  /** On a run's first `turn`: the models that failed before `model` answered, else null. */
+  fallback?: { failed: NonNullable<NonNullable<RunRow['timing']>['fallback']>['failed'] } | null;
 }
 
 export interface TrajectoryMetrics {
@@ -352,6 +356,15 @@ function runSteps(
     );
   }
   const steps = pieces.map((piece) => piece.step);
+  // Which model spoke, and what it took over from (contract decision §54).
+  const failed = run.timing?.fallback?.failed ?? [];
+  let first = true;
+  for (const step of steps) {
+    if (step.kind !== 'turn') continue;
+    step.model = run.modelLabel ?? null;
+    step.fallback = first && failed.length > 0 ? { failed: failed.map((a) => ({ ...a })) } : null;
+    first = false;
+  }
   // A turn in which the model said nothing and handed straight over to a tool.
   steps.forEach((step, index) => {
     if (step.kind !== 'turn' || (step.text ?? '').trim() !== '') return;

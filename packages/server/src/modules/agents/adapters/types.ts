@@ -185,6 +185,17 @@ export type AgentEvent =
       costSource?: 'provider' | 'estimated' | 'unknown';
     }
   | { type: 'context'; usedTokens: number; windowTokens?: number | null }
+  | {
+      /**
+       * The turn moved down the fallback chain (contract decision §54): the models in
+       * `failed` refused it, in order, with an error another model could get past, and
+       * `answered` is the one that took it — or, when the run then failed, the last tried.
+       * `provider` is the hub's provider slug, when known.
+       */
+      type: 'model.fallback';
+      failed: FallbackAttempt[];
+      answered: { model: string; provider: string | null };
+    }
   | { type: 'run.completed'; stopReason: string; interrupted?: boolean }
   | {
       type: 'run.failed';
@@ -260,7 +271,40 @@ export interface PromptInput {
    * that will make the request.
    */
   modelProviderId?: string | null;
+  /** The hub's slug for the provider of `model`, for saying which model answered. */
+  modelProviderSlug?: string | null;
+  /**
+   * The profile's fallback chain for this turn, without the model above (contract decision
+   * §54). Hermes reads its own copy from `config.yaml` and uses this only to name what it
+   * switched to; the `builtin` adapter hands it to the models module, which walks it.
+   */
+  fallbacks?: readonly FallbackModel[];
   reasoningEffort?: string | null;
+}
+
+/** One model of a fallback chain that failed a turn (contract `RunFallbackAttempt`). */
+export interface FallbackAttempt {
+  model: string;
+  /** The hub's provider slug, when known. */
+  provider: string | null;
+  /** A contract `ErrorCode`; `null` when the runtime switched without saying why. */
+  code: string | null;
+  /** The provider's own words, when it sent any. */
+  error: string | null;
+}
+
+/**
+ * One model the turn may move on to when the chosen one fails (contract decision §54), in
+ * every vocabulary an adapter might need: the hub's row id (the `builtin` adapter makes the
+ * request itself), the runtime's name for the provider (Hermes), and the hub's slug.
+ */
+export interface FallbackModel {
+  providerId: string;
+  /** The name the agent runtime knows the provider by; null when it cannot be told. */
+  provider: string | null;
+  /** The hub's provider slug. */
+  slug: string;
+  model: string;
 }
 
 /** A live conversation with one agent. */

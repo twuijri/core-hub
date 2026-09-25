@@ -2390,6 +2390,17 @@
                 }
               ]
             },
+            "fallback": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RunFallback"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`null` when the chosen model answered (absent from hubs before decision §54). When set, the turn moved down the fallback chain and `model` / `provider` name the model that actually answered — or, when the run then failed, the last one tried."
+            },
             "started_at": {
               "oneOf": [
                 {
@@ -6661,14 +6672,24 @@
     },
     "ProviderSignIn": {
       "type": "object",
-      "required": ["id", "status", "user_code", "verification_url", "accepts_code", "expires_at"],
+      "description": "One sign-in to a provider account by device code (decision §55): the person opens `verification_url`, enters `user_code`, and the client polls `models.getProviderSignIn` until `status` is no longer `pending`. On `approved` the credential is stored where the provider's scope says — the shared provider's in the `default` profile, a profile's own provider's in that profile — and the provider's `auth.signed_in` is true.",
+      "required": [
+        "id",
+        "status",
+        "user_code",
+        "verification_url",
+        "accepts_code",
+        "expires_at",
+        "error"
+      ],
       "properties": {
         "id": {
           "$ref": "#/$defs/Ulid"
         },
         "status": {
           "type": "string",
-          "enum": ["pending", "approved", "denied", "expired"]
+          "enum": ["pending", "approved", "denied", "expired", "failed"],
+          "description": "`denied` — the person declined in the browser; `expired` — the code ran out before it was used; `failed` — the sign-in could not finish (`error` says why)."
         },
         "user_code": {
           "type": ["string", "null"]
@@ -6682,6 +6703,10 @@
         },
         "expires_at": {
           "$ref": "#/$defs/Timestamp"
+        },
+        "error": {
+          "type": ["string", "null"],
+          "description": "Why a `failed` or `denied` sign-in stopped, in the runtime's own words."
         }
       }
     },
@@ -6689,6 +6714,13 @@
       "type": "object",
       "required": ["default", "fallbacks", "auxiliary"],
       "properties": {
+        "inherited": {
+          "type": "array",
+          "description": "The roles whose value is the `default` profile's, because this profile chose none (decision §37): `default` for the chat model (with its fallbacks), else an auxiliary task key. Always empty in the `default` profile.",
+          "items": {
+            "type": "string"
+          }
+        },
         "default": {
           "oneOf": [
             {
@@ -6701,7 +6733,7 @@
         },
         "fallbacks": {
           "type": "array",
-          "description": "Tried in order when the chosen model fails.",
+          "description": "Tried in order when the chosen model fails with an error another model could get past (decision §54): the provider unavailable (a 5xx, `auth_unavailable`), rate limited (429), timed out or unreachable. Never after another 4xx, and never once the model has started answering. It follows the chat model: inherited with it, and used by every agent of the profile after the model that agent runs on.",
           "items": {
             "$ref": "#/$defs/ModelRef"
           }
@@ -8135,6 +8167,48 @@
         },
         "payload": {
           "type": "object"
+        }
+      }
+    },
+    "RunFallback": {
+      "type": "object",
+      "description": "What a turn went through before the model that answered it (decision §54): each model of the chain that failed with an error another model could get past, in the order tried, starting with the one that was chosen.",
+      "required": ["failed"],
+      "properties": {
+        "failed": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/RunFallbackAttempt"
+          }
+        }
+      }
+    },
+    "RunFallbackAttempt": {
+      "type": "object",
+      "required": ["model", "provider", "code", "error"],
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": ["string", "null"],
+          "description": "The provider's slug, when the hub knows it."
+        },
+        "code": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ErrorCode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`null` when the runtime switched models without saying why."
+        },
+        "error": {
+          "type": ["string", "null"],
+          "description": "The provider's own words, when it sent any."
         }
       }
     }

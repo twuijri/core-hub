@@ -148,6 +148,8 @@ export class AgentRunner implements AgentRunnerPort {
       model: selection.model,
       modelProvider: selection.provider,
       modelProviderId: selection.providerId,
+      modelProviderSlug: service.providerSlugOf(request.workspace, selection),
+      fallbacks: service.fallbacksFor(request.workspace, selection),
       reasoningEffort: request.reasoningEffort,
     };
     void live.session.send(prompt).catch((error: unknown) => {
@@ -278,6 +280,9 @@ export class AgentRunner implements AgentRunnerPort {
             text: request.prompt,
             model: selection.model,
             modelProvider: selection.provider,
+            modelProviderId: selection.providerId,
+            // A title is worth the same fallback a turn gets (contract decision §54).
+            fallbacks: service.fallbacksFor(request.workspace, selection),
           }),
           collect,
         ]),
@@ -651,6 +656,12 @@ export function toRunnerEvent(event: AgentEvent, ctx: TranslateContext): RunnerE
         type: 'failed',
         code: event.code ?? failureCode(event.error),
         message: event.error,
+      };
+    case 'model.fallback':
+      return {
+        type: 'model_fallback',
+        failed: event.failed.map((attempt) => ({ ...attempt })),
+        answered: { ...event.answered },
       };
     case 'plan':
       // No `/rt/sessions` event carries a plan yet; it is not a message.

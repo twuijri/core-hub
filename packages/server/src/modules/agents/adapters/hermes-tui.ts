@@ -31,7 +31,7 @@ import { createInterface } from 'node:readline';
 import { StringDecoder } from 'node:string_decoder';
 import { HubError } from '../../../lib/errors.js';
 import { EventQueue } from './event-queue.js';
-import type { AgentEvent, AgentSession, PromptInput } from './types.js';
+import type { AgentEvent, AgentSession, FallbackModel, PromptInput } from './types.js';
 
 type Json = Record<string, unknown>;
 
@@ -410,6 +410,19 @@ export class HermesTuiSession implements AgentSession {
    */
   private reported = { input: 0, output: 0, reasoning: 0 };
 
+  /**
+   * The turn in flight, as the hub asked for it: the model and provider it named, and the
+   * fallback chain (contract decision §54), so a switch Hermes makes can be said in the hub's
+   * names. `notes` are Hermes's own "Model fallback" lines from this turn.
+   */
+  private asked: {
+    model: string | null;
+    provider: string | null;
+    slug: string | null;
+    fallbacks: readonly FallbackModel[];
+    notes: FallbackNote[];
+  } = { model: null, provider: null, slug: null, fallbacks: [], notes: [] };
+
   /** What this conversation is running on, so a turn that names something else switches. */
   private current: { model: string | null; provider: string | null; effort: string | null } = {
     model: null,
@@ -510,6 +523,13 @@ export class HermesTuiSession implements AgentSession {
     const done = new Promise<string>((resolve) => {
       this.turn = { resolve };
     });
+    this.asked = {
+      model: prompt.model ?? null,
+      provider: prompt.modelProvider ?? null,
+      slug: prompt.modelProviderSlug ?? null,
+      fallbacks: prompt.fallbacks ?? [],
+      notes: [],
+    };
     try {
       await this.select(prompt);
       await this.channel.request('prompt.submit', { session_id: this.liveId, text: prompt.text });
@@ -634,6 +654,12 @@ export class HermesTuiSession implements AgentSession {
         });
         return;
       }
+      case 'status.update': {
+        // Hermes says so when it moves down its `fallback_providers` (contract decision §54).
+        const note = parseFallbackNote(text(payload.text));
+        if (note && this.turn) this.asked.notes.push(note);
+        return;
+      }
       case 'message.complete':
         this.finish(payload);
         return;
@@ -654,6 +680,8 @@ export class HermesTuiSession implements AgentSession {
 
   private finish(payload: Json): void {
     const usage = (payload.usage ?? null) as Json | null;
+    const fallback = this.fallbackOf(text(usage?.model));
+    if (fallback) this.queue.push(fallback);
     if (usage) {
       const number = (value: unknown) => (typeof value === 'number' ? value : undefined);
       const input = number(usage.input) || number(usage.prompt);
@@ -691,6 +719,41 @@ export class HermesTuiSession implements AgentSession {
       });
       this.end('failed');
     }
+  }
+
+  /**
+   * Whether Hermes answered this turn on another model than the one asked for, said in the
+   * hub's names (contract decision §54). Hermes's own notes say what failed and why; without
+   * them, a model in the usage that is not the one asked for says it all the same.
+   */
+  private fallbackOf(reported: string | null): AgentEvent | null {
+    const { model, provider, slug, fallbacks, notes } = this.asked;
+    const slugOf = (runtime: string | null, name: string | null): string | null => {
+      if (runtime !== null && runtime === provider) return slug;
+      const member =
+        fallbacks.find((each) => each.model === name && (!runtime || each.provider === runtime)) ??
+        null;
+      return member?.slug ?? null;
+    };
+    if (notes.length > 0) {
+      const last = notes[notes.length - 1] as FallbackNote;
+      return {
+        type: 'model.fallback',
+        failed: notes.map((note) => ({
+          model: note.from,
+          provider: slugOf(note.fromProvider, note.from),
+          code: null,
+          error: note.reason,
+        })),
+        answered: { model: last.to, provider: slugOf(last.toProvider, last.to) },
+      };
+    }
+    if (!reported || !model || reported === model) return null;
+    return {
+      type: 'model.fallback',
+      failed: [{ model, provider: slug, code: null, error: null }],
+      answered: { model: reported, provider: slugOf(null, reported) },
+    };
   }
 
   private async onRequest(method: string, params: Json): Promise<Json> {
@@ -789,4 +852,36 @@ function strings(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string')
     : [];
+}
+
+/** One of Hermes's "Model fallback" status lines, read back into its parts. */
+export interface FallbackNote {
+  from: string;
+  fromProvider: string;
+  reason: string | null;
+  to: string;
+  toProvider: string;
+}
+
+/**
+ * Hermes's line when it moves down `fallback_providers` (MIT source
+ * `agent/chat_completion_helpers.py` §try_activate_fallback):
+ * `⚠️ Model fallback: <model> via <provider> unavailable (<reason>); using <model> via <provider>.`
+ * `null` for every other status line.
+ */
+export function parseFallbackNote(line: string | null): FallbackNote | null {
+  if (!line) return null;
+  const match =
+    /Model fallback:\s+(\S+)\s+via\s+(\S+)\s+unavailable\s+\((.*?)\);\s+using\s+(\S+)\s+via\s+(\S+?)\.?(?:\s|$)/.exec(
+      line,
+    );
+  if (!match) return null;
+  const [, from, fromProvider, reason, to, toProvider] = match as unknown as string[];
+  return {
+    from: from as string,
+    fromProvider: fromProvider as string,
+    reason: reason ? reason : null,
+    to: to as string,
+    toProvider: toProvider as string,
+  };
 }

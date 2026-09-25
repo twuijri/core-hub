@@ -681,6 +681,21 @@ export class RunEngine {
           break;
         }
 
+        case 'fallback': {
+          // The run is now the model that took it (contract decision §54): `Run.model` and
+          // `Run.provider` name it, and `Run.fallback` what failed before it.
+          if (!state.fallback) break;
+          const { answered, failed } = state.fallback;
+          store.updateRun(scope.workspace, run.runId, {
+            modelLabel: answered.provider
+              ? `${answered.provider}/${answered.model}`
+              : answered.model,
+            provider: answered.provider,
+            timing: { turns: state.turns, fallback: { failed } },
+          });
+          break;
+        }
+
         case 'context': {
           if (!state.context) break;
           this.emitToSession(scope, sessionId, 'context.updated', {
@@ -806,7 +821,12 @@ export class RunEngine {
 
     // Before anything is awaited: the run has left `active`, and a trajectory read in the
     // meantime must find its turns on the row.
-    store.updateRun(scope.workspace, run.runId, { timing: { turns: state.turns } });
+    store.updateRun(scope.workspace, run.runId, {
+      timing: {
+        turns: state.turns,
+        ...(state.fallback ? { fallback: { failed: state.fallback.failed } } : {}),
+      },
+    });
 
     const produced = await this.collectProduced(run);
     // Written before the terminal event, so a client that reads the changes when it arrives

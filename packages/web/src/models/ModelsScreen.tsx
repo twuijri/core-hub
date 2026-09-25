@@ -54,6 +54,8 @@ import { modelOption, useRecentModels } from './useModelPicker.js';
 import type { Agent, Model, Provider, ProviderHost } from '../types.js';
 import { Notice, Spinner } from '../ui/Notice.js';
 import { AddProviderDialog } from './AddProviderDialog.js';
+import { FallbackList } from './FallbackList.js';
+import { SignInPanel } from './SignInPanel.js';
 import { RuntimeCard } from './RuntimeChecks.js';
 import { needsLoopbackWarning, suggestedHostUrl } from './loopback.js';
 import {
@@ -309,12 +311,14 @@ function ProviderCard({
   const saveDefaults = useSaveDefaults();
   const { recent, remember } = useRecentModels();
   const [outcome, setOutcome] = useState<TestResult | null>(null);
-  const [panel, setPanel] = useState<'none' | 'edit' | 'models'>('none');
+  const [panel, setPanel] = useState<'none' | 'edit' | 'models' | 'sign-in'>('none');
   // Removing a provider takes its key and its catalogue with it, so it asks first.
   const [confirmRemove, setConfirmRemove] = useState(false);
   const stored = provider.api_key !== null;
   // `auth.kind: none` is "no key required" — never "no key accepted" (contract §26).
   const keyRequired = provider.auth.kind === 'api_key';
+  // Used by signing in to an account, through Hermes (contract decision §55).
+  const signIn = provider.auth.kind === 'oauth';
   const warn = needsLoopbackWarning(provider.base_url ?? '', host);
 
   return (
@@ -323,15 +327,24 @@ function ProviderCard({
         title={provider.label}
         subtitle={provider.slug}
         actions={
-          <Badge tone={stored ? 'success' : keyRequired ? 'warning' : 'neutral'}>
-            {t(
-              stored
-                ? 'models.provider.configured'
-                : keyRequired
-                  ? 'models.provider.not_configured'
-                  : 'models.provider.key_optional',
-            )}
-          </Badge>
+          signIn ? (
+            <Badge
+              tone={provider.auth.signed_in ? 'success' : 'warning'}
+              testId="provider-signed-in"
+            >
+              {t(provider.auth.signed_in ? 'models.signin.signed_in' : 'models.signin.signed_out')}
+            </Badge>
+          ) : (
+            <Badge tone={stored ? 'success' : keyRequired ? 'warning' : 'neutral'}>
+              {t(
+                stored
+                  ? 'models.provider.configured'
+                  : keyRequired
+                    ? 'models.provider.not_configured'
+                    : 'models.provider.key_optional',
+              )}
+            </Badge>
+          )
         }
       />
       <ul className="flex flex-wrap gap-1">
@@ -413,6 +426,16 @@ function ProviderCard({
       </div>
 
       <CardFooter>
+        {signIn && (
+          <Button
+            variant={provider.auth.signed_in ? 'secondary' : 'primary'}
+            aria-expanded={panel === 'sign-in'}
+            onClick={() => setPanel(panel === 'sign-in' ? 'none' : 'sign-in')}
+            data-testid="provider-sign-in"
+          >
+            {t(provider.auth.signed_in ? 'models.signin.again' : 'models.signin.action')}
+          </Button>
+        )}
         <Button
           disabled={provider.models.length === 0 || saveDefaults.isPending || isDefault}
           onClick={() => {
@@ -489,6 +512,7 @@ function ProviderCard({
 
       {panel === 'edit' && <EditPanel provider={provider} onDone={() => setPanel('none')} />}
       {panel === 'models' && <ModelsPanel provider={provider} onDone={() => setPanel('none')} />}
+      {panel === 'sign-in' && <SignInPanel provider={provider} onDone={() => setPanel('none')} />}
 
       {test.isPending && <Spinner label={t('models.provider.testing')} />}
       {outcome && (
@@ -780,6 +804,21 @@ function DefaultsTab() {
         value={refValue(defaults.data.default)}
         inherited={inherited.has('default')}
         onChange={(ref) => save.mutate({ default: ref })}
+      />
+      <FallbackList
+        chain={defaults.data.fallbacks}
+        primary={defaults.data.default ?? null}
+        models={models}
+        disabled={save.isPending}
+        onChange={(fallbacks) =>
+          // A chain is the profile's own with its chat model: an inherited model is saved
+          // with it, so the chain has a model of this profile's to fall back from (§37, §54).
+          save.mutate(
+            inherited.has('default') && defaults.data.default
+              ? { default: defaults.data.default, fallbacks }
+              : { fallbacks },
+          )
+        }
       />
       {tasks.map((task) => (
         <ModelSelect

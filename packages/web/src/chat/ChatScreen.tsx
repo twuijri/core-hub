@@ -58,6 +58,7 @@ import { useApprovalMode, useComposerModels } from './useComposerControls.js';
 import { useFollowBottom } from './followBottom.js';
 import { useLoadOlderOnScroll } from './olderMessages.js';
 import { useSessionStream } from './useSessionStream.js';
+import { useRunHistory } from './useRunHistory.js';
 import { revisionOf } from './trajectory.js';
 import { TrajectoryView } from './TrajectoryView.js';
 import { WorkingDirPicker } from './WorkingDirPicker.js';
@@ -385,6 +386,8 @@ export function OpenSession({
 
   const title = pageTitle ?? (state.session ? sessionTitle(state.session, t) : t(termKey('chat')));
   const showReasoning = preferences.data?.show_reasoning ?? true;
+  // Finished runs too, so a turn still says which model answered it after a reload (§54).
+  const runHistory = useRunHistory(sessionId, state.runs);
   // A failure hangs under the turn that failed, never above the composer (owner,
   // 2026-09-25): the live runs, and the failed history so a reload keeps it on its turn.
   const liveFailed = Object.values(state.runs)
@@ -552,7 +555,7 @@ export function OpenSession({
                   turns={turns}
                   showReasoning={showReasoning}
                   showCost={preferences.data?.show_cost ?? false}
-                  runs={state.runs}
+                  runs={runHistory}
                   slugOf={(id) => (agents.data ?? []).find((agent) => agent.id === id)?.slug}
                   anchor={anchor && anchor.phase !== 'missing' ? anchor : null}
                   noticeFor={(message) => {

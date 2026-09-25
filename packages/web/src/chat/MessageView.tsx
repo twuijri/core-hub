@@ -29,6 +29,27 @@ import { HIT_CLASS } from './anchor.js';
 import { ToolCalls } from './ToolCallCard.js';
 import { textOf } from './transcript.js';
 import { reasoningWorthShowing, sideOf, thoughtSeconds, type Turn } from './turns.js';
+import { failedNames, failureReasons, fallbackOf } from './fallback.js';
+
+/**
+ * The turn moved down the fallback chain (contract decision §54): which model answered, which
+ * failed before it, and why — under the reply, where its words are, never hidden in a menu.
+ */
+function FallbackNote({ run }: { run: Run | undefined }) {
+  const { t, language } = useI18n();
+  const note = fallbackOf(run);
+  if (!note) return null;
+  const reasons = failureReasons(note.fallback);
+  return (
+    <p className="msg-usage" dir="auto" data-testid="fallback-note" role="note">
+      {t('chat.fallback_note', {
+        failed: failedNames(note.fallback, language),
+        model: note.answered,
+      })}
+      {reasons ? ` — ${t('chat.fallback_reason', { reason: reasons })}` : ''}
+    </p>
+  );
+}
 
 /**
  * What the turn cost, in words a person can read — or nothing at all.
@@ -237,8 +258,12 @@ export function MessageView({
           </div>
         )}
         {changes && !streaming && <RunChangesCard changes={changes} />}
+        {!streaming && <FallbackNote run={message.run_id ? runs[message.run_id] : undefined} />}
         {message.usage && !streaming && (
           <p className="msg-usage" dir="auto">
+            {message.run_id && runs[message.run_id]?.model
+              ? `${t('chat.answered_by', { model: runs[message.run_id]?.model ?? '' })} · `
+              : ''}
             {t('chat.usage', {
               input: message.usage.input_tokens,
               output: message.usage.output_tokens,

@@ -239,7 +239,10 @@
     "anchor_missing": "The message this search pointed to is no longer in this conversation.",
     "older_loading": "Loading older messages…",
     "older_start": "Beginning of the conversation",
-    "older_failed": "Couldn’t load older messages."
+    "older_failed": "Couldn’t load older messages.",
+    "answered_by": "Answered by {model}",
+    "fallback_note": "{failed} failed, so {model} answered",
+    "fallback_reason": "Why: {reason}"
   },
   "composer": {
     "label": "Message composer",
@@ -543,7 +546,15 @@
       "inherited": "From the default profile",
       "no_models": "No models yet. Add a provider key and the hub fetches its model list.",
       "inheriting": "Agents inheriting these",
-      "inheriting_hint": "What each agent will use when a chat does not name a model."
+      "inheriting_hint": "What each agent will use when a chat does not name a model.",
+      "fallbacks": "Fallback models",
+      "fallbacks_hint": "Tried in order when the chat model fails because its provider is down, rate limited or not answering — never after a request the provider refused as invalid. Every agent of this profile uses them.",
+      "fallbacks_empty": "No fallback models: if the chat model's provider fails, the turn fails.",
+      "fallbacks_need_default": "Choose a chat model first; the fallbacks are tried after it.",
+      "fallback_add": "Add a fallback model",
+      "fallback_up": "Move {model} up",
+      "fallback_down": "Move {model} down",
+      "fallback_remove": "Remove {model}"
     },
     "ensembles": {
       "hint": "Ensembles are created over the API for now; this tab lands with the rooms screens."
@@ -612,7 +623,8 @@
       "scope_all": "All profiles",
       "scope_profile": "This profile only",
       "scope_all_hint": "Shared: every profile uses it, including profiles made later.",
-      "scope_profile_hint": "Only {profile} uses it, and its key wins there over a shared provider of the same kind. Other profiles never see it."
+      "scope_profile_hint": "Only {profile} uses it, and its key wins there over a shared provider of the same kind. Other profiles never see it.",
+      "sign_in_hint": "This provider is used by signing in to your account, not with a key. Add it, then sign in from its card."
     },
     "runtime": {
       "title": "Runtime",
@@ -641,6 +653,24 @@
       "restart_now": "Restart now",
       "show": "Show checks",
       "hide": "Hide checks"
+    },
+    "signin": {
+      "signed_in": "Signed in",
+      "signed_out": "Not signed in",
+      "action": "Sign in",
+      "again": "Sign in again",
+      "title": "Sign in to {provider}",
+      "steps": "Open the sign-in page, sign in to your account there, and enter this code:",
+      "open": "Open the sign-in page",
+      "code": "Code",
+      "copy": "Copy the code",
+      "waiting": "Waiting for you to approve it on the provider’s page…",
+      "approved": "Signed in. Its models are being fetched.",
+      "denied": "The sign-in was declined.",
+      "expired": "The code ran out before it was used.",
+      "failed": "The sign-in did not finish.",
+      "retry": "Start again",
+      "close": "Close"
     }
   },
   "working_dir": {
@@ -1965,7 +1995,9 @@
       "cache_hit": "Cache hit",
       "input_tokens": "Input tokens",
       "output_tokens": "Output tokens"
-    }
+    },
+    "model": "Model: {model}",
+    "fallback": "Fell back from {failed}"
   },
   "perf": {
     "live": "Live",
