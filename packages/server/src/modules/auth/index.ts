@@ -90,6 +90,7 @@ export type { SetupMeta } from './setup.js';
 export const registerEvents = authModule.registerEvents.bind(authModule);
 
 // ---------------------------------------------------------------- for other modules
+export { decodeAvatarDataUrl, type DecodedAvatar } from './avatars.js';
 export {
   requireAppToken,
   requireRole,

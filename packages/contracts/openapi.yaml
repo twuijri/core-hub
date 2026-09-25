@@ -4774,6 +4774,10 @@ paths:
       operationId: agents.getAvatar
       tags: [agents]
       summary: Fetch the agent's avatar image
+      description: >-
+        The picture `agents.update` stored for the agent (PNG or JPEG, at most 512 KB, one per
+        agent for the whole hub — the registry is the hub's, not a profile's). An agent whose
+        `avatar.kind` is `generated` has none (`404`): the client draws it from `seed`.
       x-rt-events: []
       responses:
         '200':
@@ -4783,9 +4787,10 @@ paths:
               schema:
                 type: string
                 format: binary
-            image/svg+xml:
+            image/jpeg:
               schema:
                 type: string
+                format: binary
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -18788,6 +18793,10 @@ components:
           type: string
           maxLength: 80
         avatar:
+          description: >-
+            `image` with a PNG or JPEG data URL (at most 512 KB) stores the agent's picture,
+            served by `agents.getAvatar`; `generated` or `null` removes it, and the agent is
+            drawn from its slug again. A picture that is not one of the two is `400`.
           oneOf:
             - $ref: '#/components/schemas/AvatarInput'
             - type: 'null'

@@ -2245,3 +2245,25 @@ person's own computer. What they now do, proposed — owner to confirm:
 Known limit: a hub that restarts while a request is pending leaves that request's job
 `running` (the runner has no restart recovery); the request itself still expires on its next
 read. No push wakes a device that is not connected; it sees the request when it next connects.
+
+## 75. An agent's picture is a file beside the people's and profiles', one per agent for the hub
+
+`agents.getAvatar` was 501 and `agents.update` refused any `avatar` "until attachments exist"
+(Phase 4, done). People and profiles already keep an uploaded picture as a file
+(`<DATA_DIR>/avatars/<kind>/<id>`, PNG or JPEG, 512 KB, a data URL in, `docs/domain/auth.md`).
+Agents now do the same, proposed — owner to confirm:
+
+- `agents.update` with `avatar: {kind: image, data_url}` stores `<DATA_DIR>/avatars/agents/<id>`
+  with `auth`'s own rule (the same decoder); `generated` or `null` removes it. A bad picture is
+  `400` and nothing else in the patch is applied.
+- The agent reads `avatar: {kind: image, url: /api/v1/agents/<id>/avatar}`, and
+  `agents.getAvatar` serves the bytes (`image/png` or `image/jpeg`; the contract's
+  `image/svg+xml` is gone — the hub never draws one, the client draws a generated avatar from
+  `seed`); without a picture it is `404`.
+- **No column, no migration**: whether there is a picture is whether the file is there, and its
+  type comes from its first bytes. The registry row is the hub's (global), so the picture is one
+  per agent for every profile — as its name is.
+
+No web control to set it yet (no planned surface: the agent card has no edit sheet); the API,
+the CLI and the phones can. Rejected: a knowledge attachment (attachments are profile-scoped and
+an agent row is not); an `avatar_mime` column (a migration for what the file already says).
