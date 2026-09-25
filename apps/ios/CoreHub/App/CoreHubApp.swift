@@ -4,7 +4,14 @@ import SwiftUI
 struct CoreHubApp: App {
     /// The APNs token and notification taps from before the first screen (Phone/Push.swift).
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    #if DEBUG
+    /// The demo hub keeps its sign-in apart from a real one (DemoHub.swift).
+    @State private var app = DemoHub.isOn
+        ? AppModel(keeper: TokenKeeper(store: KeychainStore(service: DemoHub.keychainService)))
+        : AppModel()
+    #else
     @State private var app = AppModel()
+    #endif
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {

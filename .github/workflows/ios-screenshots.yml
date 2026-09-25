@@ -1,0 +1,250 @@
+name: iOS store screenshots
+
+# The App Store screenshots of the iOS app (docs/store/apple/README.md): an XCUITest run
+# (apps/ios/CoreHubUITests) against the app signed in to its built-in demo hub (`-UITestDemo`),
+# never a real hub, on the sizes App Store Connect requires: iPhone 6.9" (1320 × 2868) and iPad
+# 13" (2064 × 2752). The pictures become a short-lived workflow artifact; they hold no secret.
+#
+# Only by hand. With `upload` ticked (off by default) a last job sends the listing
+# (apps/ios/fastlane/metadata) and these screenshots to App Store Connect with fastlane deliver.
+# It never uploads a build and never submits for review: the owner does that in App Store
+# Connect (docs/RELEASING.md, "App Store submission").
+on:
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: 'Upload the listing and these screenshots to App Store Connect (never submits for review)'
+        type: boolean
+        default: false
+      dark:
+        description: 'Also take a dark set (artifact only; the upload uses the light set)'
+        type: boolean
+        default: false
+      version:
+        description: 'App Store version the listing belongs to; empty = the root package.json version'
+        required: false
+  # TEMPORARY (removed before the pull request): proves the screenshot job on this branch, since a
+  # workflow_dispatch workflow cannot be run before it is on main. Never uploads (see `upload`).
+  push:
+    branches: [feat/app-store-prep]
+
+concurrency:
+  group: ios-screenshots-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  swift-client:
+    name: Generate the Swift client (CoreHubClient)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: pnpm install --frozen-lockfile --filter @corehub/contracts
+      - run: pnpm --filter @corehub/contracts generate:native
+      - name: The demo hub's answers match the contract
+        run: node apps/ios/scripts/demo-fixtures.mjs --check
+      - name: The listing is within App Store Connect's limits
+        run: node apps/ios/scripts/store-metadata.mjs --summary
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corehub-swift-client-shots
+          path: packages/contracts/generated/swift
+          retention-days: 1
+
+  screenshots:
+    name: Screenshots on the iPhone and iPad simulators
+    needs: swift-client
+    runs-on: macos-latest
+    timeout-minutes: 90
+    env:
+      SHOTS: ${{ github.workspace }}/shots
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: corehub-swift-client-shots
+          path: packages/contracts/generated/swift
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          brew install xcodegen
+      - name: Generate the Xcode project from project.yml
+        working-directory: apps/ios
+        run: xcodegen generate
+      # The largest current iPhone (6.9", 1320 × 2868) and the 13" iPad Pro (2064 × 2752), from the
+      # newest iOS runtime the runner has.
+      - name: Pick the simulators
+        id: sim
+        run: |
+          set -euo pipefail
+          devices=$(xcrun simctl list devices available -j)
+          pick() {
+            echo "$devices" | jq -r --arg re "$1" \
+              '[.devices | to_entries[] | select(.key | test("iOS")) | .value[] | select(.name | test($re))] | last | .udid'
+          }
+          iphone=$(pick '^iPhone [0-9]+ Pro Max$')
+          ipad=$(pick '^iPad Pro 13-inch')
+          test -n "$iphone" && test "$iphone" != null
+          test -n "$ipad" && test "$ipad" != null
+          xcrun simctl list devices available | grep -E "$iphone|$ipad"
+          echo "iphone=$iphone" >> "$GITHUB_OUTPUT"
+          echo "ipad=$ipad" >> "$GITHUB_OUTPUT"
+      - name: Build the app and the screenshot tests (Debug, simulator)
+        working-directory: apps/ios
+        run: |
+          mkdir -p build
+          xcodebuild build-for-testing \
+            -project CoreHub.xcodeproj \
+            -scheme CoreHubScreenshots \
+            -destination "id=${{ steps.sim.outputs.iphone }}" \
+            -derivedDataPath build/dd \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            > build/build.log 2>&1 || status=$?
+          grep -E "error:|\*\* (BUILD|TEST BUILD) " build/build.log | sort -u | head -100
+          exit "${status:-0}"
+      - name: Take the screenshots
+        working-directory: apps/ios
+        env:
+          THEMES: ${{ inputs.dark && 'light,dark' || 'light' }}
+        run: |
+          set -uo pipefail
+          failed=0
+          for pair in "iphone=${{ steps.sim.outputs.iphone }}" "ipad=${{ steps.sim.outputs.ipad }}"; do
+            device=${pair%%=*}
+            udid=${pair#*=}
+            xcrun simctl boot "$udid" || true
+            xcrun simctl bootstatus "$udid" -b
+            # A clean status bar: 9:41, full battery and signal.
+            xcrun simctl status_bar "$udid" override --time 9:41 --dataNetwork wifi --wifiMode active \
+              --wifiBars 3 --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100
+            TEST_RUNNER_COREHUB_SHOTS_DIR="$SHOTS" \
+            TEST_RUNNER_COREHUB_SHOTS_DEVICE="$device" \
+            TEST_RUNNER_COREHUB_SHOTS_THEMES="$THEMES" \
+            xcodebuild test-without-building \
+              -project CoreHub.xcodeproj \
+              -scheme CoreHubScreenshots \
+              -destination "id=$udid" \
+              -derivedDataPath build/dd \
+              -resultBundlePath "build/$device.xcresult" \
+              > "build/$device.log" 2>&1 || failed=1
+            grep -E "error:|Not on screen|Test Case .* (passed|failed)|\*\* TEST " "build/$device.log" | sort -u | head -60
+            grep -h "\[demo hub\]" "build/$device.log" | sort -u | head -20 || true
+            xcrun simctl shutdown "$udid" || true
+          done
+          if [ -z "$(find "$SHOTS" -name '*.png' 2>/dev/null)" ]; then
+            echo "::warning::The tests wrote no files; exporting the result bundles' attachments instead."
+            for device in iphone ipad; do
+              xcrun xcresulttool export attachments --path "build/$device.xcresult" --output-path "$SHOTS/xcresult-$device" || true
+            done
+          fi
+          find "$SHOTS" -name '*.png' | sort
+          exit "$failed"
+      # App Store Connect takes only its own sizes; a wrong one fails here, not at upload.
+      - name: Every screenshot has a size App Store Connect takes
+        run: |
+          set -euo pipefail
+          count=0
+          for file in $(find "$SHOTS" -name '*.png' -not -path '*/failed/*'); do
+            w=$(sips -g pixelWidth "$file" | awk '/pixelWidth/ {print $2}')
+            h=$(sips -g pixelHeight "$file" | awk '/pixelHeight/ {print $2}')
+            case "$(basename "$file")" in
+              iphone-*) want='1320x2868' ;;
+              ipad-*) want='2064x2752' ;;
+              *) want='?' ;;
+            esac
+            if [ "${w}x${h}" != "$want" ]; then
+              echo "::error::$file is ${w}x${h}, App Store Connect needs $want"
+              exit 1
+            fi
+            count=$((count + 1))
+          done
+          # 6 pictures × 2 languages × 2 devices in the light set, at least.
+          test "$count" -ge 24 || { echo "::error::only $count screenshots"; exit 1; }
+          echo "$count screenshots, all at App Store sizes" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: corehub-store-screenshots
+          path: shots
+          retention-days: 5
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: corehub-store-screenshots-logs
+          path: |
+            apps/ios/build/*.log
+            apps/ios/build/*.xcresult
+          retention-days: 3
+
+  upload:
+    name: Upload the listing and screenshots to App Store Connect
+    needs: screenshots
+    if: github.event_name == 'workflow_dispatch' && inputs.upload
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: corehub-store-screenshots
+          path: ${{ runner.temp }}/shots
+      - name: The listing is within App Store Connect's limits
+        run: node apps/ios/scripts/store-metadata.mjs
+      # deliver reads <locale>/*.png: the light set, without the sign-in extras.
+      - name: Arrange the screenshots for deliver
+        run: |
+          set -euo pipefail
+          for locale in en-US ar-SA; do
+            mkdir -p "$RUNNER_TEMP/screenshots/$locale"
+            find "$RUNNER_TEMP/shots/light/$locale" -maxdepth 1 -name '*.png' -exec cp {} "$RUNNER_TEMP/screenshots/$locale/" \;
+          done
+          find "$RUNNER_TEMP/screenshots" -name '*.png' | sort
+      - name: Write the App Store Connect API key
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: bash apps/ios/scripts/asc-api-key-json.sh
+      - name: fastlane
+        run: |
+          command -v fastlane || brew install fastlane
+          fastlane --version | tail -n 1
+      - name: Upload with deliver (no build, no submission)
+        env:
+          VERSION: ${{ inputs.version }}
+          FASTLANE_SKIP_UPDATE_CHECK: '1'
+          FASTLANE_HIDE_TIMESTAMP: '1'
+        run: |
+          set -euo pipefail
+          version=${VERSION:-$(node -p "require('./package.json').version")}
+          fastlane deliver \
+            --api_key_path "$ASC_API_KEY_JSON" \
+            --app_identifier com.twuijri.corehub \
+            --platform ios \
+            --app_version "$version" \
+            --metadata_path apps/ios/fastlane/metadata \
+            --screenshots_path "$RUNNER_TEMP/screenshots" \
+            --overwrite_screenshots true \
+            --skip_binary_upload true \
+            --skip_submission true \
+            --submit_for_review false \
+            --automatic_release false \
+            --run_precheck_before_submit false \
+            --force true
+      - name: Remove the key
+        if: always()
+        run: rm -f "${ASC_API_KEY_JSON:-/nonexistent}"

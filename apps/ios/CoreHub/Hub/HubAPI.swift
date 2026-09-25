@@ -120,12 +120,17 @@ final class HubAPI: @unchecked Sendable {
         let basePath = hub.absoluteString + CoreHubClientAPIConfiguration().basePath
         var headers = ["Accept-Language": language.rawValue]
         if let bearer { headers["Authorization"] = "Bearer \(bearer)" }
-        return CoreHubClientAPIConfiguration(
+        let configuration = CoreHubClientAPIConfiguration(
             basePath: basePath,
             customHeaders: headers,
             apiResponseQueue: HubAPI.responses,
             interceptor: BodilessRequests()
         )
+        #if DEBUG
+        // Screenshots and UI tests: the demo hub answers instead of the network (DemoHub.swift).
+        if DemoHub.isOn { configuration.requestBuilderFactory = DemoHub.factory }
+        #endif
+        return configuration
     }
 
     private static let responses = DispatchQueue(label: "\(Product.id).api", qos: .userInitiated)
