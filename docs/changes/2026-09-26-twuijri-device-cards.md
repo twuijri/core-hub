@@ -114,8 +114,26 @@ $ ./gradlew --max-workers=2 testDebugUnitTest --tests 'hub.core.android.phone.*'
   hub.core.android.phone.PushTest       tests="10" failures="0" errors="0"
 $ node apps/ios/scripts/generate-swift.mjs --check  → generate-swift  OK
 ```
-لا Xcode محليًا: اختبارات iOS (`DeviceInfoTests`، `DeviceReportTests`، `PushTests`) تثبتها وظيفة
-«Build and test on the iOS simulator» في CI. نتيجة CI على الطلب: تُضاف أدناه.
+لا Xcode محليًا: اختبارات iOS تثبتها وظيفة «Build and test on the iOS simulator» في CI.
+CI على #149 عند `8bc8d63e`: كل الفحوص الأربعة عشر ناجحة:
+```
+Android build, unit tests, lint | pass | 4m37s      BUILD SUCCESSFUL in 3m 38s
+Build and test on the iOS simulator | pass | 5m59s  Executed 76 tests, with 0 failures
+  Test Case '-[CoreHubTests.DeviceInfoTests testTheModelIsItsMarketingNameAndAnUnknownOneIsSentAsItIs]' passed
+  Test Case '-[CoreHubTests.DeviceInfoTests testAGenericNameStaysAndTheModelTellsPhonesApart]' passed
+  Test Case '-[CoreHubTests.DeviceInfoTests testMissingPartsAreLeftOutAndLongOnesFit]' passed
+  Test Case '-[CoreHubTests.DeviceInfoTests testWhatStopsPushIsThePermission]' passed
+  Test Case '-[CoreHubTests.DeviceReportTests testAPairedPhoneReportsWhatItIsButNeverItsName]' passed
+  Test Case '-[CoreHubTests.DeviceReportTests testAPasswordSignInRegistersOnceAndARemovedRowAgain]' passed
+Generate the Swift client (CoreHubClient) | pass
+Lint, typecheck, contracts, client tests, build | pass
+Server unit tests (shard 1/3, 2/3, 3/3) | pass
+Web smoke journeys (Playwright against the real hub) | pass
+db:generate + db:migrate (SQLite and PostgreSQL) | pass
+Docker image builds and answers /health | pass
+Desktop app smoke (Electron under Xvfb against the real hub) | pass
+PR adds or updates a change record | pass · PR leaves graphify-out/ to the code-map bot | pass
+```
 
 ما تثبته الاختبارات الجديدة (وتسقط على الكود القديم: الحقول والمكوّنات غير موجودة): الخادم يحفظ ما يقوله
 الجهاز ويُبقي الاسم الذي أعطاه الشخص عند إعادة الإقران والتسجيل، والتطبيق الأقدم لا يمحو شيئًا؛ آخر نشاط
