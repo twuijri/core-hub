@@ -1564,6 +1564,58 @@ describe('models: one key, every agent (ADR 0010)', () => {
     }
   });
 
+  it('a restart clears "settings changed after Hermes last started" (owner, 2026-09-25)', async () => {
+    // The owner's hub after the Core Hub rename: Hermes was already running when the hub
+    // rewrote its files, so the check said "not restarted since the last change". It must
+    // compare the write with the start the person then triggers, and clear on that restart.
+    const { fetchImpl } = anthropicOnly();
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-home-'));
+    homes.push(home);
+    let startedAt: number | null = Date.now() - 60_000;
+    const restarts: number[] = [];
+    const hub = await signedInHub(
+      {},
+      {
+        models: {
+          fetchImpl,
+          // The automatic recycle is far away: only the person's restart happens here.
+          restartDelayMs: 60_000,
+          hermes: {
+            home: () => home,
+            mode: () => 'managed',
+            reloadedAt: () => startedAt,
+            restart: () => {
+              restarts.push(Date.now());
+              return Promise.resolve(true);
+            },
+          },
+        },
+      },
+    );
+    const gateway = async () =>
+      (
+        (await authed(hub, hub.token, { method: 'GET', url: '/api/v1/models/runtime' })).json() as {
+          checks: { id: string; ok: boolean }[];
+        }
+      ).checks.find((c) => c.id === 'gateway_reloaded')!.ok;
+    try {
+      // Nothing written since Hermes started: nothing to restart for.
+      expect(await gateway()).toBe(true);
+
+      // The hub writes the runtime's files after it started.
+      await addProvider(hub, 'anthropic', { api_key: 'sk-ant-restart' });
+      await drainJobs(hub.app);
+      expect(restarts).toEqual([]);
+      expect(await gateway()).toBe(false);
+
+      // The person restarts Hermes (`agents.restart` relaunches it: a new start time).
+      startedAt = Date.now();
+      expect(await gateway()).toBe(true);
+    } finally {
+      await hub.close();
+    }
+  });
+
   it('waits for a turn to finish before recycling the runtime', async () => {
     const { fetchImpl } = anthropicOnly();
     const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-home-'));
