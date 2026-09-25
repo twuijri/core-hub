@@ -1,4 +1,4 @@
-// The Files page (DECISIONS §56): the profile's working folder, against a scripted hub.
+// The Files page (DECISIONS §65): the profile's working folder, against a scripted hub.
 // What is worth pinning here is what a person relies on — the folder in the address, a
 // delete that asks first, a save that sends back what it read and says so when the file
 // moved under it, and a file handed to the next composer in the same profile only.

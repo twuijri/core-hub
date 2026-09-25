@@ -21,7 +21,7 @@
   الحاجة. مسجّل في `docs/clients/NAVIGATION.md` §٢ و`navigation.json` (مصطلح `files`:
   Files / الملفات).
 - **الوحدة: `knowledge`** (تملك الملفات وسجلّ المرفقات)، ١١ عملية جديدة `knowledge.*WorkspaceFile*`
-  تحت `/workspace-files…`. DECISIONS **§56** (آخر رقم مستعمل في طلبات الدمج المفتوحة §55).
+  تحت `/workspace-files…`. DECISIONS **§65** (آخر رقم مستعمل في طلبات الدمج المفتوحة §55).
 - **الحدود**:
   - الرفع والإرفاق ٢٥ MB (سقف المرفق الواحد نفسه).
   - التحرير ١ MiB نص UTF-8.
@@ -76,7 +76,7 @@
   `WorkspaceTextWrite`، `WorkspacePathBody`، `WorkspaceFileTransfer`؛ معامل `WorkspaceFilePath`؛
   استجابة مشتركة `UnsupportedMediaType` (`415`).
 - وصف وسم `knowledge` لم يعد «stub».
-- `docs/contracts/DECISIONS.md` §56، و`docs/contracts/COVERAGE.md` سطر `files`.
+- `docs/contracts/DECISIONS.md` §65، و`docs/contracts/COVERAGE.md` سطر `files`.
 - العملاء المولّدون: TS يُولَّد في البناء (غير ملتزم)؛ `contracts:check-clients` نظيف.
 
 ## الملفات والتأثير
@@ -183,5 +183,5 @@ $ PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwright test zzzz
   صحّحت العدد مع تعليق، وأبقيت لقطة `design-settings-ar-light.png` الجديدة التي تُظهر «الملفات»،
   وأرجعت بقية اللقطات غير المتعلقة. أعدت تشغيل هذا الملف محليًا: `3 passed`.
 - `main` لم يتحرك منذ التفرّع (`git fetch` قبل الدفع الأخير)، فلا دمج لازم.
-- ينتظر تأكيد المالك على: المكان (أدوات الإعدادات)، الحدود، منع الأعضاء، §56.
+- ينتظر تأكيد المالك على: المكان (أدوات الإعدادات)، الحدود، منع الأعضاء، §65.
 - بعد دمج #106: استبدال معاينة هذه الصفحة بعارضه (Office وCSV وHTML المعزول) في مهمة لاحقة.

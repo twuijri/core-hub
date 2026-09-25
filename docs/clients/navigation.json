@@ -457,7 +457,7 @@
         "kind": "settings-tool"
       },
       "roles": ["admin"],
-      "note": "The selected profile's working folder (${DATA_DIR}/workspaces/<profile>): browse, upload, download, zip, new folder, rename, move, copy, delete, preview, edit text, attach to a chat. A file manager only — no shell, no commands (DECISIONS §56). Owner and admin; follows the top-bar profile chip."
+      "note": "The selected profile's working folder (${DATA_DIR}/workspaces/<profile>): browse, upload, download, zip, new folder, rename, move, copy, delete, preview, edit text, attach to a chat. A file manager only — no shell, no commands (DECISIONS §65). Owner and admin; follows the top-bar profile chip."
     },
     {
       "id": "agent_skills",

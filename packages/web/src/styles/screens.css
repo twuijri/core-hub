@@ -741,7 +741,7 @@
   pointer-events: none;
 }
 
-/* Files (workspace-files/FilesTool.tsx, DECISIONS §56): the profile's working folder. The
+/* Files (workspace-files/FilesTool.tsx, DECISIONS §65): the profile's working folder. The
    list is the drop target; while files are over it, it says so with the accent. */
 .files-drop {
   position: relative;

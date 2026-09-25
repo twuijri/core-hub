@@ -76,7 +76,7 @@
 | `theme` | Theme | السمة | |
 | `workspaces` | Profiles | البروفايلات | قرار المالك 2026-09-23: «بروفايل» / "Profile" في كل نصوص الواجهة، كما يسمّيه هرمز وإيكو والعقد (`profile`، `X-Hub-Profile`)؛ لا «مساحة عمل» ولا «Workspace». المعرّفات البرمجية `workspaces` باقية |
 | `updates` · `plugins` | Updates · Plugins | التحديثات · الإضافات | للمشرف |
-| `files` | Files | الملفات | للمالك والمشرف؛ مجلد عمل البروفايل المختار (DECISIONS §56) |
+| `files` | Files | الملفات | للمالك والمشرف؛ مجلد عمل البروفايل المختار (DECISIONS §65) |
 | `skills` · `mcp` · `memory` · `jobs` · `channels` | Skills · MCP · Memory · Jobs · Channels | المهارات · MCP · الذاكرة · المهام المجدولة · القنوات | تحت الوكيل |
 
 ## ٠) شاشات ما قبل الدخول (ليست وجهات)

@@ -3,7 +3,7 @@
  *
  * Agents work in folders under that root (one per conversation, one per task). This is the
  * file manager over it — list, read, write, upload, make folders, move, copy, delete, zip —
- * and never a shell: nothing here runs a program. Contract decision §56.
+ * and never a shell: nothing here runs a program. Contract decision §65.
  *
  * One rule decides every path, before any byte moves:
  *

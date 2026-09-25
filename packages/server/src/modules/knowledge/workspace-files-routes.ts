@@ -1,5 +1,5 @@
 /**
- * The eleven `knowledge.*WorkspaceFile*` operations (contract decision §56): the profile's
+ * The eleven `knowledge.*WorkspaceFile*` operations (contract decision §65): the profile's
  * working files for its owner and admins. The rules about paths live in
  * `workspace-files.ts`; this file is the HTTP around them — who is asking, which profile's
  * folder, what the reply carries — and the audit line every write leaves.

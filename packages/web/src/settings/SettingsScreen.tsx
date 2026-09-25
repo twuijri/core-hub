@@ -51,7 +51,7 @@ const SECTIONS: Record<string, () => ReactElement> = {
   usage: () => <AuditReport kind="usage" />,
   logs: () => <AuditReport kind="logs" />,
   performance: () => <AuditReport kind="performance" />,
-  // The selected profile's working folder (DECISIONS §56).
+  // The selected profile's working folder (DECISIONS §65).
   files: () => <FilesTool />,
 };
 

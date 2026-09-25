@@ -1,5 +1,5 @@
 /**
- * Files («الملفات», DECISIONS §56), against the real hub: Settings → Files, a file dropped on
+ * Files («الملفات», DECISIONS §65), against the real hub: Settings → Files, a file dropped on
  * the folder, renamed, opened in the editor, changed and saved, then deleted after the
  * confirm. Every step goes through the page the way a person does it, and the page is what
  * says each step worked.

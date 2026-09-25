@@ -1025,7 +1025,7 @@ Rejected: a new `source` field on `SessionCreate` (a client could then make any 
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
 
-## 56. A profile's working files are managed inside its folder only, by its owner and admins
+## 65. A profile's working files are managed inside its folder only, by its owner and admins
 
 Agents work in `${DATA_DIR}/workspaces/<profile>/…` — a folder per conversation, one per task —
 and until now a person could not see those files from a client. Proposed here — owner to confirm:

@@ -1,5 +1,5 @@
 /**
- * The profile's working files over HTTP (contract decision §56): signed in as the owner,
+ * The profile's working files over HTTP (contract decision §65): signed in as the owner,
  * each of the eleven operations answers the schema the contract documents, refuses what the
  * contract says it refuses, and leaves an audit line for every write. A member is refused
  * every one of them. The path rules themselves are `workspace-files.test.ts`.

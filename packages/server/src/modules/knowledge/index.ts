@@ -23,7 +23,7 @@
  * them, with no change here.
  *
  * Also implemented: the profile's working files (`knowledge.*WorkspaceFile*`, contract
- * decision §56) — a file manager over `${DATA_DIR}/workspaces/<profile>` for owners and
+ * decision §65) — a file manager over `${DATA_DIR}/workspaces/<profile>` for owners and
  * admins, in `workspace-files.ts` (the path rules) and `workspace-files-routes.ts`.
  *
  * What the rest of the hub gets is `attachmentsPortFor(app)`: resolve ids, put a
@@ -407,7 +407,7 @@ export const knowledgeModule = defineModule({
       },
     });
 
-    // ------------------------------------------- the profile's working files (§56)
+    // ------------------------------------------- the profile's working files (§65)
 
     registerWorkspaceFileRoutes(app, deps, knowledge);
   },

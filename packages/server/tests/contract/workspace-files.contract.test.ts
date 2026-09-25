@@ -1,4 +1,4 @@
-// `pnpm contract:test`: the profile's working files (contract decision §56) through the
+// `pnpm contract:test`: the profile's working files (contract decision §65) through the
 // generated TypeScript client, signed in as the owner — every JSON operation with a success
 // and a documented refusal, each body validated against the schema the contract documents
 // for its status. `contract.test.ts` already covers the unauthenticated answer of every one;

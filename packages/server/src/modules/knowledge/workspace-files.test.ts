@@ -1,5 +1,5 @@
 /**
- * The path rules of the profile's working files (contract decision §56), against a real
+ * The path rules of the profile's working files (contract decision §65), against a real
  * directory tree: what may be reached, what is refused, and what every operation does to
  * the disk. The HTTP around them is `workspace-files-api.test.ts`.
  */

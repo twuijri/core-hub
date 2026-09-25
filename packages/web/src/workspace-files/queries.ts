@@ -1,6 +1,6 @@
 /**
  * The Files page's data layer: the profile's working files over the generated client
- * (`knowledge.*WorkspaceFile*`, contract decision §56). Every key carries the profile, so
+ * (`knowledge.*WorkspaceFile*`, contract decision §65). Every key carries the profile, so
  * switching the chip at the top shows that profile's folder (NAVIGATION rule 4).
  *
  * The bearer token goes in the header, never in a URL, so downloads and previews fetch the

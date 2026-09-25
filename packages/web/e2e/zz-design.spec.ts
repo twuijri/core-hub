@@ -233,7 +233,7 @@ test.describe('the rebuilt screens', () => {
     await page.getByTestId('settings-nav').getByRole('link', { name: 'الحساب' }).click();
     await expect(page.getByTestId('settings-tabs')).toBeVisible();
     await expect(page.getByTestId('settings-management').getByRole('link')).toHaveCount(3);
-    // Eight tools since «الملفات» / Files joined them (DECISIONS §56).
+    // Eight tools since «الملفات» / Files joined them (DECISIONS §65).
     await expect(page.getByTestId('settings-tools').getByRole('link')).toHaveCount(8);
     await shot(page, 'design-settings-ar-light');
     await page.getByRole('link', { name: 'العرض' }).click();

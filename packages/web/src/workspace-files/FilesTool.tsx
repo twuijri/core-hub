@@ -2,7 +2,7 @@
  * Files («الملفات»): the selected profile's working folder, for its owner and admins.
  *
  * Agents work in `/data/workspaces/<profile>/…` — a folder per conversation, one per task.
- * This page is a file manager over that folder and nothing more (DECISIONS §56): browse
+ * This page is a file manager over that folder and nothing more (DECISIONS §65): browse
  * with breadcrumbs, drop files to upload, download a file or a folder as a zip, make a
  * folder or a text file, rename, move, copy, delete (after a confirm), preview text,
  * pictures and PDFs, edit text with colour and a save-conflict check, and hand a file to a
