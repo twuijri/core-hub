@@ -19,8 +19,13 @@ data class DeviceChoices(
     val spokenReplies: Boolean = false,
     /** Look for new notices every 15 minutes while the app is closed. */
     val backgroundNotices: Boolean = true,
-    /** Whose speech dictation and spoken replies use: the hub's providers (when it has them) or the phone's. */
-    val voiceSource: VoiceSource = VoiceSource.HUB,
+    /**
+     * Whose speech dictation and spoken replies use: the phone's by default (owner, 2026-09-26:
+     * «خل الأساسي حق الجوال ويقدر يغير المستخدم»), or the hub's providers when it has them.
+     */
+    val voiceSource: VoiceSource = VoiceSource.PHONE,
+    /** Photos go at original quality (the untouched file, as a file) instead of compressed. */
+    val photoOriginal: Boolean = false,
 )
 
 object DictationLanguage {
@@ -44,17 +49,23 @@ class DeviceSettings(private val prefs: SharedPreferences) {
         dictation = runCatching { Dictation.valueOf(prefs.getString(DICTATION, null) ?: "") }.getOrDefault(Dictation.APP),
         spokenReplies = prefs.getBoolean(SPOKEN, false),
         backgroundNotices = prefs.getBoolean(BACKGROUND, true),
-        voiceSource = runCatching { VoiceSource.valueOf(prefs.getString(VOICE_SOURCE, null) ?: "") }.getOrDefault(VoiceSource.HUB),
+        voiceSource = runCatching { VoiceSource.valueOf(prefs.getString(VOICE_SOURCE, null) ?: "") }.getOrDefault(VoiceSource.PHONE),
+        photoOriginal = prefs.getBoolean(PHOTO_ORIGINAL, false),
     )
 
     fun update(change: (DeviceChoices) -> DeviceChoices) {
-        val next = change(_choices.value)
+        val before = _choices.value
+        val next = change(before)
+        // The voice is written only when the person picks it: an install that never chose keeps
+        // following the default. (1.1.x wrote it with every change, under the old key, so that
+        // key is not read.)
+        if (next.voiceSource != before.voiceSource) prefs.edit().putString(VOICE_SOURCE, next.voiceSource.name).apply()
         prefs.edit()
             .putBoolean(VOICE, next.voiceInput)
             .putString(DICTATION, next.dictation.name)
             .putBoolean(SPOKEN, next.spokenReplies)
             .putBoolean(BACKGROUND, next.backgroundNotices)
-            .putString(VOICE_SOURCE, next.voiceSource.name)
+            .putBoolean(PHOTO_ORIGINAL, next.photoOriginal)
             .apply()
         _choices.value = next
     }
@@ -82,6 +93,7 @@ class DeviceSettings(private val prefs: SharedPreferences) {
         const val SEEN = "notices_seen_at"
         const val ASKED = "asked_notifications"
         const val DENIED = "notifications_denied"
-        const val VOICE_SOURCE = "voice_source"
+        const val VOICE_SOURCE = "voice_source_chosen"
+        const val PHOTO_ORIGINAL = "photo_original"
     }
 }

@@ -129,7 +129,7 @@ struct ChatScreen: View {
                 busy: model.state.isBusy,
                 sending: model.sending,
                 onSend: {
-                    let message = OutgoingMessage(text: draft, attachments: tray?.attachments ?? [])
+                    let message = tray?.message(draft) ?? OutgoingMessage(text: draft)
                     draft = ""
                     tray?.clear()
                     Task { await model.send(message) }

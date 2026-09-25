@@ -2165,6 +2165,17 @@ cli-proxy-api). Added: `ModelCapability: image_output`, `ModelDefaults.image` an
   the run's output folder, where the engine attaches it to the reply as an `image` part like any file
   the agent left there. A copy (Hermes's cache stays), never a link, a folder or a file over 25 MB;
   a URL answer (a backend that returns a link) is left to the model's words. No contract change.
+- **…and is seen there** (2026-09-26, the owner's «سوي صورة قط يطير» on 1.1.0: `image_generate`,
+  then `execute_code` copying the picture into the output folder as `flying_cat.png`, a reply that
+  printed `/data/workspaces/…/.corehub/runs/<run>/out/flying_cat.png`, and no picture). The hub had
+  attached it; the web never drew a reply's attachments. Now a picture on a message is drawn in it
+  (fetched with the bearer header, as every private file is) and any other file is its name, both
+  opening the file beside the chat (§48). As the turn ends, the runner removes its own copy of a
+  drawn picture when the agent left the same bytes in the output folder under another name, so
+  the picture is on the reply once. The prompt's output-folder line asks the agent to name a file
+  there by its name only, never by a path; and the web draws a run-folder path in a reply's words
+  (`<…>/.corehub/runs/<run>/<in|out>/<file>`, outside fenced code) as `<file>`, which the reply's
+  file mentions link — the stored words are untouched. No contract change.
 - **Background removal** through the model: `image-edit remove-bg` asks a gpt-image model for
   transparency outright and any other model for the subject on a flat colour, which the bundled,
   model-free `image-convert transparent-bg` then clears. No local model is added to the image.
@@ -2172,7 +2183,9 @@ cli-proxy-api). Added: `ModelCapability: image_output`, `ModelDefaults.image` an
 Proposed, owner to confirm: the id patterns that make a model an image model and pick its protocol;
 removing the Providers tab's "Show" filter (with only chat providers left it filtered nothing);
 the speech tabs' add button inside the tab rather than in the header (NAVIGATION §3 keeps the
-header's two actions on Providers); pure green as the default flat colour for a cut-out.
+header's two actions on Providers); pure green as the default flat colour for a cut-out; asking
+the agent for file names and drawing a run-folder path as the file's name (both, rather than
+rewriting the stored reply); removing the hub's copy of a picture the agent kept under its own name.
 
 Rejected: image providers of their own (the owner: there are none — the chat providers have the
 models); pointing Hermes at its bundled `openai`/`openrouter` backends (they reach only their own
@@ -2470,3 +2483,29 @@ Rejected: a separate `reported_name` beside `name` (two names on one card for a 
 a heartbeat call for `last_seen_at` (any authenticated call is already a sign of life); asking
 Apple to verify an APNs key on save (Apple answers only a real push to a real token —
 `devices.testPush` does that).
+
+## 82. FCM and APNs without credentials go through the Core Hub push relay
+
+Proposed — owner to confirm (the relay itself is the owner's decision, ADR 0024). A hub with no
+FCM or APNs credentials of its own reaches the official apps through a relay the owner runs,
+which alone holds his keys. (This push relay is not §80's message relay for device connections,
+which stays parked.) The contract's part:
+
+- `PushSender.source` gains `relay`: the sender has no credentials here and delivers through the
+  relay. Every `fcm` and `apns` row carries `relay` (`PushRelayStatus`, null on `webpush`) even
+  when local credentials win, so a settings screen can show the switch and private push:
+  `state` (`ready`, `not_registered` — the hub registers itself on first need —, `unreachable`,
+  `blocked` by the relay's owner, `rate_limited`, `off`, `no_url`), `enabled`, `forced_off`
+  (`COREHUB_PUSH_RELAY=off`), `private_push`, `url`, `hub_id` (not a secret), `last_error`,
+  `checked_at`. A relay that blocked the hub makes its rows `state: error` and takes FCM/APNs out
+  of `devices.getPushConfig`'s `providers`, so the apps stop registering.
+- `PUT /push/relay` (`devices.setPushRelay`, owner/admin) takes `enabled` and `private_push` and
+  answers the status. Private push sends only a generic «إشعار جديد في كور هب» / "New notice in
+  Core Hub", the notice id and its kind; the app reads the rest from its hub.
+- `PushRegistration.relay_proof` (optional): the app's signature over its token with a key it
+  made once per install, forwarded unread; it lets the relay move a token from the hub that
+  holds it to this one. No app sends it yet.
+
+Local credentials always win; nothing changes for a hub that has them. Rejected: a separate
+`relay` row in the senders list (`PushProvider` names services a device registers with, and a
+device never registers with "relay"); a `GET /push/relay` (the senders list already carries it).

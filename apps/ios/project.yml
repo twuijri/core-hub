@@ -145,6 +145,9 @@ targets:
         buildPhase: resources
       - path: ../../packages/ui-tokens/tokens.json
         buildPhase: resources
+      # The attachment limit the app keeps is the contract's (AttachmentLimitTests).
+      - path: ../../packages/contracts/openapi.yaml
+        buildPhase: resources
     # Hosted in the app, so CoreHubClient reaches the tests through the host; linking it again
     # would load two copies of every generated type.
     dependencies:

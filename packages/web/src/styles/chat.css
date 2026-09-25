@@ -1226,6 +1226,33 @@ button.context-ring {
 .msg-attachment-open:hover {
   background: var(--ch-color-surface-2);
 }
+/* A picture on a message, drawn in it: a bounded thumbnail that opens beside the chat. */
+.msg-attachment-image {
+  flex-basis: 100%;
+}
+.msg-image-open {
+  display: inline-block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+  border-radius: var(--ch-radius-md);
+}
+.msg-image-open:focus-visible {
+  outline: 2px solid var(--ch-color-accent);
+  outline-offset: 2px;
+}
+.msg-image {
+  display: block;
+  max-inline-size: min(100%, 22rem);
+  max-block-size: 22rem;
+  inline-size: auto;
+  block-size: auto;
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-surface-2);
+  object-fit: contain;
+}
 
 .file-list {
   display: flex;

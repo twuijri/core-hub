@@ -72,12 +72,18 @@ type Step =
   | { type: 'await_input' }
   /** Write a file in the session's working folder, as an agent's tool would. */
   | { type: 'write'; path: string; content: string }
+  /** Leave a file in the run's output folder, for the reply (`base64` bytes). */
+  | { type: 'produce'; name: string; base64: string }
   // The real direct path (journey 34): the models module answers the turn, fallback chain and all.
   | { type: 'direct'; workspace: string; text: string }
   // A report about a subagent (§56): told to the hub on its own channel, not in the turn.
   | { type: 'subagent'; signal: AgentSubagentSignal }
   // Waits until the person stops this subagent (or `ms` passes, or the run is stopped).
   | { type: 'until_stopped'; id: string; ms: number };
+
+/** A 48×48 PNG (a red square on amber): the picture journey 35's agent leaves for the person. */
+const RED_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAIAAADYYG7QAAAASklEQVR4nO3OAQ0AEBAAQEk+if4TQggRdDA8220X4Mpo9SklfSAkJCSUPRA6EeoRWwgJCQkJCQkJCQkJCQmthW4SEhISyib0XWgC9MOl4rgObFQAAAAASUVORK5CYII=';
 
 /** The three files journey 32 writes, opens and reads back. */
 const REPORT_HTML =
@@ -330,6 +336,27 @@ function scriptFor(prompt: string, workspace = ''): Step[] {
       { type: 'completed' },
     ];
   }
+  if (/قط يطير|flying cat/i.test(prompt)) {
+    // A reply's own files (journey 35, 2026-09-26): the owner's «سوي صورة قط يطير» — the agent
+    // leaves the picture in the run's output folder and names it by that folder's full path.
+    return [
+      {
+        type: 'tool_started',
+        ref: 'c1',
+        name: 'execute_code',
+        kind: 'shell',
+        title: 'execute_code',
+      },
+      { type: 'produce', name: 'flying_cat.png', base64: RED_PNG },
+      { type: 'tool_completed', ref: 'c1', output: 'saved', exitCode: 0 },
+      {
+        type: 'message_delta',
+        // `{{out}}` is the run's output folder, filled in when the run starts.
+        text: 'I generated the image and saved it to: {{out}}/flying_cat.png',
+      },
+      { type: 'completed' },
+    ];
+  }
   if (/عدّل المشروع|edit the project/i.test(prompt)) {
     // The files a run changed (journey 33, decision §49): after journey 32's three files, this
     // run edits two of them and creates a third — the card under the reply counts them.
@@ -508,6 +535,8 @@ interface Live {
   queue: Step[];
   /** The session's working folder, where `write` steps land. */
   workingDir: string | null;
+  /** The run's output folder, where `produce` steps land. */
+  outputDir: string | null;
   wake: (() => void) | null;
   closed: boolean;
   /** The last answer a person gave this run, for scripts that repeat it. */
@@ -591,8 +620,13 @@ class ScriptedRunner implements AgentRunner {
     this.sessionOfRun.set(request.runId, request.sessionId);
     const text = request.prompt.map((b) => (b.type === 'text' ? b.text : '')).join(' ');
     this.runs.set(request.runId, {
-      queue: scriptFor(text, request.workspace),
+      queue: scriptFor(text, request.workspace).map((step) =>
+        step.type === 'message_delta' && step.text.includes('{{out}}')
+          ? { ...step, text: step.text.replaceAll('{{out}}', request.files?.outputDir ?? '') }
+          : step,
+      ),
       workingDir: request.workingDir,
+      outputDir: request.files?.outputDir ?? null,
       wake: null,
       closed: false,
       answer: '',
@@ -627,6 +661,13 @@ class ScriptedRunner implements AgentRunner {
       }
       if (step.type === 'write') {
         if (live.workingDir) writeFileSync(path.join(live.workingDir, step.path), step.content);
+        continue;
+      }
+      if (step.type === 'produce') {
+        if (live.outputDir) {
+          mkdirSync(live.outputDir, { recursive: true });
+          writeFileSync(path.join(live.outputDir, step.name), Buffer.from(step.base64, 'base64'));
+        }
         continue;
       }
       if (step.type === 'await_input') {

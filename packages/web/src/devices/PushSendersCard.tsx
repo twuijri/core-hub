@@ -117,8 +117,8 @@ export function PushSendersSection({
                     {t(`devices.push.provider.${sender.provider}`)}
                   </span>
                   <Badge tone={TONE[sender.state]}>{t(`devices.push.state.${sender.state}`)}</Badge>
-                  {sender.source === 'environment' && (
-                    <Badge>{t('devices.push.source.environment')}</Badge>
+                  {(sender.source === 'environment' || sender.source === 'relay') && (
+                    <Badge>{t(`devices.push.source.${sender.source}`)}</Badge>
                   )}
                   <span className="text-xs text-muted">
                     {t('devices.push.devices', { count: sender.devices })}

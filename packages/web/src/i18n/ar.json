@@ -660,6 +660,7 @@
         "generated": "مفاتيح صنعها المركز",
         "environment": "من متغيرات البيئة",
         "settings": "من الإعدادات",
+        "relay": "عبر مرحّل كور هب",
         "none": "لا شيء"
       },
       "devices": "الأجهزة: {count}",
@@ -2783,6 +2784,8 @@
     "failed": "تعذّر التحقق: {message}",
     "checked_at": "آخر تحقق {time}",
     "all_releases": "كل الإصدارات",
+    "from_store": "التحديثات تأتي من متجر مايكروسوفت.",
+    "store_page": "فتح في متجر مايكروسوفت",
     "size": "{size} MB"
   },
   "rooms": {

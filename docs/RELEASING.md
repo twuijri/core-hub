@@ -1,8 +1,23 @@
 # Releasing and signing the apps
 
 Who does what: building is automatic; **publishing is the owner's step** (TEAM-RULES §6). The
-signed builds below produce files; nothing here uploads to a store, makes a GitHub release or
-pushes a tag, except TestFlight when the owner ticks it on a manual run.
+owner pushes a `v*` tag (or runs *Publish release* for an existing one); from there the GitHub
+release is made by `publish-release.yml` (below). Nothing here uploads to a store, except
+TestFlight when the owner ticks it on a manual run; the Microsoft Store upload is done by hand in
+Partner Center.
+
+## Where each platform ships (owner, 2026-09-25)
+
+| Platform | Ships as | Signed | Updates |
+|---|---|---|---|
+| Windows | `.exe` (NSIS) on the GitHub release | no (SmartScreen: *More info → Run anyway*) | the app's own GitHub check |
+| Windows | Microsoft Store (MSIX) | by the Store | the Store; the app's check is off |
+| macOS | notarised `.dmg` on the GitHub release (`desktop-signed.yml`) | Developer ID | the app's own GitHub check |
+| Linux | AppImage and `.deb` on the GitHub release | no | the app's own GitHub check |
+| Android | signed `.apk` on the GitHub release; Google Play later | test key | — |
+| iOS | TestFlight / App Store only, no file on the release | App Store | the App Store |
+
+The Mac App Store is not planned.
 
 ## One version (owner, 2026-09-26)
 
@@ -64,9 +79,13 @@ electron-builder signs macOS only when `CSC_LINK` is set.
 ## Signed builds
 
 Three workflows, each run **only** by hand (Actions → Run workflow) or by a `v*` tag on `main`
-— never on a pull request. On a manual run the signed files are kept as workflow artifacts only
-when `keep_artifacts` is ticked: the repository is public, so anyone signed in to GitHub can
-download an artifact. A tag keeps them for 14 days.
+— never on a pull request. `ios-signed.yml` runs on the tag itself; `android-signed.yml` and
+`desktop-signed.yml` run on it through `publish-release.yml`, which calls them and attaches their
+files to the release. On a manual run the signed files are kept as workflow artifacts only when
+`keep_artifacts` is ticked: the repository is public, so anyone signed in to GitHub can download
+an artifact. A release keeps them for 14 days. A release's Android `versionCode` is
+*Publish release*'s run number **+ 1000**, so it is always newer than a build made by hand
+(+ 100).
 
 | Workflow | Makes | Secrets |
 |---|---|---|
@@ -176,3 +195,136 @@ For each version:
 5. **Version details.** Check the version's text and screenshots, and the release choice
    (manual or automatic after approval).
 6. **Add for Review**, then **Submit to App Review** on the page that follows.
+
+## The GitHub release (`publish-release.yml`)
+
+On a `v*` tag on `main`, one workflow builds every file of the release and then, in its last job
+(the only one with `contents: write`, through `GITHUB_TOKEN`), creates the tag's GitHub release —
+or updates it if it exists — attaches the files and marks it **latest**:
+
+| File on the release | Built by |
+|---|---|
+| `Core-Hub-Setup-X.Y.Z-x64.exe` | `desktop.yml` (Windows, NSIS, unsigned) |
+| `Core-Hub-X.Y.Z-x64.msix` | `desktop.yml` (Windows, the Store package, unsigned) |
+| `Core-Hub-X.Y.Z-arm64.dmg` | `desktop-signed.yml` (signed and notarised) |
+| `Core-Hub-X.Y.Z-x86_64.AppImage`, `corehub_X.Y.Z_amd64.deb` | `desktop.yml` (Linux) |
+| `Core-Hub-X.Y.Z-android.apk` | `android-signed.yml` (Gradle's `app-release.apk`, renamed) |
+
+The names are fixed in one place, `apps/desktop/scripts/release-assets.mjs`, and a unit test
+(`apps/desktop/tests/unit/release-assets.test.ts`) keeps them equal to electron-builder's
+`artifactName`s and to what the app's update check picks (`assetFor` in
+`apps/desktop/src/shared/updates.ts`: the `.exe` on Windows — never the `.msix` —, the dmg on
+macOS, the AppImage, else the `.deb`, on Linux). The app reads GitHub's release list, not
+electron-updater's `latest*.yml`, so no such file is made. The job refuses to publish when any
+file is missing.
+
+The notes are short and in English: the downloads, the SmartScreen step for the `.exe`, and the
+titles of the pull requests merged since the previous version tag (GitHub's own *generate release
+notes* list, at most 20, with the full-changelog link).
+
+One workflow with job dependencies, not `workflow_run`: the release job starts only when every
+build of the same run succeeded, for the tag's commit, and reads their artifacts directly. The
+image (`release.yml`) and iOS (`ios-signed.yml`) still run on the tag on their own.
+
+**An existing tag** — Actions → *Publish release* → *Run workflow* on `main`, `tag` = e.g.
+`v1.1.0`. It builds that tag's code with the workflows on `main`. A tag whose code predates the
+Microsoft Store package (**v1.1.0** does) gets its release without the `.msix`, and its notes say
+the Store package starts with a later version. For the Store, release a version made after this
+change (for example 1.1.1: bump the root `package.json`, `pnpm version:check --write`, merge, tag).
+
+## Windows
+
+### The `.exe` (unsigned)
+
+The NSIS installer is not code-signed, so Windows SmartScreen may say *Windows protected your PC*:
+**More info → Run anyway**. The release notes say so. It keeps the app's own update check
+(GitHub releases, ADR 0023). For later: [SignPath Foundation](https://signpath.org) signs open
+source projects for free; that would remove the warning.
+
+### Microsoft Store (MSIX)
+
+The product in Partner Center (public values, in `apps/desktop/electron-builder.config.cjs`):
+
+| | |
+|---|---|
+| Identity Name | `AbdulazizAltuwijri.CoreHub` |
+| Publisher | `CN=814A0A23-0E7E-4406-8883-4E483DF08BDA` |
+| Publisher display name | `Abdulaziz Altuwijri` |
+| Store ID | `9MT62R5V3P5N` |
+| Package family name | `AbdulazizAltuwijri.CoreHub_ndbdgnrvvdj6j` |
+
+- electron-builder's `appx` target makes it: display name *Core Hub*, languages `en-US` and `ar`,
+  the brand tiles in `apps/desktop/assets/appx` (made by `pnpm icons:build`, each at 100/200/400 %
+  and the taskbar sizes), the `corehub://` protocol, x64, Windows 10 1809 or later.
+- Version `X.Y.Z.0` (`msixVersion` in `release-assets.mjs`): the Store keeps the fourth part and
+  requires it to be 0. A preview suffix is dropped.
+- It is a second packaging run, `COREHUB_CHANNEL=store pnpm --filter @corehub/desktop package
+  --win` (`scripts/package.mjs`), which stamps `corehubChannel: store` into the app. That build
+  never checks GitHub (and Electron's `process.windowsStore` turns the check off inside any MSIX
+  too); This device → Updates says *Updates come from the Microsoft Store* and links the Store
+  page.
+- Unsigned: the Store signs what it publishes. Windows installs only a signed package, so the
+  `.msix` on the release is the file to upload to Partner Center (and to sign yourself for a
+  sideload test), not for people to install.
+
+**Checked on every pull request** (`desktop.yml`, Windows job): the manifest (identity,
+publisher, `X.Y.Z.0`, both languages, protocol, tiles, `runFullTrust`) and the store stamp inside
+the app; then a copy signed with a throwaway certificate for the same publisher is installed,
+its package family name must equal Partner Center's, and it is started as Windows starts a Store
+app, in local mode: the embedded hub must answer `/api/v1/health` and write its database.
+
+**How the app behaves inside the MSIX** (desktop bridge, full trust, file-system virtualisation).
+The first point is what the pull-request run shows; the Hermes points follow from how Microsoft
+documents MSIX virtualisation and are not run in CI (they need Hermes's installer and network):
+
+- *The embedded hub* runs from the read-only install folder (`WindowsApps`) but writes only to its
+  data folder, `%APPDATA%\Core Hub\local-hub`. Inside the package Windows redirects that to the
+  package's own folder, `%LOCALAPPDATA%\Packages\AbdulazizAltuwijri.CoreHub_ndbdgnrvvdj6j\LocalCache\Roaming\Core Hub`
+  — writable, and seen the same way by the app and the hub it starts. **Uninstalling the Store app
+  deletes that folder**, and with it the local hub's data (the `.exe` build keeps it).
+- *Hermes already installed* (by its own installer, outside the app) is found: the app reads the
+  real `%LOCALAPPDATA%\hermes` and PATH through the merged view.
+- *Install Hermes from the app* runs Hermes's installer as a child of the app, so it runs inside
+  the package too: what it writes under `%LOCALAPPDATA%` and its PATH change (`HKCU`) are the
+  package's private copies. The app and its hub see that Hermes; a terminal outside does not, and
+  uninstalling the Store app removes it. The local hub runs Hermes with a home inside its own data
+  folder, so that is consistent — but a person who also wants Hermes in a terminal should install
+  it with Hermes's installer themselves (the `.exe` build has no such limit).
+- *The `corehub://` protocol* comes from the manifest; the app does not register it itself. It
+  does not set its own AppUserModelID either (the package gives it one; a different one would
+  lose its notifications).
+- The local helper listens on 127.0.0.1 as in the `.exe` build (a full-trust app may).
+
+### The first Microsoft Store submission (by hand)
+
+1. Download `Core-Hub-X.Y.Z-x64.msix` from the version's GitHub release (Assets).
+2. [Partner Center](https://partner.microsoft.com/dashboard) → Apps and games → **Core Hub** →
+   **Start submission**.
+3. **Pricing and availability**: markets, *Free*, visibility (public, or private for a first
+   test).
+4. **Properties**: category *Productivity* (secondary *Developer tools*); privacy policy URL (the
+   app signs people in to a hub — required); support contact and website
+   (`https://github.com/twuijri/core-hub`).
+5. **Age ratings**: the IARC questionnaire. The app shows what AI agents and the hub's other
+   members write, so answer *yes* to users interacting and sharing content; no violence, no
+   purchases.
+6. **Packages**: upload the `.msix`. Partner Center reads the identity, the version `X.Y.Z.0`, x64
+   and the languages from it. It asks why the package needs the restricted capability
+   `runFullTrust`: *Core Hub is a desktop (Electron) app packaged with the Desktop Bridge; it runs
+   as a full-trust Win32 process and starts its embedded hub as a child process.*
+7. **Store listings**: add English and Arabic; the texts are drafted in
+   `docs/store/microsoft/listing-en.md` and `listing-ar.md` (description, short description,
+   features, search terms, what's new). Screenshots: at least one per language, 1366×768 or
+   larger.
+8. **Submission options**: publish as soon as it passes, or manually.
+9. **Submit to the Store**. Certification takes up to a few business days.
+
+A later version: the same steps from *Update* on the existing submission, with the new `.msix`
+(its version must be higher).
+
+**Later, optional — automating the upload** (not built): the Microsoft Store Developer CLI
+(`msstore`) can publish an MSIX from a workflow. It needs an Entra ID (Azure AD) app registered
+in Partner Center (Account settings → User management → Azure AD applications, role *Manager*),
+and its tenant id, client id and secret as repository secrets; a job after the release would run
+`msstore publish Core-Hub-X.Y.Z-x64.msix -id 9MT62R5V3P5N`. Until the owner decides, the upload
+stays manual.

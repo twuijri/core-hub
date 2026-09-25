@@ -2,13 +2,17 @@ package hub.core.android.phone
 
 import hub.core.android.MemoryPrefs
 import hub.core.android.R
+import hub.core.android.chat.AttachmentBackend
 import hub.core.android.chat.AttachmentRules
 import hub.core.android.chat.AttachmentTray
+import hub.core.android.chat.AttachmentUploader
+import hub.core.android.chat.mimeOf
 import hub.core.android.chat.Outgoing
 import hub.core.android.data.HubError
 import hub.core.android.repoRoot
 import hub.core.client.model.Attachment
 import hub.core.client.model.ContentBlock
+import hub.core.client.model.Upload
 import java.io.File
 import java.time.OffsetDateTime
 import kotlinx.coroutines.CompletableDeferred
@@ -57,7 +61,8 @@ class AttachmentsTest {
         assertEquals(2048 to 1536, AttachmentRules.fitted(4032, 3024))
         assertEquals(1536 to 2048, AttachmentRules.fitted(3024, 4032))
         assertEquals(800 to 600, AttachmentRules.fitted(800, 600))
-        assertEquals("25 MB", AttachmentRules.sizeText(AttachmentRules.MAX_BYTES))
+        assertEquals("50 MB", AttachmentRules.sizeText(AttachmentRules.MAX_BYTES))
+        assertEquals("25 MB", AttachmentRules.sizeText(AttachmentRules.MAX_ONE_SHOT_BYTES))
     }
 
     @Test
@@ -113,6 +118,104 @@ class AttachmentsTest {
     }
 }
 
+/** Original quality and the hub's own limit (docs/changes/2026-09-26-twuijri-mobile-polish-2.md). */
+@OptIn(ExperimentalCoroutinesApi::class)
+class PhotoQualityTest {
+    private fun attachment(id: String, kind: Attachment.Kind = Attachment.Kind.IMAGE) = Attachment(
+        id = id, profile = "work", ownerId = "01J8QK3ZR2W7M5N4P6T8V9X0HM",
+        createdAt = OffsetDateTime.parse("2026-09-21T10:14:50Z"), updatedAt = OffsetDateTime.parse("2026-09-21T10:14:50Z"),
+        name = "photo.heic", mime = "image/heic", sizeBytes = 4_000_000, kind = kind,
+        url = "/api/v1/attachments/$id/content", sha256 = "0".repeat(64),
+    )
+
+    @Test
+    fun anOriginalPhotoGoesAsAFileAndACompressedOneAsAnImage() {
+        val original = attachment("01J8QK3ZR2W7M5N4P6T8V9X0AA")
+        val compressed = attachment("01J8QK3ZR2W7M5N4P6T8V9X0AB")
+        val blocks = Outgoing("", listOf(original, compressed), setOf(original.id)).blocks()
+        assertEquals(listOf(ContentBlock.Type.FILE, ContentBlock.Type.IMAGE), blocks.map { it.type })
+        assertEquals("image/heic", blocks[0].mime)
+    }
+
+    @Test
+    fun theTrayMarksOriginalPhotosAndSendsTheirBytesUntouched() = runTest {
+        val uploaded = attachment("01J8QK3ZR2W7M5N4P6T8V9X0AC")
+        var sent: ByteArray? = null
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        val tray = AttachmentTray(scope, upload = { f -> sent = f.readBytes(); uploaded }, discard = {})
+        val bytes = ByteArray(4096) { (it % 251).toByte() }
+        val file = File(kotlin.io.path.createTempDirectory("outgoing").toFile(), "photo.heic").apply { writeBytes(bytes) }
+        tray.add(file, isImage = true, asFile = true)
+        scope.advanceUntilIdle()
+        assertTrue(bytes.contentEquals(sent))
+        assertEquals(setOf(uploaded.id), tray.asFiles)
+        assertEquals(setOf(uploaded.id), tray.message("hi").asFiles)
+    }
+
+    @Test
+    fun compressedIsTheDefaultAndTheChoiceIsRemembered() {
+        val prefs = MemoryPrefs()
+        assertFalse(DeviceSettings(prefs).choices.value.photoOriginal)
+        DeviceSettings(prefs).update { it.copy(photoOriginal = true) }
+        assertTrue(DeviceSettings(prefs).choices.value.photoOriginal)
+    }
+
+    @Test
+    fun thePhoneKeepsTheContractsAttachmentLimit() {
+        // UploadStart.size_bytes.maximum in openapi.yaml: the contract has no call that reports it.
+        val yaml = File(repoRoot, "packages/contracts/openapi.yaml").readText()
+        val section = yaml.substringAfter("\n    UploadStart:\n").take(600)
+        val maximum = Regex("maximum: (\\d+)").find(section)!!.groupValues[1].toLong()
+        assertEquals(maximum, AttachmentRules.MAX_BYTES)
+        assertTrue(AttachmentRules.MAX_BYTES > AttachmentRules.MAX_ONE_SHOT_BYTES)
+        assertEquals(52_428_800L, HubError.maxBytesOf("""{"error":"x","code":"payload_too_large","details":{"max_bytes":52428800}}"""))
+    }
+
+    @Test
+    fun filesOverTheOneRequestLimitGoInChunks() = runTest {
+        val calls = mutableListOf<String>()
+        var received = 0L
+        var failChunks = false
+        val chunkBytes = 10L * 1024 * 1024
+        val backend = object : AttachmentBackend {
+            fun upload(next: Long, size: Long) = Upload(
+                id = "01J8QK3ZR2W7M5N4P6T8V9X0WP", name = "f", mime = "m", sizeBytes = size, chunkBytes = chunkBytes,
+                nextOffset = next.toInt(), expiresAt = OffsetDateTime.parse("2026-09-21T10:20:00Z"),
+            )
+            var size = 0L
+            override suspend fun oneShot(file: File) = attachment("01J8QK3ZR2W7M5N4P6T8V9X0AD", Attachment.Kind.FILE).also { calls += "oneShot" }
+            override suspend fun start(name: String, mime: String, sizeBytes: Long): Upload {
+                calls += "start:$mime"; size = sizeBytes; received = 0; return upload(0, sizeBytes)
+            }
+            override suspend fun chunk(uploadId: String, offset: Long, body: File): Upload {
+                calls += "chunk@$offset"
+                if (failChunks) throw java.io.IOException("dropped")
+                assertTrue(body.length() <= chunkBytes)
+                received += body.length()
+                return upload(offset + body.length(), size)
+            }
+            override suspend fun complete(uploadId: String) = attachment("01J8QK3ZR2W7M5N4P6T8V9X0AE", Attachment.Kind.FILE).also { calls += "complete" }
+            override suspend fun abort(uploadId: String) { calls += "abort" }
+        }
+        val dir = kotlin.io.path.createTempDirectory("outgoing").toFile()
+        AttachmentUploader(backend).upload(File(dir, "small.pdf").apply { writeBytes(ByteArray(1024)) }, "application/pdf")
+        assertEquals(listOf("oneShot"), calls)
+
+        val size = AttachmentRules.MAX_ONE_SHOT_BYTES + 3
+        val big = File(dir, "big.heic").apply { java.io.RandomAccessFile(this, "rw").use { it.setLength(size) } }
+        calls.clear()
+        AttachmentUploader(backend).upload(big, mimeOf(big))
+        assertEquals(listOf("start:image/heic", "chunk@0", "chunk@10485760", "chunk@20971520", "complete"), calls)
+        assertEquals(size, received)
+
+        calls.clear()
+        failChunks = true
+        val failed = runCatching { AttachmentUploader(backend).upload(big, mimeOf(big)) }
+        assertTrue(failed.isFailure)
+        assertEquals("the open upload is let go", "abort", calls.last())
+    }
+}
+
 /** Where the voice comes from (§٥). */
 class VoiceSourceTest {
     @Test
@@ -124,11 +227,20 @@ class VoiceSourceTest {
     }
 
     @Test
-    fun coreHubIsTheDefaultAndTheChoiceIsKept() {
+    fun thisPhoneIsTheDefaultAndOnlyAPickPinsTheVoice() {
+        // Owner, 2026-09-26: «خل الأساسي حق الجوال ويقدر يغير المستخدم».
         val prefs = MemoryPrefs()
-        assertEquals(VoiceSource.HUB, DeviceSettings(prefs).choices.value.voiceSource)
-        DeviceSettings(prefs).update { it.copy(voiceSource = VoiceSource.PHONE) }
+        // 1.1.x wrote the old key with every change, chosen or not: it is not read any more.
+        prefs.values["voice_source"] = "HUB"
         assertEquals(VoiceSource.PHONE, DeviceSettings(prefs).choices.value.voiceSource)
+        // Changing another choice does not pin the voice.
+        DeviceSettings(prefs).update { it.copy(spokenReplies = true) }
+        assertFalse(prefs.values.containsKey("voice_source_chosen"))
+        assertEquals(VoiceSource.PHONE, DeviceSettings(prefs).choices.value.voiceSource)
+        DeviceSettings(prefs).update { it.copy(voiceSource = VoiceSource.HUB) }
+        assertEquals(VoiceSource.HUB, DeviceSettings(prefs).choices.value.voiceSource)
+        DeviceSettings(prefs).update { it.copy(spokenReplies = false) }
+        assertEquals("a pick stays picked", VoiceSource.HUB, DeviceSettings(prefs).choices.value.voiceSource)
     }
 
     @Test

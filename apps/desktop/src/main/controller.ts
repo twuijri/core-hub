@@ -59,8 +59,8 @@ import { findHermes, installHermes, thisMachine, type HermesFound } from './herm
 import { claimPairing, probeHub, type WebSession } from './hub.js';
 import { LocalHubError, startLocalHub, type LocalHub } from './local-hub.js';
 import { startHelper, toolsFor, type HelperServer } from './helper.js';
-import { RELEASES_PAGE, checkForUpdate, type UpdateCheck } from './updates.js';
-import { checkIsDue } from '../shared/updates.js';
+import { RELEASES_PAGE, appChannel, checkForUpdate, type UpdateCheck } from './updates.js';
+import { STORE_PAGE, checkIsDue, checksGitHub, type UpdateChannel } from '../shared/updates.js';
 import { appMenuTemplate, trayMenuTemplate, type MenuActions } from './menu.js';
 import { startProxy, type ProxyServer } from './proxy.js';
 
@@ -94,6 +94,8 @@ export class DesktopController {
   private helperError: string | null = null;
   private lastUpdateCheck: UpdateCheck | null = null;
   private updateTimer: NodeJS.Timeout | null = null;
+  /** `store` in the Microsoft Store build: the Store updates it, the app never checks GitHub. */
+  private readonly channel: UpdateChannel = appChannel(app.getAppPath());
 
   constructor(
     private readonly paths: ControllerPaths,
@@ -117,8 +119,8 @@ export class DesktopController {
     this.buildMenus();
     if (this.config.get().helper.enabled) await this.syncHelper();
     // The daily look for a newer release, a little after start so it never slows the launch.
-    // Tests turn it off: they must not ask GitHub anything.
-    if (process.env.COREHUB_DESKTOP_NO_AUTO_UPDATE !== '1') {
+    // Tests turn it off: they must not ask GitHub anything. A Store build never looks.
+    if (process.env.COREHUB_DESKTOP_NO_AUTO_UPDATE !== '1' && checksGitHub(this.channel)) {
       this.updateTimer = setInterval(() => void this.autoCheckUpdates(), 60 * 60 * 1000);
       setTimeout(() => void this.autoCheckUpdates(), 15_000);
     }
@@ -540,6 +542,7 @@ export class DesktopController {
       current: app.getVersion(),
       platform: process.platform,
       arch: process.arch,
+      channel: this.channel,
     });
     this.lastUpdateCheck = result;
     this.config.update((c) => ({
@@ -552,6 +555,7 @@ export class DesktopController {
   /** Once a day when allowed; a newer version is announced by the OS once. */
   private async autoCheckUpdates(): Promise<void> {
     const settings = this.config.get().updates;
+    if (!checksGitHub(this.channel)) return;
     if (!settings.auto || !checkIsDue(settings.lastCheckedAt, Date.now())) return;
     const result = await this.checkUpdates();
     if (result.status !== 'available' || settings.notified === result.update.version) return;
@@ -568,7 +572,10 @@ export class DesktopController {
   }
 
   private updatesState(): DesktopUpdatesState {
+    if (!checksGitHub(this.channel))
+      return { channel: 'store', auto: false, last: null, releasesPage: STORE_PAGE };
     return {
+      channel: 'github',
       auto: this.config.get().updates.auto,
       last: this.lastUpdateCheck,
       releasesPage: RELEASES_PAGE,
@@ -581,7 +588,7 @@ export class DesktopController {
     );
     ipcMain.handle(CHANNELS.updatesCheck, async (event) => {
       if (!this.fromApp(event)) return null;
-      await this.checkUpdates();
+      if (checksGitHub(this.channel)) await this.checkUpdates();
       return this.updatesState();
     });
     ipcMain.handle(CHANNELS.updatesAuto, (event, value: unknown) => {

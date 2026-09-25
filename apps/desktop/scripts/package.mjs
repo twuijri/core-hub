@@ -3,6 +3,10 @@
 //   node scripts/package.mjs [--linux|--mac|--win] [extra electron-builder args]
 // COREHUB_VERSION stamps the version (a tag, or a preview's); without it the app carries the root
 // package.json's version, the one every Core Hub deliverable carries (docs/RELEASING.md).
+//
+// COREHUB_CHANNEL=store builds the Microsoft Store MSIX instead (Windows only, `--win appx`):
+// the app is stamped `corehubChannel: store` (its update check stays off; src/shared/updates.ts)
+// and carries the plain X.Y.Z of the version, which the manifest writes as X.Y.Z.0.
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
@@ -15,6 +19,7 @@ import {
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { msixVersion } from './release-assets.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 if (!existsSync(path.join(here, 'dist/main.cjs')) || !existsSync(path.join(here, 'dist/hub'))) {
@@ -25,14 +30,17 @@ const require = createRequire(import.meta.url);
 const cli = path.join(path.dirname(require.resolve('electron-builder/package.json')), 'cli.js');
 const rootVersion = JSON.parse(readFileSync(path.join(here, '../../package.json'), 'utf8')).version;
 const version = process.env.COREHUB_VERSION?.trim().replace(/^v/, '') || rootVersion;
+const store = process.env.COREHUB_CHANNEL?.trim().toLowerCase() === 'store';
+const stamped = store ? msixVersion(version).replace(/\.0$/, '') : version;
 const args = [
   cli,
   '--config',
   'electron-builder.config.cjs',
   '--publish',
   'never',
-  `-c.extraMetadata.version=${version}`,
-  ...process.argv.slice(2),
+  `-c.extraMetadata.version=${stamped}`,
+  ...(store ? ['-c.extraMetadata.corehubChannel=store', '--win', 'appx', '--x64'] : []),
+  ...process.argv.slice(2).filter((arg) => !(store && arg === '--win')),
 ];
 const result = spawnSync(process.execPath, args, {
   cwd: here,
@@ -47,7 +55,7 @@ const result = spawnSync(process.execPath, args, {
 if (result.status !== 0) process.exit(result.status ?? 1);
 
 const release = path.join(here, 'release');
-const installers = readdirSync(release).filter((f) => /\.(AppImage|deb|dmg|exe)$/.test(f));
+const installers = readdirSync(release).filter((f) => /\.(AppImage|deb|dmg|exe|msix)$/.test(f));
 const mb = (bytes) => `${(bytes / 1_000_000).toFixed(1)} MB`;
 const rows = installers.map((f) => `| ${f} | ${mb(statSync(path.join(release, f)).size)} |`);
 const table = ['| Installer | Size |', '|---|---|', ...rows].join('\n');

@@ -71,11 +71,14 @@ rmSync(path.join(out, 'renderer/welcome-style.css'));
 rmSync(path.join(out, 'renderer/welcome-style.css.map'), { force: true });
 cpSync(path.join(here, 'src/renderer/welcome.html'), path.join(out, 'renderer/welcome.html'));
 cpSync(path.join(repo, 'docs/assets/core-hub-mark-light.svg'), path.join(out, 'renderer/logo.svg'));
-// The window and tray icons; the installers' own icons (.icns, .ico, icons/) stay out of the app.
+// The window and tray icons; the installers' own icons (.icns, .ico, icons/, the Store's appx/)
+// stay out of the app.
 cpSync(path.join(here, 'assets'), path.join(out, 'assets'), {
   recursive: true,
   filter: (source) =>
-    !/\.(icns|ico)$/.test(source) && !source.startsWith(path.join(here, 'assets', 'icons')),
+    !/\.(icns|ico)$/.test(source) &&
+    !source.startsWith(path.join(here, 'assets', 'icons')) &&
+    !source.startsWith(path.join(here, 'assets', 'appx')),
 });
 // The web client without its source maps: they help nobody inside an installer.
 cpSync(webDist, path.join(out, 'web'), {

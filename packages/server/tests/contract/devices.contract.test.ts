@@ -113,6 +113,9 @@ describe.skipIf(!doc)('contract: devices operations answer their success path', 
     await call('notify.sendTestNotice', 201);
 
     await call('devices.listPushSenders', 200);
+    const relay = await call('devices.setPushRelay', 200, { body: { private_push: true } });
+    expect(relay).toMatchObject({ state: 'no_url', private_push: true, url: null });
+    await call('devices.setPushRelay', 400, { body: { enabled: 'yes' } });
     await call('devices.setPushSender', 200, {
       params: { provider: 'webpush' },
       body: { subject: 'mailto:owner@example.com' },

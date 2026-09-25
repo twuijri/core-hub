@@ -115,3 +115,38 @@ export function checkIsDue(lastCheckedAt: string | null, now: number): boolean {
   const last = Date.parse(lastCheckedAt);
   return !Number.isFinite(last) || now - last >= AUTO_CHECK_INTERVAL_MS;
 }
+
+/**
+ * Where this copy of the app gets its updates. `github`: the releases above (the .exe, dmg,
+ * AppImage and deb installers). `store`: the Microsoft Store (the MSIX build) — the Store
+ * updates it, and the app must never look for or point at another installer.
+ */
+export type UpdateChannel = 'github' | 'store';
+
+/** The Core Hub product in the Microsoft Store (public; docs/RELEASING.md). */
+export const STORE_PRODUCT_ID = '9MT62R5V3P5N';
+export const STORE_PAGE = `https://apps.microsoft.com/detail/${STORE_PRODUCT_ID}`;
+
+/**
+ * The channel, from what the build says and where the app runs:
+ * - `metadata`: `corehubChannel` in the packaged app's package.json, which packaging stamps as
+ *   `store` for the MSIX (COREHUB_CHANNEL=store, scripts/package.mjs) — the build-time flag;
+ * - `windowsStore`: Electron's `process.windowsStore`, true inside any MSIX/APPX package — so a
+ *   Store install never checks GitHub even if the stamp were missing;
+ * - `env`: COREHUB_CHANNEL at run time, for trying the Store behaviour in a development run.
+ */
+export function updateChannel(input: {
+  metadata?: unknown;
+  windowsStore?: boolean | undefined;
+  env?: string | undefined;
+}): UpdateChannel {
+  if (input.windowsStore === true) return 'store';
+  if (input.metadata === 'store') return 'store';
+  if (input.env?.trim().toLowerCase() === 'store') return 'store';
+  return 'github';
+}
+
+/** Whether the app looks for a new release on its own (and may be asked to). */
+export function checksGitHub(channel: UpdateChannel): boolean {
+  return channel === 'github';
+}

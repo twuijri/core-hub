@@ -660,6 +660,7 @@
         "generated": "Keys made by the hub",
         "environment": "From the environment",
         "settings": "From Settings",
+        "relay": "Through the Core Hub relay",
         "none": "None"
       },
       "devices": "Devices: {count}",
@@ -2783,6 +2784,8 @@
     "failed": "Could not check: {message}",
     "checked_at": "Checked {time}",
     "all_releases": "All releases",
+    "from_store": "Updates come from the Microsoft Store.",
+    "store_page": "Open in the Microsoft Store",
     "size": "{size} MB"
   },
   "rooms": {

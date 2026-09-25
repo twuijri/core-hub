@@ -18,7 +18,11 @@ app.setName(PRODUCT.name);
 // (it reads navigator.language until the person chooses in Display).
 const chosen = parseConfigLanguage(app.getPath('userData'));
 if (chosen) app.commandLine.appendSwitch('lang', chosen);
-if (process.platform === 'win32') app.setAppUserModelId(`com.twuijri.${PRODUCT.id}`);
+// Inside an MSIX package (the Microsoft Store build) Windows gives the app its identity from the
+// package, and a different id would lose its notifications; the protocol comes from the manifest.
+const windowsStore = (process as NodeJS.Process & { windowsStore?: boolean }).windowsStore === true;
+if (process.platform === 'win32' && !windowsStore)
+  app.setAppUserModelId(`com.twuijri.${PRODUCT.id}`);
 
 const here = __dirname;
 const paths = {
@@ -50,8 +54,10 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   // Only an installed app claims the scheme: a development or test run must not rewrite
-  // the person's OS link handlers. Linux packages declare it in their .desktop entry.
-  if (app.isPackaged && process.platform !== 'linux') app.setAsDefaultProtocolClient(SCHEME);
+  // the person's OS link handlers. Linux packages declare it in their .desktop entry, the MSIX in
+  // its manifest (electron-builder writes `protocols` there).
+  if (app.isPackaged && process.platform !== 'linux' && !windowsStore)
+    app.setAsDefaultProtocolClient(SCHEME);
 
   app.on('second-instance', (_event, argv) => {
     controller?.showWindow();
