@@ -59,9 +59,9 @@ export function AttachToChatDialog({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title={t('files.attach_title', { name: entry.name })}
-      description={t('files.attach_body')}
-      closeLabel={t('files.close')}
+      title={t('workspace_files.attach_title', { name: entry.name })}
+      description={t('workspace_files.attach_body')}
+      closeLabel={t('workspace_files.close')}
       testId="files-attach"
     >
       {error && (
@@ -79,7 +79,7 @@ export function AttachToChatDialog({
             icon={<IconPlus size={14} />}
             data-testid="files-attach-new"
           >
-            {t('files.attach_new_chat')}
+            {t('workspace_files.attach_new_chat')}
           </Button>
         </li>
         {sessions.isPending && <Skeleton height="2.25rem" radius="md" />}

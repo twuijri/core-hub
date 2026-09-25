@@ -72,7 +72,7 @@ export function TextEditorDialog({
       setEtag(result.etag);
       setSaved(content);
       setConflict(null);
-      toast({ title: t('files.saved', { name }), tone: 'success' });
+      toast({ title: t('workspace_files.saved', { name }), tone: 'success' });
     } catch (err) {
       const refused = conflictOf(err);
       if (refused?.reason === 'changed') setConflict({ etag: refused.etag });
@@ -83,9 +83,9 @@ export function TextEditorDialog({
   const close = async () => {
     if (dirty) {
       const leave = await confirm.ask({
-        title: t('files.discard_title'),
-        body: t('files.discard_body', { name }),
-        confirmLabel: t('files.discard'),
+        title: t('workspace_files.discard_title'),
+        body: t('workspace_files.discard_body', { name }),
+        confirmLabel: t('workspace_files.discard'),
         tone: 'danger',
       });
       if (!leave) return;
@@ -101,20 +101,20 @@ export function TextEditorDialog({
       }}
       title={
         <span dir="auto">
-          {t(isNew && etag === null ? 'files.new_file_title' : 'files.edit_title', { name })}
+          {t(isNew && etag === null ? 'workspace_files.new_file_title' : 'workspace_files.edit_title', { name })}
         </span>
       }
       description={path}
       size="lg"
-      closeLabel={t('files.close')}
+      closeLabel={t('workspace_files.close')}
       testId="files-editor"
       footer={
         <>
           <span className="me-auto text-xs text-muted" role="status">
-            {dirty ? t('files.unsaved') : t('files.all_saved')}
+            {dirty ? t('workspace_files.unsaved') : t('workspace_files.all_saved')}
           </span>
           <Button size="sm" onClick={() => void close()}>
-            {t('files.close')}
+            {t('workspace_files.close')}
           </Button>
           <Button
             size="sm"
@@ -134,7 +134,7 @@ export function TextEditorDialog({
         <div className="mb-2" data-testid="files-editor-conflict">
           <Notice tone="warning">
             <span className="flex flex-col gap-2">
-              <span>{t('files.conflict')}</span>
+              <span>{t('workspace_files.conflict')}</span>
               <span className="flex flex-wrap gap-2">
                 <Button
                   size="sm"
@@ -144,7 +144,7 @@ export function TextEditorDialog({
                   }}
                   data-testid="files-editor-reload"
                 >
-                  {t('files.conflict_reload')}
+                  {t('workspace_files.conflict_reload')}
                 </Button>
                 <Button
                   size="sm"
@@ -152,7 +152,7 @@ export function TextEditorDialog({
                   onClick={() => void write(conflict.etag)}
                   data-testid="files-editor-overwrite"
                 >
-                  {t('files.conflict_overwrite')}
+                  {t('workspace_files.conflict_overwrite')}
                 </Button>
               </span>
             </span>
@@ -170,7 +170,7 @@ export function TextEditorDialog({
             value={content}
             onChange={setContent}
             fileName={name}
-            label={t('files.editor_label', { name })}
+            label={t('workspace_files.editor_label', { name })}
             onSave={() => void write(etag)}
             testId="files-editor-text"
           />

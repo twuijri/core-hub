@@ -43,15 +43,15 @@ export function FilePreviewDialog({
           : `${entry.path} · ${formatBytes(entry.size_bytes, language)}`
       }
       size="lg"
-      closeLabel={t('files.close')}
+      closeLabel={t('workspace_files.close')}
       testId="files-preview"
       footer={
         <>
           <Button size="sm" onClick={onAttach} icon={<IconPaperclip size={14} />}>
-            {t('files.attach')}
+            {t('workspace_files.attach')}
           </Button>
           <Button size="sm" onClick={onDownload} icon={<IconDownload size={14} />}>
-            {t('files.download')}
+            {t('workspace_files.download')}
           </Button>
           {entry.editable && (
             <Button size="sm" variant="primary" onClick={onEdit} data-testid="files-preview-edit">
@@ -67,8 +67,8 @@ export function FilePreviewDialog({
         <EmptyState
           size="sm"
           icon={<IconFile size={20} />}
-          title={t('files.no_preview')}
-          body={t('files.no_preview_body')}
+          title={t('workspace_files.no_preview')}
+          body={t('workspace_files.no_preview_body')}
         />
       )}
     </Dialog>
@@ -85,7 +85,7 @@ function TextPreview({ entry }: { entry: WorkspaceFileEntry }) {
       <CodeEditor
         value={text.data.content}
         fileName={entry.name}
-        label={t('files.preview_of', { name: entry.name })}
+        label={t('workspace_files.preview_of', { name: entry.name })}
         readOnly
         testId="files-preview-text"
       />
@@ -134,10 +134,10 @@ function BytesPreview({ entry, kind }: { entry: WorkspaceFileEntry; kind: 'image
       className="files-preview-pdf"
       data={url}
       type="application/pdf"
-      aria-label={t('files.preview_of', { name: entry.name })}
+      aria-label={t('workspace_files.preview_of', { name: entry.name })}
       data-testid="files-preview-pdf"
     >
-      <p className="p-3 text-sm">{t('files.pdf_fallback')}</p>
+      <p className="p-3 text-sm">{t('workspace_files.pdf_fallback')}</p>
     </object>
   );
 }
