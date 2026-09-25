@@ -29,6 +29,9 @@ export const CHANNELS = {
   helperFolderWrite: 'helper:folder-write',
   helperAllowOpen: 'helper:allow-open',
   helperNewToken: 'helper:new-token',
+  updatesGet: 'updates:get',
+  updatesCheck: 'updates:check',
+  updatesAuto: 'updates:auto',
 } as const;
 
 export interface WelcomeInit {

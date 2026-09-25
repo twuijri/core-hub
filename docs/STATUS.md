@@ -208,13 +208,20 @@ its approval.
   This device lists the live tools (list/read in shared folders; write only in folders shared as
   writable; open files and http(s) links only when allowed), the folders and their access, the
   address and key, and the last calls, and in local mode adds it to Hermes's MCP servers in one
-  click. A hub on a server cannot reach it (the screen says so). Not yet: installers and the
-  update check, voice (the page says so). Tests:
+  click. A hub on a server cannot reach it (the screen says so). Since 2026-09-25 also
+  **installers and an update check** (ADR 0023, proposed): AppImage + deb (Linux x64: 125.8 MB
+  and 99.7 MB), dmg (macOS, Apple silicon only: 118.4 MB) and NSIS (Windows x64: 105.5 MB),
+  unsigned, built by
+  `.github/workflows/desktop.yml` as artifacts and never published; This device checks GitHub
+  releases once a day (switchable) or on demand and links the installer — nothing is downloaded
+  or installed by the app. Not yet: code signing (owner's decision), voice (the page says so).
+  Tests:
   unit tests of the main process logic, the loopback proxy, Hermes detection per platform, the
-  installer runner, the hub supervisor, and the helper (folder rule with links, tools, the MCP
-  door); a smoke test (Electron under Xvfb) that connects,
+  installer runner, the hub supervisor, the helper (folder rule with links, tools, the MCP
+  door) and the update check; a smoke test (Electron under Xvfb) that connects,
   signs in, streams a chat reply and pairs a second computer against the real hub, and starts
-  local mode on a computer without Hermes through to the first-run setup and turns the helper on.
+  local mode on a computer without Hermes through to the first-run setup and turns the helper on — run in CI against the packaged Linux
+  app as well.
 - Android and iOS: not started (ADR 0007).
 
 ## Name

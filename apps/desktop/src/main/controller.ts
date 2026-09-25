@@ -27,6 +27,7 @@ import {
 import { PRODUCT } from '@corehub/contracts';
 import type {
   DesktopHelperState,
+  DesktopUpdatesState,
   DesktopNotice,
   DesktopState,
 } from '../../../../packages/web/src/desktop/bridge-types.js';
@@ -58,6 +59,8 @@ import { findHermes, installHermes, thisMachine, type HermesFound } from './herm
 import { claimPairing, probeHub, type WebSession } from './hub.js';
 import { LocalHubError, startLocalHub, type LocalHub } from './local-hub.js';
 import { startHelper, toolsFor, type HelperServer } from './helper.js';
+import { RELEASES_PAGE, checkForUpdate, type UpdateCheck } from './updates.js';
+import { checkIsDue } from '../shared/updates.js';
 import { appMenuTemplate, trayMenuTemplate, type MenuActions } from './menu.js';
 import { startProxy, type ProxyServer } from './proxy.js';
 
@@ -89,6 +92,8 @@ export class DesktopController {
   private installing = false;
   private helper: HelperServer | null = null;
   private helperError: string | null = null;
+  private lastUpdateCheck: UpdateCheck | null = null;
+  private updateTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly paths: ControllerPaths,
@@ -111,6 +116,12 @@ export class DesktopController {
     this.registerIpc();
     this.buildMenus();
     if (this.config.get().helper.enabled) await this.syncHelper();
+    // The daily look for a newer release, a little after start so it never slows the launch.
+    // Tests turn it off: they must not ask GitHub anything.
+    if (process.env.COREHUB_DESKTOP_NO_AUTO_UPDATE !== '1') {
+      this.updateTimer = setInterval(() => void this.autoCheckUpdates(), 60 * 60 * 1000);
+      setTimeout(() => void this.autoCheckUpdates(), 15_000);
+    }
     if (this.options.tray) this.createTray();
     const config = this.config.get();
     if (config.mode === 'remote' && config.remote.url) this.openRemote(config.remote.url);
@@ -136,6 +147,7 @@ export class DesktopController {
     this.quitting = true;
     this.tray?.destroy();
     this.tray = null;
+    if (this.updateTimer) clearInterval(this.updateTimer);
     // The local hub is stopped properly (its database, its Hermes child); the rest never
     // holds up quitting: the process ending closes whatever socket is left.
     const helper = this.helper;
@@ -521,6 +533,64 @@ export class DesktopController {
     );
   }
 
+  // ---------------------------------------------------------------- updates
+
+  private async checkUpdates(): Promise<UpdateCheck> {
+    const result = await checkForUpdate({
+      current: app.getVersion(),
+      platform: process.platform,
+      arch: process.arch,
+    });
+    this.lastUpdateCheck = result;
+    this.config.update((c) => ({
+      ...c,
+      updates: { ...c.updates, lastCheckedAt: result.checkedAt },
+    }));
+    return result;
+  }
+
+  /** Once a day when allowed; a newer version is announced by the OS once. */
+  private async autoCheckUpdates(): Promise<void> {
+    const settings = this.config.get().updates;
+    if (!settings.auto || !checkIsDue(settings.lastCheckedAt, Date.now())) return;
+    const result = await this.checkUpdates();
+    if (result.status !== 'available' || settings.notified === result.update.version) return;
+    const version = result.update.version;
+    this.config.update((c) => ({ ...c, updates: { ...c.updates, notified: version } }));
+    if (!Notification.isSupported()) return;
+    const notice = new Notification({
+      title: this.t('updates.available_title', { version }),
+      body: this.t('updates.available_body'),
+      icon: path.join(this.paths.assetsDir, 'icon.png'),
+    });
+    notice.on('click', () => void shell.openExternal(result.update.page));
+    notice.show();
+  }
+
+  private updatesState(): DesktopUpdatesState {
+    return {
+      auto: this.config.get().updates.auto,
+      last: this.lastUpdateCheck,
+      releasesPage: RELEASES_PAGE,
+    };
+  }
+
+  private registerUpdatesIpc(): void {
+    ipcMain.handle(CHANNELS.updatesGet, (event) =>
+      this.fromApp(event) ? this.updatesState() : null,
+    );
+    ipcMain.handle(CHANNELS.updatesCheck, async (event) => {
+      if (!this.fromApp(event)) return null;
+      await this.checkUpdates();
+      return this.updatesState();
+    });
+    ipcMain.handle(CHANNELS.updatesAuto, (event, value: unknown) => {
+      if (!this.fromApp(event)) return null;
+      this.config.update((c) => ({ ...c, updates: { ...c.updates, auto: value === true } }));
+      return this.updatesState();
+    });
+  }
+
   // ---------------------------------------------------------------- tray and menus
 
   private readonly actions: MenuActions = {
@@ -609,6 +679,7 @@ export class DesktopController {
 
   private registerIpc(): void {
     this.registerHelperIpc();
+    this.registerUpdatesIpc();
     ipcMain.handle(CHANNELS.state, (event) => (this.fromApp(event) ? this.state() : null));
     ipcMain.handle(CHANNELS.takeSession, (event) => {
       if (!this.fromApp(event)) return null;

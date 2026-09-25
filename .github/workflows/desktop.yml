@@ -1,0 +1,71 @@
+name: Desktop installers
+
+# Builds the desktop app's installers on Linux, macOS and Windows and keeps them as workflow
+# artifacts, with their sizes in the job summary. It never publishes a release: attaching
+# installers to a GitHub release is the owner's step (TEAM-RULES §6). Unsigned — signing and
+# notarisation are a documented TODO (ADR 0023).
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to stamp (e.g. 0.1.0-alpha.17); empty keeps 0.0.0'
+        required: false
+  pull_request:
+    paths:
+      - 'apps/desktop/**'
+      - '.github/workflows/desktop.yml'
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  installers:
+    name: Installers (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: --linux
+          - os: macos-latest
+            target: --mac
+          - os: windows-latest
+            target: --win
+    env:
+      COREHUB_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @corehub/desktop electron:install
+      - run: pnpm build
+      - name: Package
+        run: pnpm --filter @corehub/desktop package ${{ matrix.target }}
+      # On Linux the three smoke journeys also run against the packaged app, embedded hub and all.
+      - name: Smoke test the packaged app
+        if: runner.os == 'Linux'
+        run: |
+          command -v xvfb-run || (sudo apt-get update && sudo apt-get install -y xvfb)
+          COREHUB_DESKTOP_SMOKE_EXECUTABLE="$PWD/apps/desktop/release/linux-unpacked/corehub" \
+            xvfb-run -a pnpm --filter @corehub/desktop test:smoke
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corehub-desktop-${{ runner.os }}
+          path: |
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.exe
+            apps/desktop/release/sizes.md
+          retention-days: 14
+          if-no-files-found: error

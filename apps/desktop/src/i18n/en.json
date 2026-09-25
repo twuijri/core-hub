@@ -100,5 +100,9 @@
   },
   "helper": {
     "pick_folder": "Choose a folder to share with the local helper"
+  },
+  "updates": {
+    "available_title": "Core Hub {version} is available",
+    "available_body": "Open the download page to install it."
   }
 }

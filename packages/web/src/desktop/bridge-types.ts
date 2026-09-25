@@ -65,6 +65,31 @@ export interface DesktopBridge {
   onOpenPath(listener: (path: string) => void): () => void;
   /** The local helper (MCP) — what this computer exposes to agents (ADR 0022). */
   helper: DesktopHelperBridge;
+  /** The update check (ADR 0023): a notice and a download link, never an install. */
+  updates: DesktopUpdatesBridge;
+}
+
+export interface DesktopUpdateCheck {
+  status: 'available' | 'up_to_date' | 'failed';
+  current: string;
+  checkedAt: string;
+  update?: { version: string; download: string; size: number | null; page: string };
+  message?: string;
+}
+
+export interface DesktopUpdatesState {
+  /** Checks once a day on its own. */
+  auto: boolean;
+  /** The last answer, or null before the first check. */
+  last: DesktopUpdateCheck | null;
+  /** Where every release is listed. */
+  releasesPage: string;
+}
+
+export interface DesktopUpdatesBridge {
+  get(): Promise<DesktopUpdatesState>;
+  check(): Promise<DesktopUpdatesState>;
+  setAuto(value: boolean): Promise<DesktopUpdatesState>;
 }
 
 export interface DesktopHelperFolder {

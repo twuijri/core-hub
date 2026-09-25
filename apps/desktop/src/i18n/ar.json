@@ -100,5 +100,9 @@
   },
   "helper": {
     "pick_folder": "اختر مجلدًا تشاركه مع المساعد المحلي"
+  },
+  "updates": {
+    "available_title": "كور هب {version} متاح",
+    "available_body": "افتح صفحة التنزيل لتثبيته."
   }
 }
