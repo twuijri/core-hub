@@ -151,7 +151,10 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
   const items = useMemo(() => {
     // The global agent is not a chat in the list: search and the pending-actions bar lead
     // to its own page (NAVIGATION §4, contract decision §46).
-    const all = (sessions.data?.items ?? []).filter((s) => s.source !== 'global_agent');
+    // The global agent has its own page, and a room seat's conversation lives in its room.
+    const all = (sessions.data?.items ?? []).filter(
+      (s) => s.source !== 'global_agent' && s.source !== 'room',
+    );
     const needle = filter.trim().toLowerCase();
     const filtered = needle
       ? all.filter(

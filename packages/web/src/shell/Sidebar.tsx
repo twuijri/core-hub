@@ -20,6 +20,7 @@ import {
   visibleEntries,
 } from '../navigation/manifest.js';
 import { useRealtime } from '../realtime/context.js';
+import { RoomList } from '../rooms/RoomList.js';
 import { SessionList } from '../sessions/SessionList.js';
 import { SettingsNav, settingsIdFromPath } from '../settings/SettingsNav.js';
 import { AgentBackRow, AgentNav } from '../agents/AgentNav.js';
@@ -215,6 +216,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <AgentNav agentId={agentPage.agentId} current={agentPage.id} onNavigate={onNavigate} />
         ) : selected === 'chat' ? (
           <SessionList {...(onNavigate ? { onOpen: onNavigate } : {})} />
+        ) : selected === 'rooms' ? (
+          <RoomList {...(onNavigate ? { onOpen: onNavigate } : {})} />
         ) : (
           <p className="px-2 text-xs text-muted">
             {t('shell.segment_later', { name: t(termKey(selected)) })}

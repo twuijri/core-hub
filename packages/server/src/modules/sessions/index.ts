@@ -13,7 +13,12 @@ import { requireSqlite } from '../../lib/db.js';
 import { HubError } from '../../lib/errors.js';
 import { defineModule, REALTIME_NAMESPACES, type HubModule } from '../../lib/module.js';
 import { AuditService } from '../audit/index.js';
-import { attachSessionsRealtime, sessionsRealtimeFor, type FollowCheck } from './realtime.js';
+import {
+  attachSessionsRealtime,
+  sessionsRealtimeFor,
+  type FollowCheck,
+  type SessionEventListener,
+} from './realtime.js';
 import { registerSessionRoutes } from './routes.js';
 import { derivedScopeResolver, type ScopeCaller, type ScopeResolver } from './scope.js';
 import { SessionsService, type TurnHandle, type TurnInput, type TurnResult } from './service.js';
@@ -21,6 +26,7 @@ import type { EngineScope } from './engine.js';
 import { SessionsStore } from './store.js';
 import type {
   AgentDirectory,
+  AgentInfo,
   AgentRunner,
   AttachmentsPort,
   SessionsNotifier,
@@ -119,6 +125,34 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
         },
         outcome: (workspace, runId) => serviceFor(app, app.log).turnResult(workspace, runId),
       });
+      seats.set(app, {
+        open: (scope, input) => serviceFor(app, app.log).openSeatSession(scope, input),
+        start: (scope, input) => serviceFor(app, app.log).startSeatTurn(scope, input),
+        async configure(scope, sessionId, patch) {
+          await serviceFor(app, app.log).update(scope, sessionId, patch);
+        },
+        async cancel(scope, sessionId, runId) {
+          try {
+            await serviceFor(app, app.log).cancelRun(scope, sessionId, runId);
+          } catch (error) {
+            if (error instanceof HubError && ['state_invalid', 'not_found'].includes(error.code))
+              return;
+            throw error;
+          }
+        },
+        runs: (scope, runIds) => serviceFor(app, app.log).runsById(scope, runIds),
+        list: (scope, sessionIds, filter) =>
+          serviceFor(app, app.log).runsOfSessions(
+            scope,
+            sessionIds,
+            filter.status,
+            filter.cursor,
+            filter.limit,
+          ),
+        outcome: (workspace, runId) => serviceFor(app, app.log).turnResult(workspace, runId),
+        agent: (workspace, agentId) => portsFor(app).agents.find(workspace, agentId),
+        listen: (listener) => sessionsRealtimeFor(app.hub.io)?.listen(listener) ?? (() => false),
+      });
       gates.set(app, {
         raise: (scope, input) => serviceFor(app, app.log).raiseWorkflowApproval(scope, input),
         cancel: (scope, workflowRunId) =>
@@ -188,6 +222,60 @@ const runs = new WeakMap<FastifyInstance, SessionRuns>();
 /** `null` when this app composes no sessions module. */
 export function sessionRunsFor(app: FastifyInstance): SessionRuns | null {
   return runs.get(app) ?? null;
+}
+
+/**
+ * A room's seats (`rooms`, DECISIONS §57): each seat has one session of its own, opened when
+ * the seat is added, and every turn it takes is a run in it. `listen` hears the sessions'
+ * streams so the room can re-emit them on `/rt/rooms` with the room's ids set.
+ */
+export interface SeatSessions {
+  open(
+    scope: EngineScope,
+    input: {
+      agentId: string;
+      seatId: string;
+      title: string;
+      model?: string | null | undefined;
+      provider?: string | null | undefined;
+      reasoningEffort?: string | null | undefined;
+      workingDir?: string | null | undefined;
+    },
+  ): Promise<string>;
+  start(
+    scope: EngineScope,
+    input: { sessionId: string; seatId: string; prompt: string },
+  ): Promise<TurnHandle>;
+  /** A seat's model, provider or effort changed: its session follows. */
+  configure(
+    scope: EngineScope,
+    sessionId: string,
+    patch: {
+      model?: string | null;
+      provider?: string | null;
+      reasoning_effort?: string | null;
+      archived?: boolean;
+    },
+  ): Promise<void>;
+  /** Stop a run; one that already ended (or was deleted) is not an error. */
+  cancel(scope: EngineScope, sessionId: string, runId: string): Promise<void>;
+  /** The contract's `Run` for each id that exists. */
+  runs(scope: EngineScope, runIds: readonly string[]): Record<string, unknown>[];
+  list(
+    scope: EngineScope,
+    sessionIds: readonly string[],
+    filter: { status?: string | undefined; cursor?: string | undefined; limit: number },
+  ): { items: Record<string, unknown>[]; next_cursor: string | null };
+  outcome(workspace: string, runId: string): TurnResult | null;
+  /** The agent a seat would sit, as the runs see it: `null` when the profile has none. */
+  agent(workspace: string, agentId: string): Promise<AgentInfo | null>;
+  listen(listener: SessionEventListener): () => void;
+}
+const seats = new WeakMap<FastifyInstance, SeatSessions>();
+
+/** `null` when this app composes no sessions module. */
+export function seatSessionsFor(app: FastifyInstance): SeatSessions | null {
+  return seats.get(app) ?? null;
 }
 
 /**
@@ -269,5 +357,6 @@ export type {
 export { RUN_FILES_DIR, collectOutputs, ensureRunFolders, runFolders } from './run-files.js';
 export type { ProducedFile, ProducedFiles, ProducedRefusal } from './run-files.js';
 export type { ScopeResolver, RequestScope } from './scope.js';
+export type { SessionEventListener, SessionEventName } from './realtime.js';
 export type { TurnHandle, TurnInput, TurnResult } from './service.js';
 export type { EngineScope } from './engine.js';

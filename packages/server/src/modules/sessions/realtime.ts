@@ -87,10 +87,39 @@ export type FollowCheck = (socket: Socket, sessionId: string) => Promise<boolean
 
 const refuseAll: FollowCheck = () => Promise.resolve(false);
 
+/**
+ * Hears every event of a session as it is sent — how `rooms` re-emits its seats' streams on
+ * `/rt/rooms` (DECISIONS §1, §57). A listener that throws is ignored: a room must never be
+ * able to break a conversation's stream.
+ */
+export type SessionEventListener = (
+  profile: string,
+  sessionId: string,
+  event: SessionEventName,
+  payload: unknown,
+) => void;
+
 export class SessionsRealtime {
   readonly journal: ResumeJournal;
   private readonly sequences = new Map<string, number>();
   private canFollow: FollowCheck = refuseAll;
+  private readonly listeners = new Set<SessionEventListener>();
+
+  /** Hear every session event from now on; the answer stops it. */
+  listen(listener: SessionEventListener): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private tell(profile: string, sessionId: string, event: SessionEventName, payload: unknown) {
+    for (const listener of this.listeners) {
+      try {
+        listener(profile, sessionId, event, payload);
+      } catch {
+        // A listener's failure is its own (see SessionEventListener).
+      }
+    }
+  }
 
   constructor(
     private readonly nsp: Namespace,
@@ -124,6 +153,7 @@ export class SessionsRealtime {
     const envelope = this.envelope(profile, event, payload);
     this.journal.append(sessionId, { seq: envelope.seq, envelope });
     this.nsp.to(profileRoom(profile)).emit(event, envelope);
+    this.tell(profile, sessionId, event, payload);
     return envelope;
   }
 
@@ -140,6 +170,7 @@ export class SessionsRealtime {
     const envelope = this.envelope(profile, event, payload);
     this.journal.append(sessionId, { seq: envelope.seq, envelope });
     this.nsp.to(sessionRoom(sessionId)).emit(event, envelope);
+    this.tell(profile, sessionId, event, payload);
     return envelope;
   }
 

@@ -770,6 +770,103 @@ export class SessionsService {
   }
 
   /**
+   * A room seat's own conversation (`rooms`, DECISIONS §57): opened once when the seat is
+   * added, then every turn the seat takes runs in it, so the agent keeps what it said
+   * before. Source `room`, origin the seat, so it stays out of the chats list and its runs
+   * name the seat. An agent that is not installed is refused before anything is written.
+   */
+  async openSeatSession(
+    scope: EngineScope,
+    input: {
+      agentId: string;
+      seatId: string;
+      title: string;
+      model?: string | null | undefined;
+      provider?: string | null | undefined;
+      reasoningEffort?: string | null | undefined;
+      workingDir?: string | null | undefined;
+    },
+  ): Promise<string> {
+    const agent = await this.requireAgent(scope, input.agentId);
+    if (!agent.available) {
+      throw new HubError('agent_unavailable', {
+        details: { agent_id: agent.id, status: agent.unavailableReason ?? 'unavailable' },
+      });
+    }
+    const session = await this.create(
+      scope,
+      {
+        agent_id: input.agentId,
+        title: input.title,
+        model: input.model ?? null,
+        provider: input.provider ?? null,
+        reasoning_effort: input.reasoningEffort ?? null,
+        working_dir: input.workingDir ?? null,
+      },
+      { source: 'room', kind: 'room', id: input.seatId },
+    );
+    return String(session.id);
+  }
+
+  /**
+   * One turn of a room seat, in the seat's own session: the prompt is the room as the seat
+   * has not yet seen it. Queued behind the seat's current turn, like a chat message sent
+   * while the agent is still answering. The ids come back at once; `done` says how it ended.
+   */
+  async startSeatTurn(
+    scope: EngineScope,
+    input: { sessionId: string; seatId: string; prompt: string },
+  ): Promise<TurnHandle> {
+    const accepted = await this.createRun(
+      scope,
+      input.sessionId,
+      { content: [{ type: 'text', text: input.prompt }] },
+      { kind: 'room', id: input.seatId },
+    );
+    const runId = String(accepted.payload.run_id);
+    const sessionId = input.sessionId;
+    return {
+      sessionId,
+      runId,
+      jobId: String(accepted.payload.job_id),
+      done: accepted.started.then(
+        () =>
+          this.turnResult(scope.workspace, runId) ?? {
+            sessionId,
+            runId,
+            status: 'failed' as const,
+            output: '',
+            error: 'the run was deleted before it ended',
+            errorCode: null,
+          },
+      ),
+    };
+  }
+
+  /** The contract's `Run` of each id that exists in the workspace, in the order asked. */
+  runsById(scope: EngineScope, runIds: readonly string[]): Record<string, unknown>[] {
+    return runIds
+      .map((id) => this.store.getRun(scope.workspace, id))
+      .filter((row): row is RunRow => !!row)
+      .map((row) => this.runOf(scope, row));
+  }
+
+  /** Runs of several sessions — a room's seats — live first, then newest (`rooms.listRuns`). */
+  runsOfSessions(
+    scope: EngineScope,
+    sessionIds: readonly string[],
+    status: string | undefined,
+    cursor: string | undefined,
+    limit: number,
+  ): { items: Record<string, unknown>[]; next_cursor: string | null } {
+    const page = this.store.runsOfSessions(scope.workspace, sessionIds, status, cursor, limit);
+    return {
+      items: page.items.map((row) => this.runOf(scope, row)),
+      next_cursor: page.nextCursor,
+    };
+  }
+
+  /**
    * One whole turn, start to finish: `startTurn`, then wait for it. What comes back is how
    * it ended and what the agent said, which is all a workflow step needs.
    */

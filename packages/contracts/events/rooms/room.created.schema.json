@@ -97,7 +97,9 @@
               "updated_at": "2026-09-21T10:00:01Z"
             }
           ],
-          "last_active_at": "2026-09-21T10:00:00Z"
+          "last_active_at": "2026-09-21T10:00:00Z",
+          "lead_seat_id": "01J8QK3ZR2W7M5N4P6T8V9X0ST",
+          "archived_at": null
         }
       }
     }
@@ -171,7 +173,9 @@
             "summary_policy",
             "handoff",
             "seats",
-            "last_active_at"
+            "last_active_at",
+            "lead_seat_id",
+            "archived_at"
           ],
           "properties": {
             "name": {
@@ -190,7 +194,30 @@
               "description": "Whether the caller may edit the room."
             },
             "can_mention_all": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Whether a person may address every seat at once with `@all`."
+            },
+            "lead_seat_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The seat that answers a message that mentions nobody (DECISIONS §57). The first\nseat added becomes the lead; `null` means such a message is only read.\n"
+            },
+            "archived_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Set while the room is archived; an archived room refuses new messages."
             },
             "member_count": {
               "type": "integer"

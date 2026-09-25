@@ -88,3 +88,32 @@ export const DEVICE_EVENTS = [
   'device.updated',
   'device.unlinked',
 ] as const;
+
+/** `/rt/rooms`: everything a room's screen and the rooms list hear (events/rooms/*). */
+export const ROOM_EVENTS = [
+  'room.created',
+  'room.updated',
+  'room.deleted',
+  'room.cleared',
+  'member.joined',
+  'member.left',
+  'member.typing',
+  'seat.added',
+  'seat.updated',
+  'seat.removed',
+  'message.created',
+  'message.delta',
+  'reasoning.delta',
+  'tool.started',
+  'tool.completed',
+  'tool.failed',
+  'run.queued',
+  'run.started',
+  'run.completed',
+  'run.failed',
+  'run.cancelled',
+  'approval.requested',
+  'approval.resolved',
+  'handoff.updated',
+  'memory.updated',
+] as const;

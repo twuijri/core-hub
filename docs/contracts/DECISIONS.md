@@ -1024,3 +1024,37 @@ did not say how many there are or who owns one. Proposed here — owner to confi
 Rejected: a new `source` field on `SessionCreate` (a client could then make any number of
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
+
+## 57. A room is its members'; a message that names nobody goes to the lead seat
+
+Proposed — owner to confirm (rooms were "later"; built on the owner's «كمل كل الشغل», 2026-09-25).
+
+- **Who sees a room.** A room lives in one profile and belongs to its members: the person who
+  made it (`role: owner`, who manages it — `can_manage`, the invite code, seats, archive,
+  delete) and whoever joined by its code. Anyone else, an admin included, gets `404`, the same
+  answer as for a room that does not exist. `rooms.list` lists only the caller's rooms.
+  Rejected: every room of a profile visible to everyone in it — a room is a conversation, and
+  people expect a conversation they were not invited to to stay closed.
+- **Invite codes.** Eight characters of `[A-Z2-9]` without `I`, `O`, `0`, `1`; the link is
+  `<hub>/join/<code>` (§23). A code opens a room only for someone who may already enter its
+  profile; for anyone else it reads like no code at all. A code never grants a profile.
+  Joining twice answers the room again (`200`), not an error; an archived room refuses
+  joining and posting with `409 state_invalid`. `room.created` goes to its maker's sockets
+  only, because a new room carries its invite code.
+- **Who answers.** The seats a message mentions (structured `mentions`, §23), every seat for
+  `@all` when `can_mention_all` (`400` otherwise), and **the room's lead seat when it mentions
+  nobody** (`Room.lead_seat_id`: the first seat added, changeable, `null` = nobody). This
+  replaces the earlier description ("every seat when `can_mention_all`") — a room with three
+  agents that all answer every sentence is noise; one default responder is what a chat with
+  one agent already does.
+- **Archiving** is `RoomPatch.archived` (and `rooms.list?archived=true`), not a new
+  operation; the transcript stays readable.
+- **A seat** is an agent with its own name (unique in the room ignoring case, `all`
+  reserved), role (`description`), instructions and model, and a conversation of its own in
+  `sessions` (source `room`, origin the seat) opened when the seat is added — so an agent that
+  cannot take turns is refused before the seat exists (`404` / `422`), and the chats list
+  leaves those conversations out. A removed seat leaves the room; its past messages keep its
+  name. A room message is the one `Message` (§1): a person's or the hub's message carries the
+  room's id as `session_id` (a room is not a session), a seat's reply its seat's session.
+- **The web** draws the person's own messages on the right and everyone else — people and
+  agents — on the left, each named, because in a room "the other side" is several speakers.
