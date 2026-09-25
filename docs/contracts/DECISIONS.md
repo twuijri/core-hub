@@ -2149,6 +2149,13 @@ cli-proxy-api). Added: `ModelCapability: image_output`, `ModelDefaults.image` an
   the skills, reading the four variables through Hermes's secret scope, so the tool and the skills
   never draw with different models. With no model chosen the hub takes back only what it wrote —
   a backend somebody picked in `hermes tools` stays.
+- **The picture comes back on the reply** (2026-09-26, found in the first real Hermes turn). Hermes
+  saves what `image_generate` draws in its own `cache/images/`, outside the run's output folder, so
+  the conversation only had the model's words. The Hermes adapter reports a successful
+  `image_generate` answer with a local path as `file.produced`, and the runner copies that file into
+  the run's output folder, where the engine attaches it to the reply as an `image` part like any file
+  the agent left there. A copy (Hermes's cache stays), never a link, a folder or a file over 25 MB;
+  a URL answer (a backend that returns a link) is left to the model's words. No contract change.
 - **Background removal** through the model: `image-edit remove-bg` asks a gpt-image model for
   transparency outright and any other model for the subject on a flat colour, which the bundled,
   model-free `image-convert transparent-bg` then clears. No local model is added to the image.
