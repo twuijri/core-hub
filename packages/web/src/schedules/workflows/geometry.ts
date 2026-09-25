@@ -92,3 +92,24 @@ export function edgeCurve(from: Position, to: Position): { d: string; mid: Posit
     mid,
   };
 }
+
+/** The least pan that brings a node fully into view (a step just added off-screen). */
+export function reveal(
+  view: View,
+  rtl: boolean,
+  position: Position,
+  width: number,
+  height: number,
+  margin = 24,
+): View {
+  const sign = signOf(rtl);
+  const a = view.tx + sign * view.zoom * position.x;
+  const b = view.tx + sign * view.zoom * (position.x + NODE_WIDTH);
+  const left = Math.min(a, b);
+  const right = Math.max(a, b);
+  const top = view.ty + view.zoom * position.y;
+  const bottom = top + view.zoom * NODE_HEIGHT;
+  const dx = left < margin ? margin - left : right > width - margin ? width - margin - right : 0;
+  const dy = top < margin ? margin - top : bottom > height - margin ? height - margin - bottom : 0;
+  return dx === 0 && dy === 0 ? view : { ...view, tx: view.tx + dx, ty: view.ty + dy };
+}

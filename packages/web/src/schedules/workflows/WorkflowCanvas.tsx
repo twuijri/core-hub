@@ -36,6 +36,7 @@ import {
   fitView,
   inPort,
   outPort,
+  reveal,
   signOf,
   toWorld,
   zoomAt,
@@ -85,7 +86,7 @@ type Gesture =
 
 const ROUTE_STROKE: Record<Route, string> = {
   success: 'var(--color-success-soft-text)',
-  failure: 'var(--color-danger-text)',
+  failure: 'var(--color-danger)',
   always: 'var(--color-muted)',
 };
 
@@ -94,7 +95,7 @@ const STATE_CLASS: Record<NodeRunState, string> = {
   waiting: 'border-warning-soft-text ring-2 ring-warning-soft',
   running: 'border-info-soft-text ring-2 ring-info-soft animate-pulse',
   done: 'border-success-soft-text',
-  failed: 'border-danger-text',
+  failed: 'border-danger',
   skipped: 'border-dashed border-line opacity-60',
 };
 
@@ -150,6 +151,19 @@ export function WorkflowCanvas({
     fit();
     fittedWith.current = { rtl, hasNodes };
   }, [rtl, hasNodes, fit]);
+
+  // A step just added is brought into view, without changing the zoom.
+  const count = draft.nodes.length;
+  const lastCount = useRef(count);
+  useEffect(() => {
+    const grew = count > lastCount.current;
+    lastCount.current = count;
+    const added = draft.nodes[count - 1];
+    if (!grew || !added) return;
+    const { width, height: tall } = size();
+    setView((current) => reveal(current, rtl, added.position, width, tall));
+    // Only a change in the number of steps asks for this.
+  }, [count]);
 
   // The wheel zooms around the pointer. React's wheel listener is passive, so it is added
   // by hand to be allowed to keep the page from scrolling.
@@ -377,8 +391,9 @@ export function WorkflowCanvas({
                   viewBox="0 0 10 10"
                   refX="9"
                   refY="5"
-                  markerWidth="7"
-                  markerHeight="7"
+                  markerUnits="userSpaceOnUse"
+                  markerWidth="11"
+                  markerHeight="11"
                   orient="auto-start-reverse"
                 >
                   <path d="M 0 0 L 10 5 L 0 10 z" fill={ROUTE_STROKE[route]} />
@@ -439,7 +454,7 @@ export function WorkflowCanvas({
                   chosen
                     ? 'border-accent ring-2 ring-accent'
                     : flagged
-                      ? 'border-danger-text'
+                      ? 'border-danger'
                       : 'border-line'
                 }`}
                 style={{
@@ -488,7 +503,7 @@ export function WorkflowCanvas({
                     state
                       ? STATE_CLASS[state]
                       : bad
-                        ? 'border-danger-text'
+                        ? 'border-danger'
                         : found.length
                           ? 'border-warning-soft-text'
                           : 'border-line'

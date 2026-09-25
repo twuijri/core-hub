@@ -21,7 +21,13 @@ import {
   type Action,
   type EditorState,
 } from '../src/schedules/workflows/model.js';
-import { edgeCurve, fitView, toWorld, zoomAt } from '../src/schedules/workflows/geometry.js';
+import {
+  edgeCurve,
+  fitView,
+  reveal,
+  toWorld,
+  zoomAt,
+} from '../src/schedules/workflows/geometry.js';
 
 const apply = (state: EditorState, ...actions: Action[]) => actions.reduce(reducer, state);
 
@@ -188,7 +194,11 @@ describe('workflow editor: conditions', () => {
       operator: '>=',
       value: '100',
     });
-    expect(splitCondition('input exists')).toEqual({ path: 'input', operator: 'exists', value: '' });
+    expect(splitCondition('input exists')).toEqual({
+      path: 'input',
+      operator: 'exists',
+      value: '',
+    });
     expect(splitCondition('nonsense here')).toBeNull();
     expect(joinCondition({ path: 'amount', operator: '>', value: '10' })).toBe('amount > 10');
     expect(joinCondition({ path: 'kind', operator: '==', value: 'invoice x' })).toBe(
@@ -272,7 +282,13 @@ describe('workflow editor: a run on the canvas', () => {
       message: 'm',
     };
     const warning = { code: 'no_start', node_id: null, edge_id: null, detail: null, message: 'w' };
-    const edge = { code: 'edge_to_unknown', node_id: null, edge_id: 'e9', detail: 'x', message: 'e' };
+    const edge = {
+      code: 'edge_to_unknown',
+      node_id: null,
+      edge_id: 'e9',
+      detail: 'x',
+      message: 'e',
+    };
     const found = issuesByTarget({ valid: false, problems: [problem, edge], warnings: [warning] });
     expect(found.nodes.get('d')).toEqual([problem]);
     expect(found.edges.get('e9')).toEqual([edge]);
@@ -282,8 +298,18 @@ describe('workflow editor: a run on the canvas', () => {
 
 describe('workflow editor: the canvas follows the reading direction', () => {
   it('mirrors x in a right-to-left language, and a zoom keeps the point under the pointer', () => {
-    const ltr = fitView([{ position: { x: 0, y: 0 } }, { position: { x: 400, y: 0 } }], 800, 400, false);
-    const rtl = fitView([{ position: { x: 0, y: 0 } }, { position: { x: 400, y: 0 } }], 800, 400, true);
+    const ltr = fitView(
+      [{ position: { x: 0, y: 0 } }, { position: { x: 400, y: 0 } }],
+      800,
+      400,
+      false,
+    );
+    const rtl = fitView(
+      [{ position: { x: 0, y: 0 } }, { position: { x: 400, y: 0 } }],
+      800,
+      400,
+      true,
+    );
     // The first step is at the start of the line: the left in English, the right in Arabic.
     const firstLtr = ltr.tx + ltr.zoom * 0;
     const firstRtl = rtl.tx - rtl.zoom * 0;
@@ -306,5 +332,19 @@ describe('workflow editor: the canvas follows the reading direction', () => {
     const { d, mid } = edgeCurve({ x: 0, y: 0 }, { x: 200, y: 100 });
     expect(d.startsWith('M 0 0 C')).toBe(true);
     expect(mid).toEqual({ x: 100, y: 50 });
+  });
+});
+
+describe('workflow editor: a step added off-screen is brought into view', () => {
+  it('pans the least it takes, in either direction, and not at all when it is in view', () => {
+    const view = { tx: 0, ty: 0, zoom: 1 };
+    expect(reveal(view, false, { x: 40, y: 40 }, 800, 400)).toBe(view);
+    const right = reveal(view, false, { x: 900, y: 40 }, 800, 400);
+    expect(right.tx).toBe(800 - 24 - (900 + 208));
+    // In Arabic the drawing grows to the left: a far step is pulled back from the left.
+    const rtlView = { tx: 800, ty: 0, zoom: 1 };
+    const left = reveal(rtlView, true, { x: 900, y: 40 }, 800, 400);
+    expect(left.tx).toBe(800 + 24 - (800 - 900 - 208));
+    expect(left.ty).toBe(0);
   });
 });

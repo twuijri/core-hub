@@ -186,7 +186,8 @@ function fakeHub() {
     if (path === `/approvals/${APPROVAL}`) {
       return json({ id: APPROVAL, status: 'pending', title: 'Gate', description: 'Ship it?' });
     }
-    if (path === `/approvals/${APPROVAL}/respond`) return json({ id: APPROVAL, status: 'approved' });
+    if (path === `/approvals/${APPROVAL}/respond`)
+      return json({ id: APPROVAL, status: 'approved' });
     return json({ items: [] });
   };
   return { seen, fetchImpl };
@@ -273,9 +274,7 @@ describe('Schedules: the Workflows section', () => {
 
     // The notice has no words yet: the hub's finding is marked on it, and Save waits.
     const tell = await screen.findByRole('button', { name: /Notify · Notify/ });
-    await waitFor(() =>
-      expect(tell).toHaveAttribute('data-issues', '1'),
-    );
+    await waitFor(() => expect(tell).toHaveAttribute('data-issues', '1'));
     expect(screen.getByTestId('workflow-save')).toBeDisabled();
     await user.type(screen.getByTestId('workflow-step-text'), 'Done');
     await waitFor(() => expect(screen.getByTestId('workflow-save')).toBeEnabled());
@@ -301,9 +300,7 @@ describe('Schedules: the Workflows section', () => {
       edges: [{ id: 'e1', from: 'agent_1', to: 'notify_1', route: 'success' }],
     });
     // The address follows the saved workflow.
-    await waitFor(() =>
-      expect(screen.getByTestId('where')).toHaveTextContent(`workflow=${OTHER}`),
-    );
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(`workflow=${OTHER}`));
   });
 
   it('the keyboard deletes the selected step and its connections', async () => {
@@ -361,9 +358,7 @@ describe('Schedules: the Workflows section', () => {
     await waitFor(() =>
       expect(seen.some((c) => c.path === `/approvals/${APPROVAL}/respond`)).toBe(true),
     );
-    expect(seen.find((c) => c.path === `/approvals/${APPROVAL}/respond`)!.profile).toBe(
-      'designer',
-    );
+    expect(seen.find((c) => c.path === `/approvals/${APPROVAL}/respond`)!.profile).toBe('designer');
   });
 
   it('runs right-to-left in Arabic', async () => {

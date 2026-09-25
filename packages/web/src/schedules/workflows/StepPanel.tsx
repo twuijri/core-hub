@@ -774,18 +774,18 @@ export function StepRunPanel({
                 </span>
                 <span className="text-accent">{t('workflows.editor.step_output_show')}</span>
               </summary>
-              <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap text-xs" dir="auto">
+              <div className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap text-xs" dir="auto">
                 {output}
-              </pre>
+              </div>
             </details>
           ) : (
-            <pre
+            <div
               className="whitespace-pre-wrap rounded-md border border-line p-2 text-xs"
               dir="auto"
               data-testid="workflow-step-output"
             >
               {output}
-            </pre>
+            </div>
           )}
         </div>
       )}

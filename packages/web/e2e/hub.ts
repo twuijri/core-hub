@@ -50,6 +50,15 @@ export const E2E_PASSWORD = 'e2e-owner-password';
 type Step = AgentEvent | { type: 'delay'; ms: number } | { type: 'await_input' };
 
 function scriptFor(prompt: string): Step[] {
+  if (/راجع قائمة الإصدار/.test(prompt)) {
+    // An agent step of a workflow drawn on the canvas (journey 32): a short answer the next
+    // step reads as `{{steps.<id>.output}}`.
+    return [
+      { type: 'delay', ms: 400 },
+      { type: 'message_delta', text: 'القائمة سليمة: ثلاثة بنود جاهزة.' },
+      { type: 'completed' },
+    ];
+  }
   if (/ملخص الجدولة/.test(prompt)) {
     // A schedule's own run (journey 28): a short answer the history previews and the
     // conversation shows.
