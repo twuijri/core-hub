@@ -69,6 +69,7 @@ export function VoiceStage({
 
   const dictation = useDictation({
     language: dictationHint(preferences.dictationLanguage, ui),
+    languageLoading: preferences.loading,
     onText: (words) => {
       setHeard(words);
       setError(null);
@@ -220,7 +221,7 @@ export function VoiceStage({
                 ? t('voice.stage.tap_to_send')
                 : t('voice.stage.interrupt')
           }
-          disabled={phase === 'transcribing'}
+          disabled={phase === 'transcribing' || (phase === 'ready' && dictation.loading)}
           onPointerDown={onPointerDown}
           onPointerUp={onPointerUp}
           onKeyDown={(event) => {

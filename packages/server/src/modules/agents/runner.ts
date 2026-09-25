@@ -20,6 +20,8 @@
  */
 import { derived } from '@corehub/contracts';
 import type { FastifyBaseLogger } from 'fastify';
+import { constants as fsConstants, copyFileSync, lstatSync, mkdirSync } from 'node:fs';
+import path from 'node:path';
 import { HubError, agentUnavailable } from '../../lib/errors.js';
 import type { AdapterSet } from './adapters/index.js';
 import type {
@@ -84,6 +86,8 @@ interface LiveRun {
   questions: Set<string>;
   /** Tools in flight, by id, so an end can be matched to what started. */
   tools: Map<string, { name: string; input: unknown }>;
+  /** Where files for the person go this turn (`sessions`' output folder), if anywhere. */
+  outputDir: string | null;
 }
 
 export interface AgentRunnerDeps {
@@ -132,6 +136,7 @@ export class AgentRunner implements AgentRunnerPort {
       decisions: new Map(),
       questions: new Set(),
       tools: new Map(),
+      outputDir: request.files?.outputDir ?? null,
     };
     this.runs.set(request.runId, run);
     // From here until the run ends, a call to the hub's own tools from this profile may act
@@ -486,6 +491,18 @@ export class AgentRunner implements AgentRunnerPort {
   }
 
   private translate(run: LiveRun, event: AgentEvent): RunnerEvent[] {
+    if (event.type === 'file.produced') {
+      const copied = handOver(event.path, run.outputDir);
+      if (copied.ok) {
+        this.deps.log.debug({ runId: run.runId, file: copied.path }, 'agents: produced file');
+      } else {
+        this.deps.log.warn(
+          { runId: run.runId, file: event.path, reason: copied.reason },
+          'agents: a file the agent produced could not be handed to the reply',
+        );
+      }
+      return [];
+    }
     if (event.type === 'tool.started') {
       const started = { name: event.name ?? event.title, input: event.input };
       this.deps.leases?.toolStarted(run.runId, started.name, started.input);
@@ -841,5 +858,56 @@ export function toRunnerEvent(event: AgentEvent, ctx: TranslateContext): RunnerE
     case 'plan':
       // No `/rt/sessions` event carries a plan yet; it is not a message.
       return null;
+    case 'file.produced':
+      // Handled by `translate`: the file is copied into the run's output folder, and the
+      // engine attaches it to the reply when the run ends.
+      return null;
+  }
+}
+
+/** What an image or other file a tool made is allowed to be before it is handed over. */
+const HANDOVER_MAX_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Copy a file an agent's own tool produced (`file.produced`) into the run's output folder, where
+ * the sessions engine picks up whatever the turn leaves for the person (decision §72: Hermes's
+ * `image_generate` saves into its own cache). A copy, so the agent's cache stays as it was; a
+ * link, a folder, a file that is gone or too large, or a run without an output folder is refused
+ * and said why — the turn itself never fails for it.
+ */
+export function handOver(
+  source: string,
+  outputDir: string | null,
+): { ok: true; path: string } | { ok: false; reason: string } {
+  if (!outputDir) return { ok: false, reason: 'no_output_folder' };
+  if (!path.isAbsolute(source)) return { ok: false, reason: 'not_absolute' };
+  let stats;
+  try {
+    stats = lstatSync(source);
+  } catch {
+    return { ok: false, reason: 'missing' };
+  }
+  if (!stats.isFile()) return { ok: false, reason: 'not_a_file' };
+  if (stats.size > HANDOVER_MAX_BYTES) return { ok: false, reason: 'too_large' };
+  const name = path.basename(source);
+  const extension = path.extname(name);
+  const stem = name.slice(0, name.length - extension.length);
+  try {
+    mkdirSync(outputDir, { recursive: true });
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const target = path.join(
+        outputDir,
+        attempt === 0 ? name : `${stem}-${attempt + 1}${extension}`,
+      );
+      try {
+        copyFileSync(source, target, fsConstants.COPYFILE_EXCL);
+        return { ok: true, path: target };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      }
+    }
+    return { ok: false, reason: 'name_taken' };
+  } catch (error) {
+    return { ok: false, reason: (error as NodeJS.ErrnoException).code ?? 'copy_failed' };
   }
 }

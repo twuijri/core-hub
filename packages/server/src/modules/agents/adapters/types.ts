@@ -166,6 +166,12 @@ export type AgentEvent =
       toolId?: string | null;
     }
   | { type: 'plan'; entries: { content: string; status: string }[] }
+  /**
+   * A tool of the agent's own made a file the person should get — Hermes's `image_generate`
+   * saves its picture in Hermes's cache, outside the run's output folder. The runner copies it
+   * there, so it is attached to the reply like any file the agent wrote (decision §72).
+   */
+  | { type: 'file.produced'; path: string; toolId: string }
   | {
       /** Cumulative token totals for the turn, as the agent reports them. */
       type: 'usage';
