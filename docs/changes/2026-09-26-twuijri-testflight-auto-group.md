@@ -67,7 +67,13 @@ All matched files use Prettier code style!
 $ pnpm change-record:check
 change-record  OK — 1 record(s) valid
 ```
-CI: تُضاف نتيجته بعد التشغيل.
+CI على PR #159 (commit `0bfc984e`): كل الفحوص الـ13 ناجحة، ومنها خطوة «Release script tests» في
+مهمة «Lint, typecheck, contracts, client tests, build»:
+```
+ℹ tests 13
+ℹ pass 13
+ℹ fail 0
+```
 
 ## المخاطر والرجوع
 - لم يُجرَّب على App Store Connect الحقيقي؛ الاختبارات على خادم وهمي فقط. أول تشغيل يدوي بـ
