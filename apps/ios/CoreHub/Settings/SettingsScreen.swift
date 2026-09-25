@@ -103,6 +103,7 @@ struct ThisDeviceExtras: View {
             Toggle(l10n("device.spoken_replies"), isOn: $device.spokenReplies)
         }
         Section {
+            Toggle(l10n("device.background_checks"), isOn: $device.backgroundChecks)
             switch notifications {
             case .authorized, .provisional, .ephemeral:
                 FactRow(label: l10n("device.notifications"), value: l10n("device.notifications_allowed"))

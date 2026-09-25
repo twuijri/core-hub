@@ -46,16 +46,20 @@ Running on a device or shipping needs the owner's Apple Developer account:
 2. Set `DEVELOPMENT_TEAM` in `project.yml` (or in Xcode) and let Xcode manage signing.
 3. Register the App Group `group.io.github.twuijri.corehub` for the app and the share extension
    (`io.github.twuijri.corehub.share`); until it is signed, a shared text does not reach the app.
-4. For TestFlight: an App Store Connect record, an upload key, and a CI secret — not set up.
+4. An app icon (none yet) before TestFlight or the App Store.
+5. For TestFlight: an App Store Connect record, an upload key, and a CI secret — not set up.
 
 ## Notifications — what works and what waits
 
 While Core Hub is open (or just sent to the background, before iOS suspends it) the app listens
 on `/rt/devices` and shows each notice the hub writes — a reply that finished, an agent waiting
-for the person — as a local notification, quiet for the conversation on screen. **Push when the
-app is closed needs APNs**: the hub's `devices` module (`devicesRegisterPush`) still answers 501,
+for the person — as a local notification, quiet for the conversation on screen. With the app
+closed, iOS wakes it now and then (`BGAppRefreshTask`, at most every 15 minutes, when iOS
+decides) to read the unread notices and show the new ones; each notice is shown once.
+
+**Real push needs APNs**: the hub's `devices` module (`devicesRegisterPush`) still answers 501,
 and APNs needs the owner's Apple account (a push key or certificate). When both exist, the app
-registers its device token with `devicesRegisterPush`; nothing else in the app has to change.
+registers its device token with `devicesRegisterPush`; the rest of the app does not change.
 
 ## Decisions (proposed — owner to confirm)
 

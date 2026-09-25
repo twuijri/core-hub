@@ -58,6 +58,9 @@ targets:
             CFBundleURLSchemes: [corehub]
         NSCameraUsageDescription: Core Hub uses the camera to scan the pairing code your hub shows on the web.
         NSLocalNetworkUsageDescription: Core Hub connects to your hub on your local network.
+        # iOS wakes the app now and then to look at the hub's notices (LocalNotices.swift).
+        UIBackgroundModes: [fetch]
+        BGTaskSchedulerPermittedIdentifiers: [io.github.twuijri.corehub.notices]
         NSMicrophoneUsageDescription: Core Hub listens while you dictate a message.
         NSSpeechRecognitionUsageDescription: Core Hub turns what you dictate into text.
         # A self-hosted hub is often reached over plain http on a LAN or a VPN address

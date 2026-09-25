@@ -223,7 +223,8 @@
     "notifications_note": "Notices arrive while Core Hub is open or just closed. Push when the app is fully closed needs the hub's device support and the owner's Apple account.",
     "notifications_allowed": "Allowed",
     "notifications_denied": "Not allowed — change it in the iPhone Settings",
-    "notifications_ask": "Allow notifications"
+    "notifications_ask": "Allow notifications",
+    "background_checks": "Look for notices while the app is closed (about every 15 minutes, when iOS allows)"
   },
   "devices": {
     "expires": "Expires {time}",

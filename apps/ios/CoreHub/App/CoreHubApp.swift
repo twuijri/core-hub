@@ -19,6 +19,11 @@ struct CoreHubApp: App {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { app.becameActive() }
+            if phase == .background, app.device.backgroundChecks { NoticeRefresh.schedule() }
+        }
+        .backgroundTask(.appRefresh(NoticeRefresh.identifier)) {
+            await LocalNotices.shared.catchUp(app: app)
+            await MainActor.run { NoticeRefresh.schedule() }
         }
     }
 }

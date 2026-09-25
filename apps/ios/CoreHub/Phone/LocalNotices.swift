@@ -3,6 +3,7 @@
 // `/rt/devices`; the app shows it as a local notification unless the person is already looking at
 // that conversation. Push through APNs needs the hub's `devices` module (still 501) and the
 // owner's Apple account, so nothing arrives while iOS has the app suspended (README.md).
+import BackgroundTasks
 import CoreHubClient
 import Foundation
 import UserNotifications
@@ -47,7 +48,32 @@ final class LocalNotices: NSObject, UNUserNotificationCenterDelegate {
         await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
     }
 
+    /// With the app closed: iOS wakes it now and then (`BGAppRefreshTask`, at most every 15
+    /// minutes and when iOS decides); it reads the unread notices written since the last look and
+    /// shows the new ones. Each notice is shown once, whichever path saw it first.
+    func catchUp(app: AppModel) async {
+        guard app.device.backgroundChecks, await app.keeper.credentials != nil else { return }
+        let since = defaults.object(forKey: Keys.lastCheck) as? Date ?? Date().addingTimeInterval(-3600)
+        let now = Date()
+        guard let page = try? await app.api.call({
+            try await NotifyAPI.notifyListNotices(unread: true, limit: 30, apiConfiguration: $0)
+        }) else { return }
+        for notice in page.items.reversed() where notice.createdAt > since { post(notice) }
+        defaults.set(now, forKey: Keys.lastCheck)
+    }
+
+    private let defaults = UserDefaults.standard
+
+    private enum Keys {
+        static let posted = Product.storagePrefix + "notices.posted"
+        static let lastCheck = Product.storagePrefix + "notices.last_check"
+    }
+
     private func post(_ notice: Notice) {
+        var posted = defaults.stringArray(forKey: Keys.posted) ?? []
+        guard NoticeRouting.isNew(notice.id, posted: posted) else { return }
+        posted = NoticeRouting.remember(notice.id, in: posted)
+        defaults.set(posted, forKey: Keys.posted)
         let content = UNMutableNotificationContent()
         content.title = notice.title
         if let body = notice.body { content.body = body }
@@ -109,6 +135,14 @@ enum NoticeRouting {
         return info
     }
 
+    /// Whether a notice has not been shown yet.
+    static func isNew(_ id: String, posted: [String]) -> Bool { !posted.contains(id) }
+
+    /// The ids already shown, newest last, kept to the last 300.
+    static func remember(_ id: String, in posted: [String]) -> [String] {
+        Array((posted + [id]).suffix(300))
+    }
+
     static func route(kind: String?, sessionID: String?, profile: String?, selector: String) -> MainContent? {
         if let sessionID { return .chat(sessionID: sessionID, profile: profile ?? selector) }
         switch kind {
@@ -117,5 +151,17 @@ enum NoticeRouting {
         case "agent": return .destination(.agentManager)
         default: return nil
         }
+    }
+}
+
+/// The background look at the hub's notices (Info.plist `BGTaskSchedulerPermittedIdentifiers`).
+enum NoticeRefresh {
+    static let identifier = "io.github.twuijri.corehub.notices"
+
+    /// Asks iOS to wake the app in about 15 minutes; iOS decides when, or whether.
+    static func schedule() {
+        let request = BGAppRefreshTaskRequest(identifier: identifier)
+        request.earliestBeginDate = Date().addingTimeInterval(15 * 60)
+        try? BGTaskScheduler.shared.submit(request)
     }
 }

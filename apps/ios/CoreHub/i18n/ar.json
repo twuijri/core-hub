@@ -223,7 +223,8 @@
     "notifications_note": "تصل الإشعارات ما دام كور هب مفتوحًا أو أُغلق للتو. الإشعار والتطبيق مغلق كليًا يحتاج دعم الأجهزة في المركز وحساب Apple للمالك.",
     "notifications_allowed": "مسموحة",
     "notifications_denied": "غير مسموحة — غيّرها من إعدادات الآيفون",
-    "notifications_ask": "اسمح بالإشعارات"
+    "notifications_ask": "اسمح بالإشعارات",
+    "background_checks": "ابحث عن الإشعارات والتطبيق مغلق (قرابة كل ١٥ دقيقة، حين يسمح iOS)"
   },
   "devices": {
     "expires": "ينتهي {time}",

@@ -21,6 +21,8 @@ final class DeviceSettings {
     var voiceInput: Bool { didSet { defaults.set(voiceInput, forKey: Keys.voiceInput) } }
     var dictationLanguage: DictationLanguage { didSet { defaults.set(dictationLanguage.rawValue, forKey: Keys.dictation) } }
     var spokenReplies: Bool { didSet { defaults.set(spokenReplies, forKey: Keys.spoken) } }
+    /// Look for the hub's notices now and then while the app is closed.
+    var backgroundChecks: Bool { didSet { defaults.set(backgroundChecks, forKey: Keys.background) } }
 
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -28,6 +30,7 @@ final class DeviceSettings {
         static let voiceInput = Product.storagePrefix + "device.voice_input"
         static let dictation = Product.storagePrefix + "device.dictation_language"
         static let spoken = Product.storagePrefix + "device.spoken_replies"
+        static let background = Product.storagePrefix + "device.background_checks"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -35,6 +38,7 @@ final class DeviceSettings {
         voiceInput = defaults.object(forKey: Keys.voiceInput) as? Bool ?? true
         dictationLanguage = defaults.string(forKey: Keys.dictation).flatMap(DictationLanguage.init(rawValue:)) ?? .app
         spokenReplies = defaults.bool(forKey: Keys.spoken)
+        backgroundChecks = defaults.object(forKey: Keys.background) as? Bool ?? true
     }
 
     /// The locale dictation listens in.

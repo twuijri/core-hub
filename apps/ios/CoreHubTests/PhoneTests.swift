@@ -26,6 +26,17 @@ final class PhoneTests: XCTestCase {
         XCTAssertNil(NoticeRouting.route(kind: "update", sessionID: nil, profile: nil, selector: "x"))
     }
 
+    func testEachNoticeIsShownOnceWhicheverPathSawItFirst() {
+        var posted: [String] = []
+        XCTAssertTrue(NoticeRouting.isNew("n1", posted: posted))
+        posted = NoticeRouting.remember("n1", in: posted)
+        XCTAssertFalse(NoticeRouting.isNew("n1", posted: posted))
+        for i in 0..<400 { posted = NoticeRouting.remember("x\(i)", in: posted) }
+        XCTAssertEqual(posted.count, 300)
+        XCTAssertEqual(posted.last, "x399")
+        XCTAssertTrue(NoticeRouting.isNew("n1", posted: posted), "only the last 300 are kept")
+    }
+
     func testSharedTextWaitsOnceForTheApp() {
         let defaults = suite("share")
         XCTAssertNil(ShareInbox.take(from: defaults))
@@ -42,6 +53,7 @@ final class PhoneTests: XCTestCase {
         let settings = DeviceSettings(defaults: defaults)
         XCTAssertTrue(settings.voiceInput)
         XCTAssertFalse(settings.spokenReplies)
+        XCTAssertTrue(settings.backgroundChecks)
         XCTAssertEqual(settings.dictationLocale(app: .ar).identifier, "ar-SA")
         settings.dictationLanguage = .en
         settings.spokenReplies = true
