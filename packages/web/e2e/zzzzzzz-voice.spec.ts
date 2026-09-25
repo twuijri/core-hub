@@ -1,5 +1,5 @@
 /**
- * 32. Voice (contract decision §54), against the real hub with a scripted OpenAI (e2e/hub.ts):
+ * 32. Voice (contract decision §55), against the real hub with a scripted OpenAI (e2e/hub.ts):
  *     OpenAI is added once and chosen on the Speech to text and Text to speech tabs, which then
  *     say «جاهز»; in a new chat the mic records from Chromium's fake microphone, the hub
  *     transcribes the take, and the words land in the composer for review; the reply is read

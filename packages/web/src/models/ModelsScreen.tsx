@@ -230,7 +230,7 @@ function ProvidersTab({
   return (
     <>
       <p className="mb-3 text-sm text-muted">{t('models.providers.hint')}</p>
-      {/* Which provider this profile speaks through, and its settings (DECISIONS §54). */}
+      {/* Which provider this profile speaks through, and its settings (DECISIONS §55). */}
       {side && kindOfTab !== 'llm' && kindOfTab && <SpeechCard kind={kindOfTab} side={side} />}
       {side && !side.ready && side.reason && (
         // The hub sends a sentence in the request's language (`models/index.ts`

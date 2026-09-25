@@ -17,7 +17,7 @@
  * `::after` twin carries the same text, so the row's height is already correct when the
  * character lands (`.composer-grow` in styles/app.css). No measuring, no jump.
  *
- * The mic dictates into the text (contract decision §54, `voice/`): pressed once it records,
+ * The mic dictates into the text (contract decision §55, `voice/`): pressed once it records,
  * pressed again the take is transcribed by the hub and the words land here for the person to
  * read before sending. The small menu beside it holds the dictation language, reading replies
  * aloud, and voice mode where the screen offers it.

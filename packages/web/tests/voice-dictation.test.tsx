@@ -1,4 +1,4 @@
-// The composer's microphone (DECISIONS §54): a take goes to `models.transcribe` and its words
+// The composer's microphone (DECISIONS §55): a take goes to `models.transcribe` and its words
 // land in the composer for review; with no STT provider the browser's own recognizer is used
 // and marked; with neither, the composer says so and links to Models. jsdom has no microphone,
 // so `getUserMedia`, `MediaRecorder` and the recognizer are small fakes here.

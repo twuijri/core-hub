@@ -1,5 +1,5 @@
 /**
- * Dictation as a state machine (contract decision §54). Pure: the hook that drives the
+ * Dictation as a state machine (contract decision §55). Pure: the hook that drives the
  * microphone (`useDictation.ts`) dispatches these events and draws `phase`; the rules of
  * what may follow what live here, so they are tested without a browser.
  *

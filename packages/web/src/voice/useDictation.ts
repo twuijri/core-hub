@@ -1,5 +1,5 @@
 /**
- * The microphone, driven by the state machine in `recorder.ts` (contract decision §54).
+ * The microphone, driven by the state machine in `recorder.ts` (contract decision §55).
  *
  * Engine `hub`: `getUserMedia` → `MediaRecorder` → one Blob → `models.transcribe` with the
  * dictation language (`Preferences.voice.dictation_language`) and the length recorded.

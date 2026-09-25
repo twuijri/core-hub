@@ -1,5 +1,5 @@
 /**
- * Voice mode (contract decision §54): a full-screen stage for talking with the agent.
+ * Voice mode (contract decision §55): a full-screen stage for talking with the agent.
  *
  *   tap (or hold) → listening → tap (or release) → the take is transcribed → sent as a
  *   message → the reply streams in and is spoken sentence by sentence as it arrives →

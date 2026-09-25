@@ -1,5 +1,5 @@
 /**
- * The speaker under a reply (contract decision §54): reads it aloud through the hub's TTS,
+ * The speaker under a reply (contract decision §55): reads it aloud through the hub's TTS,
  * or stops it. While the audio is being prepared the button says so; a reply that could not
  * be read says why beside it — with the way to Models when no voice is set up. Where the
  * profile has no TTS provider and the browser has a voice of its own, that voice is used and

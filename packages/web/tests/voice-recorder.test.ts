@@ -1,4 +1,4 @@
-// Dictation's state machine and the reading player (DECISIONS §54): src/voice/recorder.ts and
+// Dictation's state machine and the reading player (DECISIONS §55): src/voice/recorder.ts and
 // src/voice/player.ts, with no browser — the player gets a fake synthesizer and a fake speaker.
 import { describe, expect, it } from 'vitest';
 import {

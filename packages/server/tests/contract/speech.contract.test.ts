@@ -1,7 +1,7 @@
-// `pnpm contract:test`: speech through the generated TypeScript client (contract decision §54) —
+// `pnpm contract:test`: speech through the generated TypeScript client (contract decision §55) —
 // `models.transcribe` with the multipart body a browser sends, and `models.synthesize` read as
 // bytes — every answer's status documented for the operation and its body valid against the
-// schema the contract gives that status. Before §54 `models.transcribe` answered `501`.
+// schema the contract gives that status. Before §55 `models.transcribe` answered `501`.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   HubApiError,

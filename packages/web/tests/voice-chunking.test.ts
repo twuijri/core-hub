@@ -1,4 +1,4 @@
-// What of a reply is read aloud, and in what pieces (DECISIONS §54, src/voice/chunking.ts).
+// What of a reply is read aloud, and in what pieces (DECISIONS §55, src/voice/chunking.ts).
 import { describe, expect, it } from 'vitest';
 import {
   MAX_SPEECH_CHARS,

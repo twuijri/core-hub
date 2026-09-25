@@ -12,7 +12,7 @@
 الشاشة، وتبويبا الكلام في النماذج يعملان من البداية إلى النهاية.
 
 ## القرار والموافقات
-قرار العقد §54 في `docs/contracts/DECISIONS.md` — **مقترح، بانتظار تأكيد المالك**:
+قرار العقد §55 (رقم 54 أخذه طلب #121) في `docs/contracts/DECISIONS.md` — **مقترح، بانتظار تأكيد المالك**:
 
 - **الخادم:** بُني `models.transcribe`: التسجيل يُقرأ من `multipart/form-data` (قارئ المركز
   الوحيد الذي تسجّله وحدة `knowledge`) بأي ترتيب للحقول، حتى 25 م.ب (سقف Whisper؛ `413`
@@ -39,14 +39,14 @@
   نافذة «إضافة مزوّد» ← مخصّص تسأل عن نوعه: محادثة / تحويل كلام إلى نص / تحويل نص إلى كلام.
 - **لماذا لا يُحترم `input_mode` / `output_mode` في الويب:** المتعرّف في Chrome خدمة سحابية
   لشركة المتصفح، فتسميته «على الجهاز» تضلّل؛ الويب يستعمل المركز متى كان جاهزًا والمتصفح
-  احتياطًا فقط، ويترك الحقلين للهواتف (§54). مقترح.
+  احتياطًا فقط، ويترك الحقلين للهواتف (§55). مقترح.
 
 لم يُشغَّل Hermes حقيقي ولا Docker: المهمة لا تمسّ Hermes.
 
 ## العقد
 - `models.transcribe`: وصف كامل للأخطاء، وحقل multipart اختياري جديد `duration_ms`
   (إضافي، لا يكسر عميلًا). لا مسار ولا حدث جديد.
-- `docs/contracts/DECISIONS.md` §54.
+- `docs/contracts/DECISIONS.md` §55.
 
 ## الملفات والتأثير
 - الخادم: `packages/server/src/modules/models/{index.ts,service.ts}` (المسار وقارئ التسجيل
@@ -102,7 +102,16 @@ $ pnpm build && PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwr
 الاختبارات الجديدة تفشل على الكود القديم: `models.transcribe` كان يجيب `501`، والميكروفون
 وزر القراءة كانا معطّلين.
 
-CI على طلب الدمج: يُضاف أدناه بعد اكتماله.
+CI على طلب الدمج #123 (التشغيل 36092725337، قبل إعادة ترقيم القرار إلى §55 فقط):
+
+```
+Lint, typecheck, contracts, tests, build            pass  13m10s
+Web smoke journeys (Playwright against the real hub) pass  5m40s
+Docker image builds and answers /health             pass  2m43s
+db:generate + db:migrate (SQLite and PostgreSQL)    pass  1m3s
+PR leaves graphify-out/ to the code-map bot         pass  9s
+PR adds or updates a change record                  pass  12s
+```
 
 ## المخاطر والرجوع
 - **المتصفحات:** Safari يسجّل `audio/mp4`؛ Whisper يقبله، وأي خادم متوافق قد لا يقبله. Firefox
@@ -116,7 +125,7 @@ CI على طلب الدمج: يُضاف أدناه بعد اكتماله.
   هجرة قاعدة بيانات ولا تغيير في التفضيلات المخزّنة.
 
 ## التسليم والخطوة التالية
-- طلب الدمج بالإنجليزية إلى `main`، والمالك يؤكد §54 (خصوصًا: الويب يترك
+- طلب الدمج بالإنجليزية إلى `main`، والمالك يؤكد §55 (خصوصًا: الويب يترك
   `input_mode`/`output_mode` للهواتف، وقراءة الردود بقطع ≤ 400 حرف).
 - بعد الدمج: تجربة المالك بمفتاح OpenAI حقيقي على ستاك التست.
 - لاحقًا: STT لـ ElevenLabs (Scribe) إن أراده المالك؛ بث حقيقي إن ظهر مزوّد يبثّ.

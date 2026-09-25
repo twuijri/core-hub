@@ -10580,7 +10580,7 @@ paths:
         `details.reason`: `no_stt_provider` (none chosen — clients link to Models),
         `provider_disabled`, or the provider's own failure (`unauthorized`, `unreachable`,
         `http_error`, `no_key`, `unsupported`) with its words in `details.detail`. Over
-        25 MB is `413` (DECISIONS §54).
+        25 MB is `413` (DECISIONS §55).
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:

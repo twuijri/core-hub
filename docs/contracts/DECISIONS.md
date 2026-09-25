@@ -1025,7 +1025,7 @@ Rejected: a new `source` field on `SessionCreate` (a client could then make any 
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
 
-## 54. Voice in the web: dictation through the hub's STT, replies read through its TTS
+## 55. Voice in the web: dictation through the hub's STT, replies read through its TTS
 
 `models.transcribe` was declared since the first contract and answered a documented `501`,
 because the hub had no multipart reader where the models module could use it. It has one now

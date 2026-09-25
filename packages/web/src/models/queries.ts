@@ -267,7 +267,7 @@ export function parseRef(value: string): ModelRef | null {
   return { provider_id: value.slice(0, separator), model: value.slice(separator + 1) };
 }
 
-// -------------------------------------------------------------------- speech (§54)
+// -------------------------------------------------------------------- speech (§55)
 
 export interface SpeechChoice {
   kind: 'stt' | 'tts';

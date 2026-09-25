@@ -1,5 +1,5 @@
 /**
- * Speech over HTTP (contract decision §54): a recording in, its words out, through the
+ * Speech over HTTP (contract decision §55): a recording in, its words out, through the
  * profile's chosen speech-to-text provider — and a reply read aloud through its
  * text-to-speech provider. Two kinds of provider are exercised:
  *
