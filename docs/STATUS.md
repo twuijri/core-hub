@@ -237,6 +237,13 @@ its approval.
   About, Theme, Profiles and Users on the phone; the other pages open the same page on the web.
   `corehub://open/<path>` opens the page the web path names (`surfaceRoutes.android`), and a
   parity test checks the app against `navigation.json`.
+  Part 3 (2026-09-25): notices become Android notifications — announced on `/rt/devices` while the
+  app runs, and a background check every 15 minutes while it is closed (no push yet: the app does not
+  register with FCM — a follow-up; the hub's FCM sender came with the devices module); «Share to Core Hub» turns shared text into a new chat's draft (files
+  and pictures are a follow-up); the composer's microphone uses the phone's own speech recognizer;
+  spoken replies; and This device in full: the hub connection, voice input and dictation language,
+  spoken replies, notifications, and self-update from the hub's `updates` channel (SHA-256 checked,
+  handed to Android's installer).
 - iOS: not started (ADR 0007, ADR 0009).
 
 ## Name

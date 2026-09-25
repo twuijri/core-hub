@@ -175,4 +175,29 @@
     <string name="job_succeeded">Succeeded</string>
     <string name="job_failed">Failed</string>
     <string name="job_cancelled">Cancelled</string>
+
+    <!-- Part 3: phone specifics -->
+    <string name="notices_channel">Notices from your hub</string>
+    <string name="voice_prompt">Speak your message</string>
+    <string name="voice_input">Voice input</string>
+    <string name="voice_heading">Voice</string>
+    <string name="voice_input_hint">The microphone in the composer, with this phone\'s own speech recognizer.</string>
+    <string name="voice_unavailable">This phone has no speech recognizer.</string>
+    <string name="voice_language">Dictation language</string>
+    <string name="voice_language_app">As the app (%1$s)</string>
+    <string name="voice_spoken">Spoken replies</string>
+    <string name="voice_spoken_hint">Read a finished reply aloud while its chat is on screen.</string>
+    <string name="notices_no_push">The hub cannot push to phones yet. The app shows a notice when the hub announces it while the app runs, and looks for new ones every 15 minutes while it is closed.</string>
+    <string name="notices_allow">Allow notifications</string>
+    <string name="notices_allowed">Notifications are allowed.</string>
+    <string name="notices_background">Check while the app is closed</string>
+    <string name="notices_background_hint">Every 15 minutes, when there is a network.</string>
+    <string name="update_heading">Updates</string>
+    <string name="update_installed">Installed: %1$s</string>
+    <string name="update_check">Check for updates</string>
+    <string name="update_none">This is the newest version the hub has.</string>
+    <string name="update_available">Version %1$s is available</string>
+    <string name="update_install">Download and install</string>
+    <string name="update_bad_file">The downloaded file did not match the release. Nothing was installed.</string>
+    <string name="update_not_configured">This hub has no update channel set up for Android.</string>
 </resources>

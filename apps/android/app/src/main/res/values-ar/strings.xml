@@ -174,4 +174,29 @@
     <string name="job_succeeded">نجح</string>
     <string name="job_failed">فشل</string>
     <string name="job_cancelled">أُلغي</string>
+
+    <!-- Part 3: phone specifics -->
+    <string name="notices_channel">إشعارات من مركزك</string>
+    <string name="voice_prompt">تحدّث برسالتك</string>
+    <string name="voice_input">الإدخال الصوتي</string>
+    <string name="voice_heading">الصوت</string>
+    <string name="voice_input_hint">الميكروفون في خانة الكتابة، بمميّز الكلام في هذا الجوال.</string>
+    <string name="voice_unavailable">لا مميّز كلام في هذا الجوال.</string>
+    <string name="voice_language">لغة الإملاء</string>
+    <string name="voice_language_app">كلغة التطبيق (%1$s)</string>
+    <string name="voice_spoken">الردود المنطوقة</string>
+    <string name="voice_spoken_hint">اقرأ الرد المكتمل بصوت عالٍ ما دامت محادثته على الشاشة.</string>
+    <string name="notices_no_push">المركز لا يرسل إشعارات إلى الجوالات بعد. يعرض التطبيق الإشعار حين يعلنه المركز والتطبيق يعمل، ويبحث عن الجديد كل ١٥ دقيقة وهو مغلق.</string>
+    <string name="notices_allow">اسمح بالإشعارات</string>
+    <string name="notices_allowed">الإشعارات مسموح بها.</string>
+    <string name="notices_background">ابحث والتطبيق مغلق</string>
+    <string name="notices_background_hint">كل ١٥ دقيقة حين تتوفر الشبكة.</string>
+    <string name="update_heading">التحديثات</string>
+    <string name="update_installed">المثبّت: %1$s</string>
+    <string name="update_check">ابحث عن تحديث</string>
+    <string name="update_none">هذا أحدث إصدار لدى المركز.</string>
+    <string name="update_available">الإصدار %1$s متاح</string>
+    <string name="update_install">نزّل وثبّت</string>
+    <string name="update_bad_file">الملف المنزَّل لا يطابق الإصدار، ولم يُثبَّت شيء.</string>
+    <string name="update_not_configured">لم يُضبط في هذا المركز قناة تحديثات لأندرويد.</string>
 </resources>

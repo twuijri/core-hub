@@ -36,6 +36,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import hub.core.android.R
 import hub.core.android.chat.Turns
 import hub.core.android.graph
+import hub.core.android.phone.VoiceButton
 import hub.core.android.ui.components.ApprovalCard
 import hub.core.android.ui.components.Composer
 import hub.core.android.ui.components.EmptyState
@@ -60,7 +61,6 @@ fun ChatScreen(
     profile: String,
     profileName: String,
     onCreated: (String, String) -> Unit,
-    composerExtra: @Composable (append: (String) -> Unit) -> Unit = {},
 ) {
     val context = LocalContext.current
     val vm: ChatViewModel = viewModel(key = "chat:${sessionId ?: "draft"}:$profile") {
@@ -68,6 +68,14 @@ fun ChatScreen(
     }
     val ui by vm.ui.collectAsState()
     var draft by rememberSaveable(sessionId) { mutableStateOf("") }
+    if (sessionId == null) {
+        // Text shared from another app lands in the new chat's draft, once.
+        val shared by context.graph.sharedText.collectAsState()
+        LaunchedEffect(shared) {
+            shared?.let { draft = if (draft.isBlank()) it else "$draft\n$it" }
+            context.graph.sharedText.value = null
+        }
+    }
     val chat = ui.chat
     val turns = remember(chat.messages) { Turns.group(chat.messages) }
     val listState = rememberLazyListState()
@@ -125,7 +133,7 @@ fun ChatScreen(
                 vm.send(text, onCreated)
             },
             onStop = vm::stop,
-            extra = { composerExtra { spoken -> draft = if (draft.isBlank()) spoken else "$draft $spoken" } },
+            extra = { VoiceButton { spoken -> draft = if (draft.isBlank()) spoken else "$draft $spoken" } },
         )
     }
 }

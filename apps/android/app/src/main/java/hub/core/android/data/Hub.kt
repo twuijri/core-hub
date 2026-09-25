@@ -8,6 +8,7 @@ import hub.core.client.api.RoomsApi
 import hub.core.client.api.SchedulesApi
 import hub.core.client.api.SessionsApi
 import hub.core.client.api.TasksApi
+import hub.core.client.api.UpdatesApi
 import hub.core.client.infrastructure.ClientError
 import hub.core.client.infrastructure.ClientException
 import hub.core.client.infrastructure.ServerError
@@ -43,6 +44,7 @@ class HubApis(hub: String, client: OkHttpClient) {
     val schedules = SchedulesApi(base, client)
     val notify = NotifyApi(base, client)
     val rooms = RoomsApi(base, client)
+    val updates = UpdatesApi(base, client)
 }
 
 /** A failed call, with the hub's own `{ error, code }` when it sent one. */

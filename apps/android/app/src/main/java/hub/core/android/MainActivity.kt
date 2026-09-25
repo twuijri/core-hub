@@ -43,7 +43,8 @@ import hub.core.android.ui.screens.SearchScreen
 import hub.core.android.ui.screens.SettingsPageScreen
 import hub.core.android.ui.screens.SettingsScreen
 import hub.core.android.ui.screens.TasksScreen
-import hub.core.android.ui.screens.ThisDeviceBasics
+import hub.core.android.phone.Share
+import hub.core.android.phone.ThisDevicePage
 import hub.core.android.ui.screens.ShellViewModel
 import hub.core.android.ui.screens.TopBar
 import hub.core.android.ui.screens.term
@@ -89,6 +90,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handle(intent: Intent?) {
+        // «Share to Core Hub»: the shared text becomes a new chat's draft.
+        Share.textOf(intent)?.let { graph.sharedText.value = it }
         val data = intent?.dataString ?: return
         when (val link = DeepLink.parse(data)) {
             is DeepLink.Pair -> pendingPairing = link.request
@@ -119,6 +122,9 @@ private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Uni
         )
     }
     val nav = remember(session?.hub, session?.user?.id) { Navigator() }
+    val shared by graph.sharedText.collectAsState()
+    LaunchedEffect(shared) { if (shared != null) nav.go(Route.NewChat) }
+    NotificationPermission()
     // `corehub://open/<path>`: the same paths as the web (surfaceRoutes.android).
     LaunchedEffect(pendingPath) {
         val path = pendingPath ?: return@LaunchedEffect
@@ -126,6 +132,19 @@ private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Uni
         onPathHandled()
     }
     MainShell(nav) { route, navigator, shell, openDrawer -> Destination(route, navigator, shell, openDrawer) }
+}
+
+/** Asks once, after sign-in, for the permission Android 13+ needs before a notice can be shown. */
+@Composable
+private fun NotificationPermission() {
+    val graph = androidx.compose.ui.platform.LocalContext.current.graph
+    val ask = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {}
+    LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= 33 && !graph.device.askedNotifications) {
+            graph.device.askedNotifications = true
+            ask.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 }
 
 /** What each route draws. Pages not built on the phone yet say so plainly. */
@@ -177,7 +196,7 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
             is Route.SettingsPage -> {
                 TopBar(term(route.destination), onMenu = null, onBack = { if (!nav.back()) nav.go(Route.Settings) })
                 if (Screens.visible(route.destination, s.user.isAdmin)) {
-                    SettingsPageScreen(route.destination, shell, onOpen = nav::go) { ThisDeviceBasics(shell) }
+                    SettingsPageScreen(route.destination, shell, onOpen = nav::go) { ThisDevicePage(shell) }
                 } else {
                     PlaceholderScreen(term(route.destination), stringResource(R.string.admin_only))
                 }
