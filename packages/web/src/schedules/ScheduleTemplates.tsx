@@ -41,6 +41,7 @@ export function ScheduleTemplateMenu({
         <Button
           variant="secondary"
           size="sm"
+          className="self-start"
           icon={<IconSchedules size={14} />}
           data-testid="schedule-templates"
         >
@@ -149,6 +150,18 @@ export function NextRuns({ trigger, profile }: { trigger: Trigger; profile: stri
       className="flex flex-col gap-1 rounded-md bg-surface-2 p-2 text-xs"
       aria-live="polite"
       data-testid="schedule-next-runs"
+      // What the list is about, and whether it is the hub's answer yet, so a test can tell
+      // a list still showing the time before the last keystroke.
+      data-trigger={`${settled.kind} ${settled.expression ?? settled.every_minutes ?? settled.run_at ?? ''}`}
+      data-state={
+        incomplete
+          ? 'incomplete'
+          : preview.isError
+            ? 'error'
+            : preview.isPending
+              ? 'loading'
+              : 'ready'
+      }
     >
       <p className="font-medium">{t('schedules.preview.title', { zone: settled.timezone })}</p>
       {incomplete && <p className="text-muted">{t('schedules.preview.incomplete')}</p>}
