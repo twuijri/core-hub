@@ -160,7 +160,9 @@
   },
   "permissions": {
     "camera": "Core Hub uses the camera to scan the pairing code your hub shows on the web.",
-    "local_network": "Core Hub connects to your hub on your local network."
+    "local_network": "Core Hub connects to your hub on your local network.",
+    "microphone": "Core Hub listens while you dictate a message.",
+    "speech": "Core Hub turns what you dictate into text."
   },
   "about": {
     "app_version": "App version",
@@ -211,7 +213,18 @@
     "paired": "Pairing this phone",
     "password": "Username and password",
     "realtime": "Live connection",
-    "signed_in_as": "Signed in as"
+    "signed_in_as": "Signed in as",
+    "voice": "Voice",
+    "voice_input": "Microphone in the composer",
+    "dictation_language": "Dictation language",
+    "dictation_app": "Same as the app",
+    "spoken_replies": "Read replies aloud",
+    "notifications": "Notifications",
+    "notifications_note": "Notices arrive while Core Hub is open or just closed. Push when the app is fully closed needs the hub's device support and the owner's Apple account.",
+    "notifications_allowed": "Allowed",
+    "notifications_denied": "Not allowed — change it in the iPhone Settings",
+    "notifications_ask": "Allow notifications",
+    "background_checks": "Look for notices while the app is closed (about every 15 minutes, when iOS allows)"
   },
   "devices": {
     "expires": "Expires {time}",
@@ -321,5 +334,16 @@
     "name": "Name",
     "new": "New profile",
     "slug": "Id (letters, digits, dashes)"
+  },
+  "share": {
+    "saved": "Saved for Core Hub. Open Core Hub to send it in a new chat.",
+    "nothing": "There is no text or link here to share.",
+    "done": "Done"
+  },
+  "voice": {
+    "dictate": "Dictate",
+    "stop": "Stop dictating",
+    "denied": "Core Hub may not use the microphone or speech recognition. Allow them in the iPhone Settings.",
+    "unavailable": "Dictation is not available in this language on this phone."
   }
 }

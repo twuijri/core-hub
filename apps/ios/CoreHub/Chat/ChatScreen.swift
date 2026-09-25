@@ -33,8 +33,14 @@ struct ChatScreen: View {
         .background(Tone.bg)
         .navigationTitle(fixedTitle ?? model.state.title ?? l10n("sessions.untitled"))
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { model.start() }
-        .onDisappear { model.stop() }
+        .onAppear {
+            model.start()
+            LocalNotices.shared.openSessionID = model.sessionID
+        }
+        .onDisappear {
+            model.stop()
+            if LocalNotices.shared.openSessionID == model.sessionID { LocalNotices.shared.openSessionID = nil }
+        }
         .accessibilityIdentifier("screen.chat")
     }
 

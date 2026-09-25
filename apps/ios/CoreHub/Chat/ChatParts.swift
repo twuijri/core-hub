@@ -290,11 +290,30 @@ struct Composer: View {
     let onSend: () -> Void
     let onStop: () -> Void
     @Environment(\.l10n) private var l10n
+    @Environment(AppModel.self) private var app
     @FocusState private var focused: Bool
+    @State private var dictation = Dictation()
+    /// What was typed before dictation started; what is heard follows it.
+    @State private var dictationBase = ""
 
     private var canSend: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !sending }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: Space.s1) {
+            if case .failed(let message) = dictation.state {
+                Text(message)
+                    .font(.system(size: FontSize.sizeXs))
+                    .foregroundStyle(Tone.dangerSoftText)
+                    .padding(.horizontal, Space.s3)
+            }
+            field
+        }
+        .onChange(of: dictation.heard) { _, heard in
+            text = dictationBase.isEmpty ? heard : dictationBase + " " + heard
+        }
+    }
+
+    private var field: some View {
         HStack(alignment: .bottom, spacing: Space.s2) {
             TextField(placeholder, text: $text, axis: .vertical)
                 .lineLimit(1...6)
@@ -303,6 +322,18 @@ struct Composer: View {
                 .padding(.vertical, Space.s2)
                 .contentDirection(of: text.isEmpty ? placeholder : text)
                 .accessibilityIdentifier("composer.input")
+            if app.device.voiceInput {
+                Button {
+                    toggleDictation()
+                } label: {
+                    Image(systemName: dictation.state == .listening ? "mic.fill" : "mic")
+                        .font(.system(size: FontSize.sizeMd))
+                        .foregroundStyle(dictation.state == .listening ? Tone.danger : Tone.textMuted)
+                        .frame(width: Control.heightMd, height: Control.heightMd)
+                }
+                .accessibilityLabel(dictation.state == .listening ? l10n("voice.stop") : l10n("voice.dictate"))
+                .accessibilityIdentifier("composer.dictate")
+            }
             if busy && text.isEmpty {
                 Button(action: onStop) {
                     Image(systemName: "stop.fill")
@@ -330,5 +361,15 @@ struct Composer: View {
         .padding(.vertical, Space.s1)
         .floatingChrome(cornerRadius: Radius.xl)
         .frame(maxWidth: Layout.composerMax)
+    }
+
+    private func toggleDictation() {
+        if dictation.state == .listening {
+            dictation.stop()
+            return
+        }
+        dictationBase = text
+        let locale = app.device.dictationLocale(app: app.language)
+        Task { await dictation.start(locale: locale, l10n: l10n) }
     }
 }

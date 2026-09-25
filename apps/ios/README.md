@@ -18,6 +18,8 @@ manifest (`docs/clients/navigation.json`). Minimum iOS 17 (proposed — owner to
 | `CoreHub/Shell`, `CoreHub/Settings` | the drawer, Settings and its pages |
 | `CoreHub/i18n` | `ar.json` / `en.json` (checked by `pnpm i18n:check`) |
 | `CoreHub/Generated` | `Tokens.swift`, `Product.swift` — generated, committed |
+| `CoreHub/Phone` | local notices, dictation, spoken replies, This device's choices |
+| `CoreHub/Share`, `CoreHubShare` | the share extension and the inbox it leaves shared text in |
 | `CoreHubTests` | XCTest |
 | `scripts/generate-swift.mjs` | writes `Generated/*` and `Resources/*.lproj/InfoPlist.strings` |
 
@@ -42,7 +44,22 @@ Running on a device or shipping needs the owner's Apple Developer account:
 
 1. Pick the bundle id (proposed `io.github.twuijri.corehub`) and register it.
 2. Set `DEVELOPMENT_TEAM` in `project.yml` (or in Xcode) and let Xcode manage signing.
-3. For TestFlight: an App Store Connect record, an upload key, and a CI secret — not set up.
+3. Register the App Group `group.io.github.twuijri.corehub` for the app and the share extension
+   (`io.github.twuijri.corehub.share`); until it is signed, a shared text does not reach the app.
+4. An app icon (none yet) before TestFlight or the App Store.
+5. For TestFlight: an App Store Connect record, an upload key, and a CI secret — not set up.
+
+## Notifications — what works and what waits
+
+While Core Hub is open (or just sent to the background, before iOS suspends it) the app listens
+on `/rt/devices` and shows each notice the hub writes — a reply that finished, an agent waiting
+for the person — as a local notification, quiet for the conversation on screen. With the app
+closed, iOS wakes it now and then (`BGAppRefreshTask`, at most every 15 minutes, when iOS
+decides) to read the unread notices and show the new ones; each notice is shown once.
+
+**Real push needs APNs**: the hub's `devices` module (`devicesRegisterPush`) still answers 501,
+and APNs needs the owner's Apple account (a push key or certificate). When both exist, the app
+registers its device token with `devicesRegisterPush`; the rest of the app does not change.
 
 ## Decisions (proposed — owner to confirm)
 

@@ -6,6 +6,8 @@ import SwiftUI
 struct NewChatScreen: View {
     /// Opens the conversation the first message made.
     let opened: (_ sessionID: String, _ profile: String, _ firstMessage: String) -> Void
+    /// Text shared from another app, put in the composer to review before sending.
+    var seed: String? = nil
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @State private var draft = ""
@@ -54,6 +56,7 @@ struct NewChatScreen: View {
         .padding(.horizontal, Space.s3)
         .padding(.bottom, Space.s2)
         .background(Tone.bg)
+.onAppear { if let seed, draft.isEmpty { draft = seed } }
         .navigationTitle(l10n("nav.new_chat"))
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("screen.new_chat")

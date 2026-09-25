@@ -244,7 +244,7 @@ its approval.
   spoken replies; and This device in full: the hub connection, voice input and dictation language,
   spoken replies, notifications, and self-update from the hub's `updates` channel (SHA-256 checked,
   handed to Android's installer).
-- **iOS** (`apps/ios`, SwiftUI, iOS 17+; parts 1–2 of 3 since 2026-09-25): pairing by the web's
+- **iOS** (`apps/ios`, SwiftUI, iOS 17+; parts 1–3 since 2026-09-25): pairing by the web's
   QR code, its pasted text or a `corehub://pair` link, or the hub's address with a username and
   password, and first-run setup when the hub has no owner; tokens in the Keychain, refreshed once
   on `token_expired` and before expiry, a paired phone's app token renewed daily. The drawer
@@ -263,8 +263,15 @@ its approval.
   (read), device connections (a pairing QR for another phone), knowledge, logs / usage /
   performance, theme, profiles (create), updates, plugins. `corehub://open/<path>` links open the
   page they name. The navigation parity test (`NavigationParityTests`) holds the app to
-  `navigation.json`, whose `surfaceRoutes.ios` it reads. Built and unit-tested on a macOS runner's
-  simulator; **never run on a device or against the owner's hub**, and nothing is signed.
+  `navigation.json`, whose `surfaceRoutes.ios` it reads. **Phone specifics** (part 3): the hub's
+  notices (a reply finished, an agent waits) become local notifications while the app runs, quiet
+  for the conversation on screen and opening it when tapped — **no push when the app is closed**:
+  the app does not register for APNs yet (the hub's APNs sender came with the devices module the
+  same day) and APNs needs the owner's Apple account; a share extension hands shared text and links to a new chat (through an App Group
+  that works once the app is signed); dictation into the composer with the phone's speech
+  recognition; replies read aloud; This device holds the voice input, dictation language, spoken
+  replies and notification permission, kept on the phone. Built and unit-tested on a macOS
+  runner's simulator; **never run on a device or against the owner's hub**, and nothing is signed.
 
 ## Name
 Since 2026-09-24 the product is **Core Hub** («كور هب», ADR 0017): packages `@corehub/*`, the
