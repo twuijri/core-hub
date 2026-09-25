@@ -28,6 +28,12 @@
  * open the bot, send a message, approve the request below. Hermes's outside bot-creation service
  * is not used.
  *
+ * **More platforms link like Telegram.** Discord, Slack, Matrix, Mattermost and Email each have a
+ * «ربط <المنصة>» dialog with plain setup steps; the hub asks the platform who the account is
+ * before storing anything, and the linked row names it and offers its own settings. Every other
+ * platform Hermes has is listed under «منصات أخرى» with a form of the variables Hermes reads,
+ * stored unchecked — the dialog says so. The catalog is the hub's (`agents.listChannelPlatforms`).
+ *
  * **When a change takes effect** is said by the gateway that serves the profile: at once in a
  * named profile (the hub restarts that profile's messaging gateway), after Hermes's Restart in
  * the default one.
@@ -60,6 +66,7 @@ import {
   channelKeys,
   useApprovePairing,
   useCancelJob,
+  useChannelPlatforms,
   useChannels,
   useClearChannel,
   useDenyPairing,
@@ -72,13 +79,14 @@ import {
   useUpdateChannel,
   type Channel,
   type ChannelField,
+  type ChannelPlatform,
   type ChannelGateway,
   type ChannelLink,
   type PairingState,
 } from './skills.js';
-import { TelegramSettingsPanel } from './TelegramSettingsPanel.js';
+import { ChannelSettingsPanel } from './ChannelSettingsPanel.js';
 import { useProfileName } from '../shell/profiles.js';
-import { describeToolError } from './toolErrors.js';
+import { describeToolError, platformName } from './toolErrors.js';
 import { useJobs } from './useJobs.js';
 
 export function AgentChannelsScreen() {
@@ -89,6 +97,10 @@ export function AgentChannelsScreen() {
   const [editing, setEditing] = useState<Channel | null>(null);
   const [pairing, setPairing] = useState<string | null>(null);
   const [linkingTelegram, setLinkingTelegram] = useState(false);
+  const [linking, setLinking] = useState<ChannelPlatform | null>(null);
+  const platforms = useChannelPlatforms(agentId);
+  const specOf = (platform: string) =>
+    platforms.data?.items.find((entry) => entry.platform === platform) ?? null;
 
   const agent = agents.data?.find((entry) => entry.id === agentId);
   const title = agent ? t('channels.title_of', { name: agent.name }) : t('nav.agent_channels');
@@ -131,6 +143,14 @@ export function AgentChannelsScreen() {
         {telegramLinked && telegram?.link && (
           <TelegramHowTo link={telegram.link} gateway={gateway} />
         )}
+        {items
+          .filter((channel) => channel.login === 'credentials' && channel.link?.linked)
+          .map((channel) => {
+            const spec = specOf(channel.platform);
+            return spec?.support === 'full' ? (
+              <PlatformHowTo key={channel.platform} spec={spec} gateway={gateway} />
+            ) : null;
+          })}
 
         {channels.isPending && (
           <SkeletonGroup label={t('common.loading')}>
@@ -152,18 +172,27 @@ export function AgentChannelsScreen() {
                   <ChannelRow
                     agentId={agentId}
                     channel={channel}
+                    spec={specOf(channel.platform)}
                     gateway={gateway}
                     onEdit={() => setEditing(channel)}
-                    onPair={() =>
-                      channel.login === 'token'
-                        ? setLinkingTelegram(true)
-                        : setPairing(channel.platform)
-                    }
+                    onPair={() => {
+                      const spec = specOf(channel.platform);
+                      if (channel.login === 'token') setLinkingTelegram(true);
+                      else if (channel.login === 'credentials' && spec) setLinking(spec);
+                      else setPairing(channel.platform);
+                    }}
                   />
                 </li>
               ))}
             </ul>
           ))}
+        {channels.data && platforms.data && (
+          <PlatformCatalog
+            platforms={platforms.data.items}
+            channels={items}
+            onLink={(spec) => setLinking(spec)}
+          />
+        )}
         {channels.data && <PairingSection agentId={agentId} />}
       </div>
       {editing && (
@@ -179,6 +208,14 @@ export function AgentChannelsScreen() {
           onClose={() => setLinkingTelegram(false)}
         />
       )}
+      {linking && (
+        <PlatformLinkDialog
+          agentId={agentId}
+          spec={linking}
+          gateway={gateway}
+          onClose={() => setLinking(null)}
+        />
+      )}
     </AppShell>
   );
 }
@@ -186,19 +223,24 @@ export function AgentChannelsScreen() {
 function ChannelRow({
   agentId,
   channel,
+  spec,
   gateway,
   onEdit,
   onPair,
 }: {
   agentId: string | undefined;
   channel: Channel;
+  spec: ChannelPlatform | null;
   gateway: ChannelGateway | null;
   onEdit: () => void;
   onPair: () => void;
 }) {
   const { t } = useI18n();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const hasSettings = channel.platform === 'telegram' && channel.link?.linked === true;
+  const name = platformName(channel.platform, t, spec?.label);
+  const hasSettings =
+    (channel.platform === 'telegram' || spec?.settings === true) && channel.link?.linked === true;
+  const credentials = channel.login === 'credentials';
   const update = useUpdateChannel(agentId);
   const clear = useClearChannel(agentId);
   const unlink = useUnlinkChannel(agentId);
@@ -218,8 +260,8 @@ function ChannelRow({
         />
         <button type="button" className="skill-open" onClick={onEdit}>
           <span className="flex flex-wrap items-center gap-2">
-            <span className="font-medium" dir="ltr">
-              {channel.label}
+            <span className="font-medium" dir="auto">
+              {credentials ? name : channel.label}
             </span>
             {channel.exclusive && <Badge tone="warning">{t('channels.exclusive')}</Badge>}
             {link ? (
@@ -254,7 +296,7 @@ function ChannelRow({
             {t('channels.login.button')}
           </Button>
         )}
-        {channel.login === 'token' && !link?.linked && (
+        {(channel.login === 'token' || (credentials && spec)) && !link?.linked && (
           <Button size="sm" data-testid={`channel-login-${channel.platform}`} onClick={onPair}>
             {t('channels.telegram.link_button')}
           </Button>
@@ -278,12 +320,13 @@ function ChannelRow({
             disabled={unlink.isPending}
             onClick={() => {
               void ask({
-                title: t('channels.unlink_title', { name: channel.label }),
-                body: t(
+                title: t('channels.unlink_title', { name: credentials ? name : channel.label }),
+                body:
                   channel.platform === 'telegram'
-                    ? 'channels.telegram.unlink_body'
-                    : 'channels.unlink_body',
-                ),
+                    ? t('channels.telegram.unlink_body')
+                    : credentials
+                      ? t('channels.platform.unlink_body', { name })
+                      : t('channels.unlink_body'),
                 confirmLabel: t('channels.unlink'),
               }).then((yes) => {
                 if (yes) unlink.mutate(channel.platform);
@@ -315,7 +358,14 @@ function ChannelRow({
         )}
         {dialog}
       </div>
-      {hasSettings && settingsOpen && <TelegramSettingsPanel agentId={agentId} gateway={gateway} />}
+      {hasSettings && settingsOpen && (
+        <ChannelSettingsPanel
+          agentId={agentId}
+          platform={channel.platform}
+          name={name}
+          gateway={gateway}
+        />
+      )}
       {channel.status === 'error' && channel.error && (
         <Notice tone="danger">
           <span dir="auto">{channel.error}</span>
@@ -325,11 +375,11 @@ function ChannelRow({
       {unlink.isSuccess && (
         <Notice>
           <span data-testid="channel-unlinked">
-            {t(
-              channel.platform === 'telegram'
-                ? 'channels.telegram.unlinked_note'
-                : 'channels.unlinked_note',
-            )}
+            {channel.platform === 'telegram'
+              ? t('channels.telegram.unlinked_note')
+              : credentials
+                ? t('channels.platform.unlinked_note', { name })
+                : t('channels.unlinked_note')}
           </span>
         </Notice>
       )}
@@ -584,6 +634,348 @@ function TelegramLinkDialog({
           {link.isError && (
             <Notice tone="danger">
               <span data-testid="telegram-link-error" dir="auto">
+                {describeToolError(link.error, t, nameOf)}
+              </span>
+            </Notice>
+          )}
+        </div>
+      )}
+    </Dialog>
+  );
+}
+
+/** The platform's setup steps, as many as its words have (`channels.platform.<p>.stepN`). */
+function stepsOf(platform: string, t: (key: string) => string): string[] {
+  const steps: string[] = [];
+  for (let index = 1; index <= 9; index += 1) {
+    const key = `channels.platform.${platform}.step${index}`;
+    const text = t(key);
+    if (text === key) break;
+    steps.push(text);
+  }
+  return steps;
+}
+
+/** A platform's own words for `key`, or the shared ones. */
+function wordsOf(t: (key: string, values?: Record<string, string>) => string) {
+  return (platform: string, key: string, values?: Record<string, string>): string => {
+    const own = `channels.platform.${platform}.${key}`;
+    const text = t(own, values);
+    return text === own ? t(`channels.platform.${key}`, values) : text;
+  };
+}
+
+/**
+ * «منصات أخرى»: every platform the hub can link that this profile has not linked yet — the ones
+ * the hub checks and names first, each with «ربط <المنصة>», then the rest with a form of what
+ * Hermes reads and a note that nothing there is checked.
+ */
+function PlatformCatalog({
+  platforms,
+  channels,
+  onLink,
+}: {
+  platforms: ChannelPlatform[];
+  channels: Channel[];
+  onLink: (spec: ChannelPlatform) => void;
+}) {
+  const { t } = useI18n();
+  const linked = new Set(
+    channels.filter((channel) => channel.link?.linked).map((channel) => channel.platform),
+  );
+  const open = platforms.filter(
+    (spec) => spec.login === 'credentials' && !linked.has(spec.platform),
+  );
+  const full = open.filter((spec) => spec.support === 'full');
+  const generic = open.filter((spec) => spec.support === 'generic');
+  if (open.length === 0) return null;
+  const card = (spec: ChannelPlatform) => {
+    const name = platformName(spec.platform, t, spec.label);
+    return (
+      <li key={spec.platform} className="skill-row" data-testid={`platform-card-${spec.platform}`}>
+        <span className="skill-open">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="font-medium" dir="auto">
+              {name}
+            </span>
+            {spec.packages === 'first_use' && (
+              <Badge>{t('channels.platform.badge_first_use')}</Badge>
+            )}
+            {spec.inbound && <Badge tone="warning">{t('channels.platform.badge_inbound')}</Badge>}
+          </span>
+          {spec.support === 'full' && (
+            <span className="skill-description">
+              {t(`channels.platform.${spec.platform}.summary`)}
+            </span>
+          )}
+        </span>
+        <Button
+          size="sm"
+          variant={spec.support === 'full' ? 'primary' : 'ghost'}
+          data-testid={`platform-link-${spec.platform}`}
+          onClick={() => onLink(spec)}
+        >
+          {t('channels.platform.link_title', { name })}
+        </Button>
+      </li>
+    );
+  };
+  return (
+    <section className="flex flex-col gap-3" data-testid="platform-catalog">
+      <h2 className="text-base font-semibold">{t('channels.platform.catalog_title')}</h2>
+      {full.length > 0 && <ul className="flex flex-col gap-2">{full.map(card)}</ul>}
+      {generic.length > 0 && (
+        <>
+          <h3 className="text-sm font-semibold">{t('channels.platform.generic_title')}</h3>
+          <p className="text-sm text-muted">{t('channels.platform.generic_list_note')}</p>
+          <ul className="flex flex-col gap-2" data-testid="platform-generic">
+            {generic.map(card)}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** What to do once a platform is linked, in plain words. */
+function PlatformHowTo({
+  spec,
+  gateway,
+}: {
+  spec: ChannelPlatform;
+  gateway: ChannelGateway | null;
+}) {
+  const { t } = useI18n();
+  const name = platformName(spec.platform, t, spec.label);
+  return (
+    <Notice tone="info">
+      <span className="flex flex-col gap-1" data-testid={`platform-how-${spec.platform}`}>
+        <strong>{t('channels.platform.how_title', { name })}</strong>
+        {gateway?.applies === 'on_restart' && <span>{t('channels.how.step_restart')}</span>}
+        <span>{t(`channels.platform.${spec.platform}.how`)}</span>
+        {spec.pairs && <span>{t('channels.platform.how_pairs')}</span>}
+        {spec.allowlist && <span>{t('channels.platform.how_allowlist')}</span>}
+      </span>
+    </Notice>
+  );
+}
+
+/** Entries typed as a person likes: commas (Latin or Arabic), spaces, new lines. */
+function entriesOf(text: string): string[] {
+  return text
+    .split(/[\s,،]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+/**
+ * «ربط <المنصة>»: the steps in plain words, the variables the platform takes, and who may message
+ * the agent. Where the hub can ask the platform it does, before storing anything, so a wrong
+ * value is said here in the platform's words; the generic platforms say they are not checked.
+ */
+function PlatformLinkDialog({
+  agentId,
+  spec,
+  gateway,
+  onClose,
+}: {
+  agentId: string | undefined;
+  spec: ChannelPlatform;
+  gateway: ChannelGateway | null;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const nameOf = useProfileName();
+  const link = useLinkChannel(agentId);
+  const words = wordsOf(t);
+  const name = platformName(spec.platform, t, spec.label);
+  const full = spec.support === 'full';
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [allowed, setAllowed] = useState('');
+  const entries = entriesOf(allowed);
+  const missing = spec.credentials.some(
+    (credential) => credential.required && (values[credential.key] ?? '').trim() === '',
+  );
+  const done = link.data?.link?.linked ? link.data.link : null;
+  const account = done ? accountOf(done) : '';
+  const steps = full ? stepsOf(spec.platform, t) : [];
+  const fieldLabel = (key: string) => {
+    const own = `channels.platform.field.${key}`;
+    const text = t(own);
+    return text === own ? key : text;
+  };
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={t('channels.platform.link_title', { name })}
+      description={
+        full
+          ? t(`channels.platform.${spec.platform}.intro`)
+          : t('channels.platform.generic_intro', { name })
+      }
+      closeLabel={t('common.cancel')}
+      testId="platform-link"
+      footer={
+        done ? (
+          <Button onClick={onClose} data-testid="platform-link-close">
+            {t('channels.login.close')}
+          </Button>
+        ) : (
+          <>
+            <Button variant="ghost" onClick={onClose}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              disabled={link.isPending || missing}
+              data-testid="platform-link-submit"
+              onClick={() => {
+                const credentials: Record<string, string> = {};
+                for (const credential of spec.credentials) {
+                  const value = (values[credential.key] ?? '').trim();
+                  if (value !== '' || !credential.required) credentials[credential.key] = value;
+                }
+                link.mutate({
+                  platform: spec.platform,
+                  credentials,
+                  ...(spec.allowed_users_key && entries.length > 0
+                    ? { allowed_users: entries }
+                    : {}),
+                });
+              }}
+            >
+              {link.isPending
+                ? t('channels.platform.checking', { name })
+                : spec.validates
+                  ? t('channels.platform.submit_check')
+                  : t('channels.platform.submit')}
+            </Button>
+          </>
+        )
+      }
+    >
+      {done ? (
+        <Notice tone="success">
+          <span className="flex flex-col gap-1" data-testid="platform-link-done">
+            <span dir="auto">
+              {account ? t('channels.platform.done_as', { account }) : t('channels.platform.done')}
+            </span>
+            <span>
+              {gateway?.applies === 'on_restart'
+                ? t('channels.platform.done_restart')
+                : t('channels.platform.done_now')}
+            </span>
+            {full && <span>{t(`channels.platform.${spec.platform}.how`)}</span>}
+          </span>
+        </Notice>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {steps.length > 0 && (
+            <ol
+              className="flex list-decimal flex-col gap-1 ps-5 text-sm"
+              data-testid="platform-steps"
+            >
+              {steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+          )}
+          {spec.docs_url && (
+            <a
+              href={spec.docs_url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm underline"
+              dir="ltr"
+              data-testid="platform-docs"
+            >
+              {spec.docs_url}
+            </a>
+          )}
+          {!full && (
+            <Notice tone="warning">
+              <span data-testid="platform-generic-note">{t('channels.platform.generic_note')}</span>
+            </Notice>
+          )}
+          {spec.packages === 'first_use' && (
+            <Notice>
+              <span data-testid="platform-first-use">{t('channels.platform.first_use_note')}</span>
+            </Notice>
+          )}
+          {spec.inbound && (
+            <Notice tone="warning">
+              <span data-testid="platform-inbound">{t('channels.platform.inbound_note')}</span>
+            </Notice>
+          )}
+          {spec.credentials.map((credential) => (
+            <Field
+              key={credential.key}
+              label={
+                credential.required
+                  ? fieldLabel(credential.key)
+                  : t('channels.platform.optional', { label: fieldLabel(credential.key) })
+              }
+              {...(credential.kind === 'secret'
+                ? { hint: t('channels.platform.secret_hint') }
+                : {})}
+            >
+              {(props) => (
+                <Input
+                  {...props}
+                  dir="ltr"
+                  type={
+                    credential.kind === 'secret'
+                      ? 'password'
+                      : credential.kind === 'email'
+                        ? 'email'
+                        : credential.kind === 'number'
+                          ? 'number'
+                          : 'text'
+                  }
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={values[credential.key] ?? ''}
+                  data-testid={`platform-field-${credential.key}`}
+                  onChange={(event) =>
+                    setValues({ ...values, [credential.key]: event.target.value })
+                  }
+                />
+              )}
+            </Field>
+          ))}
+          {spec.allowed_users_key && (
+            <Field
+              label={words(spec.platform, 'allowed')}
+              hint={
+                full
+                  ? words(spec.platform, 'allowed_hint')
+                  : t('channels.platform.allowed_hint_generic', { key: spec.allowed_users_key })
+              }
+            >
+              {(props) => (
+                <Input
+                  {...props}
+                  dir="ltr"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={allowed}
+                  data-testid="platform-allowed"
+                  onChange={(event) => setAllowed(event.target.value)}
+                />
+              )}
+            </Field>
+          )}
+          {spec.allowlist && entries.length === 0 && (
+            <Notice tone="warning">
+              <span data-testid="platform-allowlist-empty">
+                {t('channels.platform.allowlist_empty', { name })}
+              </span>
+            </Notice>
+          )}
+          {link.isError && (
+            <Notice tone="danger">
+              <span data-testid="platform-link-error" dir="auto">
                 {describeToolError(link.error, t, nameOf)}
               </span>
             </Notice>

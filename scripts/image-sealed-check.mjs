@@ -5,7 +5,7 @@
 // /data, where it survives the container being recreated. Hermes's dashboard API, which the hub
 // starts on demand (ADR 0015), starts against the sealed code and keeps its token. The two
 // channels the hub links itself need no download (docs/changes/2026-09-25-twuijri-image-channel-deps.md):
-// Hermes's Telegram client imports with no network at all, and a profile's WhatsApp bridge,
+// Hermes's Telegram, Discord and Slack clients import with no network at all, and a profile's WhatsApp bridge,
 // prepared the way the hub prepares it, resolves Baileys from the image through its link.
 //
 //   node scripts/image-sealed-check.mjs <image>        (CI: core-hub:ci)
@@ -165,6 +165,31 @@ try {
     Boolean(telegram?.startsWith('/opt/hermes/.venv/')),
     telegram ?? 'import failed',
   );
+
+  // Discord and Slack ship in the image the same way (docs/changes/2026-09-25-twuijri-more-channels.md).
+  for (const [feature, module, label] of [
+    ['platform.discord', 'discord', 'Discord'],
+    ['platform.slack', 'slack_bolt', 'Slack'],
+  ]) {
+    const found = docker(
+      [
+        'run',
+        '--rm',
+        '--network',
+        'none',
+        image,
+        'python',
+        '-c',
+        `from tools import lazy_deps; lazy_deps.ensure('${feature}', prompt=False); import ${module}; print(${module}.__file__)`,
+      ],
+      { allowFail: true },
+    );
+    check(
+      `Hermes's ${label} client is in the image (no network, nothing installed)`,
+      Boolean(found?.startsWith('/opt/hermes/.venv/')),
+      found ?? 'import failed',
+    );
+  }
 
   // WhatsApp ships in the image: a profile's bridge, prepared the way the hub prepares it before
   // the profile's gateway starts (modules/agents/whatsapp-bridge.ts), is the bridge's own files

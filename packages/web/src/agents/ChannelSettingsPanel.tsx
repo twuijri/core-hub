@@ -1,12 +1,15 @@
 /**
- * «إعدادات تيليجرام»: every user-facing option Hermes has for Telegram in this profile, in
- * sections — who may message the bot, replies, groups, media and voice, advanced.
+ * «إعدادات <المنصة>»: every user-facing option Hermes has for a channel in this profile, in
+ * sections — who may message it, replies, groups and channels, media and voice, advanced. Built
+ * for Telegram (#97, the owner: «التليجرام فيه خصائص كثيره … يطلع ثينكينج … في اكثر من شغله»),
+ * and the same panel for Discord, Slack, Matrix, Mattermost and Email.
  *
- * The owner, 2026-09-24: «التليجرام فيه خصائص كثيره … يطلع ثينكينج … في اكثر من شغله». The hub
- * says which options exist, their values and Hermes's defaults (`agents.getChannelSettings`); the
- * words are ours, keyed by the option. Each option says what it does and what applies while it is
- * left unset; an option kept for the whole profile (speech, voice replies) says it changes every
- * channel there, WhatsApp included.
+ * The hub says which options exist, their values and Hermes's defaults
+ * (`agents.getChannelSettings`); the words are ours, keyed by the option — the same key means the
+ * same thing on every platform, and a platform whose words differ (Discord's "channel" is
+ * Telegram's "group") has its own under `channels.settings.platform.<platform>`. Each option says
+ * what it does and what applies while it is left unset; an option kept for the whole profile
+ * (speech, voice replies) says it changes every channel there, WhatsApp included.
  *
  * Changes are gathered and saved together: every save restarts the profile's gateway (in a named
  * profile at once, in the default one at Hermes's Restart), so one save for several changes is
@@ -49,16 +52,21 @@ function listOf(text: string): string[] {
     .filter(Boolean);
 }
 
-export function TelegramSettingsPanel({
+export function ChannelSettingsPanel({
   agentId,
+  platform,
+  name,
   gateway,
 }: {
   agentId: string | undefined;
+  platform: string;
+  /** The platform's name as the page says it. */
+  name: string;
   gateway: ChannelGateway | null;
 }) {
   const { t } = useI18n();
-  const settings = useChannelSettings(agentId, 'telegram', true);
-  const save = useUpdateChannelSettings(agentId, 'telegram');
+  const settings = useChannelSettings(agentId, platform, true);
+  const save = useUpdateChannelSettings(agentId, platform);
   /** Option key → the value the person chose (null: back to the default). Lists stay text here. */
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const changed = Object.keys(draft).length > 0;
@@ -80,9 +88,16 @@ export function TelegramSettingsPanel({
     save.mutate(values, { onSuccess: () => setDraft({}) });
   };
 
-  const label = (key: string) => t(`channels.settings.option.${key}.label`);
-  const help = (key: string) => t(`channels.settings.option.${key}.help`);
-  const choice = (key: string, value: string) => t(`channels.settings.choice.${key}.${value}`);
+  /** The platform's own words for a key where they differ, the shared ones otherwise. */
+  const words = (key: string): string => {
+    const own = `channels.settings.platform.${platform}.${key}`;
+    const text = t(own);
+    return text === own ? t(`channels.settings.${key}`) : text;
+  };
+  const label = (key: string) => words(`option.${key}.label`);
+  const help = (key: string) => words(`option.${key}.help`);
+  const choice = (key: string, value: string) => words(`choice.${key}.${value}`);
+  const ids = (key: string) => `${platform}-${key}`;
 
   /** "Default: on" — in words for the person, not the file's. */
   const defaultText = (option: ChannelSetting): string => {
@@ -110,7 +125,7 @@ export function TelegramSettingsPanel({
   };
 
   const control = (option: ChannelSetting) => {
-    const testId = `telegram-setting-${option.key}`;
+    const testId = ids(`setting-${option.key}`);
     const hint = (
       <span className="flex flex-col gap-0.5">
         <span>{help(option.key)}</span>
@@ -167,7 +182,7 @@ export function TelegramSettingsPanel({
                 {...(option.max !== null ? { max: option.max } : {})}
                 placeholder={
                   option.kind === 'list'
-                    ? t('channels.settings.list_placeholder')
+                    ? words('list_placeholder')
                     : option.default !== null
                       ? String(option.default)
                       : ''
@@ -188,10 +203,14 @@ export function TelegramSettingsPanel({
   return (
     <section
       className="flex flex-col gap-4 rounded-md border border-border p-4"
-      data-testid="telegram-settings"
+      data-testid={ids('settings')}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-base font-semibold">{t('channels.settings.title')}</h3>
+        <h3 className="text-base font-semibold">
+          {platform === 'telegram'
+            ? t('channels.settings.title')
+            : t('channels.settings.title_of', { name })}
+        </h3>
         <span className="text-xs text-muted">
           {gateway?.applies === 'now'
             ? t('channels.settings.applies_now')
@@ -212,12 +231,10 @@ export function TelegramSettingsPanel({
             <fieldset
               key={section}
               className="flex flex-col gap-3"
-              data-testid={`telegram-settings-${section}`}
+              data-testid={ids(`settings-${section}`)}
             >
-              <legend className="mb-1 text-sm font-semibold">
-                {t(`channels.settings.section.${section}`)}
-              </legend>
-              {section === 'media' && (
+              <legend className="mb-1 text-sm font-semibold">{words(`section.${section}`)}</legend>
+              {options.some((option) => option.shared) && (
                 <p className="text-xs text-muted">{t('channels.settings.media_note')}</p>
               )}
               {options.map((option) => (
@@ -225,7 +242,7 @@ export function TelegramSettingsPanel({
                   {control(option)}
                   <span className="flex flex-wrap items-center gap-2">
                     {option.shared && (
-                      <Badge tone="warning" testId={`telegram-setting-shared-${option.key}`}>
+                      <Badge tone="warning" testId={ids(`setting-shared-${option.key}`)}>
                         {t('channels.settings.shared')}
                       </Badge>
                     )}
@@ -233,7 +250,7 @@ export function TelegramSettingsPanel({
                       <Button
                         size="sm"
                         variant="ghost"
-                        data-testid={`telegram-setting-reset-${option.key}`}
+                        data-testid={ids(`setting-reset-${option.key}`)}
                         onClick={() => set(option.key, null)}
                       >
                         {t('channels.settings.reset')}
@@ -247,12 +264,12 @@ export function TelegramSettingsPanel({
         })}
       {save.isError && !fieldError('') && (
         <Notice tone="danger">
-          <span data-testid="telegram-settings-error">{describeError(save.error, t)}</span>
+          <span data-testid={ids('settings-error')}>{describeError(save.error, t)}</span>
         </Notice>
       )}
       {save.isSuccess && !changed && (
         <Notice tone="success">
-          <span data-testid="telegram-settings-saved">
+          <span data-testid={ids('settings-saved')}>
             {gateway?.applies === 'now'
               ? t('channels.settings.saved_now')
               : t('channels.settings.saved_restart')}
@@ -265,7 +282,7 @@ export function TelegramSettingsPanel({
         </Button>
         <Button
           disabled={!changed || save.isPending}
-          data-testid="telegram-settings-save"
+          data-testid={ids('settings-save')}
           onClick={submit}
         >
           {t('common.save')}

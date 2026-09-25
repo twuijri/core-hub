@@ -1744,3 +1744,43 @@ because the hub had no multipart reader where the models module could use it. It
 Rejected: a streaming transcription socket (no provider in the catalogue streams through an
 OpenAI-shaped surface, and the phones do not need it yet); storing the recording as an
 attachment first (a dictation is not a file of the conversation, and would outlive the words).
+
+## 64. Messaging platforms are declared once; linking one is its credentials, checked where the platform can say
+
+2026-09-25, the owner: link more messaging platforms from the Channels page, like Telegram (§41).
+Proposed here — owner to confirm:
+
+- **`agents.listChannelPlatforms`** (`GET /agents/{agent_id}/channel-platforms` →
+  `ChannelPlatformList`) is the hub's catalog: for each platform its `login` (`qr`, `token`,
+  `credentials`), the `credentials` it takes keyed by the environment variable Hermes reads,
+  the allowlist variable, and flags a client needs to draw the dialog honestly — `validates`
+  (the hub asks the platform first), `pairs` (linking switches pairing on), `allowlist`
+  (Hermes drops strangers, so nobody is answered until listed), `settings`, `exclusive`,
+  `packages` (`image`, `first_use`, `none`), `inbound` (needs a public address). Labels and
+  setup steps are the client's, keyed by platform and variable, as §41 does for settings.
+  `support: full` platforms (Telegram, WhatsApp, Discord, Slack, Matrix, Mattermost, Email) are
+  checked, named and have settings; `generic` ones are stored as given.
+- **`agents.linkChannel` takes `credentials`** beside Telegram's `token` (`ChannelTokenLink`:
+  `token` is no longer required; one of the two is). Refusals are named:
+  `credentials_invalid` (a required variable missing, a wrong shape or an unknown one;
+  `details.field = credentials.<KEY>`), `credentials_rejected` (the platform refused;
+  `details.field`, `details.platform` and its words in `details.message`),
+  `platform_unreachable` (`503`, `details.platform`), and §41's `token_in_use` with
+  `details.platform` for the platforms one process may hold. `allowed_users` items are the
+  platform's own ids (`^[^,\s]{1,320}$`), checked per platform by the hub.
+- **`Channel.login` gains `credentials`**, and `ChannelLink` covers these platforms: the account
+  the platform named when it was linked (`account_username` is the handle without an @: the
+  Discord, Slack or Mattermost bot's user name, the Matrix user id; for Email `account_name` is
+  the address). A variable replaced by hand is never named after the account it replaced: the
+  hub's note is kept with a digest of the credentials and used only while they match.
+- **`agents.unlinkChannel` and the settings operations** cover them: unlink removes the variables
+  the platform declares and switches the channel off, keeping the allowlist and the settings;
+  `getChannelSettings` / `updateChannelSettings` describe Discord's, Slack's, Matrix's,
+  Mattermost's and Email's options with §41's `ChannelSetting` shape, and the same `key` means
+  the same thing on every platform.
+
+Rejected: a schema per platform in the contract (Hermes adds platforms and variables between
+releases; §41's reasoning); letting the hub create Discord or Slack apps (their consoles require
+the person's own account); and pretending Discord and Email pair — Hermes's adapters drop a
+stranger there before the gateway could send a code, so the client asks for the allowlist up
+front instead.

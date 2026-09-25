@@ -955,6 +955,35 @@ const scriptedTelegram: typeof fetch = async (input) => {
   return json(401, { ok: false, error_code: 401, description: 'Unauthorized' });
 };
 
+/**
+ * Discord's API as linking asks it (journey 41), scripted: one token belongs to the bot
+ * @corehub_discord, any other is refused as Discord refuses it (`401: Unauthorized`).
+ */
+const E2E_DISCORD_TOKEN = 'fake-discord-token-for-e2e-only-000000000000000000000000000000001';
+const scriptedPlatforms: typeof fetch = async (input, init) => {
+  const url = String(input instanceof Request ? input.url : input);
+  const auth = new Headers(init?.headers).get('authorization');
+  const json = (status: number, value: unknown) =>
+    new Response(JSON.stringify(value), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+  // Discord's `users/@me`, the one question linking asks it.
+  if (
+    url.startsWith('https://discord.com/') &&
+    url.endsWith('@me') &&
+    auth === `Bot ${E2E_DISCORD_TOKEN}`
+  ) {
+    return json(200, {
+      id: '1234567890123456789',
+      username: 'corehub_discord',
+      global_name: 'مساعد ديسكورد',
+      bot: true,
+    });
+  }
+  return json(401, { message: '401: Unauthorized', code: 0 });
+};
+
 overrideAgents({
   pathValue: path.join(dataDir, 'no-such-bin'),
   installer: e2eInstaller,
@@ -963,6 +992,7 @@ overrideAgents({
   hermesCli: scriptedPlugins.cli,
   pairingPollMs: 700,
   telegramFetch: scriptedTelegram,
+  channelProbe: { fetchImpl: scriptedPlatforms },
 });
 
 /**

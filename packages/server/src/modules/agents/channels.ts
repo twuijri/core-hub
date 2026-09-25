@@ -18,12 +18,10 @@
  * guessing either.
  */
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
-  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -31,6 +29,17 @@ import {
 import path from 'node:path';
 import { isMap, parseDocument, type Document } from 'yaml';
 import { CONFIG_FILE, STORED } from './mcp.js';
+import { ChannelError, readEnv, writeEnvValue } from './profile-env.js';
+import {
+  PLATFORMS,
+  credentialLink,
+  credentialPlatform,
+  credentialsPresent,
+  unlinkCredentials,
+  type PlatformSpec,
+} from './channel-platforms.js';
+
+export { ChannelError, readEnv, writeEnvValue };
 
 const BLOCK = 'platforms';
 const NAME = /^[a-z0-9_-]{1,40}$/;
@@ -67,6 +76,9 @@ const CREDENTIAL = new Set([
   'app_id',
   'encrypt_key',
   'verification_token',
+  'password',
+  'secret',
+  'api_key',
 ]);
 
 export type FieldKind = 'secret' | 'boolean' | 'text';
@@ -104,13 +116,6 @@ export interface Channel {
   fields: ChannelField[];
   /** Set for WhatsApp (its session) and Telegram (its bot), read from the profile's own files. */
   link: ChannelLink | null;
-}
-
-export class ChannelError extends Error {
-  constructor(readonly reason: string) {
-    super(reason);
-    this.name = 'ChannelError';
-  }
 }
 
 function load(home: string): Document {
@@ -186,6 +191,12 @@ export function listChannels(home: string): Channel[] {
   // names it (Hermes enables the platform from the variable alone).
   const telegram = telegramLink(home, nodes.telegram, env);
   if (!nodes.telegram && telegram.linked) nodes.telegram = {};
+  // And every platform linked by its variables (`channel-platforms.ts`).
+  for (const spec of PLATFORMS) {
+    if (spec.login === 'credentials' && !nodes[spec.platform] && credentialsPresent(spec, env)) {
+      nodes[spec.platform] = {};
+    }
+  }
   return Object.entries(nodes)
     .map(([platform, node]) => {
       const fields = fieldsOf(node);
@@ -209,12 +220,36 @@ export function listChannels(home: string): Channel[] {
           link: telegram,
         };
       }
+      // A node with nothing but `enabled` is a platform somebody turned on and never
+      // told how to sign in; saying it is configured would be a lie the agent finds out.
+      const filled = fields.some((field) => field.value !== null && field.value !== '');
+      const spec = credentialPlatform(platform);
+      if (spec) {
+        const present = credentialsPresent(spec, env);
+        const link = credentialLink(home, spec, env);
+        // Signed in by hand in the file counts too (Hermes reads a `token` there); a setting does not.
+        const signedIn = fields.some((field) => field.kind === 'secret' && field.value === STORED);
+        return {
+          platform,
+          // Hermes's rule for a platform whose credentials are in the environment
+          // (`gateway/config_env.py` §_enable_from_env): on unless the file says `enabled: false`.
+          enabled: present ? node.enabled !== false : node.enabled !== false && signedIn,
+          configured: present || signedIn,
+          exclusive: spec.exclusive || (EXCLUSIVE as readonly string[]).includes(platform),
+          fields,
+          link: {
+            linked: present || signedIn,
+            accountId: link.accountId,
+            accountName: link.accountName,
+            accountPhone: null,
+            accountUsername: link.accountUsername,
+          },
+        };
+      }
       return {
         platform,
         enabled: node.enabled !== false,
-        // A node with nothing but `enabled` is a platform somebody turned on and never
-        // told how to sign in; saying it is configured would be a lie the agent finds out.
-        configured: fields.some((field) => field.value !== null && field.value !== ''),
+        configured: filled,
         exclusive: (EXCLUSIVE as readonly string[]).includes(platform),
         fields,
         link: null,
@@ -454,67 +489,6 @@ export function unlinkTelegram(home: string): Channel {
   return written;
 }
 
-// ------------------------------------------------------------------ .env
-
-/**
- * The profile's `.env`, read the way python-dotenv reads it for the lines Hermes writes:
- * `KEY=value`, an optional `export `, quotes stripped. Comments and blank lines skipped.
- */
-export function readEnv(home: string): Record<string, string> {
-  const file = path.join(home, '.env');
-  const out: Record<string, string> = {};
-  let text: string;
-  try {
-    text = readFileSync(file, 'utf8');
-  } catch {
-    return out;
-  }
-  for (const line of text.split(/\r?\n/)) {
-    const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
-    if (!match) continue;
-    let value = match[2]!.trim();
-    if (
-      value.length >= 2 &&
-      ((value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'")))
-    ) {
-      value = value.slice(1, -1);
-    }
-    out[match[1]!] = value;
-  }
-  return out;
-}
-
-/**
- * Sets one variable of the profile's `.env` (or removes it, for `null`), every other line
- * as it was. Written to a temporary file and renamed, mode 0600, the way Hermes writes it.
- */
-export function writeEnvValue(home: string, key: string, value: string | null): void {
-  const file = path.join(home, '.env');
-  const existing = existsSync(file) ? readFileSync(file, 'utf8') : '';
-  const pattern = new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=`);
-  const lines = existing === '' ? [] : existing.replace(/\n$/, '').split('\n');
-  let found = false;
-  const next: string[] = [];
-  for (const line of lines) {
-    if (!pattern.test(line)) {
-      next.push(line);
-      continue;
-    }
-    if (found || value === null) continue;
-    found = true;
-    next.push(`${key}=${value}`);
-  }
-  if (!found && value !== null) next.push(`${key}=${value}`);
-  const text = next.length > 0 ? `${next.join('\n')}\n` : '';
-  if (text === existing) return;
-  mkdirSync(home, { recursive: true });
-  const temp = `${file}.corehub-${process.pid}.tmp`;
-  writeFileSync(temp, text, { mode: 0o600 });
-  chmodSync(temp, 0o600);
-  renameSync(temp, file);
-}
-
 export function getChannel(home: string, platform: string): Channel | null {
   return listChannels(home).find((channel) => channel.platform === platform) ?? null;
 }
@@ -628,6 +602,34 @@ export function unlinkWhatsApp(home: string): Channel {
   save(home, doc);
   writeEnvValue(home, 'WHATSAPP_ENABLED', null);
   const written = getChannel(home, 'whatsapp');
+  if (!written) throw new ChannelError('channel_write_failed');
+  return written;
+}
+
+// ------------------------------------------------------------------ linked by credentials
+
+/**
+ * Forgets a platform linked by its variables: they leave `.env` (`unlinkCredentials`), a
+ * credential written into the file by hand leaves the file, and the channel is switched off. The
+ * allowlist and the settings stay.
+ */
+export function unlinkPlatform(home: string, spec: PlatformSpec): Channel {
+  unlinkCredentials(home, spec);
+  const doc = load(home);
+  const node = doc.toJS()?.[BLOCK]?.[spec.platform] as Record<string, unknown> | undefined;
+  if (node) {
+    for (const key of Object.keys(node)) {
+      if (CREDENTIAL.has(key)) doc.deleteIn([BLOCK, spec.platform, key]);
+    }
+    const extra = node.extra;
+    if (extra && typeof extra === 'object' && !Array.isArray(extra)) {
+      for (const key of Object.keys(extra as Record<string, unknown>)) {
+        if (CREDENTIAL.has(key)) doc.deleteIn([BLOCK, spec.platform, 'extra', key]);
+      }
+    }
+    save(home, doc);
+  }
+  const written = getChannel(home, spec.platform);
   if (!written) throw new ChannelError('channel_write_failed');
   return written;
 }

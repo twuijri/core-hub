@@ -60,7 +60,24 @@ import { HermesDashboard, type DashboardSpawner } from './hermes-dashboard.js';
 import { QR_PLATFORMS, pairWhatsApp, testMcpServer, type HermesApiCall } from './hermes-tools.js';
 import { namedHermesProfiles } from './hermes-profiles.js';
 import { telegramGetMe } from './telegram-api.js';
-import { SettingError, readTelegramSettings, writeTelegramSettings } from './telegram-settings.js';
+import { TELEGRAM_OPTIONS } from './telegram-settings.js';
+import {
+  SettingError,
+  readChannelSettings,
+  writeChannelSettings,
+  type OptionSpec,
+} from './channel-settings.js';
+import {
+  CredentialError,
+  PLATFORMS,
+  checkCredentials,
+  credentialPlatform,
+  identityValue,
+  linkCredentials,
+  platformSpec,
+  type PlatformSpec,
+} from './channel-platforms.js';
+import { probePlatform, type ProbeOptions } from './channel-validate.js';
 import { HermesSettingError, readHermesSettings, writeHermesSettings } from './hermes-settings.js';
 import {
   PendingWriteError,
@@ -95,6 +112,8 @@ import {
   unlinkWhatsApp,
   linkTelegram,
   unlinkTelegram,
+  unlinkPlatform,
+  readEnv,
   telegramToken,
   TELEGRAM_TOKEN,
   whatsappLink,
@@ -254,6 +273,11 @@ export interface AgentsOverrides {
   pairingPollMs?: number;
   /** Telegram's Bot API as linking asks it (`getMe`), scripted — for the tests and the e2e hub. */
   telegramFetch?: typeof fetch;
+  /**
+   * How linking asks the other platforms who an account is (`channel-validate.ts`), scripted —
+   * for the tests and the e2e hub.
+   */
+  channelProbe?: ProbeOptions;
 }
 
 /** Platforms linked by pasting a bot token (`agents.linkChannel`). */
@@ -277,6 +301,37 @@ function telegramTokenOwner(root: string, home: string, token: string): string |
     if (telegramToken(other) === token) return name;
   }
   return null;
+}
+
+/**
+ * The profile other than `home`'s that already holds this account of `spec`, for the platforms
+ * Hermes lets one process hold (Discord, Slack, …): Hermes refuses a second holder at start, in
+ * its own words; saying which profile has it before anything is written is the kinder answer.
+ */
+function accountOwner(
+  root: string,
+  home: string,
+  spec: PlatformSpec,
+  value: string,
+): string | null {
+  const homes: Array<[string, string]> = [
+    ['default', root],
+    ...namedHermesProfiles(root).map((name): [string, string] => [
+      name,
+      path.join(root, 'profiles', name),
+    ]),
+  ];
+  for (const [name, other] of homes) {
+    if (path.resolve(other) === path.resolve(home)) continue;
+    if (identityValue(spec, readEnv(other)) === value) return name;
+  }
+  return null;
+}
+
+/** A channel's own options: Telegram's (#97), then each full platform's (`channel-platforms.ts`). */
+function settingsOf(platform: string): readonly OptionSpec[] | null {
+  if (platform === 'telegram') return TELEGRAM_OPTIONS;
+  return platformSpec(platform)?.settings ?? null;
 }
 
 let pendingOverrides: AgentsOverrides | null = null;
@@ -305,6 +360,8 @@ interface AgentsContext {
   pairingPollMs: number;
   /** How linking asks Telegram who a bot is. */
   telegramFetch: typeof fetch;
+  /** How linking asks the other platforms who an account is. */
+  channelProbe: ProbeOptions;
 }
 
 /**
@@ -520,6 +577,7 @@ function contextOf(app: FastifyInstance): AgentsContext {
     },
     pairingPollMs: own.pairingPollMs ?? 1000,
     telegramFetch: own.telegramFetch ?? fetch,
+    channelProbe: own.channelProbe ?? {},
   };
   contexts.set(hub.io, created);
   return created;
@@ -1382,7 +1440,9 @@ export const agentsModule = defineModule({
         ? 'qr'
         : (TOKEN_PLATFORMS as readonly string[]).includes(channel.platform)
           ? 'token'
-          : null,
+          : credentialPlatform(channel.platform)
+            ? 'credentials'
+            : null,
       link: channel.link
         ? {
             linked: channel.link.linked,
@@ -1427,6 +1487,39 @@ export const agentsModule = defineModule({
           request.log.warn({ err: error, profile }, 'agents: a profile gateway did not follow');
         });
     };
+
+    /** Every platform the hub links, and what each takes (`channel-platforms.ts`). */
+    defineRoute(app, deps, {
+      operationId: 'agents.listChannelPlatforms',
+      handler: (request, { params }) => {
+        toolHome(request, params.agent_id as string);
+        const order = { full: 0, generic: 1 } as const;
+        return {
+          items: [...PLATFORMS]
+            .sort((a, b) => order[a.support] - order[b.support])
+            .map((spec) => ({
+              platform: spec.platform,
+              label: spec.label,
+              support: spec.support,
+              login: spec.login,
+              credentials: spec.credentials.map((credential) => ({
+                key: credential.key,
+                kind: credential.kind,
+                required: credential.required,
+              })),
+              allowed_users_key: spec.allowedUsers?.key ?? null,
+              validates: spec.validates,
+              pairs: spec.pairs,
+              allowlist: spec.allowlist,
+              settings: settingsOf(spec.platform) !== null,
+              exclusive: spec.exclusive,
+              packages: spec.packages,
+              inbound: spec.inbound,
+              docs_url: spec.docsUrl,
+            })),
+        };
+      },
+    });
 
     defineRoute(app, deps, {
       operationId: 'agents.listChannels',
@@ -1509,6 +1602,21 @@ export const agentsModule = defineModule({
           request.log.info({ profile }, 'agents: Telegram unlinked');
           return toChannel(channel, channelStatus(request, profile, channel));
         }
+        const spec = credentialPlatform(platform);
+        if (spec) {
+          const current = listChannels(home).find((entry) => entry.platform === platform);
+          if (!current?.link?.linked) {
+            throw new HubError('state_invalid', {
+              details: { agent_id: agentId, platform, reason: 'not_linked' },
+            });
+          }
+          // Held down while the credentials go, so the account stops answering now.
+          const channel = await contextOf(request.server).runtime.withGatewayStopped(profile, () =>
+            unlinkPlatform(home, spec),
+          );
+          request.log.info({ profile, platform }, 'agents: channel unlinked');
+          return toChannel(channel, channelStatus(request, profile, channel));
+        }
         if (platform !== 'whatsapp') {
           throw new HubError('state_invalid', {
             details: { agent_id: agentId, platform, reason: 'unlink_not_supported' },
@@ -1532,6 +1640,93 @@ export const agentsModule = defineModule({
     });
 
     /**
+     * Link a platform by its variables (`channel-platforms.ts`): each checked against what the
+     * platform declares, the platform asked who the account is where it can be
+     * (`channel-validate.ts`), then written to the profile's own `.env`, the channel switched on,
+     * the gateway following. Nothing is written before every check has passed.
+     */
+    const linkByCredentials = async (
+      request: FastifyRequest,
+      agentId: string,
+      home: string,
+      profile: string,
+      spec: PlatformSpec,
+      body: unknown,
+    ) => {
+      // The same rule as WhatsApp's pairing: only a Hermes this hub runs has a gateway to answer.
+      hermesApiOf(request, agentId);
+      const input = (body ?? {}) as {
+        credentials?: Record<string, unknown>;
+        allowed_users?: string[];
+      };
+      let values: Record<string, string | null>;
+      try {
+        values = checkCredentials(spec, input.credentials ?? {});
+      } catch (error) {
+        if (error instanceof CredentialError) {
+          throw new HubError('validation_failed', {
+            details: {
+              field: `credentials.${error.field}`,
+              reason: 'credentials_invalid',
+              platform: spec.platform,
+              message: error.reason,
+            },
+          });
+        }
+        throw error;
+      }
+      let allowed: string[] | undefined;
+      if (input.allowed_users !== undefined) {
+        allowed = [...new Set(input.allowed_users.map((id) => id.trim()).filter(Boolean))];
+        const item = spec.allowedUsers?.item;
+        const bad = allowed.find((entry) => (item ? !item.test(entry) : true));
+        if (bad !== undefined) {
+          throw new HubError('validation_failed', {
+            details: {
+              field: 'allowed_users',
+              reason: 'credentials_invalid',
+              platform: spec.platform,
+            },
+          });
+        }
+      }
+      const context = contextOf(request.server);
+      const root = context.runtime.status().home;
+      const account = identityValue(
+        spec,
+        Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value ?? ''])),
+      );
+      if (root && spec.exclusive && account) {
+        const owner = accountOwner(root, home, spec, account);
+        if (owner) {
+          throw new HubError('conflict', {
+            details: {
+              agent_id: agentId,
+              platform: spec.platform,
+              reason: 'token_in_use',
+              profile: owner,
+            },
+          });
+        }
+      }
+      const identity = await probePlatform(spec, values, context.channelProbe);
+      let channel: Channel | undefined;
+      try {
+        linkCredentials(home, spec, { values, allowedUsers: allowed, identity });
+        channel = listChannels(home).find((entry) => entry.platform === spec.platform);
+      } catch (error) {
+        return channelFault(error);
+      }
+      if (!channel) return channelFault(new ChannelError('channel_write_failed'));
+      request.log.info(
+        { profile, platform: spec.platform, checked: identity !== null },
+        'agents: channel linked',
+      );
+      followChannels(request, profile);
+      return toChannel(channel, channelStatus(request, profile, channel));
+    };
+
+    /**
      * Link Telegram by a bot token: shape checked, Telegram asked who the bot is, the token
      * into the profile's own `.env`, the channel on with pairing, the gateway following.
      */
@@ -1541,6 +1736,8 @@ export const agentsModule = defineModule({
         const agentId = params.agent_id as string;
         const platform = params.platform as string;
         const { home, profile } = toolHome(request, agentId);
+        const spec = credentialPlatform(platform);
+        if (spec) return linkByCredentials(request, agentId, home, profile, spec, body);
         if (!(TOKEN_PLATFORMS as readonly string[]).includes(platform)) {
           throw new HubError('state_invalid', {
             details: { agent_id: agentId, platform, reason: 'link_not_supported' },
@@ -1549,7 +1746,7 @@ export const agentsModule = defineModule({
         // The same rule as WhatsApp's pairing: only a Hermes this hub runs has a gateway to
         // answer on the bot.
         hermesApiOf(request, agentId);
-        const input = body as { token: string; allowed_users?: string[] };
+        const input = body as { token?: string; allowed_users?: string[] };
         const token = String(input.token ?? '').trim();
         if (!TELEGRAM_TOKEN.test(token)) {
           throw new HubError('validation_failed', {
@@ -1589,21 +1786,22 @@ export const agentsModule = defineModule({
      */
     const settingsTarget = (request: FastifyRequest, agentId: string, platform: string) => {
       const target = toolHome(request, agentId);
-      if (platform !== 'telegram') {
+      const options = settingsOf(platform);
+      if (!options) {
         throw new HubError('state_invalid', {
           details: { agent_id: agentId, platform, reason: 'settings_not_supported' },
         });
       }
-      return target;
+      return { ...target, options };
     };
 
     defineRoute(app, deps, {
       operationId: 'agents.getChannelSettings',
       handler: (request, { params }) => {
         const platform = params.platform as string;
-        const { home } = settingsTarget(request, params.agent_id as string, platform);
+        const { home, options } = settingsTarget(request, params.agent_id as string, platform);
         try {
-          return { platform, options: readTelegramSettings(home) };
+          return { platform, options: readChannelSettings(home, options) };
         } catch (error) {
           return channelFault(error);
         }
@@ -1614,11 +1812,12 @@ export const agentsModule = defineModule({
       operationId: 'agents.updateChannelSettings',
       handler: (request, { params, body }) => {
         const platform = params.platform as string;
-        const { home, profile } = settingsTarget(request, params.agent_id as string, platform);
+        const target = settingsTarget(request, params.agent_id as string, platform);
+        const { home, profile } = target;
         const values = (body as { values: Record<string, unknown> }).values;
         let options;
         try {
-          options = writeTelegramSettings(home, values);
+          options = writeChannelSettings(home, platform, target.options, values);
         } catch (error) {
           if (error instanceof SettingError) {
             throw new HubError('validation_failed', {
