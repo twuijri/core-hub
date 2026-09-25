@@ -196,9 +196,7 @@ describe('the files a run changed', () => {
       expect(
         (await get(h.app, `/sessions/${id}/runs/${runId}/changes/diff?path=nope.txt`)).statusCode,
       ).toBe(404);
-      expect((await get(h.app, `/sessions/${id}/runs/${runId}/changes/diff`)).statusCode).toBe(
-        400,
-      );
+      expect((await get(h.app, `/sessions/${id}/runs/${runId}/changes/diff`)).statusCode).toBe(400);
       // Another profile sees neither the list nor the diff.
       expect((await get(h.app, `/sessions/${id}/changes`, 'other')).statusCode).toBeOneOf([
         403, 404,

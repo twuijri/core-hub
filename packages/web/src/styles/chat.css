@@ -1246,6 +1246,180 @@ summary.tool-head:hover {
   list-style: disc;
 }
 
+/* ------------------------------------------------------------- the files a run changed
+   Decision §49: the card under a run's last reply, and the diff in the file panel. Paths,
+   counts and code are left to right inside any page; the sentence around them is not. */
+.run-changes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-1);
+  max-inline-size: 36rem;
+  padding: var(--ch-space-2);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-surface);
+  font-size: var(--ch-font-size-sm);
+}
+.run-changes-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--ch-space-2);
+  padding-inline: var(--ch-space-1);
+  font-weight: 500;
+}
+.run-changes-list {
+  display: flex;
+  flex-direction: column;
+}
+.run-change {
+  display: flex;
+  inline-size: 100%;
+  align-items: center;
+  gap: var(--ch-space-2);
+  padding: var(--ch-space-1);
+  border-radius: var(--ch-radius-sm);
+  color: var(--ch-color-text);
+  text-align: start;
+}
+button.run-change {
+  cursor: pointer;
+}
+button.run-change:hover,
+button.run-change:focus-visible {
+  background: var(--ch-color-surface-2);
+}
+.run-change-kind {
+  flex-shrink: 0;
+  min-inline-size: 3.5rem;
+  padding-inline: var(--ch-space-1);
+  border-radius: var(--ch-radius-sm);
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text-muted);
+  font-size: var(--ch-font-size-xs);
+  text-align: center;
+}
+.run-change-kind[data-change='added'] {
+  background: var(--ch-color-success-soft);
+  color: var(--ch-color-success-soft-text);
+}
+.run-change-kind[data-change='deleted'] {
+  background: var(--ch-color-danger-soft);
+  color: var(--ch-color-danger-soft-text);
+}
+.run-change-path {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-font-size-xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  unicode-bidi: isolate;
+}
+.run-change-counts {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: var(--ch-space-1);
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-font-size-xs);
+  unicode-bidi: isolate;
+}
+.run-change-add {
+  color: var(--ch-color-success-soft-text);
+}
+.run-change-del {
+  color: var(--ch-color-danger-soft-text);
+}
+.run-change-binary {
+  flex-shrink: 0;
+  color: var(--ch-color-text-faint);
+  font-size: var(--ch-font-size-xs);
+}
+.run-changes-more {
+  align-self: flex-start;
+  padding: var(--ch-space-1);
+  border-radius: var(--ch-radius-sm);
+  color: var(--ch-color-accent);
+  font-size: var(--ch-font-size-xs);
+  cursor: pointer;
+}
+.run-changes-more:hover {
+  background: var(--ch-color-accent-soft);
+}
+.run-changes-note,
+.diff-note {
+  padding-inline: var(--ch-space-1);
+  color: var(--ch-color-text-muted);
+  font-size: var(--ch-font-size-xs);
+}
+
+.diff-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-1);
+  overflow: auto;
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-code-bg);
+}
+.diff-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  color: var(--ch-color-code-text);
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-font-size-xs);
+  line-height: 1.5;
+}
+.diff-hunk td {
+  padding: var(--ch-space-1) var(--ch-space-2);
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text-muted);
+  white-space: pre;
+}
+.diff-num {
+  inline-size: 1%;
+  padding-inline: var(--ch-space-2);
+  color: var(--ch-color-text-faint);
+  text-align: end;
+  vertical-align: top;
+  white-space: nowrap;
+  user-select: none;
+}
+.diff-code {
+  padding-inline-end: var(--ch-space-3);
+  text-align: start;
+  white-space: pre;
+}
+.diff-table[data-split='true'] .diff-half {
+  inline-size: 50%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.diff-sign {
+  display: inline-block;
+  inline-size: 1.25em;
+  color: var(--ch-color-text-faint);
+  user-select: none;
+}
+.diff-line[data-kind='add'],
+.diff-half[data-kind='add'] {
+  background: var(--ch-color-success-soft);
+  color: var(--ch-color-success-soft-text);
+}
+.diff-line[data-kind='del'],
+.diff-half[data-kind='del'] {
+  background: var(--ch-color-danger-soft);
+  color: var(--ch-color-danger-soft-text);
+}
+.diff-line[data-kind='note'] {
+  color: var(--ch-color-text-faint);
+  font-style: italic;
+}
+.diff-half[data-kind='empty'] {
+  background: var(--ch-color-surface-2);
+}
+
 /* On a phone the pane is the whole screen: a file is read, then closed back to the chat. */
 @media (max-width: 767px) {
   [data-testid='split-pane'] {

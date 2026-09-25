@@ -28,6 +28,10 @@ const DYNAMIC: Record<string, string[]> = {
     'disabled',
   ],
   approval: ['once', 'session', 'always', 'deny'],
+  // `files/RunChangesCard.tsx`: every plural category Arabic and English select, and the kinds.
+  'changes.summary': ['zero', 'one', 'two', 'few', 'many', 'other'],
+  'changes.kind': ['added', 'modified', 'deleted', 'renamed'],
+  'diff.state': ['available', 'binary', 'too_large', 'unavailable'],
   'devices.pairing': ['expired', 'cancelled'],
   'display.glass': ['0', '1', '2', '3'],
   'display.theme': ['system', 'light', 'dark'],

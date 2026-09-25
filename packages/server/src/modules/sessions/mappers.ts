@@ -17,14 +17,7 @@
  *   (contract `MessageRole`).
  */
 import type { UsageTotals } from '../audit/index.js';
-import type {
-  approvals,
-  messages,
-  runFileChanges,
-  runs,
-  sessions,
-  toolCalls,
-} from './schema.js';
+import type { approvals, messages, runFileChanges, runs, sessions, toolCalls } from './schema.js';
 
 export type SessionRow = typeof sessions.$inferSelect;
 export type MessageRow = typeof messages.$inferSelect;

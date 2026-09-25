@@ -63,6 +63,7 @@ import { WorkingDirPicker } from './WorkingDirPicker.js';
 import { SessionFilesProvider } from '../files/context.js';
 import { FilesButton } from '../files/FilesList.js';
 import { filesRevisionOf } from '../files/kinds.js';
+import { changesRevisionOf } from '../files/changes.js';
 import { ProfileBadge } from '../shell/ProfileBadge.js';
 import { useManyProfiles, useProfileInLink } from '../shell/profiles.js';
 
@@ -249,6 +250,8 @@ export function OpenSession({
     () => filesRevisionOf(state.messages, state.runs),
     [state.messages, state.runs],
   );
+  // The files each run changed are read again when a run ends (files/changes.ts).
+  const changesRevision = useMemo(() => changesRevisionOf(state.runs), [state.runs]);
 
   const agentId = state.session?.agent_id ?? null;
   const agents = useAgents();
@@ -402,7 +405,11 @@ export function OpenSession({
     // The whole width (owner decision, 2026-09-23): the agent's replies reach the left
     // edge and the person's the right, while the composer keeps its reading column.
     // The files open in the frame's split pane, so their provider wraps the whole frame.
-    <SessionFilesProvider sessionId={sessionId} revision={filesRevision}>
+    <SessionFilesProvider
+      sessionId={sessionId}
+      revision={filesRevision}
+      changesRevision={changesRevision}
+    >
       <AppShell title={title}>
         <TabsFrame value={messageCount === 0 ? 'chat' : view} onValueChange={setView}>
           <div

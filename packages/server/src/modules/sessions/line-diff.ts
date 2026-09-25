@@ -148,11 +148,7 @@ export function diffTexts(before: string | null, after: string | null, maxBytes:
       ? [...Array<Op>(midA.length).fill('-'), ...Array<Op>(midB.length).fill('+')]
       : myers(midA, midB, MAX_EDITS);
   if (!middle) return { ...countApart(midA, midB), text: null, truncated: false };
-  const ops: Op[] = [
-    ...Array<Op>(head).fill('='),
-    ...middle,
-    ...Array<Op>(tail).fill('='),
-  ];
+  const ops: Op[] = [...Array<Op>(head).fill('='), ...middle, ...Array<Op>(tail).fill('=')];
   let additions = 0;
   let deletions = 0;
   for (const op of ops) {

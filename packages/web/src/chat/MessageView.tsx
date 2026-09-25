@@ -11,15 +11,17 @@
  * avatar are drawn once, and the gap above a grouped message is the tighter one. That
  * difference in spacing is what makes a turn read as one thing.
  */
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { useI18n } from '../i18n/context.js';
-import type { Message, Run } from '../types.js';
+import type { Message, Run, RunChanges } from '../types.js';
 import { highlightParts, matchRanges } from '../ui/combobox-filter.js';
 import { Avatar } from '../ui/Avatar.js';
 import { Badge } from '../ui/Badge.js';
 import { agentMark } from '../ui/brand/marks.js';
 import { MessageActions } from './MessageActions.js';
 import { useOpenFile, useSessionFilesOptional } from '../files/context.js';
+import { lastReplyOfRuns } from '../files/changes.js';
+import { RunChangesCard } from '../files/RunChangesCard.js';
 import { Markdown } from './Markdown.js';
 import { Reasoning } from './Reasoning.js';
 import { AnsweredQuestions } from './AnsweredQuestions.js';
@@ -107,10 +109,13 @@ export function MessageView({
   markSlug,
   anchored = false,
   mark = null,
+  changes,
   onReply,
   onFork,
 }: {
   message: Message;
+  /** The files this reply's run changed, when it is the run's last reply (decision §49). */
+  changes?: RunChanges | undefined;
   /** Continues the turn above it: no name, no avatar, the tighter gap. */
   grouped?: boolean;
   showReasoning: boolean;
@@ -227,6 +232,7 @@ export function MessageView({
             {text ? <Markdown text={text} mark={mark} /> : null}
           </div>
         )}
+        {changes && !streaming && <RunChangesCard changes={changes} />}
         {message.usage && !streaming && (
           <p className="msg-usage" dir="auto">
             {t('chat.usage', {
@@ -266,6 +272,13 @@ export function Transcript({
   onReply?: ((message: Message) => void) | undefined;
   onFork?: ((message: Message) => void) | undefined;
 }) {
+  const files = useSessionFilesOptional();
+  // A run's "files changed" card goes under its last reply only.
+  const lastReply = useMemo(() => lastReplyOfRuns(turns.map((turn) => turn.message)), [turns]);
+  const changesOf = (message: Message): RunChanges | undefined =>
+    message.run_id && lastReply.get(message.run_id) === message.id
+      ? files?.changes.get(message.run_id)
+      : undefined;
   return (
     <>
       {turns.map((turn) => (
@@ -279,6 +292,7 @@ export function Transcript({
           markSlug={slugOf?.(turn.message.author.id ?? null)}
           anchored={turn.message.id === anchor?.messageId}
           mark={turn.message.id === anchor?.messageId ? anchor.query : null}
+          changes={changesOf(turn.message)}
           onReply={onReply}
           onFork={onFork}
         />

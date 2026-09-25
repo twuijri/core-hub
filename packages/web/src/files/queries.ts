@@ -9,7 +9,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { useAuth } from '../auth/context.js';
-import type { SessionFile, SessionFileList } from '../types.js';
+import type { RunChangesList, RunFileDiff, SessionFile, SessionFileList } from '../types.js';
 
 export const fileKeys = {
   list: (profile: string, sessionId: string) => ['session-files', profile, sessionId] as const,
@@ -110,4 +110,42 @@ export function useSaveFile(sessionId: string) {
     },
     [read],
   );
+}
+
+/**
+ * The runs of the conversation that changed a file, with their files and counts (decision
+ * §49). Read again when a run ends (`revision`, `changesRevisionOf`): the hub records a run's
+ * changes before it says the run ended. The newest 200 runs that changed something are read.
+ */
+export function useSessionChanges(sessionId: string, revision: string) {
+  const { client, profile } = useAuth();
+  return useQuery({
+    queryKey: ['session-changes', profile, sessionId, revision],
+    queryFn: async () => {
+      const res = await client.request('get', '/sessions/{session_id}/changes', {
+        params: { session_id: sessionId },
+        query: { limit: 200 },
+      });
+      return res.data as RunChangesList;
+    },
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** One changed file's diff, as the hub recorded it when the run ended: it never changes. */
+export function useRunDiff(sessionId: string, runId: string, path: string) {
+  const { client, profile } = useAuth();
+  return useQuery({
+    queryKey: ['run-diff', profile, sessionId, runId, path],
+    queryFn: async ({ signal }) => {
+      const res = await client.request('get', '/sessions/{session_id}/runs/{run_id}/changes/diff', {
+        params: { session_id: sessionId, run_id: runId },
+        query: { path },
+        signal,
+      });
+      return res.data as RunFileDiff;
+    },
+    staleTime: Infinity,
+    retry: false,
+  });
 }

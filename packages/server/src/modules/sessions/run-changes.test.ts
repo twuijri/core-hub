@@ -32,7 +32,15 @@ function folder(): string {
 function git(cwd: string, ...args: string[]): string {
   return execFileSync(
     'git',
-    ['-c', 'user.name=t', '-c', 'user.email=t@example.com', '-c', 'init.defaultBranch=main', ...args],
+    [
+      '-c',
+      'user.name=t',
+      '-c',
+      'user.email=t@example.com',
+      '-c',
+      'init.defaultBranch=main',
+      ...args,
+    ],
     { cwd, encoding: 'utf8' },
   );
 }

@@ -305,7 +305,12 @@ class GitTracker implements ChangeTracker {
     // would see: read it as a folder instead.
     const inside = path.relative(topDir, root);
     if (inside !== '' && !inside.startsWith('..')) {
-      const ignored = await call(['check-ignore', '-q', '--', `${inside.split(path.sep).join('/')}/`]);
+      const ignored = await call([
+        'check-ignore',
+        '-q',
+        '--',
+        `${inside.split(path.sep).join('/')}/`,
+      ]);
       if (ignored.code === 0) return null;
     }
     const index = await call(['rev-parse', '--git-path', 'index']);
@@ -343,13 +348,16 @@ class GitTracker implements ChangeTracker {
     }
     const byPath = new Map<string, Candidate>();
     const tokens = split0(names.stdout);
-    for (let i = 0; i < tokens.length; ) {
+    for (let i = 0; i < tokens.length;) {
       const status = tokens[i++] ?? '';
       const letter = status[0];
       if (letter === 'R' || letter === 'C') {
         const oldPath = tokens[i++] ?? '';
         const newPath = tokens[i++] ?? '';
-        byPath.set(newPath, candidate(newPath, letter === 'R' ? oldPath : null, letter === 'R' ? 'renamed' : 'added'));
+        byPath.set(
+          newPath,
+          candidate(newPath, letter === 'R' ? oldPath : null, letter === 'R' ? 'renamed' : 'added'),
+        );
         continue;
       }
       const file = tokens[i++] ?? '';
@@ -358,7 +366,7 @@ class GitTracker implements ChangeTracker {
       byPath.set(file, candidate(file, null, change));
     }
     const numbers = split0(counts.stdout);
-    for (let i = 0; i < numbers.length; ) {
+    for (let i = 0; i < numbers.length;) {
       const [added = '', removed = '', named = ''] = (numbers[i++] ?? '').split('\t');
       let file = named;
       if (named === '') {
@@ -534,7 +542,10 @@ interface Kept {
 }
 
 /** Every regular file under `root`, bounded; `complete` is false when a cap was hit. */
-function readFolder(root: string, caps: ChangeCaps): { files: Map<string, Stat>; complete: boolean } {
+function readFolder(
+  root: string,
+  caps: ChangeCaps,
+): { files: Map<string, Stat>; complete: boolean } {
   const files = new Map<string, Stat>();
   let seen = 0;
   let complete = true;
@@ -685,7 +696,9 @@ class SnapshotTracker implements ChangeTracker {
       candidates.push(this.compare(file, 'deleted', before ?? null, null, false));
     }
     for (const file of modified) {
-      candidates.push(this.compare(file, 'modified', this.kept.get(file) ?? null, readNow(file), true));
+      candidates.push(
+        this.compare(file, 'modified', this.kept.get(file) ?? null, readNow(file), true),
+      );
     }
     for (const file of added) {
       if (renamedTo.has(file)) continue;
@@ -735,7 +748,9 @@ class SnapshotTracker implements ChangeTracker {
       binary: false,
       diffState: counted.text === null ? 'too_large' : 'available',
       produce: async (maxBytes) => {
-        const now = exists ? readSmall(path.join(this.root, file), this.caps.contentMaxBytes) : null;
+        const now = exists
+          ? readSmall(path.join(this.root, file), this.caps.contentMaxBytes)
+          : null;
         if (exists && !now) return null;
         const drawn = diffTexts(oldText, now ? now.toString('utf8') : null, maxBytes);
         return drawn.text === null ? null : { text: drawn.text, truncated: drawn.truncated };
