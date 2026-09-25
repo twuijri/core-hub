@@ -132,7 +132,17 @@ hub.sqlite (package folder): C:\Users\runneradmin\AppData\Local\Packages\Abdulaz
 hub.sqlite in the real %APPDATA%\Core Hub: False
 ```
 
-CI على طلب الدمج: يُضاف بعد اكتماله.
+CI على #151 عند `b7451f66` (كل الفحوص success):
+
+```
+Installers (windows-latest): pass 5m22s  · Installers (ubuntu-latest): pass · Installers (macos-latest): pass
+Lint, typecheck, contracts, client tests, build: pass · Server unit tests (3 shards): pass
+Web smoke journeys: pass · Desktop app smoke: pass · Docker image builds and answers /health: pass
+db:generate + db:migrate: pass · PR adds or updates a change record: pass
+```
+
+بعد دمج origin/main مرة ثانية (#149) أُعيد محليًا: lint وtypecheck وi18n:check (exit 0)، واختبارات
+سطح المكتب (114 ناجحة) و`desktop-surface` في الويب (19 ناجحة).
 
 `publish-release.yml` لم يُشغَّل (يعمل على وسم أو يدويًا فقط، وهذا للمالك).
 
