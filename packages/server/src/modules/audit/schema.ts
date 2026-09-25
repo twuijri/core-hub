@@ -5,7 +5,7 @@
  * Global with a nullable workspace: audit_events, jobs, job_events (a login
  * or a server update has no workspace). Scoped: usage_records, skill_uses.
  * Global: audit_counters. (performance_snapshots was dropped with contract
- * decision §73: Performance is measured when asked, `live.ts`.)
+ * decision §74: Performance is measured when asked, `live.ts`.)
  *
  * Other modules create jobs and usage records only through this module's
  * public API; they store the returned job id on their own rows
