@@ -32,7 +32,9 @@ const eventName = doc.components.schemas.WebhookEventName as Schema & {
 function propertiesOf(schema: Schema, defs: Record<string, Schema>): Record<string, Schema> {
   const ref = schema.$ref as string | undefined;
   if (ref) return propertiesOf(defs[ref.replace('#/$defs/', '')] ?? {}, defs);
-  const merged: Record<string, Schema> = { ...((schema.properties as Record<string, Schema>) ?? {}) };
+  const merged: Record<string, Schema> = {
+    ...((schema.properties as Record<string, Schema>) ?? {}),
+  };
   for (const part of (schema.allOf as Schema[] | undefined) ?? []) {
     Object.assign(merged, propertiesOf(part, defs));
   }
@@ -71,7 +73,7 @@ describe('webhook event catalogue (decision §52)', () => {
     }
   });
 
-  it("points each name at a realtime schema, and each content path at a field of its payload", () => {
+  it('points each name at a realtime schema, and each content path at a field of its payload', () => {
     for (const [name, entry] of Object.entries(catalogue)) {
       const file = path.join(contractsRoot(), 'events', entry.source, `${name}.schema.json`);
       expect(existsSync(file), file).toBe(true);

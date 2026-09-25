@@ -28,6 +28,7 @@
  */
 import type { Namespace, Server as SocketServer, Socket } from 'socket.io';
 import { REALTIME_NAMESPACES } from '../../lib/module.js';
+import { publishToTaps } from '../../lib/realtime.js';
 import { ResumeJournal, type JournalEntry } from './journal.js';
 
 export const SESSIONS_NAMESPACE = REALTIME_NAMESPACES.sessions;
@@ -103,6 +104,7 @@ export class SessionsRealtime {
   emitToProfile(profile: string, event: SessionEventName, payload: unknown): Envelope {
     const envelope = this.envelope(profile, event, payload);
     this.nsp.to(profileRoom(profile)).emit(event, envelope);
+    this.publish(envelope);
     return envelope;
   }
 
@@ -124,6 +126,7 @@ export class SessionsRealtime {
     const envelope = this.envelope(profile, event, payload);
     this.journal.append(sessionId, { seq: envelope.seq, envelope });
     this.nsp.to(profileRoom(profile)).emit(event, envelope);
+    this.publish(envelope);
     return envelope;
   }
 
@@ -140,6 +143,7 @@ export class SessionsRealtime {
     const envelope = this.envelope(profile, event, payload);
     this.journal.append(sessionId, { seq: envelope.seq, envelope });
     this.nsp.to(sessionRoom(sessionId)).emit(event, envelope);
+    this.publish(envelope);
     return envelope;
   }
 
@@ -178,6 +182,17 @@ export class SessionsRealtime {
           reply(ack, { ok: true, replayed: 0, truncated: false });
         },
       );
+    });
+  }
+
+  /** Every event also goes to the hub's listeners (`lib/realtime.ts`, the webhooks). */
+  private publish(envelope: Envelope): void {
+    publishToTaps(this.nsp.server, {
+      namespace: envelope.namespace,
+      event: envelope.event,
+      profile: envelope.profile,
+      ts: envelope.ts,
+      payload: envelope.payload,
     });
   }
 

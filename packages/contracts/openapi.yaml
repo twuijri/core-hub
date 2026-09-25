@@ -18480,35 +18480,65 @@ components:
             ar: 'ينتظر وكيل أو سير عمل موافقة'
             en: An agent or a workflow is waiting for an approval
           content:
-            [approval.title, approval.description, approval.command, approval.choices, approval.response]
+            [
+              approval.title,
+              approval.description,
+              approval.command,
+              approval.choices,
+              approval.response,
+            ]
         approval.resolved:
           source: sessions
           description:
             ar: 'أُجيب طلب موافقة أو انتهت مهلته'
             en: An approval was answered or expired
           content:
-            [approval.title, approval.description, approval.command, approval.choices, approval.response]
+            [
+              approval.title,
+              approval.description,
+              approval.command,
+              approval.choices,
+              approval.response,
+            ]
         task.created:
           source: tasks
           description:
             ar: 'أُضيفت مهمة'
             en: A task was added
           content:
-            [task.title, task.description, task.latest_summary, task.blocked_reason, task.status_reason]
+            [
+              task.title,
+              task.description,
+              task.latest_summary,
+              task.blocked_reason,
+              task.status_reason,
+            ]
         task.moved:
           source: tasks
           description:
             ar: 'انتقلت مهمة بين الأعمدة'
             en: A task changed column
           content:
-            [task.title, task.description, task.latest_summary, task.blocked_reason, task.status_reason]
+            [
+              task.title,
+              task.description,
+              task.latest_summary,
+              task.blocked_reason,
+              task.status_reason,
+            ]
         task.assigned:
           source: tasks
           description:
             ar: 'أُسندت مهمة'
             en: A task was assigned
           content:
-            [task.title, task.description, task.latest_summary, task.blocked_reason, task.status_reason]
+            [
+              task.title,
+              task.description,
+              task.latest_summary,
+              task.blocked_reason,
+              task.status_reason,
+            ]
         schedule_run.completed:
           source: schedules
           description:
