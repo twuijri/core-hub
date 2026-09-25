@@ -143,6 +143,14 @@ turn() { # turn <label> <image model>
     json 'j.items.filter(m=>m.role==="assistant").flatMap(m=>m.content||[]).filter(p=>p.type==="image").length')"
   check "$label: the run succeeded" test "$(hub GET "/sessions/$session/runs/$run_id" | json 'j.status')" = succeeded
   check "$label: the reply carries the picture as an image" test "$images" -ge 1
+  local url
+  url="$(hub GET "/sessions/$session/messages" |
+    json '(j.items.filter(m=>m.role==="assistant").flatMap(m=>m.content||[]).find(p=>p.type==="image")||{}).url||""')"
+  echo "-- the picture, downloaded from the reply: $url --"
+  curl -sS "http://127.0.0.1:$HUB_PORT$url" -H "authorization: Bearer $TOKEN" -o "/tmp/corehub-images-$RUN_ID_SUFFIX.png"
+  file "/tmp/corehub-images-$RUN_ID_SUFFIX.png" 2>/dev/null || head -c 8 "/tmp/corehub-images-$RUN_ID_SUFFIX.png" | od -c | head -1
+  check "$label: the picture on the reply is a PNG" sh -c "head -c 4 /tmp/corehub-images-$RUN_ID_SUFFIX.png | grep -q PNG"
+  rm -f "/tmp/corehub-images-$RUN_ID_SUFFIX.png"
 }
 
 echo

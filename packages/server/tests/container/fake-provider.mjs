@@ -148,7 +148,7 @@ function imagesTurn(body) {
   const deferred = typeof listing === 'string' && listing.includes('image_generate');
   note(
     `   tools offered= ${names.length} image_generate=${names.includes('image_generate')} ` +
-      `deferred image_generate=${deferred}`,
+      `deferred image_generate=${deferred} asked=${JSON.stringify(userParts(body).text.slice(0, 120))}`,
   );
   const messages = Array.isArray(body.messages) ? body.messages : [];
   const toolAnswer = [...messages].reverse().find((m) => m?.role === 'tool');
@@ -160,6 +160,9 @@ function imagesTurn(body) {
     note(`   tool answered= ${said.slice(0, 400)}`);
     return { text: 'Here is the red fox you asked for.' };
   }
+  // Only the person's own request draws; the hub's "Name this conversation" (which reaches
+  // Hermes with the same tools) is answered in words, as any model would.
+  if (/^Name this conversation/.test(userParts(body).text)) return { text: 'A red fox' };
   const drawing = { prompt: 'a red fox in flat style', aspect_ratio: 'square' };
   if (names.includes('image_generate')) {
     return { call: { name: 'image_generate', arguments: drawing } };
