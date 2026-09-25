@@ -13,6 +13,7 @@ import { rehypeFileMentions, type Mention } from '../files/mentions.js';
 import type { SessionFile } from '../types.js';
 
 type Plugins = NonNullable<Options['rehypePlugins']>;
+const NONE: readonly string[] = [];
 const HIGHLIGHT: Plugins[number] = [rehypeHighlight, { detect: false, ignoreMissing: true }];
 
 function textOfChildren(node: ReactNode): string {
@@ -80,18 +81,40 @@ function CodeBlock(props: ComponentProps<'pre'>) {
 
 /**
  * The words a reply may use for the conversation's files: each file's path, and its bare
- * name when no other file has it.
+ * name when no other file has it — or when exactly one of the files with that name is on the
+ * reply itself (`own`, by key): a reply that says `flying_cat.png` means the one it carries,
+ * not an older one of the same name.
  */
-export function mentionsOf(files: readonly SessionFile[]): Mention[] {
+export function mentionsOf(
+  files: readonly SessionFile[],
+  own: readonly string[] = [],
+): Mention[] {
   const names = new Map<string, number>();
   for (const file of files) names.set(file.name, (names.get(file.name) ?? 0) + 1);
+  const ownNames = new Map<string, number>();
+  for (const file of files)
+    if (own.includes(file.key)) ownNames.set(file.name, (ownNames.get(file.name) ?? 0) + 1);
   const out: Mention[] = [];
   for (const file of files) {
     if (file.path) out.push({ word: file.path, key: file.key });
-    if (names.get(file.name) === 1 && file.name !== file.path)
-      out.push({ word: file.name, key: file.key });
+    if (file.name === file.path) continue;
+    const unique = names.get(file.name) === 1;
+    const oneOfOwn =
+      !unique && own.includes(file.key) && ownNames.get(file.name) === 1;
+    if (unique || oneOfOwn) out.push({ word: file.name, key: file.key });
   }
   return out;
+}
+
+/** `fileForMention`, preferring the one file of that name the reply itself carries. */
+function fileForWord(
+  files: readonly SessionFile[],
+  word: string,
+  own: readonly string[],
+): SessionFile | null {
+  const mine = files.filter((file) => own.includes(file.key) && file.name === word.trim());
+  if (mine.length === 1) return mine[0] ?? null;
+  return fileForMention(files, word);
 }
 
 function safeDecode(href: string): string {
@@ -131,10 +154,19 @@ function FileLink({
  * code has been highlighted, so neither changes the other. Inside a conversation, a word
  * or an inline code span that names one of its files opens that file (decision §48).
  */
-export function Markdown({ text, mark }: { text: string; mark?: string | null | undefined }) {
+export function Markdown({
+  text,
+  mark,
+  own = NONE,
+}: {
+  text: string;
+  mark?: string | null | undefined;
+  /** The keys (`attachment:<id>`) of the files on the reply itself, which its names prefer. */
+  own?: readonly string[];
+}) {
   const files = useSessionFilesOptional();
   const list = files?.files;
-  const mentions = useMemo(() => (list ? mentionsOf(list) : []), [list]);
+  const mentions = useMemo(() => (list ? mentionsOf(list, own) : []), [list, own]);
   const rehypePlugins = useMemo<Plugins>(() => {
     const plugins: Plugins = [];
     if (mentions.length > 0)
@@ -156,7 +188,7 @@ export function Markdown({ text, mark }: { text: string; mark?: string | null | 
             // A link to a file of the conversation (`[the report](report.html)`) opens it.
             const linked =
               list && href && !/^[a-z][a-z0-9+.-]*:|^#|^\/\//i.test(href)
-                ? fileForMention(list, safeDecode(href))
+                ? fileForWord(list, safeDecode(href), own)
                 : null;
             if (linked) return <FileLink fileKey={linked.key}>{children}</FileLink>;
             return (
@@ -167,7 +199,8 @@ export function Markdown({ text, mark }: { text: string; mark?: string | null | 
           },
           code: ({ className, children, node: _node, ...rest }) => {
             const inline = !className && !textOfChildren(children).includes('\n');
-            const linked = inline && list ? fileForMention(list, textOfChildren(children)) : null;
+            const linked =
+              inline && list ? fileForWord(list, textOfChildren(children), own) : null;
             if (linked)
               return (
                 <FileLink fileKey={linked.key} code>
