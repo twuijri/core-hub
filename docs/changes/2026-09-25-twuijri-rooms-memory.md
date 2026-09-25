@@ -79,7 +79,15 @@ succeeded seat=01M3BR4GTQ7WY59ZEFCSCY4XJ1 room=01M3BR4GTKGNK7C56SZN286DXH error=
 ```
 الحاوية أُزيلت بعد الفحص، ولم تُلمس حاويات المالك ولا منفذ 8642 على المضيف.
 
-CI: يُكمَّل بعد الدفع.
+CI على #138 (التشغيل 36108913929) — كلها خضراء:
+```
+Lint, typecheck, contracts, tests, build	pass	19m7s
+Web smoke journeys (Playwright against the real hub)	pass	5m47s
+db:generate + db:migrate (SQLite and PostgreSQL)	pass	1m4s
+Docker image builds and answers /health	pass	2m38s
+PR adds or updates a change record	pass	10s
+PR leaves graphify-out/ to the code-map bot	pass	10s
+```
 
 ## المخاطر والرجوع
 - جُرّب مع Hermes حقيقي ونموذج مكتوب بالسيناريو، لا مع مزوّد نماذج حقيقي: جودة الملخّص من
