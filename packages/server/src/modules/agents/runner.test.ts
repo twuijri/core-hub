@@ -853,9 +853,9 @@ describe('agent runner: files the agent leaves for the person (reply files, 2026
     expect(readdirSync(out).sort()).toEqual(['art', 'b.png', 'c.png', 'mine.png']);
     // Two copies of the same drawing are both the hub's: neither removes the other.
     writeFileSync(path.join(out, 'c-2.png'), 'CCCC');
-    expect(dropDuplicateHandOvers([path.join(out, 'c.png'), path.join(out, 'c-2.png')], out)).toEqual(
-      [],
-    );
+    expect(
+      dropDuplicateHandOvers([path.join(out, 'c.png'), path.join(out, 'c-2.png')], out),
+    ).toEqual([]);
     expect(dropDuplicateHandOvers(copies, null)).toEqual([]);
   });
 

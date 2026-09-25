@@ -72,10 +72,9 @@ function answerFor(body) {
 let rejecting = false;
 
 /** Opaque ids: a vendor prefix, and a `:free` suffix that is part of the name, not a flag. */
-const MODELS =
-  drawing
-    ? ['lab/tiny-1:free', 'gpt-image-1', 'gemini-3.1-flash-image']
-    : ['lab/tiny-1:free', 'lab/tiny-2'];
+const MODELS = drawing
+  ? ['lab/tiny-1:free', 'gpt-image-1', 'gemini-3.1-flash-image']
+  : ['lab/tiny-1:free', 'lab/tiny-2'];
 
 // ---------------------------------------------------------------- pictures (`--script images`)
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {

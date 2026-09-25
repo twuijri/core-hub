@@ -2165,6 +2165,17 @@ cli-proxy-api). Added: `ModelCapability: image_output`, `ModelDefaults.image` an
   the run's output folder, where the engine attaches it to the reply as an `image` part like any file
   the agent left there. A copy (Hermes's cache stays), never a link, a folder or a file over 25 MB;
   a URL answer (a backend that returns a link) is left to the model's words. No contract change.
+- **…and is seen there** (2026-09-26, the owner's «سوي صورة قط يطير» on 1.1.0: `image_generate`,
+  then `execute_code` copying the picture into the output folder as `flying_cat.png`, a reply that
+  printed `/data/workspaces/…/.corehub/runs/<run>/out/flying_cat.png`, and no picture). The hub had
+  attached it; the web never drew a reply's attachments. Now a picture on a message is drawn in it
+  (fetched with the bearer header, as every private file is) and any other file is its name, both
+  opening the file beside the chat (§48). As the turn ends, the runner removes its own copy of a
+  drawn picture when the agent left the same bytes in the output folder under another name, so
+  the picture is on the reply once. The prompt's output-folder line asks the agent to name a file
+  there by its name only, never by a path; and the web draws a run-folder path in a reply's words
+  (`<…>/.corehub/runs/<run>/<in|out>/<file>`, outside fenced code) as `<file>`, which the reply's
+  file mentions link — the stored words are untouched. No contract change.
 - **Background removal** through the model: `image-edit remove-bg` asks a gpt-image model for
   transparency outright and any other model for the subject on a flat colour, which the bundled,
   model-free `image-convert transparent-bg` then clears. No local model is added to the image.
@@ -2172,7 +2183,9 @@ cli-proxy-api). Added: `ModelCapability: image_output`, `ModelDefaults.image` an
 Proposed, owner to confirm: the id patterns that make a model an image model and pick its protocol;
 removing the Providers tab's "Show" filter (with only chat providers left it filtered nothing);
 the speech tabs' add button inside the tab rather than in the header (NAVIGATION §3 keeps the
-header's two actions on Providers); pure green as the default flat colour for a cut-out.
+header's two actions on Providers); pure green as the default flat colour for a cut-out; asking
+the agent for file names and drawing a run-folder path as the file's name (both, rather than
+rewriting the stored reply); removing the hub's copy of a picture the agent kept under its own name.
 
 Rejected: image providers of their own (the owner: there are none — the chat providers have the
 models); pointing Hermes at its bundled `openai`/`openrouter` backends (they reach only their own

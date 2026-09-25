@@ -69,7 +69,7 @@ function reply(text: string, extra: Message['content'] = []): Message {
     handoff: null,
     usage: null,
     reply_to_message_id: null,
-  } as Message;
+  } as unknown as Message;
 }
 
 const catBlock = {
@@ -180,9 +180,7 @@ describe('the run folder in a reply’s words', () => {
     const fenced = `\`\`\`\n${OUT}/x.png\n\`\`\`\nthen ${OUT}/y.png`;
     expect(hideRunPaths(fenced)).toBe(`\`\`\`\n${OUT}/x.png\n\`\`\`\nthen y.png`);
     expect(hideRunPaths(`the folder ${OUT}/ is empty`)).toBe(`the folder ${OUT}/ is empty`);
-    expect(hideRunPaths('/etc/hosts and src/runs/x/out/y')).toBe(
-      '/etc/hosts and src/runs/x/out/y',
-    );
+    expect(hideRunPaths('/etc/hosts and src/runs/x/out/y')).toBe('/etc/hosts and src/runs/x/out/y');
   });
 });
 
@@ -194,9 +192,9 @@ describe('a reply that carries files', () => {
     const picture = await screen.findByTestId('message-image');
     expect(picture).toHaveAttribute('src', 'blob:http://hub.test/picture');
     expect(picture).toHaveAttribute('alt', 'flying_cat.png');
-    expect(
-      requests.find((r) => r.path === `/api/v1/attachments/${CAT}/content`)?.auth,
-    ).toBe('Bearer t');
+    expect(requests.find((r) => r.path === `/api/v1/attachments/${CAT}/content`)?.auth).toBe(
+      'Bearer t',
+    );
 
     // The words name the file, not the machine's folder, and the name opens it.
     const body = screen.getByTestId('message-assistant');
@@ -229,8 +227,6 @@ describe('a reply that carries files', () => {
     expect(mention.textContent).toBe('flying_cat.png');
     fireEvent.click(mention);
     await screen.findByTestId('file-view');
-    expect(requests.some((r) => r.path === `/api/v1/attachments/${OLD_CAT}/content`)).toBe(
-      false,
-    );
+    expect(requests.some((r) => r.path === `/api/v1/attachments/${OLD_CAT}/content`)).toBe(false);
   });
 });
