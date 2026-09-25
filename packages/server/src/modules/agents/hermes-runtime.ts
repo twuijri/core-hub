@@ -26,6 +26,7 @@ import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
+import { HUB_ORIGIN_ENV } from './hub-tools/block.js';
 import type { FastifyBaseLogger } from 'fastify';
 import { parse as parseYaml } from 'yaml';
 import { probeHttp, whichSync, type HostEnvironment } from './adapters/host.js';
@@ -422,7 +423,8 @@ export class HermesRuntime {
     this.tui = stdioTuiChannel({
       command: python,
       args: ['-m', 'tui_gateway.entry'],
-      env: this.cliEnv(),
+      // The hub's own conversations run here: their calls to the hub's tools say so (§78).
+      env: { ...this.cliEnv(), [HUB_ORIGIN_ENV]: 'hub' },
       cwd: home,
       ...(this.options.tuiSpawn ? { spawn: this.options.tuiSpawn } : {}),
       ...(this.options.tuiLogLine ? { onStderrLine: this.options.tuiLogLine } : {}),
@@ -684,6 +686,8 @@ export class HermesRuntime {
       API_SERVER_PORT: url.port || '8642',
       HERMES_DASHBOARD: '0',
       PYTHONUNBUFFERED: '1',
+      // A messaging gateway: its calls to the hub's tools are its channel turns' (§78).
+      [HUB_ORIGIN_ENV]: 'gateway',
     };
     let child: SpawnedProcess;
     try {

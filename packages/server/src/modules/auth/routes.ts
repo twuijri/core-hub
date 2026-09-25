@@ -18,6 +18,12 @@ import {
 } from '../devices/index.js';
 import { AuditService, auditFor, jobRunnerFor } from '../audit/index.js';
 import { decodeAvatarDataUrl, deleteAvatar, readAvatar } from './avatars.js';
+import {
+  deleteIdentity,
+  findIdentity,
+  listIdentities,
+  presentIdentity,
+} from './channel-identities.js';
 import type { AuthContext } from './context.js';
 import {
   assertNotLocked,
@@ -823,6 +829,57 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     if (!row || row.kind === 'web')
       throw new HubError('not_found', { messageKey: 'auth.token_not_found' });
     revokeAppTokenRow(request, row.id, 'auth.token_revoked');
+    return noContent(reply);
+  });
+
+  // ---------------------------------------------------------------- channel identities (§78)
+
+  route('GET', '/auth/me/channel-identities', signedIn, async (request) => ({
+    items: listIdentities(db, principalOf(request).user.id).map(presentIdentity),
+  }));
+
+  route('POST', '/auth/me/channel-identities/link-codes', signedIn, async (request, reply) => {
+    const issued = ctx.linkCodes.issue(principalOf(request).user.id, now());
+    return reply.code(201).send({
+      code: issued.code,
+      command: `/start ${issued.code}`,
+      expires_at: new Date(issued.expiresAt).toISOString(),
+    });
+  });
+
+  route(
+    'DELETE',
+    '/auth/me/channel-identities/:identity_id',
+    signedIn,
+    async (request, reply) => {
+      const id = param(request, 'identity_id', 'channel_identity');
+      const row = findIdentity(db, id);
+      if (!row || row.userId !== principalOf(request).user.id) {
+        throw new HubError('not_found', { details: { resource: 'channel_identity', id } });
+      }
+      deleteIdentity(db, row.id);
+      audit(request, 'auth.channel_identity_unlinked', { kind: 'channel_identity', id }, 'messaging account unlinked', {
+        platform: row.platform,
+        by: 'self',
+      });
+      return noContent(reply);
+    },
+  );
+
+  route('GET', '/auth/channel-identities', admin, async () => ({
+    items: listIdentities(db).map(presentIdentity),
+  }));
+
+  route('DELETE', '/auth/channel-identities/:identity_id', admin, async (request, reply) => {
+    const id = param(request, 'identity_id', 'channel_identity');
+    const row = findIdentity(db, id);
+    if (!row) throw new HubError('not_found', { details: { resource: 'channel_identity', id } });
+    deleteIdentity(db, row.id);
+    audit(request, 'auth.channel_identity_unlinked', { kind: 'channel_identity', id }, 'messaging account unlinked', {
+      platform: row.platform,
+      user_id: row.userId,
+      by: 'admin',
+    });
     return noContent(reply);
   });
 

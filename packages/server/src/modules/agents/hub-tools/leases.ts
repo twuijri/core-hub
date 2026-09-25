@@ -15,24 +15,46 @@
  *   separately, so the hub waits a moment for it. Still more than one owner: the call is
  *   refused (`hub_tools_run_ambiguous`) rather than guessed — acting as the wrong person is
  *   the one mistake this must never make.
+ * - a message on a channel (Telegram, WhatsApp …) is a turn of Hermes's messaging gateway, not
+ *   a run of the hub's. The hub's hook in that gateway (`hook.ts`, decision §78) opens a
+ *   **channel lease** for each turn: for the person who linked the sender, or for nobody with
+ *   the reason. A call carries where it came from (`X-Corehub-Origin`: the hub's own process or
+ *   a gateway), so a gateway's call is only ever one of its turns and a hub process's only
+ *   one of the hub's runs — a stranger's message can never borrow a person's live chat.
  */
 import { issueRunToken, revokeRunToken } from '../../auth/index.js';
+import type { HubOrigin } from './block.js';
 
 /** How Hermes names a tool of the server `corehub` (`tools/mcp_tool_schema.py`). */
 export const HUB_TOOL_PREFIX = 'mcp__corehub__';
 
 /** How long a call waits for the `tool.started` that says which run made it. */
 export const ATTRIBUTION_WAIT_MS = 2000;
+/** A channel turn nobody heard from for this long is over (its gateway died mid-turn). */
+export const CHANNEL_LEASE_IDLE_MS = 15 * 60 * 1000;
 const POLL_MS = 50;
+
+/** Why a channel turn acts for nobody (decision §78). */
+export type ChannelRefusal =
+  | 'hub_tools_sender_not_linked'
+  | 'hub_tools_sender_no_access'
+  | 'hub_tools_group_chat';
 
 export interface Lease {
   runId: string;
-  sessionId: string;
+  /** `run`: a run of the hub's own; `channel`: a turn of Hermes's messaging gateway (§78). */
+  kind: 'run' | 'channel';
+  sessionId: string | null;
   workspaceId: string;
-  userId: string;
-  /** The run token calls in this run act with. */
-  token: string;
+  /** The person it acts for; `null` for a channel turn that acts for nobody. */
+  userId: string | null;
+  /** Why it acts for nobody (`userId === null`). */
+  refusal: ChannelRefusal | null;
+  /** The run token calls in this lease act with; `null` when it acts for nobody. */
+  token: string | null;
   startedAt: number;
+  /** A channel turn's last word from its gateway. */
+  seenAt: number;
   /** Calls to the hub's tools the agent announced and has not finished. */
   pending: number;
   /** When the agent last announced one, for choosing among several of one owner. */
@@ -40,8 +62,11 @@ export interface Lease {
 }
 
 export type Attribution =
-  | { ok: true; lease: Lease }
-  | { ok: false; reason: 'hub_tools_no_live_run' | 'hub_tools_run_ambiguous' };
+  | { ok: true; lease: Lease & { userId: string; token: string } }
+  | {
+      ok: false;
+      reason: 'hub_tools_no_live_run' | 'hub_tools_run_ambiguous' | ChannelRefusal;
+    };
 
 export class RunLeases {
   private readonly leases = new Map<string, Lease>();
@@ -58,22 +83,68 @@ export class RunLeases {
       runId: input.runId,
       sessionId: input.sessionId,
     });
+    const at = this.now();
     this.leases.set(input.runId, {
       runId: input.runId,
+      kind: 'run',
       sessionId: input.sessionId,
       workspaceId: input.workspaceId,
       userId: input.userId,
+      refusal: null,
       token,
-      startedAt: this.now(),
+      startedAt: at,
+      seenAt: at,
       pending: 0,
       lastAnnouncedAt: 0,
     });
   }
 
+  /**
+   * A turn of a messaging gateway started (the hub's hook, §78): for the person who linked its
+   * sender, or for nobody with the reason. Either way it is live in its profile, so a call from
+   * that gateway meanwhile is its, and never a hub run's.
+   */
+  openChannel(input: {
+    key: string;
+    workspaceId: string;
+    userId: string | null;
+    refusal: ChannelRefusal | null;
+  }): void {
+    this.close(input.key);
+    const at = this.now();
+    const token = input.userId
+      ? issueRunToken({
+          userId: input.userId,
+          workspaceId: input.workspaceId,
+          runId: input.key,
+          sessionId: null,
+        })
+      : null;
+    this.leases.set(input.key, {
+      runId: input.key,
+      kind: 'channel',
+      sessionId: null,
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      refusal: input.userId ? null : (input.refusal ?? 'hub_tools_sender_not_linked'),
+      token,
+      startedAt: at,
+      seenAt: at,
+      pending: 0,
+      lastAnnouncedAt: 0,
+    });
+  }
+
+  /** The gateway said the turn is still going (`agent:step`). */
+  touchChannel(key: string): void {
+    const lease = this.leases.get(key);
+    if (lease?.kind === 'channel') lease.seenAt = this.now();
+  }
+
   close(runId: string): void {
     const lease = this.leases.get(runId);
     if (!lease) return;
-    revokeRunToken(lease.token);
+    if (lease.token) revokeRunToken(lease.token);
     this.leases.delete(runId);
   }
 
@@ -96,33 +167,63 @@ export class RunLeases {
   }
 
   live(workspaceId: string): Lease[] {
+    const now = this.now();
+    for (const [key, lease] of this.leases) {
+      if (lease.kind === 'channel' && now - lease.seenAt > CHANNEL_LEASE_IDLE_MS) this.close(key);
+    }
     return [...this.leases.values()].filter((lease) => lease.workspaceId === workspaceId);
   }
 
-  /** Decide now, or say that it cannot be decided yet (`null`). */
-  private decide(workspaceId: string, final: boolean): Attribution | null {
-    const live = this.live(workspaceId);
+  /**
+   * Decide now, or say that it cannot be decided yet (`null`).
+   *
+   * `origin` is where the call came from (the block's `X-Corehub-Origin`): a hub process
+   * (`hub`) can only be one of the hub's runs, a messaging gateway (`gateway`) only one of its
+   * turns; unknown (`null`, a Hermes the hub did not start) could be either.
+   */
+  private decide(workspaceId: string, origin: HubOrigin | null, final: boolean): Attribution | null {
+    const live = this.live(workspaceId).filter(
+      (lease) =>
+        origin === null ||
+        (origin === 'hub' ? lease.kind === 'run' : lease.kind === 'channel'),
+    );
     if (live.length === 0) return { ok: false, reason: 'hub_tools_no_live_run' };
-    const owners = new Set(live.map((lease) => lease.userId));
+    const ownerOf = (lease: Lease) => lease.userId ?? `nobody:${lease.runId}`;
+    const owners = new Set(live.map(ownerOf));
     const announced = live.filter((lease) => lease.pending > 0);
-    if (owners.size === 1) {
-      return { ok: true, lease: newest(announced.length > 0 ? announced : live) };
+    if (owners.size === 1) return decided(newest(announced.length > 0 ? announced : live));
+    // A gateway's turn announces nothing, so nothing can rule it out: two people (or a person
+    // and a stranger) talking to it at once cannot be told apart. Refused at once — acting as
+    // the wrong person is the one mistake this must never make.
+    if (live.some((lease) => lease.kind === 'channel')) {
+      return { ok: false, reason: 'hub_tools_run_ambiguous' };
     }
-    const announcedOwners = new Set(announced.map((lease) => lease.userId));
-    if (announcedOwners.size === 1) return { ok: true, lease: newest(announced) };
+    const announcedOwners = new Set(announced.map(ownerOf));
+    if (announcedOwners.size === 1) return decided(newest(announced));
     return final ? { ok: false, reason: 'hub_tools_run_ambiguous' } : null;
   }
 
   /** The run a call in this profile belongs to, waiting briefly when several could. */
-  async attribute(workspaceId: string, waitMs = ATTRIBUTION_WAIT_MS): Promise<Attribution> {
+  async attribute(
+    workspaceId: string,
+    waitMs = ATTRIBUTION_WAIT_MS,
+    origin: HubOrigin | null = null,
+  ): Promise<Attribution> {
     // Counted in polls, not read off the clock, so a test's frozen clock cannot hang it.
     const polls = Math.max(0, Math.ceil(waitMs / POLL_MS));
     for (let poll = 0; ; poll += 1) {
-      const decided = this.decide(workspaceId, poll >= polls);
-      if (decided) return decided;
+      const result = this.decide(workspaceId, origin, poll >= polls);
+      if (result) return result;
       await new Promise((resolve) => setTimeout(resolve, POLL_MS));
     }
   }
+}
+
+function decided(lease: Lease): Attribution {
+  if (lease.userId && lease.token) {
+    return { ok: true, lease: lease as Lease & { userId: string; token: string } };
+  }
+  return { ok: false, reason: lease.refusal ?? 'hub_tools_sender_not_linked' };
 }
 
 /** Hermes's bridge to the tools it lists on demand. */

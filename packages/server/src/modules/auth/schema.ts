@@ -2,7 +2,7 @@
  * auth — workspaces, users, app tokens, device pairing, lockouts.
  *
  * Global tables (no `workspace` column, ADR 0005): workspaces, users,
- * app_tokens, pairing_codes, login_lockouts. Scoped: workspace_members.
+ * app_tokens, pairing_codes, login_lockouts, channel_identities. Scoped: workspace_members.
  *
  * Cross-module id columns (no DB foreign key, validated through the owning
  * module's API): app_tokens.device_id / pairing_codes.device_id ->
@@ -34,6 +34,8 @@ export const LOCKOUT_SUBJECT_KINDS = ['ip', 'user'] as const;
 /** Which flow the failures belong to (the contract's `Lockout.kind`). */
 export const LOCKOUT_KINDS = ['password', 'token', 'pairing'] as const;
 export const PAIRING_CONNECTIONS = ['lan', 'relay'] as const;
+/** The contract's `ChannelIdentityPlatform`: where a person can prove an account (§78). */
+export const CHANNEL_IDENTITY_PLATFORMS = ['telegram', 'whatsapp'] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];
 export type UserStatus = (typeof USER_STATUSES)[number];
@@ -42,6 +44,7 @@ export type AppTokenKind = (typeof APP_TOKEN_KINDS)[number];
 export type AppTokenScope = (typeof APP_TOKEN_SCOPES)[number];
 export type LockoutKind = (typeof LOCKOUT_KINDS)[number];
 export type PairingConnection = (typeof PAIRING_CONNECTIONS)[number];
+export type ChannelIdentityPlatform = (typeof CHANNEL_IDENTITY_PLATFORMS)[number];
 
 /** The contract's `ModelRef`. */
 export type ModelRef = { providerId: string; model: string };
@@ -221,5 +224,30 @@ export const loginLockouts = sqliteTable(
     uniqueIndex('login_lockouts_subject_uq').on(t.subjectKind, t.subject, t.kind),
     check('login_lockouts_subject_kind_check', inList(t.subjectKind, LOCKOUT_SUBJECT_KINDS)),
     check('login_lockouts_kind_check', inList(t.kind, LOCKOUT_KINDS)),
+  ],
+);
+
+/**
+ * A messaging account a person proved is theirs (contract decision §78): a message from it runs
+ * with that person's permissions, so the hub's own tools act as them. Global — one link per
+ * account for the whole hub; the person's own memberships decide where it acts. `sender_id`
+ * is the account as Hermes names the sender.
+ */
+export const channelIdentities = sqliteTable(
+  'channel_identities',
+  {
+    ...globalColumns(),
+    /** The person; their links go with them. */
+    userId: ulid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    platform: text('platform', { enum: CHANNEL_IDENTITY_PLATFORMS }).notNull(),
+    senderId: text('sender_id', { length: 320 }).notNull(),
+    lastUsedAt: timestampMs('last_used_at'),
+  },
+  (t) => [
+    uniqueIndex('channel_identities_account_uq').on(t.platform, t.senderId),
+    index('channel_identities_user_idx').on(t.userId),
+    check('channel_identities_platform_check', inList(t.platform, CHANNEL_IDENTITY_PLATFORMS)),
   ],
 );

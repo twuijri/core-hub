@@ -6,6 +6,7 @@ import { loadOpenApiDocument } from '@corehub/contracts';
 import { requireSqlite } from '../../lib/db.js';
 import { defineModule } from '../../lib/module.js';
 import type { AuthContext } from './context.js';
+import { LinkCodes, identityOf, linkWithCode, touchIdentity } from './channel-identities.js';
 import { authenticateHook } from './principal.js';
 import { registerAuthRoutes } from './routes.js';
 import {
@@ -41,6 +42,7 @@ export const authModule = defineModule({
       namespaces: () => hub.namespaces,
       now: () => Date.now(),
       setupOpenUntil: null,
+      linkCodes: new LinkCodes(),
     };
     contexts.set(hub.io, ctx);
 
@@ -88,6 +90,31 @@ export function setupMetaFor(io: SocketServer): SetupMeta | null {
 }
 export type { SetupMeta } from './setup.js';
 export const registerEvents = authModule.registerEvents.bind(authModule);
+
+/**
+ * The messaging-account links (contract decision §78) of the hub on this Socket.IO server, for
+ * the hub's own tools (`agents`): who linked a sender, and the `/start <code>` that links one.
+ * `null` when auth is not composed into it.
+ */
+export function channelLinksFor(io: SocketServer) {
+  const ctx = contexts.get(io);
+  if (!ctx) return null;
+  return {
+    /** The person who linked this sender, if anybody. */
+    personOf(platform: string, senderId: string | null | undefined) {
+      const row = identityOf(ctx.db, platform, senderId);
+      return row ? { identityId: row.id, userId: row.userId } : null;
+    },
+    touch(identityId: string) {
+      touchIdentity(ctx.db, identityId, ctx.now());
+    },
+    link(code: string, platform: string, senderId: string | null) {
+      return linkWithCode(ctx.db, ctx.linkCodes, { code, platform, senderId }, ctx.now());
+    },
+  };
+}
+export type ChannelLinks = NonNullable<ReturnType<typeof channelLinksFor>>;
+export { looksLikeLinkCode } from './channel-identities.js';
 
 // ---------------------------------------------------------------- for other modules
 export { decodeAvatarDataUrl, type DecodedAvatar } from './avatars.js';

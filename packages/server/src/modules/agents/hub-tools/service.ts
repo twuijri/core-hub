@@ -16,11 +16,27 @@ import type { FastifyInstance } from 'fastify';
 import { serverBasePath, loadOpenApiDocument } from '@corehub/contracts';
 import type { ModuleDb } from '../../../lib/db.js';
 import { HubError } from '../../../lib/errors.js';
-import { findUser, findWorkspace, type WorkspaceScope } from '../../auth/index.js';
+import {
+  canEnter,
+  channelLinksFor,
+  findUser,
+  findWorkspace,
+  looksLikeLinkCode,
+  type WorkspaceScope,
+} from '../../auth/index.js';
+import { t, type Language } from '../../../i18n/index.js';
 import { hubToolCalls, hubToolSettings, type HubToolGroupState } from '../schema.js';
 import { readEnv } from '../channels.js';
 import type { AcpMcpServer } from '../adapters/acp.js';
-import { HUB_KEY_ENV, HUB_SERVER_NAME, blockInSync, removeBlock, writeBlock } from './block.js';
+import {
+  HUB_KEY_ENV,
+  HUB_SERVER_NAME,
+  blockInSync,
+  removeBlock,
+  writeBlock,
+  type HubOrigin,
+} from './block.js';
+import { removeHook, writeHook } from './hook.js';
 import {
   HUB_TOOLS,
   HUB_TOOL_GROUPS,
@@ -31,7 +47,7 @@ import {
   type HubToolGroup,
   type ToolContext,
 } from './catalog.js';
-import type { RunLeases } from './leases.js';
+import type { ChannelRefusal, RunLeases } from './leases.js';
 import { handleRpc, parseError, type McpToolResult, type RpcResponse } from './protocol.js';
 
 export const HUB_KEY_PREFIX = 'hub_mcp_';
@@ -71,6 +87,21 @@ export interface HubToolsDeps {
   homeOf(workspace: WorkspaceScope): { home: string | null; reason: HubToolsUnavailable | null };
   /** Where Hermes reaches this hub's MCP server. */
   url(): string | null;
+  /**
+   * The hook in a profile's home changed (decision §78): Hermes's messaging gateway reads its
+   * hooks when it starts, so the one serving that profile starts again.
+   */
+  gatewayChanged(workspace: WorkspaceScope): void;
+}
+
+/** What `agents.hubChannelEvent` carries (contract `HubChannelEvent`). */
+export interface HubChannelEventInput {
+  event: 'turn_started' | 'turn_step' | 'turn_ended' | 'link';
+  platform: string;
+  sender_id: string | null;
+  session_id?: string | null;
+  chat_type?: string | null;
+  code?: string | null;
 }
 
 function hashKey(key: string): string {
@@ -173,8 +204,12 @@ export class HubToolsService {
         writeBlock(home, url, key);
         keyHash = hashKey(key);
       }
+      if (writeHook(home, url)) this.deps.gatewayChanged(workspace);
     } else {
-      if (home) removeBlock(home);
+      if (home) {
+        removeBlock(home);
+        if (removeHook(home)) this.deps.gatewayChanged(workspace);
+      }
       keyHash = null;
     }
     const values = { enabled, groups, keyHash };
@@ -220,15 +255,23 @@ export class HubToolsService {
       });
       if (!home) continue;
       const current = row.keyHash;
+      const scope = {
+        id: workspace.id,
+        slug: workspace.slug,
+        name: workspace.name,
+        isDefault: workspace.isDefault,
+      };
       try {
-        if (current && blockInSync(home, url, (key) => hashKey(key) === current)) continue;
-        const key = newKey();
-        writeBlock(home, url, key);
-        this.deps.db
-          .update(hubToolSettings)
-          .set({ keyHash: hashKey(key), updatedAt: new Date() })
-          .where(eq(hubToolSettings.id, row.id))
-          .run();
+        if (!current || !blockInSync(home, url, (key) => hashKey(key) === current)) {
+          const key = newKey();
+          writeBlock(home, url, key);
+          this.deps.db
+            .update(hubToolSettings)
+            .set({ keyHash: hashKey(key), updatedAt: new Date() })
+            .where(eq(hubToolSettings.id, row.id))
+            .run();
+        }
+        if (writeHook(home, url)) this.deps.gatewayChanged(scope);
       } catch (error) {
         this.deps.app.log.warn(
           { err: error, profile: workspace.slug },
@@ -262,15 +305,19 @@ export class HubToolsService {
         type: 'http',
         name: HUB_SERVER_NAME,
         url,
-        headers: [{ name: 'Authorization', value: `Bearer ${key}` }],
+        headers: [
+          { name: 'Authorization', value: `Bearer ${key}` },
+          // A coding agent is always one of the hub's own runs (decision §78).
+          { name: 'X-Corehub-Origin', value: 'hub' },
+        ],
       },
     ];
   }
 
   // -------------------------------------------------------------- the MCP endpoint
 
-  /** One POST to `agents.hubMcp`: the answer, or `null` for `202`. */
-  async handle(bearer: string | null, body: unknown): Promise<RpcResponse | null> {
+  /** The profile a hub-tools key names, or `401`. */
+  private profileOfKey(bearer: string | null) {
     if (!bearer || !bearer.startsWith(HUB_KEY_PREFIX)) {
       throw new HubError('unauthorized', { messageKey: 'auth.token_invalid' });
     }
@@ -284,6 +331,16 @@ export class HubToolsService {
     if (!row || !workspace || workspace.id !== row.workspace) {
       throw new HubError('unauthorized', { messageKey: 'auth.token_invalid' });
     }
+    return { row, workspace };
+  }
+
+  /** One POST to `agents.hubMcp`: the answer, or `null` for `202`. */
+  async handle(
+    bearer: string | null,
+    body: unknown,
+    origin: HubOrigin | null = null,
+  ): Promise<RpcResponse | null> {
+    const { row, workspace } = this.profileOfKey(bearer);
     if (body === undefined || body === null) return parseError();
     const groups = this.groupsOf(row.groups);
     const offered = (tool: HubToolDefinition): boolean =>
@@ -301,8 +358,84 @@ export class HubToolsService {
           description: tool.description,
           inputSchema: tool.inputSchema,
         })),
-      callTool: (name, args) => this.call(workspace, name, args, offered),
+      callTool: (name, args) => this.call(workspace, name, args, offered, origin),
     });
+  }
+
+  /**
+   * One POST to `agents.hubChannelEvent` from the hub's hook in Hermes's messaging gateway
+   * (decision §78): a turn's sender, or a `/start` link code.
+   */
+  channelEvent(bearer: string | null, input: HubChannelEventInput): {
+    handled: boolean;
+    message: string | null;
+  } {
+    const { workspace } = this.profileOfKey(bearer);
+    const links = channelLinksFor(this.deps.app.hub.io);
+    const unhandled = { handled: false, message: null };
+    const key = `channel:${workspace.id}:${input.platform}:${input.session_id || input.sender_id || 'none'}`;
+    switch (input.event) {
+      case 'link': {
+        if (!links || !looksLikeLinkCode(input.code)) return unhandled;
+        const outcome = links.link(input.code!, input.platform, input.sender_id);
+        if (outcome.kind === 'linked') {
+          const person = findUser(this.deps.db, outcome.row.userId);
+          const language: Language = person?.locale === 'ar' ? 'ar' : 'en';
+          const text = t(
+            outcome.again ? 'agents.channel_link.again' : 'agents.channel_link.linked',
+            language,
+          )
+            .replace('{platform}', t(`agents.channel_link.platform_${outcome.row.platform}`, language))
+            .replace('{name}', outcome.userName);
+          this.deps.app.log.info(
+            { profile: workspace.slug, platform: outcome.row.platform, user: outcome.row.userId },
+            'agents: a messaging account was linked to a person',
+          );
+          return { handled: true, message: text };
+        }
+        const both = (name: string) =>
+          `${t(`agents.channel_link.${name}`, 'ar')}\n${t(`agents.channel_link.${name}`, 'en')}`;
+        return { handled: true, message: both(outcome.kind) };
+      }
+      case 'turn_started': {
+        const refuse = (refusal: ChannelRefusal) =>
+          this.deps.leases.openChannel({ key, workspaceId: workspace.id, userId: null, refusal });
+        // Others in a group steer the conversation too: a group turn acts for nobody.
+        const chat = input.chat_type ?? '';
+        if (chat !== '' && chat !== 'dm') {
+          refuse('hub_tools_group_chat');
+          return unhandled;
+        }
+        const linked = links?.personOf(input.platform, input.sender_id) ?? null;
+        if (!linked) {
+          refuse('hub_tools_sender_not_linked');
+          return unhandled;
+        }
+        const person = findUser(this.deps.db, linked.userId);
+        if (
+          !person ||
+          person.status !== 'active' ||
+          !canEnter(this.deps.db, { id: person.id, role: person.role }, workspace.id)
+        ) {
+          refuse('hub_tools_sender_no_access');
+          return unhandled;
+        }
+        this.deps.leases.openChannel({
+          key,
+          workspaceId: workspace.id,
+          userId: person.id,
+          refusal: null,
+        });
+        links?.touch(linked.identityId);
+        return unhandled;
+      }
+      case 'turn_step':
+        this.deps.leases.touchChannel(key);
+        return unhandled;
+      case 'turn_ended':
+        this.deps.leases.close(key);
+        return unhandled;
+    }
   }
 
   private async call(
@@ -310,28 +443,24 @@ export class HubToolsService {
     name: string,
     args: Record<string, unknown>,
     offered: (tool: HubToolDefinition) => boolean,
+    origin: HubOrigin | null = null,
   ): Promise<McpToolResult> {
     const started = Date.now();
     const tool = findTool(name);
     const record = (
       ok: boolean,
       errorCode: string | null,
-      lease: { userId: string; sessionId: string; runId: string } | null,
+      lease: { userId: string; sessionId: string | null; runId: string; kind: 'run' | 'channel' } | null,
     ) => this.record(workspace.id, name, ok, errorCode, lease, Date.now() - started);
 
     if (!tool || !offered(tool)) {
       record(false, 'hub_tools_tool_off', null);
       return refusal('hub_tools_tool_off', `the tool ${name} is not offered in this profile`);
     }
-    const attribution = await this.deps.leases.attribute(workspace.id);
+    const attribution = await this.deps.leases.attribute(workspace.id, undefined, origin);
     if (!attribution.ok) {
       record(false, attribution.reason, null);
-      return refusal(
-        attribution.reason,
-        attribution.reason === 'hub_tools_no_live_run'
-          ? 'no conversation of the hub is running in this profile, so there is nobody to act for'
-          : 'several people have conversations running in this profile and the hub could not tell whose this is; try again',
-      );
+      return refusal(attribution.reason, REFUSALS[attribution.reason] ?? attribution.reason);
     }
     const { lease } = attribution;
     const person = findUser(this.deps.db, lease.userId);
@@ -427,7 +556,7 @@ export class HubToolsService {
     tool: string,
     ok: boolean,
     errorCode: string | null,
-    lease: { userId: string; sessionId: string; runId: string } | null,
+    lease: { userId: string; sessionId: string | null; runId: string; kind: 'run' | 'channel' } | null,
     durationMs: number,
   ): void {
     const settings = this.row(workspaceId);
@@ -441,7 +570,8 @@ export class HubToolsService {
         errorCode,
         userId: lease?.userId ?? null,
         sessionId: lease?.sessionId ?? null,
-        runId: lease?.runId ?? null,
+        // A channel turn's key is not a run of the hub's (§78).
+        runId: lease && lease.kind === 'run' ? lease.runId : null,
         durationMs: Math.max(0, Math.round(durationMs)),
       })
       .run();
@@ -460,6 +590,20 @@ export class HubToolsService {
     }
   }
 }
+
+/** What the agent reads when a call acts for nobody (§67, §78). */
+const REFUSALS: Record<string, string> = {
+  hub_tools_no_live_run:
+    'no conversation of the hub is running in this profile, so there is nobody to act for',
+  hub_tools_run_ambiguous:
+    'several people have conversations running in this profile and the hub could not tell whose this is; try again',
+  hub_tools_sender_not_linked:
+    "this message came from a messaging account nobody linked to Core Hub, so Core Hub's tools are not available here; the person can link it in Core Hub → Settings → Account",
+  hub_tools_sender_no_access:
+    'the person who linked this messaging account may not use this profile (or is disabled), so there is nobody to act for',
+  hub_tools_group_chat:
+    "this message came from a group, where others steer the conversation too, so Core Hub's tools act for nobody here",
+};
 
 function refusal(code: string, message: string): McpToolResult {
   return {

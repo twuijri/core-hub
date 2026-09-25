@@ -203,7 +203,11 @@ describe("the hub's own tools: the card and the profile's Hermes config", () => 
         type: 'http',
         name: 'corehub',
         url: 'http://127.0.0.1:8123/api/v1/hub-mcp',
-        headers: [{ name: 'Authorization', value: `Bearer ${keyOf(root)}` }],
+        headers: [
+          { name: 'Authorization', value: `Bearer ${keyOf(root)}` },
+          // A coding agent is always one of the hub's own runs (§78).
+          { name: 'X-Corehub-Origin', value: 'hub' },
+        ],
       },
     ]);
     await authed(h, h.token, {

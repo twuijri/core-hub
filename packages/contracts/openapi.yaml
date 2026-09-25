@@ -6159,9 +6159,23 @@ paths:
         profile, and acts as the person who owns it, with that person's permissions in that
         profile only and never an admin's, through the same checks as the REST API. A tool
         refused this way is a JSON-RPC result with `isError: true` and the hub's error code,
-        not an HTTP error (contract decision §67).
+        not an HTTP error (contract decision §67). A tool call from Hermes's messaging gateway
+        acts for the person who linked the message's sender, or is refused
+        (`hub_tools_sender_not_linked`, `hub_tools_sender_no_access`, `hub_tools_group_chat`);
+        one from the hub's own process only for one of its runs (contract decision §78).
       security: []
       x-scope: global
+      parameters:
+        - name: X-Corehub-Origin
+          in: header
+          required: false
+          description: >-
+            Which kind of Hermes process made the call: `hub` (the process the hub runs its own
+            conversations in, or a coding agent) or `gateway` (a messaging gateway). The block the
+            hub writes fills it from `COREHUB_MCP_ORIGIN`, which the hub sets in each process it
+            starts; anything else is unknown, and the call may then be any live run's or turn's.
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -6227,6 +6241,7 @@ paths:
               platform: telegram
               sender_id: '123456789'
               session_id: null
+              chat_type: null
               code: corehub_7K3M9QX2AB
       x-rt-events: []
       responses:
@@ -16733,6 +16748,12 @@ components:
           type: [string, 'null']
           maxLength: 200
           description: Hermes's session of the conversation (turn events).
+        chat_type:
+          type: [string, 'null']
+          maxLength: 20
+          description: >-
+            Hermes's kind of chat (`dm`, `group`, `forum`, …; turn events). A turn anywhere but a
+            direct chat acts for nobody (`hub_tools_group_chat`): others steer a group's conversation too.
         code:
           type: [string, 'null']
           maxLength: 200

@@ -718,6 +718,19 @@ function contextOf(app: FastifyInstance): AgentsContext {
       return home ? { home, reason: null } : { home: null, reason: 'hermes_profile_absent' };
     },
     url: () => hubMcpUrl(app),
+    // Hermes's messaging gateway reads its hooks when it starts (decision §78): the one that
+    // serves the profile starts again — a named profile's at once, the default one held down
+    // and started again (it also carries the API server).
+    gatewayChanged: (workspace) => {
+      const profile = hermesProfileName(workspace);
+      const restart =
+        profile === 'default'
+          ? runtime.withGatewayStopped('default', () => undefined)
+          : runtime.channelsChanged(profile);
+      restart.catch((error: unknown) =>
+        app.log.warn({ err: error, profile }, 'agents: could not restart the profile gateway'),
+      );
+    },
   });
   const created: AgentsContext = {
     service,
