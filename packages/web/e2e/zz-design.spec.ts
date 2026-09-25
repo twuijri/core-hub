@@ -247,7 +247,8 @@ test.describe('the rebuilt screens', () => {
     await page.getByTestId('settings-nav').getByRole('link', { name: 'الأداء' }).click();
     await expect(page.getByText('Node')).toBeVisible();
     await page.getByTestId('settings-nav').getByRole('link', { name: 'السجلات' }).click();
-    await expect(page.getByTestId('audit-days-7')).toBeVisible();
+    // Live since DECISIONS §51: the hub's own lines, not a period report.
+    await expect(page.getByTestId('logs-tool')).toBeVisible();
 
     // Models: the provider card, and the model panel's table inside a scroll area.
     await page.getByTestId('settings-nav').getByRole('link', { name: 'النماذج' }).click();

@@ -249,6 +249,16 @@ export function attachmentReferences(app: FastifyInstance): {
   };
 }
 
+/**
+ * Per workspace id: its unfinished runs and its conversations not archived. For the
+ * Performance screen, through the composition root.
+ */
+export function sessionActivityFor(
+  app: FastifyInstance,
+): Map<string, { activeRuns: number; sessions: number }> {
+  return new SessionsStore(requireSqlite(app.hub.database)).activityByWorkspace();
+}
+
 export const registerRoutes = sessionsModule.registerRoutes.bind(sessionsModule);
 export const registerEvents = sessionsModule.registerEvents.bind(sessionsModule);
 

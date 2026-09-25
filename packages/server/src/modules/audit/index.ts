@@ -8,7 +8,9 @@
  * Also implemented (Phase 4): `audit.getReport` for `usage`, `logs`, `performance` and
  * `skills`, and the typed Usage and Skills usage screens `audit.getUsage` /
  * `audit.getSkillUsage` (contract decision §50, `analytics.ts`). Skill use is recorded from
- * the version that added it (`skill_uses`); the reports say from when.
+ * the version that added it (`skill_uses`); the reports say from when. And the live screens
+ * (contract decision §51): `audit.getLivePerformance` (`live.ts`, measured when asked) and
+ * `audit.listLogLines` (the hub's log rings, `lib/log-ring.ts`).
  *
  * Composition note: the module object is a singleton shared by every `buildServer()` in a
  * test process, so the service is kept per Socket.IO server (one per app), the same way
@@ -28,6 +30,7 @@ import { listWorkspacesFor, requireRole, requireUser, requireWorkspace } from '.
 import { UsageAnalytics, type AnalyticsProfile, type AnalyticsSources } from './analytics.js';
 import { createJobRunner, type JobRunner } from './jobs.js';
 import { ReportService, type LogLevel, type ReportKind } from './reports.js';
+import { LiveSampler, liveSourcesFor, socketsPerProfile } from './live.js';
 import { AuditService, serializeJob } from './service.js';
 
 export { AuditService, serializeJob } from './service.js';
@@ -56,6 +59,15 @@ export type {
   RunActivityRow,
 } from './analytics.js';
 export type { JobHandle, JobRunner, JobWorker, NewJob } from './jobs.js';
+export { LiveSampler, registerLiveSources, socketsPerProfile } from './live.js';
+export type {
+  HermesProcessInfo,
+  HermesProcessKind,
+  LivePerformance,
+  LiveSources,
+  ProfileActivity,
+} from './live.js';
+export { ProcFs } from './procfs.js';
 
 interface AuditContext {
   audit: AuditService;
@@ -63,6 +75,7 @@ interface AuditContext {
   realtime: Realtime;
   reports: ReportService;
   analytics: UsageAnalytics;
+  live: LiveSampler;
 }
 
 /**
@@ -99,9 +112,13 @@ function contextOf(app: FastifyInstance): AuditContext {
     runner: createJobRunner({ audit, log: app.log }),
     reports,
     analytics: new UsageAnalytics(db, analyticsSources?.(app) ?? {}),
+    live: new LiveSampler(),
   };
   contexts.set(hub.io, created);
   startSampler(app, reports);
+  app.addHook('onClose', () => {
+    created.live.close();
+  });
   return created;
 }
 
@@ -291,6 +308,45 @@ export const auditModule = defineModule({
       operationId: 'audit.getSkillUsage',
       handler: (request, { query }) =>
         contextOf(request.server).analytics.skills(analyticsQuery(request, query)),
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'audit.getLivePerformance',
+      handler: async (request) => {
+        const server = request.server;
+        const sources = liveSourcesFor(server);
+        // A source that fails is an empty list on the screen, not a failed screen: the
+        // host and the hub can still be measured.
+        const listed = <T>(what: string, read: (() => T[]) | undefined): T[] => {
+          try {
+            return read?.() ?? [];
+          } catch (error) {
+            request.log.warn({ err: error }, `audit: could not list ${what}`);
+            return [];
+          }
+        };
+        const io = server.hub.io;
+        return contextOf(server).live.measure({
+          processes: listed('the Hermes processes', sources.hermesProcesses?.bind(sources)),
+          profiles: listed('the profiles', sources.profileActivity?.bind(sources)),
+          sockets: socketsPerProfile(
+            Object.values(REALTIME_NAMESPACES).map((namespace) => io.of(namespace)),
+          ),
+        });
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'audit.listLogLines',
+      handler: (request, { query }) =>
+        request.server.hub.logs.query({
+          source: (query.source as 'all' | 'hub' | 'hermes' | 'errors' | undefined) ?? 'all',
+          profile: query.profile as string | undefined,
+          level: query.level as LogLevel | undefined,
+          q: query.q as string | undefined,
+          limit: (query.limit as number | undefined) ?? 200,
+          after: query.after as number | undefined,
+        }),
     });
   },
   registerEvents(io: SocketServer) {

@@ -18,6 +18,8 @@ import { AccountTab } from './AccountTab.js';
 import { AuditReport } from './AuditReport.js';
 import { DisplayTab } from './DisplayTab.js';
 import { KnowledgeTab } from './KnowledgeTab.js';
+import { LogsTool } from './LogsTool.js';
+import { PerformanceTool } from './PerformanceTool.js';
 import { PluginsTab } from './PluginsTab.js';
 import { PrivacyTab } from './PrivacyTab.js';
 import { UpdatesTab } from './UpdatesTab.js';
@@ -50,8 +52,10 @@ const SECTIONS: Record<string, () => ReactElement> = {
   // The audit module's reports: Usage and Skills usage are their own pages (decision §50).
   usage: () => <UsagePage />,
   skills_usage: () => <SkillsUsagePage />,
-  logs: () => <AuditReport kind="logs" />,
-  performance: () => <AuditReport kind="performance" />,
+  // Live since contract decision §51: the hub's and Hermes's own lines, and the processes
+  // measured when asked.
+  logs: () => <LogsTool />,
+  performance: () => <PerformanceTool />,
 };
 
 export function SettingsScreen({ id }: { id: string }) {

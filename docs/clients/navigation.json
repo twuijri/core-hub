@@ -380,7 +380,8 @@
       "entry": {
         "kind": "settings-tool"
       },
-      "roles": ["member"]
+      "roles": ["admin"],
+      "note": "The hub's and every Hermes gateway's own lines (DECISIONS §51): owners and admins only."
     },
     {
       "id": "usage",

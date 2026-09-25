@@ -12589,6 +12589,173 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '501':
           $ref: '#/components/responses/NotImplemented'
+  /audit/performance/live:
+    get:
+      operationId: audit.getLivePerformance
+      tags: [audit]
+      summary: The host, the hub and every Hermes process right now, with the last few minutes (admin)
+      description: >-
+        Measured when asked, never stored: the host's CPU, memory and load; this hub's CPU,
+        memory, event-loop lag and uptime; every Hermes process the hub runs (the TUI gateway,
+        `hermes serve`, and each profile's messaging gateway) with its pid, CPU, memory and
+        uptime; and each profile's active runs, conversations and connected sockets. `history`
+        is the samples taken while somebody was looking, oldest first, at most six minutes of
+        them (contract decision §51). CPU is the share since the previous sample; a process
+        figure the host cannot give (no `/proc`) is `null`, never zero.
+      x-scope: global
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: One live measurement.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivePerformance'
+              example:
+                at: '2026-09-25T10:00:05Z'
+                interval_seconds: 5
+                host:
+                  platform: linux
+                  measured_from: proc
+                  cpu_count: 8
+                  cpu_percent: 12.5
+                  memory_total_bytes: 16777216000
+                  memory_used_bytes: 6442450944
+                  load: [0.42, 0.51, 0.6]
+                hub:
+                  pid: 1
+                  cpu_percent: 1.8
+                  rss_bytes: 184549376
+                  heap_used_bytes: 71303168
+                  event_loop_lag_ms: 1.2
+                  uptime_seconds: 86400
+                  node_version: v24.8.0
+                processes:
+                  - kind: tui_gateway
+                    profile: null
+                    pid: 58
+                    state: running
+                    cpu_percent: 0.4
+                    rss_bytes: 227540992
+                    uptime_seconds: 3600
+                  - kind: gateway
+                    profile: default
+                    pid: 41
+                    state: running
+                    cpu_percent: 0.1
+                    rss_bytes: 209715200
+                    uptime_seconds: 86390
+                profiles:
+                  - profile: default
+                    active_runs: 1
+                    sessions: 42
+                    sockets: 2
+                history:
+                  - at: '2026-09-25T10:00:00Z'
+                    host_cpu_percent: 10.1
+                    host_memory_used_bytes: 6440000000
+                    hub_cpu_percent: 1.5
+                    hub_rss_bytes: 184000000
+                    event_loop_lag_ms: 1.1
+                    hermes_rss_bytes: 437256192
+                  - at: '2026-09-25T10:00:05Z'
+                    host_cpu_percent: 12.5
+                    host_memory_used_bytes: 6442450944
+                    hub_cpu_percent: 1.8
+                    hub_rss_bytes: 184549376
+                    event_loop_lag_ms: 1.2
+                    hermes_rss_bytes: 437256192
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /audit/logs/lines:
+    get:
+      operationId: audit.listLogLines
+      tags: [audit]
+      summary: The last lines the hub and every Hermes gateway wrote, filtered (admin)
+      description: >-
+        Read from bounded rings in the hub's memory, one per source — the hub, and Hermes per
+        profile — each keeping its newest 5000 lines (contract decision §51); a restart
+        empties them. `source=errors` is every source's `error` lines. `level` is the least
+        severe level shown. `limit` keeps the newest matching lines, returned oldest first.
+        `after` returns only lines newer than that `seq`, for a live tail.
+      x-scope: global
+      x-roles: [owner, admin]
+      x-rt-events: []
+      parameters:
+        - name: source
+          in: query
+          schema:
+            type: string
+            enum: [all, hub, hermes, errors]
+            default: all
+        - name: profile
+          in: query
+          description: With `source=hermes` (or `all`), only the Hermes lines of this profile's gateway; `tui` is the TUI gateway every profile shares.
+          schema:
+            type: string
+            maxLength: 64
+        - name: level
+          in: query
+          schema:
+            type: string
+            enum: [error, warn, info, debug]
+        - name: q
+          in: query
+          description: Case-insensitive text the line contains.
+          schema:
+            type: string
+            maxLength: 200
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5000
+            default: 200
+        - name: after
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: The matching lines and the sources there are.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogLinesPage'
+              example:
+                lines:
+                  - seq: 1041
+                    at: '2026-09-25T10:00:01Z'
+                    level: info
+                    source: hub
+                    profile: null
+                    message: core hub listening
+                  - seq: 1042
+                    at: '2026-09-25T10:00:03Z'
+                    level: error
+                    source: hermes
+                    profile: work
+                    message: 'ERROR gateway.platforms.whatsapp: bridge exited'
+                last_seq: 1042
+                capacity: 5000
+                sources:
+                  - source: hub
+                    profile: null
+                    lines: 812
+                  - source: hermes
+                    profile: work
+                    lines: 230
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /audit/usage:
     get:
       operationId: audit.getUsage
@@ -19255,6 +19422,212 @@ components:
           type: object
           description: Kind-specific; fixed in Phase 4 (usage totals and breakdowns, runtime processes, skill counts, log entries with ISO timestamps and byte sizes).
           additionalProperties: true
+    LivePerformance:
+      type: object
+      required: [at, interval_seconds, host, hub, processes, profiles, history]
+      properties:
+        at:
+          $ref: '#/components/schemas/Timestamp'
+        interval_seconds:
+          type: integer
+          minimum: 1
+          description: How often a client should ask again.
+        host:
+          type: object
+          required:
+            [
+              platform,
+              measured_from,
+              cpu_count,
+              cpu_percent,
+              memory_total_bytes,
+              memory_used_bytes,
+              load,
+            ]
+          properties:
+            platform:
+              type: string
+            measured_from:
+              type: string
+              enum: [proc, os]
+              description: '`proc` on Linux; `os` where there is no `/proc` (Hermes processes are then not measured).'
+            cpu_count:
+              type: integer
+              minimum: 0
+            cpu_percent:
+              type: [number, 'null']
+              description: Share of the whole machine since the previous sample, 0–100.
+            memory_total_bytes:
+              type: integer
+              minimum: 0
+            memory_used_bytes:
+              type: integer
+              minimum: 0
+            load:
+              type: [array, 'null']
+              items:
+                type: number
+              minItems: 3
+              maxItems: 3
+        hub:
+          type: object
+          required:
+            [
+              pid,
+              cpu_percent,
+              rss_bytes,
+              heap_used_bytes,
+              event_loop_lag_ms,
+              uptime_seconds,
+              node_version,
+            ]
+          properties:
+            pid:
+              type: integer
+            cpu_percent:
+              type: [number, 'null']
+              description: Of one core, like `top`; above 100 means more than one core.
+            rss_bytes:
+              type: integer
+              minimum: 0
+            heap_used_bytes:
+              type: integer
+              minimum: 0
+            event_loop_lag_ms:
+              type: [number, 'null']
+              description: Mean event-loop delay since the previous sample.
+            uptime_seconds:
+              type: integer
+              minimum: 0
+            node_version:
+              type: string
+        processes:
+          type: array
+          items:
+            $ref: '#/components/schemas/HermesProcess'
+        profiles:
+          type: array
+          items:
+            type: object
+            required: [profile, active_runs, sessions, sockets]
+            properties:
+              profile:
+                $ref: '#/components/schemas/ProfileSlug'
+              active_runs:
+                type: integer
+                minimum: 0
+              sessions:
+                type: integer
+                minimum: 0
+                description: Conversations not archived.
+              sockets:
+                type: integer
+                minimum: 0
+        history:
+          type: array
+          items:
+            type: object
+            required:
+              [
+                at,
+                host_cpu_percent,
+                host_memory_used_bytes,
+                hub_cpu_percent,
+                hub_rss_bytes,
+                event_loop_lag_ms,
+                hermes_rss_bytes,
+              ]
+            properties:
+              at:
+                $ref: '#/components/schemas/Timestamp'
+              host_cpu_percent:
+                type: [number, 'null']
+              host_memory_used_bytes:
+                type: integer
+                minimum: 0
+              hub_cpu_percent:
+                type: [number, 'null']
+              hub_rss_bytes:
+                type: integer
+                minimum: 0
+              event_loop_lag_ms:
+                type: [number, 'null']
+              hermes_rss_bytes:
+                type: [integer, 'null']
+                description: Every Hermes process together; null when none could be measured.
+    HermesProcess:
+      type: object
+      required: [kind, profile, pid, state, cpu_percent, rss_bytes, uptime_seconds]
+      properties:
+        kind:
+          type: string
+          enum: [tui_gateway, dashboard, gateway]
+          description: "`tui_gateway` carries every conversation; `dashboard` is `hermes serve`; `gateway` is one profile's messaging gateway."
+        profile:
+          type: [string, 'null']
+          description: The profile a `gateway` serves; null for the processes every profile shares.
+        pid:
+          type: [integer, 'null']
+        state:
+          type: string
+          description: The supervisor's word for it (`running`, `starting`, `error`, `stopped`, …).
+        cpu_percent:
+          type: [number, 'null']
+          description: Of one core, since the previous sample.
+        rss_bytes:
+          type: [integer, 'null']
+        uptime_seconds:
+          type: [integer, 'null']
+    LogLine:
+      type: object
+      required: [seq, at, level, source, profile, message]
+      properties:
+        seq:
+          type: integer
+          minimum: 1
+          description: Increases with every line the hub keeps, across sources.
+        at:
+          $ref: '#/components/schemas/Timestamp'
+        level:
+          type: string
+          enum: [error, warn, info, debug]
+        source:
+          type: string
+          enum: [hub, hermes]
+        profile:
+          type: [string, 'null']
+          description: The Hermes profile whose gateway wrote it; `tui` for the TUI gateway; null for the hub.
+        message:
+          type: string
+    LogLinesPage:
+      type: object
+      required: [lines, last_seq, capacity, sources]
+      properties:
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogLine'
+        last_seq:
+          type: integer
+          minimum: 0
+          description: The newest `seq` the hub holds, whether or not it matched; pass it as `after` next time.
+        capacity:
+          type: integer
+          description: How many lines each source keeps.
+        sources:
+          type: array
+          items:
+            type: object
+            required: [source, profile, lines]
+            properties:
+              source:
+                type: string
+                enum: [hub, hermes]
+              profile:
+                type: [string, 'null']
+              lines:
+                type: integer
+                minimum: 0
     ReportPeriod:
       type: object
       description: The calendar days a report covers, both ends included, in the caller's calendar.

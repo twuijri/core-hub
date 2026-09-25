@@ -40,6 +40,7 @@ import { createContractIndex } from '../../lib/contract.js';
 import { defineModule } from '../../lib/module.js';
 import { createRealtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
+import { levelOfHermesLine } from '../../lib/log-ring.js';
 import { t } from '../../i18n/index.js';
 import {
   findWorkspace,
@@ -369,6 +370,16 @@ function contextOf(app: FastifyInstance): AgentsContext {
       : {}),
     // Every messaging gateway starts on the providers and model a chat in its profile uses
     // (`models` writes them, looked up per start because it mounts after this module).
+    // Hermes's own log from the TUI gateway, into the Logs screen's ring only (never the
+    // hub's log volume, `adapters/hermes-tui.ts`).
+    tuiLogLine: (line: string) => {
+      hub.logs.push({
+        source: 'hermes',
+        profile: 'tui',
+        level: levelOfHermesLine(line, 'info'),
+        message: line,
+      });
+    },
     prepareGateway: (profile: string, home: string) => {
       modelsPorts.get(hub.io)?.prepareGatewayProfile?.(profile, home);
     },
@@ -511,6 +522,31 @@ export function hermesRuntimeFor(app: FastifyInstance): HermesRuntime {
 export function hermesDashboardFor(app: FastifyInstance): HermesDashboard | null {
   const { dashboard } = contextOf(app);
   return dashboard.available() ? dashboard : null;
+}
+
+/**
+ * Every Hermes process this hub runs, for the Performance screen (through the composition
+ * root): the TUI gateway, `hermes serve` (started on demand, so often `stopped`) and every
+ * profile's messaging gateway. Empty where the hub does not supervise Hermes.
+ */
+export function hermesProcessesFor(app: FastifyInstance): Array<{
+  kind: 'tui_gateway' | 'dashboard' | 'gateway';
+  profile: string | null;
+  pid: number | null;
+  state: string;
+}> {
+  const { runtime, dashboard } = contextOf(app);
+  const processes: ReturnType<typeof hermesProcessesFor> = runtime.processes();
+  if (dashboard.available()) {
+    const status = dashboard.status();
+    processes.push({
+      kind: 'dashboard',
+      profile: null,
+      pid: status.pid,
+      state: status.running ? 'running' : 'stopped',
+    });
+  }
+  return processes;
 }
 
 /** The live turns, for anything that must not interrupt one (`models` recycles Hermes). */

@@ -762,3 +762,116 @@
   text-align: center;
   pointer-events: none;
 }
+
+/* ------------------------------------------------------------ live tools
+   Settings → Performance and Logs (DECISIONS §51). The sparkline is mirrored in Arabic so
+   "now" stays at the end of the line, beside the figure it belongs to. */
+.ch-perf-grid {
+  display: grid;
+  gap: var(--ch-space-3);
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+.ch-perf-title {
+  font-size: var(--ch-font-size-sm);
+  font-weight: 600;
+  margin-block-end: var(--ch-space-2);
+}
+
+.ch-perf-metric {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ch-space-3);
+  padding-block: var(--ch-space-2);
+  border-block-start: 1px solid var(--ch-color-border);
+}
+
+.ch-perf-metric:first-of-type {
+  border-block-start: none;
+}
+
+.ch-perf-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  unicode-bidi: isolate;
+}
+
+.ch-sparkline {
+  inline-size: 7.5rem;
+  block-size: 1.75rem;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+[dir='rtl'] .ch-sparkline {
+  transform: scaleX(-1);
+}
+
+.ch-sparkline-base {
+  stroke: var(--ch-color-border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.ch-sparkline-line {
+  fill: none;
+  stroke: var(--ch-color-accent);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.ch-sparkline-dot {
+  fill: var(--ch-color-accent);
+}
+
+.ch-logs-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ch-space-2);
+}
+
+.ch-logs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-block-size: 60vh;
+  overflow: auto;
+  padding: var(--ch-space-1);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-code-bg);
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-font-size-xs);
+}
+
+.ch-logs-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ch-space-2);
+  padding-inline: var(--ch-space-1);
+  border-radius: var(--ch-radius-sm);
+  color: var(--ch-color-code-text);
+}
+
+.ch-logs-line[data-level='error'] {
+  background: var(--ch-color-danger-soft);
+  color: var(--ch-color-danger-soft-text);
+}
+
+.ch-logs-time,
+.ch-logs-where {
+  flex-shrink: 0;
+  color: var(--ch-color-text-faint);
+  font-variant-numeric: tabular-nums;
+  unicode-bidi: isolate;
+}
+
+.ch-logs-message {
+  min-inline-size: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
