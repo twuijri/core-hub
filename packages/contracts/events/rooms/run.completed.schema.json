@@ -713,6 +713,17 @@
                 }
               ]
             },
+            "fallback": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RunFallback"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`null` when the chosen model answered (absent from hubs before decision §49). When set, the turn moved down the fallback chain and `model` / `provider` name the model that actually answered."
+            },
             "started_at": {
               "oneOf": [
                 {
@@ -736,6 +747,48 @@
           }
         }
       ]
+    },
+    "RunFallback": {
+      "type": "object",
+      "description": "What a turn went through before the model that answered it (decision §49): each model of the chain that failed with an error another model could get past, in the order tried, starting with the one that was chosen.",
+      "required": ["failed"],
+      "properties": {
+        "failed": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/RunFallbackAttempt"
+          }
+        }
+      }
+    },
+    "RunFallbackAttempt": {
+      "type": "object",
+      "required": ["model", "provider", "code", "error"],
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": ["string", "null"],
+          "description": "The provider's slug, when the hub knows it."
+        },
+        "code": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ErrorCode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`null` when the runtime switched models without saying why."
+        },
+        "error": {
+          "type": ["string", "null"],
+          "description": "The provider's own words, when it sent any."
+        }
+      }
     },
     "RunStatus": {
       "type": "string",

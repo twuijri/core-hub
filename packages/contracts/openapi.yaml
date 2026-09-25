@@ -9796,6 +9796,7 @@ paths:
                     local: true
                     repeatable: false
                     keys_url: null
+                    sign_in: false
                 host:
                   containerized: true
                   loopback_alias: host.docker.internal
@@ -9931,6 +9932,13 @@ paths:
       operationId: models.startProviderSignIn
       tags: [models]
       summary: Start a browser/device-code sign-in for providers that use OAuth (admin)
+      description: >-
+        Only for a provider whose `auth.kind` is `oauth` (its preset says `sign_in: true`);
+        any other is `409 state_invalid` with `details.reason = sign_in_unsupported`. The agent
+        runtime performs the sign-in and keeps the credential (decision §50), so where the hub
+        does not supervise Hermes this is `409 state_invalid` with
+        `details.reason = hermes_not_supervised`, and `503` while Hermes's server cannot be
+        reached. A sign-in is kept for as long as its code is valid.
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
@@ -9947,6 +9955,7 @@ paths:
                 verification_url: https://auth.example/device
                 accepts_code: false
                 expires_at: '2026-09-21T13:25:00Z'
+                error: null
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -9955,6 +9964,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /models/providers/{provider_id}/sign-in/{sign_in_id}:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -9968,6 +9979,9 @@ paths:
       operationId: models.getProviderSignIn
       tags: [models]
       summary: Poll a sign-in
+      description: >-
+        Asks the runtime how the sign-in stands and answers with it. A sign-in the hub no
+        longer holds (it ran out, or the hub restarted) is `404`.
       x-rt-events: []
       responses:
         '200':
@@ -9983,6 +9997,7 @@ paths:
                 verification_url: https://auth.example/device
                 accepts_code: false
                 expires_at: '2026-09-21T13:25:00Z'
+                error: null
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -9991,6 +10006,10 @@ paths:
       operationId: models.completeProviderSignIn
       tags: [models]
       summary: Submit a pasted code for providers that hand one back (admin)
+      description: >-
+        Only while `accepts_code` is true. Every sign-in the hub offers today is a device code,
+        which the person enters on the provider's page, so this is `409 state_invalid`
+        (`details.reason = code_not_accepted`) for all of them.
       x-roles: [owner, admin]
       requestBody:
         required: true
@@ -10019,6 +10038,7 @@ paths:
                 verification_url: https://auth.example/authorize
                 accepts_code: true
                 expires_at: '2026-09-21T13:25:00Z'
+                error: null
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -10027,6 +10047,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /models:
     get:
       operationId: models.listCatalogue
@@ -14341,6 +14363,16 @@ components:
             - $ref: '#/components/schemas/ToolCall'
             - type: 'null'
           description: The whole call — arguments and result — for a `tool` step.
+        model:
+          type: [string, 'null']
+          description: For a `turn`, the model that spoke in it, when the hub knows it.
+        fallback:
+          oneOf:
+            - $ref: '#/components/schemas/RunFallback'
+            - type: 'null'
+          description: >-
+            On the first `turn` of a run that moved down the fallback chain (decision §49): the
+            models that failed before `model` answered. `null` otherwise.
     TrajectoryMetrics:
       type: object
       description: |
@@ -14436,6 +14468,36 @@ components:
         metrics:
           $ref: '#/components/schemas/TrajectoryMetrics'
     # ---------------------------------------------------------------- runs
+    RunFallback:
+      type: object
+      description: >-
+        What a turn went through before the model that answered it (decision §49): each model
+        of the chain that failed with an error another model could get past, in the order
+        tried, starting with the one that was chosen.
+      required: [failed]
+      properties:
+        failed:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/RunFallbackAttempt'
+    RunFallbackAttempt:
+      type: object
+      required: [model, provider, code, error]
+      properties:
+        model:
+          type: string
+        provider:
+          type: [string, 'null']
+          description: The provider's slug, when the hub knows it.
+        code:
+          oneOf:
+            - $ref: '#/components/schemas/ErrorCode'
+            - type: 'null'
+          description: '`null` when the runtime switched models without saying why.'
+        error:
+          type: [string, 'null']
+          description: The provider's own words, when it sent any.
     RunStatus:
       type: string
       enum: [queued, running, waiting, succeeded, failed, cancelled]
@@ -14523,6 +14585,14 @@ components:
               oneOf:
                 - $ref: '#/components/schemas/Usage'
                 - type: 'null'
+            fallback:
+              oneOf:
+                - $ref: '#/components/schemas/RunFallback'
+                - type: 'null'
+              description: >-
+                `null` when the chosen model answered (absent from hubs before decision §49).
+                When set, the turn moved down the fallback chain and `model` / `provider` name
+                the model that actually answered.
             started_at:
               oneOf:
                 - $ref: '#/components/schemas/Timestamp'
@@ -17404,7 +17474,19 @@ components:
       type: object
       description: One provider *type* a person can add, with everything the dialog prefills.
       required:
-        [id, label, kind, api_mode, base_url, base_url_required, key, local, repeatable, keys_url]
+        [
+          id,
+          label,
+          kind,
+          api_mode,
+          base_url,
+          base_url_required,
+          key,
+          local,
+          repeatable,
+          keys_url,
+          sign_in,
+        ]
       properties:
         id:
           type: string
@@ -17437,6 +17519,13 @@ components:
           description: 'May be added more than once; the person gives each instance its own name.'
         keys_url:
           type: [string, 'null']
+        sign_in:
+          type: boolean
+          description: >-
+            The provider is used by signing in to an account rather than with an API key: after
+            adding it, `models.startProviderSignIn` shows a code and a link (decision §50).
+            Only the providers whose sign-in the agent runtime can complete on the hub's behalf
+            say `true`; `key` is then `optional` and a client does not ask for one.
     ProviderHost:
       type: object
       required: [containerized, loopback_alias]
@@ -17540,13 +17629,22 @@ components:
           $ref: '#/components/schemas/Visibility'
     ProviderSignIn:
       type: object
-      required: [id, status, user_code, verification_url, accepts_code, expires_at]
+      description: >-
+        One sign-in to a provider account by device code (decision §50): the person opens
+        `verification_url`, enters `user_code`, and the client polls `models.getProviderSignIn`
+        until `status` is no longer `pending`. On `approved` the credential is stored where the
+        provider's scope says — the shared provider's in the `default` profile, a profile's own
+        provider's in that profile — and the provider's `auth.signed_in` is true.
+      required: [id, status, user_code, verification_url, accepts_code, expires_at, error]
       properties:
         id:
           $ref: '#/components/schemas/Ulid'
         status:
           type: string
-          enum: [pending, approved, denied, expired]
+          enum: [pending, approved, denied, expired, failed]
+          description: >-
+            `denied` — the person declined in the browser; `expired` — the code ran out before
+            it was used; `failed` — the sign-in could not finish (`error` says why).
         user_code:
           type: [string, 'null']
         verification_url:
@@ -17556,6 +17654,9 @@ components:
           description: Whether the provider hands the user a code to paste back.
         expires_at:
           $ref: '#/components/schemas/Timestamp'
+        error:
+          type: [string, 'null']
+          description: Why a `failed` or `denied` sign-in stopped, in the runtime's own words.
     RuntimeReport:
       type: object
       description: >-
@@ -17616,7 +17717,12 @@ components:
             - type: 'null'
         fallbacks:
           type: array
-          description: Tried in order when the chosen model fails.
+          description: >-
+            Tried in order when the chosen model fails with an error another model could get
+            past (decision §49): the provider unavailable (a 5xx, `auth_unavailable`), rate
+            limited (429), timed out or unreachable. Never after another 4xx, and never once the
+            model has started answering. It follows the chat model: inherited with it, and used
+            by every agent of the profile after the model that agent runs on.
           items:
             $ref: '#/components/schemas/ModelRef'
         auxiliary:
