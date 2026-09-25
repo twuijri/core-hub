@@ -2319,3 +2319,124 @@ Proposed here — owner to confirm:
 Left out on purpose: Hermes's `api_server`, `webhook`, `msgraph_webhook` and `relay` (the hub's
 own API, webhooks and an experimental connector — not a place people message the agent) and
 `a2a` (agent-to-agent; it declares no required variable, so there is nothing to link).
+## 78. A coding agent's own config files are edited from the web: one set for the hub, where the agent reads them
+
+The owner, 2026-09-25 (asked in `docs/changes/2026-09-26-twuijri-close-501-stubs.md`, (b)):
+«تم» — build one admin page for coding agents' config files, one set shared by every profile, in
+the hub user's home where the agents read them. `agents.listConfigFiles`, `getConfigFile` and
+`putConfigFile` were 501. Approved by the owner; the details marked *proposed* are ours.
+
+- **Which files: what the pinned version really reads**, checked in each package (the change
+  record quotes the evidence), two per agent — its instructions and its settings: Claude Code
+  `CLAUDE.md` and `settings.json` under `CLAUDE_CONFIG_DIR` or `~/.claude`; Codex `AGENTS.md`
+  and `config.toml` under `CODEX_HOME` or `~/.codex`; Gemini CLI `GEMINI.md` and `settings.json`
+  under `$GEMINI_CLI_HOME/.gemini` or `~/.gemini`; Qwen Code `QWEN.md` and `settings.json` under
+  `QWEN_HOME` or `~/.qwen`; Kimi Code `AGENTS.md` and `config.toml` under `KIMI_CODE_HOME` or
+  `~/.kimi-code`; Pi `AGENTS.md` and `settings.json` under `PI_CODING_AGENT_DIR` or
+  `~/.pi/agent`. OpenCode is not listed (not verified). The agent's own variable is honoured
+  from the environment the hub hands its agents. The keys are `instructions` and `settings`
+  for every agent. A new capability, `config_files`, says an agent has them.
+- **An allow-list, not paths.** A `file_key` names one entry of the agent's list; no request
+  carries a path. A file or a folder on the way that is a link is followed only while its real
+  path stays inside the agent's folder or the home (a dotfiles folder works; a link towards
+  `/data/keys` is `409 symlink_outside`, read or written).
+- **Owners and admins only** — all three operations (`x-roles`), reading too: a settings file
+  can hold keys.
+- **Writes are careful**: optimistic concurrency by `revision` (a hash of the bytes; `null`
+  creates) — a stale one is `409 changed` with the current revision and writes nothing; JSON
+  must parse (comments allowed for Gemini CLI and Qwen Code, which strip them) or `400
+  invalid_json` with the parser's sentence; at most 1 MiB of UTF-8 (`413`; `415` for a file
+  that is not UTF-8 text); the previous bytes kept under `<DATA_DIR>/backups/agent-config/
+  <agent>/<key>/` (the newest ten); written to a temporary file and renamed, keeping the mode
+  (`0600` when new); every write audited (`agent_config_file.written`, with both revisions).
+  TOML is not checked (no parser in the hub): the agent reports its own error.
+- **Proposed — owner to confirm: the image's home moves into the volume.** `HOME=/data/home` in
+  the image (made on the first boot of an older volume), so what is edited here — and whatever
+  else the coding agents keep in their home — survives an upgrade that replaces the container,
+  as every other written file does. npm's cache stays outside the volume
+  (`NPM_CONFIG_CACHE=/tmp/.npm`). On the desktop and a native install the home is the person's
+  own, unchanged.
+- **Web** (proposed): «ملفات الإعداد» / "Config files", an agent-level page (web and desktop,
+  not the phones) before Settings, one tab per file with the Files page's editor (Markdown in
+  the reading font with each line's own direction, JSON and TOML left to right in monospace),
+  Save and Revert, and a note that the files are shared by every profile.
+
+Rejected: a home per profile (the agents do not know profiles; a per-profile `HOME` would split
+their logins and caches too, and the owner chose one set); arbitrary paths under the home (the
+boundary would be the client's); editing Hermes's files here (its settings, memory and files have
+their own pages, §58, §65).
+
+## 79. A message on a channel acts for the person who proved that account is theirs, and for nobody else
+
+The owner, 2026-09-25: «اوافق» to option (b) — a person links their own Telegram and/or WhatsApp
+identity to their hub account; a message from a linked identity runs with that person's
+permissions, so the hub's MCP tools (§67) act as them; an unlinked sender gets no hub tools and
+the agent still chats as today; linking is proven, not typed; unlinking from the person's
+settings; an admin sees and removes links. Approved; the mechanism below is ours, proposed —
+owner to confirm.
+
+What was observed in Hermes (MIT, v2026.9.14, ADR 0012), in our words: its messaging gateway
+loads gateway hooks from the active profile's `hooks/<name>/` (`HOOK.yaml` with the events,
+`handler.py` with `handle(event_type, context)`) when it starts. `agent:start` is awaited before
+the agent runs a turn, with the sender as the platform named it (`platform`, `user_id`,
+`chat_type`, `session_id`); `agent:end` follows the turn and `agent:step` each tool loop. A slash
+command Hermes knows fires `command:<name>` after Hermes's own authorization, and a handler
+answering `{decision: handled, message}` makes the gateway reply that instead. `/start` is such a
+command (a Telegram bot link `?start=<code>` sends it). The sender id is the same one Hermes's
+allowlists and pairing use: Telegram's numeric user id, WhatsApp's chat id. MCP headers in
+`config.yaml` are filled from the process environment when the profile's `.env` does not name
+the variable.
+
+- **The hook is the hub's**, written beside the `corehub` block when the tools are switched on
+  (`hooks/corehub/`, marked, removed when off, put back at boot) and the profile's messaging
+  gateway restarted to load it. It speaks to `agents.hubChannelEvent`
+  (`POST /api/v1/hub-mcp/channel-events`) with the profile's own hub-tools key, read from the
+  `.env` of the profile it lives in.
+- **Linking is proven with a one-time code.** `auth.createChannelLinkCode` gives the person
+  `corehub_XXXXXXXXXX` (ten minutes, once, one per person, in memory, hashed); they send
+  `/start <code>` to the bot from the account. The hook hands the code and the sender to the hub,
+  which links that account and has Hermes reply in the person's language. The bot must already
+  answer the sender (Hermes drops strangers before any hook). An account linked to somebody else
+  is refused, not taken over. Telegram and WhatsApp only (`ChannelIdentityPlatform`).
+- **One link per account for the hub** (not per profile): a person is the same person in every
+  profile, and their memberships already say where they may act. A linked sender's turn in a
+  profile they may not enter (or while disabled) acts for nobody (`hub_tools_sender_no_access`).
+- **A turn is a channel lease.** `turn_started` opens a lease for the linked person (a run token
+  for that person in that profile, as §67's runs have) or for nobody with the reason;
+  `turn_ended` closes it; `turn_step` keeps it alive; fifteen quiet minutes end it.
+- **A call says which process made it.** The block gains `X-Corehub-Origin:
+  ${COREHUB_MCP_ORIGIN}`, and the hub sets that variable in each Hermes process it starts —
+  `hub` where its own conversations run (and in a coding agent's `session/new`), `gateway` in
+  every messaging gateway. A gateway's call is only ever one of its turns', a hub process's only
+  one of the hub's runs': a stranger's message can never borrow a person's live chat, which
+  before this change it could (a gateway turn's call while a chat was live was that chat's
+  owner's). Unknown origin (a Hermes the hub did not start) may be either, and then a live
+  channel turn beside a different person makes the call ambiguous.
+- **Refused, never guessed**: a stranger (`hub_tools_sender_not_linked`), a group or forum chat —
+  others steer that conversation too (`hub_tools_group_chat`), two different senders' turns live
+  in one gateway at once (`hub_tools_run_ambiguous`: a gateway announces no tool calls to tell
+  them apart). The agent reads the refusal as a tool result, as in §67.
+- **Managing links**: `auth.listMyChannelIdentities`, `auth.deleteMyChannelIdentity` (Settings →
+  Account, «حسابات المراسلة»), `auth.listChannelIdentities` and `auth.deleteChannelIdentity` for
+  owners and admins (Settings → People). Table `channel_identities` (migration `0025`), removed
+  with its person. `last_used_at` is when a message from it last acted as the person.
+
+Rejected: typing an account id (anyone could claim anyone's); per-profile links (the same person
+proving the same phone once per profile); acting as the profile's owner for every channel
+message (a stranger would act as the owner); guessing among concurrent senders.
+
+## 80. The relay, presets and hub peers stay in the contract, parked
+
+The owner, 2026-09-25, on the rest of the 501 inventory:
+
+- **Relay** (`devices.getRelay`, `devices.setRelay`): «يبقى في العقد، مؤجّلًا». The desktop app is
+  to work both ways — connected to a server, or local — and a desktop-local person without a
+  server may later want their phone to reach it from outside. That is what the relay is for.
+  Options when it is built: the person's own Cloudflare Tunnel, or Tailscale. Not a service run
+  for them. Not built now; the operations stay 501.
+- **Presets** (`agents.listPresets`, `getPreset`, `deletePreset`, `activatePreset`) and **hub
+  peers** (`devices.listPeers`, `requestPeer`, `updatePeer`, `deletePeer`, `createPeerInvite`):
+  «خلها بعدين اخاف تفتحلنا ثغرات» — later; the owner is wary of the security surface they open
+  (a preset swaps an agent's whole configuration; a peer is another hub reaching into this one).
+  Not built and not deleted; they stay 501 until a decision says what they may do and what they
+  may not.

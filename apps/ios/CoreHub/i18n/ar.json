@@ -41,7 +41,8 @@
     "back_to_agents": "رجوع إلى الوكلاء",
     "skills_usage": "استخدام المهارات",
     "files": "الملفات",
-    "terminal": "الطرفية"
+    "terminal": "الطرفية",
+    "config_files": "ملفات الإعداد"
   },
   "common": {
     "cancel": "إلغاء",

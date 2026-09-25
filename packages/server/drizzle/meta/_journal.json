@@ -176,6 +176,13 @@
       "when": 1790353868784,
       "tag": "0024_drop_performance_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1790360538187,
+      "tag": "0025_channel_identities",
+      "breakpoints": true
     }
   ]
 }

@@ -112,6 +112,7 @@ import { SkillImportError, installPack, planImport, type UploadedFile } from './
 import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './installer.js';
 import type { AgentDirectoryPort, AgentInfo, AgentModelsPort, AgentRunnerPort } from './ports.js';
 import { AgentRunner } from './runner.js';
+import { ConfigFileError, ConfigFileStore } from './config-files.js';
 import { subagentSupport } from './serialize.js';
 import {
   AgentUpdateChecker,
@@ -320,6 +321,8 @@ export interface AgentsOverrides {
     idleRetryMs?: number;
     firstCheckMs?: number;
   };
+  /** The home coding agents read their config files from (`config-files.ts`), for the tests. */
+  agentHome?: string;
 }
 
 /** Platforms linked by pasting a bot token (`agents.linkChannel`). */
@@ -412,6 +415,8 @@ interface AgentsContext {
   telegramFetch: typeof fetch;
   /** How linking asks the other platforms who an account is. */
   channelProbe: ProbeOptions;
+  /** The coding agents' own config files, one set for the hub (decision §78). */
+  configFiles: ConfigFileStore;
 }
 
 /**
@@ -713,6 +718,19 @@ function contextOf(app: FastifyInstance): AgentsContext {
       return home ? { home, reason: null } : { home: null, reason: 'hermes_profile_absent' };
     },
     url: () => hubMcpUrl(app),
+    // Hermes's messaging gateway reads its hooks when it starts (decision §79): the one that
+    // serves the profile starts again — a named profile's at once, the default one held down
+    // and started again (it also carries the API server).
+    gatewayChanged: (workspace) => {
+      const profile = hermesProfileName(workspace);
+      const restart =
+        profile === 'default'
+          ? runtime.withGatewayStopped('default', () => undefined)
+          : runtime.channelsChanged(profile);
+      restart.catch((error: unknown) =>
+        app.log.warn({ err: error, profile }, 'agents: could not restart the profile gateway'),
+      );
+    },
   });
   const created: AgentsContext = {
     service,
@@ -751,7 +769,19 @@ function contextOf(app: FastifyInstance): AgentsContext {
     pairingPollMs: own.pairingPollMs ?? 1000,
     telegramFetch: own.telegramFetch ?? fetch,
     channelProbe: own.channelProbe ?? {},
+    configFiles: new ConfigFileStore({
+      env: hub.config.hostEnv.inherited ?? {},
+      ...(own.agentHome ? { home: own.agentHome } : {}),
+      dataDir: hub.config.dataDir,
+    }),
   };
+  // The home coding agents read their files from exists before anything is spawned: the
+  // image's `/data/home` is made on the first boot of a volume that predates it.
+  try {
+    created.configFiles.ensureHome();
+  } catch (error) {
+    app.log.warn({ err: error }, 'agents: could not make the home coding agents read from');
+  }
   contexts.set(hub.io, created);
   return created;
 }
@@ -1589,6 +1619,97 @@ export const agentsModule = defineModule({
         const agentId = params.agent_id as string;
         const { profile } = toolHome(request, agentId, 'journey_is_hermes_only');
         return readJourney(hermesApiOf(request, agentId), profile);
+      },
+    });
+
+    /**
+     * A coding agent's own config files (decision §78): a fixed list per agent, one set for
+     * every profile, in the home of the user the hub runs as (`config-files.ts`).
+     */
+    const configFileFault = (error: unknown, agentId: string, key?: string): never => {
+      if (!(error instanceof ConfigFileError)) throw error;
+      const { fault } = error;
+      switch (fault.kind) {
+        case 'unknown':
+          throw notFound({ resource: 'config_file', id: key ?? agentId });
+        case 'symlink_outside':
+          throw new HubError('conflict', { details: { reason: 'symlink_outside' } });
+        case 'too_large':
+          throw new HubError('payload_too_large', { details: { limit_bytes: fault.limit } });
+        case 'not_text':
+          throw new HubError('unsupported_media_type', { details: { reason: 'not_utf8' } });
+        case 'changed':
+          throw new HubError('conflict', {
+            details: { reason: 'changed', revision: fault.revision },
+          });
+        case 'invalid_json':
+          throw new HubError('validation_failed', {
+            details: { field: 'content', reason: 'invalid_json', message: fault.message },
+          });
+      }
+    };
+    const agentSlug = (request: FastifyRequest, agentId: string): string =>
+      contextOf(request.server).service.get(scopeOf(request), agentId, request.language).slug;
+
+    defineRoute(app, deps, {
+      operationId: 'agents.listConfigFiles',
+      handler: (request, { params }) => {
+        const agentId = params.agent_id as string;
+        return { items: contextOf(request.server).configFiles.list(agentSlug(request, agentId)) };
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.getConfigFile',
+      handler: (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const key = params.file_key as string;
+        try {
+          return contextOf(request.server).configFiles.read(agentSlug(request, agentId), key);
+        } catch (error) {
+          return configFileFault(error, agentId, key);
+        }
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.putConfigFile',
+      handler: (request, { params, body }) => {
+        const agentId = params.agent_id as string;
+        const key = params.file_key as string;
+        const scope = scopeOf(request);
+        const slug = agentSlug(request, agentId);
+        const input = body as { content: string; revision: string | null };
+        try {
+          const written = contextOf(request.server).configFiles.write(slug, key, {
+            content: input.content,
+            revision: input.revision ?? null,
+          });
+          const actor = actorOf(request).userId;
+          auditFor(request.server).record({
+            workspace: scope.id,
+            ownerId: actor,
+            actorKind: 'user',
+            actorId: actor,
+            action: 'agent_config_file.written',
+            entityKind: 'agent',
+            entityId: agentId,
+            summary: `config file written: ${slug} ${written.view.path}`.slice(0, 500),
+            data: {
+              agent: slug,
+              key,
+              path: written.view.path,
+              bytes: written.view.size_bytes,
+              previous_revision: written.previous,
+              revision: written.view.revision,
+              backup: written.backup,
+            },
+            requestId: String(request.id),
+          });
+          return written.view;
+        } catch (error) {
+          return configFileFault(error, agentId, key);
+        }
       },
     });
 

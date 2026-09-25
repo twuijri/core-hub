@@ -41,7 +41,8 @@
     "back_to_agents": "Back to agents",
     "skills_usage": "Skills usage",
     "files": "Files",
-    "terminal": "Terminal"
+    "terminal": "Terminal",
+    "config_files": "Config files"
   },
   "common": {
     "cancel": "Cancel",
