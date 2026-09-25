@@ -89,7 +89,9 @@ if [ "$1" = profile ] && [ "$2" = create ]; then mkdir -p "$HERMES_HOME/profiles
 exit 0
 `;
 
-async function boot(options: { api?: boolean; down?: boolean; external?: boolean } = {}) {
+async function boot(
+  options: { api?: boolean; down?: boolean; external?: boolean; settleMs?: number } = {},
+) {
   const bin = mkdtempSync(path.join(tmpdir(), 'corehub-tg-bin-'));
   bins.push(bin);
   if (!options.external) {
@@ -139,7 +141,12 @@ async function boot(options: { api?: boolean; down?: boolean; external?: boolean
     {
       agents: {
         pathValue: bin,
-        runtime: { spawnImpl, healthIntervalMs: 0, gatewayBackoffMs: [5] },
+        runtime: {
+          spawnImpl,
+          healthIntervalMs: 0,
+          gatewayBackoffMs: [5],
+          channelSettleMs: options.settleMs ?? 5,
+        },
         ...(options.api === false ? {} : { hermesApi: api }),
         ...(options.external ? { adapterOptions: { hermes: { fetchImpl: healthy } } } : {}),
         telegramFetch: telegram.fetchImpl,
@@ -269,12 +276,13 @@ describe('Link Telegram by a bot token', () => {
     expect(res.json()).toMatchObject({ details: { reason: 'telegram_unreachable' } });
   });
 
-  it('in the default profile, waits for Hermes’s Restart', async () => {
-    const { hub: h, agent, root } = await boot();
+  it('in the default profile, restarts its gateway so the bot answers without a Restart', async () => {
+    const { hub: h, agent, root, of } = await boot();
     const res = await link(h, agent, 'default', { token: GOOD });
     expect(res.statusCode, res.body).toBe(200);
     expect(readFileSync(path.join(root, '.env'), 'utf8')).toContain(`TELEGRAM_BOT_TOKEN=${GOOD}`);
-    expect((await channels(h, agent, 'default')).gateway).toMatchObject({ applies: 'on_restart' });
+    expect((await channels(h, agent, 'default')).gateway).toMatchObject({ applies: 'now' });
+    await vi.waitFor(() => expect(of('default')).toHaveLength(2));
   });
 
   it('names the profile a bot is already linked in', async () => {
@@ -427,5 +435,91 @@ describe('Telegram settings', () => {
     const webhook = await authed(h, h.token, { url: settingsUrl(agent, 'webhook') });
     expect(webhook.statusCode).toBe(409);
     expect(webhook.json()).toMatchObject({ details: { reason: 'settings_not_supported' } });
+  });
+});
+
+/**
+ * The owner, 2026-09-26: «التيليقرام المفروض يسوي رستارت بعد» — a Telegram linked in the default
+ * profile stayed silent until somebody pressed Restart, because only a WhatsApp pairing restarted
+ * the default gateway. Every channel change there now restarts it, once per burst.
+ */
+describe('A channel change in the default profile', () => {
+  const SETTLE_MS = 80;
+  const settled = () => new Promise((resolve) => setTimeout(resolve, SETTLE_MS * 4));
+
+  /** Restarts of the default gateway so far: every start after the first. */
+  const restarts = (of: (profile: string) => unknown[]) => of('default').length - 1;
+
+  async function linked() {
+    const booted = await boot({ settleMs: SETTLE_MS });
+    expect(booted.of('default')).toHaveLength(1);
+    const res = await link(booted.hub, booted.agent, 'default', { token: GOOD });
+    expect(res.statusCode, res.body).toBe(200);
+    await vi.waitFor(() => expect(restarts(booted.of)).toBe(1));
+    await settled();
+    expect(restarts(booted.of)).toBe(1);
+    return booted;
+  }
+
+  it('linking Telegram restarts the default gateway exactly once', async () => {
+    const { hub: h, agent, of } = await linked();
+    expect((await channels(h, agent, 'default')).gateway).toMatchObject({ applies: 'now' });
+    expect(of('manger')).toHaveLength(0);
+  });
+
+  it('saving Telegram settings restarts it exactly once', async () => {
+    const { hub: h, agent, of } = await linked();
+    const saved = await authed(h, h.token, {
+      method: 'PATCH',
+      url: `/api/v1/agents/${agent}/channels/telegram/settings`,
+      payload: { values: { show_reasoning: true } },
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    await vi.waitFor(() => expect(restarts(of)).toBe(2));
+    await settled();
+    expect(restarts(of)).toBe(2);
+  });
+
+  it('switching Telegram off restarts it exactly once', async () => {
+    const { hub: h, agent, of } = await linked();
+    const off = await authed(h, h.token, {
+      method: 'PUT',
+      url: `/api/v1/agents/${agent}/channels/telegram`,
+      payload: { enabled: false },
+    });
+    expect(off.statusCode, off.body).toBe(200);
+    await vi.waitFor(() => expect(restarts(of)).toBe(2));
+    await settled();
+    expect(restarts(of)).toBe(2);
+  });
+
+  it('unlinking Telegram restarts it exactly once', async () => {
+    const { hub: h, agent, of } = await linked();
+    const res = await authed(h, h.token, {
+      method: 'POST',
+      url: `/api/v1/agents/${agent}/channels/telegram/unlink`,
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    await vi.waitFor(() => expect(restarts(of)).toBe(2));
+    await settled();
+    expect(restarts(of)).toBe(2);
+  });
+
+  it('a burst of changes restarts it once, after the last', async () => {
+    const { hub: h, agent, of } = await boot({ settleMs: SETTLE_MS });
+    expect((await link(h, agent, 'default', { token: GOOD })).statusCode).toBe(200);
+    for (const enabled of [false, true, false, true]) {
+      const res = await authed(h, h.token, {
+        method: 'PUT',
+        url: `/api/v1/agents/${agent}/channels/telegram`,
+        payload: { enabled },
+      });
+      expect(res.statusCode, res.body).toBe(200);
+    }
+    // Nothing yet: the burst has not settled.
+    expect(restarts(of)).toBe(0);
+    await vi.waitFor(() => expect(restarts(of)).toBe(1));
+    await settled();
+    expect(restarts(of)).toBe(1);
   });
 });

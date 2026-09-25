@@ -6900,12 +6900,12 @@ paths:
                     description: >-
                       The messaging gateway that serves this profile's channels, when the hub runs
                       Hermes; null otherwise. `applies` says when a channel change takes effect:
-                      `now` in a named profile (the hub starts, restarts or stops that profile's
-                      gateway itself), `on_restart` in the default profile, whose gateway also
-                      carries the API server and waits for Hermes's Restart. Linking WhatsApp
-                      (`agents.loginChannel`) and changing its mode (`agents.setChannelMode`)
-                      restart the gateway in either profile; a channel whose gateway still has to
-                      restart says so in `Channel.restart_needed`.
+                      `now` — the hub starts, restarts or stops the gateway serving the profile
+                      itself after every channel change, the default profile's too (held down a
+                      moment; it also carries the API server), once a burst of changes has
+                      settled (decision §85). `on_restart` is what a hub before 1.1.1 said for
+                      the default profile. A channel whose running gateway does not serve it yet
+                      says so in `Channel.restart_needed`.
                     oneOf:
                       - $ref: '#/components/schemas/ChannelGateway'
                       - type: 'null'
@@ -6913,7 +6913,7 @@ paths:
                 gateway:
                   profile: default
                   state: running
-                  applies: on_restart
+                  applies: now
                   error: null
                 items:
                   - platform: telegram

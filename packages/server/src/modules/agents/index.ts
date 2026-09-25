@@ -288,6 +288,7 @@ export interface AgentsOverrides {
     healthIntervalMs?: number;
     gatewayBackoffMs?: number[];
     gatewayRescanMs?: number;
+    channelSettleMs?: number;
   };
   /** Hermes's dashboard API's seams (a fake spawner and `fetch`, a short idle). */
   dashboard?: { spawnImpl?: DashboardSpawner; fetchImpl?: typeof fetch; idleMs?: number };
@@ -586,6 +587,9 @@ function contextOf(app: FastifyInstance): AgentsContext {
     ...(own.runtime?.gatewayBackoffMs ? { gatewayBackoffMs: own.runtime.gatewayBackoffMs } : {}),
     ...(own.runtime?.gatewayRescanMs !== undefined
       ? { gatewayRescanMs: own.runtime.gatewayRescanMs }
+      : {}),
+    ...(own.runtime?.channelSettleMs !== undefined
+      ? { channelSettleMs: own.runtime.channelSettleMs }
       : {}),
     // Every messaging gateway starts on the providers and model a chat in its profile uses
     // (`models` writes them, looked up per start because it mounts after this module).
@@ -1859,6 +1863,8 @@ export const agentsModule = defineModule({
       const record = runtime.gatewayRecord(profile);
       const platform = record?.platforms[channel.platform];
       if (record && !platform && record.gatewayState === 'running') {
+        // A change the gateway is about to follow (`channelsChanged`) is not one for Restart.
+        if (runtime.channelsSettling(profile)) return health('unknown', null);
         // Hermes names every platform it was started with (`connecting` first), so a running
         // gateway that does not name this one started before it was switched on.
         return health('offline', null, true);
@@ -1928,15 +1934,17 @@ export const agentsModule = defineModule({
       return {
         profile,
         state: gateway ? gatewayState(gateway.state) : 'stopped',
-        applies: profile === 'default' ? 'on_restart' : 'now',
+        // The hub restarts the gateway serving any profile after a channel change, the default
+        // one included (`hermes-runtime.ts` §channelsChanged).
+        applies: 'now',
         error: gateway?.lastError ?? null,
       };
     };
 
     /**
-     * A channel of the profile changed: its gateway follows (`hermes-runtime.ts`
-     * §channelsChanged). Not awaited — a gateway may take seconds to stop — and never the
-     * reason a save fails.
+     * A channel of the profile changed: the gateway serving it restarts to follow, the default
+     * profile's too, once a burst of changes has settled (`hermes-runtime.ts` §channelsChanged).
+     * Not awaited — a gateway may take seconds to stop — and never the reason a save fails.
      */
     const followChannels = (request: FastifyRequest, profile: string): void => {
       void contextOf(request.server)
@@ -2483,7 +2491,7 @@ export const agentsModule = defineModule({
             // default profile's too — so the number is answered without anyone pressing Restart.
             if (outcome.status === 'connected') {
               await contextOf(app)
-                .runtime.channelLinked(profile)
+                .runtime.channelsChanged(profile)
                 .catch((error: unknown) => {
                   app.log.warn(
                     { err: error, profile },
