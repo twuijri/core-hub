@@ -59,8 +59,9 @@ class ChatsListTest {
            "updated_at":"2026-09-20T10:00:00Z","slug":"a$id","name":"A","kind":"hermes","vendor":null,
            "avatar":{"kind":"generated","url":null,"seed":"a"},"status":"$status","enabled":$enabled,
            "install":{"source":"managed","path":null,"package":null,"command":null,"version":null,"latest_version":null,
-             "update_available":false,"auto_update":false,"auto_update_supported":false,"checked_at":null,"error":null},
-           "runtime":{"state":"running","url":null,"error":null},"capabilities":["streaming"],"sections":[],"limited":false,"default_model":null}""",
+             "update_available":false,"pinned_version":null,"newer_than_tested":false,"auto_update":false,
+             "auto_update_supported":false,"checked_at":null,"error":null},
+           "runtime":{"state":"running","url":null,"error":null},"capabilities":["streaming"],"sections":[],"limited":false,"subagents":"none","default_model":null}""",
     )
 
     @Test fun `only enabled, installed agents start a chat`() {

@@ -1,8 +1,9 @@
 // Prepares a copy of the OpenAPI document for the Swift generator (apps/ios). The source
 // document is never rewritten; `generate-native.mjs` writes the copy next to the output.
 //
-// openapi-generator 7.x (`swift6`) reads three things in our 3.1 document wrongly, each seen
-// in the first generated client (docs/changes/2026-09-25-twuijri-ios-shell-chat.md):
+// openapi-generator 7.x (`swift6`) reads four things in our 3.1 document wrongly, each seen
+// in a generated client (docs/changes/2026-09-25-twuijri-ios-shell-chat.md and
+// docs/changes/2026-09-25-twuijri-integration.md):
 //
 // 1. Nullability through `$ref`. `category_id: oneOf [{ $ref: Ulid }, { type: 'null' }]` in
 //    `required` came out as a non-optional `String`, so decoding the hub's real `null` fails
@@ -17,9 +18,14 @@
 // 3. Names Swift already uses. A model named `Task` hides Swift's `Task` inside the client
 //    (`Task.checkCancellation()` no longer compiles) and `Locale` hides Foundation's. Those
 //    components are renamed with a `Hub` prefix everywhere they are referenced.
+// 4. A boolean pinned to one value became `enum Applied: Bool`, which does not compile, and
+//    the `webhooks` section (calls the hub makes) wrote a `NotifyAPI` over the one holding the
+//    `notify.*` operations. Both passes are shared with Kotlin (scripts/kotlin-openapi.mjs).
 //
 //   import { prepareForSwift } from './swift-openapi.mjs';
 //   const copy = prepareForSwift(structuredClone(doc));
+
+import { dropWebhooks, plainBooleans } from './kotlin-openapi.mjs';
 
 const METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'];
 const SCHEMA_REF = '#/components/schemas/';
@@ -139,6 +145,8 @@ export function renameComponents(doc, renames) {
 }
 
 export function prepareForSwift(doc) {
+  dropWebhooks(doc);
+  plainBooleans(doc);
   inlinePathParameters(doc);
   const components = doc?.components?.schemas ?? {};
   // Judge nullability against the untouched shapes, so a `$ref` to a nullable schema counts.

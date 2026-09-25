@@ -64,7 +64,7 @@ object Screens {
 
     /** Destinations only an owner or admin sees (`roles: ["admin"]`). */
     val adminOnly = setOf(
-        "agent_manager", "users", "webhooks", "performance", "workspaces", "updates", "plugins", "files",
+        "agent_manager", "users", "webhooks", "logs", "performance", "workspaces", "updates", "plugins", "files",
     ) + agentLevel
 
     /** The capability an agent page needs (`agent_settings` is shown for every installed agent). */

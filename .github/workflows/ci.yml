@@ -20,10 +20,14 @@ env:
   REDOCLY_TELEMETRY: 'off'
 
 jobs:
+  # "Lint, typecheck, contracts, tests, build" is a required check on main. It is the `gate`
+  # job at the end: it passes only when this job and every server test shard passed. The
+  # server's unit suite runs in shards of its own because, run inside this job, it alone
+  # outgrew the job's time limit (docs/changes/2026-09-25-twuijri-integration.md).
   checks:
-    name: Lint, typecheck, contracts, tests, build
+    name: Lint, typecheck, contracts, client tests, build
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm
@@ -53,7 +57,8 @@ jobs:
           fi
       - run: pnpm contracts:check-clients
       - run: pnpm typecheck
-      - run: pnpm test
+      - name: Tests of every package but the server (its unit suite runs in `server-tests`)
+        run: pnpm -r --workspace-concurrency=1 --if-present --filter '!@corehub/server' test
       - run: pnpm contract:test
       - run: pnpm build
       - name: The built web client is in place for the hub to serve
@@ -64,6 +69,44 @@ jobs:
           node packages/cli/dist/bin.js --help >/dev/null
           node packages/cli/dist/bin.js --lang ar help chat >/dev/null
           if node packages/cli/dist/bin.js whoami; then echo '::error::whoami must exit 3 when not signed in'; exit 1; fi
+
+  server-tests:
+    name: Server unit tests (shard ${{ matrix.shard }}/3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable pnpm
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # What `pnpm --filter @corehub/server test` runs, one third of the files per job.
+      - run: pnpm --filter @corehub/contracts build
+      - run: pnpm --filter @corehub/server exec vitest run --project unit --shard=${{ matrix.shard }}/3
+
+  gate:
+    name: Lint, typecheck, contracts, tests, build
+    needs: [checks, server-tests]
+    # Always runs, so a failed or cancelled job above fails this required check instead of
+    # skipping it (a skipped required check would count as passed).
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every check and every server test shard passed
+        env:
+          CHECKS: ${{ needs.checks.result }}
+          SERVER_TESTS: ${{ needs.server-tests.result }}
+        run: |
+          echo "checks: $CHECKS, server-tests: $SERVER_TESTS"
+          test "$CHECKS" = success && test "$SERVER_TESTS" = success
 
   web-e2e:
     name: Web smoke journeys (Playwright against the real hub)

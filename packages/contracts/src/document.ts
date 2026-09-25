@@ -1,6 +1,6 @@
 // Runtime access to the contract document. Used by the server to mount 501 stubs for
 // operations that are declared but not yet implemented, and by the contract test.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
@@ -93,14 +93,30 @@ export function openapiDocumentPath(): string {
   return path.join(contractsRoot(), 'openapi.yaml');
 }
 
-/** Returns null when the document does not exist yet (tooling must tolerate that). */
+/** The last parse of each document file, kept while the file is unchanged. */
+const parsed = new Map<string, { mtimeMs: number; size: number; doc: OpenApiDocument }>();
+
+/**
+ * Returns null when the document does not exist yet (tooling must tolerate that).
+ *
+ * The document is parsed once per file (and again whenever the file changes); every call
+ * gets its own copy, so a caller may change what it gets without touching anyone else's.
+ * A hub asks for it from several modules on every start, and parsing the YAML was most of
+ * a test hub's start-up time.
+ */
 export function loadOpenApiDocument(file: string = openapiDocumentPath()): OpenApiDocument | null {
   if (!existsSync(file)) return null;
-  const doc = parseYaml(readFileSync(file, 'utf8')) as OpenApiDocument;
-  if (!doc || typeof doc !== 'object' || typeof doc.openapi !== 'string') {
-    throw new Error(`${file} is not an OpenAPI document`);
+  const { mtimeMs, size } = statSync(file);
+  let entry = parsed.get(file);
+  if (!entry || entry.mtimeMs !== mtimeMs || entry.size !== size) {
+    const doc = parseYaml(readFileSync(file, 'utf8')) as OpenApiDocument;
+    if (!doc || typeof doc !== 'object' || typeof doc.openapi !== 'string') {
+      throw new Error(`${file} is not an OpenAPI document`);
+    }
+    entry = { mtimeMs, size, doc };
+    parsed.set(file, entry);
   }
-  return doc;
+  return structuredClone(entry.doc);
 }
 
 /** True while openapi.yaml is still the scaffold placeholder. */
