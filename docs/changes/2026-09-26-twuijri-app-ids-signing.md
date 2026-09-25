@@ -92,14 +92,30 @@ iOS signed build 36145773790 — success
   Signed .ipa: 5.5M          artifacts: 0
 Desktop signed macOS build 36145777678 — failure (electron-builder's CSC_LINK import:
   "security set-key-partition-list … SecKeychainUnlock: The user name or passphrase you entered is not correct")
-  → fixed by importing into the job's own keychain (CSC_NAME/CSC_KEYCHAIN); re-run below.
+  → fixed by importing into the job's own keychain (CSC_NAME/CSC_KEYCHAIN).
+Desktop signed macOS build 36147018360 — success
+  signing file=release/mac-arm64/corehub.app type=distribution identityName=Developer ID Application: …
+  • notarization successful
+  corehub.app: valid on disk / satisfies its Designated Requirement
+  Identifier=com.twuijri.corehub   Runtime Version=26.5.0
+  corehub.app: accepted  source=Notarized Developer ID
+  The validate action worked!   (stapled ticket)
+  Core-Hub-0.0.0-arm64.dmg: rejected  source=no usable signature   (the dmg itself is not signed; the app in it is)
+  Signed dmg: 112M          artifacts: 0
+Android signed build 36146405111 (after the stricter AAB check) — success
+  package: name='com.twuijri.corehub' versionCode='5'   jar verified.   artifacts: 0
 ```
+
+التشغيل المؤقت: لتسجيل سير العمل الجديدة كي تُشغَّل يدويًا من هذا الفرع (GitHub يرفض `workflow_dispatch`
+لملف غير موجود في الفرع الافتراضي) أُضيف مؤقتًا مشغّل `push` لهذا الفرع مع شرط يتخطى الوظيفة (ظهرت
+التشغيلات «skipped»)، ثم أُزيل قبل الدمج في فرع الليلة.
 
 ## المخاطر والرجوع
 - التشغيلات الموقّعة لا تعمل على طلبات الدمج، فلا خطر على الفحوص المطلوبة؛ أسوأ الحالات فشل تشغيل يدوي.
 - `asc-profiles.mjs` ينشئ ملفَّي تعريف في حساب Apple (أُنشئا فعلًا في التشغيل أعلاه) ويعيد استخدامهما، ولا
   يحذف شيئًا.
 - الرجوع: حذف سير العمل الثلاثة الجديدة وإرجاع الملفات؛ بناءات طلبات الدمج لا تعتمد على شيء منها.
+- ملف dmg نفسه غير موقّع (التطبيق داخله موقّع وموثّق ومختوم، وهو ما يفحصه Gatekeeper)؛ توقيع الـdmg خيار لاحق.
 - دعم Firebase مؤجّل: الإضافة تعالج الملف فقط؛ لا مكتبة `firebase-messaging` بعد.
 
 ## التسليم والخطوة التالية
