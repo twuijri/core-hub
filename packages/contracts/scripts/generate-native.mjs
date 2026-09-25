@@ -2,9 +2,11 @@
 // Generates the Kotlin (Android) and Swift (iOS) clients with openapi-generator-cli.
 // Needs a Java runtime. Locally without Java it skips with a warning; in CI it fails.
 import { execFileSync } from 'node:child_process';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { bin, contractsRoot, generatedDir, openapiPath } from './lib.mjs';
+import { stringify } from 'yaml';
+import { bin, contractsRoot, generatedDir, loadDocument, openapiPath } from './lib.mjs';
+import { prepareForSwift } from './swift-openapi.mjs';
 
 if (!existsSync(openapiPath)) {
   console.warn('contracts:generate:native  openapi.yaml absent — nothing to generate.');
@@ -31,12 +33,19 @@ if (!hasJava()) {
   process.exit(0);
 }
 
+// Swift reads a prepared copy of the document (scripts/swift-openapi.mjs: nullable
+// properties become optional ones, path parameters reach every operation, names Swift owns
+// are prefixed); the source document is never rewritten.
+mkdirSync(generatedDir, { recursive: true });
+const swiftInput = path.join(generatedDir, 'openapi.swift.yaml');
+writeFileSync(swiftInput, stringify(prepareForSwift(loadDocument(openapiPath))));
+
 const targets = [
-  { name: 'kotlin', config: 'openapi-generator/kotlin.yaml' },
-  { name: 'swift', config: 'openapi-generator/swift.yaml' },
+  { name: 'kotlin', config: 'openapi-generator/kotlin.yaml', input: openapiPath },
+  { name: 'swift', config: 'openapi-generator/swift.yaml', input: swiftInput },
 ];
 
-for (const { name, config } of targets) {
+for (const { name, config, input } of targets) {
   const out = path.join(generatedDir, name);
   rmSync(out, { recursive: true, force: true });
   console.log(`contracts:generate:native  ${name} -> ${path.relative(process.cwd(), out)}`);
@@ -45,7 +54,7 @@ for (const { name, config } of targets) {
     [
       'generate',
       '-i',
-      openapiPath,
+      input,
       '-c',
       path.join(contractsRoot, config),
       '-o',
