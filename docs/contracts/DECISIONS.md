@@ -1069,3 +1069,52 @@ Rejected: running a repository task in the session's own folder when git refuses
 would work on an empty folder and look successful); a per-project limit (the owner asked per
 profile); a migration to make `worktrees.path` unique only among live rows — a task's removed
 worktree row is reused instead, which also keeps one history per task.
+
+## 48. A conversation's files are listed and read inside its working folder, and previewed in a sandbox
+
+The owner asked to see the conversation's files in the conversation (2026-09-25: «وبذات اني اقدر
+استعرض الملفات بالمحادثه»). Two operations (§46 is the global agent's, and the open task-worktree change also numbered its decision §46 and
+moves to §47 when it lands, so this is §48):
+
+- `sessions.listFiles` (`GET /sessions/{id}/files`) answers a `SessionFileList`: one `SessionFile`
+  per file, newest first, from three places — the paths the conversation's **tool calls** named
+  (Hermes's arguments or its one-line preview for a file tool; an ACP agent's `rawInput`, now
+  recorded as the call's arguments, with its `locations` and `diff` paths), the session's
+  **working folder** (read to four levels and 2000 entries, 200 files listed, `truncated` when
+  a cap is hit; hidden entries and `node_modules` skipped unless a tool call named the file), and
+  the **attachments** of its messages. Each entry says how a client previews it (`preview`,
+  chosen from the name) and up to what size (`preview_max_bytes`).
+- `sessions.readFile` (`GET /sessions/{id}/files/content?path=`) sends one file of the working
+  folder, read-only. The path is resolved against the folder's real path and every segment is
+  `lstat`ed: outside the folder, a symbolic link anywhere on the way, or not a regular file is
+  `400 validation_failed` (`details.reason`), and the file is opened with `O_NOFOLLOW` and sized
+  on the open descriptor. A preview over its kind's limit is `413`; `download=true` has one
+  limit of its own (100 MB). The type comes from the name (code as `text/plain`), never sniffed,
+  and every answer carries `nosniff`, `Content-Security-Policy: sandbox; default-src 'none'` and
+  `no-store`. Attachments keep `sessions.downloadAttachment`.
+- **The folder is the boundary**, not the profile: a conversation reads only its own folder. A
+  task's session works in its task's folder (its git worktree when it has one), so that is
+  covered by the same rule without a second root.
+- **HTML is never shown in the client's origin.** Clients render it in an
+  `<iframe sandbox="allow-scripts">` from `srcdoc` (no `allow-same-origin`: an opaque origin),
+  behind a policy that lets the page run its own script and load scripts, styles, pictures and
+  fonts over https — so a report that draws with a CDN library still draws — but calls nothing
+  (`connect-src 'none'`), submits nothing, and frames nothing. "Open in new tab" opens a frame
+  around the page, sandboxed the same way, never the page itself as a blob of the client's origin;
+  an SVG is not opened in a tab at all.
+- **Office files are read in the browser**, bounded: the ZIP's directory is checked first (at most
+  5000 entries, 30 MB a part, 120 MB in all, as the archive declares them) and only the parts a
+  preview needs are inflated, each into a buffer of exactly its declared size. Sheets and
+  documents become tables and text a client draws itself (nothing is turned into HTML); a deck is
+  an outline of its slides' titles and text, and says so.
+- No realtime event was added: a client reads the list again when a tool call or a run ends on
+  `/rt/sessions`; a changed `modified_at` or `size_bytes` means an open file changed.
+- **Next: the files each run changed.** `fileRefsOf` keeps every ref with its run, so a
+  per-run answer (`GET /sessions/{id}/runs/{run_id}/files`, with a diff) filters the same refs
+  and adds what the run's start looked like; nothing in the two operations above changes for it.
+
+Rejected: a token in the file URL so a frame or a tab could load it directly (the contract keeps
+bearer tokens out of URLs), serving the agent's HTML from the hub's origin with a relaxed policy,
+a third-party renderer for DOCX/PPTX that inflates without limits, and listing the whole profile
+folder (another conversation's files are not this one's).
+

@@ -48,7 +48,35 @@ import {
 
 export const E2E_PASSWORD = 'e2e-owner-password';
 
-type Step = AgentEvent | { type: 'delay'; ms: number } | { type: 'await_input' };
+type Step =
+  | AgentEvent
+  | { type: 'delay'; ms: number }
+  | { type: 'await_input' }
+  /** Write a file in the session's working folder, as an agent's tool would. */
+  | { type: 'write'; path: string; content: string };
+
+/** The three files journey 32 writes, opens and reads back. */
+const REPORT_HTML =
+  '<!doctype html><html><body><h1 id="t">تقرير الربع</h1>' +
+  '<script>document.getElementById("t").dataset.ran = "yes";</script></body></html>';
+const DATA_CSV = 'البند,المبلغ\nإيجار,1200\nكهرباء,300\n';
+const NOTES_MD = '# ملاحظات\n\n- راجع **الميزانية** قبل الخميس\n';
+
+function writes(ref: string, file: string, content: string): Step[] {
+  return [
+    {
+      type: 'tool_started',
+      ref,
+      name: 'write_file',
+      kind: 'file_write',
+      title: file,
+      input: { path: file },
+    },
+    { type: 'delay', ms: 150 },
+    { type: 'write', path: file, content },
+    { type: 'tool_completed', ref, output: `wrote ${file}`, exitCode: 0 },
+  ];
+}
 
 function scriptFor(prompt: string): Step[] {
   if (/ملخص الجدولة/.test(prompt)) {
@@ -208,6 +236,28 @@ function scriptFor(prompt: string): Step[] {
       { type: 'completed' },
     ];
   }
+  if (/اكتب الملفات|write the files/i.test(prompt)) {
+    // Files beside the chat (journey 32, decision §48): three files written by a tool in the
+    // session's folder, named in the reply so the words become links. `تحديث` writes the
+    // report again, so an open tab has something to follow.
+    const again = /تحديث/.test(prompt);
+    return [
+      { type: 'message_delta', text: 'أكتب الملفات الآن.\n\n' },
+      ...writes(
+        'w1',
+        'report.html',
+        again ? REPORT_HTML.replace('الربع', 'الربع المحدَّث') : REPORT_HTML,
+      ),
+      ...(again
+        ? []
+        : [...writes('w2', 'data.csv', DATA_CSV), ...writes('w3', 'notes.md', NOTES_MD)]),
+      {
+        type: 'message_delta',
+        text: again ? 'حدّثت report.html.' : 'كتبت report.html و data.csv و `notes.md`.',
+      },
+      { type: 'completed' },
+    ];
+  }
   if (/ارسم المسار|trace this/i.test(prompt)) {
     // The Trajectory tab (journey 31): a turn that reads a file, a command that fails, and
     // an answer — with pauses, so every step has a duration on the timeline.
@@ -269,6 +319,8 @@ function scriptFor(prompt: string): Step[] {
 
 interface Live {
   queue: Step[];
+  /** The session's working folder, where `write` steps land. */
+  workingDir: string | null;
   wake: (() => void) | null;
   closed: boolean;
   /** The last answer a person gave this run, for scripts that repeat it. */
@@ -285,6 +337,7 @@ class ScriptedRunner implements AgentRunner {
     const text = request.prompt.map((b) => (b.type === 'text' ? b.text : '')).join(' ');
     this.runs.set(request.runId, {
       queue: scriptFor(text),
+      workingDir: request.workingDir,
       wake: null,
       closed: false,
       answer: '',
@@ -315,6 +368,10 @@ class ScriptedRunner implements AgentRunner {
             resolve();
           };
         });
+        continue;
+      }
+      if (step.type === 'write') {
+        if (live.workingDir) writeFileSync(path.join(live.workingDir, step.path), step.content);
         continue;
       }
       if (step.type === 'await_input') {

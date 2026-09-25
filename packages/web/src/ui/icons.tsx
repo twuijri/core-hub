@@ -282,6 +282,12 @@ export const IconDownload = (p: IconProps) => (
     <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
   </Svg>
 );
+export const IconExternal = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M14 4h6v6M20 4l-8 8" />
+    <path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" />
+  </Svg>
+);
 export const IconFolder = (p: IconProps) => (
   <Svg {...p}>
     <path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.5.7L11.5 7H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />

@@ -19,6 +19,7 @@ import { Avatar } from '../ui/Avatar.js';
 import { Badge } from '../ui/Badge.js';
 import { agentMark } from '../ui/brand/marks.js';
 import { MessageActions } from './MessageActions.js';
+import { useOpenFile, useSessionFilesOptional } from '../files/context.js';
 import { Markdown } from './Markdown.js';
 import { Reasoning } from './Reasoning.js';
 import { AnsweredQuestions } from './AnsweredQuestions.js';
@@ -61,19 +62,38 @@ function Marked({ text, query }: { text: string; query: string | null | undefine
 
 function Attachments({ message }: { message: Message }) {
   const { t } = useI18n();
+  const files = useSessionFilesOptional();
+  const open = useOpenFile();
   const blocks = message.content.filter((b) => b.type !== 'text');
   if (blocks.length === 0) return null;
   return (
     <ul className="msg-attachments">
-      {blocks.map((block, i) => (
-        <li key={i}>
-          <Badge>
-            {block.type === 'location'
-              ? `${t('chat.location')} ${block.latitude.toFixed(4)}, ${block.longitude.toFixed(4)}`
-              : (block.name ?? block.type)}
-          </Badge>
-        </li>
-      ))}
+      {blocks.map((block, i) => {
+        const label =
+          block.type === 'location'
+            ? `${t('chat.location')} ${block.latitude.toFixed(4)}, ${block.longitude.toFixed(4)}`
+            : (block.name ?? block.type);
+        // An attachment opens beside the chat, like any other file of it (decision §48).
+        const key = 'attachment_id' in block ? `attachment:${block.attachment_id}` : null;
+        const file = key && files ? files.fileOf(key) : undefined;
+        return (
+          <li key={i}>
+            {file && open ? (
+              <button
+                type="button"
+                className="msg-attachment-open"
+                aria-label={t('files.open', { name: file.name })}
+                onClick={() => open(file.key)}
+                data-testid="attachment-open"
+              >
+                <Badge>{label}</Badge>
+              </button>
+            ) : (
+              <Badge>{label}</Badge>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }

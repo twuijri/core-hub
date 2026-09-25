@@ -25,6 +25,7 @@
  *   the contract declares.
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { createReadStream } from 'node:fs';
 import { z } from 'zod';
 import { HubError, notFound } from '../../lib/errors.js';
 import { parse } from '../../lib/validate.js';
@@ -279,6 +280,42 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     return trajectory;
   });
 
+  // ---------------------------------------------------------------- files
+
+  app.get('/sessions/:session_id/files', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    return deps.service(request).listFiles(scope, session_id);
+  });
+
+  app.get('/sessions/:session_id/files/content', async (request, reply: FastifyReply) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const query = parse(
+      z.object({
+        path: z.string().min(1).max(4096),
+        download: z
+          .enum(['true', 'false'])
+          .default('false')
+          .transform((value) => value === 'true'),
+      }),
+      request.query,
+      'query',
+    );
+    const file = deps.service(request).openFile(scope, session_id, query.path, query.download);
+    const name = file.relative.split('/').at(-1) ?? 'file';
+    // Opened directly, an HTML file still runs nothing in the hub's origin: the sandbox
+    // gives it an origin of its own and `default-src 'none'` loads nothing (decision §48).
+    return reply
+      .header('content-type', file.type.contentType)
+      .header('content-length', String(file.size))
+      .header('x-content-type-options', 'nosniff')
+      .header('content-security-policy', "sandbox; default-src 'none'")
+      .header('cache-control', 'no-store')
+      .header('content-disposition', contentDisposition(query.download, name))
+      .send(createReadStream('', { fd: file.fd, start: 0, end: Math.max(0, file.size - 1) }));
+  });
+
   // ------------------------------------------------------------- messages
 
   app.get('/sessions/:session_id/messages', async (request) => {
@@ -375,4 +412,10 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     const body = parse(approvalResponse, request.body);
     return deps.service(request).respondApproval(scope, approval_id, body);
   });
+}
+
+/** `inline` or `attachment`, with the name in both forms (RFC 6266 / RFC 5987). */
+function contentDisposition(download: boolean, name: string): string {
+  const ascii = name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+  return `${download ? 'attachment' : 'inline'}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }

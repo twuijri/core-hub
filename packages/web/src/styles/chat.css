@@ -1033,3 +1033,229 @@ summary.tool-head:hover {
     display: none;
   }
 }
+
+/* ------------------------------------------------------------- the files of a conversation
+   Decision §48: the Files list, the links that open a file (a tool call, a word in a reply,
+   an attachment), and the panel beside the chat that shows it. */
+.tool-file,
+.file-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ch-space-1);
+  max-inline-size: 16rem;
+  border-radius: var(--ch-radius-sm);
+  color: var(--ch-color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  unicode-bidi: isolate;
+}
+.tool-file {
+  padding-inline: var(--ch-space-1);
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-font-size-xs);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tool-file:hover,
+.file-link:hover {
+  background: var(--ch-color-accent-soft);
+}
+.file-link {
+  max-inline-size: none;
+  font: inherit;
+}
+.file-link-code code {
+  color: inherit;
+}
+.msg-attachment-open {
+  cursor: pointer;
+  border-radius: var(--ch-radius-full);
+}
+.msg-attachment-open:hover {
+  background: var(--ch-color-surface-2);
+}
+
+.file-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-1);
+}
+.file-row {
+  display: flex;
+  inline-size: 100%;
+  align-items: center;
+  gap: var(--ch-space-2);
+  padding: var(--ch-space-2);
+  border-radius: var(--ch-radius-md);
+  text-align: start;
+  color: var(--ch-color-text);
+}
+.file-row:hover,
+.file-row:focus-visible {
+  background: var(--ch-color-surface-2);
+}
+
+.file-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-2);
+  min-block-size: 100%;
+}
+.file-tabs {
+  display: flex;
+  gap: var(--ch-space-1);
+  overflow-x: auto;
+  border-block-end: 1px solid var(--ch-color-border);
+  padding-block-end: var(--ch-space-1);
+}
+.file-tab {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  max-inline-size: 14rem;
+  border-radius: var(--ch-radius-md);
+  color: var(--ch-color-text-muted);
+}
+.file-tab[data-active='true'] {
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text);
+}
+.file-tab-name {
+  min-inline-size: 0;
+  overflow: hidden;
+  padding-inline: var(--ch-space-2);
+  font-size: var(--ch-font-size-sm);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.file-view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--ch-space-2);
+  min-block-size: 0;
+}
+.file-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--ch-space-2);
+}
+.file-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-block-size: 0;
+}
+.file-html {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--ch-space-1);
+}
+.file-frame {
+  flex: 1;
+  inline-size: 100%;
+  min-block-size: 60vh;
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  /* The page draws on white, as it would in a browser tab: most pages set no background. */
+  background: white;
+}
+.file-image {
+  max-inline-size: 100%;
+  block-size: auto;
+  align-self: center;
+  border-radius: var(--ch-radius-md);
+}
+.file-code-wrap pre,
+.file-code {
+  margin: 0;
+  overflow: auto;
+  padding: var(--ch-space-3);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-code-bg);
+  color: var(--ch-color-code-text);
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-font-size-xs);
+  text-align: start;
+}
+.file-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-font-size-sm);
+  text-align: start;
+}
+.file-table-wrap {
+  overflow: auto;
+}
+.file-table {
+  border-collapse: collapse;
+  font-size: var(--ch-font-size-sm);
+}
+.file-table th,
+.file-table td {
+  border: 1px solid var(--ch-color-border);
+  padding: var(--ch-space-1) var(--ch-space-2);
+  text-align: start;
+  vertical-align: top;
+  white-space: pre-wrap;
+}
+.file-table th {
+  background: var(--ch-color-surface-2);
+  font-weight: 600;
+  position: sticky;
+  inset-block-start: 0;
+}
+.file-sheets {
+  display: flex;
+  gap: var(--ch-space-1);
+  overflow-x: auto;
+  margin-block-end: var(--ch-space-2);
+}
+.file-sheet {
+  flex-shrink: 0;
+  padding: var(--ch-space-1) var(--ch-space-2);
+  border-radius: var(--ch-radius-sm);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
+  cursor: pointer;
+}
+.file-sheet[aria-selected='true'] {
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text);
+}
+.file-slides {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-3);
+}
+.file-slide {
+  padding: var(--ch-space-3);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+}
+.file-slide ul {
+  margin-block-start: var(--ch-space-1);
+  padding-inline-start: var(--ch-space-4);
+  list-style: disc;
+}
+
+/* On a phone the pane is the whole screen: a file is read, then closed back to the chat. */
+@media (max-width: 767px) {
+  [data-testid='split-pane'] {
+    position: fixed;
+    inset: 0;
+    z-index: var(--ch-z-overlay);
+    inline-size: 100% !important;
+    background: var(--ch-color-surface);
+  }
+  [data-testid='split-pane'] > [role='separator'] {
+    display: none;
+  }
+}

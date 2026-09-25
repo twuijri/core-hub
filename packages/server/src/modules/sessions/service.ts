@@ -30,6 +30,15 @@ import { excerpt, type SessionFilters } from './store.js';
 import type { MessagePart } from './schema.js';
 import type { RunState } from './run-reducer.js';
 import { buildTrajectory, type Trajectory } from './trajectory.js';
+import {
+  DOWNLOAD_MAX_BYTES,
+  PREVIEW_MAX_BYTES,
+  listSessionFiles,
+  openInside,
+  type AttachmentOnMessage,
+  type OpenedFile,
+  type SessionFileEntry,
+} from './files.js';
 
 /** `undefined` is spelled out everywhere: `exactOptionalPropertyTypes` is on. */
 export interface ContentBlockInput {
@@ -555,6 +564,81 @@ export class SessionsService {
       live,
       now,
     });
+  }
+
+  /**
+   * The conversation's files for preview (contract `sessions.listFiles`, decision §48): what
+   * its tool calls named, what is in its working folder, and its messages' attachments.
+   * Tool calls are read from the store, where a live run writes each one as it happens.
+   */
+  listFiles(
+    scope: EngineScope,
+    sessionId: string,
+  ): { working_dir: string | null; truncated: boolean; items: SessionFileEntry[] } {
+    const row = this.requireSession(scope, sessionId);
+    const runs = this.store.allRuns(scope.workspace, row.id);
+    const calls = [
+      ...this.store
+        .toolCallsForRuns(
+          scope.workspace,
+          runs.map((r) => r.id),
+        )
+        .values(),
+    ]
+      .flat()
+      .sort(
+        (a, b) => (a.startedAt?.getTime() ?? 0) - (b.startedAt?.getTime() ?? 0) || a.seq - b.seq,
+      );
+    const messages = this.store.allMessages(scope.workspace, row.id);
+    const ids = [...new Set(messages.flatMap((m) => m.attachmentIds))];
+    const resolved = ids.length > 0 ? this.ports.attachments.resolve(scope.workspace, ids) : null;
+    const attachments: AttachmentOnMessage[] = [];
+    const listed = new Set<string>();
+    for (const message of messages) {
+      for (const id of message.attachmentIds) {
+        const found = resolved?.get(id);
+        if (!found || listed.has(id)) continue;
+        listed.add(id);
+        attachments.push({
+          id,
+          messageId: message.id,
+          at: message.createdAt.getTime(),
+          name: found.name,
+          mime: found.mime,
+          sizeBytes: found.sizeBytes,
+        });
+      }
+    }
+    return listSessionFiles({
+      workingDir: row.workingDir ?? null,
+      toolCalls: calls.map((call) => ({
+        id: call.id,
+        runId: call.runId,
+        name: call.name,
+        kind: call.kind ?? null,
+        title: call.title ?? null,
+        input: (call.input as Record<string, unknown> | null) ?? null,
+      })),
+      attachments,
+    });
+  }
+
+  /**
+   * One file of the working folder, opened read-only (contract `sessions.readFile`). The
+   * caller streams the descriptor and closes it. Checked against the preview limit of its
+   * kind, or the download limit when it is being saved.
+   */
+  openFile(
+    scope: EngineScope,
+    sessionId: string,
+    requested: string,
+    download: boolean,
+  ): OpenedFile {
+    const row = this.requireSession(scope, sessionId);
+    if (!row.workingDir) throw notFound({ resource: 'file', id: requested });
+    return openInside(row.workingDir, requested, (type) =>
+      download ? DOWNLOAD_MAX_BYTES : PREVIEW_MAX_BYTES[type.kind],
+    );
   }
 
   // ------------------------------------------------------------- messages
