@@ -1227,6 +1227,134 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  # ---------------------------------------------------------------- channel identities
+  /auth/me/channel-identities:
+    get:
+      operationId: auth.listMyChannelIdentities
+      tags: [auth]
+      summary: The messaging accounts linked to your account
+      description: >-
+        The Telegram and WhatsApp accounts you proved are yours (contract decision §78). A
+        message from one of them runs with your permissions, so the hub's own tools act as you
+        there, in the profiles you may enter; a message from an account nobody linked gets
+        none of the hub's tools.
+      x-scope: global
+      x-rt-events: []
+      responses:
+        '200':
+          description: Your links, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelIdentityList'
+              example:
+                items:
+                  - id: 01J9ZT1A2B3C4D5E6F7G8H9J0K
+                    user_id: 01J9ZRX1QW3M8K2T6B4N5C7D9E
+                    platform: telegram
+                    sender_id: '123456789'
+                    linked_at: '2026-09-26T08:00:00Z'
+                    last_used_at: '2026-09-26T09:30:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/me/channel-identities/link-codes:
+    post:
+      operationId: auth.createChannelLinkCode
+      tags: [auth]
+      summary: Start linking a messaging account — a one-time code to send to the bot
+      description: >-
+        The code proves the account: send `command` to your agent's bot from the Telegram or
+        WhatsApp account you want linked, within ten minutes. The hub's hook in Hermes's
+        messaging gateway sees the sender the platform names and links that account to you
+        (a Telegram bot link `https://t.me/<bot>?start=<code>` sends the same). A new code
+        replaces your previous one; a code works once. The bot must already answer you
+        (paired or on its allowlist): Hermes drops strangers before any hook runs.
+      x-scope: global
+      x-rt-events: []
+      responses:
+        '201':
+          description: The code, shown once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelLinkCode'
+              example:
+                code: corehub_7K3M9QX2AB
+                command: /start corehub_7K3M9QX2AB
+                expires_at: '2026-09-26T08:10:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/me/channel-identities/{identity_id}:
+    parameters:
+      - name: identity_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Ulid'
+    delete:
+      operationId: auth.deleteMyChannelIdentity
+      tags: [auth]
+      summary: Unlink one of your messaging accounts
+      description: Its next message gets none of the hub's tools. Somebody else's link is `404`.
+      x-scope: global
+      x-rt-events: []
+      responses:
+        '204':
+          description: Unlinked.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /auth/channel-identities:
+    get:
+      operationId: auth.listChannelIdentities
+      tags: [auth]
+      summary: Every linked messaging account on this hub (admin)
+      x-scope: global
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: Every link, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelIdentityList'
+              example:
+                items:
+                  - id: 01J9ZT1A2B3C4D5E6F7G8H9J0K
+                    user_id: 01J9ZRX1QW3M8K2T6B4N5C7D9E
+                    platform: whatsapp
+                    sender_id: '966500000000@s.whatsapp.net'
+                    linked_at: '2026-09-26T08:00:00Z'
+                    last_used_at: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /auth/channel-identities/{identity_id}:
+    parameters:
+      - name: identity_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Ulid'
+    delete:
+      operationId: auth.deleteChannelIdentity
+      tags: [auth]
+      summary: Remove anyone's messaging-account link (admin)
+      x-scope: global
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '204':
+          description: Removed.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   # ---------------------------------------------------------------- pairing
   /auth/pairings:
     post:
@@ -5207,7 +5335,16 @@ paths:
     get:
       operationId: agents.listConfigFiles
       tags: [agents]
-      summary: List the editable config files of an agent (the coding-agent Settings screen, the profile Files screen)
+      summary: List a coding agent's own config files (admin)
+      description: >-
+        The files a coding agent reads from its home, from a fixed list per agent (its
+        instructions file and its settings file, where the pinned version really reads them),
+        without their content. There is **one set for every profile**: the files live in the
+        home of the user the hub runs as, where the agent reads them whichever profile a
+        conversation is in (contract decision §77). An agent that declares no config files
+        (`AgentCapability` `config_files`) answers an empty list. Owners and admins only: a
+        settings file may carry keys.
+      x-roles: [owner, admin]
       x-rt-events: []
       responses:
         '200':
@@ -5224,15 +5361,15 @@ paths:
                       $ref: '#/components/schemas/ConfigFile'
               example:
                 items:
-                  - key: memory
+                  - key: instructions
                     label:
-                      ar: 'ملف الذاكرة'
-                      en: Memory file
+                      ar: 'التعليمات'
+                      en: Instructions
                     path: ~/.claude/CLAUDE.md
                     language: markdown
                     exists: true
                     size_bytes: 2048
-                    revision: 'a1b2c3'
+                    revision: 'a1b2c3d4e5f60718'
                     updated_at: '2026-09-20T09:00:00Z'
                     content: null
                   - key: settings
@@ -5241,13 +5378,15 @@ paths:
                       en: Settings
                     path: ~/.claude/settings.json
                     language: json
-                    exists: true
-                    size_bytes: 512
-                    revision: 'd4e5f6'
-                    updated_at: '2026-09-20T09:00:00Z'
+                    exists: false
+                    size_bytes: 0
+                    revision: null
+                    updated_at: null
                     content: null
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
   /agents/{agent_id}/config-files/{file_key}:
@@ -5257,13 +5396,21 @@ paths:
       - name: file_key
         in: path
         required: true
+        description: One of the keys `agents.listConfigFiles` lists for this agent; nothing else is a file.
         schema:
           type: string
           pattern: '^[a-z0-9_-]{1,40}$'
+          example: instructions
     get:
       operationId: agents.getConfigFile
       tags: [agents]
-      summary: Read a config file with its content
+      summary: Read a config file with its content (admin)
+      description: >-
+        A file that does not exist yet answers `exists: false`, `content: ""` and
+        `revision: null`. A file larger than 1 MiB is `413`, one that is not UTF-8 text `415`,
+        and one whose real path (after links) leaves the agent's folder and the home is `409`
+        (`details.reason = symlink_outside`) — nothing is read.
+      x-roles: [owner, admin]
       x-rt-events: []
       responses:
         '200':
@@ -5273,26 +5420,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/ConfigFile'
               example:
-                key: memory
+                key: instructions
                 label:
-                  ar: 'ملف الذاكرة'
-                  en: Memory file
+                  ar: 'التعليمات'
+                  en: Instructions
                 path: ~/.claude/CLAUDE.md
                 language: markdown
                 exists: true
                 size_bytes: 2048
-                revision: 'a1b2c3'
+                revision: 'a1b2c3d4e5f60718'
                 updated_at: '2026-09-20T09:00:00Z'
                 content: "# Project notes\n\nAlways run tests before committing.\n"
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
     put:
       operationId: agents.putConfigFile
       tags: [agents]
       summary: Replace a config file's content (admin)
-      description: Optimistic concurrency — send the `revision` you read; a mismatch is `409 conflict`.
+      description: >-
+        Optimistic concurrency: send the `revision` you read (`null` for a file that does not
+        exist yet); a mismatch is `409 conflict` with `details.reason = changed` and the
+        current `details.revision`, and nothing is written. A JSON settings file must parse
+        (comments are allowed where the agent itself allows them) or it is `400` with
+        `details.reason = invalid_json` and `details.message`. At most 1 MiB of UTF-8 (`413`).
+        The previous version is kept as a backup under the hub's data folder (the newest ten
+        per file), the file is written atomically with the permissions it had (`0600` when
+        new), and the write is audited (`agent_config_file.written`).
       x-roles: [owner, admin]
       requestBody:
         required: true
@@ -5302,8 +5465,8 @@ paths:
               $ref: '#/components/schemas/ConfigFileWrite'
             example:
               content: "# Project notes\n\nAlways run tests before committing.\nWrite commit messages in English.\n"
-              revision: 'a1b2c3'
-      x-rt-events: [agent.updated]
+              revision: 'a1b2c3d4e5f60718'
+      x-rt-events: []
       responses:
         '200':
           description: The stored file.
@@ -5312,15 +5475,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/ConfigFile'
               example:
-                key: memory
+                key: instructions
                 label:
-                  ar: 'ملف الذاكرة'
-                  en: Memory file
+                  ar: 'التعليمات'
+                  en: Instructions
                 path: ~/.claude/CLAUDE.md
                 language: markdown
                 exists: true
                 size_bytes: 2101
-                revision: 'b7c8d9'
+                revision: 'b7c8d9e0f1a2b3c4'
                 updated_at: '2026-09-21T11:35:00Z'
                 content: "# Project notes\n\nAlways run tests before committing.\nWrite commit messages in English.\n"
         '400':
@@ -5333,6 +5496,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
   # ---------------------------------------------------------------- skills
   /agents/{agent_id}/skills:
     parameters:
@@ -6030,6 +6195,50 @@ paths:
                             type: string
         '202':
           description: A notification was accepted; there is nothing to answer.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /hub-mcp/channel-events:
+    post:
+      operationId: agents.hubChannelEvent
+      tags: [agents]
+      summary: What Hermes's messaging gateway tells the hub about a channel message
+      description: >-
+        Not a client API: the hook the hub writes into a profile's Hermes home
+        (`hooks/corehub/`, beside its `corehub` MCP block) calls it from Hermes's messaging
+        gateway, with the same bearer (the profile's hub-tools key). `turn_started`,
+        `turn_step` and `turn_ended` bracket the agent's turn for one sender, so a call to the
+        hub's tools from that gateway acts as the person who linked that sender — or is
+        refused when nobody did (`hub_tools_sender_not_linked`). `link` carries the argument
+        of a `/start` command: a live link code links the sender to its person and the gateway
+        answers `message` instead of passing the command on; anything else is `handled:
+        false` (contract decision §78).
+      security: []
+      x-scope: global
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HubChannelEvent'
+            example:
+              event: link
+              platform: telegram
+              sender_id: '123456789'
+              session_id: null
+              code: corehub_7K3M9QX2AB
+      x-rt-events: []
+      responses:
+        '200':
+          description: What the gateway does next.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HubChannelEventResult'
+              example:
+                handled: true
+                message: 'Linked: this Telegram account now acts as Tariq in Core Hub.'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -16457,6 +16666,86 @@ components:
             token:
               type: string
               description: Shown exactly once.
+    ChannelIdentityPlatform:
+      type: string
+      enum: [telegram, whatsapp]
+    ChannelIdentity:
+      type: object
+      description: >-
+        A messaging account a person proved is theirs (contract decision §78). One hub-wide
+        link per account: it acts in every profile the person may enter, and nowhere else.
+      required: [id, user_id, platform, sender_id, linked_at, last_used_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Ulid'
+        user_id:
+          $ref: '#/components/schemas/Ulid'
+        platform:
+          $ref: '#/components/schemas/ChannelIdentityPlatform'
+        sender_id:
+          type: string
+          description: >-
+            The account as Hermes names the sender: Telegram's numeric user id, WhatsApp's chat
+            id (`…@s.whatsapp.net`, or `…@lid` where WhatsApp hides the number).
+        linked_at:
+          $ref: '#/components/schemas/Timestamp'
+        last_used_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: When a message from it last ran with the person's permissions.
+    ChannelIdentityList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChannelIdentity'
+    ChannelLinkCode:
+      type: object
+      required: [code, command, expires_at]
+      properties:
+        code:
+          type: string
+          pattern: '^corehub_[A-Z2-9]{10}$'
+        command:
+          type: string
+          description: What to send the bot, `/start <code>`.
+        expires_at:
+          $ref: '#/components/schemas/Timestamp'
+    HubChannelEvent:
+      type: object
+      required: [event, platform, sender_id]
+      properties:
+        event:
+          type: string
+          enum: [turn_started, turn_step, turn_ended, link]
+        platform:
+          type: string
+          pattern: '^[a-z0-9_]{1,40}$'
+          description: Hermes's name of the platform (`telegram`, `whatsapp`, …).
+        sender_id:
+          type: [string, 'null']
+          maxLength: 320
+          description: The sender as Hermes names it; `null` when the platform named nobody.
+        session_id:
+          type: [string, 'null']
+          maxLength: 200
+          description: Hermes's session of the conversation (turn events).
+        code:
+          type: [string, 'null']
+          maxLength: 200
+          description: The `/start` argument (`link` only).
+    HubChannelEventResult:
+      type: object
+      required: [handled, message]
+      properties:
+        handled:
+          type: boolean
+          description: '`link` only: the command was the hub''s, and the gateway answers `message` instead of passing it on.'
+        message:
+          type: [string, 'null']
     PairingConnection:
       type: string
       enum: [lan, relay]
@@ -18621,14 +18910,16 @@ components:
           plans,
           learn,
           skill_commands,
+          config_files,
         ]
       description: |
-        What an agent can do. The last six are the composer's `/` commands the agent itself
-        carries out (decision §57): `compress` (`sessions.compress`), `steer`
+        What an agent can do. `compress` … `skill_commands` are the composer's `/` commands the
+        agent itself carries out (decision §57): `compress` (`sessions.compress`), `steer`
         (`sessions.steerRun`), and `goals`, `plans`, `learn`, `skill_commands` — a message
         that starts with `/goal`, `/plan`, `/learn` or `/skill <name>` is the agent's
         command rather than text for the model. A client offers a command only when the
-        session's agent has its capability.
+        session's agent has its capability. `config_files`: the agent has config files of its
+        own an admin can edit (`agents.listConfigFiles`, decision §77).
     AgentSection:
       type: string
       description: The rows shown under the agent's card, in order (NAVIGATION §4).
@@ -18950,15 +19241,21 @@ components:
             - type: 'null'
     ConfigFile:
       type: object
+      description: >-
+        One of a coding agent's own config files (contract decision §77). The same file for
+        every profile: it lives in the home of the user the hub runs as.
       required: [key, label, path, language, exists, size_bytes, revision, updated_at, content]
       properties:
         key:
           type: string
+          description: "`instructions` (the agent's own instructions file) or `settings`."
         label:
           $ref: '#/components/schemas/LocalizedText'
         path:
           type: string
-          description: Display path (may start with `~`); never a hub-internal absolute path.
+          description: >-
+            Display path: `~/…` under the home, or `$VARIABLE/…` when the agent's own variable
+            (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, …) moves its folder. Never a hub-internal absolute path.
         language:
           type: string
           enum: [markdown, json, yaml, toml, text]
@@ -18968,21 +19265,24 @@ components:
           type: integer
         revision:
           type: [string, 'null']
+          description: A hash of the bytes; `null` while the file does not exist.
         updated_at:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'
             - type: 'null'
         content:
           type: [string, 'null']
+          description: The text on `getConfigFile` and `putConfigFile`; `null` in a listing.
     ConfigFileWrite:
       type: object
-      required: [content]
+      required: [content, revision]
       properties:
         content:
           type: string
           maxLength: 1048576
         revision:
           type: [string, 'null']
+          description: The revision read, or `null` to create a file that does not exist yet.
     SkillSource:
       type: string
       description: >-
