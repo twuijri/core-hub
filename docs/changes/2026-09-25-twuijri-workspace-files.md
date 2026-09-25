@@ -172,6 +172,16 @@ $ PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwright test zzzz
   لا تتأثر. سطور التدقيق الموجودة تبقى في `audit_events`.
 
 ## التسليم والخطوة التالية
-- الفرع مدفوع وطلب الدمج مفتوح بالإنجليزية؛ نتيجة CI تُضاف هنا بعد اكتماله.
+- طلب الدمج #130 (بالإنجليزية): https://github.com/twuijri/core-hub/pull/130
+- **CI على آخر دفع للشيفرة (التشغيل 36100797390): أخضر كله.**
+  - Lint, typecheck, contracts, tests, build: نجح (13m43s).
+  - Web smoke journeys (Playwright against the real hub): نجح (5m19s).
+  - Docker image builds and answers /health: نجح.
+  - db:generate + db:migrate (SQLite وPostgreSQL): نجح.
+  - change record وgraphify-out: نجحا.
+- التشغيل الأول سقط في `zz-design.spec.ts`: كان يعدّ سبع أدوات في قائمة الإعدادات والآن ثمانٍ.
+  صحّحت العدد مع تعليق، وأبقيت لقطة `design-settings-ar-light.png` الجديدة التي تُظهر «الملفات»،
+  وأرجعت بقية اللقطات غير المتعلقة. أعدت تشغيل هذا الملف محليًا: `3 passed`.
+- `main` لم يتحرك منذ التفرّع (`git fetch` قبل الدفع الأخير)، فلا دمج لازم.
 - ينتظر تأكيد المالك على: المكان (أدوات الإعدادات)، الحدود، منع الأعضاء، §56.
 - بعد دمج #106: استبدال معاينة هذه الصفحة بعارضه (Office وCSV وHTML المعزول) في مهمة لاحقة.
