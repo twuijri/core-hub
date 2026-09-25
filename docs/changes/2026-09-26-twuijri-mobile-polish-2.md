@@ -72,7 +72,22 @@ tests 199 skipped 4 failed 0      # الجديدة: PhotoQualityTest 5، وthisP
 lint: 0 errors, 22 warnings       # كما في main
 ```
 
-(بقية الفحوص ونتيجة CI تُضاف قبل المراجعة.)
+```
+$ pnpm lint
+All matched files use Prettier code style!
+$ pnpm i18n:check
+i18n:check  OK
+$ pnpm contracts:check-clients
+check-clients  OK — 600 client file(s) scanned, 228 contract path(s) known.
+$ node apps/ios/scripts/generate-swift.mjs --check
+generate-swift  OK — every generated file matches its source
+$ pnpm change-record:check
+change-record  OK — 1 record(s) valid
+```
+
+CI على PR #152 (الرأس `ca413e26`): كل الوظائف خضراء، ومنها «Build and test on the iOS simulator» —
+`Executed 91 tests, with 0 failures`، ومنها `PhotoQualityTests` (٥) و
+`VoiceSourceTests.testThisPhoneIsTheDefaultAndAChoiceIsKept` — و«Android build, unit tests, lint».
 
 ## المخاطر والرجوع
 - لم يُجرَّب على جهاز: الملف الأصلي من منتقي iOS بـ`.current`، والرفع المستأنف أمام مركز حقيقي،
