@@ -437,6 +437,16 @@ export class HermesRuntime {
     this.log.info({ profile: name }, 'hermes: made a missing profile as a copy of default');
   }
 
+  /**
+   * The next conversation starts a new TUI gateway, which reads the profiles' MCP servers
+   * afresh (the hub's own tools were switched, contract decision §47). The running one is
+   * retired, not killed, for the reason `setProviderEnv` gives.
+   */
+  refreshTui(): void {
+    if (this.tui) this.retireTui(this.tui);
+    this.tui = null;
+  }
+
   private retireTui(channel: TuiChannel): void {
     if (!channel.alive) return;
     this.retiredTui.add(channel);

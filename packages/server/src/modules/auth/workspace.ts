@@ -63,27 +63,27 @@ export function membershipIds(db: ModuleDb, userId: string): string[] {
     .map((row) => row.workspace);
 }
 
+/** Who is entering: the role decides, and a run token's pin narrows it to one workspace. */
+export type EnteringUser = Pick<PrincipalUser, 'id' | 'role' | 'pinnedWorkspaceId'>;
+
 /** Workspaces the user may enter, default first then by name (docs/domain/auth.md). */
-export function listWorkspacesFor(
-  db: ModuleDb,
-  user: Pick<PrincipalUser, 'id' | 'role'>,
-): WorkspaceRow[] {
+export function listWorkspacesFor(db: ModuleDb, user: EnteringUser): WorkspaceRow[] {
   const all = db
     .select()
     .from(workspaces)
     .where(isNull(workspaces.archivedAt))
     .orderBy(desc(workspaces.isDefault), asc(workspaces.name))
     .all();
+  if (user.pinnedWorkspaceId) return all.filter((row) => row.id === user.pinnedWorkspaceId);
   if (user.role !== 'member') return all;
   const allowed = new Set(membershipIds(db, user.id));
   return all.filter((row) => allowed.has(row.id));
 }
 
-export function canEnter(
-  db: ModuleDb,
-  user: Pick<PrincipalUser, 'id' | 'role'>,
-  workspaceId: string,
-): boolean {
+export function canEnter(db: ModuleDb, user: EnteringUser, workspaceId: string): boolean {
+  // A run token entered its one workspace when its run started there (and is checked
+  // against the person's own membership on every call, `principal.ts`).
+  if (user.pinnedWorkspaceId) return user.pinnedWorkspaceId === workspaceId;
   if (user.role !== 'member') return true;
   return membershipIds(db, user.id).includes(workspaceId);
 }
@@ -110,7 +110,7 @@ export function workspaceRefusal(
 /** Resolves the header for the principal; 404 `profile_not_found` when unknown or not enterable. */
 export function resolveWorkspaceFor(
   db: ModuleDb,
-  user: Pick<PrincipalUser, 'id' | 'role'>,
+  user: EnteringUser,
   slugOrId: string | undefined,
 ): WorkspaceScope {
   if (!slugOrId) throw new HubError('profile_required');

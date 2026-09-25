@@ -357,6 +357,7 @@ export class RunEngine {
         prompt: exchange?.prompt ?? promptOf(store, scope.workspace, runRow),
         files: exchange?.files ?? null,
         allowedTools: allowedToolsOf(session),
+        userId: scope.userId,
       });
       if (accepted.agentSessionRef && accepted.agentSessionRef !== session.agentSessionRef) {
         store.updateSession(scope.workspace, session.id, {

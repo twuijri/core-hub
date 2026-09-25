@@ -101,6 +101,13 @@ export {
   type PrincipalUser,
 } from './principal.js';
 export {
+  RUN_TOKEN_PREFIX,
+  issueRunToken,
+  revokeRunToken,
+  runGrantOf,
+  type RunGrant,
+} from './run-tokens.js';
+export {
   DEFAULT_WORKSPACE_SLUG,
   canEnter,
   defaultWorkspace,

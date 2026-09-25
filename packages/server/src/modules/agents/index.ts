@@ -58,6 +58,10 @@ import { HermesRuntime, type HermesRuntimeStatus, type Spawner } from './hermes-
 import { HermesDashboard, type DashboardSpawner } from './hermes-dashboard.js';
 import { QR_PLATFORMS, pairWhatsApp, testMcpServer, type HermesApiCall } from './hermes-tools.js';
 import { namedHermesProfiles } from './hermes-profiles.js';
+import { RunLeases } from './hub-tools/leases.js';
+import { HUB_SERVER_NAME } from './hub-tools/block.js';
+import { registerHubToolRoutes } from './hub-tools/routes.js';
+import { HubToolsService, type HubToolsNotify } from './hub-tools/service.js';
 import { telegramGetMe } from './telegram-api.js';
 import { SettingError, readTelegramSettings, writeTelegramSettings } from './telegram-settings.js';
 import {
@@ -268,6 +272,10 @@ interface AgentsContext {
   service: AgentsService;
   adapters: AdapterSet;
   runner: AgentRunner;
+  /** Who each live run acts for, for the hub's own tools (contract decision §47). */
+  leases: RunLeases;
+  /** The hub's own tools: settings, the profile block, the MCP endpoint (§47). */
+  hubTools: HubToolsService;
   runtime: HermesRuntime;
   dashboard: HermesDashboard;
   /** Hermes's API for the agent tools, or `null` where the hub does not supervise Hermes. */
@@ -328,6 +336,28 @@ export function migrateMemoryOfEveryProfile(
       log.warn({ profile, err: error }, 'agents: could not move memory to where Hermes reads it');
     }
   }
+}
+
+let hubToolsNotifyFactory: ((app: FastifyInstance) => HubToolsNotify) | null = null;
+
+/**
+ * `notifications.notify`, the one hub tool with no REST operation to go through: a notice
+ * in the run owner's inbox. `notify` owns notices; the composition root lends the writer.
+ */
+export function registerHubToolsNotify(factory: (app: FastifyInstance) => HubToolsNotify): void {
+  hubToolsNotifyFactory = factory;
+}
+
+/**
+ * Where Hermes reaches the hub's MCP server (contract decision §47): this process, on the
+ * loopback — Hermes runs beside the hub (ADR 0008). The port the server listens on once it
+ * does, the configured one before.
+ */
+function hubMcpUrl(app: FastifyInstance): string | null {
+  const address = app.server.address();
+  const port = address && typeof address === 'object' ? address.port : app.hub.config.port;
+  if (!port) return null;
+  return `http://127.0.0.1:${port}/api/v1/hub-mcp`;
 }
 
 const contexts = new WeakMap<SocketServer, AgentsContext>();
@@ -439,7 +469,8 @@ function contextOf(app: FastifyInstance): AgentsContext {
     // named profile's).
     gateways: () => runtime.gateways().map(toMessagingGateway),
   });
-  const runner = new AgentRunner({ service, adapters, log: app.log });
+  const leases = new RunLeases();
+  const runner = new AgentRunner({ service, adapters, log: app.log, leases });
   // Hermes's own web server as an internal API (ADR 0015): nothing runs until a caller
   // asks, and only where `runtime` is managed (`hermesDashboardFor`).
   const dashboard = new HermesDashboard({
@@ -450,10 +481,30 @@ function contextOf(app: FastifyInstance): AgentsContext {
     ...(own.dashboard?.fetchImpl ? { fetchImpl: own.dashboard.fetchImpl } : {}),
     ...(own.dashboard?.idleMs !== undefined ? { idleMs: own.dashboard.idleMs } : {}),
   });
+  const hubTools = new HubToolsService({
+    app,
+    db: requireSqlite(hub.database),
+    leases,
+    dataDir: hub.config.dataDir,
+    version: hub.version,
+    hermesAgentId: () => HERMES_ENTRY.id,
+    notify: () => hubToolsNotifyFactory?.(app) ?? null,
+    timezone: () => runtime.timezone(),
+    refreshRuntime: () => runtime.refreshTui(),
+    homeOf: (workspace) => {
+      const root = runtime.status().home;
+      if (!root) return { home: null, reason: 'runtime_absent' };
+      const home = profileHome(root, workspace);
+      return home ? { home, reason: null } : { home: null, reason: 'hermes_profile_absent' };
+    },
+    url: () => hubMcpUrl(app),
+  });
   const created: AgentsContext = {
     service,
     adapters,
     runner,
+    leases,
+    hubTools,
     runtime,
     dashboard,
     hermesApi: () =>
@@ -614,6 +665,12 @@ export const agentsModule = defineModule({
       const mode = await ctx.runtime.start();
       app.log.info({ mode, endpoint: ctx.runtime.endpoint }, 'agents: hermes runtime');
       migrateMemoryOfEveryProfile(ctx.runtime.status().home, app.log);
+      // The hub's own tools go back into every profile that has them on (§47).
+      ctx.hubTools.syncAll();
+    });
+    // Again once the port is known for certain (a hub on port 0 learns it only now).
+    app.addHook('onListen', async () => {
+      ctx.hubTools.syncAll();
     });
     app.addHook('onClose', async () => {
       await ctx.runner.closeAll();
@@ -893,6 +950,13 @@ export const agentsModule = defineModule({
      * file, and Hermes — the one that will run the server — is the one that tries it. The
      * rows themselves still claim nothing: `connected` stays false until Hermes starts.
      */
+    /** The block the hub writes for its own tools is edited from their card only (§47). */
+    const refuseManaged = (name: string): void => {
+      if (name === HUB_SERVER_NAME) {
+        throw new HubError('conflict', { details: { reason: 'mcp_managed', name } });
+      }
+    };
+
     const mcpFault = (error: unknown): never => {
       if (error instanceof McpError) {
         if (error.reason === 'mcp_not_found') throw notFound({ resource: 'mcp_server' });
@@ -935,6 +999,7 @@ export const agentsModule = defineModule({
           enabled?: boolean;
           config: Record<string, unknown>;
         };
+        refuseManaged(input.name);
         try {
           if (getMcpServer(home, input.name)) {
             throw new HubError('conflict', {
@@ -959,6 +1024,7 @@ export const agentsModule = defineModule({
         const home = skillHome(request, params.agent_id as string);
         const name = params.server_name as string;
         const patch = body as { enabled?: boolean; config?: Record<string, unknown> };
+        refuseManaged(name);
         try {
           if (!getMcpServer(home, name)) throw notFound({ resource: 'mcp_server', id: name });
           return toMcpServer(
@@ -976,6 +1042,7 @@ export const agentsModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'agents.deleteMcpServer',
       handler: (request, { params }) => {
+        refuseManaged(params.server_name as string);
         const home = skillHome(request, params.agent_id as string);
         try {
           deleteMcpServer(home, params.server_name as string);
@@ -1005,6 +1072,24 @@ export const agentsModule = defineModule({
           config: server.config,
           language: request.language,
         });
+      },
+    });
+
+    registerHubToolRoutes(app, deps, {
+      service: (server) => contextOf(server).hubTools,
+      scopeOf,
+      actorOf,
+      assertHermes: (request, agentId) => {
+        const row = contextOf(request.server).service.get(
+          scopeOf(request),
+          agentId,
+          request.language,
+        );
+        if (row.kind !== 'hermes') {
+          throw new HubError('state_invalid', {
+            details: { agent_id: agentId, reason: 'skills_are_hermes_only' },
+          });
+        }
       },
     });
 
