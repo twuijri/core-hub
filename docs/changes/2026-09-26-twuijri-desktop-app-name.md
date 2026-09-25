@@ -87,7 +87,20 @@ default=/home/twuijri/.config/Core Hub
 pinned=/home/twuijri/.config/Core Hub
 same=true
 ```
-CI: يُكمل بعد الدفع (انظر التسليم).
+CI على PR #163 (الالتزام الأول): كل الفحوص نجحت، ومنها Installers (macos-latest / ubuntu-latest / windows-latest).
+من سجل `desktop.yml` (run 36201321308):
+```
+bundle: apps/desktop/release/mac-arm64/Core Hub.app
+DMG window: /Volumes/Core Hub 1.1.1
+Core Hub.app
+  • building        target=DMG arch=arm64 file=release/Core-Hub-1.1.1-arm64.dmg
+Name=Core Hub
+Exec="/opt/Core Hub/corehub" %U
+  • building        target=deb arch=x64 file=release/corehub_1.1.1_amd64.deb
+  • building        target=nsis file=release\Core-Hub-Setup-1.1.1-x64.exe archs=x64 oneClick=false perMachine=false
+  • building        target=AppX arch=x64 file=release\Core-Hub-1.1.1-x64.msix
+  executablePath=release\win-unpacked\corehub.exe
+```
 
 ## المخاطر والرجوع
 - مستخدم ماك يبقى عنده `corehub.app` بجانب `Core Hub.app` حتى يحذفه؛ البيانات مشتركة ولا تضيع.
@@ -97,5 +110,5 @@ CI: يُكمل بعد الدفع (انظر التسليم).
   يساوي الافتراضي.
 
 ## التسليم والخطوة التالية
-PR إلى `main` بالإنجليزية، بلا دمج ولا وسم. بعد الدمج يظهر الاسم الجديد في الإصدار التالي. مقترح للمالك: عرض
+PR https://github.com/twuijri/core-hub/pull/163 إلى `main` بالإنجليزية، بلا دمج ولا وسم. بعد الدمج يظهر الاسم الجديد في الإصدار التالي. مقترح للمالك: عرض
 نقل `corehub.app` القديم إلى سلة المهملات من داخل التطبيق.
