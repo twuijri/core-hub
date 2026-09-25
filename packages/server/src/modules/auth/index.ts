@@ -148,7 +148,7 @@ export {
   type PrincipalScope,
   type PrincipalScopeResolver,
 } from './scopes.js';
-export { findUser, ownerUser, presentUser, revokeToken } from './users.js';
+export { findUser, ownerUser, presentUser, revokeToken, tokenLive } from './users.js';
 export {
   emitToUser,
   revalidateSockets,

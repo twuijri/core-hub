@@ -7,6 +7,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authed, capturingLogger, testHub } from '../../../tests/unit/helpers.js';
+import { eq } from 'drizzle-orm';
+import { requireSqlite } from '../../lib/db.js';
+import { devices } from '../devices/schema.js';
 import { OWNER_RESET_MARKER, SETUP_TOKEN_FILE } from './setup.js';
 
 const T0 = new Date('2026-09-25T09:00:00.000Z');
@@ -170,6 +173,21 @@ describe('auth: COREHUB_RESET_OWNER=1 (ADR 0019)', () => {
       payload: { username: 'noura', password: 'admin-password-1', role: 'admin' },
     });
     expect(admin.statusCode).toBe(201);
+    // The owner's phone receives push (a row as the devices module keeps it).
+    const phone = requireSqlite(first.app.hub.database)
+      .insert(devices)
+      .values({
+        ownerId: owner.user.id,
+        deviceKey: 'owner-phone',
+        name: 'iPhone',
+        platform: 'ios',
+        pairedAt: new Date(),
+        pushProvider: 'apns',
+        pushToken: 'sealed',
+        pushRegisteredAt: new Date(),
+      })
+      .returning()
+      .get();
     await first.app.close();
 
     // Somebody else got there first; the operator restarts with the variable set.
@@ -196,6 +214,13 @@ describe('auth: COREHUB_RESET_OWNER=1 (ADR 0019)', () => {
       });
       expect(refresh.statusCode).toBe(401);
       expect(await meta(reset)).toMatchObject({ setup_required: true, setup_open: true });
+      // …and nothing more is pushed to the old owner's phone.
+      const row = requireSqlite(reset.app.hub.database)
+        .select()
+        .from(devices)
+        .where(eq(devices.id, phone.id))
+        .get()!;
+      expect(row).toMatchObject({ pushProvider: 'none', pushToken: null });
 
       // The old owner's name is still taken: nothing was deleted.
       expect((await setup(reset, OWNER)).statusCode).toBe(409);

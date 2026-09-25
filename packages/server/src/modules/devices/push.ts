@@ -56,6 +56,11 @@ export interface PushServiceOptions {
   dataDir: string;
   env: PushEnvInput | undefined;
   sealer: Sealer;
+  /**
+   * Is the sign-in that registered a device's token still good (auth, through the
+   * composition root)? Without it every registration is taken as live.
+   */
+  sessionLive?: (tokenId: string, now: number) => boolean;
   /** Refuses a Web Push endpoint the hub must not call (returns why), null when fine. */
   checkEndpoint?: (endpoint: string) => Promise<string | null>;
   fetchImpl?: typeof fetch;
@@ -525,11 +530,34 @@ export class PushService {
 
   // ---------------------------------------------------------------------- sending
 
+  /**
+   * The sign-in behind a device's registration has ended (expired, revoked, its person
+   * disabled) without anyone telling the device: the token is forgotten before it is used.
+   * A phone registered before `push_session_id` answers to its pairing token; a browser's
+   * subscription has neither and is the browser's own.
+   */
+  private sessionEnded(device: typeof devices.$inferSelect): boolean {
+    const session = device.pushSessionId ?? device.appTokenId;
+    if (!session || !this.options.sessionLive) return false;
+    return !this.options.sessionLive(session, this.now());
+  }
+
   /** Sends to one device; a token the service says is gone is forgotten here. */
   async sendToDevice(device: typeof devices.$inferSelect, message: PushMessage) {
     const provider = device.pushProvider;
     if (provider === 'none' || !device.pushToken) {
       return null;
+    }
+    if (this.sessionEnded(device)) {
+      this.forgetToken(device.id);
+      return {
+        deviceId: device.id,
+        provider,
+        ok: false,
+        providerRef: null,
+        error: 'the sign-in that registered this device has ended',
+        gone: true,
+      } satisfies DeliveryResult;
     }
     const sender = this.resolve(provider).sender;
     if (!sender) {
@@ -570,7 +598,7 @@ export class PushService {
   private forgetToken(deviceId: string): void {
     this.options.db
       .update(devices)
-      .set({ pushProvider: 'none', pushToken: null, pushRegisteredAt: null })
+      .set({ pushProvider: 'none', pushToken: null, pushRegisteredAt: null, pushSessionId: null })
       .where(eq(devices.id, deviceId))
       .run();
   }

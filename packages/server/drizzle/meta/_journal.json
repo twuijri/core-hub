@@ -155,6 +155,13 @@
       "when": 1790343428221,
       "tag": "0021_model_role_image",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1790351883773,
+      "tag": "0022_device_push_session",
+      "breakpoints": true
     }
   ]
 }
