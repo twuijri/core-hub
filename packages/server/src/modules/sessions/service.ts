@@ -30,6 +30,7 @@ import { excerpt, type SessionFilters } from './store.js';
 import type { MessagePart } from './schema.js';
 import type { RunState } from './run-reducer.js';
 import { buildTrajectory, type Trajectory } from './trajectory.js';
+import { SessionCategories } from './categories.js';
 
 /** `undefined` is spelled out everywhere: `exactOptionalPropertyTypes` is on. */
 export interface ContentBlockInput {
@@ -121,6 +122,8 @@ export class SessionsService {
   readonly store: SessionsStore;
   readonly audit: AuditService;
   readonly engine: RunEngine;
+  /** The profile's categories (contract decision §53, `categories.ts`). */
+  readonly categories: SessionCategories;
 
   constructor(
     store: SessionsStore,
@@ -134,6 +137,23 @@ export class SessionsService {
     this.store = store;
     this.audit = audit;
     this.engine = new RunEngine({ store, audit, realtime, ports, log });
+    this.categories = new SessionCategories(store.db);
+  }
+
+  /**
+   * `sessions.deleteCategory`: the category goes, its sessions stay — each one loses the
+   * category and is announced (`session.updated`), so every open list moves it back.
+   */
+  deleteCategory(scope: EngineScope, categoryId: string): void {
+    this.categories.remove(scope, categoryId, (id) => {
+      for (const sessionId of this.categories.sessionIdsIn(scope.workspace, id)) {
+        const updated = this.store.updateSession(scope.workspace, sessionId, { categoryId: null });
+        if (!updated) continue;
+        this.realtime.emitToProfile(scope.profile, 'session.updated', {
+          session: this.sessionOf(scope, updated),
+        });
+      }
+    });
   }
 
   // ------------------------------------------------------------- sessions
@@ -157,6 +177,7 @@ export class SessionsService {
     } = {},
   ): Promise<Record<string, unknown>> {
     const agent = await this.requireAgent(scope, input.agent_id);
+    if (input.category_id) this.categories.require(scope.workspace, input.category_id);
     // Resolved before the row is minted: a refused path must not leave a session behind.
     const root = this.rootOf(scope);
     const asked = input.working_dir?.trim() ? input.working_dir.trim() : null;
@@ -293,13 +314,8 @@ export class SessionsService {
     patch: SessionPatchInput,
   ): Promise<Record<string, unknown>> {
     const row = this.requireSession(scope, sessionId);
-    if (patch.category_id !== undefined && patch.category_id !== null) {
-      // `session_categories` is declared in the contract but has no table yet;
-      // refusing is honest, silently dropping the field would not be.
-      throw new HubError('not_implemented', {
-        details: { field: 'category_id', operation: 'sessions.listCategories' },
-      });
-    }
+    // A category of this profile, or `404` — never a silent drop (contract decision §53).
+    if (patch.category_id) this.categories.require(scope.workspace, patch.category_id);
     const changes: Partial<SessionRow> = {};
     /**
      * Who owns the name (contract decision §26). A non-empty title is the person's own
@@ -342,7 +358,7 @@ export class SessionsService {
       );
     }
     if (patch.notify !== undefined) changes.notify = patch.notify;
-    if (patch.category_id === null) changes.categoryId = null;
+    if (patch.category_id !== undefined) changes.categoryId = patch.category_id;
 
     // Putting a conversation away puts its work away too (owner, 2026-09-24): an archived
     // chat whose agent kept working — and spending — would be out of sight, not stopped.

@@ -357,3 +357,26 @@ export const approvals = sqliteTable(
     check('approvals_status_check', inList(t.status, APPROVAL_STATUSES)),
   ],
 );
+
+/**
+ * A folder of the profile's chats list (contract decision §53): the profile's, shared by
+ * everyone who may enter it, like its sessions. `sessions.category_id` points here; no FK, so
+ * deleting a category clears its sessions in the service, which announces each one.
+ */
+export const sessionCategories = sqliteTable(
+  'session_categories',
+  {
+    ...scopedColumns(),
+    name: text('name', { length: 60 }).notNull(),
+    /** `name` trimmed and lower-cased: what "the same name" means within a profile. */
+    nameKey: text('name_key', { length: 60 }).notNull(),
+    /** `#rrggbb`, or null for the list's own colour. */
+    color: text('color', { length: 7 }),
+    /** Display order within the profile, always `0…n-1`. */
+    position: integer('position').notNull().default(0),
+  },
+  (t) => [
+    uniqueIndex('session_categories_workspace_name_uq').on(t.workspace, t.nameKey),
+    index('session_categories_workspace_position_idx').on(t.workspace, t.position),
+  ],
+);

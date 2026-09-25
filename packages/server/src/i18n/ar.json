@@ -95,7 +95,9 @@
     "approval_choice_session": "لهذه الجلسة",
     "approval_choice_always": "دائمًا",
     "approval_choice_deny": "رفض",
-    "produced_refused": "{files} — تجاوزت حدّ المرفقات حجمًا أو عددًا، وهي باقية في مجلد الدور."
+    "produced_refused": "{files} — تجاوزت حدّ المرفقات حجمًا أو عددًا، وهي باقية في مجلد الدور.",
+    "category_name_taken": "في هذا البروفايل تصنيف بهذا الاسم.",
+    "category_limit": "في هذا البروفايل ١٠٠ تصنيف، وهو الحد؛ احذف واحدًا أولًا."
   },
   "jobs": {
     "queued": "في الانتظار.",

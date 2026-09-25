@@ -545,27 +545,6 @@ describe('sessions: bulk, fork and export', () => {
 });
 
 describe('sessions: what is deliberately not implemented', () => {
-  it('answers 501 for session categories, and refuses to pretend a category was set', async () => {
-    const hub = await hubWithAgent();
-    try {
-      const list = await call(hub.app, 'GET', '/session-categories');
-      expect(list.status).toBe(501);
-      expect(list.json()).toMatchObject({ code: 'not_implemented' });
-
-      const id = ((await create(hub.app)).json() as { id: string }).id;
-      const patch = await call(hub.app, 'PATCH', `/sessions/${id}`, {
-        body: { category_id: '01J8QK3ZR2W7M5N4P6T8V9X0CT' },
-      });
-      expect(patch.status).toBe(501);
-      expect(patch.json()).toMatchObject({
-        code: 'not_implemented',
-        details: { field: 'category_id' },
-      });
-    } finally {
-      await hub.close();
-    }
-  });
-
   it('hands attachment storage to `knowledge`, which asks for a token', async () => {
     // The eight attachment operations are declared on the `sessions` tag and mounted
     // by `knowledge` (which owns the bytes), so they are no longer the app's 501 stub.

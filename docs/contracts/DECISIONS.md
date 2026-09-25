@@ -1024,3 +1024,41 @@ did not say how many there are or who owns one. Proposed here — owner to confi
 Rejected: a new `source` field on `SessionCreate` (a client could then make any number of
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
+
+## 53. A session category is the profile's, shared like its conversations; moving is a session patch
+
+The contract has declared `session_categories` since the start (`SessionCategory`, four
+operations, `Session.category_id`, `sessions.list?category_id=`), but no module built them and
+every call answered `501`. It did not say whose a category is, what `position` does when two
+categories want the same place, or what `session_count` counts. Proposed here — owner to
+confirm:
+
+- **The profile's, not the person's.** A category belongs to the profile it was made in and
+  everyone who may enter that profile sees, uses, renames and deletes it — the same rule as the
+  profile's conversations, which are not per person either. `owner_id` is who made it. A
+  category per person would need `Session.category_id` to differ per viewer, and the contract has
+  one field on one shared session: two people filing the same conversation would overwrite each
+  other. Whether a group is **collapsed** is the viewer's own and stays in the client.
+- **Moving is `sessions.update` / `sessions.bulkUpdate`** with `category_id` (a category of the
+  session's own profile) or `null` (out of any). A category the profile does not have — another
+  profile's, a deleted one, a made-up id — is `404 not_found` (`details.resource =
+  session_category`), never a silent drop. `sessions.create` checks the same. A fork keeps its
+  parent's category.
+- **Order is `position`, always `0…n-1`.** Create puts a category last, or at `position` when
+  given; `updateCategory` with `position` moves it there (past the end is the end) and renumbers
+  the rest; deleting closes the gap. Clients reorder with one patch per move.
+- **Names are unique per profile** (trimmed, case ignored): a second «الإطلاق» is `409
+  conflict` on create and on rename — `updateCategory` now documents its `409`. A profile holds
+  at most 100 (the list is not paged), the 101st is `409`.
+- **`session_count` counts the conversations in it that are not archived** — what the list
+  shows by default.
+- **Deleting keeps the conversations**: each one in it, archived ones too, loses its category and
+  is announced with `session.updated`, so every open list moves it back among the rest.
+- **Across profiles** (ADR 0016): `listCategories?profiles=all` lists every profile the caller
+  may enter, each profile's categories in its own order, each naming its `profile`. A client
+  showing every profile at once offers a conversation only the categories of its own profile.
+
+Rejected: a `session_category.*` realtime event (another person's new category shows at the next
+fetch, which is enough for a rare change; the moves themselves already travel as
+`session.updated`); a separate `moveSession` operation (the patch already carries the field, and
+`bulkUpdate` moves many at once); per-person categories (above).
