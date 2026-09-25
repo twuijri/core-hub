@@ -1,5 +1,5 @@
 /**
- * Common schedules and the next runs, against the real hub (DECISIONS §57).
+ * Common schedules and the next runs, against the real hub (DECISIONS §53).
  *
  * A person picks «أيام العمل الساعة ٩:٠٠» from «جداول شائعة»: the form's time becomes
  * `0 9 * * 1-5`, and the next three times shown are the hub's own calculation

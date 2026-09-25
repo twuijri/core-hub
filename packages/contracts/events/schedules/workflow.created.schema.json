@@ -236,7 +236,7 @@
     },
     "WorkflowLimits": {
       "type": "object",
-      "description": "What one run of a workflow may take (DECISIONS §57). Each is `null` for no limit. Time a run spends waiting for a person at an approval counts toward none of them.",
+      "description": "What one run of a workflow may take (DECISIONS §53). Each is `null` for no limit. Time a run spends waiting for a person at an approval counts toward none of them.",
       "required": ["max_duration_seconds", "max_cost", "step_timeout_seconds"],
       "properties": {
         "max_duration_seconds": {

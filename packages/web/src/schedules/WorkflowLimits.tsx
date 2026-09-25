@@ -1,5 +1,5 @@
 /**
- * A workflow's limits (DECISIONS §57): a time budget, a cost budget and a per-step timeout.
+ * A workflow's limits (DECISIONS §53): a time budget, a cost budget and a per-step timeout.
  *
  * - `RunLimits`: on a run's view, the limits it ran under, what it has cost so far by the
  *   hub's estimate, and — when a limit ended it — which one, in the person's language.

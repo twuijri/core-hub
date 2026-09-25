@@ -6236,7 +6236,7 @@
               ]
             },
             "stopped_by": {
-              "description": "Which limit ended the run, when one did (DECISIONS §57): `max_duration` or `max_cost` stopped it at once, the step working then cancelled; `step_timeout` is a step that ran out of time with no `failure` edge to take. The run is then `failed` and `error` says the same in words. `null` otherwise.",
+              "description": "Which limit ended the run, when one did (DECISIONS §53): `max_duration` or `max_cost` stopped it at once, the step working then cancelled; `step_timeout` is a step that ran out of time with no `failure` edge to take. The run is then `failed` and `error` says the same in words. `null` otherwise.",
               "oneOf": [
                 {
                   "type": "string",
@@ -6253,7 +6253,7 @@
     },
     "WorkflowLimits": {
       "type": "object",
-      "description": "What one run of a workflow may take (DECISIONS §57). Each is `null` for no limit. Time a run spends waiting for a person at an approval counts toward none of them.",
+      "description": "What one run of a workflow may take (DECISIONS §53). Each is `null` for no limit. Time a run spends waiting for a person at an approval counts toward none of them.",
       "required": ["max_duration_seconds", "max_cost", "step_timeout_seconds"],
       "properties": {
         "max_duration_seconds": {

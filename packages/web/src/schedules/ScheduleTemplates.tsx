@@ -2,7 +2,7 @@
  * Help writing a schedule's time: a "Common schedules" menu that fills in the cron or the
  * interval, and the next three times it would run, shown in the schedule's own timezone.
  *
- * The times are the hub's (`schedules.previewTrigger`, DECISIONS §57): the same calculation
+ * The times are the hub's (`schedules.previewTrigger`, DECISIONS §53): the same calculation
  * that sets a saved schedule's `next_run_at`, so what the form promises is what the hub will
  * do — a browser's own cron reader could disagree with it on a day-of-month and weekday pair,
  * or a zone's summer time. A time the hub cannot read says so here, before it is saved.

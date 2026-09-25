@@ -1,5 +1,5 @@
 /**
- * What one workflow run may take (DECISIONS §57): a time budget, a cost budget and a
+ * What one workflow run may take (DECISIONS §53): a time budget, a cost budget and a
  * per-step timeout. This file is the pure half — reading what a person wrote, merging a
  * run's own limits over its workflow's, and the arithmetic in micro-USD; the engine
  * (`workflow-engine.ts`) enforces them.

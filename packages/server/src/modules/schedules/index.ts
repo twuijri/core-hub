@@ -485,7 +485,7 @@ function toWorkflowRun(
     error: row.error,
     started_at: row.startedAt?.toISOString() ?? null,
     finished_at: row.finishedAt?.toISOString() ?? null,
-    // The limits it ran under, what it cost so far, and which limit ended it (§57).
+    // The limits it ran under, what it cost so far, and which limit ended it (§53).
     limits: (row.definitionSnapshot as WorkflowDefinition).limits ?? { ...NO_LIMITS },
     cost: costOf(row.output),
     stopped_by: stoppedByOf(row.output),
@@ -1001,7 +1001,7 @@ export const schedulesModule = defineModule({
           timeout_ms?: number | null;
         };
         const definition = workflow.definition as WorkflowDefinition;
-        // This run's own limits over the workflow's (§57); refused before anything starts.
+        // This run's own limits over the workflow's (§53); refused before anything starts.
         const limits = runLimits(definition.limits, ask.limits, ask.timeout_ms);
         if (definition.nodes.length === 0) {
           throw new HubError('conflict', { details: { reason: 'workflow_empty' } });

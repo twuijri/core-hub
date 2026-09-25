@@ -347,7 +347,7 @@ registerWorkflowPorts((app) => {
         return turn(scope, { ...input, source: 'workflow' });
       }
       // Followed while it works: the engine reads its cost by run id, and a limit that runs
-      // out stops it the way the chat's Stop does (DECISIONS §57).
+      // out stops it the way the chat's Stop does (DECISIONS §53).
       const runs = sessionRunsFor(app);
       if (!runs) throw new Error('this hub composes no sessions module');
       const handle = await runs.start(scope, { ...input, source: 'workflow' });

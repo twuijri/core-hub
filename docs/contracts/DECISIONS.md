@@ -1025,7 +1025,7 @@ Rejected: a new `source` field on `SessionCreate` (a client could then make any 
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
 
-## 57. A workflow run has limits; a schedule's next times can be asked before it is saved
+## 53. A workflow run has limits; a schedule's next times can be asked before it is saved
 
 Two small additions to `schedules`. Proposed here — owner to confirm:
 

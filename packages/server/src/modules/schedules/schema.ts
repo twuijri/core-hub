@@ -139,7 +139,7 @@ export type WorkflowEdge = {
 };
 
 /**
- * What one run may take (the contract's `WorkflowLimits`, DECISIONS §57), stored in the
+ * What one run may take (the contract's `WorkflowLimits`, DECISIONS §53), stored in the
  * contract's own words inside the definition — a workflow's in `workflows.definition`, a
  * run's effective ones in `workflow_runs.definition_snapshot` — so no column had to be added.
  */

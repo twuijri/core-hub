@@ -1,5 +1,5 @@
 /**
- * A workflow run's limits (DECISIONS §57): a time budget, a cost budget and a per-step
+ * A workflow run's limits (DECISIONS §53): a time budget, a cost budget and a per-step
  * timeout — set on the workflow or on one run, enforced by the engine, and read back on the
  * run with what it cost and which limit stopped it.
  *

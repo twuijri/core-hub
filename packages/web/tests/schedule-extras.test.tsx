@@ -1,5 +1,5 @@
 /**
- * Two helps on the Schedules page (DECISIONS §57):
+ * Two helps on the Schedules page (DECISIONS §53):
  *
  * - writing a schedule's time: a "Common schedules" menu fills in the cron or the interval,
  *   and the form shows the next three times **the hub** says it would run

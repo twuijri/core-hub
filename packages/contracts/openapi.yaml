@@ -8532,7 +8532,7 @@ paths:
       description: >-
         The hub's own calculation — the one that sets `Schedule.next_run_at` — applied to a
         trigger that is not saved, so a form can show "next: …" while a person types
-        (DECISIONS §57). `next_runs` are the next `count` times from now (3 when not given,
+        (DECISIONS §53). `next_runs` are the next `count` times from now (3 when not given,
         at most 10), in UTC; a client shows them in `trigger.timezone`. Fewer come back when
         there are fewer (a `once` has one, a past `once` or an impossible cron none). A trigger
         saving would refuse is refused the same way: `409` with `details.reason`
@@ -17369,7 +17369,7 @@ components:
                 - type: 'null'
             stopped_by:
               description: >-
-                Which limit ended the run, when one did (DECISIONS §57): `max_duration` or
+                Which limit ended the run, when one did (DECISIONS §53): `max_duration` or
                 `max_cost` stopped it at once, the step working then cancelled;
                 `step_timeout` is a step that ran out of time with no `failure` edge to take.
                 The run is then `failed` and `error` says the same in words. `null` otherwise.
@@ -17380,7 +17380,7 @@ components:
     WorkflowLimits:
       type: object
       description: >-
-        What one run of a workflow may take (DECISIONS §57). Each is `null` for no limit. Time
+        What one run of a workflow may take (DECISIONS §53). Each is `null` for no limit. Time
         a run spends waiting for a person at an approval counts toward none of them.
       required: [max_duration_seconds, max_cost, step_timeout_seconds]
       properties:

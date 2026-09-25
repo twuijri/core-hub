@@ -27,7 +27,7 @@
  * error. Nothing here evaluates code — templates and conditions are `expr.ts`, which walks
  * paths and compares values.
  *
- * **Limits** (DECISIONS §57): a run works under a time budget, a cost budget and a per-step
+ * **Limits** (DECISIONS §53): a run works under a time budget, a cost budget and a per-step
  * timeout (`limits.ts`), each optional. A step is raced against them: the time budget and
  * the step timeout are timers, the cost budget is the hub's per-turn estimate of the agent
  * step's run, read every few seconds while it works and once when it ends. When the time or

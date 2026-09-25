@@ -257,7 +257,7 @@ describe.skipIf(!doc)('contract: schedules fire, and a workflow step waits for a
     }
   });
 
-  it('previews a trigger, and a run carries its limits, its cost and what stopped it (§57)', async () => {
+  it('previews a trigger, and a run carries its limits, its cost and what stopped it (§53)', async () => {
     const preview = await call('schedules.previewTrigger', 200, {
       body: { trigger: { ...trigger, expression: '0 9 * * 1-5' }, count: 3 },
     });
