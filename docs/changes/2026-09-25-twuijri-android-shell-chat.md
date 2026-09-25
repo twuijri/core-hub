@@ -101,8 +101,15 @@
 - `ChatReducerTest` (بأشكال أمثلة العقد): بناء الرد من القشرة والأجزاء والرسالة النهائية، قشرة
   متأخرة لا تمحو ما بُثّ، الأدوات، الموافقات والأسئلة، فشل التشغيل بكلمات المركز، تجاهل أحداث جلسات
   أخرى، `after_seq` من بروفايل الجلسة وحده، تجميع الأدوار.
-- `PairingTest`، `SecureStoreTest`، `MarkdownTest` (ومنه اتجاه المحتوى)، `ChatsListTest`،
-  `StringsParityTest` (المفاتيح والعناصر النائبة متطابقة، ولا «مساحة عمل»).
+- `PairingTest`، `SecureStoreTest`، `RealtimeTest`، `MarkdownTest` (ومنه اتجاه المحتوى)،
+  `ChatsListTest`، `StringsParityTest` (المفاتيح والعناصر النائبة متطابقة، ولا «مساحة عمل»).
+- `LiveHubTest` (اختياري، يُتخطّى في CI): طبقتا HTTP واللحظي على مركز حقيقي — دخول، قائمة المحادثات
+  عبر البروفايلات، إنشاء محادثة مع الوكيل `direct`، اشتراك، تشغيل يُبثّ حتى نهايته، ثم إعادة قراءته.
+  **كشف خطأً لم تكشفه اختبارات الوحدات**: عميل Socket.IO للـJava يمرّر اسم الحدث أولًا ثم الحمولة،
+  والكود كان يقرأ الوسيط الأول فقط فيُسقط كل حدث. أُصلح (`envelopeOf`) وثُبّت باختبار وحدة.
+
+محاكي أندرويد لم يُشغَّل: المستخدم على هذا الجهاز لا يملك صلاحية `/dev/kvm`، فالواجهة نفسها لم
+تُجرَّب على جهاز؛ ما جُرّب على المركز الحقيقي هو طبقات البيانات والشبكة التي تقف عليها.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 محليًا (JDK 17، Android SDK 35، عبر `mj-run`، Gradle بـ`--no-daemon --max-workers=2`):
@@ -142,6 +149,32 @@ check-clients  OK — 315 client file(s) scanned, 176 contract path(s) known.
 $ pnpm nav:check
 nav:check  OK — 34 destinations, 2 pre-auth screens (login, setup), 39 terms, ar/en complete, routes for web
 ```
+
+على مركز محلي حقيقي (`pnpm --filter @corehub/server dev` بمنفذ ٨٧٩١ وبيانات مؤقتة):
+
+```
+$ COREHUB_LIVE_HUB=http://127.0.0.1:8791 … ./gradlew :app:testDebugUnitTest --tests '*LiveHubTest*'
+tests 1 failures 0
+live: 2 chats across profiles
+live: agent مباشر (available)
+live: subscribe ack SubscribeAck(ok=true, replayed=0, truncated=false, code=null)
+live: event /rt/sessions message.created seq=18
+live: event /rt/sessions run.queued seq=19
+live: event /rt/sessions message.created seq=20
+live: event /rt/sessions run.started seq=21
+live: event /rt/sessions session.updated seq=22
+live: event /rt/sessions run.failed seq=23
+live: event /rt/sessions session.updated seq=24
+live: event /rt/devices notice.created seq=3
+live: run ended; failure=stream ended unexpectedly; messages=[(user, مرحبا), (assistant, )]; lastSeq=24
+```
+(التشغيل يفشل لأن المركز التجريبي بلا مزوّد نماذج؛ المطلوب هنا أن يصل الفشل بكلمات المركز.) قبل
+الإصلاح لم يصل أي حدث وانتهى الاختبار بمهلة ٦٠ ثانية.
+
+ملاحظة: في أول تشغيل تبنّى المركز التجريبي بوابة Hermes تعمل على هذا الجهاز (`127.0.0.1:8642`)
+وكان الوكيل المختار Hermes، فأُرسلت إليها رسالة «مرحبا» واحدة لم تنتهِ خلال دقيقة. لم يتغيّر أي ملف
+في `~/.hermes` ولا `/opt/hermes` (فُحص بالتاريخ). الاختبار صار يختار الوكيل `direct` افتراضيًا حتى لا
+يلمس أي Hermes.
 
 CI: يُضاف بعد الدفع.
 

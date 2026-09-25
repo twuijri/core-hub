@@ -60,6 +60,16 @@ data class Envelope(
     }
 }
 
+/**
+ * The envelope in what the Java client hands an `onAnyIncoming` listener: the event's name
+ * first, then its single argument (a live hub showed the name comes first — reading only the
+ * first argument dropped every event).
+ */
+fun envelopeOf(args: Array<out Any?>): Envelope? {
+    val payload = args.firstOrNull { it is JSONObject } as? JSONObject ?: return null
+    return Envelope.parse(payload.toString())
+}
+
 /** The answer to `subscribe`: `{ ok, replayed, truncated }` or `{ ok: false, error, code }`. */
 data class SubscribeAck(val ok: Boolean, val replayed: Int = 0, val truncated: Boolean = false, val code: String? = null) {
     companion object {
@@ -150,10 +160,7 @@ class Realtime(private val http: OkHttpClient) {
                 ?: (args.firstOrNull() as? JSONObject)?.optString("message")
             if (code in REFUSALS) _refused.tryEmit(code!!)
         }
-        socket.onAnyIncoming { args ->
-            val first = args.firstOrNull() as? JSONObject ?: return@onAnyIncoming
-            Envelope.parse(first.toString())?.let { _events.tryEmit(it) }
-        }
+        socket.onAnyIncoming { args -> envelopeOf(args)?.let { _events.tryEmit(it) } }
         socket.connect()
         return socket
     }

@@ -45,7 +45,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      # The Ubuntu runner image carries the Android SDK (ANDROID_HOME) with its licences accepted;
+      # AGP fetches any platform it lacks.
       - uses: gradle/actions/setup-gradle@v4
       - run: pnpm install --frozen-lockfile
       - name: Generate the Kotlin client from the contract
