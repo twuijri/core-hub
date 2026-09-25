@@ -156,7 +156,9 @@ export function FilesTool() {
 
   const relocate = async (entry: WorkspaceFileEntry, mode: 'move' | 'copy') => {
     const typed = await ask.ask({
-      title: t(mode === 'move' ? 'workspace_files.move_title' : 'workspace_files.copy_title', { name: entry.name }),
+      title: t(mode === 'move' ? 'workspace_files.move_title' : 'workspace_files.copy_title', {
+        name: entry.name,
+      }),
       label: t('workspace_files.destination'),
       description: t('workspace_files.destination_hint'),
       initialValue:
@@ -167,7 +169,11 @@ export function FilesTool() {
     if (!to || to === entry.path) return;
     try {
       await (mode === 'move' ? actions.move : actions.copy).mutateAsync({ from: entry.path, to });
-      toast({ title: t(mode === 'move' ? 'workspace_files.moved' : 'workspace_files.copied', { path: to }) });
+      toast({
+        title: t(mode === 'move' ? 'workspace_files.moved' : 'workspace_files.copied', {
+          path: to,
+        }),
+      });
     } catch (error) {
       fail(error);
     }
@@ -176,7 +182,11 @@ export function FilesTool() {
   const remove = async (entry: WorkspaceFileEntry) => {
     const yes = await confirm.ask({
       title: t('workspace_files.delete_title', { name: entry.name }),
-      body: t(entry.kind === 'directory' ? 'workspace_files.delete_folder_body' : 'workspace_files.delete_body'),
+      body: t(
+        entry.kind === 'directory'
+          ? 'workspace_files.delete_folder_body'
+          : 'workspace_files.delete_body',
+      ),
       tone: 'danger',
     });
     if (!yes) return;
@@ -266,7 +276,9 @@ export function FilesTool() {
             </button>
           )}
           {entry.link && entry.kind !== 'link' && <Badge>{t('workspace_files.link')}</Badge>}
-          {entry.kind === 'link' && <Badge tone="warning">{t('workspace_files.link_outside')}</Badge>}
+          {entry.kind === 'link' && (
+            <Badge tone="warning">{t('workspace_files.link_outside')}</Badge>
+          )}
         </span>
       ),
     },
@@ -349,9 +361,15 @@ export function FilesTool() {
 
   return (
     <div className="flex flex-col gap-3" data-testid="files-tool">
-      <p className="text-sm text-muted">{t('workspace_files.intro', { profile: profileName(profile) })}</p>
+      <p className="text-sm text-muted">
+        {t('workspace_files.intro', { profile: profileName(profile) })}
+      </p>
       <div className="flex flex-wrap items-center gap-2">
-        <Breadcrumb label={t('workspace_files.breadcrumb')} items={crumbs} testId="files-breadcrumb" />
+        <Breadcrumb
+          label={t('workspace_files.breadcrumb')}
+          items={crumbs}
+          testId="files-breadcrumb"
+        />
         <span className="ms-auto flex flex-wrap gap-2">
           <Button
             size="sm"
@@ -458,7 +476,9 @@ export function FilesTool() {
                 />
               }
             />
-            {listing.data.truncated && <Notice tone="warning">{t('workspace_files.truncated')}</Notice>}
+            {listing.data.truncated && (
+              <Notice tone="warning">{t('workspace_files.truncated')}</Notice>
+            )}
           </>
         )}
       </section>
@@ -538,7 +558,11 @@ function RowActions({
       )}
       {openable && (
         <MenuItem icon={<IconDownload size={14} />} onSelect={onDownload}>
-          {t(entry.kind === 'directory' ? 'workspace_files.download_zip' : 'workspace_files.download')}
+          {t(
+            entry.kind === 'directory'
+              ? 'workspace_files.download_zip'
+              : 'workspace_files.download',
+          )}
         </MenuItem>
       )}
       {entry.kind === 'file' && (

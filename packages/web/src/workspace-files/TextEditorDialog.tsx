@@ -101,7 +101,12 @@ export function TextEditorDialog({
       }}
       title={
         <span dir="auto">
-          {t(isNew && etag === null ? 'workspace_files.new_file_title' : 'workspace_files.edit_title', { name })}
+          {t(
+            isNew && etag === null
+              ? 'workspace_files.new_file_title'
+              : 'workspace_files.edit_title',
+            { name },
+          )}
         </span>
       }
       description={path}

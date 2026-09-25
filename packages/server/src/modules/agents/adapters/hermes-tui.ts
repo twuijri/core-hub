@@ -39,7 +39,13 @@ import {
   type SubagentControl,
   type SubagentTailText,
 } from './subagents.js';
-import type { AgentEvent, AgentSession, CompressOutcome, FallbackModel, PromptInput } from './types.js';
+import type {
+  AgentEvent,
+  AgentSession,
+  CompressOutcome,
+  FallbackModel,
+  PromptInput,
+} from './types.js';
 
 type Json = Record<string, unknown>;
 
