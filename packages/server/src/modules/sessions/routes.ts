@@ -316,6 +316,30 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
       .send(createReadStream('', { fd: file.fd, start: 0, end: Math.max(0, file.size - 1) }));
   });
 
+  // ---------------------------------------------------------- run changes
+
+  app.get('/sessions/:session_id/changes', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const query = parse(z.object({ cursor, limit }), request.query, 'query');
+    return deps.service(request).listChanges(scope, session_id, query.cursor, query.limit);
+  });
+
+  app.get('/sessions/:session_id/runs/:run_id/changes', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const run_id = pathId(request.params, 'run_id', 'run');
+    return deps.service(request).runChanges(scope, session_id, run_id);
+  });
+
+  app.get('/sessions/:session_id/runs/:run_id/changes/diff', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const run_id = pathId(request.params, 'run_id', 'run');
+    const query = parse(z.object({ path: z.string().min(1).max(4096) }), request.query, 'query');
+    return deps.service(request).runChangeDiff(scope, session_id, run_id, query.path);
+  });
+
   // ------------------------------------------------------------- messages
 
   app.get('/sessions/:session_id/messages', async (request) => {

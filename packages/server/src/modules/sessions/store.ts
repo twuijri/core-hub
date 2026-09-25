@@ -13,11 +13,40 @@
  * seen, so a page stays stable while new rows arrive at the top — which they
  * constantly do in a chat.
  */
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  exists,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import type { ModuleDatabase } from '../../db/handle.js';
 import { newUlid } from '../../db/ids.js';
-import { approvals, messages, runs, sessions, toolCalls } from './schema.js';
-import type { ApprovalRow, MessageRow, RunRow, SessionRow, ToolCallRow } from './mappers.js';
+import {
+  approvals,
+  messages,
+  runFileChanges,
+  runs,
+  sessions,
+  toolCalls,
+  type RunChangesSummary,
+} from './schema.js';
+import type { RunChangesRecord } from './run-changes.js';
+import type {
+  ApprovalRow,
+  MessageRow,
+  RunFileChangeRow,
+  RunRow,
+  SessionRow,
+  ToolCallRow,
+} from './mappers.js';
 
 export const DEFAULT_LIMIT = 50;
 export const MAX_LIMIT = 200;
@@ -613,6 +642,138 @@ export class SessionsStore {
       out.set(row.runId, list);
     }
     return out;
+  }
+
+  // ---------------------------------------------------------- run changes
+
+  /** What a run changed (decision §49): its rows replace any earlier, its totals go on the run. */
+  saveRunChanges(
+    workspace: string,
+    ownerId: string,
+    runId: string,
+    record: RunChangesRecord,
+    recordedAt: Date,
+  ): void {
+    const summary: RunChangesSummary = {
+      source: record.source,
+      complete: record.complete,
+      filesChanged: record.filesChanged,
+      additions: record.additions,
+      deletions: record.deletions,
+      truncated: record.truncated,
+      recordedAt: recordedAt.getTime(),
+    };
+    this.db.transaction((tx) => {
+      tx.delete(runFileChanges)
+        .where(and(eq(runFileChanges.workspace, workspace), eq(runFileChanges.runId, runId)))
+        .run();
+      if (record.files.length > 0) {
+        tx.insert(runFileChanges)
+          .values(
+            record.files.map((file, seq) => ({
+              id: newUlid(),
+              workspace,
+              ownerId,
+              runId,
+              seq,
+              path: file.path,
+              oldPath: file.oldPath,
+              change: file.change,
+              additions: file.additions,
+              deletions: file.deletions,
+              binary: file.binary,
+              diffState: file.diffState,
+              diff: file.diff,
+              diffTruncated: file.diffTruncated,
+            })),
+          )
+          .run();
+      }
+      tx.update(runs)
+        .set({ changes: summary, updatedAt: new Date() })
+        .where(and(eq(runs.workspace, workspace), eq(runs.id, runId)))
+        .run();
+    });
+  }
+
+  /** The files of these runs, without their diffs, in each run's order. */
+  runFileChangesOf(workspace: string, runIds: readonly string[]): Map<string, RunFileChangeRow[]> {
+    const out = new Map<string, RunFileChangeRow[]>();
+    if (runIds.length === 0) return out;
+    const rows = this.db
+      .select({
+        id: runFileChanges.id,
+        runId: runFileChanges.runId,
+        seq: runFileChanges.seq,
+        path: runFileChanges.path,
+        oldPath: runFileChanges.oldPath,
+        change: runFileChanges.change,
+        additions: runFileChanges.additions,
+        deletions: runFileChanges.deletions,
+        binary: runFileChanges.binary,
+        diffState: runFileChanges.diffState,
+      })
+      .from(runFileChanges)
+      .where(
+        and(eq(runFileChanges.workspace, workspace), inArray(runFileChanges.runId, [...runIds])),
+      )
+      .orderBy(asc(runFileChanges.runId), asc(runFileChanges.seq))
+      .all();
+    for (const row of rows) {
+      const list = out.get(row.runId) ?? [];
+      list.push(row);
+      out.set(row.runId, list);
+    }
+    return out;
+  }
+
+  /** One file a run changed, with its diff. */
+  runFileChange(
+    workspace: string,
+    runId: string,
+    file: string,
+  ): (RunFileChangeRow & { diff: string | null; diffTruncated: boolean }) | undefined {
+    return this.db
+      .select()
+      .from(runFileChanges)
+      .where(
+        and(
+          eq(runFileChanges.workspace, workspace),
+          eq(runFileChanges.runId, runId),
+          eq(runFileChanges.path, file),
+        ),
+      )
+      .get();
+  }
+
+  /** The session's runs that changed a file, newest first, keyset-paged by run id. */
+  runsWithChanges(
+    workspace: string,
+    sessionId: string,
+    cursor: string | undefined,
+    limit: number,
+  ): Page<RunRow> {
+    const where: SQL[] = [
+      eq(runs.workspace, workspace),
+      eq(runs.sessionId, sessionId),
+      isNotNull(runs.changes),
+      exists(
+        this.db
+          .select({ one: sql`1` })
+          .from(runFileChanges)
+          .where(eq(runFileChanges.runId, runs.id)),
+      ),
+    ];
+    const position = decodeCursor(cursor);
+    if (position) where.push(lt(runs.id, position.id));
+    const rows = this.db
+      .select()
+      .from(runs)
+      .where(and(...where))
+      .orderBy(desc(runs.id))
+      .limit(limit + 1)
+      .all();
+    return pageOf(rows, limit, (row) => encodeCursor(row.createdAt.getTime(), row.id));
   }
 
   // ------------------------------------------------------------ approvals

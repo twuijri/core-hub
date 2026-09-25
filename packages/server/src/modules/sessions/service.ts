@@ -17,6 +17,8 @@ import {
   toApproval,
   toMessage,
   toRun,
+  toRunChanges,
+  toRunFileDiff,
   toSession,
   type ApprovalRow,
   type MessageRow,
@@ -634,6 +636,52 @@ export class SessionsService {
     return openInside(row.workingDir, requested, (type) =>
       download ? DOWNLOAD_MAX_BYTES : PREVIEW_MAX_BYTES[type.kind],
     );
+  }
+
+  // ---------------------------------------------------------- run changes
+
+  /**
+   * The runs of a conversation that changed a file, newest first, each with its files and
+   * their line counts (contract `sessions.listChanges`, decision §49). The diffs stay behind
+   * `runChangeDiff`: a list drawn under every reply must not carry them.
+   */
+  listChanges(
+    scope: EngineScope,
+    sessionId: string,
+    cursor: string | undefined,
+    limit: number,
+  ): { items: Record<string, unknown>[]; next_cursor: string | null } {
+    const row = this.requireSession(scope, sessionId);
+    const page = this.store.runsWithChanges(scope.workspace, row.id, cursor, limit);
+    const files = this.store.runFileChangesOf(
+      scope.workspace,
+      page.items.map((run) => run.id),
+    );
+    return {
+      items: page.items.map((run) => toRunChanges(run, files.get(run.id) ?? [])),
+      next_cursor: page.nextCursor,
+    };
+  }
+
+  /** One run's changed files (contract `sessions.getRunChanges`); 404 when none were recorded. */
+  runChanges(scope: EngineScope, sessionId: string, runId: string): Record<string, unknown> {
+    const run = this.requireRun(scope, sessionId, runId);
+    if (!run.changes) throw notFound({ resource: 'run_changes', id: runId });
+    const files = this.store.runFileChangesOf(scope.workspace, [run.id]).get(run.id) ?? [];
+    return toRunChanges(run, files);
+  }
+
+  /** One changed file's recorded diff (contract `sessions.getRunChangeDiff`). */
+  runChangeDiff(
+    scope: EngineScope,
+    sessionId: string,
+    runId: string,
+    file: string,
+  ): Record<string, unknown> {
+    const run = this.requireRun(scope, sessionId, runId);
+    const row = run.changes ? this.store.runFileChange(scope.workspace, run.id, file) : undefined;
+    if (!row) throw notFound({ resource: 'file', id: file });
+    return toRunFileDiff(run.id, row);
   }
 
   // ------------------------------------------------------------- messages
