@@ -11,6 +11,7 @@ on:
       - 'packages/contracts/openapi-generator/swift.yaml'
       - 'packages/ui-tokens/tokens.json'
       - 'docs/clients/navigation.json'
+      - 'docs/changes/*-ios-*.md'
       - '.github/workflows/ios.yml'
   push:
     branches: [main]
