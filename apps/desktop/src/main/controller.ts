@@ -26,9 +26,11 @@ import {
 } from 'electron';
 import { PRODUCT } from '@corehub/contracts';
 import type {
+  DesktopHelperState,
   DesktopNotice,
   DesktopState,
 } from '../../../../packages/web/src/desktop/bridge-types.js';
+import { FOLDER_LIMIT, randomToken, type HelperConfig } from '../shared/helper.js';
 import { languageFromLocale, withRemote, type Language } from '../shared/config.js';
 import {
   isSafeAppPath,
@@ -55,6 +57,7 @@ import { ConfigStore } from './config-store.js';
 import { findHermes, installHermes, thisMachine, type HermesFound } from './hermes.js';
 import { claimPairing, probeHub, type WebSession } from './hub.js';
 import { LocalHubError, startLocalHub, type LocalHub } from './local-hub.js';
+import { startHelper, toolsFor, type HelperServer } from './helper.js';
 import { appMenuTemplate, trayMenuTemplate, type MenuActions } from './menu.js';
 import { startProxy, type ProxyServer } from './proxy.js';
 
@@ -84,6 +87,8 @@ export class DesktopController {
   /** Shown on the first-run screen when the app came back to it on its own. */
   private welcomeNotice: WelcomeError | null = null;
   private installing = false;
+  private helper: HelperServer | null = null;
+  private helperError: string | null = null;
 
   constructor(
     private readonly paths: ControllerPaths,
@@ -105,6 +110,7 @@ export class DesktopController {
     }
     this.registerIpc();
     this.buildMenus();
+    if (this.config.get().helper.enabled) await this.syncHelper();
     if (this.options.tray) this.createTray();
     const config = this.config.get();
     if (config.mode === 'remote' && config.remote.url) this.openRemote(config.remote.url);
@@ -132,8 +138,11 @@ export class DesktopController {
     this.tray = null;
     // The local hub is stopped properly (its database, its Hermes child); the rest never
     // holds up quitting: the process ending closes whatever socket is left.
+    const helper = this.helper;
+    this.helper = null;
     await Promise.all([
       this.stopLocal(),
+      helper?.close(),
       Promise.race([this.proxy?.close(), new Promise((resolve) => setTimeout(resolve, 1_000))]),
     ]);
   }
@@ -415,6 +424,103 @@ export class DesktopController {
     this.config.update((c) => ({ ...c, window: { ...bounds, maximized } }));
   }
 
+  // ---------------------------------------------------------------- local helper (MCP)
+
+  /** Starts or stops the helper to match the setting. */
+  private async syncHelper(): Promise<void> {
+    const wanted = this.config.get().helper.enabled;
+    if (!wanted && this.helper) {
+      const helper = this.helper;
+      this.helper = null;
+      await helper.close();
+    }
+    if (wanted && !this.helper) {
+      try {
+        this.helper = await startHelper({
+          config: () => this.config.get().helper,
+          env: {
+            openPath: (file) => shell.openPath(file),
+            openUrl: (url) => shell.openExternal(url),
+          },
+          version: app.getVersion(),
+          preferredPort: this.config.get().helper.port,
+        });
+        this.helperError = null;
+        const port = this.helper.port;
+        if (this.config.get().helper.port !== port) this.updateHelper((h) => ({ ...h, port }));
+      } catch (error) {
+        this.helperError = error instanceof Error ? error.message : String(error);
+      }
+    }
+  }
+
+  private updateHelper(change: (helper: HelperConfig) => HelperConfig): void {
+    this.config.update((c) => ({ ...c, helper: change(c.helper) }));
+  }
+
+  private helperState(): DesktopHelperState {
+    const helper = this.config.get().helper;
+    return {
+      enabled: helper.enabled,
+      url: this.helper?.url ?? null,
+      token: helper.token,
+      folders: helper.folders.map((f) => ({ ...f })),
+      allowOpen: helper.allowOpen,
+      tools: toolsFor(helper).map(({ name, description }) => ({ name, description })),
+      activity: this.helper?.activity() ?? [],
+      error: helper.enabled ? this.helperError : null,
+    };
+  }
+
+  private registerHelperIpc(): void {
+    const guarded = <A extends unknown[]>(
+      channel: string,
+      run: (...args: A) => void | Promise<void>,
+    ) =>
+      ipcMain.handle(channel, async (event, ...args: unknown[]) => {
+        if (!this.fromApp(event)) return null;
+        await run(...(args as A));
+        return this.helperState();
+      });
+    guarded(CHANNELS.helperGet, () => {});
+    guarded(CHANNELS.helperEnable, async (value: unknown) => {
+      this.updateHelper((h) => ({ ...h, enabled: value === true }));
+      await this.syncHelper();
+    });
+    guarded(CHANNELS.helperAddFolder, async () => {
+      const parent = this.appWindow;
+      const options = {
+        title: this.t('helper.pick_folder'),
+        properties: ['openDirectory' as const, 'createDirectory' as const],
+      };
+      const picked = parent
+        ? await dialog.showOpenDialog(parent, options)
+        : await dialog.showOpenDialog(options);
+      const folder = picked.canceled ? undefined : picked.filePaths[0];
+      if (!folder) return;
+      this.updateHelper((h) =>
+        h.folders.some((f) => f.path === folder) || h.folders.length >= FOLDER_LIMIT
+          ? h
+          : { ...h, folders: [...h.folders, { path: folder, write: false }] },
+      );
+    });
+    guarded(CHANNELS.helperRemoveFolder, (folder: unknown) =>
+      this.updateHelper((h) => ({ ...h, folders: h.folders.filter((f) => f.path !== folder) })),
+    );
+    guarded(CHANNELS.helperFolderWrite, (folder: unknown, write: unknown) =>
+      this.updateHelper((h) => ({
+        ...h,
+        folders: h.folders.map((f) => (f.path === folder ? { ...f, write: write === true } : f)),
+      })),
+    );
+    guarded(CHANNELS.helperAllowOpen, (value: unknown) =>
+      this.updateHelper((h) => ({ ...h, allowOpen: value === true })),
+    );
+    guarded(CHANNELS.helperNewToken, () =>
+      this.updateHelper((h) => ({ ...h, token: randomToken() })),
+    );
+  }
+
   // ---------------------------------------------------------------- tray and menus
 
   private readonly actions: MenuActions = {
@@ -502,6 +608,7 @@ export class DesktopController {
   }
 
   private registerIpc(): void {
+    this.registerHelperIpc();
     ipcMain.handle(CHANNELS.state, (event) => (this.fromApp(event) ? this.state() : null));
     ipcMain.handle(CHANNELS.takeSession, (event) => {
       if (!this.fromApp(event)) return null;

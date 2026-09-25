@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n/context.js';
 import { useMeta } from '../hub/queries.js';
 import { desktopBridge, type DesktopState } from '../desktop/desktop.js';
+import { HelperSection } from '../desktop/HelperSection.js';
 import { Button, Notice, Skeleton, SkeletonGroup, Switch, Table } from '../ui/index.js';
 
 const PLATFORM_KEY: Record<string, string> = {
@@ -152,6 +153,8 @@ export function ThisDeviceTab() {
           testId="this-device-tray"
         />
       </section>
+
+      <HelperSection bridge={bridge} local={state.mode === 'local'} />
 
       <section className="flex flex-col gap-3" aria-labelledby="this-device-voice">
         <h3 id="this-device-voice" className="text-sm font-semibold">

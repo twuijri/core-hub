@@ -1,12 +1,13 @@
 /**
  * The desktop app's own settings: which mode, which hub, where the window was.
  *
- * One JSON file in the OS app-data folder (`app.getPath('userData')/desktop.json`). It holds
- * no secret — the web client keeps its tokens in its own storage partition, one per hub —
- * so a person can read or delete it by hand. Anything unreadable falls back to the default
+ * One JSON file in the OS app-data folder (`app.getPath('userData')/desktop.json`, mode 0600).
+ * Its only secret is the local helper's token; the web client keeps its sign-ins in its own
+ * storage partition, one per hub. A person can read or delete it by hand. Anything unreadable falls back to the default
  * for that field instead of failing the launch: a settings file is never a reason the app
  * does not open.
  */
+import { defaultHelper, parseHelper, randomToken, type HelperConfig } from './helper.js';
 import { normalizeHubUrl } from './hub-url.js';
 
 export type Mode = 'remote' | 'local';
@@ -42,13 +43,18 @@ export interface DesktopConfig {
   deviceKey: string;
   /** Closing the window keeps the app in the tray (default on, where a tray exists). */
   closeToTray: boolean;
+  /** The local helper (MCP): off, no folders, until the person says otherwise. */
+  helper: HelperConfig;
 }
 
 export const RECENT_LIMIT = 5;
 export const DEFAULT_WINDOW = { width: 1280, height: 820 } as const;
 export const MIN_WINDOW = { width: 420, height: 560 } as const;
 
-export function defaultConfig(makeId: () => string): DesktopConfig {
+export function defaultConfig(
+  makeId: () => string,
+  makeToken: () => string = randomToken,
+): DesktopConfig {
   return {
     version: 1,
     mode: null,
@@ -58,6 +64,7 @@ export function defaultConfig(makeId: () => string): DesktopConfig {
     window: null,
     deviceKey: makeId(),
     closeToTray: true,
+    helper: defaultHelper(makeToken),
   };
 }
 
@@ -86,8 +93,12 @@ function bounds(value: unknown): WindowBounds | null {
 }
 
 /** Reads whatever is in the file, keeping each valid field and defaulting the rest. */
-export function parseConfig(raw: unknown, makeId: () => string): DesktopConfig {
-  const base = defaultConfig(makeId);
+export function parseConfig(
+  raw: unknown,
+  makeId: () => string,
+  makeToken: () => string = randomToken,
+): DesktopConfig {
+  const base = defaultConfig(makeId, makeToken);
   if (!isRecord(raw)) return base;
   const remote = isRecord(raw.remote) ? raw.remote : {};
   const recent = Array.isArray(remote.recent)
@@ -112,6 +123,7 @@ export function parseConfig(raw: unknown, makeId: () => string): DesktopConfig {
         ? raw.deviceKey
         : base.deviceKey,
     closeToTray: typeof raw.closeToTray === 'boolean' ? raw.closeToTray : base.closeToTray,
+    helper: parseHelper(raw.helper, () => base.helper.token),
   };
 }
 

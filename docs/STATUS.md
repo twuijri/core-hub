@@ -202,12 +202,19 @@ its approval.
   data in `<app data>/local-hub`; it finds the person's Hermes program (PATH, then where
   Hermes's installers put it on Linux, macOS and Windows) or a running gateway, and without
   one offers **Install Hermes** — Hermes's own installer, shown before it runs, output streamed
-  — or to continue without; This device then shows the data folder and the Hermes in use. Not
-  yet: the local helper, installers and the update check, voice (the page says so). Tests:
+  — or to continue without; This device then shows the data folder and the Hermes in use. Since
+  2026-09-25 also the **local helper** (ADR 0022, proposed): an MCP server in the app on
+  127.0.0.1, off by default, token-protected, refusing browser requests; its permission screen in
+  This device lists the live tools (list/read in shared folders; write only in folders shared as
+  writable; open files and http(s) links only when allowed), the folders and their access, the
+  address and key, and the last calls, and in local mode adds it to Hermes's MCP servers in one
+  click. A hub on a server cannot reach it (the screen says so). Not yet: installers and the
+  update check, voice (the page says so). Tests:
   unit tests of the main process logic, the loopback proxy, Hermes detection per platform, the
-  installer runner and the hub supervisor; a smoke test (Electron under Xvfb) that connects,
+  installer runner, the hub supervisor, and the helper (folder rule with links, tools, the MCP
+  door); a smoke test (Electron under Xvfb) that connects,
   signs in, streams a chat reply and pairs a second computer against the real hub, and starts
-  local mode on a computer without Hermes through to the first-run setup.
+  local mode on a computer without Hermes through to the first-run setup and turns the helper on.
 - Android and iOS: not started (ADR 0007).
 
 ## Name

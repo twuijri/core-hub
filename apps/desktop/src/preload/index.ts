@@ -9,6 +9,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type {
   DesktopBridge,
+  DesktopHelperState,
   DesktopNotice,
   DesktopState,
 } from '../../../../packages/web/src/desktop/bridge-types.js';
@@ -39,6 +40,16 @@ const bridge: DesktopBridge = {
     }),
   setUnreadCount: (count: number) => ipcRenderer.send(CHANNELS.unread, Number(count) || 0),
   onOpenPath: (listener) => listen<string>(CHANNELS.openPath, listener),
+  helper: {
+    get: () => ipcRenderer.invoke(CHANNELS.helperGet) as Promise<DesktopHelperState>,
+    setEnabled: (value) => ipcRenderer.invoke(CHANNELS.helperEnable, value === true),
+    addFolder: () => ipcRenderer.invoke(CHANNELS.helperAddFolder),
+    removeFolder: (folder) => ipcRenderer.invoke(CHANNELS.helperRemoveFolder, String(folder)),
+    setFolderWrite: (folder, write) =>
+      ipcRenderer.invoke(CHANNELS.helperFolderWrite, String(folder), write === true),
+    setAllowOpen: (value) => ipcRenderer.invoke(CHANNELS.helperAllowOpen, value === true),
+    newToken: () => ipcRenderer.invoke(CHANNELS.helperNewToken),
+  },
 };
 
 contextBridge.exposeInMainWorld('corehubDesktop', bridge);
