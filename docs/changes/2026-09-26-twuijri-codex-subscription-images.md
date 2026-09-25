@@ -109,7 +109,9 @@ $ COREHUB_HERMES_IMAGE=core-hub:morechannels vitest run --maxWorkers=1 --reporte
 لم أشغّل الاختبارات الجديدة على الكود القديم؛ هي تطلب وحدات وبروتوكولًا لم تكن موجودة.
 لم يُشغَّل محليًا: بقية حزم الخادم والويب وPlaywright (يشغّلها CI).
 
-CI: يُحدَّث بعد الدفع.
+CI على PR #156 (التشغيل 36191323593 وأخواته) أخضر كله: lint/typecheck/contracts/build، اختبارات الخادم
+(3 أجزاء)، Playwright على المركز الحقيقي، صورة Docker تجيب `/health`، db:generate/migrate (SQLite
+وPostgreSQL)، سطح المكتب وAndroid وiOS، وسجل التغيير وgraphify.
 
 ## المخاطر والرجوع
 - **لا حساب ChatGPT حقيقيًا جُرِّب**: الشكل مأخوذ من مصدر Hermes وسلوكه الموصوف؛ أول تجربة حقيقية
