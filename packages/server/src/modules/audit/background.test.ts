@@ -1,5 +1,5 @@
 /**
- * The Background panel's list (contract decision §47): how jobs read in it, and how the items
+ * The Background panel's list (contract decision §49): how jobs read in it, and how the items
  * of every source are put in one order.
  */
 import { describe, expect, it } from 'vitest';

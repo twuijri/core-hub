@@ -167,7 +167,7 @@ export interface AgentInfo {
   available: boolean;
   /** Machine-readable reason for `available: false` (`not_installed`, `stopped`, …). */
   unavailableReason?: string;
-  /** What it lets a person do with its subagents (§47); absent is `none`. */
+  /** What it lets a person do with its subagents (§49); absent is `none`. */
   subagents?: 'full' | 'observe' | 'none';
 }
 
@@ -300,7 +300,7 @@ export interface AgentRunnerPort {
   send(runId: string, input: RunnerRunInput): Promise<void>;
   interrupt(runId: string): Promise<void>;
   ask(request: RunnerAskRequest): Promise<string | null>;
-  /** Every subagent report of every live conversation, by hub session id (§47). */
+  /** Every subagent report of every live conversation, by hub session id (§49). */
   onSubagent(listener: (sessionId: string, signal: RunnerSubagentSignal) => void): () => void;
   /** What the live conversation lets a person do with its subagents; `null` when none. */
   subagents(sessionId: string): RunnerSubagentControl | null;

@@ -487,7 +487,7 @@ export class HermesTuiSession implements AgentSession {
   }
 
   /**
-   * Hermes's delegations (contract decision §47): its `subagent.*` events, and its calls to
+   * Hermes's delegations (contract decision §49): its `subagent.*` events, and its calls to
    * list, stop, steer and read a subagent of this session. The calls name the live session,
    * which is what Hermes checks the caller's authority against.
    */

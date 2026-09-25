@@ -430,7 +430,7 @@ registerTaskNames((app) => (kind, id) => {
 });
 
 /**
- * The Background panel (contract decision §47) is `audit`'s list of a person's work; the runs
+ * The Background panel (contract decision §49) is `audit`'s list of a person's work; the runs
  * and subagents are `sessions`'s, the workflow runs `schedules`'s. Each answers for its own.
  */
 registerBackgroundSource((app) => sessionBackgroundFor(app));

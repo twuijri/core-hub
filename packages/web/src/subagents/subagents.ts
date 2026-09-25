@@ -1,5 +1,5 @@
 /**
- * A conversation's subagents (contract decision §47), the pure half: how a live change joins
+ * A conversation's subagents (contract decision §49), the pure half: how a live change joins
  * the list, how the running ones are ordered as a tree, and how long each has been going.
  * No React and no clock of its own, so every rule here is a unit test.
  */

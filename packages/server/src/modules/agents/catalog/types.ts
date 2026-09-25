@@ -85,7 +85,7 @@ export interface CatalogEntry {
   sections: AgentSection[];
   /**
    * What the agent lets a person do with the subagents it delegates to (contract decision
-   * §47), as its protocol actually carries it — checked against the pinned version.
+   * §49), as its protocol actually carries it — checked against the pinned version.
    */
   subagents: 'full' | 'observe' | 'none';
 }

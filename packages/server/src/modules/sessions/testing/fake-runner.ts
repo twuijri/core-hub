@@ -44,7 +44,7 @@ export class FakeAgentDirectory implements AgentDirectory {
 
 /**
  * One step of a script: an event to emit, a pause until a person answers, or a report about a
- * subagent (§47), which goes to `onSubagent` listeners rather than into the turn.
+ * subagent (§49), which goes to `onSubagent` listeners rather than into the turn.
  */
 export type ScriptStep =
   AgentEvent | { type: 'await_input' } | { type: 'subagent'; signal: AgentSubagentSignal };
@@ -70,7 +70,7 @@ export interface FakeRunnerOptions {
    */
   answer?: string | null | ((request: AgentAskRequest) => string | null | Promise<string | null>);
   /**
-   * What the agent lets a person do with its subagents (§47). `full` answers every verb —
+   * What the agent lets a person do with its subagents (§49). `full` answers every verb —
    * a stop is confirmed at once with a `completed` / `interrupted` report — `observe` none.
    * Absent: the runner has no subagents at all.
    */
@@ -92,7 +92,7 @@ export class FakeAgentRunner implements AgentRunner {
   readonly asked: AgentAskRequest[] = [];
   readonly inputs: Array<{ runId: string; input: AgentRunInput }> = [];
   readonly interrupted: string[] = [];
-  /** Every subagent verb the hub used, in order (§47). */
+  /** Every subagent verb the hub used, in order (§49). */
   readonly subagentCalls: Array<{ verb: string; sessionId: string; id?: string; text?: string }> =
     [];
   private readonly channels = new Map<string, RunChannel>();

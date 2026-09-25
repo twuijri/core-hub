@@ -1,5 +1,5 @@
 /**
- * A conversation's subagents over the wire (contract decision §47): `sessions.listSubagents`
+ * A conversation's subagents over the wire (contract decision §49): `sessions.listSubagents`
  * once, then every `subagent.*` event of that conversation folded in as it arrives — the events
  * are profile-wide, so no subscription is needed, and each carries the whole subagent. Stop,
  * steer and the output's tail are the conversation's own operations.

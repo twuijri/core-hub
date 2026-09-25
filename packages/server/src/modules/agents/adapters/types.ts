@@ -278,7 +278,7 @@ export interface AgentSession {
   interrupt(): Promise<void>;
   close(): Promise<void>;
   /**
-   * The subagents this conversation's agent delegates to (contract decision §47), on a channel
+   * The subagents this conversation's agent delegates to (contract decision §49), on a channel
    * of their own because one can outlive the turn that started it. Absent: the agent never
    * says it delegated.
    */

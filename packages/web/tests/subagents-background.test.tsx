@@ -1,5 +1,5 @@
 /**
- * Subagents and the Background panel (contract decision §47).
+ * Subagents and the Background panel (contract decision §49).
  *
  * - A conversation's subagents: running ones as a tree under the one that started them,
  *   finished ones folded into "Finished (n)", Stop and Steer only where the agent allows them.

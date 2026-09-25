@@ -1034,7 +1034,7 @@ summary.tool-head:hover {
   }
 }
 
-/* ------------------------------------------------ the Subagents panel (§47) */
+/* ------------------------------------------------ the Subagents panel (§49) */
 /* Above the composer, in the reading column; a quiet card that folds to one line. */
 .chat-flow .subagents {
   inline-size: 100%;
@@ -1202,7 +1202,7 @@ summary.tool-head:hover {
   font-size: var(--ch-font-size-xs);
   white-space: pre-wrap;
 }
-/* A subagent in the Trajectory: its own lane, its own colour (§47). */
+/* A subagent in the Trajectory: its own lane, its own colour (§49). */
 .trajectory-bar[data-kind='subagent'],
 .trajectory-dot[data-kind='subagent'] {
   background: var(--ch-color-status-running);

@@ -137,12 +137,12 @@ export class AcpSession implements AgentSession {
   private nextId = 1;
   private closed = false;
   private readonly subagentSignals = new SubagentSignals();
-  /** Tool calls that are delegations, by their id: the subagent is the call (§47). */
+  /** Tool calls that are delegations, by their id: the subagent is the call (§49). */
   private readonly delegations = new Map<string, { goal: string | null }>();
 
   /**
    * What an ACP agent's stream says about its delegations: that one started, what it was asked,
-   * and that it ended — `observe`, nothing more (contract decision §47).
+   * and that it ended — `observe`, nothing more (contract decision §49).
    */
   readonly subagents: SubagentControl = {
     support: 'observe',

@@ -1,5 +1,5 @@
 /**
- * 41. Subagents and the Background panel (owner, 2026-09-25; contract decision §47): a scripted
+ * 41. Subagents and the Background panel (owner, 2026-09-25; contract decision §49): a scripted
  *     run delegates to two subagents. The conversation's Subagents panel shows both running;
  *     the Background button in the top bar lists the run and the subagents; stopping one in the
  *     panel moves it to Finished, the other then completes and joins it; its step opens in the

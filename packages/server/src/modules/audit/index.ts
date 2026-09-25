@@ -202,7 +202,7 @@ export const auditModule = defineModule({
       },
     });
 
-    // ------------------------------------------------ the Background panel (§47)
+    // ------------------------------------------------ the Background panel (§49)
 
     defineRoute(app, deps, {
       operationId: 'background.list',

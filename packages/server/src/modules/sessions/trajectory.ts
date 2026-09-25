@@ -45,7 +45,7 @@ export interface TrajectoryStep {
   tool_call_only: boolean;
   first_token_ms: number | null;
   tool_call: Record<string, unknown> | null;
-  /** The subagent of a `subagent` step (§47). */
+  /** The subagent of a `subagent` step (§49). */
   subagent?: ReturnType<typeof toSubagent>;
 }
 
@@ -86,7 +86,7 @@ export interface TrajectorySource {
   usage: ReadonlyMap<string, UsageTotals>;
   /** The engine's state of each run that is still active. */
   live: ReadonlyMap<string, RunState>;
-  /** The conversation's subagents (§47); none when absent. */
+  /** The conversation's subagents (§49); none when absent. */
   subagents?: readonly SubagentRecord[];
   now: number;
 }
@@ -522,7 +522,7 @@ const SUBAGENT_STATUS: Record<SubagentRecord['status'], TrajectoryStepStatus> = 
 };
 
 /**
- * Subagents get a lane of their own (§47): every tool call a subagent made moves there, and each
+ * Subagents get a lane of their own (§49): every tool call a subagent made moves there, and each
  * subagent is one step from its start to its end, placed after the last step of its run that
  * began before it (or at the end, for one that started between runs).
  */

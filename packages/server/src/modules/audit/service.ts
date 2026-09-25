@@ -341,7 +341,7 @@ export class AuditService {
   }
 
   /**
-   * The Background panel's jobs (§47): one person's, in these workspaces — every one still
+   * The Background panel's jobs (§49): one person's, in these workspaces — every one still
    * queued or running, and the ones that ended at or after `since`.
    */
   backgroundJobs(ownerId: string, workspaces: readonly string[], since: number): JobRow[] {

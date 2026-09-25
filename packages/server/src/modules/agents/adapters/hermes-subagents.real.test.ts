@@ -1,5 +1,5 @@
 /**
- * Subagents with **the real Hermes** (contract decision §47): a turn whose model calls Hermes's
+ * Subagents with **the real Hermes** (contract decision §49): a turn whose model calls Hermes's
  * own `delegate_task`, so Hermes starts a real child agent. The hub hears the delegation on its
  * own channel — `subagent.start` then `subagent.complete`, with the goal the model gave — and
  * not in the turn. The image's own `python -m tui_gateway.entry` against a scripted

@@ -1,5 +1,5 @@
 /**
- * Subagents: what an agent reports about the agents it delegates to (contract decision §47).
+ * Subagents: what an agent reports about the agents it delegates to (contract decision §49).
  *
  * A subagent is not part of a turn's stream. Hermes can keep one going after the turn that
  * started it (asynchronous delegation), and a report that arrived between turns would have no

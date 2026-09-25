@@ -290,7 +290,7 @@ function Timeline({
     >
       {LANES.map((lane) => {
         const inLane = placed.filter((entry) => entry.step.lane === lane);
-        // The subagents' lane only where the agent delegated (§47).
+        // The subagents' lane only where the agent delegated (§49).
         if (lane === 'subagents' && inLane.length === 0) return null;
         const rows = packRows(inLane.map((entry) => entry.span));
         const depth = Math.max(1, ...rows.map((row) => row + 1));
@@ -472,7 +472,7 @@ function StepRow({
   );
 }
 
-/** A subagent's step opened: what it was asked, how it ended, and its recent tools (§47). */
+/** A subagent's step opened: what it was asked, how it ended, and its recent tools (§49). */
 function SubagentStepBody({ subagent }: { subagent: NonNullable<TrajectoryStep['subagent']> }) {
   const { t } = useI18n();
   return (

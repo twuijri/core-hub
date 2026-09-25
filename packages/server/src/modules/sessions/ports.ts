@@ -32,7 +32,7 @@ export interface AgentInfo {
   available: boolean;
   /** Machine-readable reason for `available: false` (`not_installed`, `stopped`, …). */
   unavailableReason?: string;
-  /** What it lets a person do with its subagents (§47); absent is `none`. */
+  /** What it lets a person do with its subagents (§49); absent is `none`. */
   subagents?: 'full' | 'observe' | 'none';
 }
 
@@ -238,7 +238,7 @@ export interface AgentRunner {
    */
   ask?(request: AgentAskRequest): Promise<string | null>;
   /**
-   * Optional (contract decision §47): every report about a subagent of any live conversation,
+   * Optional (contract decision §49): every report about a subagent of any live conversation,
    * named by the hub session it belongs to. A runner without it has no subagents to tell of.
    */
   onSubagent?(listener: (sessionId: string, signal: AgentSubagentSignal) => void): () => void;

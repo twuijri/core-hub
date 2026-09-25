@@ -1159,7 +1159,7 @@ export class SchedulesService {
   }
 
   /**
-   * The Background panel's workflow runs (§47): one person's in these workspaces — every one not
+   * The Background panel's workflow runs (§49): one person's in these workspaces — every one not
    * over, and those that ended at or after `since` — with the workflow's name.
    */
   backgroundWorkflowRuns(
