@@ -16,7 +16,7 @@
  * **A signing secret never comes back.** It is written once and read as `[stored]`, the
  * same shape the updates module uses for its source token.
  *
- * **Webhooks receive the hub's events** (decision §53): every event in the contract's
+ * **Webhooks receive the hub's events** (decision §59): every event in the contract's
  * `WebhookEventName` catalogue, as it is emitted, goes through `webhook-queue.ts`, which
  * queues a signed delivery per subscribed webhook and sends it in the background with
  * retries.
@@ -373,7 +373,7 @@ function announce(
 
 /**
  * The events a webhook may subscribe to: `WebhookEventName` in the contract, in its order,
- * with the descriptions it gives (decision §53). The hub forwards exactly these.
+ * with the descriptions it gives (decision §59). The hub forwards exactly these.
  */
 function webhookEvents(): Array<{ name: string; description: { ar: string; en: string } }> {
   return [...webhookCatalogue().values()].map((entry) => ({

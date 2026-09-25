@@ -40,9 +40,9 @@ export const derived = {
   runFilesDir: `.${PRODUCT.id}`,
   /** The signature header on an outgoing webhook. */
   webhookSignatureHeader: `x-${PRODUCT.id}-signature`,
-  /** The event name on an outgoing webhook delivery (decision §53). */
+  /** The event name on an outgoing webhook delivery (decision §59). */
   webhookEventHeader: `x-${PRODUCT.id}-event`,
-  /** The delivery id on an outgoing webhook delivery (decision §53). */
+  /** The delivery id on an outgoing webhook delivery (decision §59). */
   webhookDeliveryHeader: `x-${PRODUCT.id}-delivery`,
   /** What the logs call this service, and what an ACP agent is told it is talking to. */
   serviceName: PRODUCT.id,

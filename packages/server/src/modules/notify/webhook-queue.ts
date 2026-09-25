@@ -1,5 +1,5 @@
 /**
- * The hub's events, on their way to the webhooks that asked for them (decision §53).
+ * The hub's events, on their way to the webhooks that asked for them (decision §59).
  *
  * **Queued in the database, sent in the background.** An event the hub emits is matched
  * against the webhooks when it happens, and one `webhook_deliveries` row is written per

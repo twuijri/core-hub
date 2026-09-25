@@ -1,5 +1,5 @@
 /**
- * The webhook catalogue (decision §53) is one list in the contract: `WebhookEventName`'s enum
+ * The webhook catalogue (decision §59) is one list in the contract: `WebhookEventName`'s enum
  * and its `x-webhook-events`. The hub serves it and forwards exactly those events, and it
  * leaves out the content fields it names. These tests keep the three halves of that list —
  * the names, the realtime schema each one's `data` follows, and the content paths — from
@@ -44,7 +44,7 @@ function propertiesOf(schema: Schema, defs: Record<string, Schema>): Record<stri
   return merged;
 }
 
-describe('webhook event catalogue (decision §53)', () => {
+describe('webhook event catalogue (decision §59)', () => {
   const catalogue = eventName['x-webhook-events'];
 
   it('describes every name, and names nothing it does not describe', () => {

@@ -224,7 +224,7 @@ describe('Webhooks', () => {
     const { fetchImpl } = hub();
     mount(<WebhooksTab />, fetchImpl);
     await waitFor(() => expect(screen.getByTestId('webhooks-empty')).toBeTruthy());
-    // Events are forwarded now (decision §53), with retries: the page says what happens.
+    // Events are forwarded now (decision §59), with retries: the page says what happens.
     const note = screen.getByTestId('webhooks-forwarding-note').textContent;
     expect(note).toContain('as it happens');
     expect(note).not.toContain('only the test delivery');

@@ -73,7 +73,7 @@ test('24. Webhooks: a private address needs a yes, the secret shows once, and th
 
     await openSettings(page, 'خطافات الويب');
     await expect(page.getByTestId('webhooks-tab')).toBeVisible();
-    // Not the placeholder, and it says how events are sent (decision §53).
+    // Not the placeholder, and it says how events are sent (decision §59).
     await expect(page.getByTestId('webhooks-forwarding-note')).toContainText('فور وقوعه');
     await expect(page.getByTestId('webhooks-empty')).toBeVisible();
 

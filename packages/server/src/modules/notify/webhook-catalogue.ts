@@ -1,5 +1,5 @@
 /**
- * The events a webhook can subscribe to, read from the contract (decision §53).
+ * The events a webhook can subscribe to, read from the contract (decision §59).
  *
  * `WebhookEventName` in `openapi.yaml` is the whole list: the names, the realtime namespace
  * each one is emitted on (`source`), a description in both languages, and the fields of the
