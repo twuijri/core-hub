@@ -178,7 +178,41 @@
   ينتظر تأكيد المالك)، ومسار خطوة سير عمل أوقفها حدّ = `null`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-(تُملأ بعد تشغيلها)
+كلها محليًا على رأس الفرع بعد دمج الطلبات الـ38 وكل الإصلاحات، عبر `mj-run` (سقف 10 ج.ب)، واحدًا
+واحدًا؛ الاختبارات بـ`VITEST_MAX_WORKERS=3` (بستة عمّال تجاوز خادم الاختبار السقف)، وPlaywright بعامل واحد.
+
+```
+$ pnpm lint                      → eslint . && prettier --check . : All matched files use Prettier code style!  (rc=0)
+$ pnpm typecheck                 → rc=0
+$ pnpm contracts:lint            → openapi.yaml: validated … Your API description is valid.
+                                   contracts:lint  validating 96 event schema file(s)
+                                   contracts:lint  OK
+$ pnpm contracts:check-clients   → check-clients  OK — 570 client file(s) scanned, 222 contract path(s) known.
+$ pnpm contract:test             → Test Files  19 passed (19)
+                                        Tests  364 passed (364)
+$ pnpm i18n:check                → server 181 · cli 252 · web ar/en · desktop 80 · ios 279 keys — i18n:check  OK
+$ pnpm nav:check                 → nav:check  OK — 37 destinations, 2 pre-auth screens (login, setup), 42 terms,
+                                   ar/en complete, routes for web, ios, android, desktop
+$ pnpm change-record:check       → (يُشغَّل بعد كتابة هذا القسم؛ نتيجته في وصف الطلب وفي CI)
+$ pnpm test                      → cli/ui-tokens/contracts: 7+1+12 files passed
+                                   server: Test Files 156 passed | 23 skipped (179) · Tests 1601 passed | 63 skipped
+                                   (web وما بعده في تشغيل ثانٍ بعد إصلاح اختبار سطح سطح المكتب:)
+                                   web: Test Files 85 passed (85) · Tests 993 passed (993)
+                                   desktop: Test Files 8 passed (8) · Tests 94 passed (94)
+$ pnpm build                     → rc=0 … desktop build: apps/desktop/dist/hub ready
+$ PLAYWRIGHT_CHANNEL=chrome pnpm web:e2e --workers=1
+                                 → 70 passed (4.4m)   (لقطات e2e المتغيّرة أُعيدت، لم تُضَف)
+$ drizzle-kit generate           → No schema changes, nothing to migrate
+عدّ العمليات من هب مُقلَع (منطق status.test.ts): COUNT 295 of 315  = السطر في STATUS
+الترحيل على SQLite جديدة:        applied: 21 … fk check: []
+ترقية قاعدة طُبّقت عليها ترحيلات main (0000–0015، 16 إدخالًا) → applied: 21, tables 69,
+                                   skill_uses / session_categories / hub_tool_calls / room_handoff_chains موجودة, fk check: []
+```
+- Postgres: `db:migrate` مع `DATABASE_URL` لا يطبّق شيئًا (لا مجلد `drizzle/pg` في `main` ولا في أي طلب)
+  ويقول ذلك؛ وظيفة CI «db:generate + db:migrate (SQLite and PostgreSQL)» تتحقق منه.
+- Android وiOS: لا تُبنى محليًا (لا JDK/Xcode)؛ مسارات `android.yml` و`ios.yml` تتغيّر في هذا الطلب
+  (`apps/android/**`، `apps/ios/**`، `docs/clients/navigation.json`) فتعمل على الطلب؛ نتيجتها في CI.
+- نتيجة CI على الطلب: تُضاف بعد انتهائها.
 
 ## المخاطر والرجوع
 - إصلاحا 9 و10 يمسّان كود `main`/#114 لا كود الجمع وحده؛ كلاهما صغير ومحدد (انظر أعلاه).
