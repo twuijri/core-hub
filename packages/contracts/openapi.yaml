@@ -6178,7 +6178,18 @@ paths:
     get:
       operationId: agents.getJourney
       tags: [agents]
-      summary: Read the agent's journey graph (skills and tools it has used, clustered)
+      summary: Read what the agent has learned in the profile, as a graph (skills and memories)
+      description: >-
+        Hermes's own learning graph for the profile in `X-Hub-Profile` — what Hermes's
+        `hermes journey` and its server's `GET /api/learning/graph` give, read through that
+        server (ADR 0015): the profile's skills that the agent made or has used (a skill Hermes
+        ships, or one nobody used, is not in it), and each entry of `MEMORY.md` and `USER.md` as
+        a node of its own. Links are Hermes's: a skill's declared `related_skills`, and each
+        memory to the skills whose names or words it shares. Hermes decides every value; the
+        hub only renames the fields. Only where the hub supervises Hermes: otherwise `409
+        state_invalid` with `details.reason = hermes_not_supervised`; an agent that is not
+        Hermes is `409 state_invalid`, `journey_is_hermes_only`; Hermes's server not answering is
+        `503`, `hermes_api_unavailable`.
       x-rt-events: []
       responses:
         '200':
@@ -6190,21 +6201,53 @@ paths:
               example:
                 nodes:
                   - id: web-research
-                    label: 'بحث على الويب'
+                    label: web-research
                     kind: skill
                     category: research
                     use_count: 12
+                    pinned: true
+                    state: active
+                    agent_created: false
+                    memory_source: null
+                    learned_at: '2026-09-20T10:00:00Z'
+                  - id: summarize-pdf
+                    label: summarize-pdf
+                    kind: skill
+                    category: research
+                    use_count: 0
                     pinned: false
+                    state: active
+                    agent_created: true
+                    memory_source: null
+                    learned_at: '2026-09-25T16:08:51Z'
+                  - id: 'memory:memory:0'
+                    label: 'يفضّل الشخص البحث بالعربية'
+                    kind: memory
+                    category: memory
+                    use_count: 0
+                    pinned: false
+                    state: active
+                    agent_created: false
+                    memory_source: memory
+                    learned_at: '2026-09-25T16:08:51Z'
                 edges:
-                  - source: web-research
-                    target: summarize-pdf
+                  - source: summarize-pdf
+                    target: web-research
+                  - source: 'memory:memory:0'
+                    target: web-research
                 clusters:
                   - category: research
                     count: 2
+                  - category: memory
+                    count: 1
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   # ---------------------------------------------------------------- plugins (agent-local)
   /agents/{agent_id}/plugins:
     parameters:
@@ -14762,7 +14805,7 @@ paths:
         `audit.getUsage` and `audit.getSkillUsage` (contract decision §50); `skills` here answers
         the header's profile with the same body as `audit.getSkillUsage` in `data`. Logs and
         Performance are `audit.listLogLines` and `audit.getLivePerformance` (§51); the `logs` and
-        `performance` kinds that were here are gone (§73).
+        `performance` kinds that were here are gone (§74).
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: days
@@ -19312,27 +19355,67 @@ components:
           type: [integer, 'null']
     Journey:
       type: object
+      description: >-
+        What the agent has learned in one profile (Hermes's learning graph). `nodes` carry
+        Hermes's ids unchanged — a skill's name, or `memory:<memory|profile>:<n>` for a memory,
+        where `n` counts the entries of `MEMORY.md` and then of `USER.md` together (so the first
+        `USER.md` entry after two `MEMORY.md` ones is `memory:profile:2`) — so a client can name
+        them the way Hermes does.
       required: [nodes, edges, clusters]
       properties:
         nodes:
           type: array
           items:
             type: object
-            required: [id, label, kind, category, use_count, pinned]
+            required:
+              [
+                id,
+                label,
+                kind,
+                category,
+                use_count,
+                pinned,
+                state,
+                agent_created,
+                memory_source,
+                learned_at,
+              ]
             properties:
               id:
                 type: string
               label:
                 type: string
+                description: A skill's name; a memory's first line (Hermes cuts it at 80 characters).
               kind:
                 type: string
-                enum: [skill, tool, plugin]
+                enum: [skill, memory]
               category:
                 type: [string, 'null']
+                description: The skill's category (its folder, or its front matter); `memory` for a memory.
               use_count:
                 type: integer
+                description: How often the agent used the skill (Hermes's count); always 0 for a memory.
               pinned:
                 type: boolean
+                description: Pinned in Hermes, so its curator leaves the skill alone.
+              state:
+                type: string
+                enum: [active, stale, archived]
+                description: Hermes's curator state of the skill; a memory is `active`.
+              agent_created:
+                type: boolean
+                description: The agent wrote this skill itself (Hermes's `created_by = agent`).
+              memory_source:
+                type: [string, 'null']
+                enum: [memory, user, null]
+                description: For a memory, the file it is in (`MEMORY.md` or `USER.md`); null for a skill.
+              learned_at:
+                oneOf:
+                  - $ref: '#/components/schemas/Timestamp'
+                  - type: 'null'
+                description: >-
+                  Hermes's time for the node: a skill's last use (or its file's time when never
+                  recorded), a memory file's time.
         edges:
           type: array
           items:
@@ -19345,6 +19428,7 @@ components:
                 type: string
         clusters:
           type: array
+          description: How many nodes each category has, the largest first.
           items:
             type: object
             required: [category, count]

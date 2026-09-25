@@ -3,7 +3,7 @@
 Owns: `audit_event`, `usage_record`, `job`, `job_event`. Schema: `packages/server/src/modules/audit/schema.ts`.
 
 `usage_records` is scoped. (`performance_snapshots` was dropped by migration
-`0023`, contract decision §73: Performance is measured when asked.)
+`0023`, contract decision §74: Performance is measured when asked.)
 `audit_events`, `jobs`, `job_events` carry a **nullable** `workspace`
 (hub-level rows have none). Base columns omitted. Jobs are here by
 `DECISIONS.md` §6.
