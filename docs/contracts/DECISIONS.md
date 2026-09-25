@@ -2605,7 +2605,14 @@ owner to confirm:
   and started again. `ChannelLink.mode` reads it (no `WHATSAPP_MODE` is Hermes's `self-chat`).
 - **A link answers at once, in every profile.** After a link and a mode change the hub restarts
   the gateway that serves the profile — the default one too, held down for a moment like a hub
-  tools change (§79). Other channel edits in the default profile still wait for Restart.
+  tools change (§79). ~~Other channel edits in the default profile still wait for Restart.~~
+  **Amended the same day** (the owner: «التيليقرام المفروض يسوي رستارت بعد» — a Telegram linked
+  in the default profile stayed silent): every channel change — link, settings save, switching on
+  or off, clearing, unlinking, mode — restarts the gateway serving the profile, the default one
+  included, and `ChannelGateway.applies` is always `now` from this hub (`on_restart` stays in the
+  enum for older hubs). Changes a second apart are gathered: one restart after the last of a
+  burst (a trailing debounce per profile, 1 s), and while one waits, a channel the running gateway
+  does not name yet reads `unknown` rather than `restart_needed`.
   `Channel.restart_needed` is true when a running gateway does not name a switched-on, linked
   channel (Hermes names every platform it starts with), and a client offers Restart there; a
   platform Hermes reports `connecting` reads `unknown`, and the web reads again until it is not.

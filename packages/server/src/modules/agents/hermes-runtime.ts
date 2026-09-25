@@ -123,6 +123,8 @@ export interface HermesRuntimeOptions {
   gatewayRescanMs?: number;
   /** The installed WhatsApp bridge each home's copy links to (`whatsapp-bridge.ts`). */
   whatsappBridge?: string;
+  /** How long channel changes are gathered before the gateway follows (tests shorten it). */
+  channelSettleMs?: number;
 }
 
 /** Hermes's profile id rule (`_PROFILE_ID_RE`); a hub slug always satisfies it. */
@@ -134,6 +136,8 @@ const STOP_GRACE_MS = 10_000;
 const WARM_UP_INTERVAL_MS = 2_000;
 const WARM_UP_ATTEMPTS = 60;
 const TUI_RETIRE_INTERVAL_MS = 5_000;
+/** How long a channel change waits for another before its gateway follows (`channelsChanged`). */
+const CHANNEL_SETTLE_MS = 1_000;
 
 /** Reads or mints the API server key. Kept next to the JWT secret, mode 0600. */
 export function loadOrCreateHermesApiKey(dataDir: string): string {
@@ -198,6 +202,15 @@ export class HermesRuntime {
   private restartRequested = false;
   private restartTimer: NodeJS.Timeout | null = null;
   private healthTimer: NodeJS.Timeout | null = null;
+  /** Channel changes per profile waiting out `channelSettleMs` before their gateway follows. */
+  private readonly channelFollows = new Map<
+    string,
+    {
+      timer: NodeJS.Timeout;
+      waiters: Array<{ resolve: () => void; reject: (error: unknown) => void }>;
+    }
+  >();
+  private readonly channelSettleMs: number;
   /** Set while the default gateway is held down on purpose (`withDefaultGatewayStopped`). */
   private relaunchGate: Promise<void> | null = null;
   /**
@@ -212,6 +225,7 @@ export class HermesRuntime {
     this.log = options.log;
     this.spawnImpl = options.spawnImpl ?? defaultSpawner;
     this.healthIntervalMs = options.healthIntervalMs ?? 30_000;
+    this.channelSettleMs = options.channelSettleMs ?? CHANNEL_SETTLE_MS;
     this.profileGateways = new ProfileGateways({
       // Only a Hermes this hub runs: an external gateway's profiles are somebody else's.
       root: () => (this.mode === 'managed' ? this.home : null),
@@ -294,25 +308,48 @@ export class HermesRuntime {
   }
 
   /**
-   * A channel of `profile` changed. A named profile's gateway exists for its channels, so it
-   * is started, restarted or stopped to match now. The default profile's gateway also carries
-   * the API server and Hermes's own schedulers, so a change there waits for its next restart,
-   * as it always has.
+   * A channel of `profile` changed — linked, edited, switched on or off, cleared, unlinked, its
+   * mode changed — and must answer now, in every profile. A gateway reads its channels when it
+   * starts, so the one that serves the profile follows: a named profile's is started, restarted
+   * or stopped to match; the default one (which also carries the API server and Hermes's
+   * schedulers) is held down for a moment and started again, the way a change to the hub's tools
+   * restarts it (decision §79). Before this the default profile waited for somebody to press
+   * Restart, and a Telegram linked there stayed silent (the owner's report of 2026-09-26).
+   *
+   * Changes that arrive within `channelSettleMs` of each other are applied once, after the last
+   * (a trailing debounce per profile): toggling a channel five times restarts its gateway once.
+   * The promise settles when that one restart is done.
    */
   channelsChanged(profile: string): Promise<void> {
     if (this.mode !== 'managed') return Promise.resolve();
-    return this.profileGateways.channelsChanged(profile);
+    return new Promise<void>((resolve, reject) => {
+      const pending = this.channelFollows.get(profile);
+      if (pending) clearTimeout(pending.timer);
+      const waiters = pending?.waiters ?? [];
+      waiters.push({ resolve, reject });
+      const timer = setTimeout(() => {
+        this.channelFollows.delete(profile);
+        this.followChannels(profile).then(
+          () => waiters.forEach((waiter) => waiter.resolve()),
+          (error: unknown) => waiters.forEach((waiter) => waiter.reject(error)),
+        );
+      }, this.channelSettleMs);
+      timer.unref?.();
+      this.channelFollows.set(profile, { timer, waiters });
+    });
   }
 
   /**
-   * A channel of `profile` was linked, or its mode changed, and must answer now — in the default
-   * profile too. A named profile's gateway follows as for any channel change; the default one is
-   * held down for a moment and started again (the API server with it), the way a change to the
-   * hub's tools restarts it (decision §79). Without this a WhatsApp linked in the default profile
-   * read `offline` until somebody pressed Restart (the owner's report of 2026-09-26).
+   * True while a channel change of `profile` waits for its gateway to follow
+   * (`channelsChanged`): a channel its running gateway does not name yet is about to be served,
+   * so it does not read as needing a Restart.
    */
-  channelLinked(profile: string): Promise<void> {
-    if (this.mode !== 'managed') return Promise.resolve();
+  channelsSettling(profile: string): boolean {
+    return this.channelFollows.has(profile);
+  }
+
+  private followChannels(profile: string): Promise<void> {
+    if (this.mode !== 'managed' || this.stopping) return Promise.resolve();
     if (profile !== 'default') return this.profileGateways.channelsChanged(profile);
     return this.withGatewayStopped('default', () => undefined);
   }
@@ -402,8 +439,9 @@ export class HermesRuntime {
    * Hermes reads them when it builds a session's agent, so the TUI gateway is retired the way a
    * key change retires it: the next message in any conversation opens a fresh one that reads
    * them, and a turn already running finishes on the values it started with. A named profile's
-   * messaging gateway is restarted to match now (the channel rule); the default profile's carries
-   * the API server and Hermes's schedulers and waits for Restart, as a channel change there does.
+   * messaging gateway is restarted to match now; the default profile's carries the API server and
+   * Hermes's schedulers and waits for Restart (a channel change there restarts it,
+   * `channelsChanged`).
    */
   settingsChanged(profile: string): Promise<void> {
     if (this.mode !== 'managed') return Promise.resolve();
@@ -641,6 +679,11 @@ export class HermesRuntime {
 
   async stop(): Promise<void> {
     this.stopping = true;
+    for (const { timer, waiters } of this.channelFollows.values()) {
+      clearTimeout(timer);
+      waiters.forEach((waiter) => waiter.resolve());
+    }
+    this.channelFollows.clear();
     if (this.retireTimer) clearTimeout(this.retireTimer);
     this.retireTimer = null;
     const retired = [...this.retiredTui];

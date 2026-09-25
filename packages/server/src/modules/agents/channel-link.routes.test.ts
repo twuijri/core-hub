@@ -127,7 +127,7 @@ async function boot(options: { down?: boolean } = {}) {
     {
       agents: {
         pathValue: bin,
-        runtime: { spawnImpl, healthIntervalMs: 0, gatewayBackoffMs: [5] },
+        runtime: { spawnImpl, healthIntervalMs: 0, gatewayBackoffMs: [5], channelSettleMs: 5 },
         hermesApi: api,
         channelProbe: { fetchImpl: platforms.fetchImpl },
       },

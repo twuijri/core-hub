@@ -147,7 +147,7 @@ async function boot(options: { api?: boolean } = {}) {
     {
       agents: {
         pathValue: bin,
-        runtime: { spawnImpl, healthIntervalMs: 0, gatewayBackoffMs: [5] },
+        runtime: { spawnImpl, healthIntervalMs: 0, gatewayBackoffMs: [5], channelSettleMs: 5 },
         ...(options.api === false ? {} : { hermesApi: hermes.api }),
         pairingPollMs: 5,
       },
