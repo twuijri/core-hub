@@ -187,7 +187,12 @@ export type AgentEvent =
       costMicroUsd?: number;
       costSource?: 'provider' | 'estimated' | 'unknown';
     }
-  | { type: 'context'; usedTokens: number; windowTokens?: number | null }
+  | { type: 'context'; usedTokens: number; windowTokens?: number | null; estimated?: boolean }
+  /**
+   * The agent is compressing the conversation's context on its own inside this run, because
+   * the window was filling up (decision §50). `finished` follows before the run ends.
+   */
+  | { type: 'compression'; phase: 'started' | 'finished' }
   | { type: 'completed' }
   | { type: 'failed'; code?: string; message: string };
 
@@ -220,6 +225,37 @@ export interface AgentAskRequest {
   timeoutMs: number;
 }
 
+/**
+ * Compress a conversation's context now, between runs (`sessions.compress`, decision §50).
+ * The fields a run of this session would open the agent's conversation with, so the agent
+ * compresses the same one.
+ */
+export interface AgentCompressRequest {
+  sessionId: string;
+  workspace: string;
+  agentId: string;
+  agentSessionRef: string | null;
+  workingDir: string | null;
+  model: string | null;
+  provider: string | null;
+  reasoningEffort: string | null;
+  /** What the summary should keep in view; `null` = the agent decides. */
+  focus: string | null;
+}
+
+export interface AgentCompressResult {
+  /** The agent's conversation id, when opening it for this minted or changed one. */
+  agentSessionRef: string | null;
+  status: 'compressed' | 'unchanged' | 'skipped';
+  beforeTokens: number | null;
+  afterTokens: number | null;
+  beforeMessages: number | null;
+  afterMessages: number | null;
+  context: { usedTokens: number; windowTokens: number | null; estimated: boolean } | null;
+  /** The agent's own words, untranslated. */
+  message: string | null;
+}
+
 export interface AgentRunner {
   /** Hand the turn to the agent. Throws to fail the run before it streams. */
   start(request: AgentRunRequest): Promise<AgentRunAccepted>;
@@ -235,6 +271,14 @@ export interface AgentRunner {
    * hub that cannot name a session prettily still names it.
    */
   ask?(request: AgentAskRequest): Promise<string | null>;
+  /**
+   * Optional (decision §50). A runner without it cannot compress, and `sessions.compress`
+   * says so (`409 state_invalid`, `command_unsupported`); so does one whose adapter throws
+   * `HubError('state_invalid', {reason: 'command_unsupported'})`.
+   */
+  compress?(request: AgentCompressRequest): Promise<AgentCompressResult>;
+  /** Optional: guidance into the run in flight without stopping it (`sessions.steerRun`). */
+  steer?(runId: string, text: string): Promise<'queued' | 'rejected'>;
 }
 
 /**

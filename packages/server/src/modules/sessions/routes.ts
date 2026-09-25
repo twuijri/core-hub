@@ -77,6 +77,9 @@ const runCreate = z.object({
   reply_to_message_id: ulid.nullish(),
 });
 
+const sessionCompress = z.object({ focus: z.string().max(2000).nullish() });
+const runSteer = z.object({ text: z.string().trim().min(1).max(8000) });
+
 const approvalResponse = z.object({
   decision: z.enum(['approve_once', 'approve_session', 'approve_always', 'deny']).nullish(),
   answer: z.string().max(4000).nullish(),
@@ -335,6 +338,25 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
       run_id: pathId(request.params, 'run_id', 'run'),
     };
     return deps.service(request).cancelRun(scope, params.session_id, params.run_id);
+  });
+
+  // ------------------------------------------- commands (decision §50)
+
+  app.post('/sessions/:session_id/compress', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const body = parse(sessionCompress, request.body ?? {});
+    return deps.service(request).compress(scope, session_id, body);
+  });
+
+  app.post('/sessions/:session_id/runs/:run_id/steer', async (request) => {
+    const scope = await scopeOf(request);
+    const params = {
+      session_id: pathId(request.params, 'session_id', 'session'),
+      run_id: pathId(request.params, 'run_id', 'run'),
+    };
+    const body = parse(runSteer, request.body);
+    return deps.service(request).steerRun(scope, params.session_id, params.run_id, body.text);
   });
 
   // ------------------------------------------------------------ approvals

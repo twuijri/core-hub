@@ -175,6 +175,14 @@ export type { HermesApiCall } from './hermes-tools.js';
 export type { HermesCli } from './hermes-plugins.js';
 export { HermesRuntime, loadOrCreateHermesApiKey } from './hermes-runtime.js';
 export {
+  HERMES_COMPRESSION_DEFAULTS,
+  HermesCompressionError,
+  readHermesCompression,
+  writeHermesCompression,
+  type HermesCompression,
+} from './hermes-compression.js';
+export { profileHome } from './profile-home.js';
+export {
   HermesProfileError,
   PROFILE_ARCHIVE_TIMEOUT_MS,
   createHermesProfileArchives,

@@ -33,6 +33,8 @@ import type {
   RunnerAskRequest,
   RunnerApprovalKind,
   RunnerChoice,
+  RunnerCompressRequest,
+  RunnerCompressResult,
   RunnerDecision,
   RunnerEvent,
   RunnerFileExchange,
@@ -86,12 +88,11 @@ export class AgentRunner implements AgentRunnerPort {
   constructor(private readonly deps: AgentRunnerDeps) {}
 
   async start(request: RunnerRunRequest): Promise<RunnerRunAccepted> {
-    const { service, adapters } = this.deps;
+    const { service } = this.deps;
     const row = service.loadAgent(request.agentId);
     if (row.installState !== 'installed') {
       throw agentUnavailable({ agent_id: row.id, status: row.installState });
     }
-    const adapter = adapters.byKind(row.adapterKind);
 
     // Resolved every turn, not only when the conversation opens. The composer can change
     // the model between turns, and a live Hermes session is deliberately never evicted —
@@ -102,26 +103,7 @@ export class AgentRunner implements AgentRunnerPort {
       provider: request.provider,
     });
 
-    let live = this.sessions.get(request.sessionId);
-    if (live && isClosed(live.session)) {
-      // Its process went away between turns — a Hermes TUI gateway retired after a key
-      // change and closed once idle: reopen by the stored ref rather than hand the turn to
-      // a session that can only refuse it ("Hermes session is closed").
-      this.sessions.delete(request.sessionId);
-      live = undefined;
-    }
-    if (!live) {
-      const target = service.targetFor(row, request.workspace, {
-        sessionRef: request.agentSessionRef ?? mintSessionRef(row.adapterKind, request.sessionId),
-        cwd: request.workingDir,
-        model: request.model,
-        provider: request.provider,
-        reasoningEffort: request.reasoningEffort,
-      });
-      const session = await adapter.start(target);
-      live = { session, adapterKind: row.adapterKind, sessionId: request.sessionId };
-      this.sessions.set(request.sessionId, live);
-    }
+    const live = await this.open(row, request);
 
     const run: LiveRun = {
       runId: request.runId,
@@ -163,6 +145,73 @@ export class AgentRunner implements AgentRunnerPort {
     });
 
     return { agentSessionRef: live.session.id, agentRunRef: null };
+  }
+
+  /**
+   * The conversation's live agent session, opened (or reopened by its stored ref) when there
+   * is none. A run and a compression of the same hub session share it.
+   */
+  private async open(
+    row: ReturnType<AgentsService['loadAgent']>,
+    request: Pick<
+      RunnerRunRequest,
+      | 'sessionId'
+      | 'workspace'
+      | 'agentSessionRef'
+      | 'workingDir'
+      | 'model'
+      | 'provider'
+      | 'reasoningEffort'
+    >,
+  ): Promise<LiveSession> {
+    const { service, adapters } = this.deps;
+    let live = this.sessions.get(request.sessionId);
+    if (live && isClosed(live.session)) {
+      // Its process went away between turns — a Hermes TUI gateway retired after a key
+      // change and closed once idle: reopen by the stored ref rather than hand the turn to
+      // a session that can only refuse it ("Hermes session is closed").
+      this.sessions.delete(request.sessionId);
+      live = undefined;
+    }
+    if (!live) {
+      const target = service.targetFor(row, request.workspace, {
+        sessionRef: request.agentSessionRef ?? mintSessionRef(row.adapterKind, request.sessionId),
+        cwd: request.workingDir,
+        model: request.model,
+        provider: request.provider,
+        reasoningEffort: request.reasoningEffort,
+      });
+      const session = await adapters.byKind(row.adapterKind).start(target);
+      live = { session, adapterKind: row.adapterKind, sessionId: request.sessionId };
+      this.sessions.set(request.sessionId, live);
+    }
+    return live;
+  }
+
+  /**
+   * Compress the conversation's context between turns (decision §50). The agent session is
+   * the one the next run would use, so what is compressed is what the next turn reads.
+   */
+  async compress(request: RunnerCompressRequest): Promise<RunnerCompressResult> {
+    const row = this.deps.service.loadAgent(request.agentId);
+    if (row.installState !== 'installed') {
+      throw agentUnavailable({ agent_id: row.id, status: row.installState });
+    }
+    if (!row.capabilities.includes('compress')) throw commandUnsupported('compress', row.id);
+    const live = await this.open(row, request);
+    if (!live.session.compress) throw commandUnsupported('compress', row.id);
+    const outcome = await live.session.compress(request.focus);
+    return { agentSessionRef: live.session.id, ...outcome };
+  }
+
+  /** Guidance into the run in flight (`sessions.steerRun`); the run is not interrupted. */
+  async steer(runId: string, text: string): Promise<'queued' | 'rejected'> {
+    const run = this.runs.get(runId);
+    if (!run || run.ended) {
+      throw new HubError('state_invalid', { details: { reason: 'run_not_live', runId } });
+    }
+    if (!run.live.session.steer) throw commandUnsupported('steer', run.live.adapterKind);
+    return run.live.session.steer(text);
   }
 
   /**
@@ -383,6 +432,13 @@ export class AgentRunner implements AgentRunnerPort {
       this.sessions.delete(run.sessionId);
     }
   }
+}
+
+/** The agent has no such command (decision §50): `409 state_invalid`, said plainly. */
+function commandUnsupported(command: string, agent: string): HubError {
+  return new HubError('state_invalid', {
+    details: { reason: 'command_unsupported', command, agent },
+  });
 }
 
 /** Resolve, or give up. The work behind it is abandoned, never awaited. */
@@ -637,7 +693,10 @@ export function toRunnerEvent(event: AgentEvent, ctx: TranslateContext): RunnerE
         type: 'context',
         usedTokens: event.usedTokens,
         windowTokens: event.windowTokens ?? null,
+        ...(event.estimated ? { estimated: true } : {}),
       };
+    case 'compression':
+      return { type: 'compression', phase: event.phase };
     case 'run.completed':
       if (event.interrupted && !ctx.interruptRequested) {
         // The agent stopped on its own; the hub never asked. Not a success.

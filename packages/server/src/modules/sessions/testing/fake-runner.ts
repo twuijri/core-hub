@@ -14,6 +14,8 @@
  */
 import type {
   AgentAskRequest,
+  AgentCompressRequest,
+  AgentCompressResult,
   AgentDirectory,
   AgentEvent,
   AgentInfo,
@@ -63,6 +65,15 @@ export interface FakeRunnerOptions {
    * proves the fallback.
    */
   answer?: string | null | ((request: AgentAskRequest) => string | null | Promise<string | null>);
+  /**
+   * What `compress` answers (decision §50); a function may throw to play a refusal.
+   * `undefined` leaves the runner without `compress`, as an agent that cannot.
+   */
+  compress?:
+    | AgentCompressResult
+    | ((request: AgentCompressRequest) => AgentCompressResult | Promise<AgentCompressResult>);
+  /** What `steer` answers; `undefined` leaves the runner without `steer`. */
+  steer?: 'queued' | 'rejected';
 }
 
 interface RunChannel {
@@ -88,6 +99,11 @@ export class FakeAgentRunner implements AgentRunner {
    * is the only faithful way to play one.
    */
   readonly ask?: (request: AgentAskRequest) => Promise<string | null>;
+  readonly compress?: (request: AgentCompressRequest) => Promise<AgentCompressResult>;
+  readonly steer?: (runId: string, text: string) => Promise<'queued' | 'rejected'>;
+  /** Every compression asked for, and every piece of guidance sent, in order. */
+  readonly compressed: AgentCompressRequest[] = [];
+  readonly steered: Array<{ runId: string; text: string }> = [];
 
   constructor(private readonly options: FakeRunnerOptions = {}) {
     this.script = [...(options.script ?? [])];
@@ -96,6 +112,20 @@ export class FakeAgentRunner implements AgentRunner {
         this.asked.push(request);
         const answer = options.answer;
         return typeof answer === 'function' ? answer(request) : (answer ?? null);
+      };
+    }
+    const compress = options.compress;
+    if (compress !== undefined) {
+      this.compress = async (request: AgentCompressRequest) => {
+        this.compressed.push(request);
+        return typeof compress === 'function' ? compress(request) : compress;
+      };
+    }
+    const steer = options.steer;
+    if (steer !== undefined) {
+      this.steer = async (runId: string, text: string) => {
+        this.steered.push({ runId, text });
+        return steer;
       };
     }
   }

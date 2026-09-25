@@ -60,6 +60,8 @@ export type WorkspaceHubSettings = {
     targetRatio: number;
     protectFirst: number;
     protectLast: number;
+    /** `model.context_length` for Hermes: the window when the catalogue's is wrong. */
+    contextLength: number | null;
   };
   privacy: { redactPii: boolean };
   appearance: {

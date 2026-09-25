@@ -65,6 +65,13 @@ export const AGENT_CAPABILITIES = [
   'journey',
   'jobs',
   'tasks',
+  // The composer's `/` commands the agent carries out itself (decision §50).
+  'compress',
+  'steer',
+  'goals',
+  'plans',
+  'learn',
+  'skill_commands',
 ] as const;
 export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];
 

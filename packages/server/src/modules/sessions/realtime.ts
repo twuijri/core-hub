@@ -49,7 +49,8 @@ export type SessionEventName =
   | 'run.cancelled'
   | 'approval.requested'
   | 'approval.resolved'
-  | 'context.updated';
+  | 'context.updated'
+  | 'context.compression';
 
 export interface Envelope {
   event: string;

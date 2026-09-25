@@ -596,13 +596,20 @@ export class RunEngine {
 
         case 'context': {
           if (!state.context) break;
-          this.emitToSession(scope, sessionId, 'context.updated', {
+          this.recordContext(scope, sessionId, state.context);
+          break;
+        }
+
+        case 'compression': {
+          // The agent compressing on its own inside the run (decision §50).
+          this.emitToSession(scope, sessionId, 'context.compression', {
             session_id: sessionId,
-            context: {
-              used_tokens: state.context.usedTokens,
-              window_tokens: state.context.windowTokens,
-            },
-            usage: null,
+            run_id: run.runId,
+            phase: action.phase,
+            trigger: 'auto',
+            before_tokens: null,
+            after_tokens: null,
+            message: null,
           });
           break;
         }
@@ -626,7 +633,19 @@ export class RunEngine {
         }
 
         case 'finished':
-          // Handled in finalise(), which needs the final message too.
+          // Handled in finalise(), which needs the final message too. A compression the
+          // run was still in never finishes now: say so, or the chat would keep showing it.
+          if (state.compressing) {
+            this.emitToSession(scope, sessionId, 'context.compression', {
+              session_id: sessionId,
+              run_id: run.runId,
+              phase: action.status === 'succeeded' ? 'finished' : 'failed',
+              trigger: 'auto',
+              before_tokens: null,
+              after_tokens: null,
+              message: null,
+            });
+          }
           break;
       }
     }
@@ -796,6 +815,56 @@ export class RunEngine {
   }
 
   // ------------------------------------------------------------- emitters
+
+  /**
+   * The window as the agent last reported it: kept on the session, so `Session.context`
+   * answers after a reload, and announced as `context.updated` (decision §50).
+   */
+  recordContext(
+    scope: EngineScope,
+    sessionId: string,
+    context: { usedTokens: number; windowTokens: number | null; estimated: boolean },
+  ): void {
+    const { store } = this.deps;
+    const session = store.getSession(scope.workspace, sessionId);
+    if (!session) return;
+    store.updateSession(scope.workspace, sessionId, {
+      metadata: {
+        ...session.metadata,
+        context: {
+          usedTokens: context.usedTokens,
+          windowTokens: context.windowTokens,
+          estimated: context.estimated,
+        },
+      },
+    });
+    this.emitToSession(scope, sessionId, 'context.updated', {
+      session_id: sessionId,
+      context: {
+        used_tokens: context.usedTokens,
+        window_tokens: context.windowTokens,
+        ...(context.estimated ? { estimated: true } : {}),
+      },
+      usage: null,
+    });
+  }
+
+  /**
+   * Work that must not overlap a turn of this session (`sessions.compress`): it waits for
+   * the session's run chain, and a run queued meanwhile waits for it in turn.
+   */
+  exclusive<T>(sessionId: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.chains.get(sessionId) ?? Promise.resolve();
+    const result = previous.catch(() => undefined).then(work);
+    this.chains.set(
+      sessionId,
+      result.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    return result;
+  }
 
   private emitToSession(
     scope: EngineScope,

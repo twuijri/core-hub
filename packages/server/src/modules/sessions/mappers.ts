@@ -125,6 +125,29 @@ export interface SessionView {
   match?: { message_id: string | null; snippet: string } | null;
 }
 
+/**
+ * `Session.context`: the window as the agent last reported it (decision §50), kept in the
+ * session's metadata by the engine. `null` until an agent has reported one.
+ */
+export function contextOf(metadata: SessionRow['metadata'] | null | undefined): {
+  used_tokens: number;
+  window_tokens: number | null;
+  estimated?: boolean;
+} | null {
+  const stored = metadata?.context as
+    { usedTokens?: unknown; windowTokens?: unknown; estimated?: unknown } | undefined;
+  if (!stored || typeof stored.usedTokens !== 'number' || stored.usedTokens < 0) return null;
+  const window =
+    typeof stored.windowTokens === 'number' && stored.windowTokens >= 1
+      ? stored.windowTokens
+      : null;
+  return {
+    used_tokens: Math.round(stored.usedTokens),
+    window_tokens: window === null ? null : Math.round(window),
+    ...(stored.estimated === true ? { estimated: true } : {}),
+  };
+}
+
 export function toSession(view: SessionView, profile: string): Record<string, unknown> {
   const { row } = view;
   return {
@@ -148,7 +171,7 @@ export function toSession(view: SessionView, profile: string): Record<string, un
     preview: row.preview ?? null,
     message_count: row.messageCount,
     usage: wireUsage(view.usage),
-    context: null,
+    context: contextOf(row.metadata),
     status: sessionStatusFrom(view.lastRunStatus),
     active_run_id: view.activeRunId,
     parent_session_id: row.parentSessionId ?? null,
