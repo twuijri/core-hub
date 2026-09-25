@@ -72,7 +72,7 @@
 | `tasks` | Tasks | المهام | القسم اسمه «المهام»، لا «اللوحة» ولا Kanban |
 | `schedules` | Schedules | الجدولة | كانت «Workflow» في تطبيق الجوال |
 | `settings` | Settings | الإعدادات | |
-| `logs` · `usage` · `performance` | Logs · Usage · Performance | السجلات · الاستخدام · الأداء | أدوات في أسفل الإعدادات |
+| `logs` · `usage` · `skills_usage` · `performance` | Logs · Usage · Skills usage · Performance | السجلات · الاستخدام · استخدام المهارات · الأداء | أدوات في أسفل الإعدادات؛ «استخدام المهارات» منذ 2026-09-25 (DECISIONS §47) |
 | `theme` | Theme | السمة | |
 | `workspaces` | Profiles | البروفايلات | قرار المالك 2026-09-23: «بروفايل» / "Profile" في كل نصوص الواجهة، كما يسمّيه هرمز وإيكو والعقد (`profile`، `X-Hub-Profile`)؛ لا «مساحة عمل» ولا «Workspace». المعرّفات البرمجية `workspaces` باقية |
 | `updates` · `plugins` | Updates · Plugins | التحديثات · الإضافات | للمشرف |
@@ -172,7 +172,7 @@
   الجانبية لا من بطاقات في وسط الصفحة. **`Agents` لم تعد هنا** منذ 2026-09-24: صارت
   مدخلًا في الشريط الأساسي (§١، §٤)، ولا يبقى لها في الإعدادات أي مدخل ولا اختصار.
 - قسم **Tools** في أسفل الشاشة (`settingsTools`) بالترتيب: `Logs` · `Usage` ·
-  `Performance` (مشرف، عام) · `Theme` · `Profiles` (مشرف) · `Updates`
+  `Skills usage` · `Performance` (مشرف، عام) · `Theme` · `Profiles` (مشرف) · `Updates`
   (مشرف، عام) · `Plugins` (مشرف). كل واحد شاشة **مختلفة** بعنوانها نفسه.
 
 **يُحذف** من أي عميل: شاشة «قائمة إعدادات» وسيطة، وأقسام «متقدّم» أو «أدوات

@@ -4,12 +4,12 @@
  * load, once per run and skill — and what does not: a failed load, a linked file of a skill
  * already loaded, an edit through `skill_manage`, any other tool.
  */
+import { sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { requireSqlite } from '../../lib/db.js';
 import { modules as defaultModules } from '../index.js';
 import { testHub } from '../../../tests/unit/helpers.js';
 import { UsageAnalytics } from '../audit/index.js';
-import { skillUses } from '../audit/schema.js';
 import { createSessionsModule } from './index.js';
 import { skillUseOf } from './skill-use.js';
 import { FakeAgentDirectory, FakeAgentRunner, fakeHermes } from './testing/fake-runner.js';
@@ -109,7 +109,16 @@ describe('a run records the skills it loaded', () => {
       expect(live).toBe(false);
 
       const db = requireSqlite(h.app.hub.database);
-      const rows = db.select().from(skillUses).all();
+      // `skill_uses` is `audit`'s table; read it the way any caller outside `audit` could.
+      const rows = db.all<{
+        skill: string;
+        sessionId: string;
+        agentId: string;
+        runId: string;
+        workspace: string;
+      }>(
+        sql`SELECT skill, session_id AS sessionId, agent_id AS agentId, run_id AS runId, workspace FROM skill_uses`,
+      );
       expect(rows.map((row) => row.skill).sort()).toEqual(['arxiv', 'github-pr-workflow']);
       expect(rows.every((row) => row.sessionId === id && row.agentId === AGENT_ID)).toBe(true);
       expect(new Set(rows.map((row) => row.runId)).size).toBe(1);

@@ -550,7 +550,10 @@ export class RunEngine {
                 });
               } catch (error) {
                 // A count nobody could write is not worth failing a run over.
-                this.deps.log.warn({ err: error, runId: run.runId }, 'sessions: skill use not recorded');
+                this.deps.log.warn(
+                  { err: error, runId: run.runId },
+                  'sessions: skill use not recorded',
+                );
               }
             }
           }

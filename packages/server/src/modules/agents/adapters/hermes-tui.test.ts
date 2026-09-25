@@ -296,8 +296,7 @@ describe('Hermes over the TUI gateway', () => {
       .filter((e): e is Extract<AgentEvent, { type: 'tool.started' }> => e.type === 'tool.started')
       .map((started) => {
         const finished = events.find(
-          (e) =>
-            (e.type === 'tool.completed' || e.type === 'tool.failed') && e.id === started.id,
+          (e) => (e.type === 'tool.completed' || e.type === 'tool.failed') && e.id === started.id,
         );
         return skillUseOf({
           name: started.name,

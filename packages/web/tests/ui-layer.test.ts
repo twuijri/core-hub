@@ -46,6 +46,8 @@ const KIT: Array<[component: string, file: string]> = [
   ['CardHeader', 'Card.tsx'],
   ['CardFooter', 'Card.tsx'],
   ['cardClass', 'Card.tsx'],
+  ['StackedBarChart', 'Chart.tsx'],
+  ['ShareBars', 'Chart.tsx'],
   ['Checkbox', 'Checkbox.tsx'],
   ['Combobox', 'Combobox.tsx'],
   ['useConfirm', 'ConfirmDialog.tsx'],

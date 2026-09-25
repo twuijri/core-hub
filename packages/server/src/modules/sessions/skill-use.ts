@@ -18,9 +18,7 @@ import type { ToolCallState } from './run-reducer.js';
 
 export const SKILL_LOAD_TOOL = 'skill_view';
 
-export function skillUseOf(
-  call: Pick<ToolCallState, 'name' | 'input' | 'status'>,
-): string | null {
+export function skillUseOf(call: Pick<ToolCallState, 'name' | 'input' | 'status'>): string | null {
   if (call.name !== SKILL_LOAD_TOOL || call.status !== 'succeeded') return null;
   const name = call.input?.name;
   if (typeof name !== 'string') return null;

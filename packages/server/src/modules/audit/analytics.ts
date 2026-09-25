@@ -288,7 +288,9 @@ export class UsageAnalytics {
         cache_write_tokens: cacheWriteKnown ? totals.cacheWrite : null,
         reasoning_tokens: totals.reasoning,
         total_tokens: grand,
-        cache_hit_rate: cacheReadKnown ? ratio(totals.cacheRead, totals.input + totals.cacheRead) : null,
+        cache_hit_rate: cacheReadKnown
+          ? ratio(totals.cacheRead, totals.input + totals.cacheRead)
+          : null,
         runs,
         unreported_runs: unreportedRuns,
         conversations: sessions.size,

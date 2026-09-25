@@ -13,7 +13,11 @@ import {
 import { auditCounters, skillUses, usageRecords } from './schema.js';
 
 const OWNER = '01J8QK3ZR2W7M5N4P6T8V9X0HM';
-const HOME: AnalyticsProfile = { id: '01J8QK3ZR2W7M5N4P6T8V9X0PF', slug: 'default', isDefault: true };
+const HOME: AnalyticsProfile = {
+  id: '01J8QK3ZR2W7M5N4P6T8V9X0PF',
+  slug: 'default',
+  isDefault: true,
+};
 const WORK: AnalyticsProfile = { id: '01J8QK3ZR2W7M5N4P6T8V9X0PG', slug: 'work', isDefault: false };
 const HERMES = '01J8QK3ZR2W7M5N4P6T8V9X0A1';
 const CODER = '01J8QK3ZR2W7M5N4P6T8V9X0A2';
@@ -46,7 +50,12 @@ function usage(db: Db, over: Partial<typeof usageRecords.$inferInsert> = {}): vo
     .run();
 }
 
-function skill(db: Db, name: string, at: number, over: Partial<typeof skillUses.$inferInsert> = {}) {
+function skill(
+  db: Db,
+  name: string,
+  at: number,
+  over: Partial<typeof skillUses.$inferInsert> = {},
+) {
   seq += 1;
   const id = `01J8QK3ZR2W7M5N4P6T8V9X${String(seq).padStart(3, '0')}`;
   db.insert(skillUses)
@@ -111,7 +120,13 @@ describe('the Usage report', () => {
   it('adds up days, models and agents, and shares add up to the whole', () => {
     const db = memoryDb();
     usage(db, { cacheReadTokens: 300 });
-    usage(db, { modelLabel: 'claude-test', inputTokens: 50, outputTokens: 50, costMicroUsd: 0, costSource: 'unknown' });
+    usage(db, {
+      modelLabel: 'claude-test',
+      inputTokens: 50,
+      outputTokens: 50,
+      costMicroUsd: 0,
+      costSource: 'unknown',
+    });
     usage(db, { sessionId: 's2', recordedAt: new Date(NOW - 2 * DAY) });
     // Outside the 7 days: not counted.
     usage(db, { recordedAt: new Date(NOW - 8 * DAY) });
@@ -134,7 +149,11 @@ describe('the Usage report', () => {
       cost: { amount: '0.002000', currency: 'USD' },
       cost_source: 'estimated',
     });
-    const days = report.by_day as Array<{ date: string; total_tokens: number; conversations: number }>;
+    const days = report.by_day as Array<{
+      date: string;
+      total_tokens: number;
+      conversations: number;
+    }>;
     expect(days.map((d) => d.date)[0]).toBe('2026-09-19');
     expect(days.find((d) => d.date === '2026-09-25')).toMatchObject({
       total_tokens: 520,
@@ -249,7 +268,11 @@ describe('the Skills usage report', () => {
     });
     expect(report.never_used).toEqual(['never-1', 'never-2']);
     expect(report.top_series).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
-    const ranked = report.top_skills as Array<{ skill: string; share: number; last_used_at: string }>;
+    const ranked = report.top_skills as Array<{
+      skill: string;
+      share: number;
+      last_used_at: string;
+    }>;
     expect(ranked[0]).toMatchObject({ skill: 'a', share: 0.25 });
     expect(ranked).toHaveLength(7);
     const today = (report.by_day as Array<Record<string, unknown>>).find(

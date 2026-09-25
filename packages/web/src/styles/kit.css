@@ -1100,3 +1100,138 @@
 .ch-sidebar-panel .ch-sidebar-group {
   padding-inline: 0;
 }
+
+/* ------------------------------------------------------------------ charts (ui/Chart.tsx)
+ * The categorical `chart-1…6` tokens, and `border-strong` for "everything else". Boxes, not
+ * SVG: a row of boxes follows the page direction, so time reads the way the text does.
+ * Thin bars with a 2px surface gap between stacked segments and a rounded data end. */
+.ch-chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-2);
+}
+.ch-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ch-space-1) var(--ch-space-3);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
+}
+.ch-chart-legend li,
+.ch-chart-readout-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ch-space-1);
+}
+.ch-chart-swatch {
+  display: inline-block;
+  inline-size: 0.625rem;
+  block-size: 0.625rem;
+  border-radius: 2px;
+  flex: none;
+}
+.ch-chart-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ch-space-1) var(--ch-space-3);
+  min-block-size: 1.25rem;
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text);
+  font-variant-numeric: tabular-nums;
+}
+.ch-chart-plot {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  block-size: 10rem;
+  padding-block-start: var(--ch-space-1);
+  border-block-end: 1px solid var(--ch-color-border-strong);
+  border-radius: var(--ch-radius-sm);
+}
+.ch-chart-plot:focus-visible {
+  outline: 2px solid var(--ch-color-focus);
+  outline-offset: 2px;
+}
+.ch-chart-col {
+  flex: 1 1 0;
+  min-inline-size: 1px;
+  max-inline-size: 2.5rem;
+  block-size: 100%;
+  display: flex;
+  align-items: flex-end;
+  border-radius: 4px 4px 0 0;
+}
+.ch-chart-col[data-active='true'] {
+  background: var(--ch-color-surface-2);
+}
+.ch-chart-stack {
+  inline-size: 100%;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+  min-block-size: 0;
+}
+.ch-chart-seg {
+  display: block;
+  flex-basis: 0;
+  min-block-size: 1px;
+}
+.ch-chart-stack .ch-chart-seg:last-child {
+  border-start-start-radius: 4px;
+  border-start-end-radius: 4px;
+}
+.ch-chart-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
+}
+.ch-chart-tone-1 {
+  background: var(--ch-color-chart-1);
+}
+.ch-chart-tone-2 {
+  background: var(--ch-color-chart-2);
+}
+.ch-chart-tone-3 {
+  background: var(--ch-color-chart-3);
+}
+.ch-chart-tone-4 {
+  background: var(--ch-color-chart-4);
+}
+.ch-chart-tone-5 {
+  background: var(--ch-color-chart-5);
+}
+.ch-chart-tone-6 {
+  background: var(--ch-color-chart-6);
+}
+.ch-chart-tone-other {
+  background: var(--ch-color-border-strong);
+}
+.ch-share {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-2);
+}
+.ch-share-row {
+  display: grid;
+  grid-template-columns: minmax(6rem, 12rem) 1fr auto;
+  align-items: center;
+  gap: var(--ch-space-3);
+  font-size: var(--ch-font-size-sm);
+}
+.ch-share-track {
+  block-size: 0.5rem;
+  border-radius: var(--ch-radius-full);
+  background: var(--ch-color-surface-2);
+  overflow: hidden;
+}
+.ch-share-fill {
+  display: block;
+  block-size: 100%;
+  border-radius: var(--ch-radius-full);
+}
+.ch-share-value {
+  color: var(--ch-color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

@@ -21,6 +21,8 @@ import { KnowledgeTab } from './KnowledgeTab.js';
 import { PluginsTab } from './PluginsTab.js';
 import { PrivacyTab } from './PrivacyTab.js';
 import { UpdatesTab } from './UpdatesTab.js';
+import { SkillsUsagePage } from './usage/SkillsUsagePage.js';
+import { UsagePage } from './usage/UsagePage.js';
 import { ThemeTool } from './ThemeTool.js';
 
 /**
@@ -45,9 +47,9 @@ const SECTIONS: Record<string, () => ReactElement> = {
   theme: () => <ThemeTool />,
   webhooks: () => <WebhooksTab />,
   privacy: () => <PrivacyTab />,
-  // The three reports the audit module answers; `skills` is still a 501 and stays a
-  // placeholder, which is what the hub itself says about it.
-  usage: () => <AuditReport kind="usage" />,
+  // The audit module's reports: Usage and Skills usage are their own pages (decision §47).
+  usage: () => <UsagePage />,
+  skills_usage: () => <SkillsUsagePage />,
   logs: () => <AuditReport kind="logs" />,
   performance: () => <AuditReport kind="performance" />,
 };

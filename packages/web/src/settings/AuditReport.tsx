@@ -1,7 +1,8 @@
 /**
- * The three reports behind Logs, Usage and Performance (`audit.getReport`).
+ * The two reports behind Logs and Performance (`audit.getReport`). Usage and Skills usage
+ * are typed reports with pages of their own (`usage/`, decision §47).
  *
- * One screen for three kinds, because they are one call with one shape: a period, a
+ * One screen for both kinds, because they are one call with one shape: a period, a
  * generated-at, and a `data` block the report defines. What differs is how the block is
  * read, and that is the only thing this file switches on.
  *
@@ -14,9 +15,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
-import { Badge, Notice, Segmented, Spinner, Table, type Column } from '../ui/index.js';
+import { Badge, Notice, Segmented, Spinner } from '../ui/index.js';
 
-type Kind = 'usage' | 'logs' | 'performance';
+type Kind = 'logs' | 'performance';
 
 interface Report {
   kind: Kind;
@@ -70,82 +71,9 @@ export function AuditReport({ kind }: { kind: Kind }) {
           <p className="text-xs text-muted">
             {t('audit.between', { from: report.data.period.from, to: report.data.period.to })}
           </p>
-          {kind === 'usage' && <UsageBody data={report.data.data} number={number} />}
           {kind === 'logs' && <LogsBody data={report.data.data} />}
           {kind === 'performance' && <PerformanceBody data={report.data.data} number={number} />}
         </>
-      )}
-    </div>
-  );
-}
-
-interface Totals {
-  input_tokens: number;
-  output_tokens: number;
-  runs: number;
-  sessions: number;
-  cost: { amount: string; currency: string };
-  cost_source: string;
-}
-
-function UsageBody({
-  data,
-  number,
-}: {
-  data: Record<string, unknown>;
-  number: (value: number) => string;
-}) {
-  const { t } = useI18n();
-  const totals = data.totals as Totals;
-  const byModel = (data.by_model ?? []) as Array<Record<string, unknown>>;
-  const columns: Array<Column<Record<string, unknown>>> = [
-    { key: 'model', header: t('audit.model'), cell: (row) => String(row.model) },
-    { key: 'runs', header: t('audit.runs'), cell: (row) => number(Number(row.runs)) },
-    {
-      key: 'tokens',
-      header: t('audit.tokens'),
-      cell: (row) => number(Number(row.input_tokens) + Number(row.output_tokens)),
-    },
-    {
-      key: 'cost',
-      header: t('audit.cost'),
-      cell: (row) => (row.cost as { amount: string }).amount,
-    },
-  ];
-  return (
-    <div className="flex flex-col gap-3">
-      <ul className="flex flex-wrap gap-2" data-testid="usage-totals">
-        <li>
-          <Badge>{t('audit.runs_n', { count: number(totals.runs) })}</Badge>
-        </li>
-        <li>
-          <Badge>{t('audit.sessions_n', { count: number(totals.sessions) })}</Badge>
-        </li>
-        <li>
-          <Badge>
-            {t('audit.tokens_n', {
-              count: number(totals.input_tokens + totals.output_tokens),
-            })}
-          </Badge>
-        </li>
-        <li>
-          {/* The number is an estimate from published prices unless the provider said
-              otherwise, and the badge says which. */}
-          <Badge tone={totals.cost_source === 'estimated' ? 'warning' : 'neutral'}>
-            {totals.cost_source === 'unknown'
-              ? t('audit.cost_unknown')
-              : `${totals.cost_source === 'estimated' ? '≈ ' : ''}${totals.cost.amount} ${totals.cost.currency}`}
-          </Badge>
-        </li>
-      </ul>
-      {byModel.length > 0 && (
-        <Table
-          caption={t('audit.by_model')}
-          columns={columns}
-          rows={byModel}
-          rowKey={(row) => String(row.model)}
-          testId="usage-by-model"
-        />
       )}
     </div>
   );
