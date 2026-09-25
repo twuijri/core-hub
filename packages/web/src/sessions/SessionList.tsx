@@ -2,7 +2,7 @@
 // reordering (dnd-kit; the keyboard sensor gives every drag a keyboard equivalent: focus the
 // grip, Space to pick up, arrows to move, Space to drop).
 //
-// In groups (contract decision §54): the profile's categories first, each collapsible, then a
+// In groups (contract decision §60): the profile's categories first, each collapsible, then a
 // group per messaging channel a conversation came from, then the chats in no group. A chat is
 // dropped on a category's header, or moved from its menu («نقل إلى تصنيف»). Which groups are
 // collapsed is the viewer's own, remembered in this browser (`groups.ts`).
@@ -766,7 +766,7 @@ function GroupHeader({
 
 /**
  * «نقل إلى تصنيف»: the categories of the chat's own profile — another profile's cannot hold
- * it (decision §54) — plus "No category", and a new one made on the spot.
+ * it (decision §60) — plus "No category", and a new one made on the spot.
  */
 function MoveDialog({
   session,
