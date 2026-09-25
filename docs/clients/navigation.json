@@ -193,7 +193,7 @@
       },
       "roles": ["member"],
       "tabs": ["app", "devices"],
-      "note": "Tab devices lists the person's own devices (rename, revoke, last seen, push); an admin sees everyone's and the push senders (contract decision §56, 2026-09-25). A Settings page since 2026-09-22: configured once, so not in the sidebar."
+      "note": "Tab devices lists the person's own devices (rename, revoke, last seen, push); an admin sees everyone's and the push senders (contract decision §66, 2026-09-25). A Settings page since 2026-09-22: configured once, so not in the sidebar."
     },
     {
       "id": "agent_manager",

@@ -12,7 +12,7 @@ iOS، و`notice.created` ما دام التطبيق مفتوحًا).
 قائمة الأجهزة، و«تفعيل إشعارات المتصفح»، وبطاقة حالة المرسِلات للمشرف.
 
 ## القرار والموافقات
-كل ما يلي **مقترح — ينتظر تأكيد المالك** (قرار العقد §56):
+كل ما يلي **مقترح — ينتظر تأكيد المالك** (قرار العقد §66):
 
 1. **notify يقرر «هل»، وdevices يقرر «كيف».** الإشعار المكتوب في الوارد يُسلَّم لمنفذ الدفع إلا إذا كان
    مفتاح `push` لنوعه مطفأً أو كانت اللحظة داخل ساعات الهدوء. devices يرسله لكل جهاز مقترن للشخص عليه
@@ -38,7 +38,7 @@ iOS، و`notice.created` ما دام التطبيق مفتوحًا).
 9. **ntfy مؤجَّل**: يحتاج قيمة جديدة في `push_provider` أي ترحيلًا، و`0016` محجوز في عدة طلبات مفتوحة.
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
-عمليات جديدة (قرار §56):
+عمليات جديدة (قرار §66):
 - `devices.register` — `POST /devices` (جسم `DeviceRegistration`) → `201`/`200` `Device`، `409`.
 - `devices.testPush` — `POST /devices/{device_id}/push/test` → `PushTestResult`، `409` بلا تسجيل.
 - `devices.getPushConfig` — `GET /push/config` → `PushConfig { webpush_public_key, providers }`.
@@ -114,7 +114,7 @@ Desktop (Electron, Web Push عبر Chromium):
   `screens/DeviceConnectionsScreen.tsx`، `public/push-sw.js` (عامل الخدمة)، ملفا اللغة،
   `tests/devices-push.test.tsx`، `e2e/zzzzzz-browser-push.spec.ts`، `e2e/hub.ts` (سطر `overrideDevices`)،
   لقطتان في `e2e/shots/`.
-- الوثائق: `docs/STATUS.md`، `docs/contracts/DECISIONS.md` (§56)، `docs/contracts/COVERAGE.md`،
+- الوثائق: `docs/STATUS.md`، `docs/contracts/DECISIONS.md` (§66)، `docs/contracts/COVERAGE.md`،
   `docs/domain/{devices,notify,README}.md`، `docs/DEPLOY.md`، `docs/clients/navigation.json` (الملاحظة).
 
 ## الفحوص (الأوامر ونواتجها الفعلية)

@@ -5,7 +5,7 @@
  * Scoped: notifications (owner_id = recipient), notification_deliveries,
  * notification_preferences, webhooks, webhook_deliveries.
  * The push senders' credentials (`push_credentials`) belong to `devices`, which sends
- * (DECISIONS §56): notify decides whether a person is told, devices decides how.
+ * (DECISIONS §66): notify decides whether a person is told, devices decides how.
  *
  * Cross-module id columns: notification_deliveries.device_id -> devices.devices,
  * notifications.entity_id -> the entity named by `entity_kind`,

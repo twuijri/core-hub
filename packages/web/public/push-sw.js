@@ -1,5 +1,5 @@
 /*
- * Core Hub's service worker for Web Push (DECISIONS §56). It does one thing: show the
+ * Core Hub's service worker for Web Push (DECISIONS §66). It does one thing: show the
  * notice the hub pushed, and open what it points at when it is clicked. No caching, no
  * offline mode — the app is the hub's, and a stale copy of it would be worse than none.
  *

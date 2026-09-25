@@ -12,7 +12,7 @@
  * key. The recipient's own locale decides, never the locale of whoever caused it.
  *
  * **Quiet hours silence push, not the inbox.** A notice written at 3 a.m. is still in the
- * inbox at 8 — hiding it would lose it. Push is the `devices` module's (DECISIONS §56): a
+ * inbox at 8 — hiding it would lose it. Push is the `devices` module's (DECISIONS §66): a
  * notice that was written, whose kind the person left on for push, outside their quiet
  * hours, is handed to the push port, and what each device's push service answered is
  * recorded in `notification_deliveries`.

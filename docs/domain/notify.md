@@ -3,7 +3,7 @@
 Owns: `notification`, `notification_delivery`, `notification_preference`,
 `webhook`, `webhook_delivery`. Schema:
 `packages/server/src/modules/notify/schema.ts`. All scoped. Base columns omitted.
-`push_credential` moved to `devices` on 2026-09-25 (contract decision §56): notify decides
+`push_credential` moved to `devices` on 2026-09-25 (contract decision §66): notify decides
 whether a person is told, devices decides how.
 
 Other modules never insert here; they call `notify.emit(kind, recipient,

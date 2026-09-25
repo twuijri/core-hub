@@ -1,7 +1,7 @@
 // Module `devices`: phones, computers and browsers linked to the hub, and push to them.
 // Public surface of the module: other modules and app/ import this file only.
 //
-// What answers (DECISIONS §56): the registry (list, read, rename, unlink, register a
+// What answers (DECISIONS §66): the registry (list, read, rename, unlink, register a
 // browser), push registration, the push senders (Web Push with the hub's own VAPID keys,
 // FCM, APNs) and a test push. Capability requests, the relay and peers stay 501.
 //

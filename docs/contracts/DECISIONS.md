@@ -1025,7 +1025,7 @@ Rejected: a new `source` field on `SessionCreate` (a client could then make any 
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
 
-## 56. Push is the devices module's: Web Push with the hub's own keys, FCM and APNs when the owner gives credentials
+## 66. Push is the devices module's: Web Push with the hub's own keys, FCM and APNs when the owner gives credentials
 
 The phone and desktop apps poll because nothing could push to them: all seventeen `devices`
 operations answered `501`, and quiet hours were stored but silenced nothing. Proposed here —

@@ -99,7 +99,7 @@ import { pluginsModule } from './plugins/index.js';
  * neither module has to know the other exists (ARCHITECTURE §Modules).
  */
 /**
- * `devices` sends, `notify` decides whether to (DECISIONS §56). Neither imports the other:
+ * `devices` sends, `notify` decides whether to (DECISIONS §66). Neither imports the other:
  * `auth` already imports `devices`, and `devices` must not reach back into `auth` or
  * `notify`, so what it needs from them is lent here.
  */

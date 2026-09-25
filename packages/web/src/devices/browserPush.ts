@@ -1,5 +1,5 @@
 /**
- * This browser as a device that receives push (DECISIONS §56).
+ * This browser as a device that receives push (DECISIONS §66).
  *
  * Turning notifications on is four steps, all of them the browser's own: ask for the
  * permission, register the service worker (`/push-sw.js`), subscribe with the hub's VAPID

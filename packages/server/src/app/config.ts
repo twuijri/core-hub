@@ -73,7 +73,7 @@ const envSchema = z.object({
     })
     .optional(),
   /**
-   * Push (DECISIONS §56). All optional: Web Push works with nothing set (the hub makes its own
+   * Push (DECISIONS §66). All optional: Web Push works with nothing set (the hub makes its own
    * VAPID keys), and FCM / APNs can be configured from Settings instead. When set here, the
    * environment wins and Settings shows the sender as configured by the environment.
    *

@@ -1,7 +1,7 @@
 # devices
 
 Owns: `device`, `device_command`, `push_credential` (moved here from notify on 2026-09-25,
-same table; contract decision §56). Schema:
+same table; contract decision §66). Schema:
 `packages/server/src/modules/devices/schema.ts`. `devices` is global (a
 device belongs to a user); `device_commands` is scoped. Base columns omitted.
 
@@ -88,7 +88,7 @@ Push keys are not here: they are the hub's own, in `${DATA_DIR}/keys/vapid.json`
 
 `notify` hands a written notice to the push port when the kind's `push` switch is on and the
 moment is outside quiet hours; `pushFor(app).sendToUser()` sends to every `paired` device of the
-person with a push registration and answers per device. See contract decision §56.
+person with a push registration and answers per device. See contract decision §66.
 
 ## Queries the clients need
 

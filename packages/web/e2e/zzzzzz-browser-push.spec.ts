@@ -1,5 +1,5 @@
 /**
- * Browser notifications, end to end against the real hub (DECISIONS §56): Settings →
+ * Browser notifications, end to end against the real hub (DECISIONS §66): Settings →
  * Notifications → «تفعيل إشعارات المتصفح», then «إرسال إشعار تجريبي», and the notice arrives —
  * encrypted to this browser's key and signed with the hub's VAPID key — at a push service.
  *

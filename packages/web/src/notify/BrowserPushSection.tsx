@@ -1,6 +1,6 @@
 /**
  * "Enable browser notifications": this browser becomes one of the person's devices and
- * receives what reaches their inbox by Web Push, even with the page closed (DECISIONS §56).
+ * receives what reaches their inbox by Web Push, even with the page closed (DECISIONS §66).
  *
  * The state is the browser's own (permission, subscription), read on mount and after each
  * change; the hub only learns of it through `devices.registerPush`. "Send a test" writes a
