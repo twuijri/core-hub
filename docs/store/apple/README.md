@@ -131,7 +131,7 @@ Answer: **Data Not Collected.** Checked in the code on 2026-09-26:
   dependencies (`apps/ios/project.yml`, `packages/contracts/openapi-generator/swift.yaml`).
 - [x] No request to any server of the developer's: every request goes to the hub the person typed
   or scanned (`HubAPI.swift`, `RealtimeClient.swift`); no address of ours is built into the app.
-- [x] Messages, attachments, the device's name and model, and the push token go to the person's
+- [x] Messages, attachments, the device's name, model and versions, and the push token go to the person's
   own hub. Apple counts data as collected when the developer or its partners can access it; the
   developer cannot access a hub it does not run, so this is not collection.
 - [x] No tracking: no IDFA, no App Tracking Transparency prompt, no data shared with data brokers.

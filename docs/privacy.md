@@ -21,7 +21,8 @@ twuijri, who does not run your hub and cannot see it.
 Everything you do in the app is a request to your hub: signing in, your messages and the photos
 and files you attach, your answers to an agent, changes to tasks, schedules and settings. When you
 sign in, the app also tells your hub how to list this phone among your devices: the phone's name
-and model, the app's version, and a random identifier made by the app. When you allow
+and model, the iOS and app versions, whether notifications can reach it, and a random identifier
+made by the app. When you allow
 notifications, it gives your hub this phone's push token so the hub can notify you.
 
 Your sign-in (the hub's address and the token it gave the app) is kept in the phone's Keychain.
