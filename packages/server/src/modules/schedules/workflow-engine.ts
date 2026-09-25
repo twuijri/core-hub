@@ -64,7 +64,14 @@ export interface WorkflowPorts {
   agentTurn:
     | ((
         scope: RunScope,
-        input: { agentId: string; prompt: string; title: string },
+        input: {
+          agentId: string;
+          prompt: string;
+          title: string;
+          /** The step's own model (`<provider>/<model>`), else the agent's. */
+          model?: string | null;
+          provider?: string | null;
+        },
       ) => Promise<AgentTurnResult>)
     | null;
   /** A notice in the run owner's inbox. */
@@ -482,7 +489,11 @@ export class WorkflowEngine {
   ): StepResult {
     service.finishStep(row.id, {
       status: state.cancelled ? 'cancelled' : result.ok ? 'succeeded' : 'failed',
-      output: result.ok || result.route === 'failure' ? { value: result.output } : null,
+      // The route is written with the output, so a run's view can say which edges were taken.
+      output: {
+        ...(result.ok || result.route === 'failure' ? { value: result.output } : {}),
+        route: state.cancelled ? null : result.route,
+      },
       error: result.error,
       runId: result.runId ?? null,
     });
@@ -545,6 +556,8 @@ export class WorkflowEngine {
           agentId: node.agent_id,
           prompt: rendered,
           title: node.title || node.id,
+          model: node.model ?? null,
+          provider: node.provider ?? null,
         });
         return turn.status === 'succeeded'
           ? { ...succeed(turn.output), runId: turn.runId }
@@ -574,10 +587,51 @@ export function stepOf(step: NodeRunRow): Record<string, unknown> {
     session_id: null,
     run_id: step.runId,
     approval_id: step.approvalId,
+    output: outputText(step),
+    route: routeOf(step),
     error: step.error,
     started_at: step.startedAt?.toISOString() ?? null,
     finished_at: step.finishedAt?.toISOString() ?? null,
   };
+}
+
+/** The contract's cap on a step's `output`: enough to read, not a megabyte per step. */
+const MAX_STEP_OUTPUT = 20_000;
+
+/** What a finished step produced, as text (`WorkflowStep.output`); `null` before it ends. */
+function outputText(step: NodeRunRow): string | null {
+  const stored = step.output as { value?: unknown } | null;
+  if (!stored || !('value' in stored) || stored.value === null || stored.value === undefined) {
+    return null;
+  }
+  const value = stored.value;
+  let text: string;
+  if (typeof value === 'string') text = value;
+  else if (typeof value === 'number' || typeof value === 'boolean') text = String(value);
+  else {
+    try {
+      text = JSON.stringify(value) ?? '';
+    } catch {
+      text = '';
+    }
+  }
+  return text.length > MAX_STEP_OUTPUT ? `${text.slice(0, MAX_STEP_OUTPUT)}…` : text;
+}
+
+/**
+ * Which edges a finished step follows (`WorkflowStep.route`). Steps finished before the
+ * route was written down read it from their status: a success, or a failure.
+ */
+function routeOf(step: NodeRunRow): 'success' | 'failure' | null {
+  const stored = (step.output as { route?: unknown } | null)?.route;
+  if (stored === 'success' || stored === 'failure') return stored;
+  if (step.status === 'succeeded') {
+    // A condition's "no" is a success whose value is `false`.
+    const value = (step.output as { value?: unknown } | null)?.value;
+    return step.nodeType === 'condition' && value === false ? 'failure' : 'success';
+  }
+  if (step.status === 'failed') return 'failure';
+  return null;
 }
 
 function succeed(output: unknown): StepResult {

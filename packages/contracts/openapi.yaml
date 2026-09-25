@@ -8874,8 +8874,21 @@ paths:
       operationId: schedules.listWorkflows
       tags: [schedules]
       summary: List workflows (the Workflow segment)
+      description: >-
+        The workflows of the profile in `X-Hub-Profile`. With `profiles=all` the list is every
+        profile the caller may enter instead (the server's rule, as `schedules.list`), each
+        workflow carrying its own `profile`, newest first — the Schedules page shows every
+        profile (ADR 0016, DECISIONS §48). A client then acts on a workflow with that
+        workflow's `profile` in `X-Hub-Profile`.
       parameters:
         - $ref: '#/components/parameters/Profile'
+        - name: profiles
+          in: query
+          description: >-
+            `all`: every profile the caller may enter, not only the one in `X-Hub-Profile`.
+          schema:
+            type: string
+            enum: [all]
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       x-rt-events: []
@@ -9013,6 +9026,70 @@ paths:
                 active_run_id: null
                 run_count: 0
                 schedule_count: 0
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /workflows/validate:
+    post:
+      operationId: schedules.validateWorkflow
+      tags: [schedules]
+      summary: Check a workflow drawing without saving it (the editor's live check)
+      description: >-
+        The same check `createWorkflow` and `updateWorkflow` make, run on a drawing that is
+        not saved: `problems` are what saving would refuse (`409 workflow_invalid`), and
+        `warnings` are worth saying but saved anyway. Each names the node or edge it is
+        about, so an editor can mark it, and carries a stable `code` a client translates
+        (DECISIONS §48). Nothing is written and nothing is announced.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowWrite'
+            example:
+              name: 'مراجعة ثم إشعار'
+              nodes:
+                - id: review
+                  kind: agent
+                  title: 'مراجعة'
+                  agent_id: null
+                  model: null
+                  provider: null
+                  reasoning_effort: null
+                  skills: []
+                  input: 'راجع {{steps.nowhere.output}}'
+                  approval_required: false
+                  position:
+                    x: 0
+                    y: 0
+              edges: []
+      x-rt-events: []
+      responses:
+        '200':
+          description: What saving this drawing would refuse, and what it would only warn about.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowValidation'
+              example:
+                valid: false
+                problems:
+                  - code: template_step_unknown
+                    node_id: review
+                    edge_id: null
+                    detail: steps.nowhere.output
+                    message: '"مراجعة" refers to {{steps.nowhere.output}}, but there is no step "nowhere"'
+                warnings:
+                  - code: agent_missing
+                    node_id: review
+                    edge_id: null
+                    detail: null
+                    message: 'the node "مراجعة" names no agent'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -9207,6 +9284,8 @@ paths:
                         session_id: 01J8QK3ZR2W7M5N4P6T8V9X0YG
                         run_id: 01J8QK3ZR2W7M5N4P6T8V9X0RV
                         approval_id: null
+                        output: 'راجعت الفرع: لا مشكلات.'
+                        route: success
                         error: null
                         started_at: '2026-09-21T09:00:01Z'
                         finished_at: '2026-09-21T09:04:00Z'
@@ -9216,6 +9295,8 @@ paths:
                         session_id: null
                         run_id: null
                         approval_id: 01J8QK3ZR2W7M5N4P6T8V9X0AS
+                        output: null
+                        route: null
                         error: null
                         started_at: null
                         finished_at: null
@@ -9265,6 +9346,8 @@ paths:
                     session_id: 01J8QK3ZR2W7M5N4P6T8V9X0YG
                     run_id: 01J8QK3ZR2W7M5N4P6T8V9X0RV
                     approval_id: null
+                    output: 'راجعت الفرع: لا مشكلات.'
+                    route: success
                     error: null
                     started_at: '2026-09-21T09:00:01Z'
                     finished_at: '2026-09-21T09:04:00Z'
@@ -17127,7 +17210,19 @@ components:
     WorkflowStep:
       type: object
       required:
-        [node_id, attempt, status, session_id, run_id, approval_id, error, started_at, finished_at]
+        [
+          node_id,
+          attempt,
+          status,
+          session_id,
+          run_id,
+          approval_id,
+          output,
+          route,
+          error,
+          started_at,
+          finished_at,
+        ]
       properties:
         node_id:
           type: string
@@ -17135,6 +17230,22 @@ components:
           type: integer
         status:
           $ref: '#/components/schemas/WorkflowStepStatus'
+        output:
+          type: [string, 'null']
+          description: >-
+            What the step produced, as text — the agent's answer, the notice's words, a
+            condition's `true`/`false`, a delay's seconds, an approval's answer — at most
+            20 000 characters; `null` while it has not finished or when it produced nothing
+            (DECISIONS §48).
+        route:
+          description: >-
+            Which of the step's edges it follows: `success` after a step that succeeded or a
+            condition that said yes, `failure` after a failed step or a condition that said
+            no (`always` edges follow either); `null` while it has not finished.
+          oneOf:
+            - type: string
+              enum: [success, failure]
+            - type: 'null'
         session_id:
           oneOf:
             - $ref: '#/components/schemas/Ulid'
@@ -17228,6 +17339,46 @@ components:
             type: string
         expires_at:
           $ref: '#/components/schemas/Timestamp'
+    WorkflowIssue:
+      type: object
+      required: [code, node_id, edge_id, detail, message]
+      properties:
+        code:
+          type: string
+          description: >-
+            Stable reason a client translates. Problems — `node_id_missing`,
+            `node_id_duplicate`, `edge_from_unknown`, `edge_to_unknown`,
+            `condition_unreadable` (`detail` is the parser's reason, such as
+            `condition_operator_missing`), `delay_out_of_range`, `template_root_unknown`,
+            `template_step_unknown` (`detail` is the path). Warnings — `workflow_empty`,
+            `no_start`, `many_starts` (`detail` is the count), `agent_missing`. A client that
+            meets a code it does not know shows `message`.
+        node_id:
+          type: [string, 'null']
+          description: The node it is about; `null` when it is about the whole drawing or an edge.
+        edge_id:
+          type: [string, 'null']
+          description: The edge it is about; `null` otherwise.
+        detail:
+          type: [string, 'null']
+        message:
+          type: string
+          description: The same thing in English words, as `workflow_invalid` has always said it.
+    WorkflowValidation:
+      type: object
+      required: [valid, problems, warnings]
+      properties:
+        valid:
+          type: boolean
+          description: '`true` when `problems` is empty: saving this drawing would be accepted.'
+        problems:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowIssue'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowIssue'
     # ---------------------------------------------------------------- models
     ProviderKind:
       type: string

@@ -33,7 +33,10 @@ import {
 } from '../auth/index.js';
 import {
   SchedulesService,
+  definitionOf,
+  problemsOf,
   validateDefinition,
+  warningIssuesOf,
   warningsFor,
   type ScheduleRow,
   type Scope,
@@ -874,19 +877,47 @@ export const schedulesModule = defineModule({
 
     defineRoute(app, deps, {
       operationId: 'schedules.listWorkflows',
-      handler: (request) => {
+      handler: (request, { query }) => {
         const scope = scopeOf(request);
         const service = serviceOf(request);
+        // `profiles=all`: every profile this person may enter, as the Schedules page shows
+        // them (ADR 0016, DECISIONS §48); otherwise the header's profile, as before.
+        let scopes: Scope[] = [scope];
+        if (query.profiles === 'all') {
+          const principal = request.principal;
+          if (!principal) throw new HubError('internal', { message: 'route has no principal' });
+          const db = requireSqlite(request.server.hub.database);
+          scopes = listWorkspacesFor(db, principal.user).map((row) => ({
+            workspace: row.id,
+            profile: row.slug,
+            userId: scope.userId,
+          }));
+        }
+        const rows = scopes
+          .flatMap((each) => service.listWorkflows(each).map((row) => ({ row, each })))
+          // Newest first across profiles, as within one.
+          .sort((a, b) => (a.row.id < b.row.id ? 1 : a.row.id > b.row.id ? -1 : 0));
         return {
-          items: service.listWorkflows(scope).map((row) =>
-            toWorkflow(row, scope.profile, {
-              runs: service.workflowRunsOf(scope, row.id, 1000).length,
-              schedules: service.scheduleCount(scope, row.id),
+          items: rows.map(({ row, each }) =>
+            toWorkflow(row, each.profile, {
+              runs: service.workflowRunsOf(each, row.id, 1000).length,
+              schedules: service.scheduleCount(each, row.id),
               activeRunId: service.activeRunOf(row.id),
             }),
           ),
           next_cursor: null,
         };
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'schedules.validateWorkflow',
+      handler: (request, { body }) => {
+        // The editor's live check: the rule saving applies, on a drawing nobody saved.
+        scopeOf(request);
+        const definition = definitionOf((body ?? {}) as Record<string, unknown>);
+        const problems = problemsOf(definition);
+        return { valid: problems.length === 0, problems, warnings: warningIssuesOf(definition) };
       },
     });
 

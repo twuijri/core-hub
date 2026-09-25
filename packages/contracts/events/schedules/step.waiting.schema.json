@@ -64,6 +64,8 @@
           "session_id": null,
           "run_id": null,
           "approval_id": "01J8QK3ZR2W7M5N4P6T8V9X0AS",
+          "output": null,
+          "route": null,
           "error": null,
           "started_at": null,
           "finished_at": null
@@ -101,6 +103,8 @@
         "session_id",
         "run_id",
         "approval_id",
+        "output",
+        "route",
         "error",
         "started_at",
         "finished_at"
@@ -145,6 +149,22 @@
               "type": "null"
             }
           ]
+        },
+        "output": {
+          "type": ["string", "null"],
+          "description": "What the step produced, as text; `null` while it has not finished (DECISIONS §48)."
+        },
+        "route": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": ["success", "failure"]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Which of the step's edges it follows; `null` while it has not finished."
         },
         "error": {
           "type": ["string", "null"]
