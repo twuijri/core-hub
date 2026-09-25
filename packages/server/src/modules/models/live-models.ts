@@ -35,19 +35,44 @@ export interface LiveModel {
 export type LiveModels = { ok: true; models: LiveModel[] } | { ok: false; reason: string };
 
 /**
- * The program. Its only inputs are the Hermes provider id (an argument, never program text) and
- * the environment; it prints one JSON line and never the token.
+ * The Codex CLI version the hub asks the ChatGPT subscription's model list as (decision §83).
  *
- * - `openai-codex`: `GET {base}/models?client_version=0.0.0` with the account id taken from the
- *   token's claims (`ChatGPT-Account-Id`: without it the backend answers an empty list with a
- *   200) and Hermes's identity headers when Hermes has them. `client_version=0.0.0` is the
- *   value that returns the whole account catalogue (a made-up version hides newer models). A
- *   model marked hidden is left out; the rest keep the backend's order (`priority`).
+ * The backend reads `client_version` as the version of the official Codex CLI asking and leaves
+ * out every model whose `minimal_client_version` is newer. The Codex CLI (openai/codex,
+ * Apache-2.0) sends its own release version (`codex-rs/models-manager`: `client_version_to_whole`,
+ * the crate version) on `GET …/codex/models?client_version=…`. `0.0.0` — what this file sent
+ * until 2026-09-26 — now answers a frozen older list: the owner's Pro account got `gpt-6-astra`
+ * and the 5.6 trio but not `gpt-6-sol` / `gpt-6-luna` (Hermes found the same, live 2026-09-22).
+ *
+ * So the hub sends the latest Codex CLI release: **0.157.0** (`rust-v0.157.0`, 2026-09-25). To
+ * bump it, take the newest `rust-v*` tag of github.com/openai/codex. An owner can move it without
+ * a release by setting `COREHUB_CODEX_CLIENT_VERSION` in the hub's environment. When this
+ * version is refused or lists nothing, `0.0.0` is asked once more rather than showing nothing.
+ */
+export const CODEX_CLIENT_VERSION = '0.157.0';
+
+/** The version sent, as the hub's environment may override it. */
+export function codexClientVersion(env: NodeJS.ProcessEnv = process.env): string {
+  const override = (env.COREHUB_CODEX_CLIENT_VERSION ?? '').trim();
+  return /^\d+\.\d+\.\d+$/.test(override) ? override : CODEX_CLIENT_VERSION;
+}
+
+/**
+ * The program. Its only inputs are the Hermes provider id and the Codex client version
+ * (arguments, never program text) and the environment; it prints one JSON line and never the
+ * token.
+ *
+ * - `openai-codex`: `GET {base}/models?client_version=<version>` with the account id taken from
+ *   the token's claims (`ChatGPT-Account-Id`: without it the backend answers an empty list with
+ *   a 200) and Hermes's identity headers when Hermes has them; `0.0.0` once more when that
+ *   version is refused or lists nothing. A model marked hidden is left out; the rest keep the
+ *   backend's order (`priority`). Nothing is added and nothing is renamed.
  * - every other provider: the OpenAI-shaped `GET {base}/models` (`data[].id`).
  */
 export const LIVE_MODELS_PROGRAM = `
 import base64, json, sys, urllib.error, urllib.request
 provider = sys.argv[1]
+client_version = sys.argv[2] if len(sys.argv) > 2 else "0.0.0"
 
 def out(value):
     print(json.dumps(value))
@@ -74,14 +99,14 @@ def account_of(token):
     except Exception:
         return None
 
-def ask(creds):
+def ask(creds, version=None):
     token = str(creds.get("api_key") or "").strip()
     base = str(creds.get("base_url") or "").strip().rstrip("/")
     if not token or not base:
         raise LookupError("the signed-in account has no usable credential")
     headers = {"Authorization": "Bearer " + token, "Accept": "application/json"}
     if provider == "openai-codex":
-        url = base + "/models?client_version=0.0.0"
+        url = base + "/models?client_version=" + (version or client_version)
         try:
             from agent.codex_headers import codex_cloudflare_headers
             headers.update(codex_cloudflare_headers(token, base_url=base))
@@ -135,19 +160,31 @@ try:
     creds = resolve(False)
 except Exception as exc:
     out({"ok": False, "reason": "not signed in: " + type(exc).__name__ + ": " + str(exc)[:200]})
-try:
+def ask_once(creds, version=None):
     try:
-        body = ask(creds)
+        return ask(creds, version)
     except urllib.error.HTTPError as error:
         if error.code != 401:
             raise
-        body = ask(resolve(True))
+        return ask(resolve(True), version)
+
+try:
+    try:
+        body = ask_once(creds)
+        models = listed(body)
+    except urllib.error.HTTPError:
+        if provider != "openai-codex" or client_version == "0.0.0":
+            raise
+        models = []
+    if not models and provider == "openai-codex" and client_version != "0.0.0":
+        # The versioned ask was refused or listed nothing: the older, ungated question.
+        body = ask_once(creds, "0.0.0")
+        models = listed(body)
 except urllib.error.HTTPError as error:
     detail = error.read().decode("utf-8", "replace")[:200]
     out({"ok": False, "reason": "the provider answered HTTP " + str(error.code) + (": " + detail if detail else "")})
 except Exception as exc:
     out({"ok": False, "reason": "the provider could not be asked: " + type(exc).__name__ + ": " + str(exc)[:200]})
-models = listed(body)
 if not models:
     out({"ok": False, "reason": "the provider listed no models"})
 out({"ok": True, "models": models})
@@ -158,10 +195,11 @@ export async function liveModels(
   run: HermesPythonRun,
   home: string,
   hermesProvider: string,
+  clientVersion: string = codexClientVersion(),
 ): Promise<LiveModels> {
   let answer: { code: number; stdout: string; stderr: string };
   try {
-    answer = await run(home, [LIVE_MODELS_PROGRAM, hermesProvider]);
+    answer = await run(home, [LIVE_MODELS_PROGRAM, hermesProvider, clientVersion]);
   } catch (error) {
     return { ok: false, reason: error instanceof Error ? error.message : 'Hermes did not run' };
   }
