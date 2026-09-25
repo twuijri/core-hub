@@ -1698,8 +1698,14 @@ export class ModelsService {
       } else {
         const model = this.requireModel(scope, body.default);
         this.requireExpressible(scope, model.providerId);
+        // A new chat model keeps the chain unless one is sent with it: choosing a model on a
+        // provider card must not quietly throw the fallbacks away (decision §49).
         const fallbacks = chainOf(
-          (body.fallbacks ?? []).map((ref) => this.requireModel(scope, ref).id),
+          body.fallbacks !== undefined
+            ? body.fallbacks.map((ref) => this.requireModel(scope, ref).id)
+            : (this.effectiveDefault(scope.id, 'chat')?.row.fallbackModelIds ?? []).filter(
+                (id) => this.refOf(scope, id) !== null,
+              ),
           model.id,
         );
         this.store.setDefault(

@@ -9,6 +9,7 @@ import type {
   ProviderHost,
   ProviderPreset,
   ProviderProbeResult,
+  ProviderSignIn,
   RuntimeReport,
   SpeechSettings,
 } from '../types.js';
@@ -251,9 +252,58 @@ export interface ModelRef {
 export function useSaveDefaults() {
   const { client } = useAuth();
   return useModelsMutation(
-    async (body: { default?: ModelRef | null; assignments?: Record<string, ModelRef | null> }) =>
-      (await client.request('put', '/models/defaults', { body })).data as ModelDefaults,
+    async (body: {
+      default?: ModelRef | null;
+      /** The chat model's fallback chain, in order (contract decision §49). */
+      fallbacks?: ModelRef[];
+      assignments?: Record<string, ModelRef | null>;
+    }) => (await client.request('put', '/models/defaults', { body })).data as ModelDefaults,
   );
+}
+
+/** Starts a device-code sign-in for a provider used by signing in (contract decision §50). */
+export function useStartSignIn() {
+  const { client } = useAuth();
+  return useMutation({
+    mutationFn: async (providerId: string) =>
+      (
+        await client.request('post', '/models/providers/{provider_id}/sign-in', {
+          params: { provider_id: providerId },
+        })
+      ).data as ProviderSignIn,
+  });
+}
+
+/** How often a pending sign-in is asked about: Hermes itself polls the provider every 5 s. */
+export const SIGN_IN_POLL_MS = 3000;
+
+/**
+ * Polls a sign-in until it is no longer `pending`. On `approved` the provider list is read
+ * again, so the card says it is signed in and its models arrive.
+ */
+export function useSignInStatus(providerId: string, signInId: string | null) {
+  const { client, profile } = useAuth();
+  const queryClient = useQueryClient();
+  return useQuery({
+    queryKey: ['models', 'sign-in', profile, providerId, signInId] as const,
+    enabled: signInId !== null,
+    queryFn: async () => {
+      const signIn = (
+        await client.request('get', '/models/providers/{provider_id}/sign-in/{sign_in_id}', {
+          params: { provider_id: providerId, sign_in_id: signInId as string },
+        })
+      ).data as ProviderSignIn;
+      if (signIn.status === 'approved') {
+        // The card and the pickers, not this query: it would ask again, and again.
+        for (const key of ['providers', 'catalogue', 'defaults']) {
+          void queryClient.invalidateQueries({ queryKey: ['models', key] });
+        }
+      }
+      return signIn;
+    },
+    refetchInterval: (query) =>
+      !query.state.data || query.state.data.status === 'pending' ? SIGN_IN_POLL_MS : false,
+  });
 }
 
 /** `<provider_id>|<model>` — one string a picker can carry for a `ModelRef`. */

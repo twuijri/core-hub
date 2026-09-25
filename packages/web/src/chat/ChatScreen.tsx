@@ -57,6 +57,7 @@ import { useApprovalMode, useComposerModels } from './useComposerControls.js';
 import { useFollowBottom } from './followBottom.js';
 import { useLoadOlderOnScroll } from './olderMessages.js';
 import { useSessionStream } from './useSessionStream.js';
+import { useRunHistory } from './useRunHistory.js';
 import { revisionOf } from './trajectory.js';
 import { TrajectoryView } from './TrajectoryView.js';
 import { WorkingDirPicker } from './WorkingDirPicker.js';
@@ -373,6 +374,8 @@ export function OpenSession({
 
   const title = pageTitle ?? (state.session ? sessionTitle(state.session, t) : t(termKey('chat')));
   const showReasoning = preferences.data?.show_reasoning ?? true;
+  // Finished runs too, so a turn still says which model answered it after a reload (§49).
+  const runHistory = useRunHistory(sessionId, state.runs);
   const failedRun = Object.values(state.runs).find((r) => r.status === 'failed' && r.error);
   // Only asked for once a run has failed for want of a provider, and then asked fresh:
   // the notice says which step of propagation is missing right now.
@@ -498,7 +501,7 @@ export function OpenSession({
                 turns={turns}
                 showReasoning={showReasoning}
                 showCost={preferences.data?.show_cost ?? false}
-                runs={state.runs}
+                runs={runHistory}
                 slugOf={(id) => (agents.data ?? []).find((agent) => agent.id === id)?.slug}
                 anchor={anchor && anchor.phase !== 'missing' ? anchor : null}
                 onReply={setReplyTo}

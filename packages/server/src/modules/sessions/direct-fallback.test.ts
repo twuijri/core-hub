@@ -207,6 +207,24 @@ describe('the fallback chain on the direct agent (decision §49)', () => {
     expect(run.error?.error).toContain('auth_unavailable');
   });
 
+  it('keeps the chain when only the chat model changes, and never lists that model in it', async () => {
+    const { h } = await setUp('primary', ['backup', 'strict']);
+    const providerId = (
+      (await authed(h, h.token, { method: 'GET', url: '/api/v1/models/defaults' })).json() as {
+        default: { provider_id: string };
+      }
+    ).default.provider_id;
+    // What a provider card sends: the model alone.
+    const changed = await authed(h, h.token, {
+      method: 'PUT',
+      url: '/api/v1/models/defaults',
+      payload: { default: { provider_id: providerId, model: 'backup' } },
+    });
+    expect(changed.statusCode).toBe(200);
+    const body = changed.json() as { fallbacks: { model: string }[] };
+    expect(body.fallbacks.map((ref) => ref.model)).toEqual(['strict']);
+  });
+
   it('when every model fails, the run fails on the last and lists the ones before it', async () => {
     const { h, chats, slug, sessionId } = await setUp('primary', ['strict']);
     const run = await runToEnd(h, sessionId);

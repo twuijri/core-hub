@@ -103,6 +103,9 @@ export function AddProviderDialog({
 
   const usingPreset = mode === 'preset' && preset !== undefined;
   const keyOptional = usingPreset ? preset.key === 'optional' : true;
+  // Used by signing in to an account, through Hermes (contract decision §50): no key to type
+  // and no model list to fetch until the sign-in is approved on the card.
+  const signInPreset = usingPreset && preset.sign_in;
   const canSubmit =
     baseUrl.trim() !== '' &&
     (usingPreset || label.trim() !== '') &&
@@ -294,77 +297,87 @@ export function AddProviderDialog({
           )}
         </Field>
 
-        <Field label={keyOptional ? t('models.add.key_optional') : t('models.add.key_required')}>
-          {(props) => (
-            <span className="field-row-inline">
-              <Input
-                {...props}
-                type={showKey ? 'text' : 'password'}
-                autoComplete="off"
-                spellCheck={false}
-                dir="ltr"
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
-                required={!keyOptional}
-                data-testid="add-api-key"
-              />
-              <Button aria-pressed={showKey} onClick={() => setShowKey((shown) => !shown)}>
-                {t(showKey ? 'models.add.hide_key' : 'models.add.show_key')}
-              </Button>
-            </span>
-          )}
-        </Field>
+        {signInPreset && (
+          <Notice tone="info">
+            <span data-testid="add-sign-in-hint">{t('models.add.sign_in_hint')}</span>
+          </Notice>
+        )}
 
-        <div className="ch-field-row">
-          <Label>{t('models.add.default_model')}</Label>
-          <div className="flex items-center gap-2">
-            {/* The list is empty until the provider is asked, so the picker says so and
+        {!signInPreset && (
+          <Field label={keyOptional ? t('models.add.key_optional') : t('models.add.key_required')}>
+            {(props) => (
+              <span className="field-row-inline">
+                <Input
+                  {...props}
+                  type={showKey ? 'text' : 'password'}
+                  autoComplete="off"
+                  spellCheck={false}
+                  dir="ltr"
+                  value={apiKey}
+                  onChange={(event) => setApiKey(event.target.value)}
+                  required={!keyOptional}
+                  data-testid="add-api-key"
+                />
+                <Button aria-pressed={showKey} onClick={() => setShowKey((shown) => !shown)}>
+                  {t(showKey ? 'models.add.hide_key' : 'models.add.show_key')}
+                </Button>
+              </span>
+            )}
+          </Field>
+        )}
+
+        {!signInPreset && (
+          <div className="ch-field-row">
+            <Label>{t('models.add.default_model')}</Label>
+            <div className="flex items-center gap-2">
+              {/* The list is empty until the provider is asked, so the picker says so and
                 keeps Fetch inside the popup, where the person already is. */}
-            <Combobox
-              value={model === '' ? null : model}
-              onChange={(next) => setModel(next ?? '')}
-              label={t('models.add.default_model')}
-              placeholder={t('models.add.model_placeholder')}
-              testId="add-default-model"
-              status={
-                probe.isPending
-                  ? 'loading'
-                  : probeError !== null
-                    ? 'error'
-                    : models.length === 0
-                      ? 'unfetched'
-                      : 'ready'
-              }
-              errorMessage={probeError}
-              fetchAction={{
-                label: t('models.add.fetch'),
-                onSelect: fetchModels,
-                disabled: probe.isPending || baseUrl.trim() === '',
-              }}
-              options={models.map((item) => ({
-                value: item.id,
-                label: item.label,
-                detail: item.id,
-              }))}
-            />
-            <Button
-              disabled={probe.isPending || baseUrl.trim() === ''}
-              onClick={fetchModels}
-              data-testid="add-fetch-models"
-            >
-              {t('models.add.fetch')}
-            </Button>
+              <Combobox
+                value={model === '' ? null : model}
+                onChange={(next) => setModel(next ?? '')}
+                label={t('models.add.default_model')}
+                placeholder={t('models.add.model_placeholder')}
+                testId="add-default-model"
+                status={
+                  probe.isPending
+                    ? 'loading'
+                    : probeError !== null
+                      ? 'error'
+                      : models.length === 0
+                        ? 'unfetched'
+                        : 'ready'
+                }
+                errorMessage={probeError}
+                fetchAction={{
+                  label: t('models.add.fetch'),
+                  onSelect: fetchModels,
+                  disabled: probe.isPending || baseUrl.trim() === '',
+                }}
+                options={models.map((item) => ({
+                  value: item.id,
+                  label: item.label,
+                  detail: item.id,
+                }))}
+              />
+              <Button
+                disabled={probe.isPending || baseUrl.trim() === ''}
+                onClick={fetchModels}
+                data-testid="add-fetch-models"
+              >
+                {t('models.add.fetch')}
+              </Button>
+            </div>
+            {probe.isPending && <Spinner label={t('models.add.fetching')} />}
+            {probeError && (
+              <Notice tone="danger">
+                <span data-testid="add-fetch-error">{probeError}</span>
+              </Notice>
+            )}
+            {models.length > 0 && !probeError && (
+              <p className="ch-field-hint">{t('models.add.fetched', { count: models.length })}</p>
+            )}
           </div>
-          {probe.isPending && <Spinner label={t('models.add.fetching')} />}
-          {probeError && (
-            <Notice tone="danger">
-              <span data-testid="add-fetch-error">{probeError}</span>
-            </Notice>
-          )}
-          {models.length > 0 && !probeError && (
-            <p className="ch-field-hint">{t('models.add.fetched', { count: models.length })}</p>
-          )}
-        </div>
+        )}
 
         {create.isError && <Notice tone="danger">{describeError(create.error, t)}</Notice>}
 

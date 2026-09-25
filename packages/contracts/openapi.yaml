@@ -14592,7 +14592,8 @@ components:
               description: >-
                 `null` when the chosen model answered (absent from hubs before decision §49).
                 When set, the turn moved down the fallback chain and `model` / `provider` name
-                the model that actually answered.
+                the model that actually answered — or, when the run then failed, the last one
+                tried.
             started_at:
               oneOf:
                 - $ref: '#/components/schemas/Timestamp'

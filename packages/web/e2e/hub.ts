@@ -16,7 +16,7 @@ import {
 import { registerProfileTransfer } from '../../server/src/modules/auth/index.js';
 import { fakeProfileRuntime } from '../../server/src/modules/auth/testing/fake-profile-runtime.js';
 import { principalScopeResolver } from '../../server/src/modules/auth/index.js';
-import { overrideAgents } from '../../server/src/modules/agents/index.js';
+import { agentModelsPort, overrideAgents } from '../../server/src/modules/agents/index.js';
 import { overrideModels } from '../../server/src/modules/models/index.js';
 import type { AgentInstaller, HermesApiCall } from '../../server/src/modules/agents/index.js';
 import { createSessionsModule } from '../../server/src/modules/sessions/index.js';
@@ -47,9 +47,23 @@ import {
 
 export const E2E_PASSWORD = 'e2e-owner-password';
 
-type Step = AgentEvent | { type: 'delay'; ms: number } | { type: 'await_input' };
+/** The hub this process built, once built: journey 34 asks its models module for a turn. */
+let hubApp: Awaited<ReturnType<typeof buildServer>> | null = null;
 
-function scriptFor(prompt: string): Step[] {
+type Step =
+  | AgentEvent
+  | { type: 'delay'; ms: number }
+  | { type: 'await_input' }
+  // The real direct path (journey 34): the models module answers the turn, fallback chain and all.
+  | { type: 'direct'; workspace: string; text: string };
+
+function scriptFor(prompt: string, workspace = ''): Step[] {
+  if (/احتياطي|fallback/i.test(prompt)) {
+    // Journey 34 (contract decision §49): the turn is the models module's own — the profile's
+    // chat model, its fallback chain as the Defaults tab saved it, and the provider's HTTP
+    // (the scripted proxy below, whose first model is down with `auth_unavailable`).
+    return [{ type: 'direct', workspace, text: prompt }];
+  }
   if (/ملخص الجدولة/.test(prompt)) {
     // A schedule's own run (journey 28): a short answer the history previews and the
     // conversation shows.
@@ -276,6 +290,45 @@ interface Live {
   raw: string;
 }
 
+/**
+ * One turn on the models module's direct path, as the `direct` agent makes it: the profile's
+ * chat model, then its fallback chain (contract decision §49) — every step real but the
+ * provider's HTTP, which is `scriptedProvider` below.
+ */
+async function* directTurn(workspace: string, text: string): AsyncIterable<AgentEvent> {
+  const port = hubApp ? agentModelsPort(hubApp.hub.io) : null;
+  const primary = port?.defaultModelFor(workspace, 'builtin', null) ?? null;
+  if (!port || !primary) {
+    yield { type: 'failed', code: 'provider_not_configured', message: 'no chat model is chosen' };
+    return;
+  }
+  const fallbacks = (port.fallbackChain?.(workspace) ?? []).map((member) => ({
+    providerId: member.providerId,
+    model: member.model,
+  }));
+  for await (const event of port.directChat(workspace, {
+    providerId: primary.provider_id,
+    model: primary.model,
+    messages: [{ role: 'user', text }],
+    fallbacks,
+  })) {
+    if (event.type === 'delta') yield { type: 'message_delta', text: event.text };
+    else if (event.type === 'fallback') {
+      yield { type: 'model_fallback', failed: event.failed, answered: event.answered };
+    } else if (event.type === 'usage') {
+      yield {
+        type: 'usage',
+        modelLabel: event.modelLabel,
+        providerId: event.providerId,
+        ...(event.inputTokens !== undefined ? { inputTokens: event.inputTokens } : {}),
+        ...(event.outputTokens !== undefined ? { outputTokens: event.outputTokens } : {}),
+      };
+    } else if (event.type === 'completed') yield { type: 'completed' };
+    else if (event.type === 'failed')
+      yield { type: 'failed', code: event.code, message: event.message };
+  }
+}
+
 /** A runner with real pauses, so a socket can be dropped mid-run and resumed. */
 class ScriptedRunner implements AgentRunner {
   private readonly runs = new Map<string, Live>();
@@ -283,7 +336,7 @@ class ScriptedRunner implements AgentRunner {
   async start(request: AgentRunRequest): Promise<AgentRunAccepted> {
     const text = request.prompt.map((b) => (b.type === 'text' ? b.text : '')).join(' ');
     this.runs.set(request.runId, {
-      queue: scriptFor(text),
+      queue: scriptFor(text, request.workspace),
       wake: null,
       closed: false,
       answer: '',
@@ -320,6 +373,10 @@ class ScriptedRunner implements AgentRunner {
         await new Promise<void>((resolve) => {
           live.wake = resolve;
         });
+        continue;
+      }
+      if (step.type === 'direct') {
+        yield* directTurn(step.workspace, step.text);
         continue;
       }
       if (step.type === 'tool_completed' && step.output) {
@@ -675,8 +732,50 @@ const bigCatalogue = Array.from({ length: 443 }, (_, i) => {
   const variant = i % 3 === 0 ? '-thinking' : i % 3 === 1 ? '-instruct' : '';
   return { id: `${family}-${Math.floor(i / FAMILIES.length) + 1}${variant}`, object: 'model' };
 });
-const scriptedProvider: typeof fetch = async (input) => {
+/**
+ * The owner's proxy on 2026-09-25 (journey 34): its first model is down with
+ * `503 auth_unavailable`, the second answers.
+ */
+export const E2E_PROXY_URL = 'http://proxy.e2e/v1';
+const proxyAnswer = 'أجاب النموذج الاحتياطي بدل النموذج المعطّل.';
+function scriptedProxy(url: string, init: RequestInit | undefined): Response {
+  const json = (status: number, value: unknown) =>
+    new Response(JSON.stringify(value), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+  if (url.endsWith('/models')) {
+    return json(200, { data: [{ id: 'gemini-3.8-flash-high' }, { id: 'gpt-backup' }] });
+  }
+  const body = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
+  if (body.model === 'gemini-3.8-flash-high') {
+    return json(503, {
+      error: {
+        message:
+          'auth_unavailable: no auth available (providers=antigravity, model=gemini-3.8-flash-high)',
+      },
+    });
+  }
+  const frames = [
+    { choices: [{ delta: { content: proxyAnswer } }] },
+    { choices: [{ delta: {} }], usage: { prompt_tokens: 14, completion_tokens: 9 } },
+  ];
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const frame of frames) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
+      }
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      controller.close();
+    },
+  });
+  return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+}
+
+const scriptedProvider: typeof fetch = async (input, init) => {
   const url = String(input instanceof Request ? input.url : input);
+  if (url.startsWith(E2E_PROXY_URL)) return scriptedProxy(url, init);
   const json = (value: unknown) =>
     new Response(JSON.stringify(value), {
       status: 200,
@@ -848,6 +947,7 @@ app.post('/__e2e/expire-token', async (request) => {
   return { token: expired };
 });
 
+hubApp = app;
 await app.listen({ port, host: '127.0.0.1' });
 console.log(
   `e2e hub listening on http://127.0.0.1:${port} (web: ${app.hub.web}, setup: ${setupMode})`,
