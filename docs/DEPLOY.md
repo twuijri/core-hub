@@ -47,7 +47,7 @@ to set: the hub makes its own Web Push keys in `/data/keys/vapid.json`. The offi
 (FCM) and iPhone (APNs) apps are reached through the **Core Hub push relay** (ADR 0024) once
 the hub knows its address: nothing to set when the build has it built in, otherwise
 `COREHUB_PUSH_RELAY_URL`. A hub that has its own credentials uses them instead — entered in
-Device connections → Devices → Push senders, or these variables, which then win over Settings
+Device connections → Push senders, or these variables, which then win over Settings
 (add them to the `environment:` of the service yourself; the reference file leaves them out):
 
 | Variable | Meaning |

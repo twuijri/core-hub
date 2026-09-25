@@ -43,6 +43,23 @@ export const IconDevices = (p: IconProps) => (
     <path d="M7 19h6" />
   </Svg>
 );
+/** A phone: an iPhone keeps its island at the top, an Android phone a punch-hole camera. */
+export const IconPhone = ({
+  platform = 'android',
+  ...p
+}: IconProps & { platform?: 'ios' | 'android' }) => (
+  <Svg {...p}>
+    <rect x="6" y="2.5" width="12" height="19" rx="2.5" />
+    {platform === 'ios' ? <path d="M10.5 5h3" /> : <circle cx="12" cy="5.2" r=".6" />}
+    <path d="M10.5 18.5h3" />
+  </Svg>
+);
+export const IconTablet = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="4" y="3" width="16" height="18" rx="2.5" />
+    <path d="M11 18h2" />
+  </Svg>
+);
 export const IconAgents = (p: IconProps) => (
   <Svg {...p}>
     <rect x="4" y="7" width="16" height="12" rx="3" />

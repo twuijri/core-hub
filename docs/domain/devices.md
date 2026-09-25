@@ -91,7 +91,7 @@ Push keys are not here: they are the hub's own, in `${DATA_DIR}/keys/vapid.json`
 
 ## push_relay (global, one row)
 
-The Core Hub push relay as this hub knows it (ADR 0024, DECISIONS §82; migration `0026`).
+The Core Hub push relay as this hub knows it (ADR 0024, DECISIONS §82; migration `0027`).
 
 | column | type | meaning |
 |---|---|---|

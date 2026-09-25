@@ -165,6 +165,14 @@ export function parseServiceAccount(json: string): FcmCredentials {
   } catch {
     throw new Error('the service account is not JSON');
   }
+  if (parsed.project_info && parsed.client) {
+    throw new Error(
+      "this is google-services.json, the Android app's own file; the hub needs a service-account key (Firebase Console → Project settings → Service accounts → Generate new private key)",
+    );
+  }
+  if (typeof parsed.type === 'string' && parsed.type !== 'service_account') {
+    throw new Error(`the JSON is not a service-account key (its type is "${parsed.type}")`);
+  }
   const missing = ['project_id', 'client_email', 'private_key'].filter(
     (key) => typeof parsed[key] !== 'string' || !(parsed[key] as string).trim(),
   );
@@ -350,6 +358,32 @@ export interface ApnsOptions {
 }
 
 const PROVIDER_TOKEN_MS = 50 * 60_000;
+
+/**
+ * Proves a `.p8` is an APNs key before it is stored: it parses as a private key and signs an
+ * ES256 provider token, which is all the hub ever does with it. Apple itself is not asked —
+ * it answers only a real push to a real device token (`devices.testPush` does that).
+ */
+export function checkApnsKey(privateKey: string): void {
+  let key;
+  try {
+    key = createPrivateKey(privateKey);
+  } catch {
+    throw new Error('private_key is not a .p8 (PEM) key');
+  }
+  const curve = key.asymmetricKeyDetails?.namedCurve;
+  const signs = (() => {
+    try {
+      signEs256Jwt({ alg: 'ES256', kid: 'CHECK' }, { iss: 'CHECK', iat: 0 }, key);
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+  if (key.asymmetricKeyType !== 'ec' || curve !== 'prime256v1' || !signs) {
+    throw new Error('private_key cannot sign an APNs token (an APNs .p8 key is an EC P-256 key)');
+  }
+}
 
 export function apnsSender(credentials: ApnsCredentials, options: ApnsOptions = {}): PushSender {
   const now = options.now ?? Date.now;

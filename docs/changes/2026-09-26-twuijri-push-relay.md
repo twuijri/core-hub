@@ -68,7 +68,7 @@ DECISIONS **§82**:
 - المركز: `modules/devices/relay.ts` (جديد)، `push.ts` (المرسِل عبر المرحّل، الحالة، المزامنة)، `index.ts`
   (الربط عند التسجيل، المزامنة عند إلغاء التسجيل والفصل، مؤقّت الدقيقة، `setPushRelay`)، `schema.ts` (جدول
   `push_relay`)، `senders.ts` (حقل `locale` اختياري في `PushMessage` فقط)، `testing/fake-relay.ts` (جديد)،
-  `app/config.ts` (`COREHUB_PUSH_RELAY_URL`، `COREHUB_PUSH_RELAY`)، الترحيل `drizzle/0026_push_relay.sql`
+  `app/config.ts` (`COREHUB_PUSH_RELAY_URL`، `COREHUB_PUSH_RELAY`)، الترحيل `drizzle/0027_push_relay.sql`
   (+ اللقطة والسجل).
 - الاختبارات: `tests/unit/devices-push-relay.test.ts` (جديد، ١٢ حالة)، `tests/unit/config.test.ts`،
   `tests/contract/devices.contract.test.ts`.
@@ -80,8 +80,8 @@ DECISIONS **§82**:
 نفسه — `source: relay` وحقل `relay` على صفّي FCM وAPNs — وتغيير الإعداد بـ`PUT /push/relay`. المطلوب في
 الواجهة: شارة «عبر مرحّل كور هب» (المفتاح موجود)، سطر حالة المرحّل (`relay.state` و`last_error`)، مفتاح
 «الدفع الخاص» (`private_push`)، ومفتاح «استعمال المرحّل» (`enabled`، معطّل مع `forced_off`). وتعارض
-الترحيل: `0025` أخذه #148 (`channel_identities`) فصار ترحيلي `0026`؛ إن دُمج #149 قبله وأخذ `0026` أعيد
-التوليد بعده (`0027`)، ورقم القرار §82 يترك §81 لـ#149.
+الترحيل: `0025` أخذه #148 (`channel_identities`) و`0026` أخذه #149 (`device_report`)، فأُعيد توليد ترحيلي
+بعد دمجهما `0027`؛ ورقم القرار §82 بعد §81 الذي أخذه #149.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 محليًا عبر `mj-run`، بعد دمج `origin/main` (`fa17cd1a`):
@@ -136,7 +136,7 @@ AssertionError: the contract grew or shrank: update docs/STATUS.md: expected 315
 تُضاف أدناه.
 
 ## المخاطر والرجوع
-- **الرجوع**: revert للفرع. الترحيل `0026` يضيف جدولًا فقط؛ نسخة أقدم تتجاهله.
+- **الرجوع**: revert للفرع. الترحيل `0027` يضيف جدولًا فقط؛ نسخة أقدم تتجاهله.
 - **لا أثر قبل النشر**: `DEFAULT_RELAY_URL` فارغ، فمركز بلا `COREHUB_PUSH_RELAY_URL` يبقى كما كان (FCM/APNs
   «غير مُعدّ»). الاختبارات القديمة كلها كما هي.
 - APNs من Worker لم يُجرَّب أمام Apple (انظر القرار ٣). إن فشل، البديل الموثّق في ADR هو خادم صغير للمالك.

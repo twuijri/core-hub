@@ -83,11 +83,16 @@ test('a browser turns notifications on, and a test notice is pushed to it', asyn
     await section.screenshot({ path: path.join(shots, 'browser-push-ar-light.png') });
 
     // The browser is now one of the person's devices, with push.
+    // One page: pairing at the top, the devices as cards below it (no tabs since 2026-09-26).
     await page.goto('/settings/devices');
-    await page.getByRole('tab', { name: 'الأجهزة' }).click();
+    await expect(page.getByRole('tab')).toHaveCount(0);
     const row = page.getByTestId('device-row').filter({ hasText: 'هذا المتصفح' });
     await expect(row).toBeVisible();
     await expect(row.getByTestId('device-push')).toContainText('Web Push');
+    await expect(row.getByTestId('device-seen')).toContainText('آخر نشاط');
+    await expect(page.getByTestId('device-group-browser')).toContainText('المتصفحات');
+    // The senders wait folded under the devices; opening them shows one row each.
+    await page.getByTestId('push-senders-summary').click();
     await expect(page.getByTestId('push-sender-webpush')).toHaveAttribute('data-state', 'ready');
     await expect(page.getByTestId('push-sender-fcm')).toHaveAttribute(
       'data-state',
@@ -99,7 +104,7 @@ test('a browser turns notifications on, and a test notice is pushed to it', asyn
 
     // Revoking it stops the pushes.
     await row.getByTestId('device-revoke').click();
-    await page.getByTestId('confirm-dialog').getByRole('button', { name: 'إلغاء الربط' }).click();
+    await page.getByTestId('confirm-dialog').getByRole('button', { name: 'إزالة' }).click();
     await expect(row).toHaveCount(0);
   } finally {
     await service.close();

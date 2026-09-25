@@ -37,6 +37,13 @@ export const DEVICE_CONNECTIONS = ['lan', 'relay'] as const;
 export const PUSH_PROVIDERS = ['none', 'fcm', 'apns', 'webpush'] as const;
 export const DEVICE_STATUSES = ['paired', 'revoked'] as const;
 export const PUSH_CREDENTIAL_PROVIDERS = ['fcm', 'apns', 'webpush'] as const;
+/** The contract's `PushBlocker`: what the device says stops push on it. */
+export const PUSH_BLOCKERS = [
+  'none',
+  'not_in_build',
+  'permission_pending',
+  'permission_denied',
+] as const;
 export const CAPABILITY_KINDS = [
   'location',
   'camera',
@@ -72,6 +79,7 @@ export type DevicePlatform = (typeof DEVICE_PLATFORMS)[number];
 export type DeviceKind = (typeof DEVICE_KINDS)[number];
 export type DeviceConnection = (typeof DEVICE_CONNECTIONS)[number];
 export type CapabilityKind = (typeof CAPABILITY_KINDS)[number];
+export type PushBlocker = (typeof PUSH_BLOCKERS)[number];
 
 /** One entry of the contract's `Device.capabilities`. */
 export type DeviceCapability = {
@@ -108,6 +116,16 @@ export const devices = sqliteTable(
      * (docs/changes/2026-09-26-twuijri-push-cleanup-mobile-logs.md).
      */
     pushSessionId: ulid('push_session_id'),
+    /** What the device last said stops push on it (the contract's `PushBlocker`); null: never said. */
+    pushBlocker: text('push_blocker', { enum: PUSH_BLOCKERS }),
+    /**
+     * The sign-in (`auth.app_tokens` row) that last registered this device with
+     * `devices.register`: calls made with it count as the device being seen, as a paired
+     * device's calls with its pairing token do.
+     */
+    seenSessionId: ulid('seen_session_id'),
+    /** When a person named the device: registering or pairing it again keeps that name. */
+    renamedAt: timestampMs('renamed_at'),
     capabilities: json<DeviceCapability[]>('capabilities').notNull().default(EMPTY_ARRAY),
     status: text('status', { enum: DEVICE_STATUSES }).notNull().default('paired'),
     /** The device token issued at pairing (auth module). */
