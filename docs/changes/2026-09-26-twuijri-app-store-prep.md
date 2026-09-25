@@ -96,7 +96,15 @@ Test Case '-[CoreHubUITests.StoreScreenshots testStoreScreenshots]' passed (142.
 نظرتُ في اللقطات: المحادثة (Markdown وبطاقة الأداة و«فكّر 4 ث»)، الدرج بشارات البروفايلات، الوكلاء،
 المهام، محادثة جديدة، الإعدادات، وشاشة الدخول؛ بالعربية من اليمين وبالإنجليزية.
 
-CI على الطلب: يُضاف بعد اكتماله.
+CI على الطلب #153 (بعد دمج `origin/main`): كل الفحوص نجحت، ومنها بناء iOS واختباراته على المحاكي
+(`DemoHubTests` الأربعة نجحت)، و«Store listing and demo hub checks»، والخادم والويب وسطح المكتب؛ مهمة الرفع
+`skipping`.
+```
+Test Case '-[CoreHubTests.DemoHubTests testEveryPageOfTheScreenshotsDecodesInBothLanguages]' passed (1.169 seconds).
+Test Case '-[CoreHubTests.DemoHubTests testTheDemoIsOffUnlessLaunchedForIt]' passed (0.002 seconds).
+Test Case '-[CoreHubTests.DemoHubTests testTheRequestLanguagePicksTheWords]' passed (0.111 seconds).
+Test Case '-[CoreHubTests.DemoHubTests testWhatTheDemoHubDoesNotHaveIsRefused]' passed (0.079 seconds).
+```
 
 ## المخاطر والرجوع
 - الرفع (deliver) لم يُجرَّب — ممنوع قبل قرار المالك. أول تشغيل بـ `upload` قد يكشف فرقًا في deliver (مثل
