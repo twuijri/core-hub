@@ -1395,7 +1395,7 @@
       "section": {
         "access": "Who may message the bot",
         "replies": "Replies",
-        "groups": "Groups",
+        "groups": "Groups and channels",
         "media": "Media & voice",
         "advanced": "Advanced"
       },
@@ -1519,6 +1519,82 @@
         "proxy_url": {
           "label": "Proxy",
           "help": "Reach Telegram through a proxy, e.g. socks5://host:1080. Leave empty for a direct connection."
+        },
+        "allowed_roles": {
+          "label": "Allowed roles",
+          "help": "Server role ids (digits). The bot answers anyone who has one."
+        },
+        "allowed_channels": {
+          "label": "Only these channels",
+          "help": "Ids of the channels it answers in. Empty: any channel it can see."
+        },
+        "free_response_channels": {
+          "label": "Channels with no mention needed",
+          "help": "Ids of channels where it answers every message."
+        },
+        "ignored_channels": {
+          "label": "Ignored channels",
+          "help": "Ids of channels it never answers in, even when mentioned."
+        },
+        "auto_thread": {
+          "label": "Answer in a thread",
+          "help": "When mentioned in a channel it opens a thread and answers there."
+        },
+        "thread_require_mention": {
+          "label": "In threads: answer only when mentioned",
+          "help": "Inside threads it answers only when mentioned."
+        },
+        "no_thread_channels": {
+          "label": "Channels without threads",
+          "help": "Ids of channels where it answers directly, without a thread."
+        },
+        "disable_dms": {
+          "label": "Ignore direct messages",
+          "help": "It does not answer DMs, only channels."
+        },
+        "reply_in_thread": {
+          "label": "Answer in a thread",
+          "help": "It answers in a thread under the message instead of the channel itself."
+        },
+        "reply_broadcast": {
+          "label": "Also show the answer in the channel",
+          "help": "The first part of a threaded answer also shows in the channel."
+        },
+        "strict_mention": {
+          "label": "Explicit mention in every message",
+          "help": "In threads it answers only a message that mentions it explicitly."
+        },
+        "free_response_rooms": {
+          "label": "Rooms with no mention needed",
+          "help": "Ids of rooms where it answers every message (they start with !)."
+        },
+        "allowed_rooms": {
+          "label": "Only these rooms",
+          "help": "Ids of the rooms it answers in. Direct messages are not affected."
+        },
+        "dm_mention_threads": {
+          "label": "Thread on a mention in a DM",
+          "help": "In a direct chat, mentioning it opens a thread."
+        },
+        "e2ee_mode": {
+          "label": "End-to-end encryption",
+          "help": "Whether it uses encryption in encrypted rooms."
+        },
+        "reply_mode": {
+          "label": "How it answers",
+          "help": "In a thread under the message, or as a plain message in the channel."
+        },
+        "require_authenticated_sender": {
+          "label": "Verify the sender",
+          "help": "Only mail your server verified the sender of (SPF/DKIM/DMARC) is accepted, so nobody can pose as an address on the list."
+        },
+        "skip_attachments": {
+          "label": "Ignore attachments",
+          "help": "Attachments are not read."
+        },
+        "poll_interval": {
+          "label": "Check mail every (seconds)",
+          "help": "Seconds between checks for new mail (5 to 3600)."
         }
       },
       "choice": {
@@ -1548,8 +1624,227 @@
         },
         "allow_bots": {
           "none": "Ignore them",
-          "all": "Answer them"
+          "all": "Answer them",
+          "mentions": "Answer only when mentioned"
+        },
+        "e2ee_mode": {
+          "off": "Off",
+          "optional": "When needed",
+          "required": "Required"
+        },
+        "reply_mode": {
+          "off": "Plain message",
+          "thread": "In a thread"
         }
+      },
+      "title_of": "{name} settings",
+      "platform": {
+        "discord": {
+          "option": {
+            "allowed_users": {
+              "label": "People the bot answers",
+              "help": "Discord user ids. Anyone not here and without an allowed role gets no answer."
+            },
+            "require_mention": {
+              "label": "In channels: answer only when mentioned",
+              "help": "In server channels it answers only a message that @mentions it. DMs are not affected."
+            },
+            "home_channel": {
+              "label": "Home channel",
+              "help": "Id of the channel scheduled results and notices go to. /set-home sets it too."
+            },
+            "reactions": {
+              "label": "Reactions",
+              "help": "A reaction on your message while it works and when it is done."
+            }
+          },
+          "list_placeholder": "123456789012345678, 876543210987654321"
+        },
+        "slack": {
+          "option": {
+            "allowed_users": {
+              "label": "People who skip approval",
+              "help": "Slack member ids (like U01ABCDEF). Anyone else gets a pairing code."
+            },
+            "require_mention": {
+              "label": "In channels: answer only when mentioned",
+              "help": "In channels it answers only a message that mentions it. DMs are not affected."
+            },
+            "home_channel": {
+              "label": "Home channel",
+              "help": "Id of the channel (starting with C) scheduled results and notices go to."
+            },
+            "reactions": {
+              "label": "Reactions",
+              "help": "A reaction on your message while it works and when it is done."
+            }
+          },
+          "list_placeholder": "C01ABCDEF, C02GHIJKL"
+        },
+        "matrix": {
+          "option": {
+            "allowed_users": {
+              "label": "People who skip approval",
+              "help": "Full Matrix ids (like @sara:matrix.org). Anyone else gets a pairing code."
+            },
+            "require_mention": {
+              "label": "In rooms: answer only when mentioned",
+              "help": "In rooms it answers only a message that mentions it. DMs are not affected."
+            },
+            "home_channel": {
+              "label": "Home room",
+              "help": "Id of the room (starting with !) scheduled results and notices go to."
+            },
+            "reactions": {
+              "label": "Reactions",
+              "help": "A reaction on your message while it works and when it is done."
+            }
+          },
+          "section": {
+            "groups": "Rooms"
+          },
+          "list_placeholder": "!abc:matrix.org"
+        },
+        "mattermost": {
+          "option": {
+            "allowed_users": {
+              "label": "People who skip approval",
+              "help": "Mattermost user ids. Anyone else gets a pairing code."
+            },
+            "require_mention": {
+              "label": "In channels: answer only when mentioned",
+              "help": "In channels it answers only a message that @mentions it. DMs are not affected."
+            },
+            "home_channel": {
+              "label": "Home channel",
+              "help": "Id of the channel scheduled results and notices go to."
+            }
+          },
+          "list_placeholder": "channelid1, channelid2"
+        },
+        "email": {
+          "option": {
+            "allowed_users": {
+              "label": "Addresses the agent answers",
+              "help": "Email addresses. Mail from anyone else is ignored and gets no pairing code."
+            },
+            "home_channel": {
+              "label": "Home address",
+              "help": "The address scheduled results and notices go to."
+            }
+          },
+          "section": {
+            "access": "Who may write to the agent",
+            "media": "Attachments"
+          },
+          "list_placeholder": "sara@example.com, ali@example.com"
+        }
+      }
+    },
+    "platform": {
+      "catalog_title": "More platforms",
+      "generic_title": "Other platforms Hermes supports",
+      "generic_list_note": "These link with a form of the values Hermes reads. The hub does not check them and has no settings panel for them.",
+      "link_title": "Link {name}",
+      "badge_first_use": "Downloaded on first start",
+      "badge_inbound": "Needs a public address",
+      "how_title": "How to start with {name}",
+      "how_pairs": "The first person to message the agent gets a pairing code; approve it below under “Waiting for approval”.",
+      "how_allowlist": "The agent answers only the people in the allowed list. Change it in Settings.",
+      "generic_intro": "Enter the {name} values as Hermes reads them. They are kept secret in this profile's Hermes files.",
+      "generic_note": "The hub does not check these values before saving them. If one is wrong, Hermes's message shows on the platform's row once the gateway starts.",
+      "first_use_note": "This platform's library is not in the hub's image: Hermes downloads it from the internet (PyPI) once, the first time it starts, and keeps it in the data folder.",
+      "inbound_note": "This platform delivers messages to a web address the internet must reach, and the hub's image does not open that port by itself. It needs extra setup on the server.",
+      "optional": "{label} (optional)",
+      "secret_hint": "Kept secret in this profile's Hermes files and never shown again.",
+      "allowed": "People who skip approval (optional)",
+      "allowed_hint": "Separate them with commas. Anyone else gets a pairing code to approve here.",
+      "allowed_hint_generic": "Separate them with commas, as the platform names them. Saved to {key}.",
+      "allowlist_empty": "{name} answers nobody who is not on this list, and sends no pairing code. Add yourself at least.",
+      "submit": "Link",
+      "submit_check": "Check and link",
+      "checking": "Asking {name}…",
+      "done": "Linked.",
+      "done_as": "Linked: {account}.",
+      "done_now": "The agent answers on the platform now.",
+      "done_restart": "In the default profile, restart Hermes from its card for the agent to start answering.",
+      "invalid": "“{field}” is missing or not in the right form.",
+      "rejected": "{name} refused these details: {message}",
+      "unreachable": "{name} did not answer. Check the address and the hub's internet connection, and try again.",
+      "in_use": "This {name} account is linked in the profile “{profile}”. It answers from one place only: unlink it there first.",
+      "unlink_body": "The {name} details are removed from this profile and the agent stops answering there. The account itself stays on the platform, and the allowed people and settings stay.",
+      "unlinked_note": "{name} unlinked. It no longer answers from this profile.",
+      "name": {
+        "discord": "Discord",
+        "slack": "Slack",
+        "matrix": "Matrix",
+        "mattermost": "Mattermost",
+        "email": "Email"
+      },
+      "field": {
+        "DISCORD_BOT_TOKEN": "Bot token",
+        "SLACK_BOT_TOKEN": "Bot token (starts with xoxb-)",
+        "SLACK_APP_TOKEN": "App token (starts with xapp-)",
+        "MATRIX_HOMESERVER": "Homeserver address",
+        "MATRIX_ACCESS_TOKEN": "Access token",
+        "MATTERMOST_URL": "Mattermost server address",
+        "MATTERMOST_TOKEN": "Bot account token",
+        "EMAIL_ADDRESS": "Email address",
+        "EMAIL_PASSWORD": "Password (or app password)",
+        "EMAIL_IMAP_HOST": "IMAP (incoming) server",
+        "EMAIL_IMAP_PORT": "IMAP port (default 993)",
+        "EMAIL_SMTP_HOST": "SMTP (outgoing) server",
+        "EMAIL_SMTP_PORT": "SMTP port (default 587)"
+      },
+      "discord": {
+        "summary": "A Discord bot that answers in DMs and server channels.",
+        "intro": "The agent answers through a Discord bot you make in the developer portal. The hub asks Discord about the bot before it stores the token.",
+        "step1": "Open the Discord developer portal, press New Application and pick a name.",
+        "step2": "Under Bot, press Reset Token and copy it. On the same page, turn on Message Content Intent.",
+        "step3": "Under OAuth2 → URL Generator pick the scopes bot and applications.commands, then Send Messages and Read Message History, and open the link to add the bot to your server.",
+        "step4": "Paste the token here, and your Discord user id (turn on Developer Mode, right-click your name → Copy User ID).",
+        "allowed": "People the bot answers",
+        "allowed_hint": "Discord user ids (digits), separated by commas. Discord sends strangers no pairing code, so anyone not here gets no answer.",
+        "how": "Add the bot to your server with the link from the developer portal if you have not, then DM it or @mention it in a channel."
+      },
+      "slack": {
+        "summary": "A Slack app that answers in DMs and channels (Socket Mode).",
+        "intro": "The agent answers through a Slack app you make. The hub asks Slack about both tokens before it stores them.",
+        "step1": "Open api.slack.com/apps, press Create New App → From scratch and pick your Slack team.",
+        "step2": "Under Socket Mode, turn it on and create an app-level token with connections:write (it starts with xapp-).",
+        "step3": "Under OAuth & Permissions add the bot scopes chat:write, app_mentions:read, channels:history, im:history, im:read, im:write and users:read.",
+        "step4": "Under Event Subscriptions, turn them on and subscribe to app_mention, message.im and message.channels; under App Home, turn on the Messages tab.",
+        "step5": "Press the Install button on the OAuth & Permissions page, copy the bot token (it starts with xoxb-), and paste both tokens here.",
+        "allowed_hint": "Slack member ids (like U01ABCDEF), separated by commas. Anyone else gets a pairing code to approve here.",
+        "how": "Invite the app to a channel with /invite, then mention it or message it directly."
+      },
+      "matrix": {
+        "summary": "A Matrix account that answers in rooms and DMs, on any homeserver.",
+        "intro": "The agent answers through a Matrix account. Make one for the bot on your homeserver; the hub asks the server about it before saving.",
+        "step1": "Create an account for the bot on a Matrix homeserver (in Element, for example).",
+        "step2": "Sign in to Element with that account and copy the Access Token from Settings → Help & About.",
+        "step3": "Enter the homeserver address (like https://matrix.org) and paste the token here.",
+        "allowed_hint": "Full Matrix ids (like @sara:matrix.org), separated by commas. Anyone else gets a pairing code.",
+        "how": "Invite the bot's account to a room, or start a direct chat with it. Matrix's library is downloaded on first start."
+      },
+      "mattermost": {
+        "summary": "A Mattermost bot on your server.",
+        "intro": "The agent answers through a Mattermost bot account. The hub asks the server about the account before saving.",
+        "step1": "In Mattermost open Integrations → Bot Accounts → Add Bot Account (a system admin turns them on).",
+        "step2": "Pick a name for the bot and copy the token shown after it is made.",
+        "step3": "Enter your server's address (like https://chat.example.com) and paste the token here.",
+        "allowed_hint": "Mattermost user ids, separated by commas. Anyone else gets a pairing code.",
+        "how": "Add the bot to a channel and @mention it, or message it directly."
+      },
+      "email": {
+        "summary": "A mailbox the agent reads (IMAP) and answers from (SMTP).",
+        "intro": "The agent reads a mailbox and answers the mail. The hub signs in to the incoming and outgoing servers before saving; it reads and sends nothing.",
+        "step1": "A mailbox just for the agent is best. In Gmail, turn on 2-Step Verification and make an “app password”.",
+        "step2": "Enter the address, the password and the IMAP and SMTP servers (in Gmail: imap.gmail.com and smtp.gmail.com).",
+        "step3": "Enter the addresses the agent answers. Email sends no pairing code, so anyone not on the list is ignored.",
+        "allowed": "Addresses the agent answers",
+        "allowed_hint": "Email addresses, separated by commas. Mail from anyone else is ignored.",
+        "how": "Send a message to the mailbox from an address on the list; the agent answers in the same thread."
       }
     }
   },
