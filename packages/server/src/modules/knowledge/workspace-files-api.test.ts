@@ -8,12 +8,11 @@ import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 
 import path from 'node:path';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import addFormatsModule, { type FormatsPlugin } from 'ajv-formats';
-import { like } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadOpenApiDocument } from '@corehub/contracts';
 import { authed, signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
 import { requireSqlite } from '../../lib/db.js';
-import { auditEvents } from '../audit/schema.js';
 
 const document = loadOpenApiDocument();
 const ajv = new Ajv2020({ strict: false, allErrors: true, validateFormats: true });
@@ -264,11 +263,11 @@ describe('workspace files over HTTP', () => {
     const root404 = await as('DELETE', '/workspace-files?path=');
     expect(root404.statusCode).toBe(400);
 
+    // The audit trail is `audit`'s table; read it the way a report would, by its action.
     const actions = requireSqlite(hub.app.hub.database)
-      .select({ action: auditEvents.action, data: auditEvents.data })
-      .from(auditEvents)
-      .where(like(auditEvents.action, 'workspace_file.%'))
-      .all()
+      .all<{ action: string }>(
+        sql`SELECT action FROM audit_events WHERE action LIKE 'workspace_file.%'`,
+      )
       .map((row) => row.action);
     expect(actions).toEqual(
       expect.arrayContaining([
