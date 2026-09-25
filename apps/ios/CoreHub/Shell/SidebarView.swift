@@ -34,6 +34,7 @@ struct SidebarView: View {
                 .padding(.horizontal, Space.s3)
                 .padding(.vertical, Space.s3)
             }
+            .scrollDismissesKeyboard(.interactively)
             footer
         }
         .frame(maxHeight: .infinity, alignment: .top)

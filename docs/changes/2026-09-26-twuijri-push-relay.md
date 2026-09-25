@@ -11,7 +11,7 @@
 ## القرار والموافقات
 قرار المالك (٢٠٢٦-٠٩-٢٥): مرحّل مركزي يشغّله هو على Cloudflare Workers («ايه ابدا ونعتمد على Cloudflare
 Workers») — مثل وسيط الإشعارات عند Bitwarden وHome Assistant وMattermost. التفصيل في
-`docs/adr/0024-push-relay.md` وقرار العقد §81. ما يلي **مقترح — ينتظر تأكيد المالك**:
+`docs/adr/0024-push-relay.md` وقرار العقد §82. ما يلي **مقترح — ينتظر تأكيد المالك**:
 
 1. **المرحّل حزمة في مساحة العمل** `packages/push-relay` (`@corehub/push-relay`) لا `services/`: فيغطّيه
    lint وtypecheck واختبارات المستودع كلها دون إعداد جديد.
@@ -50,7 +50,7 @@ Workers») — مثل وسيط الإشعارات عند Bitwarden وHome Assist
 لم يُنشر شيء على Cloudflare ولم يُنشأ أي مورد؛ النشر للمالك.
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
-DECISIONS **§81**:
+DECISIONS **§82**:
 - `PUT /push/relay` (`devices.setPushRelay`، مالك/مشرف): `PushRelayUpdate {enabled?, private_push?}` ←
   `PushRelayStatus`.
 - `PushSender.source` أُضيف له `relay`، و`PushSender.relay` (`PushRelayStatus` أو null، اختياري) على صفّي FCM
@@ -68,19 +68,20 @@ DECISIONS **§81**:
 - المركز: `modules/devices/relay.ts` (جديد)، `push.ts` (المرسِل عبر المرحّل، الحالة، المزامنة)، `index.ts`
   (الربط عند التسجيل، المزامنة عند إلغاء التسجيل والفصل، مؤقّت الدقيقة، `setPushRelay`)، `schema.ts` (جدول
   `push_relay`)، `senders.ts` (حقل `locale` اختياري في `PushMessage` فقط)، `testing/fake-relay.ts` (جديد)،
-  `app/config.ts` (`COREHUB_PUSH_RELAY_URL`، `COREHUB_PUSH_RELAY`)، الترحيل `drizzle/0025_push_relay.sql`
+  `app/config.ts` (`COREHUB_PUSH_RELAY_URL`، `COREHUB_PUSH_RELAY`)، الترحيل `drizzle/0026_push_relay.sql`
   (+ اللقطة والسجل).
 - الاختبارات: `tests/unit/devices-push-relay.test.ts` (جديد، ١٢ حالة)، `tests/unit/config.test.ts`،
   `tests/contract/devices.contract.test.ts`.
 - الويب: مفتاح ترجمة واحد `devices.push.source.relay` (ar/en) فقط — بلا تغيير في الشاشات.
-- الوثائق: `docs/adr/0024-push-relay.md`، `docs/contracts/DECISIONS.md` (§81)، `docs/domain/devices.md`،
+- الوثائق: `docs/adr/0024-push-relay.md`، `docs/contracts/DECISIONS.md` (§82)، `docs/domain/devices.md`،
   `docs/DEPLOY.md`، `docs/STATUS.md`، هذا السجل.
 
 **ملاحظة لطلب `feat/device-cards`** (يعيد تصميم واجهة مرسِلي الدفع): الحالة معروضة في شكل قائمة المرسِلين
 نفسه — `source: relay` وحقل `relay` على صفّي FCM وAPNs — وتغيير الإعداد بـ`PUT /push/relay`. المطلوب في
 الواجهة: شارة «عبر مرحّل كور هب» (المفتاح موجود)، سطر حالة المرحّل (`relay.state` و`last_error`)، مفتاح
 «الدفع الخاص» (`private_push`)، ومفتاح «استعمال المرحّل» (`enabled`، معطّل مع `forced_off`). وتعارض
-الترحيل: الفرعان يأخذان `0025`؛ من يُدمج ثانيًا يعيد `pnpm db:generate` بعد دمج الآخر.
+الترحيل: `0025` أخذه #148 (`channel_identities`) فصار ترحيلي `0026`؛ إن دُمج #149 قبله وأخذ `0026` أعيد
+التوليد بعده (`0027`)، ورقم القرار §82 يترك §81 لـ#149.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 محليًا عبر `mj-run`، بعد دمج `origin/main` (`fa17cd1a`):
@@ -135,7 +136,7 @@ AssertionError: the contract grew or shrank: update docs/STATUS.md: expected 315
 تُضاف أدناه.
 
 ## المخاطر والرجوع
-- **الرجوع**: revert للفرع. الترحيل `0025` يضيف جدولًا فقط؛ نسخة أقدم تتجاهله.
+- **الرجوع**: revert للفرع. الترحيل `0026` يضيف جدولًا فقط؛ نسخة أقدم تتجاهله.
 - **لا أثر قبل النشر**: `DEFAULT_RELAY_URL` فارغ، فمركز بلا `COREHUB_PUSH_RELAY_URL` يبقى كما كان (FCM/APNs
   «غير مُعدّ»). الاختبارات القديمة كلها كما هي.
 - APNs من Worker لم يُجرَّب أمام Apple (انظر القرار ٣). إن فشل، البديل الموثّق في ADR هو خادم صغير للمالك.

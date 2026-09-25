@@ -112,7 +112,7 @@ const envSchema = z.object({
     })
     .optional(),
   /**
-   * The Core Hub push relay (ADR 0024, DECISIONS §81): delivers to the official iOS and Android
+   * The Core Hub push relay (ADR 0024, DECISIONS §82): delivers to the official iOS and Android
    * apps when this hub has no APNs / FCM credentials of its own. `COREHUB_PUSH_RELAY_URL`
    * replaces the address built into the hub (`DEFAULT_RELAY_URL` in modules/devices/relay.ts);
    * `COREHUB_PUSH_RELAY=off` never uses a relay, whatever Settings say.

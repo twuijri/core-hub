@@ -4,6 +4,7 @@ import { useMe } from '../hub/queries.js';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
+import { MyChannelAccounts } from '../people/ChannelAccounts.js';
 import {
   Avatar,
   Button,
@@ -59,6 +60,7 @@ export function AccountTab() {
           },
         ]}
       />
+      <MyChannelAccounts />
       <ChangePassword />
     </div>
   );

@@ -3,9 +3,12 @@ package hub.core.android.ui.screens
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import hub.core.android.AppGraph
+import hub.core.android.chat.AttachmentTray
+import hub.core.android.chat.ChatAttachment
 import hub.core.android.chat.ChatMessage
 import hub.core.android.chat.ChatReducer
 import hub.core.android.chat.ChatState
+import hub.core.android.chat.Outgoing
 import hub.core.android.data.HubError
 import hub.core.android.data.hubCall
 import hub.core.client.model.Agent
@@ -13,7 +16,7 @@ import hub.core.client.model.AgentStatus
 import hub.core.client.model.Approval
 import hub.core.client.model.ApprovalDecision
 import hub.core.client.model.ApprovalResponse
-import hub.core.client.model.ContentBlock
+import hub.core.client.api.SessionsApi
 import hub.core.client.model.MessageRole
 import hub.core.client.model.RunCreate
 import hub.core.client.model.SessionCreate
@@ -60,6 +63,16 @@ class ChatViewModel(
     private val _ui = MutableStateFlow(ChatUi(loading = sessionId != null))
     val ui: StateFlow<ChatUi> = _ui.asStateFlow()
     private val apis get() = graph.store.current?.let(graph::apis)
+
+    /** Files waiting in the composer, uploaded into this chat's profile as soon as they are picked. */
+    val tray = AttachmentTray(
+        viewModelScope,
+        upload = { file ->
+            val api = apis ?: throw HubError(401, "unauthorized", null)
+            api.sessions.sessionsUploadAttachment(profile, file, SessionsApi.PurposeSessionsUploadAttachment.MESSAGE)
+        },
+        discard = { attachment -> hubCall { apis?.sessions?.sessionsDeleteAttachment(attachment.profile, attachment.id) } },
+    )
     private val firstSubscribe = CompletableDeferred<Unit>()
 
     init {
@@ -74,7 +87,10 @@ class ChatViewModel(
                     if (envelope.event == "run.completed" && before.running && !_ui.value.chat.running &&
                         graph.device.choices.value.spokenReplies && graph.inForeground()
                     ) {
-                        _ui.value.chat.messages.lastOrNull { it.role == MessageRole.ASSISTANT }?.text?.let(graph.speaker::speak)
+                        val hub = graph.store.current?.let {
+                            hub.core.android.phone.HubVoice(graph.apis(it), it.hub, profile, graph.device.choices.value.voiceSource)
+                        }
+                        _ui.value.chat.messages.lastOrNull { it.role == MessageRole.ASSISTANT }?.text?.let { graph.speaker.speak(it, hub) }
                     }
                 }
             }
@@ -149,8 +165,17 @@ class ChatViewModel(
      * conversation screen then subscribes and sends the message itself.
      */
     fun send(text: String, onCreated: (sessionId: String, profile: String) -> Unit = { _, _ -> }) {
-        val body = text.trim()
-        if (body.isEmpty()) return
+        if (tray.uploading) return
+        val outgoing = Outgoing(text, tray.attachments)
+        if (outgoing.isEmpty) return
+        tray.clear()
+        send(outgoing, onCreated)
+    }
+
+    /** The person's words and the files they attached, as one run (web: `blocksFor`). */
+    fun send(outgoing: Outgoing, onCreated: (sessionId: String, profile: String) -> Unit = { _, _ -> }) {
+        if (outgoing.isEmpty) return
+        val body = outgoing.text.trim()
         val api = apis ?: return
         _ui.update { it.copy(sending = true, error = null) }
         viewModelScope.launch {
@@ -158,7 +183,7 @@ class ChatViewModel(
                 val agentId = _ui.value.agentId ?: run { _ui.update { it.copy(sending = false) }; return@launch }
                 hubCall { api.sessions.sessionsCreate(profile, SessionCreate(agentId = agentId), UUID.randomUUID().toString()) }
                     .onSuccess { session ->
-                        graph.outbox[session.id] = body
+                        graph.outbox[session.id] = outgoing
                         _ui.update { it.copy(sending = false) }
                         onCreated(session.id, session.profile)
                     }
@@ -168,7 +193,7 @@ class ChatViewModel(
             hubCall {
                 api.sessions.sessionsCreateRun(
                     profile, sessionId,
-                    RunCreate(content = listOf(ContentBlock(type = ContentBlock.Type.TEXT, text = body))),
+                    RunCreate(content = outgoing.blocks()),
                     UUID.randomUUID().toString(),
                 )
             }.onSuccess { accepted ->
@@ -177,7 +202,9 @@ class ChatViewModel(
                     val echo = if (chat.messages.any { it.id == accepted.messageId }) chat.messages else chat.messages + ChatMessage(
                         id = accepted.messageId, seq = (chat.messages.maxOfOrNull { it.seq } ?: 0) + 1, role = MessageRole.USER,
                         authorName = graph.store.current?.user?.displayName.orEmpty(), text = body, reasoning = "", reasoningMs = null,
-                        toolCalls = emptyList(), attachments = emptyList(), runId = accepted.runId, streaming = false,
+                        toolCalls = emptyList(),
+                        attachments = outgoing.blocks().filter { it.attachmentId != null }.map { ChatAttachment(it.type, it.name, it.url) },
+                        runId = accepted.runId, streaming = false,
                     )
                     ui.copy(sending = false, chat = chat.copy(messages = echo, failure = null))
                 }

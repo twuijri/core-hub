@@ -1,5 +1,5 @@
 /**
- * The Core Hub push relay, the hub's half (ADR 0024, DECISIONS §81).
+ * The Core Hub push relay, the hub's half (ADR 0024, DECISIONS §82).
  *
  * The official iOS and Android apps belong to the owner's Apple team and Firebase project, so
  * a hub can reach them only with his APNs and FCM keys. Those keys stay in one place — the

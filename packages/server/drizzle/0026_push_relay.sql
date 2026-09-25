@@ -1,4 +1,4 @@
--- The Core Hub push relay as this hub knows it (ADR 0024, DECISIONS §81): its registration (the
+-- The Core Hub push relay as this hub knows it (ADR 0024, DECISIONS §82): its registration (the
 -- secret sealed like every other), the admin switch, private push, and what the last call said.
 CREATE TABLE `push_relay` (
 	`id` text(26) PRIMARY KEY NOT NULL,

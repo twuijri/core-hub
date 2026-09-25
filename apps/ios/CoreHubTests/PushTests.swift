@@ -1,6 +1,7 @@
 @testable import CoreHub
 import CoreHubClient
 import Foundation
+import UserNotifications
 import XCTest
 
 /// A hub that records what the registrar asks of it.
@@ -148,11 +149,50 @@ final class PushTests: XCTestCase {
     }
 
     func testThisDeviceNamesEachPushState() {
-        let keys = [PushState.active, .idle, .notAllowed, .noSender, .failed].map(ThisDeviceExtras.pushNote)
+        let states = [PushState.active, .idle, .waiting, .notAllowed, .noSender, .failed]
+        let keys = states.map(ThisDeviceExtras.pushNote)
+        // Waiting and turned off share the long note; each has its own plain-words label.
         XCTAssertEqual(Set(keys).count, 5)
+        let labels = states.map(ThisDeviceExtras.pushLabel)
+        XCTAssertEqual(Set(labels).count, 6)
         for language in [AppLanguage.ar, .en] {
             let l10n = L10n(language)
-            for key in keys { XCTAssertTrue(l10n.has(key), "\(key) in \(language)") }
+            for key in keys + labels { XCTAssertTrue(l10n.has(key), "\(key) in \(language)") }
         }
+        XCTAssertEqual(L10n(.en)(ThisDeviceExtras.pushLabel(.noSender)), "The hub has no iPhone sender yet")
+        XCTAssertEqual(L10n(.en)(ThisDeviceExtras.pushLabel(.notAllowed)), "Off in iPhone settings")
+    }
+
+    func testThePermissionAloneDecidesWaitingOrOff() {
+        XCTAssertEqual(PushState.before(registering: .notDetermined), .waiting)
+        XCTAssertEqual(PushState.before(registering: .denied), .notAllowed)
+        XCTAssertNil(PushState.before(registering: .authorized))
+        XCTAssertNil(PushState.before(registering: .provisional))
+        XCTAssertNil(PushState.before(registering: .ephemeral))
+    }
+
+    func testTheAppAsksOnceALaunchOnlyWhileIOSHasNotAskedAndOnlyInFront() {
+        var prompt = PermissionPrompt()
+        // In the background iOS drops the alert: not asked, and the launch's one ask is kept.
+        XCTAssertFalse(prompt.shouldAsk(status: .notDetermined, appActive: false))
+        XCTAssertTrue(prompt.shouldAsk(status: .notDetermined, appActive: true))
+        // Closed without an answer: not again this launch.
+        XCTAssertFalse(prompt.shouldAsk(status: .notDetermined, appActive: true))
+
+        // Never after a no, never when already allowed.
+        var fresh = PermissionPrompt()
+        XCTAssertFalse(fresh.shouldAsk(status: .denied, appActive: true))
+        XCTAssertFalse(fresh.shouldAsk(status: .authorized, appActive: true))
+        XCTAssertFalse(fresh.askedThisLaunch)
+    }
+
+    func testForegroundRetriesEverythingButWorkingPush() {
+        // A sender added on the hub, or notifications turned on in Settings, takes effect when
+        // the app comes back to the front — not only at the next cold launch.
+        XCTAssertTrue(PushState.noSender.retriesOnForeground)
+        XCTAssertTrue(PushState.failed.retriesOnForeground)
+        XCTAssertTrue(PushState.notAllowed.retriesOnForeground)
+        XCTAssertTrue(PushState.waiting.retriesOnForeground)
+        XCTAssertFalse(PushState.active.retriesOnForeground)
     }
 }

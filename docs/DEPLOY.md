@@ -255,6 +255,8 @@ boot. The endpoint is the Hermes agent's `gateway.endpoint` setting
 | `/data/hermes-packages/` | optional Python packages Hermes installs the first time a feature needs them (Edge voices, Bedrock, Vertex, and the Matrix, Feishu, DingTalk, Teams and Google Chat channels …). Telegram's, Discord's and Slack's clients are not among them: they ship in the image |
 | `/data/hermes/…/scripts/whatsapp-bridge/` | a profile's copy of Hermes's WhatsApp bridge (about 220 KB), made by the hub before the profile's gateway or the pairing screen starts it; its `node_modules` is a link to the dependencies the image ships, so linking a phone downloads nothing |
 | `/data/workspaces/<profile>/` | each chat's working folder |
+| `/data/home/` | the home of the user the hub runs as (`HOME` in the image since 2026-09-26): the coding agents read their own config files from it (`~/.claude/CLAUDE.md`, `~/.codex/config.toml` …, edited under Agents → the agent → Config files) and keep their state there. Made on the first boot of an older volume |
+| `/data/backups/agent-config/` | the previous version of each config file edited from the web, the newest ten per file |
 
 Linking Telegram, WhatsApp, Discord or Slack needs no download from PyPI or npm: their
 dependencies are in the image (docs/changes/2026-09-25-twuijri-image-channel-deps.md,

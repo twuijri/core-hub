@@ -41,7 +41,8 @@
     "back_to_agents": "Back to agents",
     "skills_usage": "Skills usage",
     "files": "Files",
-    "terminal": "Terminal"
+    "terminal": "Terminal",
+    "config_files": "Config files"
   },
   "common": {
     "cancel": "Cancel",
@@ -162,10 +163,11 @@
     "global_note": "This page is the whole hub's, not one profile's."
   },
   "permissions": {
-    "camera": "Core Hub uses the camera to scan the pairing code your hub shows on the web.",
+    "camera": "Core Hub uses the camera to scan the pairing code your hub shows on the web, and to take photos you attach to a message.",
     "local_network": "Core Hub connects to your hub on your local network.",
     "microphone": "Core Hub listens while you dictate a message.",
-    "speech": "Core Hub turns what you dictate into text."
+    "speech": "Core Hub turns what you dictate into text.",
+    "photos": "Core Hub attaches the photos you choose to your messages."
   },
   "about": {
     "app_version": "App version",
@@ -231,7 +233,19 @@
     "notifications_allowed": "Allowed",
     "notifications_denied": "Not allowed — change it in the iPhone Settings",
     "notifications_ask": "Allow notifications",
-    "background_checks": "Look for notices while the app is closed (about every 15 minutes, when iOS allows)"
+    "background_checks": "Look for notices while the app is closed (about every 15 minutes, when iOS allows)",
+    "voice_source": "Voice",
+    "voice_hub": "Core Hub",
+    "voice_phone": "This phone",
+    "voice_source_hint": "Core Hub uses the profile's speech providers on the hub for dictation and reading replies aloud; when the hub has none, this phone's own voice is used.",
+    "push_on": "Push on",
+    "push_waiting": "Waiting for your permission",
+    "push_off": "Off in iPhone settings",
+    "push_no_sender_short": "The hub has no iPhone sender yet",
+    "push_failed_short": "Registration failed",
+    "push_setting_up": "Setting up…",
+    "notifications_off": "Notifications are off for Core Hub",
+    "open_settings": "Open Settings"
   },
   "devices": {
     "expires": "Expires {time}",
@@ -351,7 +365,9 @@
     "dictate": "Dictate",
     "stop": "Stop dictating",
     "denied": "Core Hub may not use the microphone or speech recognition. Allow them in the iPhone Settings.",
-    "unavailable": "Dictation is not available in this language on this phone."
+    "unavailable": "Dictation is not available in this language on this phone.",
+    "transcribing": "Turning your words into text…",
+    "no_speech": "Nothing was heard. Try again a little closer to the microphone."
   },
   "tools": {
     "refresh": "Refresh"
@@ -399,5 +415,13 @@
     "kind_gateway": "Messaging gateway · {profile}",
     "profiles": "Profiles",
     "profile_counts": "{runs} active runs · {sessions} conversations · {sockets} sockets"
+  },
+  "attachments": {
+    "add": "Attach",
+    "photo_library": "Photo library",
+    "camera": "Camera",
+    "file": "File",
+    "remove": "Remove {name}",
+    "too_large": "This file is over {size}, the largest the hub takes."
   }
 }

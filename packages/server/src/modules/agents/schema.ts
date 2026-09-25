@@ -72,6 +72,8 @@ export const AGENT_CAPABILITIES = [
   'plans',
   'learn',
   'skill_commands',
+  // The agent's own config files an admin edits (decision §78).
+  'config_files',
 ] as const;
 export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];
 

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The only file the app ever shares: a downloaded update, from its cache. -->
+<!-- What the app shares from its cache: a downloaded update, and the file the camera writes a
+     photo into (a photo attached to a message). -->
 <paths>
     <cache-path name="updates" path="updates/" />
+    <cache-path name="camera" path="camera/" />
 </paths>

@@ -4,7 +4,7 @@ A Cloudflare Worker that delivers a self-hosted hub's notices to the official Co
 (iOS `com.twuijri.corehub`, Android) with the owner's APNs and FCM keys. The keys live only
 here, as Worker secrets; hubs never see them. A hub with no APNs/FCM credentials of its own
 registers itself on first need and pushes through the relay with nothing to set.
-Why and how: [ADR 0024](../../docs/adr/0024-push-relay.md), DECISIONS §81.
+Why and how: [ADR 0024](../../docs/adr/0024-push-relay.md), DECISIONS §82.
 
 - **Storage**: one D1 database (`corehub-push-relay`). It holds hubs (id, salt, blocked, limits),
   token bindings (a SHA-256 of each token, never the token), rate-limit counters and request

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -77,6 +78,9 @@ import hub.core.android.nav.Navigator
 import hub.core.android.nav.Route
 import hub.core.android.nav.Screens
 import hub.core.android.ui.components.BrandName
+import hub.core.android.ui.components.DismissKeyboardWhenDrawerMoves
+import hub.core.android.ui.components.keyboardSink
+import hub.core.android.ui.components.rememberKeyboardDismisser
 import hub.core.android.ui.components.ErrorNotice
 import hub.core.android.ui.components.Glyphs
 import hub.core.android.ui.components.ProfileBadge
@@ -105,6 +109,8 @@ fun MainShell(nav: Navigator, content: DestinationContent) {
     val scope = rememberCoroutineScope()
     val closeDrawer: () -> Unit = { scope.launch { drawer.close() } }
     val openDrawer: () -> Unit = { scope.launch { drawer.open() } }
+    val keyboard = rememberKeyboardDismisser()
+    DismissKeyboardWhenDrawerMoves(drawer, keyboard)
 
     BackHandler(enabled = drawer.isOpen || nav.stack.size > 1) {
         if (drawer.isOpen) closeDrawer() else nav.back()
@@ -118,7 +124,8 @@ fun MainShell(nav: Navigator, content: DestinationContent) {
                 drawerContainerColor = LocalTokens.current.bgRaised,
                 drawerShape = RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp),
             ) {
-                Sidebar(shell, nav, onClose = closeDrawer)
+                // The drawer takes focus from the composer as it opens (and the keyboard goes).
+                Box(Modifier.keyboardSink(keyboard)) { Sidebar(shell, nav, onClose = closeDrawer) }
             }
         },
     ) {
@@ -161,7 +168,9 @@ private fun Sidebar(shell: ShellViewModel, nav: Navigator, onClose: () -> Unit) 
     val session by shell.session.collectAsState()
     val s = session ?: return
     var segment by rememberSaveable { mutableStateOf(Segment.CHAT) }
-    Column(Modifier.fillMaxSize().statusBarsPadding()) {
+    // imePadding: while the drawer's search has the keyboard, the footer (account, language,
+    // theme, sign out, version) rides above it instead of under it.
+    Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             BrandName(Modifier.weight(1f))
             IconButton(onClick = onClose) { Icon(Icons.Default.Close, stringResource(R.string.menu_close)) }

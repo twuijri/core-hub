@@ -1,13 +1,16 @@
 /**
- * The three operations of the hub's own tools (contract decision §67): the card's read and
- * write (`agents.getHubTools`, `agents.updateHubTools`) and the MCP endpoint Hermes talks to
- * (`agents.hubMcp`). Mounted by the `agents` module, which lends what they need.
+ * The operations of the hub's own tools (contract decision §67): the card's read and write
+ * (`agents.getHubTools`, `agents.updateHubTools`), the MCP endpoint Hermes talks to
+ * (`agents.hubMcp`), and what the hub's hook in Hermes's messaging gateway reports
+ * (`agents.hubChannelEvent`, decision §79). Mounted by the `agents` module, which lends what
+ * they need.
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { HubError } from '../../../lib/errors.js';
 import { defineRoute, type RouteDeps } from '../../../lib/route.js';
 import type { WorkspaceScope } from '../../auth/index.js';
-import type { HubToolsPatch, HubToolsService } from './service.js';
+import { HUB_ORIGIN_HEADER, type HubOrigin } from './block.js';
+import type { HubChannelEventInput, HubToolsPatch, HubToolsService } from './service.js';
 
 export interface HubToolRouteHelpers {
   service(app: FastifyInstance): HubToolsService;
@@ -15,6 +18,12 @@ export interface HubToolRouteHelpers {
   actorOf(request: FastifyRequest): { userId: string };
   /** Throws unless the agent is Hermes (the only agent whose config the hub writes). */
   assertHermes(request: FastifyRequest, agentId: string): void;
+}
+
+/** Where a call came from (decision §79); anything else — an unset `${…}` — is unknown. */
+function originOf(header: string | string[] | undefined): HubOrigin | null {
+  const value = (Array.isArray(header) ? header[0] : header)?.trim().toLowerCase();
+  return value === 'hub' || value === 'gateway' ? value : null;
 }
 
 function bearer(header: string | string[] | undefined): string | null {
@@ -61,12 +70,24 @@ export function registerHubToolRoutes(
     handler: async (request, { body }, reply) => {
       const answer = await helpers
         .service(request.server)
-        .handle(bearer(request.headers.authorization), body);
+        .handle(
+          bearer(request.headers.authorization),
+          body,
+          originOf(request.headers[HUB_ORIGIN_HEADER]),
+        );
       if (answer === null) {
         void reply.status(202).send();
         return reply;
       }
       return answer;
     },
+  });
+
+  defineRoute(app, deps, {
+    operationId: 'agents.hubChannelEvent',
+    handler: (request, { body }) =>
+      helpers
+        .service(request.server)
+        .channelEvent(bearer(request.headers.authorization), body as HubChannelEventInput),
   });
 }
