@@ -123,7 +123,8 @@ final class HubAPI: @unchecked Sendable {
         return CoreHubClientAPIConfiguration(
             basePath: basePath,
             customHeaders: headers,
-            apiResponseQueue: HubAPI.responses
+            apiResponseQueue: HubAPI.responses,
+            interceptor: BodilessRequests()
         )
     }
 
@@ -154,5 +155,25 @@ final class HubAPI: @unchecked Sendable {
         } catch {
             throw HubFailure(error)
         }
+    }
+}
+
+/// The generated client marks every POST `Content-Type: application/json`, also one with no
+/// body (`cancelRun`, renewing an app token). The hub refuses an empty JSON body, as it
+/// should; a request with nothing to send says nothing about its type.
+final class BodilessRequests: OpenAPIInterceptor {
+    func intercept<T>(urlRequest: URLRequest, urlSession: URLSessionProtocol, requestBuilder: RequestBuilder<T>, completion: @escaping (Result<URLRequest, Error>) -> Void) {
+        completion(.success(BodilessRequests.adjust(urlRequest)))
+    }
+
+    func retry<T>(urlRequest: URLRequest, urlSession: URLSessionProtocol, requestBuilder: RequestBuilder<T>, data: Data?, response: URLResponse?, error: Error, completion: @escaping (OpenAPIInterceptorRetry) -> Void) {
+        completion(.dontRetry)
+    }
+
+    static func adjust(_ request: URLRequest) -> URLRequest {
+        guard request.httpBody?.isEmpty ?? true, request.httpBodyStream == nil else { return request }
+        var copy = request
+        copy.setValue(nil, forHTTPHeaderField: "Content-Type")
+        return copy
     }
 }

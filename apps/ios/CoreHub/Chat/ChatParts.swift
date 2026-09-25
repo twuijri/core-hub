@@ -239,10 +239,10 @@ struct FlowButtons: View {
     }
 }
 
-struct FlowLayout: Layout {
+struct FlowLayout: SwiftUI.Layout {
     var spacing: CGFloat
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: LayoutSubviews, cache: inout ()) -> CGSize {
         let width = proposal.width ?? .infinity
         var x: CGFloat = 0
         var y: CGFloat = 0
@@ -262,7 +262,7 @@ struct FlowLayout: Layout {
         return CGSize(width: min(widest, width), height: y + line)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: LayoutSubviews, cache: inout ()) {
         var x = bounds.minX
         var y = bounds.minY
         var line: CGFloat = 0

@@ -151,3 +151,14 @@ final class PairingTests: XCTestCase {
         XCTAssertEqual(AppModel.pickProfile(remembered: nil, credentials: withDefault), "default")
     }
 }
+
+final class HubRequestTests: XCTestCase {
+    func testABodilessRequestDropsItsContentType() {
+        var request = URLRequest(url: URL(string: "https://h/x")!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        XCTAssertNil(BodilessRequests.adjust(request).value(forHTTPHeaderField: "Content-Type"))
+        request.httpBody = Data("{}".utf8)
+        XCTAssertEqual(BodilessRequests.adjust(request).value(forHTTPHeaderField: "Content-Type"), "application/json")
+    }
+}
