@@ -496,7 +496,7 @@ describe('devices: the senders', () => {
       payload: {
         key_id: 'ABC123DEFG',
         team_id: 'DEF123GHIJ',
-        bundle_id: 'hub.core.ios',
+        bundle_id: 'com.twuijri.corehub',
         environment: 'sandbox',
         private_key: privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(),
       },
@@ -516,7 +516,7 @@ describe('devices: the senders', () => {
     expect(test.json()).toEqual({ provider: 'apns', status: 'sent', error: null });
     expect(apns.received[0]).toMatchObject({
       token,
-      headers: { 'apns-topic': 'hub.core.ios' },
+      headers: { 'apns-topic': 'com.twuijri.corehub' },
       body: { aps: { alert: { title: 'إشعار تجريبي' } } },
     });
   });

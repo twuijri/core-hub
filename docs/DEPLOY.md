@@ -51,7 +51,7 @@ senders, or — if you prefer them in the stack — these variables, which then 
 | Variable | Meaning |
 |---|---|
 | `COREHUB_FCM_SERVICE_ACCOUNT` | The Firebase service-account JSON, or a path to the file inside the container. |
-| `COREHUB_APNS_KEY_ID`, `COREHUB_APNS_TEAM_ID`, `COREHUB_APNS_BUNDLE_ID` | The APNs key's id, the Apple team id, the iOS app's bundle id. |
+| `COREHUB_APNS_KEY_ID`, `COREHUB_APNS_TEAM_ID`, `COREHUB_APNS_BUNDLE_ID` | The APNs key's id, the Apple team id, the iOS app's bundle id (`com.twuijri.corehub`, docs/RELEASING.md). |
 | `COREHUB_APNS_KEY` | The `.p8` key's contents, or a path to it. |
 | `COREHUB_APNS_ENVIRONMENT` | `production` (default) or `sandbox` for development builds. |
 | `COREHUB_PUSH_CONTACT` | A `mailto:` or `https:` contact push services may use (VAPID `sub`). |

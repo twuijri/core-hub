@@ -277,7 +277,7 @@ describe('the APNs sender', () => {
       {
         keyId: 'ABC123DEFG',
         teamId: 'DEF123GHIJ',
-        bundleId: 'hub.core.ios',
+        bundleId: 'com.twuijri.corehub',
         privateKey: key.pem,
         environment: 'sandbox',
       },
@@ -294,7 +294,7 @@ describe('the APNs sender', () => {
     const [first, second] = apns.received;
     expect(first!.token).toBe(token);
     expect(first!.headers).toMatchObject({
-      'apns-topic': 'hub.core.ios',
+      'apns-topic': 'com.twuijri.corehub',
       'apns-push-type': 'alert',
       'apns-priority': '10',
       'apns-collapse-id': message.noticeId,
@@ -337,7 +337,7 @@ describe('the APNs sender', () => {
       {
         keyId: 'ABC123DEFG',
         teamId: 'DEF123GHIJ',
-        bundleId: 'hub.core.ios',
+        bundleId: 'com.twuijri.corehub',
         privateKey: apnsKey().pem,
         environment: 'production',
       },

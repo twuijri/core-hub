@@ -38,16 +38,15 @@ cd apps/ios && xcodegen generate && open CoreHub.xcodeproj
 CI (`.github/workflows/ios.yml`) generates the Swift client on Linux, then builds and runs the
 tests on a macOS runner's simulator. Nothing there is signed or published.
 
-## Signing — a TODO for the owner
+## Signing
 
-Running on a device or shipping needs the owner's Apple Developer account:
-
-1. Pick the bundle id (proposed `io.github.twuijri.corehub`) and register it.
-2. Set `DEVELOPMENT_TEAM` in `project.yml` (or in Xcode) and let Xcode manage signing.
-3. Register the App Group `group.io.github.twuijri.corehub` for the app and the share extension
-   (`io.github.twuijri.corehub.share`); until it is signed, a shared text does not reach the app.
-4. An app icon (none yet) before TestFlight or the App Store.
-5. For TestFlight: an App Store Connect record, an upload key, and a CI secret — not set up.
+The bundle ids are `com.twuijri.corehub` (the app) and `com.twuijri.corehub.share` (the share
+extension), with the App Group `group.com.twuijri.corehub`, in the owner's team `58QWJ228ZE`
+(`DEVELOPMENT_TEAM` in `project.yml`; Xcode signs automatically on a developer's Mac). A signed
+App Store build and an optional TestFlight upload come from `.github/workflows/ios-signed.yml`,
+run by hand or by a release tag, never on a pull request — how it signs and what the owner sets in
+the Apple consoles: `docs/RELEASING.md`. An app icon (none yet) is still needed before TestFlight
+accepts a build.
 
 ## Notifications — what works and what waits
 

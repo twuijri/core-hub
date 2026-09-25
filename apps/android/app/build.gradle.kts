@@ -7,6 +7,11 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Firebase (FCM) reads its project from app/google-services.json, which is never committed: the
+// signed-build workflow writes it from a secret. A pull request, a fork or a local build has no
+// file and builds without the plugin.
+if (file("google-services.json").exists()) apply(plugin = "com.google.gms.google-services")
+
 val repoRoot = rootProject.file("../..")
 
 /**
@@ -242,19 +247,38 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "hub.core.android"
+        // The store identity (owner, 2026-09-25): Firebase's Android app and the Play listing use
+        // it. The Kotlin packages keep `hub.core.android` (the `namespace`); the two need not match.
+        applicationId = "com.twuijri.corehub"
         // 26 (Android 8.0): the generated client speaks java.time (dateLibrary java8), which
         // Android has from API 26 without core-library desugaring; adaptive icons and the
         // notification channels the app posts to are 26+ as well. Below 26 is ~1% of devices.
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
+        // The signed-build workflow stamps its run number so each build a store sees is newer.
+        versionCode = providers.environmentVariable("COREHUB_ANDROID_VERSION_CODE").orNull?.toIntOrNull() ?: 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // A signed release needs the keystore (docs/RELEASING.md): CI writes it from the repository's
+    // secrets and passes its path and passwords in these variables. Without them a release build
+    // stays unsigned, as on a pull request or a fork.
+    val releaseKeystore = providers.environmentVariable("COREHUB_ANDROID_KEYSTORE").orNull
+    if (releaseKeystore != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = providers.environmentVariable("COREHUB_ANDROID_KEYSTORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("COREHUB_ANDROID_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("COREHUB_ANDROID_KEY_PASSWORD").get()
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

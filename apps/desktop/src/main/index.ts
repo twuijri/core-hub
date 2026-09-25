@@ -18,7 +18,7 @@ app.setName(PRODUCT.name);
 // (it reads navigator.language until the person chooses in Display).
 const chosen = parseConfigLanguage(app.getPath('userData'));
 if (chosen) app.commandLine.appendSwitch('lang', chosen);
-if (process.platform === 'win32') app.setAppUserModelId(`io.github.twuijri.${PRODUCT.id}`);
+if (process.platform === 'win32') app.setAppUserModelId(`com.twuijri.${PRODUCT.id}`);
 
 const here = __dirname;
 const paths = {

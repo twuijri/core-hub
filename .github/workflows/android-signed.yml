@@ -1,0 +1,109 @@
+name: Android signed build
+
+# A signed release APK and AAB of the Android app (docs/RELEASING.md), with Firebase configured
+# from the repository's secrets. Never on a pull request: only when the owner runs it by hand or
+# pushes a release tag. It publishes nothing; the files become workflow artifacts only on a tag,
+# or on a manual run that asks for them (the repository is public, so a check run keeps nothing).
+on:
+  workflow_dispatch:
+    inputs:
+      keep_artifacts:
+        description: 'Keep the signed APK and AAB as workflow artifacts (anyone can download them)'
+        type: boolean
+        default: false
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: android-signed-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  signed:
+    name: Signed release APK and AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse tags that are not on main
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo '::error::Release tags must point at a commit on main.'
+            exit 1
+          fi
+      - name: Enable pnpm
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      # No Gradle cache: nothing built next to the Firebase file or the keystore is kept.
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: true
+      - run: pnpm install --frozen-lockfile
+      - name: Generate the Kotlin client from the contract
+        run: pnpm --filter @corehub/contracts generate:native
+      # The secrets become files in the runner's temp folder (the Firebase file where its plugin
+      # reads it); their values are never printed.
+      - name: Write the keystore and the Firebase configuration
+        env:
+          ANDROID_TEST_KEYSTORE_B64: ${{ secrets.ANDROID_TEST_KEYSTORE_B64 }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_TEST_KEYSTORE_B64" || { echo '::error::ANDROID_TEST_KEYSTORE_B64 is not set'; exit 1; }
+          test -n "$GOOGLE_SERVICES_JSON" || { echo '::error::GOOGLE_SERVICES_JSON is not set'; exit 1; }
+          umask 077
+          printf %s "$ANDROID_TEST_KEYSTORE_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/corehub-release.jks"
+          # The Firebase file as downloaded (JSON), or the same base64-encoded.
+          if printf %s "$GOOGLE_SERVICES_JSON" | head -c 1 | grep -q '{'; then
+            printf %s "$GOOGLE_SERVICES_JSON" > apps/android/app/google-services.json
+          else
+            printf %s "$GOOGLE_SERVICES_JSON" | base64 --decode --ignore-garbage > apps/android/app/google-services.json
+          fi
+          echo "COREHUB_ANDROID_KEYSTORE=$RUNNER_TEMP/corehub-release.jks" >> "$GITHUB_ENV"
+      - name: Build the signed APK and AAB
+        working-directory: apps/android
+        env:
+          COREHUB_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_TEST_KEYSTORE_PASSWORD }}
+          COREHUB_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_TEST_KEY_ALIAS }}
+          COREHUB_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_TEST_KEY_PASSWORD }}
+          COREHUB_ANDROID_VERSION_CODE: ${{ github.run_number }}
+        run: ./gradlew --max-workers=2 --no-build-cache assembleRelease bundleRelease
+      - name: Check the package name and the signature
+        run: |
+          set -euo pipefail
+          apk=apps/android/app/build/outputs/apk/release/app-release.apk
+          aab=apps/android/app/build/outputs/bundle/release/app-release.aab
+          tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$tools/aapt2" dump badging "$apk" | head -1
+          "$tools/aapt2" dump badging "$apk" | head -1 | grep -q "name='com.twuijri.corehub'"
+          # Firebase's values reached the app (the plugin ran).
+          "$tools/aapt2" dump resources "$apk" | grep -q 'string/google_app_id'
+          "$tools/apksigner" verify --verbose "$apk" | grep -E '^Verifie[sd]|^Verified using'
+          jarsigner -verify "$aab" | tail -1
+          {
+            echo "Signed APK: $(du -h "$apk" | cut -f1), AAB: $(du -h "$aab" | cut -f1)"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' || inputs.keep_artifacts
+        with:
+          name: corehub-android-signed
+          path: |
+            apps/android/app/build/outputs/apk/release/app-release.apk
+            apps/android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 14
+          if-no-files-found: error
+      - name: Remove the keystore and the Firebase file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/corehub-release.jks" apps/android/app/google-services.json

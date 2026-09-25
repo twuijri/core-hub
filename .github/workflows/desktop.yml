@@ -2,8 +2,8 @@ name: Desktop installers
 
 # Builds the desktop app's installers on Linux, macOS and Windows and keeps them as workflow
 # artifacts, with their sizes in the job summary. It never publishes a release: attaching
-# installers to a GitHub release is the owner's step (TEAM-RULES §6). Unsigned — signing and
-# notarisation are a documented TODO (ADR 0023).
+# installers to a GitHub release is the owner's step (TEAM-RULES §6). Unsigned: the signed and
+# notarised macOS build is desktop-signed.yml, never run on a pull request (docs/RELEASING.md).
 on:
   workflow_dispatch:
     inputs:
