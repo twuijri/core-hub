@@ -90,7 +90,15 @@ $ pnpm --filter @corehub/server exec vitest run src/modules/models/models-api.te
 Playwright: لم أضف فحصًا — تشغيل فاشل يحتاج وكيلًا مبرمجًا للفشل في مركز e2e، وإعادة التشغيل تحتاج
 هرمز يديره المركز (غير موجود في e2e، فيرد `409`). ليس رخيصًا؛ اختبارات الوحدة تغطي السلوك.
 
-CI: يُملأ بعد الدفع.
+CI على PR #107 (الدفعة `89b07e0`):
+```
+Lint, typecheck, contracts, tests, build              pass  13m36s
+Web smoke journeys (Playwright against the real hub)  pass  5m22s
+Docker image builds and answers /health               pass  2m43s
+db:generate + db:migrate (SQLite and PostgreSQL)      pass  1m30s
+PR adds or updates a change record                    pass  8s
+PR leaves graphify-out/ to the code-map bot           pass  8s
+```
 
 ## المخاطر والرجوع
 - طلب إضافي واحد عند فتح كل محادثة (`listRuns?status=failed&limit=100`). محادثة فيها أكثر من مئة تشغيل
