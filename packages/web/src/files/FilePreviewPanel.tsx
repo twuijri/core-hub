@@ -15,7 +15,7 @@ import { useI18n } from '../i18n/context.js';
 import { usePane } from '../shell/pane.js';
 import type { SessionFile } from '../types.js';
 import { Button, Notice, Spinner } from '../ui/index.js';
-import { IconClose, IconDownload, IconPanel } from '../ui/icons.js';
+import { IconClose, IconDownload, IconExternal } from '../ui/icons.js';
 import { useSessionFilesContext } from './context.js';
 import { CSV_MAX_ROWS, delimiterOf, parseCsv } from './csv.js';
 import { PREVIEW_SANDBOX, sandboxedPage, withPolicy } from './html.js';
@@ -70,6 +70,8 @@ export function FilePreviewPanel() {
       </div>
       {active ? (
         <FileView key={active.key} sessionId={files.sessionId} file={active} />
+      ) : files.active && files.status === 'loading' ? (
+        <Spinner label={t('files.loading')} />
       ) : files.active ? (
         <Notice tone="warning">{t('files.gone')}</Notice>
       ) : null}
@@ -153,7 +155,7 @@ function FileView({ sessionId, file }: { sessionId: string; file: SessionFile })
             iconOnly
             aria-label={t('files.open_new_tab')}
             tooltip={t('files.open_new_tab')}
-            icon={<IconPanel size={14} />}
+            icon={<IconExternal size={14} />}
             onClick={() => bytes.data && openInNewTab(file, bytes.data)}
             data-testid="file-new-tab"
           />

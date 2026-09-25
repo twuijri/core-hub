@@ -84,12 +84,18 @@ export function kid(node: Element, localName: string): Element | undefined {
   return kids(node, localName)[0];
 }
 
-/** An attribute by local name (`r:id`, `w:val`), whatever its prefix. */
+/**
+ * An attribute by local name (`r:id`, `w:val`), whatever its prefix. A prefixed one wins
+ * over a bare one of the same name: a slide's `<p:sldId id="256" r:id="rId2">` means `r:id`.
+ */
 export function attr(node: Element, localName: string): string | null {
+  let bare: string | null = null;
   for (const attribute of Array.from(node.attributes)) {
-    if (attribute.localName === localName) return attribute.value;
+    if (attribute.localName !== localName) continue;
+    if (attribute.namespaceURI !== null) return attribute.value;
+    bare ??= attribute.value;
   }
-  return null;
+  return bare;
 }
 
 /** `Target` of each relationship in a `.rels` part, by `Id`, resolved against `base`. */
