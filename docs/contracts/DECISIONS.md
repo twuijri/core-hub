@@ -1024,3 +1024,44 @@ did not say how many there are or who owns one. Proposed here — owner to confi
 Rejected: a new `source` field on `SessionCreate` (a client could then make any number of
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
+
+## 51. Logs and Performance are live: log rings in memory, and processes measured when asked
+
+`audit.getReport` answered Logs with the audit trail and job events, and Performance with a
+minute-by-minute row the hub wrote about its own memory. Neither showed what an owner opens those
+screens for: what the hub and Hermes just said, and what is using the machine now. Proposed
+here — owner to confirm:
+
+- **`audit.listLogLines`** (`GET /audit/logs/lines`, owners and admins, global) reads bounded
+  rings kept **in the hub's memory**: one for the hub and one per Hermes profile's gateway
+  (`tui` for the TUI gateway every profile shares), 5000 lines each. Not the database and not a
+  file: a log screen is for what just happened, the container's stdout already keeps the whole
+  history, and a ring cannot fill a disk. A ring per source so a chatty gateway cannot push the
+  hub's last error out. A restart empties them, and the screen says so.
+- Filters are the hub's: `source` (`all`, `hub`, `hermes`, `errors` — every source's `error`
+  lines), `profile`, `level` (the least severe shown), `q` (case-insensitive text), `limit`
+  (the newest 1–5000, returned oldest first) and `after` (only lines with a larger `seq`; one
+  counter across the rings) for a live tail. The screen offers 200 · 1000 · 5000.
+- Only a line's message (and an error's message) is kept, never the log call's other fields: the
+  ring is filled before pino's redaction. Fastify's per-request access lines are left out — the
+  screen polls, and its own requests would fill the ring. A Hermes line's level is the word in the
+  line (`ERROR`, `WARNING`, a traceback), not the pipe it came through.
+- **`audit.getLivePerformance`** (`GET /audit/performance/live`, owners and admins, global)
+  measures **when asked**, with nothing on a timer: the host (CPU, memory used/total, load), the
+  hub process (CPU, RSS, heap, mean event-loop lag, uptime), each Hermes process the hub runs
+  (TUI gateway, `hermes serve`, each profile's messaging gateway: pid, state, CPU, RSS, uptime)
+  and each profile's unfinished runs, conversations not archived and connected clients. CPU is
+  the share between two samples: the first look takes two, 250 ms apart. `history` is the samples
+  taken while somebody looked, at most 72 (six minutes at the screen's five seconds), for the
+  sparklines. Viewers two seconds apart share one sample.
+- Linux reads `/proc`; elsewhere the host comes from Node's `os` and the Hermes processes are
+  listed with `null` numbers, never zeros. Process CPU is of one core, like `top`.
+- Clients poll (5 s for Performance, 3 s for the Logs tail) and stop while the tab is hidden; no
+  realtime event is added.
+- The Logs screen becomes **owners and admins only**, like Performance (it was `member`): the
+  hub's and Hermes's own lines are not a member's business.
+
+Rejected: a database table of log lines (write amplification for lines nobody reads); a
+background sampler every 5 s (work while nobody watches); a new realtime namespace (a poll every
+few seconds of one small document is simpler and pauses by itself). `audit.getReport` keeps its
+`logs` and `performance` kinds unchanged for the CLI and older clients.

@@ -61,9 +61,9 @@ Legend: **reads** = data the screen shows · **acts** = what the person can do
 | 10 | `settings` › **Models** (provider keys only) | `models.listProviders` | `models.updateProvider` (`api_key`) | — |
 | 10 | `settings` › **This device** | `devices.get` (`this_device`), `auth.getPreferences` (`voice`), `updates.check`, `notify.getPreferences` | `devices.update` (name, capabilities, app version), `auth.setPreferences` (voice modes, dictation language, reasoning effort), `updates.download` (Range), `devices.registerPush` | `device.updated`, `notice.created` (`update_available`) |
 | 10 | `settings` › **About** | `meta.get` (server name/version/contract), `updates.check` | — | — |
-| 11 | `logs` — Logs | `audit.getReport` (`kind=logs`, `q`, `level`) — Phase 4 stub, `501` until then | — | — |
+| 11 | `logs` — Logs (admin) | `audit.listLogLines` (`source`, `profile`, `level`, `q`, `limit`, `after` for the live tail; DECISIONS §51) | — | — |
 | 12 | `usage` — Usage | `audit.getReport` (`kind=usage`, `days`) — Phase 4 stub | — | — |
-| 13 | `performance` — Performance (admin) | `audit.getReport` (`kind=performance`) — Phase 4 stub, pollable | — | — |
+| 13 | `performance` — Performance (admin) | `audit.getLivePerformance` — polled every 5 s while visible (DECISIONS §51) | — | — |
 | 14 | `skillsUsage` — Skills Usage | `audit.getReport` (`kind=skills`, `days`) — Phase 4 stub | — | — |
 | 15 | `theme` — Theme (server theme and background, per workspace) | `auth.getProfileSettings` (`appearance`), `sessions.getAttachment` (background) | `auth.updateProfileSettings` (`appearance`), `sessions.uploadAttachment` (`purpose=background`), `sessions.deleteAttachment` | — |
 | 16 | `profiles` — Profiles (admin) | `auth.listProfiles`, `auth.getProfile`, `agents.list` (`runtime.state` per agent) | `auth.createProfile` (incl. clone), `auth.updateProfile` (rename, slug, avatar, default model), `auth.deleteProfile`, `auth.exportProfile`, `auth.importProfile`, `agents.restart` (runtime restart), "Edit config" → `files` | `agent.updated`, `job.*` |

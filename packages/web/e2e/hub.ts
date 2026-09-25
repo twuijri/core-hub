@@ -848,6 +848,21 @@ app.post('/__e2e/expire-token', async (request) => {
   return { token: expired };
 });
 
+// Test-only control: lines in the hub's log rings, as the hub and a profile's Hermes gateway
+// would have written them (zzzzzz-perf-logs) — the e2e hub runs no Hermes to write its own.
+app.post('/__e2e/seed-logs', async (request) => {
+  const { lines } = request.body as {
+    lines: Array<{
+      level: 'error' | 'warn' | 'info' | 'debug';
+      source: 'hub' | 'hermes';
+      profile?: string;
+      message: string;
+    }>;
+  };
+  for (const line of lines) app.hub.logs.push(line);
+  return { ok: true, count: lines.length };
+});
+
 await app.listen({ port, host: '127.0.0.1' });
 console.log(
   `e2e hub listening on http://127.0.0.1:${port} (web: ${app.hub.web}, setup: ${setupMode})`,
