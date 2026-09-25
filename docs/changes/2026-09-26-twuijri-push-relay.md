@@ -159,7 +159,20 @@ CI عند `749323fa`: كل شيء ناجح إلا «Lint, typecheck, contracts, 
 tests/devices-push.test.tsx(341,18): error TS2353: Object literal may only specify known properties, and 'relay_url' does not exist in type …
 ```
 أُصلح (`details: {}`)، و`pnpm --filter @corehub/web typecheck` ينجح محليًا (exit 0) والملف ١٠/١٠.
-نتيجة CI الأخيرة تُضاف عند انتهائها.
+CI على #150 عند `b98a93a7` (بعد دمج #149): **كل الفحوص ناجحة** (١٥ pass، والنشر `skipping` كما يجب):
+```
+Lint, typecheck, contracts, tests, build                     pass
+Lint, typecheck, contracts, client tests, build              pass
+Server unit tests (shard 1/3, 2/3, 3/3)                      pass
+Web smoke journeys (Playwright against the real hub)         pass
+db:generate + db:migrate (SQLite and PostgreSQL)             pass
+Docker image builds and answers /health                      pass
+Desktop app smoke / Android build, unit tests, lint          pass
+Build and test on the iOS simulator / Swift client           pass
+Push relay tests / change record / graphify-out              pass
+Deploy the relay to Cloudflare                               skipping (workflow_dispatch only)
+MERGEABLE
+```
 
 ## المخاطر والرجوع
 - **الرجوع**: revert للفرع. الترحيل `0027` يضيف جدولًا فقط؛ نسخة أقدم تتجاهله.
