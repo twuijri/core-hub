@@ -69,7 +69,7 @@ jobs:
           umask 077
           printf %s "$ANDROID_TEST_KEYSTORE_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/corehub-release.jks"
           # The Firebase file as downloaded (JSON), or the same base64-encoded.
-          if printf %s "$GOOGLE_SERVICES_JSON" | head -c 1 | grep -q '{'; then
+          if [[ "$GOOGLE_SERVICES_JSON" =~ ^[[:space:]]*\{ ]]; then
             printf %s "$GOOGLE_SERVICES_JSON" > apps/android/app/google-services.json
           else
             printf %s "$GOOGLE_SERVICES_JSON" | base64 --decode --ignore-garbage > apps/android/app/google-services.json
@@ -89,10 +89,13 @@ jobs:
           apk=apps/android/app/build/outputs/apk/release/app-release.apk
           aab=apps/android/app/build/outputs/bundle/release/app-release.aab
           tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$tools/aapt2" dump badging "$apk" | head -1
-          "$tools/aapt2" dump badging "$apk" | head -1 | grep -q "name='com.twuijri.corehub'"
+          # Whole outputs first: a pipe closed early by grep -q would fail the step under pipefail.
+          "$tools/aapt2" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
+          head -1 "$RUNNER_TEMP/badging.txt"
+          grep -q "^package: name='com.twuijri.corehub'" "$RUNNER_TEMP/badging.txt"
           # Firebase's values reached the app (the plugin ran).
-          "$tools/aapt2" dump resources "$apk" | grep -q 'string/google_app_id'
+          "$tools/aapt2" dump resources "$apk" > "$RUNNER_TEMP/resources.txt"
+          grep -q 'string/google_app_id' "$RUNNER_TEMP/resources.txt"
           "$tools/apksigner" verify --verbose "$apk" | grep -E '^Verifie[sd]|^Verified using'
           jarsigner -verify "$aab" | tail -1
           {

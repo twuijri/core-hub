@@ -95,7 +95,7 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" > /dev/null
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
           # The identity's SHA-1 and name are public (they are in every app it signs).
-          identity=$(security find-identity -v -p codesigning "$keychain" | grep -E '"(Apple|iPhone) Distribution' | head -1)
+          identity=$(security find-identity -v -p codesigning "$keychain" | grep -m1 -E '"(Apple|iPhone) Distribution' || true)
           test -n "$identity" || { echo '::error::IOS_CSC_LINK holds no Apple Distribution identity'; exit 1; }
           echo "$identity"
           echo "CERT_SHA1=$(echo "$identity" | awk '{print $2}')" >> "$GITHUB_ENV"
@@ -112,7 +112,7 @@ jobs:
           mkdir -p "$dir"
           key="$dir/AuthKey_$ASC_API_KEY_ID.p8"
           # The .p8 as downloaded, or the same base64-encoded.
-          if printf %s "$ASC_API_KEY_P8" | grep -q 'BEGIN PRIVATE KEY'; then
+          if [[ "$ASC_API_KEY_P8" == *"BEGIN PRIVATE KEY"* ]]; then
             printf '%s\n' "$ASC_API_KEY_P8" > "$key"
           else
             printf %s "$ASC_API_KEY_P8" | base64 --decode > "$key"
