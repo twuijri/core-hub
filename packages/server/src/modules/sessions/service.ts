@@ -43,6 +43,12 @@ import {
 } from './files.js';
 import { SubagentBook, type SubagentRecord, type SubagentSupport } from './subagents.js';
 import { SessionCategories } from './categories.js';
+import {
+  continuationTitle,
+  summaryOf,
+  transcriptOf,
+  type ChannelRead,
+} from './channel-continuation.js';
 
 /** `undefined` is spelled out everywhere: `exactOptionalPropertyTypes` is on. */
 export interface ContentBlockInput {
@@ -288,6 +294,56 @@ export class SessionsService {
     const payload = this.sessionOf(scope, withDir);
     this.realtime.emitToProfile(scope.profile, 'session.created', { session: payload });
     return payload;
+  }
+
+  /**
+   * "Continue in Core Hub" (`sessions.continueChannelConversation`, contract decision §62):
+   * a channel conversation, read from Hermes (`read`), becomes an ordinary chat in this
+   * profile with `agent_id`. The transcript is kept as the caller's attachment, and the chat's
+   * first message — the summary, the person's note and the transcript — is **answered, not
+   * sent**: the client sends it once it watches the chat, as a new chat's first message is
+   * sent (a run started here would stream to nobody). The agent is checked before anything
+   * is written, as a turn is: a chat left behind with no agent to answer is a dead one.
+   */
+  async continueChannel(
+    scope: EngineScope,
+    read: ChannelRead,
+    input: { agent_id: string; note?: string | null | undefined },
+  ): Promise<{ session: Record<string, unknown>; first_message: Record<string, unknown>[] }> {
+    const agent = await this.requireAgent(scope, input.agent_id);
+    if (!agent.available) {
+      throw new HubError('agent_unavailable', {
+        details: { agent_id: agent.id, status: agent.unavailableReason ?? 'unavailable' },
+      });
+    }
+    const transcript = transcriptOf(read, scope.language);
+    const file = await this.ports.attachments.store(
+      { workspace: scope.workspace, userId: scope.userId },
+      {
+        name: transcript.name,
+        mime: 'text/markdown',
+        bytes: Buffer.from(transcript.text, 'utf8'),
+      },
+    );
+    const session = await this.create(scope, {
+      agent_id: agent.id,
+      title: continuationTitle(read, scope.language),
+    });
+    // The title names the conversation it came from; the agent's own naming does not replace it.
+    this.store.updateSession(scope.workspace, String(session.id), { titleSetByUser: true });
+    return {
+      session,
+      first_message: [
+        { type: 'text', text: summaryOf(read, scope.language, input.note ?? null) },
+        {
+          type: 'file',
+          attachment_id: file.id,
+          name: file.name,
+          mime: file.mime,
+          size_bytes: file.sizeBytes,
+        },
+      ],
+    };
   }
 
   /**

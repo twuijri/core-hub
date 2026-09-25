@@ -4083,6 +4083,101 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  /channel-conversations/{conversation_id}/continue:
+    post:
+      operationId: sessions.continueChannelConversation
+      tags: [sessions]
+      summary: Continue a channel conversation as a chat in the hub
+      description: |
+        "Continue in Core Hub" (contract decision §62): a channel conversation is read-only
+        here, so going on with it in the hub is a new, ordinary chat in the same profile
+        (`X-Hub-Profile`) with the agent given, whose context is the conversation.
+
+        The hub reads the conversation from Hermes as `sessions.listChannelMessages` does (the
+        latest 500 messages), writes the transcript to a text attachment (`.md`, owned by the
+        caller) and makes the chat, titled after the other party. It **starts no run**: it
+        answers `first_message` — a short summary in the caller's language (the channel, the
+        other party, how many messages and over what time), the caller's `note` when given,
+        and the transcript as a `file` block — which the client sends as the chat's first
+        message once it is watching the chat's stream. That first turn is where the agent
+        reads the transcript; nothing is copied into Hermes's channel session, and the
+        channel conversation is left as it was.
+
+        `404` for an unknown conversation or agent, `422` for an agent that cannot take a
+        turn, `503` when Hermes cannot be asked (as `sessions.listChannelMessages`).
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - name: conversation_id
+          in: path
+          required: true
+          description: Hermes's own session id.
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelContinueRequest'
+            example:
+              agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AG
+              note: 'جهّز له ردًّا عن موعد التسليم الجديد.'
+      x-rt-events: [session.created]
+      responses:
+        '201':
+          description: The new chat, and the first message to send in it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelContinuation'
+              example:
+                session:
+                  id: 01J8QK3ZR2W7M5N4P6T8V9X0YC
+                  profile: default
+                  owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                  created_at: '2026-09-25T10:40:00Z'
+                  updated_at: '2026-09-25T10:40:00Z'
+                  agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AG
+                  title: 'تيليجرام: أحمد'
+                  source: chat
+                  origin: null
+                  channel: null
+                  model: null
+                  provider: null
+                  reasoning_effort: null
+                  working_dir: null
+                  pinned: false
+                  archived: false
+                  category_id: null
+                  preview: null
+                  message_count: 0
+                  usage: null
+                  context: null
+                  status: idle
+                  active_run_id: null
+                  parent_session_id: null
+                  notify: true
+                  last_message_at: null
+                  match: null
+                first_message:
+                  - type: text
+                    text: 'نكمل هنا محادثة من تيليجرام مع «أحمد» (٦ رسائل، من 2026-09-25 09:15 إلى 09:20 بتوقيت UTC). نصّها كاملًا في الملف المرفق؛ اقرأه أولًا.'
+                  - type: file
+                    attachment_id: 01J8QK3ZR2W7M5N4P6T8V9X0AT
+                    name: telegram-أحمد.md
+                    mime: text/markdown
+                    size_bytes: 812
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/AgentUnavailable'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   # ---------------------------------------------------------------- attachments
   /attachments:
     post:
@@ -15870,6 +15965,31 @@ components:
         text:
           type: string
           maxLength: 300
+    ChannelContinueRequest:
+      type: object
+      required: [agent_id]
+      properties:
+        agent_id:
+          $ref: '#/components/schemas/Ulid'
+        note:
+          type: [string, 'null']
+          maxLength: 4000
+          description: What the person wants done with it; added to the first message.
+    ChannelContinuation:
+      type: object
+      required: [session, first_message]
+      properties:
+        session:
+          $ref: '#/components/schemas/Session'
+        first_message:
+          type: array
+          minItems: 2
+          description: >-
+            The chat's first message, for the client to send (`sessions.createRun`) once it
+            watches the chat: a `text` block (the summary, and the note) and a `file` block
+            (the transcript).
+          items:
+            $ref: '#/components/schemas/ContentBlock'
     ChannelMessage:
       type: object
       description: One message of a channel conversation, as Hermes keeps it.

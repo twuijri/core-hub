@@ -16,6 +16,7 @@ import { modules as defaultModules } from '../../src/modules/index.js';
 import { listWorkspacesFor, principalScopeResolver } from '../../src/modules/auth/index.js';
 import { requireSqlite } from '../../src/lib/db.js';
 import { createSessionsModule, registerChannelSource } from '../../src/modules/sessions/index.js';
+import { attachmentsPort } from '../../src/modules/knowledge/index.js';
 import {
   FakeAgentDirectory,
   FakeAgentRunner,
@@ -77,6 +78,7 @@ describe.skipIf(!doc)('contract: channel conversations', () => {
     const sessions = createSessionsModule({
       agents: new FakeAgentDirectory([fakeHermes(AGENT)]),
       runner: new FakeAgentRunner({ script: [{ type: 'completed' }] }),
+      attachments: attachmentsPort,
       scopes: principalScopeResolver,
     });
     hub = await testHub(
@@ -111,6 +113,10 @@ describe.skipIf(!doc)('contract: channel conversations', () => {
       params: { conversation_id: CONVERSATION },
     });
     expect(opened).toMatchObject({ details: { reason: 'hermes_not_managed' } });
+    await call('sessions.continueChannelConversation', 503, {
+      params: { conversation_id: CONVERSATION },
+      body: { agent_id: AGENT },
+    });
   });
 
   it('lists and opens a Telegram conversation, and refuses what is not one', async () => {
@@ -170,6 +176,25 @@ describe.skipIf(!doc)('contract: channel conversations', () => {
     });
     await call('sessions.listChannelMessages', 404, {
       params: { conversation_id: 'no_such_conversation' },
+    });
+
+    // "Continue in Core Hub" (§62): a chat and its first message, as the contract says.
+    const continued = await call('sessions.continueChannelConversation', 201, {
+      params: { conversation_id: CONVERSATION },
+      body: { agent_id: AGENT, note: null },
+    });
+    expect(continued.session).toMatchObject({ source: 'chat', title: 'Telegram: أحمد' });
+    expect((continued.first_message as Array<{ type: string }>).map((b) => b.type)).toEqual([
+      'text',
+      'file',
+    ]);
+    await call('sessions.continueChannelConversation', 404, {
+      params: { conversation_id: '20260925_070000_ee55ff66' },
+      body: { agent_id: AGENT },
+    });
+    await call('sessions.continueChannelConversation', 400, {
+      params: { conversation_id: CONVERSATION },
+      body: { note: 'no agent' },
     });
 
     hermes.down = true;

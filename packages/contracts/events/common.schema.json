@@ -10045,6 +10045,45 @@
         }
       }
     },
+    "ChannelContinueRequest": {
+      "type": "object",
+      "required": [
+        "agent_id"
+      ],
+      "properties": {
+        "agent_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 4000,
+          "description": "What the person wants done with it; added to the first message."
+        }
+      }
+    },
+    "ChannelContinuation": {
+      "type": "object",
+      "required": [
+        "session",
+        "first_message"
+      ],
+      "properties": {
+        "session": {
+          "$ref": "#/$defs/Session"
+        },
+        "first_message": {
+          "type": "array",
+          "minItems": 2,
+          "description": "The chat's first message, for the client to send (`sessions.createRun`) once it watches the chat: a `text` block (the summary, and the note) and a `file` block (the transcript).",
+          "items": {
+            "$ref": "#/$defs/ContentBlock"
+          }
+        }
+      }
+    },
     "SessionCompressRequest": {
       "type": "object",
       "description": "Every field is optional; an empty body compresses the whole conversation.",

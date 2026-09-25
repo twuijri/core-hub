@@ -64,6 +64,19 @@ test('33. a Telegram conversation shows under «تيليجرام» and opens rea
     // A reload opens it again from the address alone.
     await page.reload();
     await expect(page.getByTestId('channel-readonly')).toBeVisible();
+
+    // «أكمل في كور هب» (§62): a new chat in this profile whose first message carries the
+    // summary, the note and the transcript, sent by the chat once it listens.
+    await page.getByTestId('channel-continue').click();
+    await page.getByTestId('channel-continue-note').fill('جهّز له ردًّا.');
+    await page.getByTestId('channel-continue-go').click();
+    await expect(page).toHaveURL(/\/chat\/[0-9A-Z]{26}(\?profile=[a-z0-9-]+)?$/);
+    const first = page.getByTestId('message-user').first();
+    await expect(first).toContainText('نكمل هنا محادثة من تيليجرام مع «أحمد');
+    await expect(first).toContainText('جهّز له ردًّا.');
+    await expect(first).toContainText('telegram-');
+    await expect(page.getByTestId('message-assistant').last()).toBeVisible({ timeout: 20_000 });
+    await page.screenshot({ path: path.join(shots, 'channel-continue-ar-light.png') });
   } finally {
     await request.post('/__e2e/channels', { data: { on: false } });
   }

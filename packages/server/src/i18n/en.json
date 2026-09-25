@@ -97,7 +97,23 @@
     "approval_choice_deny": "Deny",
     "produced_refused": "{files} — too many or too large to attach here; they are still in the run folder.",
     "category_name_taken": "This profile already has a category with that name.",
-    "category_limit": "This profile already has 100 categories; delete one first."
+    "category_limit": "This profile already has 100 categories; delete one first.",
+    "continue": {
+      "agent": "Agent",
+      "facts": "{count} messages, {from} – {to} UTC · profile {profile}",
+      "latest_only": "Only its latest {count} messages are here.",
+      "summary": "Let’s continue here a {channel} conversation with “{peer}” ({count} messages, {from} – {to} UTC). The full transcript is in the attached file; read it first.",
+      "channels": {
+        "telegram": "Telegram",
+        "whatsapp": "WhatsApp",
+        "discord": "Discord",
+        "slack": "Slack",
+        "signal": "Signal",
+        "matrix": "Matrix",
+        "email": "Email",
+        "sms": "SMS"
+      }
+    }
   },
   "jobs": {
     "queued": "Queued.",
