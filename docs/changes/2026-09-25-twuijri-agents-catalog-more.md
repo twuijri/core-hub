@@ -142,6 +142,14 @@ $ vitest run tests/agent-versions.test.tsx tests/agent-chips.test.tsx   (web)
  Test Files  2 passed (2)
       Tests  20 passed (20)
 ```
+وبعد أن كشف CI أن رحلة Playwright رقم 6 تعدّ ست رقائق وكلاء (صارت تسعًا بالكتالوج الجديد) صحّحتها
+وشغّلتها وحدها (مع لقطاتها الخمس المحدَّثة، وهي من صلب التغيير):
+```
+$ pnpm build   (exit=0)
+$ PLAYWRIGHT_CHANNEL=chrome pnpm exec playwright test e2e/smoke.spec.ts -g "agent row gives up labels"
+  ✓  1 [chromium] › e2e/smoke.spec.ts:205:3 › web smoke journeys › 6. the agent row gives up labels before options, then overflows into More (1.4s)
+  1 passed (8.6s)
+```
 لم أشغّل مجموعات الخادم والويب وPlaywright كاملة محليًا (قاعدة السرعة)؛ CI يشغّلها. نتيجة CI في
 «التسليم». لم أبنِ صورة Docker ولم أجرّب الوكلاء الجدد داخلها.
 
@@ -156,7 +164,17 @@ $ vitest run tests/agent-versions.test.tsx tests/agent-chips.test.tsx   (web)
   بالرجوع (صف يتيم لا يضر؛ الإقلاع يوافق الجدول مع الكتالوج).
 
 ## التسليم والخطوة التالية
-- PR إلى `main` بالإنجليزية؛ CI يُتابَع حتى الأخضر (النتيجة تُضاف هنا).
+- PR #140 إلى `main` بالإنجليزية. CI على الالتزام `e2e: the agent row holds nine catalog agents now`
+  (التشغيل 36112056690) أخضر كله:
+```
+Lint, typecheck, contracts, tests, build | pass | 14m47s
+Web smoke journeys (Playwright against the real hub) | pass | 5m19s
+Docker image builds and answers /health | pass | 2m35s
+db:generate + db:migrate (SQLite and PostgreSQL) | pass | 1m12s
+PR adds or updates a change record | pass | 10s
+PR leaves graphify-out/ to the code-map bot | pass | 10s
+```
+  (التشغيل الأول فشل في رحلة Playwright 6 فقط، بسبب عدد الرقائق؛ صُحّحت.)
 - للمالك: تأكيد DECISIONS §59 (الـ pin خط أساس مختبر، التحديث بإصدار دقيق، التلقائي عند الخمول ومطفأ
   افتراضيًا، الإمساك 15 دقيقة، قائمة الرخص المقبولة)، وإضافة Qwen Code وKimi Code وPi، ورفض Grok Build
   وDeepSeek Harness وGoose مؤقتًا.
