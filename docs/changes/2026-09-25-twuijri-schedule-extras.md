@@ -122,7 +122,15 @@ $ pnpm build && PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwr
 
 الاختبارات الجديدة تفشل على الكود القديم: لا حقل `limits` ولا مسار `/schedules/preview` ولا قائمة.
 
-CI: (يُملأ بعد الدفع)
+CI على #133 (التشغيل 36106683863)، كلها ناجحة:
+```
+Lint, typecheck, contracts, tests, build              pass
+Web smoke journeys (Playwright against the real hub)  pass
+Docker image builds and answers /health               pass
+db:generate + db:migrate (SQLite and PostgreSQL)      pass
+PR adds or updates a change record                    pass
+PR leaves graphify-out/ to the code-map bot           pass
+```
 
 ## المخاطر والرجوع
 - **تغيير منفذ دور الوكيل**: خطوة الوكيل صارت `runs.start` + `handle.done` بدل `oneTurn` (الذي هو
