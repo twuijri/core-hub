@@ -6,6 +6,8 @@ import SwiftUI
 
 struct ChatScreen: View {
     @State var model: ChatModel
+    /// A conversation that is a destination of its own (the global agent) keeps that title.
+    var fixedTitle: String? = nil
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @State private var draft = ""
@@ -29,7 +31,7 @@ struct ChatScreen: View {
             bottom
         }
         .background(Tone.bg)
-        .navigationTitle(model.state.title ?? l10n("sessions.untitled"))
+        .navigationTitle(fixedTitle ?? model.state.title ?? l10n("sessions.untitled"))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { model.start() }
         .onDisappear { model.stop() }

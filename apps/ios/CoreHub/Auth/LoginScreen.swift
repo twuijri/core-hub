@@ -14,6 +14,8 @@ struct LoginScreen: View {
     @State private var scanning = false
     @State private var pasting = false
     @State private var pasted = ""
+    /// The hub that answered «no owner yet»: first-run setup opens for it.
+    @State private var setup: SetupTarget?
 
     var body: some View {
         NavigationStack {
@@ -45,6 +47,9 @@ struct LoginScreen: View {
                     scanning = false
                     pair(with: text)
                 }
+            }
+            .navigationDestination(item: $setup) { target in
+                SetupScreen(hub: target.hub, open: target.open)
             }
             .alert(l10n("login.paste"), isPresented: $pasting) {
                 TextField(l10n("login.paste"), text: $pasted)
@@ -160,8 +165,8 @@ struct LoginScreen: View {
                 try await app.signIn(hub: hub, username: username, password: password)
                 hubText = hub.absoluteString
                 password = ""
-            } catch SignInProblem.setupRequired {
-                error = l10n("login.setup_required")
+            } catch SignInProblem.setupRequired(let open) {
+                setup = SetupTarget(hub: hub, open: open)
             } catch {
                 self.error = HubFailure(error).describe(l10n)
             }
@@ -204,6 +209,72 @@ struct LabeledField<Content: View>: View {
                 .frame(minHeight: Control.heightLg)
                 .background(Tone.surface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: Radius.md, style: .continuous).strokeBorder(Tone.border))
+        }
+    }
+}
+
+struct SetupTarget: Hashable {
+    let hub: URL
+    let open: Bool
+}
+
+/// First-run setup (preAuth `setup`): the hub has no owner, and whoever arrives first — or,
+/// after the open hour, whoever has the claim token the hub wrote to its data folder — makes
+/// the owner account here and is signed in.
+struct SetupScreen: View {
+    let hub: URL
+    let open: Bool
+    @Environment(AppModel.self) private var app
+    @Environment(\.l10n) private var l10n
+    @State private var username = ""
+    @State private var displayName = ""
+    @State private var password = ""
+    @State private var token = ""
+    @State private var busy = false
+    @State private var error: String?
+
+    var body: some View {
+        Form {
+            Section {
+                Text(open ? l10n("setup.open") : l10n("setup.token_needed"))
+                    .font(.system(size: FontSize.sizeSm))
+                    .foregroundStyle(Tone.textMuted)
+                FactRow(label: l10n("login.hub_url"), value: hub.absoluteString)
+            }
+            if let error { NoticeView(text: error, tone: .danger) }
+            Section {
+                TextField(l10n("login.username"), text: $username)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                TextField(l10n("account.display_name"), text: $displayName)
+                SecureField(l10n("login.password"), text: $password)
+                if !open {
+                    SecureField(l10n("setup.token"), text: $token)
+                }
+            }
+            Section {
+                Button(l10n("setup.submit")) { Task { await submit() } }
+                    .disabled(busy || username.isEmpty || password.count < 8 || (!open && token.count < 8))
+            }
+        }
+        .navigationTitle(l10n("nav.setup"))
+        .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("screen.setup")
+    }
+
+    private func submit() async {
+        busy = true
+        defer { busy = false }
+        do {
+            try await app.completeSetup(
+                hub: hub,
+                username: username.lowercased(),
+                password: password,
+                displayName: displayName.isEmpty ? nil : displayName,
+                token: open ? nil : token
+            )
+        } catch {
+            self.error = HubFailure(error).describe(l10n)
         }
     }
 }

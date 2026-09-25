@@ -41,6 +41,8 @@ final class AppModel {
     private(set) var connection: RealtimeClient.State = .offline
     /// Why the last sign-out happened, shown once on the sign-in screen.
     var notice: String?
+    /// Where a `corehub://open/…` link asked to go; the shell takes it.
+    var pendingRoute: MainContent?
 
     let keeper: TokenKeeper
     let api: HubAPI
@@ -107,7 +109,7 @@ final class AppModel {
     /// Username and password against the hub at `hub`.
     func signIn(hub: URL, username: String, password: String) async throws {
         let meta = try await api.anonymous(hub: hub) { try await MetaAPI.metaGet(apiConfiguration: $0) }
-        if meta.setupRequired { throw SignInProblem.setupRequired }
+        if meta.setupRequired { throw SignInProblem.setupRequired(open: meta.setupOpen) }
         let pair = try await api.anonymous(hub: hub) {
             try await AuthAPI.authLogin(
                 loginRequest: LoginRequest(username: username, password: password),
@@ -130,6 +132,32 @@ final class AppModel {
             defaultProfile: pair.user.defaultProfile
         )
         await finishSignIn(credentials)
+    }
+
+    /// First-run setup (preAuth `setup`, ADR 0011/0019): makes the owner and signs them in.
+    func completeSetup(hub: URL, username: String, password: String, displayName: String?, token: String?) async throws {
+        let request = SetupRequest(token: token, username: username, password: password, displayName: displayName)
+        let pair = try await api.anonymous(hub: hub) {
+            try await AuthAPI.authCompleteSetup(
+                setupRequest: request,
+                acceptLanguage: AuthAPI.AcceptLanguage_authCompleteSetup(rawValue: self.language.rawValue),
+                apiConfiguration: $0
+            )
+        }
+        await finishSignIn(Credentials(
+            hubURL: hub,
+            kind: .password,
+            accessToken: pair.accessToken,
+            refreshToken: pair.refreshToken,
+            accessExpiresAt: Date().addingTimeInterval(TimeInterval(pair.expiresIn)),
+            renewedAt: nil,
+            userID: pair.user.id,
+            username: pair.user.username,
+            displayName: pair.user.displayName,
+            role: pair.user.role.rawValue,
+            profiles: pair.user.profiles,
+            defaultProfile: pair.user.defaultProfile
+        ))
     }
 
     /// Claims a pairing the web made (Settings → Device connections → App).
@@ -276,7 +304,10 @@ final class AppModel {
             pendingLink = url
             return
         }
-        guard phase == .signedOut else { return }
+        if phase == .signedIn {
+            pendingRoute = AppModel.route(for: url, selector: currentProfile)
+            return
+        }
         switch PairingPayload.parseLink(url.absoluteString) {
         case .success(let payload):
             Task {
@@ -291,6 +322,33 @@ final class AppModel {
         }
     }
 
+    /// `corehub://open/<path>` → the page it names (the paths of `surfaceRoutes.ios`). A chat
+    /// opens in the profile its `?profile=` names, else the selector's.
+    nonisolated static func route(for url: URL, selector: String) -> MainContent? {
+        guard url.scheme?.lowercased() == Product.id,
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        let action = components.host ?? ""
+        guard action == "open" else { return nil }
+        guard let match = AppRoutes.match(components.path) else { return nil }
+        let destination = match.destination
+        let params = match.params
+        switch destination {
+        case .chat:
+            guard let id = params["sessionId"] else { return .newChat }
+            let profile = components.queryItems?.first { $0.name == "profile" }?.value ?? selector
+            return .chat(sessionID: id, profile: profile)
+        case .newChat:
+            return .newChat
+        case .settings:
+            return .settings
+        default:
+            if NavigationMap.settingsTabs.contains(destination) || NavigationMap.settingsManagement.contains(destination)
+                || NavigationMap.settingsTools.contains(destination) { return .settings }
+            if NavigationMap.agentLevel.contains(destination) { return .destination(.agentManager) }
+            return .destination(destination)
+        }
+    }
+
     /// Foreground again: reconnect now and renew a device token that is due.
     func becameActive() {
         guard phase == .signedIn else { return }
@@ -302,5 +360,6 @@ final class AppModel {
 }
 
 enum SignInProblem: Error {
-    case setupRequired
+    /// The hub has no owner yet; `open` when setup needs no claim token right now.
+    case setupRequired(open: Bool)
 }

@@ -22,6 +22,7 @@ struct ShellView: View {
     @State private var sessionList: SessionListModel?
     /// The first message of a chat made from the draft, handed to its conversation once.
     @State private var firstMessages = FirstMessages()
+    @State private var searching = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -51,7 +52,22 @@ struct ShellView: View {
         }
         .onAppear {
             if sessionList == nil { sessionList = SessionListModel(app: app) }
+            takeLink()
         }
+        .onChange(of: app.pendingRoute) { _, _ in takeLink() }
+        .sheet(isPresented: $searching) {
+            SearchScreen(
+                openChat: { session in navigate(.chat(sessionID: session.id, profile: session.profile)) },
+                openGlobalAgent: { navigate(.destination(.globalAgent)) }
+            )
+        }
+    }
+
+    /// A `corehub://open/…` link the app was opened with.
+    private func takeLink() {
+        guard let route = app.pendingRoute else { return }
+        app.pendingRoute = nil
+        navigate(route)
     }
 
     private var selectedSession: String? {
@@ -64,6 +80,9 @@ struct ShellView: View {
         switch main {
         case .settings:
             SettingsScreen(backToChats: { navigate(beforeSettings) })
+        case .destination(.agentManager):
+            // The Agents page keeps its own stack: an agent's pages are pushed on it.
+            AgentsScreen(openMenu: { setDrawer(true) })
         default:
             NavigationStack {
                 content
@@ -98,6 +117,12 @@ struct ShellView: View {
                 firstMessage: firstMessages.take(sessionID)
             ))
             .id(sessionID)
+        case .destination(.tasks):
+            TasksScreen(openChat: { sessionID, profile in navigate(.chat(sessionID: sessionID, profile: profile)) })
+        case .destination(.schedules):
+            SchedulesScreen()
+        case .destination(.globalAgent):
+            GlobalAgentScreen()
         case .destination(let destination):
             PlaceholderScreen(destination: destination)
         case .settings:
@@ -106,6 +131,11 @@ struct ShellView: View {
     }
 
     private func navigate(_ target: MainContent) {
+        if target == .destination(.search) {
+            setDrawer(false)
+            searching = true
+            return
+        }
         if target == .settings, main != .settings { beforeSettings = main }
         main = target
         setDrawer(false)
