@@ -69,7 +69,17 @@ contracts:lint  OK
 $ pnpm contracts:check-clients
 check-clients  OK — 622 client file(s) scanned, 230 contract path(s) known.
 ```
-CI: يُضاف بعد التشغيل.
+CI على PR #158 (التشغيل 36197411226 وما معه) — كلها ناجحة:
+```
+Server unit tests (shard 1/3)	pass	4m4s
+Server unit tests (shard 2/3)	pass	3m10s
+Server unit tests (shard 3/3)	pass	2m3s
+Lint, typecheck, contracts, client tests, build	pass	6m13s
+Web smoke journeys (Playwright against the real hub)	pass	7m17s
+Docker image builds and answers /health	pass	2m39s
+Build and test on the iOS simulator	pass	6m3s
+Android build, unit tests, lint	pass	2m22s
+```
 
 ## المخاطر والرجوع
 - كل تغيير في قنوات الافتراضي يقطع خادم الـAPI لحظة (محادثة جارية عبر بوابة TUI لا تتأثر؛ هي عملية منفصلة).
