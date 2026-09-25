@@ -6,6 +6,7 @@
  * The payload is the one every client reads (`packages/server/src/modules/devices/
  * senders.ts`, `pushPayload`): { type, notice_id, kind, title, body, profile, resource }.
  */
+/* global self */
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
@@ -22,7 +23,7 @@ function targetOf(notice) {
 }
 
 self.addEventListener('push', (event) => {
-  let notice = null;
+  let notice;
   try {
     notice = event.data ? event.data.json() : null;
   } catch {

@@ -133,3 +133,36 @@ export function useDeviceStream(): void {
     };
   }, [socket, queryClient, session]);
 }
+
+export type PushSenderUpdate = components['schemas']['PushSenderUpdate'];
+
+export function useSetPushSender() {
+  const { client } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { provider: PushSender['provider']; body: PushSenderUpdate }) =>
+      (
+        await client.request('put', '/push/senders/{provider}', {
+          params: { provider: input.provider },
+          body: input.body,
+        })
+      ).data,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: deviceKeys.senders });
+      void queryClient.invalidateQueries({ queryKey: deviceKeys.config });
+    },
+  });
+}
+
+export function useDeletePushSender() {
+  const { client } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (provider: PushSender['provider']) =>
+      (await client.request('delete', '/push/senders/{provider}', { params: { provider } })).data,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: deviceKeys.senders });
+      void queryClient.invalidateQueries({ queryKey: deviceKeys.config });
+    },
+  });
+}

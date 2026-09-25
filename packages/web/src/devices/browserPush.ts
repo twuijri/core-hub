@@ -30,10 +30,11 @@ export function browserEnvironment(): PushEnvironment {
     typeof window !== 'undefined' &&
     'PushManager' in window &&
     'Notification' in window;
-  let storage: PushEnvironment['storage'] = null;
+  let storage: PushEnvironment['storage'];
   try {
     storage = typeof localStorage === 'undefined' ? null : localStorage;
   } catch {
+    // Some privacy modes throw on the mere read of `localStorage`.
     storage = null;
   }
   return {

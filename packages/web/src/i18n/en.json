@@ -536,8 +536,27 @@
         "none": "None"
       },
       "devices": "Devices: {count}",
-      "missing": "Missing: {fields}",
-      "how": "FCM takes COREHUB_FCM_SERVICE_ACCOUNT; APNs takes COREHUB_APNS_KEY_ID, COREHUB_APNS_TEAM_ID, COREHUB_APNS_BUNDLE_ID and COREHUB_APNS_KEY (docs/DEPLOY.md)."
+      "missing": "Missing:",
+      "how": "FCM and APNs are set by these environment variables (docs/DEPLOY.md):",
+      "set_up": "Set up",
+      "change": "Change",
+      "form": {
+        "fcm_intro": "Firebase Console → Project settings → Service accounts → Generate new private key. Paste the whole JSON file.",
+        "apns_intro": "Apple Developer → Certificates, IDs & Profiles → Keys: a key with Apple Push Notifications service (APNs).",
+        "enabled": "Send through this service",
+        "service_account": "Service account JSON",
+        "service_account_hint": "Stored encrypted and never shown again.",
+        "secret_kept": "Leave empty to keep the stored one.",
+        "key_id": "Key ID",
+        "team_id": "Team ID",
+        "bundle_id": "App bundle ID",
+        "environment": "Environment",
+        "production": "Production",
+        "sandbox": "Sandbox (development builds)",
+        "private_key": ".p8 key",
+        "private_key_hint": "The contents of AuthKey_….p8. Stored encrypted and never shown again.",
+        "forget": "Forget"
+      }
     }
   },
   "placeholder": {

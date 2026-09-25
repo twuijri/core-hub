@@ -132,7 +132,9 @@ function DeviceRow({ device }: { device: Device }) {
           {device.online && <Badge tone="success">{t('devices.online')}</Badge>}
           <Badge tone={device.push ? 'success' : 'neutral'} testId="device-push">
             {device.push
-              ? t('devices.push_on', { provider: t(`devices.push.provider.${device.push.provider}`) })
+              ? t('devices.push_on', {
+                  provider: t(`devices.push.provider.${device.push.provider}`),
+                })
               : t('devices.push_off')}
           </Badge>
         </div>
@@ -141,7 +143,12 @@ function DeviceRow({ device }: { device: Device }) {
           {device.app_version ? ` · ${device.app_version}` : ''}
         </p>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="ghost" onClick={() => void onRename()} data-testid="device-rename">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => void onRename()}
+            data-testid="device-rename"
+          >
             {t('devices.rename')}
           </Button>
           {device.push && (

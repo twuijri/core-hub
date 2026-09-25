@@ -121,6 +121,7 @@ function hub(devices: Record<string, unknown>[]) {
     if (path.startsWith('/devices/') && method === 'PATCH') return json({ ...devices[0], ...body });
     if (path.startsWith('/devices/') && method === 'DELETE') return json(null, 204);
     if (path === '/push/senders') return json(SENDERS);
+    if (path.startsWith('/push/senders/') && method === 'PUT') return json(SENDERS.items[1]);
     if (path === '/push/config') return json({ webpush_public_key: 'BK', providers: ['webpush'] });
     if (path === '/notify/notices') return json({ items: [], next_cursor: null, unread_count: 0 });
     if (path === '/notify/preferences')
@@ -243,7 +244,8 @@ describe('browser push, in this browser', () => {
     });
     const { env, calls } = fakeBrowserEnv('default', 'granted');
     expect(await browserPushState(env)).toBe('off');
-    const key = 'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4';
+    const key =
+      'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4';
     await enableBrowserPush(client, env, { publicKey: key, locale: 'en' });
     expect(calls).toEqual(['permission', 'register:/push-sw.js', 'subscribe:65']);
     const register = sent.find((s) => s.path === '/devices' && s.method === 'POST');
@@ -310,6 +312,24 @@ describe('the Devices tab', () => {
     expect(fcm.getAttribute('data-state')).toBe('not_configured');
     expect(fcm.textContent).toContain('Missing: service_account');
     expect(screen.getByTestId('push-sender-webpush').getAttribute('data-state')).toBe('ready');
+  });
+
+  it('lets the admin paste the FCM service account, stored and never filled back in', async () => {
+    const user = userEvent.setup();
+    const { fetchImpl, sent } = hub([]);
+    mount(fetchImpl, <DevicesPanel isAdmin />);
+    await user.click(await screen.findByTestId('push-sender-edit-fcm'));
+    const dialog = await screen.findByTestId('push-sender-dialog');
+    expect(within(dialog).getByTestId('push-sender-save').hasAttribute('disabled')).toBe(true);
+    await user.click(within(dialog).getByLabelText('Service account JSON'));
+    await user.paste('{"project_id":"p"}');
+    await user.click(within(dialog).getByTestId('push-sender-save'));
+    await waitFor(() =>
+      expect(sent.find((s) => s.method === 'PUT' && s.path === '/push/senders/fcm')?.body).toEqual({
+        enabled: true,
+        service_account: '{"project_id":"p"}',
+      }),
+    );
   });
 
   it('does not show a member the push senders', async () => {

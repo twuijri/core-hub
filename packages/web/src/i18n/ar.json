@@ -536,8 +536,27 @@
         "none": "لا شيء"
       },
       "devices": "الأجهزة: {count}",
-      "missing": "ينقص: {fields}",
-      "how": "يأخذ FCM المتغير COREHUB_FCM_SERVICE_ACCOUNT، ويأخذ APNs المتغيرات COREHUB_APNS_KEY_ID وCOREHUB_APNS_TEAM_ID وCOREHUB_APNS_BUNDLE_ID وCOREHUB_APNS_KEY (docs/DEPLOY.md)."
+      "missing": "ينقص:",
+      "how": "يُضبط FCM وAPNs بمتغيرات البيئة هذه (docs/DEPLOY.md):",
+      "set_up": "إعداد",
+      "change": "تغيير",
+      "form": {
+        "fcm_intro": "من Firebase Console ← إعدادات المشروع ← حسابات الخدمة ← إنشاء مفتاح خاص جديد. الصق ملف JSON كاملًا.",
+        "apns_intro": "من Apple Developer ← Certificates, IDs & Profiles ← Keys: مفتاح مفعّل فيه Apple Push Notifications service (APNs).",
+        "enabled": "الإرسال عبر هذه الخدمة",
+        "service_account": "ملف حساب الخدمة (JSON)",
+        "service_account_hint": "يُحفظ مشفّرًا ولا يُعرض مرة أخرى.",
+        "secret_kept": "اتركه فارغًا لإبقاء المحفوظ.",
+        "key_id": "معرّف المفتاح (Key ID)",
+        "team_id": "معرّف الفريق (Team ID)",
+        "bundle_id": "معرّف حزمة التطبيق (Bundle ID)",
+        "environment": "البيئة",
+        "production": "الإنتاج",
+        "sandbox": "التجربة (نسخ التطوير)",
+        "private_key": "مفتاح ‎.p8",
+        "private_key_hint": "محتوى الملف AuthKey_….p8. يُحفظ مشفّرًا ولا يُعرض مرة أخرى.",
+        "forget": "حذف المحفوظ"
+      }
     }
   },
   "placeholder": {

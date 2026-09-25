@@ -214,7 +214,7 @@ export async function startFakeApns(): Promise<FakeApns> {
   const received: FakeApns['received'] = [];
   const unregistered = new Set<string>();
   const server = http2.createServer();
-  server.on('stream', (stream, headers) => {
+  server.on('stream', (stream: http2.ServerHttp2Stream, headers: http2.IncomingHttpHeaders) => {
     const chunks: Buffer[] = [];
     stream.on('data', (chunk: Buffer) => chunks.push(chunk));
     stream.on('end', () => {
