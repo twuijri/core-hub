@@ -183,7 +183,10 @@ change-record  OK — 1 record(s) valid
 CI على PR #147 (الدفعة الثانية، iOS كاملًا): «Build and test on the iOS simulator» نجح —
 `Executed 86 tests, with 0 failures`، منها `KeyboardTests` (٢)، `BrandMarkTests`، `AttachmentTests`
 (٥)، `VoiceSourceTests` (٤)، `LucideIconTests`، و`PushTests` الجديدة (٤) — وكل الوظائف الأخرى نجحت.
-نتيجة الدفعة الأخيرة (أندرويد للبنود ٤–٧) تُكتب في الـPR.
+وعلى الرأس `668c300a` (بعد دمج `origin/main`): كل وظائف PR #147 خضراء — Android build, unit tests,
+lint؛ Build and test on the iOS simulator؛ Lint, typecheck, contracts, client tests, build؛ Server unit
+tests (٣ أجزاء)؛ Web smoke journeys؛ Desktop app smoke؛ Docker image؛ db:generate + db:migrate؛ Change
+record.
 
 ## المخاطر والرجوع
 - لم يُجرَّب شيء على جهاز حقيقي ولا على مركز المالك: الكاميرا، منتقي الصور، التسجيل للمركز، وتشغيل
