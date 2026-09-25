@@ -387,7 +387,7 @@ export class SessionsStore {
   }
 
   /**
-   * The Background panel's runs (§49): one person's in these workspaces — every one not over,
+   * The Background panel's runs (§56): one person's in these workspaces — every one not over,
    * and those that ended at or after `since` — each with its conversation's title.
    */
   backgroundRuns(

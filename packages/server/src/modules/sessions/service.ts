@@ -122,7 +122,7 @@ export class SessionsService {
   readonly store: SessionsStore;
   readonly audit: AuditService;
   readonly engine: RunEngine;
-  /** The subagents of every conversation (§49). */
+  /** The subagents of every conversation (§56). */
   readonly subagents: SubagentBook;
 
   constructor(
@@ -146,7 +146,7 @@ export class SessionsService {
     ports.runner.onSubagent?.((sessionId, signal) => this.subagents.onSignal(sessionId, signal));
   }
 
-  // ------------------------------------------------------------ subagents (§49)
+  // ------------------------------------------------------------ subagents (§56)
 
   /** `sessions.listSubagents`: what the agent supports, and its subagents. */
   async listSubagents(

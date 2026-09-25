@@ -388,7 +388,7 @@
     "SubagentSupport": {
       "type": "string",
       "enum": ["full", "observe", "none"],
-      "description": "What an agent lets a person do with the subagents it delegates to (contract decision\n§49). `full` — see them live, stop one, steer one while it takes guidance, read its\noutput (Hermes); `observe` — see them start and end, nothing more (a coding agent whose\nstream names its delegations); `none` — the agent never says it delegated.\n"
+      "description": "What an agent lets a person do with the subagents it delegates to (contract decision\n§56). `full` — see them live, stop one, steer one while it takes guidance, read its\noutput (Hermes); `observe` — see them start and end, nothing more (a coding agent whose\nstream names its delegations); `none` — the agent never says it delegated.\n"
     },
     "Timestamp": {
       "type": "string",

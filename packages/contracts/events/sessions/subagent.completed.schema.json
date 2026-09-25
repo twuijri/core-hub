@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/sessions/subagent.completed.schema.json",
   "title": "/rt/sessions · subagent.completed",
-  "description": "A subagent ended — `completed`, `failed` or `interrupted` (stopped, or cut short by its run). Profile-wide. Emitted by: sessions module from the agent's delegation reports (contract decision §49).",
+  "description": "A subagent ended — `completed`, `failed` or `interrupted` (stopped, or cut short by its run). Profile-wide. Emitted by: sessions module from the agent's delegation reports (contract decision §56).",
   "type": "object",
   "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
   "properties": {

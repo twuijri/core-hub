@@ -1,5 +1,5 @@
 /**
- * The subagents of each conversation (contract decision §49).
+ * The subagents of each conversation (contract decision §56).
  *
  * An agent reports its delegations on a channel of their own (`AgentRunner.onSubagent`),
  * between turns too, because one can outlive the turn that started it. This book folds those

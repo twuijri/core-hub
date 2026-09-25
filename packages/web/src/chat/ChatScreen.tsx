@@ -238,7 +238,7 @@ export function OpenSession({
       ),
     [setParams],
   );
-  /** The Trajectory tab opened at one step — a subagent's, from its panel (§49). */
+  /** The Trajectory tab opened at one step — a subagent's, from its panel (§56). */
   const openStep = useCallback(
     (stepId: string) =>
       setParams(
@@ -542,7 +542,7 @@ export function OpenSession({
                       m.content.some((part) => part.type === 'text' && part.text.trim() !== ''),
                   )) && <RunFailureNotice failure={failedRun.error} runtime={runtime.data} />}
             </div>
-            {/* What the agent delegated, above the composer (§49); nothing until it has. */}
+            {/* What the agent delegated, above the composer (§56); nothing until it has. */}
             <SubagentsPanel sessionId={sessionId} onOpenTrajectory={openStep} />
             <Composer
               busy={busy}

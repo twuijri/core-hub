@@ -53,7 +53,7 @@ type Step =
   | AgentEvent
   | { type: 'delay'; ms: number }
   | { type: 'await_input' }
-  // A report about a subagent (§49): told to the hub on its own channel, not in the turn.
+  // A report about a subagent (§56): told to the hub on its own channel, not in the turn.
   | { type: 'subagent'; signal: AgentSubagentSignal }
   // Waits until the person stops this subagent (or `ms` passes, or the run is stopped).
   | { type: 'until_stopped'; id: string; ms: number };

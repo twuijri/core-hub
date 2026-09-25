@@ -1,5 +1,5 @@
 /**
- * The Background panel's data (contract decision §49): `background.list` over every profile the
+ * The Background panel's data (contract decision §56): `background.list` over every profile the
  * person may enter, read again when something changes — a run, a subagent, a workflow run or a
  * job — at most once a second, with a slow poll behind it for what no event reports.
  */

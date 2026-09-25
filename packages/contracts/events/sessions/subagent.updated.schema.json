@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/sessions/subagent.updated.schema.json",
   "title": "/rt/sessions · subagent.updated",
-  "description": "A running subagent called a tool or stopped taking guidance; `subagent` is its whole state. Profile-wide. Emitted by: sessions module from the agent's delegation reports (contract decision §49).",
+  "description": "A running subagent called a tool or stopped taking guidance; `subagent` is its whole state. Profile-wide. Emitted by: sessions module from the agent's delegation reports (contract decision §56).",
   "type": "object",
   "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
   "properties": {

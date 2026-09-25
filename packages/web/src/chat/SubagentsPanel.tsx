@@ -1,5 +1,5 @@
 /**
- * The Subagents panel of a conversation (contract decision §49; owner, 2026-09-25: «مثل كلود
+ * The Subagents panel of a conversation (contract decision §56; owner, 2026-09-25: «مثل كلود
  * يبين الوكلاء الفرعيين الي يشتغلون»). Above the composer, only once the agent has delegated:
  * each running subagent — nested ones under the one that started them — with its goal, model,
  * time, tool count and last tool; Stop, Steer and View where the agent allows them

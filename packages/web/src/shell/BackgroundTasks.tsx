@@ -1,5 +1,5 @@
 /**
- * The Background button (contract decision §49; owner, 2026-09-25): beside the pending-actions
+ * The Background button (contract decision §56; owner, 2026-09-25): beside the pending-actions
  * bar, how many things are working for the person right now — chats, tasks, schedules and
  * workflows, jobs, subagents, in every profile they may enter — opening a sheet that lists
  * them with where each lives and Stop where it can be stopped, and what finished in the last

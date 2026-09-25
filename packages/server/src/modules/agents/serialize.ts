@@ -158,7 +158,7 @@ export function serializeAgent(
 }
 
 /**
- * What the agent lets a person do with its subagents (§49): its catalog entry's word, or for an
+ * What the agent lets a person do with its subagents (§56): its catalog entry's word, or for an
  * agent found on the host rather than in the catalog, its adapter's — Hermes reports them all,
  * an unknown ACP agent is not trusted to.
  */

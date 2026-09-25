@@ -99,7 +99,7 @@ export interface EngineDeps {
   realtime: SessionsRealtime;
   ports: SessionsPorts;
   log: FastifyBaseLogger;
-  /** Told where each conversation lives when a run of it starts (§49). */
+  /** Told where each conversation lives when a run of it starts (§56). */
   subagents?: { remember(sessionId: string, scope: SubagentScope): void };
 }
 
@@ -321,7 +321,7 @@ export class RunEngine {
     }
 
     audit.startJob(runRow.jobId);
-    // The conversation's subagents are told to its profile, and belong to its owner (§49).
+    // The conversation's subagents are told to its profile, and belong to its owner (§56).
     this.deps.subagents?.remember(session.id, {
       workspace: scope.workspace,
       profile: scope.profile,

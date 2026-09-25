@@ -18,6 +18,6 @@ export const claudeCode: CatalogEntry = {
   capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'skills', 'worktrees', 'resume'],
   sections: ['skills', 'mcp', 'settings'],
   // The bridge names a `Task` delegation and its end; the subagent's own tools arrive flat,
-  // without a parent id, and it offers no stop or steer of one subagent (§49).
+  // without a parent id, and it offers no stop or steer of one subagent (§56).
   subagents: 'observe',
 };

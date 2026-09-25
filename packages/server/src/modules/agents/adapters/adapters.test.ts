@@ -424,7 +424,7 @@ describe('the adapter set', () => {
   });
 });
 
-describe('ACP adapter: subagents (§49)', () => {
+describe('ACP adapter: subagents (§56)', () => {
   const connect = async (updates: Record<string, unknown>[]) => {
     const agent = fakeAgent({ updates });
     const { session } = await AcpSession.connect(agent.transport, {

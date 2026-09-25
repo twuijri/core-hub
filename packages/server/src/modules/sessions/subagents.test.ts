@@ -1,5 +1,5 @@
 /**
- * The subagent book (contract decision §49), with no agent and no socket: reports in, records
+ * The subagent book (contract decision §56), with no agent and no socket: reports in, records
  * and events out. Every event is checked against its schema in `packages/contracts/events`.
  */
 import { readFileSync } from 'node:fs';
@@ -77,7 +77,7 @@ function setup(control: AgentSubagentControl | null = null) {
   return { store, book, emitted, sessionId: session.id };
 }
 
-describe('the subagent book (§49)', () => {
+describe('the subagent book (§56)', () => {
   it('folds reports into one record each and announces every change in the contract shape', () => {
     const { book, emitted, sessionId } = setup();
     book.onSignal(sessionId, {

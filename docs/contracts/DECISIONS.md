@@ -1025,7 +1025,7 @@ Rejected: a new `source` field on `SessionCreate` (a client could then make any 
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
 
-## 49. Subagents are part of their conversation; the Background panel is everything working for a person
+## 56. Subagents are part of their conversation; the Background panel is everything working for a person
 
 The owner asked for what Claude shows as its background tasks: the subagents an agent is running,
 and everything else working in the background. Hermes delegates to subagents with its

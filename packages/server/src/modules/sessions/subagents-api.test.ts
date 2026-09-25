@@ -1,5 +1,5 @@
 /**
- * Subagents over the real routes (contract decision §49): a scripted run whose agent delegates
+ * Subagents over the real routes (contract decision §56): a scripted run whose agent delegates
  * to two subagents. The conversation lists them live, one is stopped, the other is steered, read
  * and then finishes; the trajectory draws them in their own lane; the Background panel lists
  * the run and the subagents and stops one — every answer in the contract's shape.
@@ -137,7 +137,7 @@ async function startRun(h: TestHub): Promise<string> {
 
 type Item = { id: string; status: string; kind?: string; stoppable?: boolean };
 
-describe('sessions subagents (§49)', () => {
+describe('sessions subagents (§56)', () => {
   it('lists, stops, steers, reads and finishes subagents, and draws them in the trajectory', async () => {
     const { h, runner } = await hub();
     try {

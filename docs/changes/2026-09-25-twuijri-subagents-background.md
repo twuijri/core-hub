@@ -21,7 +21,7 @@
 (`codex-acp` 0.16.0): أحداث `spawn_agent` موجودة في Codex نفسه ولم نجد لها نقلًا في الجسر ← **none**.
 
 ## القرار والموافقات
-موافقة المالك على الفكرة: السؤال نفسه. قرار العقد: **DECISIONS §49** (§47 أخذه #105 و#108 المفتوحان،
+موافقة المالك على الفكرة: السؤال نفسه. قرار العقد: **DECISIONS §56** (§47 أخذه #105 و#108 المفتوحان،
 و§48 أخذه #106؛ يُعاد الترقيم عند الدمج إن لزم). المواصفة بكلماتنا:
 `docs/inspirations/subagents-background.md`.
 
@@ -54,7 +54,7 @@
   `BackgroundStatus`, `BackgroundList`؛ ومعامل `SubagentId`.
 - إضافات: `Agent.subagents`؛ `TrajectoryStepKind.subagent`، `TrajectoryLane.subagents`،
   `TrajectoryStep.subagent` (اختياري). `agent.updated` و`common.schema.json` حُدِّثا بالحقل الجديد.
-- `events/README.md` (20 حدثًا في `/rt/sessions`)، `DECISIONS.md` §49، `COVERAGE.md` (المحادثة، وصف
+- `events/README.md` (20 حدثًا في `/rt/sessions`)، `DECISIONS.md` §56، `COVERAGE.md` (المحادثة، وصف
   زر «في الخلفية»).
 
 ## الملفات والتأثير

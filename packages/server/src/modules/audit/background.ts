@@ -1,5 +1,5 @@
 /**
- * The Background panel (contract decision §49): everything working for one person, gathered
+ * The Background panel (contract decision §56): everything working for one person, gathered
  * from the modules that do the work.
  *
  * This module owns the jobs, so it owns the list; the other kinds of work — runs and subagents

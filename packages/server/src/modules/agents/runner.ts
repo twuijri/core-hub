@@ -60,7 +60,7 @@ interface LiveSession {
   adapterKind: string;
   /** The hub session the agent session serves; the map key, kept for logging. */
   sessionId: string;
-  /** Stops forwarding its subagent reports (§49). */
+  /** Stops forwarding its subagent reports (§56). */
   unwatch: () => void;
 }
 

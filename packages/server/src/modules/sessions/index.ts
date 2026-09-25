@@ -197,7 +197,7 @@ export function sessionRunsFor(app: FastifyInstance): SessionRuns | null {
 
 const backgrounds = new WeakMap<FastifyInstance, BackgroundSource>();
 
-/** This module's runs and subagents in the Background panel (§49); `null` when not composed. */
+/** This module's runs and subagents in the Background panel (§56); `null` when not composed. */
 export function sessionBackgroundFor(app: FastifyInstance): BackgroundSource | null {
   return backgrounds.get(app) ?? null;
 }

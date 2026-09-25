@@ -294,7 +294,7 @@ const LIVE_WORKFLOW_RUN: ReadonlySet<string> = new Set([
   'paused',
 ]);
 
-/** A workflow run as a Background item (§49). */
+/** A workflow run as a Background item (§56). */
 function workflowRunItem(row: WorkflowRunRow, name: string, profile: string): BackgroundItem {
   const status: BackgroundStatus =
     row.status === 'queued'
@@ -322,7 +322,7 @@ function workflowRunItem(row: WorkflowRunRow, name: string, profile: string): Ba
 }
 
 /**
- * This module's share of the Background panel (§49): a person's workflow runs, stopped as their
+ * This module's share of the Background panel (§56): a person's workflow runs, stopped as their
  * Cancel does. Registered with `audit` by the composition root.
  */
 export function workflowBackgroundFor(app: FastifyInstance): BackgroundSource {

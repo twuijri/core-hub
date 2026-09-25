@@ -741,7 +741,7 @@
   pointer-events: none;
 }
 
-/* ------------------------------------------------ the Background sheet (§49) */
+/* ------------------------------------------------ the Background sheet (§56) */
 .background-list {
   display: flex;
   flex-direction: column;

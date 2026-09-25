@@ -1,5 +1,5 @@
 /**
- * This module's share of the Background panel (contract decision §49): a person's runs — chat,
+ * This module's share of the Background panel (contract decision §56): a person's runs — chat,
  * task and schedule runs; a workflow's agent steps are shown as their workflow run, by
  * `schedules` — and the subagents of their conversations. Registered with `audit` by the
  * composition root; stopping is the chat's own Stop and `sessions.interruptSubagent`.

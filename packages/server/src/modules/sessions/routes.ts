@@ -280,7 +280,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     return trajectory;
   });
 
-  // ------------------------------------------------------------ subagents (§49)
+  // ------------------------------------------------------------ subagents (§56)
 
   const subagentId = (params: unknown): string => {
     const value = (params as { subagent_id?: unknown }).subagent_id;

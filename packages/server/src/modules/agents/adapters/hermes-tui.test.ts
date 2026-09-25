@@ -549,7 +549,7 @@ describe('Hermes over the TUI gateway', () => {
   });
 });
 
-describe('Hermes subagents over the TUI gateway (§49)', () => {
+describe('Hermes subagents over the TUI gateway (§56)', () => {
   it("reports each delegation on the conversation's own channel, not in the turn", async () => {
     const gateway = fakeGateway((method, _params, api) => {
       if (method === 'session.create') return { session_id: 's', stored_session_id: 'st' };

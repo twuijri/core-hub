@@ -187,7 +187,7 @@ paths:
       tags: [jobs]
       summary: What is running for the person, and what finished in the last day
       description: |
-        The Background panel (contract decision §49): everything working for the caller — their
+        The Background panel (contract decision §56): everything working for the caller — their
         chat runs, task runs, schedule runs, workflow runs, jobs (exports, imports, plugin
         installs, channel logins and the rest) and the subagents of their conversations — in one
         list. `running` holds what is queued or running, oldest first; `finished` what ended in
@@ -3018,7 +3018,7 @@ paths:
       tags: [sessions]
       summary: List the subagents a conversation's agent delegated to
       description: |
-        Every subagent the conversation's agent started (contract decision §49): the ones still
+        Every subagent the conversation's agent started (contract decision §56): the ones still
         running first, then the finished ones, newest first. `support` says what the agent lets a
         person do with them — `full` (stop, steer, read the live output: Hermes), `observe` (see
         them come and go, nothing else: a coding agent whose stream names its delegations) or
@@ -14562,13 +14562,13 @@ components:
       description: |
         `input` is something the person sent; `turn` is the model speaking once (before, between
         or after tool calls); `reasoning` is what the model showed of its thinking in that turn;
-        `tool` is one tool call; `subagent` is one delegated subagent from start to end (§49).
+        `tool` is one tool call; `subagent` is one delegated subagent from start to end (§56).
     TrajectoryLane:
       type: string
       enum: [input, model, tools, subagents]
       description: >-
         The row of the timeline a step is drawn in. `turn` and `reasoning` share `model`;
-        `subagents` holds each subagent and every tool call a subagent made (§49).
+        `subagents` holds each subagent and every tool call a subagent made (§56).
     TrajectoryStepStatus:
       type: string
       enum: [running, succeeded, failed, cancelled]
@@ -14652,7 +14652,7 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Subagent'
             - type: 'null'
-          description: The subagent of a `subagent` step (§49); absent or `null` otherwise.
+          description: The subagent of a `subagent` step (§56); absent or `null` otherwise.
     TrajectoryMetrics:
       type: object
       description: |
@@ -14748,13 +14748,13 @@ components:
         metrics:
           $ref: '#/components/schemas/TrajectoryMetrics'
     # ---------------------------------------------------------------- runs
-    # ------------------------------------------------------------ subagents (§49)
+    # ------------------------------------------------------------ subagents (§56)
     SubagentSupport:
       type: string
       enum: [full, observe, none]
       description: |
         What an agent lets a person do with the subagents it delegates to (contract decision
-        §49). `full` — see them live, stop one, steer one while it takes guidance, read its
+        §56). `full` — see them live, stop one, steer one while it takes guidance, read its
         output (Hermes); `observe` — see them start and end, nothing more (a coding agent whose
         stream names its delegations); `none` — the agent never says it delegated.
     SubagentStatus:
@@ -14880,7 +14880,7 @@ components:
         truncated:
           type: boolean
           description: Only the end is here; the transcript is longer.
-    # ------------------------------------------------------------ background (§49)
+    # ------------------------------------------------------------ background (§56)
     BackgroundKind:
       type: string
       enum: [chat_run, task_run, schedule_run, workflow_run, job, subagent]

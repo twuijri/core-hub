@@ -42,7 +42,7 @@ export const SESSION_EVENTS = [
 ] as const;
 
 /**
- * A conversation's subagents (contract decision §49). Profile-wide on `/rt/sessions`, so the
+ * A conversation's subagents (contract decision §56). Profile-wide on `/rt/sessions`, so the
  * Background panel hears them wherever the person is; each carries the whole `Subagent`.
  */
 export const SUBAGENT_EVENTS = [

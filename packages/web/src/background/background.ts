@@ -1,5 +1,5 @@
 /**
- * The Background panel (contract decision §49), the pure half: where each item lives in the
+ * The Background panel (contract decision §56), the pure half: where each item lives in the
  * client, and how many things are running. No React.
  */
 import { PROFILE_PARAM, chatHref } from '../chat/anchor.js';
