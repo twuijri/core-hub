@@ -47,12 +47,10 @@ export function FilePreviewDialog({
       testId="files-preview"
       footer={
         <>
-          <Button size="sm" onClick={onAttach}>
-            <IconPaperclip size={14} />
+          <Button size="sm" onClick={onAttach} icon={<IconPaperclip size={14} />}>
             {t('files.attach')}
           </Button>
-          <Button size="sm" onClick={onDownload}>
-            <IconDownload size={14} />
+          <Button size="sm" onClick={onDownload} icon={<IconDownload size={14} />}>
             {t('files.download')}
           </Button>
           {entry.editable && (

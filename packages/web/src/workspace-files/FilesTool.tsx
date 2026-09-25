@@ -310,11 +310,11 @@ export function FilesTool() {
             <Button
               variant="ghost"
               size="sm"
+              iconOnly
+              icon={<IconMore size={16} />}
               aria-label={t('files.actions_for', { name: entry.name })}
               data-testid="files-row-actions"
-            >
-              <IconMore size={16} />
-            </Button>
+            />
           }
         >
           <RowActions
@@ -353,25 +353,37 @@ export function FilesTool() {
       <div className="flex flex-wrap items-center gap-2">
         <Breadcrumb label={t('files.breadcrumb')} items={crumbs} testId="files-breadcrumb" />
         <span className="ms-auto flex flex-wrap gap-2">
-          <Button size="sm" onClick={() => void newFolder()} data-testid="files-new-folder">
-            <IconFolder size={14} />
+          <Button
+            size="sm"
+            icon={<IconFolder size={14} />}
+            onClick={() => void newFolder()}
+            data-testid="files-new-folder"
+          >
             {t('files.new_folder')}
           </Button>
-          <Button size="sm" onClick={() => void newFile()} data-testid="files-new-file">
-            <IconPlus size={14} />
+          <Button
+            size="sm"
+            icon={<IconPlus size={14} />}
+            onClick={() => void newFile()}
+            data-testid="files-new-file"
+          >
             {t('files.new_file')}
           </Button>
-          <Button size="sm" onClick={() => void downloadFolder()} data-testid="files-zip">
-            <IconDownload size={14} />
+          <Button
+            size="sm"
+            icon={<IconDownload size={14} />}
+            onClick={() => void downloadFolder()}
+            data-testid="files-zip"
+          >
             {t('files.download_zip')}
           </Button>
           <Button
             size="sm"
             variant="primary"
+            icon={<IconUpload size={14} />}
             onClick={() => fileInput.current?.click()}
             data-testid="files-upload"
           >
-            <IconUpload size={14} />
             {t('files.upload')}
           </Button>
           <input

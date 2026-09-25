@@ -37,7 +37,7 @@ export function normalisePath(typed: string): string {
     .replace(/\/$/, '');
 }
 
-/** A size a person reads: bytes, KB, MB, GB, in their language's digits. */
+/** A size a person reads: bytes, KB, MB, GB, in their language's digits, bidi-isolated. */
 export function formatBytes(bytes: number, language: string): string {
   const units = ['B', 'KB', 'MB', 'GB'];
   let value = bytes;
@@ -49,7 +49,8 @@ export function formatBytes(bytes: number, language: string): string {
   const number = new Intl.NumberFormat(language === 'ar' ? 'ar' : 'en', {
     maximumFractionDigits: unit === 0 ? 0 : 1,
   }).format(value);
-  return `${number} ${units[unit] ?? 'B'}`;
+  // Isolated left to right, so «40 B» never reads «B 40» inside an Arabic sentence.
+  return `\u2066${number} ${units[unit] ?? 'B'}\u2069`;
 }
 
 /** How the page shows a file: a picture, a PDF, text, or nothing it can draw. */

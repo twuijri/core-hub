@@ -76,9 +76,9 @@ export function AttachToChatDialog({
             variant="primary"
             disabled={attach.isPending}
             onClick={() => void send(routeOf('new_chat'))}
+            icon={<IconPlus size={14} />}
             data-testid="files-attach-new"
           >
-            <IconPlus size={14} />
             {t('files.attach_new_chat')}
           </Button>
         </li>

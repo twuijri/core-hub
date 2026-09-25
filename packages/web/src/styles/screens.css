@@ -822,6 +822,15 @@ button.files-name:focus-visible {
   overflow-wrap: normal;
   letter-spacing: normal;
 }
+.files-editor[data-prose='true'] .files-editor-layer,
+.files-editor[data-prose='true'] .files-editor-input {
+  font-family: var(--ch-font-sans);
+}
+/* The base styles give <code> a font of its own; here it must be the layer's exactly. */
+.files-editor-layer code {
+  font: inherit;
+  letter-spacing: inherit;
+}
 .files-editor-layer {
   pointer-events: none;
   background: transparent;

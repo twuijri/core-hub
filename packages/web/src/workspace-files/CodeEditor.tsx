@@ -107,7 +107,14 @@ export function CodeEditor({
   };
 
   return (
-    <div className="files-editor" dir={dir} data-testid={testId}>
+    <div
+      className="files-editor"
+      dir={dir}
+      // Prose (Markdown, plain text) in the reading font, so Arabic joins; code in the
+      // monospace one. Both layers take the same font either way, so they stay aligned.
+      data-prose={dir === 'auto' ? 'true' : undefined}
+      data-testid={testId}
+    >
       <pre className="files-editor-layer hljs" aria-hidden="true">
         <code>
           {coloured ?? deferred}
