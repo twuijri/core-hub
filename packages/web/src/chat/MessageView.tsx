@@ -274,7 +274,7 @@ export function MessageView({
           </p>
         )}
         {notice}
-        {!streaming && <MessageActions message={message} onReply={onReply} onFork={onFork} />}
+        {!streaming && <MessageActions message={message} onReply={onReply} onFork={onFork} speak />}
       </div>
     </article>
   );

@@ -14,7 +14,7 @@ import type { ReactNode } from 'react';
 import { IconClose } from './icons.js';
 import { Button } from './Button.js';
 
-export type DialogSize = 'sm' | 'md' | 'lg';
+export type DialogSize = 'sm' | 'md' | 'lg' | 'full';
 
 export function Dialog({
   open,

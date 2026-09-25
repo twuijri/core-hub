@@ -10,7 +10,7 @@
  * OpenRouter is the one provider here that reports prices and context windows, so those
  * fields are read when present and left null when not.
  */
-import { detailOf, joinUrl, reasonOf, requestBytes, requestJson } from './http.js';
+import { detailOf, joinUrl, reasonOf, requestBytes, requestForm, requestJson } from './http.js';
 import { chatFailure, openStream, parseFrame, sseData } from './stream.js';
 import type {
   ChatEvent,
@@ -23,6 +23,8 @@ import type {
   ProviderTestResult,
   SynthesizeRequest,
   SynthesizeResult,
+  TranscribeRequest,
+  TranscribeResult,
   DiscoveredModel,
 } from './types.js';
 import type { ModelCapability, ModelKind, ModelPricing } from '../schema.js';
@@ -279,7 +281,9 @@ export const openAiAdapter: ProviderAdapter = {
   },
 
   async synthesize(ctx: ProviderContext, request: SynthesizeRequest): Promise<SynthesizeResult> {
-    if (!ctx.apiKey) return { supported: false, reason: 'no_key' };
+    // A self-hosted OpenAI-compatible speech server is added without a key (the hub does
+    // not demand one); it is asked without one, and its own answer stands.
+    if (!ctx.apiKey && ctx.requiresKey !== false) return { supported: false, reason: 'no_key' };
     const voice = request.voice ?? ctx.settings.voice ?? null;
     if (!voice) return { supported: false, reason: 'no_voice' };
     const answer = await requestBytes({
@@ -305,6 +309,51 @@ export const openAiAdapter: ProviderAdapter = {
       supported: true,
       audio: answer.bytes,
       contentType: answer.contentType ?? 'audio/mpeg',
+    };
+  },
+  /**
+   * `POST {base}/audio/transcriptions` (OpenAI's Whisper surface, which every
+   * OpenAI-compatible speech server copies): the recording as the `file` part, the row's
+   * model, and the language hint when there is one. `response_format: json` is the one
+   * format all of them accept; a `language` or `duration` in the answer is read when the
+   * server sends it (the verbose servers do) and left null when not.
+   */
+  async transcribe(ctx: ProviderContext, request: TranscribeRequest): Promise<TranscribeResult> {
+    if (!ctx.apiKey && ctx.requiresKey !== false) return { supported: false, reason: 'no_key' };
+    const form = new FormData();
+    form.append(
+      'file',
+      new Blob([new Uint8Array(request.audio)], { type: request.mime }),
+      request.filename,
+    );
+    form.append('model', ctx.settings.model ?? 'whisper-1');
+    // Whisper takes ISO-639-1 (`ar`), not a full BCP-47 tag (`ar-SA`).
+    const hint = (request.language ?? ctx.settings.language ?? '').split('-')[0]?.toLowerCase();
+    if (hint) form.append('language', hint);
+    form.append('response_format', 'json');
+    const answer = await requestForm({
+      url: joinUrl(ctx.baseUrl, 'audio/transcriptions'),
+      headers: authHeaders(ctx),
+      form,
+      fetchImpl: ctx.fetchImpl,
+    });
+    if (!answer.ok) {
+      return { supported: false, reason: reasonOf(answer), detail: detailOf(answer) };
+    }
+    const body = answer.body as { text?: unknown; language?: unknown; duration?: unknown } | null;
+    if (typeof body?.text !== 'string') {
+      return {
+        supported: false,
+        reason: 'http_error',
+        detail: 'the provider did not answer with a transcript',
+      };
+    }
+    const seconds = typeof body.duration === 'number' ? body.duration : Number.NaN;
+    return {
+      supported: true,
+      text: body.text.trim(),
+      language: typeof body.language === 'string' && body.language ? body.language : hint || null,
+      durationMs: Number.isFinite(seconds) && seconds >= 0 ? Math.round(seconds * 1000) : null,
     };
   },
 };

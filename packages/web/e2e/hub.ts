@@ -1038,8 +1038,37 @@ const scriptedProvider: typeof fetch = async (input, init) => {
       headers: { 'content-type': 'application/json' },
     });
   if (url.endsWith('/models')) return json({ data: bigCatalogue });
+  // Speech (journey 32, DECISIONS §63): a scripted Whisper that hears one sentence, and a
+  // voice that answers with a tenth of a second of real silence the browser can play.
+  if (url.endsWith('/audio/transcriptions')) return json({ text: 'لخّص اجتماع اليوم' });
+  if (url.endsWith('/audio/speech')) {
+    return new Response(silentWav(), { status: 200, headers: { 'content-type': 'audio/wav' } });
+  }
   return json({ ok: true });
 };
+
+/** A playable WAV: 16-bit mono PCM at 8 kHz, a tenth of a second of silence. */
+function silentWav(): ArrayBuffer {
+  const samples = 800;
+  const buffer = Buffer.alloc(44 + samples * 2);
+  buffer.write('RIFF', 0);
+  buffer.writeUInt32LE(36 + samples * 2, 4);
+  buffer.write('WAVE', 8);
+  buffer.write('fmt ', 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(8000, 24);
+  buffer.writeUInt32LE(16000, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write('data', 36);
+  buffer.writeUInt32LE(samples * 2, 40);
+  return buffer.buffer.slice(
+    buffer.byteOffset,
+    buffer.byteOffset + buffer.byteLength,
+  ) as ArrayBuffer;
+}
 overrideModels({ fetchImpl: scriptedProvider });
 
 /**

@@ -32,6 +32,7 @@ import type {
   DiscoveredVoice,
   ProviderContext,
   SynthesizeResult,
+  TranscribeResult,
 } from './adapters/types.js';
 import {
   PROVIDER_CATALOGUE,
@@ -1942,20 +1943,7 @@ export class ModelsService {
       providerId?: string | null;
     },
   ): Promise<{ audio: Uint8Array; contentType: string; provider: string }> {
-    const id = request.providerId ?? this.speechChoice(scope, ownerId).tts;
-    if (!id) {
-      throw new HubError('agent_unavailable', {
-        messageKey: 'models.speech.no_tts_provider',
-        details: { reason: 'no_tts_provider' },
-      });
-    }
-    const row = this.requireSpeechProvider(scope, id, 'tts');
-    if (!row.enabled) {
-      throw new HubError('agent_unavailable', {
-        messageKey: 'models.speech.provider_disabled',
-        details: { reason: 'provider_disabled', provider: row.slug },
-      });
-    }
+    const row = this.activeSpeechRow(scope, ownerId, 'tts', request.providerId ?? null);
     const adapter = providerAdapter(this.entryOf(row)?.protocol ?? 'openai');
     const result: SynthesizeResult = await adapter.synthesize(this.contextOf(scope, row), {
       text: request.text,
@@ -1969,6 +1957,98 @@ export class ModelsService {
       });
     }
     return { audio: result.audio, contentType: result.contentType, provider: row.slug };
+  }
+
+  /**
+   * `models.transcribe`: one recording through the profile's speech-to-text provider (or
+   * the one named), and its words back. Every way it can fail is named — no provider, a
+   * provider switched off, a provider that refused or answered nothing usable — and a
+   * silent take is `400 no_speech`, never an empty transcript presented as a result.
+   */
+  async transcribe(
+    scope: WorkspaceScope,
+    ownerId: string,
+    request: {
+      audio: Uint8Array;
+      filename: string;
+      mime: string;
+      language: string | null;
+      providerId: string | null;
+      /** The length the client recorded; used when the provider does not report one. */
+      durationMs: number | null;
+    },
+  ): Promise<{
+    text: string;
+    language: string | null;
+    duration_ms: number;
+    provider_id: string;
+    model: string | null;
+  }> {
+    const row = this.activeSpeechRow(scope, ownerId, 'stt', request.providerId);
+    const adapter = providerAdapter(this.entryOf(row)?.protocol ?? 'openai');
+    if (!adapter.transcribe) {
+      throw new HubError('agent_unavailable', {
+        messageKey: 'models.speech.transcribe_failed',
+        details: { reason: 'unsupported', detail: null, provider: row.slug },
+      });
+    }
+    const context = this.contextOf(scope, row);
+    const result: TranscribeResult = await adapter.transcribe(context, {
+      audio: request.audio,
+      filename: request.filename,
+      mime: request.mime,
+      language: request.language,
+    });
+    if (!result.supported) {
+      throw new HubError('agent_unavailable', {
+        messageKey: 'models.speech.transcribe_failed',
+        details: { reason: result.reason, detail: result.detail ?? null, provider: row.slug },
+      });
+    }
+    if (result.text === '') {
+      throw new HubError('validation_failed', {
+        messageKey: 'models.speech.no_speech',
+        details: { reason: 'no_speech' },
+      });
+    }
+    return {
+      text: result.text,
+      language: result.language,
+      duration_ms: Math.max(0, Math.round(result.durationMs ?? request.durationMs ?? 0)),
+      provider_id: row.id,
+      model: context.settings.model ?? null,
+    };
+  }
+
+  /**
+   * The speech provider a request speaks through: the one it names, else the profile's
+   * choice — resolved the way the speech tabs resolve it (a profile's own row of the same
+   * slug over a shared one), so what the tab calls ready is what answers.
+   */
+  private activeSpeechRow(
+    scope: WorkspaceScope,
+    ownerId: string,
+    kind: 'stt' | 'tts',
+    named: string | null,
+  ): ProviderRow {
+    const id = named ?? this.speechChoice(scope, ownerId)[kind];
+    if (!id) {
+      throw new HubError('agent_unavailable', {
+        messageKey:
+          kind === 'tts' ? 'models.speech.no_tts_provider' : 'models.speech.no_stt_provider',
+        details: { reason: kind === 'tts' ? 'no_tts_provider' : 'no_stt_provider' },
+      });
+    }
+    const chosen = this.requireSpeechProvider(scope, id, kind);
+    const row = named ? chosen : (this.effectiveFor(scope.id, chosen.id) ?? chosen);
+    if (!row.enabled) {
+      throw new HubError('agent_unavailable', {
+        messageKey:
+          kind === 'tts' ? 'models.speech.provider_disabled' : 'models.speech.stt.disabled',
+        details: { reason: 'provider_disabled', provider: row.slug },
+      });
+    }
+    return row;
   }
 
   // ------------------------------------------------------------ the first default

@@ -6,6 +6,8 @@
  *     adapter.listModels(ctx)  -> the provider's own model list, or `supported: false`
  *     adapter.listVoices(ctx)  -> a TTS provider's voices, or `supported: false`
  *     adapter.synthesize(ctx)  -> audio bytes, or `supported: false`
+ *     adapter.transcribe(ctx)  -> a transcript, or `supported: false` (optional: only the
+ *                                 OpenAI-shaped surface has one the hub drives today)
  *     adapter.chat(ctx, req)   -> a streamed turn, for the `direct` agent
  *
  * There is deliberately no "assume it worked" path: `test` returning `ok: true` means a
@@ -91,6 +93,27 @@ export type SynthesizeResult =
   | { supported: true; audio: Uint8Array; contentType: string }
   | { supported: false; reason: string; detail?: string | null };
 
+export interface TranscribeRequest {
+  /** The recording exactly as the client sent it. */
+  audio: Uint8Array;
+  /** The name the provider sees; its extension is how OpenAI-shaped servers tell the format. */
+  filename: string;
+  mime: string;
+  /** A BCP-47 hint (`ar`, `en`); null lets the provider detect it. */
+  language: string | null;
+}
+
+export type TranscribeResult =
+  | {
+      supported: true;
+      text: string;
+      /** What the provider detected or was told; null when it said nothing. */
+      language: string | null;
+      /** How long the provider says the take was; null when it did not say. */
+      durationMs: number | null;
+    }
+  | { supported: false; reason: string; detail?: string | null };
+
 // ------------------------------------------------------------------- streamed chat
 
 /** An image handed to the model inline, already read off disk by the caller. */
@@ -170,6 +193,8 @@ export interface ProviderAdapter {
   listModels(ctx: ProviderContext): Promise<ListModelsResult>;
   listVoices(ctx: ProviderContext): Promise<ListVoicesResult>;
   synthesize(ctx: ProviderContext, request: SynthesizeRequest): Promise<SynthesizeResult>;
+  /** Speech to text. Absent on a protocol the hub cannot transcribe with. */
+  transcribe?(ctx: ProviderContext, request: TranscribeRequest): Promise<TranscribeResult>;
   /**
    * One streamed turn against the provider's chat surface, for the `direct` agent.
    *

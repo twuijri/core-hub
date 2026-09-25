@@ -907,25 +907,6 @@ describe('models: speech', () => {
     }
   });
 
-  it('is still a documented 501 for transcription, with the reason', async () => {
-    const hub = await signedInHub();
-    try {
-      const response = await authed(hub, hub.token, {
-        method: 'POST',
-        url: '/api/v1/models/speech/transcriptions',
-        payload: {},
-      });
-      expect(response.statusCode).toBe(501);
-      // Not the app's generic stub: the route says which gap it is waiting on.
-      expect(response.json()).toMatchObject({
-        code: 'not_implemented',
-        error: expect.stringContaining('audio upload') as unknown as string,
-      });
-    } finally {
-      await hub.close();
-    }
-  });
-
   it('refuses a sign-in for a provider used with a key (decision §55)', async () => {
     const hub = await signedInHub();
     try {

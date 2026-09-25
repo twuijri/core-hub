@@ -6,17 +6,15 @@
  * buttons. It stays visible while anything inside it has keyboard focus, because a row
  * that only exists for the mouse does not exist at all.
  *
- * Four things and a fifth that is coming: the time it was said, copy, reply to it, fork
- * the conversation from it, and speak it — which is disabled and says why, because
- * `models.transcribe` and its voice are a later phase and a button that lies is worse
- * than a button that waits.
+ * Five things: the time it was said, read it aloud (a reply only, through the hub's TTS —
+ * `voice/SpeakButton.tsx`), copy, reply to it, and fork the conversation from it.
  */
 import { useState } from 'react';
 import { useI18n } from '../i18n/context.js';
 import type { Message } from '../types.js';
 import { Button } from '../ui/Button.js';
-import { IconCheck, IconCopy, IconFork, IconReply, IconSpeak } from '../ui/icons.js';
-import { Tooltip } from '../ui/Tooltip.js';
+import { IconCheck, IconCopy, IconFork, IconReply } from '../ui/icons.js';
+import { SpeakButton } from '../voice/SpeakButton.js';
 import { textOf } from './transcript.js';
 
 /** The clock time of a message, in the reading language. */
@@ -33,8 +31,11 @@ export function MessageActions({
   message,
   onReply,
   onFork,
+  speak = false,
 }: {
   message: Message;
+  /** Offer reading it aloud (a reply of the agent). */
+  speak?: boolean;
   onReply?: ((message: Message) => void) | undefined;
   onFork?: ((message: Message) => void) | undefined;
 }) {
@@ -56,20 +57,7 @@ export function MessageActions({
   return (
     <div className="msg-actions" data-testid="message-actions">
       <span className="msg-time">{messageTime(message, language)}</span>
-      <Tooltip label={t('chat.speak_later')}>
-        {/* Disabled controls take no pointer events, so the reason hangs off a focusable
-            wrapper — otherwise nobody would ever read it. */}
-        <span tabIndex={0} data-testid="message-speak-wrap">
-          <Button
-            variant="ghost"
-            size="sm"
-            iconOnly
-            disabled
-            aria-label={t('chat.speak')}
-            icon={<IconSpeak size={14} />}
-          />
-        </span>
-      </Tooltip>
+      {speak && <SpeakButton message={message} />}
       <Button
         variant="ghost"
         size="sm"

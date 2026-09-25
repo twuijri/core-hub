@@ -7,15 +7,11 @@
  * `models.putModel`, `models.deleteModel`, `models.listCatalogue`, `models.getDefaults`,
  * `models.setDefaults`, `models.listEnsembles`, `models.createEnsemble`,
  * `models.updateEnsemble`, `models.deleteEnsemble`, `models.getSpeech`,
- * `models.updateSpeech`, `models.listVoices`, `models.synthesize`, and — through Hermes's
- * own server, where the hub supervises Hermes (contract decision §55) —
- * `models.startProviderSignIn`, `models.getProviderSignIn`, `models.completeProviderSignIn`.
- *
- * Still documented 501 stubs, with the reason:
- * - `models.transcribe` — the audio arrives as `multipart/form-data` and the hub has no
- *   multipart reader wired (`packages/server` deliberately has one body parser). Adding
- *   one is its own change; until then the operation says so rather than returning an
- *   empty transcript.
+ * `models.updateSpeech`, `models.listVoices`, `models.synthesize`, `models.transcribe`
+ * (the recording arrives as `multipart/form-data`, read by the hub's one multipart reader,
+ * which the `knowledge` module registers), and — through Hermes's own server, where the hub
+ * supervises Hermes (contract decision §55) — `models.startProviderSignIn`,
+ * `models.getProviderSignIn`, `models.completeProviderSignIn`.
  *
  * What this module gives the rest of the hub is `modelsPort()`: the credentials a coding
  * agent starts with and the default model an agent inherits, so the `agents` module never
@@ -255,6 +251,105 @@ function enter(request: FastifyRequest): {
   actor: { userId: string };
 } {
   return { service: contextOf(request.server), scope: scopeOf(request), actor: actorOf(request) };
+}
+
+/** Whisper's own ceiling, and a few minutes of speech in any format a browser records. */
+export const MAX_RECORDING_BYTES = 25 * 1024 * 1024;
+
+const recordingField = (path: string, message: string) =>
+  new HubError('validation_failed', { details: { fields: [{ path, message }] } });
+
+const EXTENSIONS: Record<string, string> = {
+  'audio/webm': 'webm',
+  'video/webm': 'webm',
+  'audio/ogg': 'ogg',
+  'audio/mp4': 'mp4',
+  'video/mp4': 'mp4',
+  'audio/x-m4a': 'm4a',
+  'audio/m4a': 'm4a',
+  'audio/mpeg': 'mp3',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
+  'audio/wave': 'wav',
+  'audio/flac': 'flac',
+};
+
+/**
+ * An OpenAI-shaped speech server tells the format by the file's extension, and a browser's
+ * `FormData` often calls a recording `blob`: the extension is added from the type.
+ */
+function withExtension(filename: string, mime: string): string {
+  if (/\.[a-z0-9]{2,4}$/i.test(filename)) return filename;
+  const extension = EXTENSIONS[mime];
+  return extension ? `${filename}.${extension}` : filename;
+}
+
+/**
+ * The `audio` part and the three optional fields of `models.transcribe`, in whatever order
+ * the client wrote them (a browser's `FormData` keeps insertion order; busboy only reaches
+ * a field after the part before it is read to the end, so every part is read in turn).
+ */
+async function readRecording(request: FastifyRequest): Promise<{
+  audio: Uint8Array;
+  filename: string;
+  mime: string;
+  language: string | null;
+  providerId: string | null;
+  durationMs: number | null;
+}> {
+  if (!request.isMultipart()) {
+    throw recordingField('audio', 'send the recording as multipart/form-data');
+  }
+  let audio: { bytes: Buffer; filename: string; mime: string } | null = null;
+  const fields: Record<string, string> = {};
+  try {
+    for await (const part of request.parts()) {
+      if (part.type === 'file') {
+        const bytes = await part.toBuffer();
+        if (part.fieldname === 'audio' && !audio) {
+          audio = { bytes, filename: part.filename || 'recording', mime: part.mimetype };
+        }
+      } else if (typeof part.value === 'string') {
+        fields[part.fieldname] = part.value;
+      }
+    }
+  } catch (error) {
+    const candidate = error as { code?: unknown; statusCode?: unknown } | null;
+    if (candidate?.code === 'FST_REQ_FILE_TOO_LARGE' || candidate?.statusCode === 413) {
+      throw new HubError('payload_too_large', { details: { max_bytes: MAX_RECORDING_BYTES } });
+    }
+    throw error;
+  }
+  if (!audio || audio.bytes.length === 0) throw recordingField('audio', 'a recording is required');
+  if (audio.bytes.length > MAX_RECORDING_BYTES) {
+    throw new HubError('payload_too_large', { details: { max_bytes: MAX_RECORDING_BYTES } });
+  }
+  if (
+    audio.mime &&
+    !/^(audio|video)\//.test(audio.mime) &&
+    audio.mime !== 'application/octet-stream'
+  ) {
+    throw recordingField('audio', `not a recording (${audio.mime})`);
+  }
+  const language = fields.language?.trim() || null;
+  if (language && !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(language)) {
+    throw recordingField('language', 'a BCP-47 tag such as "ar" or "en"');
+  }
+  const providerId = fields.provider_id?.trim() || null;
+  const duration = fields.duration_ms ? Number(fields.duration_ms) : null;
+  if (duration !== null && (!Number.isInteger(duration) || duration < 0)) {
+    throw recordingField('duration_ms', 'a whole number of milliseconds');
+  }
+  // A browser records `audio/webm;codecs=opus`; the provider wants the bare type.
+  const mime = (audio.mime || 'application/octet-stream').split(';')[0]!.trim();
+  return {
+    audio: new Uint8Array(audio.bytes),
+    filename: withExtension(audio.filename, mime),
+    mime,
+    language,
+    providerId,
+    durationMs: duration,
+  };
 }
 
 export const modelsModule = defineModule({
@@ -666,27 +761,14 @@ export const modelsModule = defineModule({
       },
     });
 
-    // ------------------------------------------------- the documented gaps
-
-    /**
-     * Declared in the contract, deliberately not implemented, and each says which gap it
-     * is waiting on. An explicit route is better than the app's generic 501 stub: the
-     * client gets the reason, not just "not implemented yet".
-     */
-    const gaps: Record<string, string> = {
-      'models.transcribe': 'models.transcribe.not_implemented',
-    };
-    for (const [operationId, messageKey] of Object.entries(gaps)) {
-      defineRoute(app, deps, {
-        operationId,
-        handler: () => {
-          throw new HubError('not_implemented', {
-            messageKey,
-            details: { operation_id: operationId },
-          });
-        },
-      });
-    }
+    defineRoute(app, deps, {
+      operationId: 'models.transcribe',
+      handler: async (request) => {
+        const { service, scope, actor } = enter(request);
+        const recording = await readRecording(request);
+        return service.transcribe(scope, actor.userId, recording);
+      },
+    });
   },
   registerEvents(_io: SocketServer) {
     // This module does not stream (ARCHITECTURE §Realtime). A catalogue refresh is a job

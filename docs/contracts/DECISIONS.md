@@ -1709,3 +1709,38 @@ Rejected: copying the messages into the new chat's transcript (the agent would n
 the chat would claim turns nobody ran); a system message (the same, and the contract has no
 system role a client could send); forking into Hermes's own channel session (the hub cannot write
 there, §61); starting the first run on the hub (lost opening deltas).
+
+## 63. Voice in the web: dictation through the hub's STT, replies read through its TTS
+
+`models.transcribe` was declared since the first contract and answered a documented `501`,
+because the hub had no multipart reader where the models module could use it. It has one now
+(the `knowledge` module's), so the operation is built. Proposed here — owner to confirm:
+
+- **The recording is never kept.** `models.transcribe` reads the `audio` part (≤ 25 MB,
+  Whisper's own ceiling; `413` above it) and the optional `language`, `provider_id` and — new
+  and additive — `duration_ms` fields in whatever order the client wrote them, sends the audio
+  to the profile's chosen STT provider (its own row of the same slug over a shared one, as the
+  speech tabs resolve `ready`) and answers `Transcription`. `duration_ms` is the provider's own
+  figure when it reports one, else the client's, else 0.
+- **Every failure is named.** No provider chosen: `422 agent_unavailable`,
+  `details.reason: no_stt_provider` (the web links to Models → Speech to text). A provider
+  switched off: `provider_disabled`. The provider refused or answered nothing usable: its
+  reason (`unauthorized`, `unreachable`, `http_error`, `no_key`, `unsupported`) with its own
+  words in `details.detail`. A silent take: `400 validation_failed`, `details.reason: no_speech`.
+- **One protocol for now: the OpenAI-shaped `audio/transcriptions`** (OpenAI, Groq, and any
+  self-hosted OpenAI-compatible speech server). A custom endpoint added as a speech provider
+  needs no key — it is asked without one, like a custom chat endpoint (§26) — for both
+  transcription and `models.synthesize`.
+- **No streaming.** Neither side streams: the web's voice mode is turn by turn (record → one
+  transcription → the run streams its reply → the reply is spoken sentence by sentence as the
+  text arrives) and says so on the stage.
+- **Where the web's voice settings live: `Preferences.voice`, unchanged.** The web keeps
+  `dictation_language` (`auto`, `ar`, `en`) and `auto_speak` there. It uses the hub's STT and
+  TTS whenever the profile has them ready and falls back to the browser's own recognizer or
+  voice only when it does not, marked as such on screen; `input_mode` / `output_mode` stay the
+  phones' switch — a browser's recognizer is often a cloud service of the browser's vendor, so
+  calling it "on the device" would mislead.
+
+Rejected: a streaming transcription socket (no provider in the catalogue streams through an
+OpenAI-shaped surface, and the phones do not need it yet); storing the recording as an
+attachment first (a dictation is not a file of the conversation, and would outlive the words).

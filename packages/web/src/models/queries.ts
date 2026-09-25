@@ -334,3 +334,41 @@ export function parseRef(value: string): ModelRef | null {
   if (separator <= 0) return null;
   return { provider_id: value.slice(0, separator), model: value.slice(separator + 1) };
 }
+
+// -------------------------------------------------------------------- speech (§63)
+
+export interface SpeechChoice {
+  kind: 'stt' | 'tts';
+  providerId: string | null;
+  /** The chosen provider's settings; only what the person can edit here. */
+  settings?: { model?: string | null; language?: string | null; voice?: string | null };
+}
+
+/** Choose the profile's STT or TTS provider and set its model, language or voice. */
+export function useUpdateSpeech() {
+  const { client } = useAuth();
+  return useModelsMutation(async ({ kind, providerId, settings }: SpeechChoice) => {
+    const body = {
+      ...(kind === 'stt' ? { stt_provider_id: providerId } : { tts_provider_id: providerId }),
+      ...(providerId && settings ? { providers: [{ id: providerId, settings }] } : {}),
+    };
+    return (await client.request('patch', '/models/speech', { body })).data as SpeechSettings;
+  });
+}
+
+/** The voices a TTS provider lists; empty for one that takes a free-form voice id. */
+export function useVoices(providerId: string | null) {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: ['models', 'voices', profile, providerId] as const,
+    queryFn: async () =>
+      (
+        await client.request('get', '/models/speech/voices', {
+          query: { provider_id: providerId as string },
+        })
+      ).data.items as { id: string; name: string; language: string | null }[],
+    enabled: !!session && !!providerId,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+}

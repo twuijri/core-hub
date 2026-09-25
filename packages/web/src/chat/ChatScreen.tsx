@@ -71,6 +71,8 @@ import { FilesButton } from '../files/FilesList.js';
 import { filesRevisionOf } from '../files/kinds.js';
 import { changesRevisionOf } from '../files/changes.js';
 import { ProfileBadge } from '../shell/ProfileBadge.js';
+import { VoiceProvider, useAutoRead, useVoicePreferences } from '../voice/context.js';
+import { VoiceStage } from '../voice/VoiceStage.js';
 import { useManyProfiles, useProfileInLink } from '../shell/profiles.js';
 
 export function ChatScreen() {
@@ -124,16 +126,23 @@ type OpenAnchor = Anchor & { sessionId: string; phase: AnchorPhase };
  * One open conversation. `title` replaces the conversation's own name in the top bar: the
  * global agent's page (screens/GlobalAgentScreen.tsx) is this conversation under its own name.
  */
-export function OpenSession({
-  sessionId,
-  title: pageTitle,
-  intro,
-}: {
+export function OpenSession(props: OpenSessionProps) {
+  // One voice for the whole conversation: every speaker and voice mode share it (§63).
+  return (
+    <VoiceProvider>
+      <OpenSessionBody {...props} />
+    </VoiceProvider>
+  );
+}
+
+interface OpenSessionProps {
   sessionId: string;
   title?: string;
   /** A line said above an empty conversation: what this page is, before anything is in it. */
   intro?: string;
-}) {
+}
+
+function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProps) {
   const { t, language } = useI18n();
   const { client, profile } = useAuth();
   const manyProfiles = useManyProfiles();
@@ -425,6 +434,11 @@ export function OpenSession({
     state.context,
   );
 
+  // Voice (contract decision §63): the full-screen stage, and reading replies aloud as
+  // they finish when the person asked for it — not while the stage speaks them itself.
+  const [voiceMode, setVoiceMode] = useState(false);
+  const voicePreferences = useVoicePreferences();
+
   const title = pageTitle ?? (state.session ? sessionTitle(state.session, t) : t(termKey('chat')));
   const showReasoning = preferences.data?.show_reasoning ?? true;
   // Finished runs too, so a turn still says which model answered it after a reload (§54).
@@ -488,6 +502,20 @@ export function OpenSession({
       changesRevision={changesRevision}
     >
       <AppShell title={title}>
+        <AutoRead
+          messages={state.messages}
+          enabled={voicePreferences.autoSpeak && !voiceMode}
+          ready={stream.status === 'ready'}
+        />
+        {voiceMode && (
+          <VoiceStage
+            messages={state.messages}
+            busy={busy}
+            onSend={send}
+            onCancel={cancel}
+            onClose={() => setVoiceMode(false)}
+          />
+        )}
         <TabsFrame value={messageCount === 0 ? 'chat' : view} onValueChange={setView}>
           <div
             className="chat-flow"
@@ -737,6 +765,7 @@ export function OpenSession({
                 onApprovalMode={approval.set}
                 approvalDisabledReason={approval.disabledReason}
                 starters={messageCount === 0 ? starterSuggestions(language) : []}
+                onVoiceMode={disabledReason === null ? () => setVoiceMode(true) : undefined}
               />
               <div className="chat-pad" aria-hidden />
             </TabPanel>
@@ -745,6 +774,20 @@ export function OpenSession({
       </AppShell>
     </SessionFilesProvider>
   );
+}
+
+/** Reads each reply aloud as it finishes, when the person asked for it (`useAutoRead`). */
+function AutoRead({
+  messages,
+  enabled,
+  ready,
+}: {
+  messages: readonly Message[];
+  enabled: boolean;
+  ready: boolean;
+}) {
+  useAutoRead(messages, enabled, ready);
+  return null;
 }
 
 /** The address parameter that opens a conversation on its Trajectory tab. */

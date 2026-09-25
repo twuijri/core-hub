@@ -44,12 +44,15 @@ import {
 } from './queries.js';
 
 export function AddProviderDialog({
+  kind: startKind = 'llm',
   presets,
   host,
   taken,
   profileName,
   onClose,
 }: {
+  /** What a custom endpoint is added as; the speech tabs open it as their own kind. */
+  kind?: 'llm' | 'stt' | 'tts';
   presets: ProviderPreset[];
   host: ProviderHost | undefined;
   /**
@@ -74,6 +77,9 @@ export function AddProviderDialog({
     [presets, taken, scope],
   );
   const [mode, setMode] = useState<'preset' | 'custom'>('preset');
+  // A custom endpoint may be a speech server (Whisper-style `audio/transcriptions`,
+  // `audio/speech`): what it is for is asked, never guessed (DECISIONS §63).
+  const [customKind, setCustomKind] = useState<'llm' | 'stt' | 'tts'>(startKind);
   const [presetId, setPresetId] = useState<string>(offered[0]?.id ?? '');
   const preset = offered.find((item) => item.id === presetId);
   const [label, setLabel] = useState('');
@@ -142,14 +148,15 @@ export function AddProviderDialog({
     const body: ProviderCreate = {
       ...(usingPreset ? { preset: preset.id } : {}),
       label: usingPreset ? label.trim() || preset.label : label.trim(),
-      kind: usingPreset ? (preset.kind as 'llm' | 'stt' | 'tts') : 'llm',
+      kind: usingPreset ? (preset.kind as 'llm' | 'stt' | 'tts') : customKind,
       base_url: baseUrl.trim(),
       ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
       scope,
     };
     create.mutate(body, {
       onSuccess: async (provider) => {
-        if (model) {
+        // A default model is a chat model; a speech provider's model is set on its tab.
+        if (model && (usingPreset ? preset.kind === 'llm' : customKind === 'llm')) {
           // The catalogue refresh is a job; registering the chosen model makes the
           // default legal now instead of racing it (`models.putModel` §custom).
           await saveModel.mutateAsync({ provider_id: provider.id, model, custom: true });
@@ -259,18 +266,35 @@ export function AddProviderDialog({
             )}
           </div>
         ) : (
-          <Field label={t('models.provider.label')}>
-            {(props) => (
-              <Input
-                {...props}
-                dir="auto"
-                value={label}
-                onChange={(event) => setLabel(event.target.value)}
-                required
-                data-testid="add-label"
+          <>
+            <fieldset className="flex flex-col gap-1">
+              <legend className="ch-label">{t('models.add.kind')}</legend>
+              <Segmented
+                className="self-start"
+                label={t('models.add.kind')}
+                value={customKind}
+                onChange={(next) => setCustomKind(next === 'stt' || next === 'tts' ? next : 'llm')}
+                wrap
+                options={(['llm', 'stt', 'tts'] as const).map((value) => ({
+                  value,
+                  label: t(`models.add.kind_${value}`),
+                  itemProps: { 'data-testid': `add-kind-${value}` },
+                }))}
               />
-            )}
-          </Field>
+            </fieldset>
+            <Field label={t('models.provider.label')}>
+              {(props) => (
+                <Input
+                  {...props}
+                  dir="auto"
+                  value={label}
+                  onChange={(event) => setLabel(event.target.value)}
+                  required
+                  data-testid="add-label"
+                />
+              )}
+            </Field>
+          </>
         )}
 
         <Field label={t('models.provider.base_url')}>

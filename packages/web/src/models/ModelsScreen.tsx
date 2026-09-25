@@ -56,6 +56,7 @@ import { Notice, Spinner } from '../ui/Notice.js';
 import { AddProviderDialog } from './AddProviderDialog.js';
 import { FallbackList } from './FallbackList.js';
 import { SignInPanel } from './SignInPanel.js';
+import { SpeechCard } from './SpeechCard.js';
 import { RuntimeCard } from './RuntimeChecks.js';
 import { needsLoopbackWarning, suggestedHostUrl } from './loopback.js';
 import {
@@ -185,6 +186,7 @@ export function ModelsScreen() {
 
       {adding && (
         <AddProviderDialog
+          kind={KIND_OF_TAB[tab] ?? 'llm'}
           presets={presets.data?.items ?? []}
           host={presets.data?.host}
           taken={{
@@ -230,6 +232,8 @@ function ProvidersTab({
   return (
     <>
       <p className="mb-3 text-sm text-muted">{t('models.providers.hint')}</p>
+      {/* Which provider this profile speaks through, and its settings (DECISIONS §63). */}
+      {side && kindOfTab !== 'llm' && kindOfTab && <SpeechCard kind={kindOfTab} side={side} />}
       {side && !side.ready && side.reason && (
         // The hub sends a sentence in the request's language (`models/index.ts`
         // §localiseSpeech), so it is shown as it arrived.
