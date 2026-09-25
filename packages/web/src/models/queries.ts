@@ -272,6 +272,8 @@ export function useSaveDefaults() {
   return useModelsMutation(
     async (body: {
       default?: ModelRef | null;
+      /** The image model (decision §72); null goes back to inheriting. */
+      image?: ModelRef | null;
       /** The chat model's fallback chain, in order (contract decision §54). */
       fallbacks?: ModelRef[];
       assignments?: Record<string, ModelRef | null>;

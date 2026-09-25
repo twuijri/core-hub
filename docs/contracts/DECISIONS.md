@@ -2114,3 +2114,53 @@ rather than in Settings.
 Rejected: a copy per skill in the hub's database (two truths that can disagree); overwriting on
 upgrade (loses the person's edits); marking library skills read-only like Hermes's built-ins (a library
 skill is meant to be adapted, and the edit kept); a flag file per skill (one manifest is one atomic write).
+
+## 72. The image model is a role on the chat providers, and the hub hands it to Hermes and the skills
+
+The Models page (2026-09-25). The owner: «موديلات تحويل النص لصوت والصوت لنص تنتقل لتبويباتها ما
+نخليها هنا», and an Images tab («الصور») with no image providers of its own: the image model is
+picked from the chat providers that already offer one (for example `gemini-3.1-flash-image` behind
+cli-proxy-api). Added: `ModelCapability: image_output`, `ModelDefaults.image` and
+`ModelDefaultsWrite.image` (`ModelRef` or `null`), and `image` among `ModelDefaults.inherited`.
+
+- **A role, like the chat model.** Stored as the `image` role of the profile's model defaults; a
+  profile that chose none uses the `default` profile's — the same model on the provider of the same
+  slug this profile uses (§37) — and `null` goes back to inheriting. Only a model with
+  `image_output` on a chat provider the hub can draw with is accepted (`400` otherwise): not a
+  provider signed in through Hermes (its credential is Hermes's), not Anthropic or Ollama.
+- **`image_output`** is the provider's word where it gives one (OpenRouter's output modalities) and
+  otherwise the model's id (`image`, `dall-e`, `imagen`, `flux` …), so a catalogue fetched before
+  this decision offers its image models too.
+- **How it is spoken to** follows the provider and the model: Google's own API (`gemini`); an
+  OpenAI-compatible endpoint with an Images-API family — gpt-image, DALL·E, Imagen, FLUX —
+  (`compatible`, `/images/generations` and `/images/edits`); any other model that draws on an
+  OpenAI-compatible endpoint (`chat`, `/chat/completions` with `modalities: ["image","text"]`, the
+  picture in `message.images`).
+- **Where it goes.** Into every Hermes home the hub writes (the root for the default profile, each
+  named profile's own where it differs), as four variables the hub owns —
+  `COREHUB_IMAGE_PROVIDER`, `COREHUB_IMAGE_BASE_URL`, `COREHUB_IMAGE_MODEL`,
+  `COREHUB_IMAGE_API_KEY` (the chosen provider's key) — removed when no model is chosen. The image
+  skills declare them, which is how Hermes hands them to the terminal; nobody types a key.
+- **Hermes's own `image_generate` tool** draws through a backend the hub installs,
+  `plugins/image_gen/corehub-images/`, listed in `plugins.enabled` and named in
+  `image_gen.provider` (Hermes's MIT source, v2026.9.14: a user plugin loads only when listed; the
+  tool calls the backend `image_gen.provider` names). None of Hermes's own backends takes an
+  arbitrary OpenAI-compatible address, key and model. The backend runs the same `image_api.py` as
+  the skills, reading the four variables through Hermes's secret scope, so the tool and the skills
+  never draw with different models. With no model chosen the hub takes back only what it wrote —
+  a backend somebody picked in `hermes tools` stays.
+- **Background removal** through the model: `image-edit remove-bg` asks a gpt-image model for
+  transparency outright and any other model for the subject on a flat colour, which the bundled,
+  model-free `image-convert transparent-bg` then clears. No local model is added to the image.
+
+Proposed, owner to confirm: the id patterns that make a model an image model and pick its protocol;
+removing the Providers tab's "Show" filter (with only chat providers left it filtered nothing);
+the speech tabs' add button inside the tab rather than in the header (NAVIGATION §3 keeps the
+header's two actions on Providers); pure green as the default flat colour for a cut-out.
+
+Rejected: image providers of their own (the owner: there are none — the chat providers have the
+models); pointing Hermes at its bundled `openai`/`openrouter` backends (they reach only their own
+service, so cli-proxy-api and custom endpoints would not work); a second copy of the image
+protocols inside the backend (two implementations drift); keeping `OPENAI_API_KEY`/`GEMINI_API_KEY`
+as fallbacks in the skills (Hermes hides them from the terminal, and they would draw with a model
+nobody chose).

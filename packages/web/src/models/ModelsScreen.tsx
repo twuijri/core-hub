@@ -7,6 +7,11 @@
  * configured; everything the hub *can* talk to lives behind "Add provider" (contract
  * decision §26).
  *
+ * Owner direction, 2026-09-25: «موديلات تحويل النص لصوت والصوت لنص تنتقل لتبويباتها». The
+ * Providers tab lists the chat providers only; speech providers are listed, added, edited and
+ * removed in their own two tabs. And an Images tab chooses the profile's image model from the
+ * chat providers' image models — there are no image providers of their own (decision §72).
+ *
  * The rules that run through every control here:
  * - a key is write-only. The field shows `[stored]` as a placeholder and is empty; the
  *   screen never receives the value, so it cannot echo it;
@@ -41,7 +46,6 @@ import {
   Radio,
   ScrollArea,
   Segmented,
-  Select,
   Separator,
   Skeleton,
   SkeletonGroup,
@@ -78,8 +82,11 @@ import {
   type TestResult,
 } from './queries.js';
 
-/** Which provider kind each speech tab shows. `general` shows everything configured. */
-const KIND_OF_TAB: Record<string, 'llm' | 'stt' | 'tts'> = {
+type ProviderKind = 'llm' | 'stt' | 'tts';
+
+/** Which provider kind each tab lists and adds. `general` is the chat providers. */
+const KIND_OF_TAB: Record<string, ProviderKind> = {
+  general: 'llm',
   stt_providers: 'stt',
   tts_providers: 'tts',
 };
@@ -100,7 +107,8 @@ export function ModelsScreen() {
   const presets = useProviderPresets();
   const refresh = useRefreshProvider();
   const runtime = useRuntimeReport();
-  const [adding, setAdding] = useState(false);
+  // Which kind the add dialog adds: the tab it was opened from says.
+  const [adding, setAdding] = useState<ProviderKind | null>(null);
   const { profile } = useAuth();
   const profileName = useProfileName();
 
@@ -127,7 +135,7 @@ export function ModelsScreen() {
             </Button>
             <Button
               variant="primary"
-              onClick={() => setAdding(true)}
+              onClick={() => setAdding('llm')}
               data-testid="open-add-provider"
             >
               {t('models.provider.add')}
@@ -173,12 +181,14 @@ export function ModelsScreen() {
             <DefaultsTab />
           ) : tab === 'ensembles' ? (
             <Notice>{t('models.ensembles.hint')}</Notice>
+          ) : tab === 'images' ? (
+            <ImagesTab onProviders={() => setTab('general')} />
           ) : (
             <ProvidersTab
               providers={providers.data}
-              tab={tab}
+              kind={KIND_OF_TAB[tab] ?? 'llm'}
               host={presets.data?.host}
-              onAdd={() => setAdding(true)}
+              onAdd={() => setAdding(KIND_OF_TAB[tab] ?? 'llm')}
             />
           )}
         </section>
@@ -186,15 +196,17 @@ export function ModelsScreen() {
 
       {adding && (
         <AddProviderDialog
-          kind={KIND_OF_TAB[tab] ?? 'llm'}
-          presets={presets.data?.items ?? []}
+          kind={adding}
+          // The presets of the tab's kind: chat providers on Providers, speech ones on the
+          // speech tabs (an OpenAI speech preset still brings its chat row with the same key).
+          presets={(presets.data?.items ?? []).filter((preset) => preset.kind === adding)}
           host={presets.data?.host}
           taken={{
             all: new Set(configured.filter((p) => p.scope === 'all').map((p) => p.slug)),
             profile: new Set(configured.filter((p) => p.scope === 'profile').map((p) => p.slug)),
           }}
           profileName={profileName(profile)}
-          onClose={() => setAdding(false)}
+          onClose={() => setAdding(null)}
         />
       )}
     </AppShell>
@@ -205,35 +217,32 @@ export function ModelsScreen() {
 
 function ProvidersTab({
   providers,
-  tab,
+  kind,
   host,
   onAdd,
 }: {
   providers: Provider[];
-  tab: string;
+  kind: ProviderKind;
   host: ProviderHost | undefined;
   onAdd(): void;
 }) {
   const { t } = useI18n();
   const speech = useSpeechSettings();
   const defaults = useModelDefaults();
-  const kindOfTab = KIND_OF_TAB[tab];
-  const side =
-    kindOfTab === 'stt' ? speech.data?.stt : kindOfTab === 'tts' ? speech.data?.tts : undefined;
-  const [filter, setFilter] = useState<'all' | 'llm' | 'stt' | 'tts'>('all');
+  const side = kind === 'stt' ? speech.data?.stt : kind === 'tts' ? speech.data?.tts : undefined;
 
-  // The speech tabs are about one kind; the providers tab is the whole list, with the
-  // filter the owner asked for.
-  const shown = useMemo(() => {
-    if (kindOfTab) return providers.filter((provider) => provider.kind === kindOfTab);
-    return filter === 'all' ? providers : providers.filter((provider) => provider.kind === filter);
-  }, [providers, kindOfTab, filter]);
+  // Each tab is one kind: chat providers here, speech providers in their own tabs (owner,
+  // 2026-09-25). Every saved provider is still listed — in the tab of its kind.
+  const shown = useMemo(
+    () => providers.filter((provider) => provider.kind === kind),
+    [providers, kind],
+  );
 
   return (
     <>
       <p className="mb-3 text-sm text-muted">{t('models.providers.hint')}</p>
       {/* Which provider this profile speaks through, and its settings (DECISIONS §63). */}
-      {side && kindOfTab !== 'llm' && kindOfTab && <SpeechCard kind={kindOfTab} side={side} />}
+      {side && kind !== 'llm' && <SpeechCard kind={kind} side={side} />}
       {side && !side.ready && side.reason && (
         // The hub sends a sentence in the request's language (`models/index.ts`
         // §localiseSpeech), so it is shown as it arrived.
@@ -241,21 +250,13 @@ function ProvidersTab({
           {side.reason}
         </Notice>
       )}
-      {!kindOfTab && providers.length > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted">{t('models.filter')}</span>
-          <Select
-            value={filter}
-            onValueChange={(next) => setFilter((next ?? 'all') as typeof filter)}
-            label={t('models.filter')}
-            testId="provider-filter"
-            options={[
-              { value: 'all', label: t('models.filter_all') },
-              { value: 'llm', label: t('models.tab.general') },
-              { value: 'stt', label: t('models.tab.stt_providers') },
-              { value: 'tts', label: t('models.tab.tts_providers') },
-            ]}
-          />
+      {kind !== 'llm' && shown.length > 0 && (
+        // The header's "Add provider" is the chat tab's (NAVIGATION §3); a speech tab adds
+        // its own kind from here.
+        <div className="mb-3">
+          <Button onClick={onAdd} data-testid="speech-add-provider">
+            {t(kind === 'stt' ? 'models.speech.add_stt' : 'models.speech.add_tts')}
+          </Button>
         </div>
       )}
       <ul className="grid gap-3 lg:grid-cols-2" data-testid="provider-list">
@@ -277,16 +278,24 @@ function ProvidersTab({
       {shown.length === 0 && (
         <EmptyState
           icon={<IconModels size={20} />}
-          title={t(providers.length === 0 ? 'models.providers.none' : 'models.providers.empty')}
-          {...(providers.length === 0
-            ? {
-                action: (
-                  <Button variant="primary" onClick={onAdd}>
-                    {t('models.provider.add')}
-                  </Button>
-                ),
-              }
-            : {})}
+          title={t(
+            kind === 'stt'
+              ? 'models.speech.none_stt'
+              : kind === 'tts'
+                ? 'models.speech.none_tts'
+                : 'models.providers.none',
+          )}
+          action={
+            <Button variant="primary" onClick={onAdd} data-testid="empty-add-provider">
+              {t(
+                kind === 'stt'
+                  ? 'models.speech.add_stt'
+                  : kind === 'tts'
+                    ? 'models.speech.add_tts'
+                    : 'models.provider.add',
+              )}
+            </Button>
+          }
         />
       )}
     </>
@@ -323,6 +332,9 @@ function ProviderCard({
   const keyRequired = provider.auth.kind === 'api_key';
   // Used by signing in to an account, through Hermes (contract decision §55).
   const signIn = provider.auth.kind === 'oauth';
+  // The chat default belongs to chat providers; a speech provider's model is chosen on its
+  // tab's card (decision §63).
+  const chat = provider.kind === 'llm';
   const warn = needsLoopbackWarning(provider.base_url ?? '', host);
 
   return (
@@ -408,26 +420,28 @@ function ProviderCard({
         </ul>
       )}
 
-      <div className="labelled-row">
-        <span className="labelled-row-name text-xs text-muted">
-          {t('models.add.default_model')}
-        </span>
-        <Combobox
-          value={defaultModel ?? null}
-          disabled={provider.models.length === 0 || saveDefaults.isPending}
-          onChange={(model) => {
-            remember(model);
-            saveDefaults.mutate({
-              default: model ? { provider_id: provider.id, model } : null,
-            });
-          }}
-          label={t('models.add.default_model')}
-          placeholder={t('models.defaults.none')}
-          testId="card-default-model"
-          recent={recent}
-          options={provider.models.map((model) => modelOption(model, model.model))}
-        />
-      </div>
+      {chat && (
+        <div className="labelled-row">
+          <span className="labelled-row-name text-xs text-muted">
+            {t('models.add.default_model')}
+          </span>
+          <Combobox
+            value={defaultModel ?? null}
+            disabled={provider.models.length === 0 || saveDefaults.isPending}
+            onChange={(model) => {
+              remember(model);
+              saveDefaults.mutate({
+                default: model ? { provider_id: provider.id, model } : null,
+              });
+            }}
+            label={t('models.add.default_model')}
+            placeholder={t('models.defaults.none')}
+            testId="card-default-model"
+            recent={recent}
+            options={provider.models.map((model) => modelOption(model, model.model))}
+          />
+        </div>
+      )}
 
       <CardFooter>
         {signIn && (
@@ -440,17 +454,19 @@ function ProviderCard({
             {t(provider.auth.signed_in ? 'models.signin.again' : 'models.signin.action')}
           </Button>
         )}
-        <Button
-          disabled={provider.models.length === 0 || saveDefaults.isPending || isDefault}
-          onClick={() => {
-            const first = provider.models[0];
-            if (first) {
-              saveDefaults.mutate({ default: { provider_id: provider.id, model: first.model } });
-            }
-          }}
-        >
-          {t('models.action.set_default')}
-        </Button>
+        {chat && (
+          <Button
+            disabled={provider.models.length === 0 || saveDefaults.isPending || isDefault}
+            onClick={() => {
+              const first = provider.models[0];
+              if (first) {
+                saveDefaults.mutate({ default: { provider_id: provider.id, model: first.model } });
+              }
+            }}
+          >
+            {t('models.action.set_default')}
+          </Button>
+        )}
         <Button onClick={() => setPanel('models')}>{t('models.action.display_names')}</Button>
         <Button onClick={() => setPanel('models')} data-testid="manage-visible">
           {t('models.action.visible_models')}
@@ -760,6 +776,96 @@ function ModelsPanel({ provider, onDone }: { provider: Provider; onDone(): void 
       <div>
         <Button onClick={onDone}>{t('models.panel.done')}</Button>
       </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------- images
+
+/**
+ * The profile's image model (contract decision §72): one of the chat providers' models that
+ * draws. There are no image providers to add here — the list is what the chat providers
+ * already offer, and choosing is a role like the chat model, inherited from the default
+ * profile until this profile picks its own.
+ */
+function ImagesTab({ onProviders }: { onProviders(): void }) {
+  const { t } = useI18n();
+  const defaults = useModelDefaults();
+  const catalogue = useCatalogue();
+  const providers = useProviders();
+  const save = useSaveDefaults();
+  const { recent, remember } = useRecentModels();
+
+  if (defaults.isPending || catalogue.isPending)
+    return (
+      <SkeletonGroup label={t('common.loading')}>
+        <Skeleton height="2.5rem" radius="md" />
+      </SkeletonGroup>
+    );
+  if (defaults.isError) return <Notice tone="danger">{describeError(defaults.error, t)}</Notice>;
+  if (catalogue.isError) return <Notice tone="danger">{describeError(catalogue.error, t)}</Notice>;
+
+  // A provider signed in through Hermes holds no key the hub could hand the image tools.
+  const drawing = new Set(
+    (providers.data ?? [])
+      .filter((provider) => provider.kind === 'llm' && provider.auth.kind !== 'oauth')
+      .map((provider) => provider.id),
+  );
+  const images = (catalogue.data ?? []).filter(
+    (model) => model.capabilities.includes('image_output') && drawing.has(model.provider_id),
+  );
+  const chosen = defaults.data.image ?? null;
+  const inherited = (defaults.data.inherited ?? []).includes('image');
+
+  return (
+    <div className="flex flex-col gap-4" data-testid="images-tab">
+      <p className="text-sm text-muted">{t('models.images.hint')}</p>
+      {images.length === 0 && !chosen ? (
+        <EmptyState
+          icon={<IconModels size={20} />}
+          title={t('models.images.none')}
+          body={t('models.images.none_hint')}
+          action={
+            <Button onClick={onProviders} data-testid="images-to-providers">
+              {t('models.images.to_providers')}
+            </Button>
+          }
+        />
+      ) : (
+        <div className="labelled-row">
+          <Label className="labelled-row-name">{t('models.images.model')}</Label>
+          <Combobox
+            value={chosen ? refValue(chosen) : null}
+            onChange={(next) => {
+              remember(next);
+              save.mutate({ image: next ? parseRef(next) : null });
+            }}
+            label={t('models.images.model')}
+            placeholder={t('models.defaults.none')}
+            testId="image-model"
+            recent={recent}
+            options={images.map((model) => modelOption(model, refValue(model)))}
+            disabled={save.isPending}
+          />
+          {inherited && (
+            <span className="text-xs text-muted" data-testid="image-model-inherited">
+              {t('models.defaults.inherited')}
+            </span>
+          )}
+          {chosen && !inherited && (
+            <Button
+              size="sm"
+              disabled={save.isPending}
+              onClick={() => save.mutate({ image: null })}
+              data-testid="image-model-clear"
+            >
+              {t('models.images.clear')}
+            </Button>
+          )}
+        </div>
+      )}
+      <p className="text-xs text-muted">{t('models.images.used_by')}</p>
+      {save.isError && <Notice tone="danger">{describeError(save.error, t)}</Notice>}
     </div>
   );
 }

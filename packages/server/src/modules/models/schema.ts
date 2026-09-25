@@ -72,18 +72,26 @@ export const MODEL_KINDS = ['chat', 'embedding', 'stt', 'tts'] as const;
 export type ModelKind = (typeof MODEL_KINDS)[number];
 
 /** The contract's `ModelCapability`. */
-export const MODEL_CAPABILITIES = ['vision', 'tools', 'reasoning', 'audio', 'streaming'] as const;
+export const MODEL_CAPABILITIES = [
+  'vision',
+  'tools',
+  'reasoning',
+  'audio',
+  'streaming',
+  'image_output',
+] as const;
 export type ModelCapability = (typeof MODEL_CAPABILITIES)[number];
 
 export const MODEL_SOURCES = ['catalogue', 'discovered', 'manual'] as const;
 export type ModelSource = (typeof MODEL_SOURCES)[number];
 
 /**
- * Roles a workspace assigns a model to. `chat` is the contract's `ModelDefaults.default`;
- * the rest are its `auxiliary.assignments` keys, declared by the server
- * (`defaults.ts` §AUXILIARY_TASKS) and shown with an Arabic and an English label.
+ * Roles a workspace assigns a model to. `chat` is the contract's `ModelDefaults.default`,
+ * `image` its `ModelDefaults.image` (the Models → Images tab, decision §72); the rest are its
+ * `auxiliary.assignments` keys, declared by the server (`defaults.ts` §AUXILIARY_TASKS) and
+ * shown with an Arabic and an English label.
  */
-export const MODEL_ROLES = ['chat', 'coding', 'title', 'summary', 'embedding'] as const;
+export const MODEL_ROLES = ['chat', 'coding', 'title', 'summary', 'embedding', 'image'] as const;
 export type ModelRole = (typeof MODEL_ROLES)[number];
 
 export const SECRET_KINDS = ['api_key', 'token', 'password', 'generic'] as const;

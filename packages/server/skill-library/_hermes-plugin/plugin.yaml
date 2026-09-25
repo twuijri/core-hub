@@ -1,0 +1,5 @@
+name: corehub-images
+version: 1.0.0
+description: "Core Hub's image backend: draws and edits with the image model chosen in Core Hub (Models → Images), from the profile's own chat providers."
+author: twuijri (Core Hub)
+kind: backend

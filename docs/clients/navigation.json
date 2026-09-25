@@ -227,7 +227,7 @@
         "kind": "settings-management"
       },
       "roles": ["member"],
-      "tabs": ["general", "auxiliary", "ensembles", "stt_providers", "tts_providers"],
+      "tabs": ["general", "auxiliary", "ensembles", "stt_providers", "tts_providers", "images"],
       "note": "Providers, keys and voice providers live here, never in a Settings tab. Its own Settings page since 2026-09-22."
     },
     {

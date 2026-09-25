@@ -8,6 +8,7 @@ import {
   chooseInCombobox,
   chooseOption,
   closeControl,
+  openControl,
   optionLabels,
   stubListViewport,
 } from './helpers/ui.js';
@@ -109,6 +110,18 @@ const PRESETS = [
     base_url_required: true,
     key: 'optional',
     local: true,
+    repeatable: false,
+    keys_url: null,
+  },
+  {
+    id: 'openai-tts',
+    label: 'OpenAI TTS',
+    kind: 'tts',
+    api_mode: 'native',
+    base_url: 'https://api.openai.com/v1',
+    base_url_required: false,
+    key: 'required',
+    local: false,
     repeatable: false,
     keys_url: null,
   },
@@ -752,6 +765,174 @@ describe('models screen', () => {
     expect(screen.getByRole('dialog')).toBeTruthy();
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+});
+
+describe('the Models tabs: speech in its own tabs, and an Images tab (owner, 2026-09-25)', () => {
+  const STT_ID = '01J8QK3ZR2W7M5N4P6T8V9X0ST';
+  const TTS_ID = '01J8QK3ZR2W7M5N4P6T8V9X0TT';
+  const PROXY_ID = '01J8QK3ZR2W7M5N4P6T8V9X0PX';
+  const speechProviders = [
+    provider({ api_key: '[stored]', auth: { kind: 'api_key', signed_in: true } }),
+    provider({
+      id: STT_ID,
+      slug: 'openai-stt',
+      label: 'OpenAI Whisper',
+      kind: 'stt',
+      models: [{ ...MODEL, key: 'openai-stt/whisper-1', model: 'whisper-1', kind: 'stt' }],
+    }),
+    provider({ id: TTS_ID, slug: 'elevenlabs', label: 'ElevenLabs', kind: 'tts' }),
+  ];
+  const IMAGE_MODEL = {
+    ...MODEL,
+    key: 'cli-proxy-api/gemini-3.1-flash-image',
+    provider_id: PROXY_ID,
+    provider: 'cli-proxy-api',
+    model: 'gemini-3.1-flash-image',
+    capabilities: ['image_output'],
+  };
+  const proxy = provider({
+    id: PROXY_ID,
+    slug: 'cli-proxy-api',
+    label: 'cli-proxy-api',
+    builtin: false,
+    auth: { kind: 'none', signed_in: true },
+  });
+  const defaults = (over: Record<string, unknown> = {}) => ({
+    default: null,
+    image: null,
+    fallbacks: [],
+    auxiliary: { tasks: [], assignments: {} },
+    inherited: [],
+    ...over,
+  });
+
+  it('lists only chat providers on Providers, with no speech filter', async () => {
+    const { fetchImpl } = hub({ providers: speechProviders });
+    renderScreen(fetchImpl);
+    const list = await screen.findByTestId('provider-list');
+    await waitFor(() => expect(list.querySelectorAll('[data-provider-slug]')).toHaveLength(1));
+    expect(list.querySelector('[data-provider-slug="anthropic"]')).toBeTruthy();
+    expect(screen.queryByText('OpenAI Whisper')).toBeNull();
+    expect(screen.queryByText('ElevenLabs')).toBeNull();
+    expect(screen.queryByTestId('provider-filter')).toBeNull();
+    // The add dialog here offers chat presets, not speech ones.
+    await openDialog();
+    const offered = await presetLabels();
+    expect(offered).toContain('LiteLLM');
+    expect(offered).not.toContain('OpenAI TTS');
+  });
+
+  it('lists, adds, edits and removes speech providers in their own tab', async () => {
+    const { state, fetchImpl } = hub({ providers: speechProviders });
+    renderScreen(fetchImpl);
+    await waitFor(() => expect(screen.getByTestId('models-tabs')).toBeTruthy());
+    // Each speech tab lists its own kind.
+    await userEvent.click(screen.getByText('Speech to text'));
+    await waitFor(() => expect(screen.getByText('OpenAI Whisper')).toBeTruthy());
+    expect(screen.queryByText('ElevenLabs')).toBeNull();
+    await userEvent.click(screen.getByText('Text to speech'));
+
+    const list = await screen.findByTestId('provider-list');
+    await waitFor(() => expect(within(list).getByText('ElevenLabs')).toBeTruthy());
+    expect(within(list).queryByText('Anthropic')).toBeNull();
+    expect(within(list).queryByText('OpenAI Whisper')).toBeNull();
+    // A speech provider's card edits and removes it; the chat default is not its business.
+    expect(within(list).getByTestId('provider-edit')).toBeTruthy();
+    expect(within(list).queryByTestId('card-default-model')).toBeNull();
+    expect(within(list).queryByRole('button', { name: 'Set as default' })).toBeNull();
+
+    // Adding from this tab adds a speech provider of this kind.
+    await userEvent.click(screen.getByTestId('speech-add-provider'));
+    await waitFor(() => expect(screen.getByTestId('add-preset')).toBeTruthy());
+    const offered = await presetLabels();
+    expect(offered).toEqual(['OpenAI TTS']);
+    await userEvent.click(
+      within(screen.getByTestId('add-provider-dialog')).getByRole('button', { name: 'Cancel' }),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    await userEvent.click(within(list).getByTestId('provider-remove'));
+    await userEvent.click(
+      within(await screen.findByTestId('confirm-remove-provider')).getByRole('button', {
+        name: 'Remove',
+      }),
+    );
+    await waitFor(() => {
+      const removed = state.sent.find((call) => call.method === 'DELETE');
+      expect(removed?.url).toContain(`/models/providers/${TTS_ID}`);
+    });
+  });
+
+  it("chooses the image model from the chat providers' image models", async () => {
+    const { state, fetchImpl } = hub({
+      providers: [provider(), proxy],
+      models: [MODEL, IMAGE_MODEL],
+      defaults: defaults(),
+    });
+    renderScreen(fetchImpl);
+    await waitFor(() => expect(screen.getByTestId('models-tabs')).toBeTruthy());
+    await userEvent.click(screen.getByText('Images'));
+    const tab = await screen.findByTestId('images-tab');
+    expect(tab.textContent).toContain('there are no separate image providers');
+
+    const undo = stubListViewport();
+    await openControl(userEvent, screen.getByTestId('image-model'));
+    const rows = await screen.findAllByTestId('combobox-option');
+    // Only a model that draws is offered: the chat model is not.
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining('gemini-3.1-flash-image'),
+    ]);
+    await userEvent.click(rows[0]!);
+    undo();
+    await waitFor(() => {
+      const put = state.sent.find((call) => call.url.endsWith('/models/defaults') && call.body);
+      expect(put?.body).toEqual({
+        image: { provider_id: PROXY_ID, model: 'gemini-3.1-flash-image' },
+      });
+    });
+  });
+
+  it("says an inherited image model is the default profile's, and a chosen one can go back to it", async () => {
+    const chosen = { provider_id: PROXY_ID, model: 'gemini-3.1-flash-image' };
+    const inheritedHub = hub({
+      providers: [proxy],
+      models: [IMAGE_MODEL],
+      defaults: defaults({ image: chosen, inherited: ['image'] }),
+    });
+    renderScreen(inheritedHub.fetchImpl);
+    await userEvent.click(await screen.findByText('Images'));
+    expect((await screen.findByTestId('image-model-inherited')).textContent).toBe(
+      'From the default profile',
+    );
+    expect(screen.queryByTestId('image-model-clear')).toBeNull();
+    cleanup();
+
+    const own = hub({
+      providers: [proxy],
+      models: [IMAGE_MODEL],
+      defaults: defaults({ image: chosen }),
+    });
+    renderScreen(own.fetchImpl);
+    await userEvent.click(await screen.findByText('Images'));
+    await userEvent.click(await screen.findByTestId('image-model-clear'));
+    await waitFor(() => {
+      const put = own.state.sent.find((call) => call.url.endsWith('/models/defaults') && call.body);
+      expect(put?.body).toEqual({ image: null });
+    });
+    expect(screen.queryByTestId('image-model-inherited')).toBeNull();
+  });
+
+  it('says in Arabic when no chat provider offers an image model, and leads to Providers', async () => {
+    const { fetchImpl } = hub({ models: [MODEL], defaults: defaults() });
+    renderScreen(fetchImpl, 'ar');
+    await waitFor(() => expect(screen.getByTestId('models-tabs')).toBeTruthy());
+    await userEvent.click(screen.getByText('الصور'));
+    expect(
+      await screen.findByText('لا يقدّم أيٌّ من مزوّدي المحادثة عندك نموذج صور.'),
+    ).toBeTruthy();
+    await userEvent.click(screen.getByTestId('images-to-providers'));
+    expect(await screen.findByTestId('provider-list')).toBeTruthy();
   });
 });
 
