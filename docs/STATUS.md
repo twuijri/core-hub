@@ -340,7 +340,10 @@ its approval.
   bundle ids are `com.twuijri.corehub` and `com.twuijri.corehub.share` with the App Group
   `group.com.twuijri.corehub`, and `.github/workflows/ios-signed.yml` (by hand or a release tag)
   archives and exports a signed App Store `.ipa`, with an optional TestFlight upload (off by
-  default; not tried) — proven by a run on the branch (docs/RELEASING.md).
+  default; not tried) — proven by a run on the branch (docs/RELEASING.md). Since 2026-09-26 an
+  uploaded build is also added to the TestFlight groups in `testflight_groups` (default `Owner`)
+  by `apps/ios/scripts/testflight-distribute.mjs` once App Store Connect has processed it —
+  tested against a fake App Store Connect only, not yet on a real run.
 - **App icons** (since 2026-09-26): every app shows the Core Hub mark, white on the accent
   (`#0b6b5d`) like the favicon, made by `pnpm icons:build` (`scripts/icons/build-icons.mjs`, resvg)
   from `CoreHubMark.tsx` and `tokens.json`: iOS `AppIcon` (one opaque 1024 px icon, with iOS 18

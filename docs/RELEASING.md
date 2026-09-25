@@ -90,7 +90,7 @@ an artifact. A release keeps them for 14 days. A release's Android `versionCode`
 | Workflow | Makes | Secrets |
 |---|---|---|
 | `android-signed.yml` | signed `app-release.apk` + `app-release.aab`, Firebase configured | `ANDROID_TEST_KEYSTORE_B64`, `ANDROID_TEST_KEYSTORE_PASSWORD`, `ANDROID_TEST_KEY_ALIAS`, `ANDROID_TEST_KEY_PASSWORD`, `GOOGLE_SERVICES_JSON` |
-| `ios-signed.yml` | App Store archive and `.ipa` (app + share extension); TestFlight when `upload_testflight` is ticked | `IOS_CSC_LINK`, `IOS_CSC_KEY_PASSWORD`, `ASC_API_KEY_ID`, `ASC_API_KEY_P8`, `ASC_API_ISSUER_ID` |
+| `ios-signed.yml` | App Store archive and `.ipa` (app + share extension); TestFlight when `upload_testflight` is ticked, then the TestFlight groups in `testflight_groups` (default `Owner`) | `IOS_CSC_LINK`, `IOS_CSC_KEY_PASSWORD`, `ASC_API_KEY_ID`, `ASC_API_KEY_P8`, `ASC_API_ISSUER_ID` |
 | `desktop-signed.yml` | macOS dmg signed with Developer ID and notarised | `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` |
 
 How each handles its secrets: they reach only the steps that need them, as environment
@@ -133,6 +133,26 @@ export `COREHUB_ANDROID_KEYSTORE` (a path), `COREHUB_ANDROID_KEYSTORE_PASSWORD`,
    `production`, which push needs) and the signature.
 5. `upload_testflight` (a manual run only, off by default) uploads with `xcrun altool` and the
    same key.
+6. After the upload, `apps/ios/scripts/testflight-distribute.mjs` adds the build to the TestFlight
+   groups named in `testflight_groups` (comma-separated, default `Owner`; empty adds none). App
+   Store Connect adds builds to an internal group by itself only when they come from Xcode's own
+   upload ("Automatic for Xcode Builds"), not from altool, so without this step each build had to
+   be added by hand. With the same key it finds the app by bundle id, waits until App Store
+   Connect has processed the build (`processingState` `VALID`), and adds it to each group.
+   - **Internal groups** (such as `Owner`) get the build straight away; no review.
+   - **External groups** get it too, but their testers see it only after **Beta App Review**
+     approves it. The workflow never submits for review; that stays the owner's step in App Store
+     Connect.
+   - **Slow processing**: after 30 minutes the step stops waiting and leaves a warning, not a
+     failure; the upload succeeded, and the build can be added by hand (TestFlight → the group →
+     Builds → +).
+   - **Missing export compliance** (`MISSING_EXPORT_COMPLIANCE`) is a warning: the app declares
+     `ITSAppUsesNonExemptEncryption = false`, so it should not happen; if it does, answer it on the
+     build in TestFlight. The build is still added and becomes installable once answered.
+   - A build Apple rejected, an unknown app or an unknown group name fails the step; the error
+     lists the app's groups.
+
+   The script's tests run in CI (`pnpm scripts:test`) against a fake App Store Connect.
 
 On a developer's Mac, Xcode signs automatically with team `58QWJ228ZE`
 (`DEVELOPMENT_TEAM` in `apps/ios/project.yml`).
@@ -182,7 +202,9 @@ Once, and again when the listing or the screenshots change:
 For each version:
 
 1. **A build.** Actions → *iOS signed build* → Run workflow with **upload_testflight** ticked.
-   Wait until App Store Connect has processed the build (TestFlight shows it).
+   The run waits until App Store Connect has processed the build and adds it to the `Owner`
+   TestFlight group (or the groups in **testflight_groups**), so it reaches the owner's devices
+   without adding it by hand.
 2. **Pick the build.** App Store Connect → the app → the version in "Prepare for Submission" →
    **Build** → choose the build from TestFlight.
 3. **App Review Information.** Tick **Sign-in required** and enter the demo account's username
