@@ -354,6 +354,47 @@ describe('Hermes runtime: the TUI gateway and changing keys', () => {
   });
 });
 
+describe("Hermes runtime: Hermes's settings changed (contract decision §58)", () => {
+  it('retires the TUI gateway so the next message reads the new values, and leaves an external Hermes alone', async () => {
+    const { logger } = capturingLogger();
+    const { spawnImpl } = fakeSpawner();
+    const { started, tuiSpawn } = tuiGateways();
+    const bin = binDirWithHermes();
+    writeFileSync(path.join(bin, 'python'), '');
+    const runtime = new HermesRuntime({
+      dataDir: tempDir(),
+      host: { pathValue: bin },
+      log: logger,
+      fetchImpl: unreachableFetch,
+      spawnImpl,
+      tuiSpawn,
+      healthIntervalMs: 0,
+    });
+    await runtime.start();
+    const first = runtime.tuiChannel()!;
+    await HermesTuiSession.open(first, null);
+    await runtime.settingsChanged('default');
+    expect(first.alive).toBe(false);
+    expect(started[0]!.killed).toBe(true);
+    // The next conversation gets a fresh one, which reads the profile's files as it builds.
+    const second = runtime.tuiChannel()!;
+    expect(second).not.toBe(first);
+    await runtime.stop();
+
+    const external = new HermesRuntime({
+      dataDir: tempDir(),
+      host: { pathValue: bin },
+      log: logger,
+      fetchImpl: async () => new Response('{"status":"ok"}', { status: 200 }),
+      spawnImpl,
+      healthIntervalMs: 0,
+    });
+    expect(await external.start()).toBe('external');
+    await expect(external.settingsChanged('work')).resolves.toBeUndefined();
+    await external.stop();
+  });
+});
+
 describe('Hermes runtime: the profile a conversation runs in (ADR 0014 stage 3)', () => {
   async function managedRuntime(profileRun: HermesRuntimeOptions['profileRun']) {
     const { logger } = capturingLogger();

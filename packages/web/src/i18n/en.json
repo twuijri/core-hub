@@ -272,7 +272,9 @@
       "auto_safe": "Auto-edit",
       "auto_all": "No ask",
       "off": "No approvals",
-      "always": "Always ask"
+      "always": "Always ask",
+      "manual": "Manual: asks about every dangerous command",
+      "smart": "Smart"
     },
     "dictate": "Dictate",
     "dictate_unavailable": "Dictation arrives with a speech provider (models.transcribe is still 501).",
@@ -282,7 +284,9 @@
       "always": "Asks before everything, reads included — slowest, safest.",
       "auto_safe": "Runs what it judges safe, asks about the rest.",
       "auto_all": "Runs everything without asking; nothing to object to.",
-      "off": "No gate at all: commands, files and network without permission."
+      "off": "No gate at all: commands, files and network without permission.",
+      "manual": "Asks before every dangerous command.",
+      "smart": "A helper model lets the safe ones through and asks about the rest."
     },
     "effort": {
       "label": "Thinking effort",
@@ -470,6 +474,28 @@
         "error": "failing"
       },
       "jobs_n": "{count} scheduled jobs"
+    },
+    "applies_next_message": "Applies from the next message.",
+    "saved": "Saved.",
+    "saved_next_message": "Saved in Hermes's settings; applies from the next message.",
+    "saved_restart_needed": "Saved in Hermes's settings; applies once Hermes restarts.",
+    "saved_restarting": "Saved; Hermes is restarting now so it applies.",
+    "default_is": "Hermes's default: {value}",
+    "default_none": "none",
+    "default_on": "on",
+    "default_off": "off",
+    "use_default": "Hermes's default ({value})",
+    "pending": {
+      "title": "Waiting for review",
+      "subtitle": "What the agent wrote to its memory or its skills, not saved yet",
+      "empty": "Nothing is waiting for review.",
+      "kind_memory": "Agent's memory",
+      "kind_user": "What it knows about you",
+      "kind_skill": "Skill",
+      "origin_review": "Hermes's own review",
+      "origin_chat": "During a conversation",
+      "approve": "Approve",
+      "reject": "Reject"
     }
   },
   "jobs": {
@@ -1428,7 +1454,9 @@
     "revoke_device_body": "This device loses access at once and is unlinked; pairing it again gives it a new token.",
     "none": "No app or device holds a token",
     "none_body": "Only your own sign-ins can reach your account.",
-    "browsers_note": "Browsers you signed in to are not listed here. Changing your password under Account signs out every browser except this one; it does not revoke the tokens above."
+    "browsers_note": "Browsers you signed in to are not listed here. Changing your password under Account signs out every browser except this one; it does not revoke the tokens above.",
+    "redact_title": "What reaches the model from messaging channels",
+    "redact_admin_only": "An admin changes it."
   },
   "people": {
     "title": "People",

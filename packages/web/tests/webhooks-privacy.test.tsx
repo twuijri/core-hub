@@ -1,7 +1,7 @@
 // The last two Settings pages: Webhooks (admin, `notify`) and Privacy (`auth`). What is
 // worth testing in each is that it says what the hub does and nothing more — a secret is on
 // screen once, a refusal is in words, a test shows what the endpoint answered, and Privacy
-// offers no switch the hub would ignore.
+// offers no switch the hub would ignore (Hermes's own redact_pii is hermes-settings.test.tsx).
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -424,7 +424,8 @@ describe('Privacy', () => {
   });
 
   it('offers no switch the hub would ignore', async () => {
-    // `privacy.redact_pii` is stored by the hub and read by nothing, so it is not here.
+    // The hub's own `privacy.redact_pii` is read by nothing and never shown; Hermes's is, where
+    // there is a Hermes (`hermes-settings.test.tsx`). This hub lists none.
     const { fetchImpl, sent } = hub({ tokens: [token()] });
     mount(<PrivacyTab />, fetchImpl);
     await screen.findByTestId('app-token-table');

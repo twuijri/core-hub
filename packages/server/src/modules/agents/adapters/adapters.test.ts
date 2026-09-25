@@ -364,17 +364,10 @@ describe('Hermes adapter', () => {
     expect(probe.runtime).toMatchObject({ state: 'error', error: 'gateway answered 503' });
   });
 
-  it('declares the four settings sections the Hermes screen renders', () => {
+  it("declares no settings of its own: Hermes's live in the profile's files", () => {
+    // `hermes-settings.ts` reads and writes them where the route knows the profile's home.
     const adapter = createHermesAdapter({ host: { pathValue: '/nowhere-at-all' } });
-    const sections = adapter.settings(target, { max_turns: 12 });
-    expect(sections.map((section) => section.key)).toEqual([
-      'agent',
-      'memory',
-      'session',
-      'gateway',
-    ]);
-    expect(sections[0]?.restart_required).toBe(true);
-    expect(sections[0]?.fields[0]).toMatchObject({ key: 'max_turns', value: 12, kind: 'integer' });
+    expect(adapter.settings(target, { max_turns: 12 })).toEqual([]);
   });
 
   it('refuses to start a conversation without the API server key it would need', async () => {

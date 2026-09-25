@@ -1493,3 +1493,47 @@ duplicate what Hermes already decides; a per-agent `commands` list instead of ca
 one more field to keep in step with the catalogue; putting compression settings on the agent's
 settings form — those values are stored by the hub and never reach Hermes today, which is the
 defect this entry exists to avoid repeating.
+
+## 58. Hermes's settings are Hermes's own keys, per profile; staged memory and skill writes are reviewed in the hub
+
+Hermes's Settings page showed four sections (`agent`, `memory`, `session`, `gateway`) that the
+hub stored in its own table and nothing read — a turn limit of 40 that Hermes never saw, an
+approvals mode, a gateway URL. The profile settings carried `proxy` and `privacy.redact_pii`
+that nothing applied either. Read in Hermes's MIT source (v2026.9.14) and proposed here — owner to
+confirm:
+
+- **The adapter's form is Hermes's own keys in the selected profile.** `agents.getSettings` /
+  `agents.updateSettings` for Hermes read and write the profile's `config.yaml` (edited in place,
+  comments kept) or its `.env`: `agent` — `agent.max_turns`, `agent.run_budget_seconds`,
+  `agent.tool_use_enforcement`, `agent.reasoning_effort`; `memory` — the two character budgets;
+  `approvals` — `approvals.mode`, `memory.write_approval`, `skills.write_approval`; `network` —
+  `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`; `privacy` — `privacy.redact_pii`. Nothing is stored by
+  the hub. The old four sections are gone (the gateway URL is the registry's, not a setting).
+- **`SettingsField` says what it does and what Hermes does without it.** Optional `help`,
+  `default` (Hermes's own; `value: null` means nothing written, and sending `null` puts it back)
+  and `default_text`; `Choice.labels` in both languages; `SettingsSection.applies`
+  (`next_message` | `restart`) and `note`. All additive.
+- **When a value applies.** Hermes reads these when it builds a session's agent, so saving retires
+  the TUI gateway the way a key change does: every conversation takes them from its next message.
+  A named profile's messaging gateway is restarted at once; the default profile's waits for
+  Restart. The proxy is process-wide: in the default profile saving runs Hermes's Restart as a
+  job (`restart_job_id`), because the one TUI gateway serves every profile from the root home —
+  so the default profile's proxy is the one every conversation uses, and a named profile's reaches
+  only its own gateway. **The proxy is Hermes's only; the hub's own requests do not use it.**
+- **`redact_pii` is wired to Hermes, the hub's field deprecated.** The Privacy page's switch is
+  Hermes's `privacy.redact_pii` in the profile (WhatsApp, Telegram, Signal, BlueBubbles; re-read
+  per message). `ProfileSettings.privacy` and `ProfileSettings.proxy`, which nothing read, are
+  `deprecated` and kept so no client breaks; removing them is a later breaking change.
+- **Review of staged writes.** With a write gate on, Hermes keeps each memory or skill write in
+  `pending/<memory|skills>/<id>.json`. `agents.listPendingWrites`, `agents.approvePendingWrite`
+  (Hermes's own `apply_memory_pending` / `apply_skill_pending`, run with Hermes's Python against
+  the profile's home; a write Hermes refuses stays, `409` with Hermes's words) and
+  `agents.rejectPendingWrite` (the record removed, which is Hermes's reject).
+- **Not built, because Hermes does not have it:** an automatic session reset after idle time or at
+  an hour (`SessionResetPolicy` is an inert type; "time never does" replace a conversation).
+
+Rejected: keeping the hub-stored form (it changed nothing); writing through `ProfileSettings`
+(the same keys would have two homes, and the agent form is where ADR 0002 puts an agent's
+settings); a hub-side store for pending writes (Hermes already keeps them, and its `/memory` and
+`/skills` commands answer the same records); removing `ProfileSettings.privacy` outright (breaks
+generated clients for no gain now).

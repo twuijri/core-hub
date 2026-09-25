@@ -4633,8 +4633,18 @@ paths:
       tags: [agents]
       summary: Read the agent's runtime settings with their form schema
       description: |
-        The adapter declares sections and typed fields; the client renders them. Hermes exposes
-        `agent`, `memory`, `session`, `gateway`; Ekko its runtime sections; an ACP agent usually none.
+        The adapter declares sections and typed fields; the client renders them. An ACP agent
+        usually has none.
+
+        Hermes's are **Hermes's own keys in the selected profile** (contract decision §58), read
+        from and written to that profile's `config.yaml` (comments and every other key kept) or
+        its `.env`: `agent` (turn limit, run time limit, tool-use enforcement, default reasoning
+        effort), `memory` (the two character budgets), `approvals` (dangerous commands, memory and
+        skill writes waiting for review), `network` (the proxy Hermes's outgoing requests use)
+        and `privacy` (hiding user ids and phone numbers from the model on messaging channels).
+        Each field carries Hermes's own `default`; `value` is `null` while nothing is written.
+        Needs the Hermes home this hub prepared (`409 state_invalid` with `runtime_absent` or
+        `hermes_profile_absent` otherwise).
       x-rt-events: []
       responses:
         '200':
@@ -4647,67 +4657,74 @@ paths:
                 sections:
                   - key: agent
                     title:
-                      ar: 'الوكيل'
-                      en: Agent
-                    restart_required: true
+                      ar: 'وقت التشغيل'
+                      en: Agent runtime
+                    restart_required: false
+                    applies: next_message
+                    note:
+                      ar: 'تسري من الرسالة التالية في محادثات كور هب.'
+                      en: "Applies from the next message in Core Hub's conversations."
                     fields:
                       - key: max_turns
                         label:
-                          ar: 'أقصى عدد للدورات'
-                          en: Max turns
+                          ar: 'أقصى عدد للدورات في التشغيل'
+                          en: Max turns per run
                         kind: integer
-                        value: 40
+                        value: 60
                         options: []
-                        min: 1
-                        max: 500
+                        min: 0
+                        max: 100000
                         hint: null
+                        help:
+                          ar: 'كم مرة يستدعي الوكيل النموذج في رسالة واحدة قبل أن يتوقف. صفر = بلا حد.'
+                          en: 'How many model calls the agent may make for one message before it stops. 0 = no limit.'
+                        default: null
+                        default_text:
+                          ar: '٥٠٠ في محادثات كور هب، وبلا حد في القنوات'
+                          en: "500 in Core Hub's conversations, no limit on channels"
                       - key: tool_use_enforcement
                         label:
                           ar: 'إلزام استخدام الأدوات'
-                          en: Tool use enforcement
+                          en: Tool-use enforcement
                         kind: choice
-                        value: auto
+                        value: null
                         options:
                           - value: auto
-                            label: 'تلقائي'
-                          - value: always
-                            label: 'دائمًا'
-                          - value: never
-                            label: 'أبدًا'
+                            label: Automatic
+                            labels:
+                              ar: 'تلقائي'
+                              en: Automatic
+                          - value: 'on'
+                            label: Always
+                            labels:
+                              ar: 'دائمًا'
+                              en: Always
+                          - value: 'off'
+                            label: Never
+                            labels:
+                              ar: 'أبدًا'
+                              en: Never
                         min: null
                         max: null
                         hint: null
-                  - key: session
-                    title:
-                      ar: 'الجلسة'
-                      en: Session
-                    restart_required: false
-                    fields:
-                      - key: approvals_mode
-                        label:
-                          ar: 'وضع الموافقات'
-                          en: Approvals mode
-                        kind: choice
-                        value: ask
-                        options:
-                          - value: off
-                            label: 'بلا موافقات'
-                          - value: ask
-                            label: 'اسأل'
-                          - value: always
-                            label: 'دائمًا'
-                        min: null
-                        max: null
-                        hint: null
+                        help: null
+                        default: auto
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
     patch:
       operationId: agents.updateSettings
       tags: [agents]
       summary: Change values in one section (admin)
-      description: One section per call, as the settings screens save one row at a time. A section with `restart_required` returns a restart job.
+      description: |
+        One section per call, as the settings screens save one section at a time. Every value is
+        checked before anything is written; `null` puts a field back to the agent's default. A
+        section that `applies` at `restart` returns the restart job when the hub runs the agent.
+        For Hermes, saving also makes the new values reach it: the hub's conversations take them
+        from the next message, and the profile's messaging gateway is restarted when it runs.
       x-roles: [owner, admin]
       requestBody:
         required: true
@@ -4716,9 +4733,9 @@ paths:
             schema:
               $ref: '#/components/schemas/AgentSettingsPatch'
             example:
-              section: session
+              section: agent
               values:
-                approvals_mode: always
+                max_turns: 60
       x-rt-events: [agent.updated, job.queued]
       responses:
         '200':
@@ -4729,28 +4746,24 @@ paths:
                 $ref: '#/components/schemas/AgentSettingsResult'
               example:
                 section:
-                  key: session
+                  key: agent
                   title:
-                    ar: 'الجلسة'
-                    en: Session
+                    ar: 'وقت التشغيل'
+                    en: Agent runtime
                   restart_required: false
+                  applies: next_message
                   fields:
-                    - key: approvals_mode
+                    - key: max_turns
                       label:
-                        ar: 'وضع الموافقات'
-                        en: Approvals mode
-                      kind: choice
-                      value: always
-                      options:
-                        - value: off
-                          label: 'بلا موافقات'
-                        - value: ask
-                          label: 'اسأل'
-                        - value: always
-                          label: 'دائمًا'
-                      min: null
-                      max: null
+                        ar: 'أقصى عدد للدورات في التشغيل'
+                        en: Max turns per run
+                      kind: integer
+                      value: 60
+                      options: []
+                      min: 0
+                      max: 100000
                       hint: null
+                      default: null
                 restart_job_id: null
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -4760,6 +4773,118 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /agents/{agent_id}/pending-writes:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+    get:
+      operationId: agents.listPendingWrites
+      tags: [agents]
+      summary: Memory and skill writes waiting for review in the selected profile (admin)
+      description: >-
+        With Hermes's `memory.write_approval` or `skills.write_approval` on, Hermes does not save
+        what the agent writes to its memory or its skills: it keeps each write under the profile's
+        `pending/memory/` or `pending/skills/` until somebody approves or rejects it (contract
+        decision §58). Oldest first. Listed even when the gate is off again, so nothing is
+        stranded. Hermes only (`409 state_invalid` for another agent).
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The writes waiting.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingWriteList'
+              example:
+                items:
+                  - id: 3fa9c21e
+                    kind: memory
+                    action: add
+                    summary: 'Remember: the deploy runs on Fridays'
+                    origin: background_review
+                    created_at: '2026-09-25T09:30:00Z'
+                    target: memory
+                    name: null
+                    content: 'The deploy runs on Fridays.'
+                    old_text: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /agents/{agent_id}/pending-writes/{write_kind}/{write_id}/approve:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/PendingWriteKind'
+      - $ref: '#/components/parameters/PendingWriteId'
+    post:
+      operationId: agents.approvePendingWrite
+      tags: [agents]
+      summary: Approve a memory or skill write waiting for review (admin)
+      description: >-
+        Hermes itself applies it — its own code, run against the profile's home, the way its
+        `/memory approve` and `/skills approve` do — and then forgets the pending record. A write
+        Hermes cannot apply (a memory over its budget, a skill that changed meanwhile) is
+        `409 state_invalid` with Hermes's words in `details.message`, and stays waiting. Needs a
+        Hermes installed beside the hub (`409` with `hermes_not_supervised` otherwise).
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: Applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingWriteApplied'
+              example:
+                id: 3fa9c21e
+                kind: memory
+                applied: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /agents/{agent_id}/pending-writes/{write_kind}/{write_id}:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/PendingWriteKind'
+      - $ref: '#/components/parameters/PendingWriteId'
+    delete:
+      operationId: agents.rejectPendingWrite
+      tags: [agents]
+      summary: Reject a memory or skill write waiting for review (admin)
+      description: >-
+        The write is dropped and never saved — what Hermes's own `/memory reject` and
+        `/skills reject` do: its pending record is removed. One that is not waiting is `404`.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '204':
+          description: Rejected.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   # ---------------------------------------------------------------- config files
   /agents/{agent_id}/config-files:
     parameters:
@@ -13723,6 +13848,24 @@ components:
       schema:
         type: string
         pattern: '^[A-Za-z0-9._-]{1,60}$'
+    PendingWriteKind:
+      name: write_kind
+      in: path
+      required: true
+      description: Which of Hermes's review queues the write waits in.
+      schema:
+        type: string
+        enum: [memory, skills]
+        example: memory
+    PendingWriteId:
+      name: write_id
+      in: path
+      required: true
+      description: Hermes's id of a pending write, as `agents.listPendingWrites` lists it.
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9_-]{1,64}$'
+        example: 3fa9c21e
     PairingRequestId:
       name: request_id
       in: path
@@ -14813,6 +14956,11 @@ components:
       properties:
         proxy:
           type: object
+          deprecated: true
+          description: >-
+            Stored by the hub and applied by nothing. The proxy Hermes uses is Hermes's own, per
+            profile: `agents.getSettings` / `agents.updateSettings`, section `network` (contract
+            decision §58). Kept so an older client still reads a whole object.
           required: [https_proxy, http_proxy, all_proxy, no_proxy]
           properties:
             https_proxy:
@@ -14860,6 +15008,12 @@ components:
               description: The model's window in tokens, when the catalogue's is wrong; `null` = what the model reports.
         privacy:
           type: object
+          deprecated: true
+          description: >-
+            Stored by the hub and applied by nothing. Hiding user ids and phone numbers from the
+            model is Hermes's own `privacy.redact_pii`, per profile: `agents.updateSettings`,
+            section `privacy` — what the Privacy page switches (contract decision §58). Kept so an
+            older client still reads a whole object.
           required: [redact_pii]
           properties:
             redact_pii:
@@ -16447,6 +16601,11 @@ components:
           type: string
         label:
           type: string
+        labels:
+          description: >-
+            The label in both UI languages, when the server has it (an agent's settings form);
+            `label` is then the English one, for a client that reads only that.
+          $ref: '#/components/schemas/LocalizedText'
     AgentRef:
       type: object
       required: [id, name]
@@ -16830,6 +16989,25 @@ components:
           type: [number, 'null']
         hint:
           type: [string, 'null']
+        help:
+          description: >-
+            What the setting does, in both UI languages. Absent or `null` where the adapter has no
+            more to say than the label.
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedText'
+            - type: 'null'
+        default:
+          description: >-
+            The agent's own default, used while `value` is `null` (nothing written). A `null`
+            default means the agent has no value of its own for it (the feature is off). Sending
+            `null` for a field puts it back to this default.
+        default_text:
+          description: >-
+            The default in words, where the number alone would mislead (Hermes's turn limit is 500
+            in the hub's conversations and none on its channels). Absent or `null` otherwise.
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedText'
+            - type: 'null'
     SettingsSection:
       type: object
       required: [key, title, restart_required, fields]
@@ -16840,10 +17018,80 @@ components:
           $ref: '#/components/schemas/LocalizedText'
         restart_required:
           type: boolean
+        applies:
+          description: >-
+            When a saved value takes effect. `next_message`: from the next message (a turn already
+            running finishes on the values it started with); `restart`: after the agent's runtime
+            restarts, which saving asks for when the hub runs it (`restart_job_id`). Absent: the
+            adapter does not say.
+          type: string
+          enum: [next_message, restart]
+        note:
+          description: Where and when the section's values apply, in both UI languages. Absent or `null` when there is nothing to add.
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedText'
+            - type: 'null'
         fields:
           type: array
           items:
             $ref: '#/components/schemas/SettingsField'
+    PendingWrite:
+      type: object
+      description: >-
+        One write the agent made to its memory or its skills that waits for review (Hermes's
+        `pending/<kind>/<id>.json`). What it would change is shown from the record itself.
+      required: [id, kind, action, summary, origin, created_at, target, name, content, old_text]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [memory, skills]
+        action:
+          type: string
+          description: "Hermes's verb: for memory `add`, `replace`, `remove` or `batch`; for skills `create`, `edit`, `patch`, `write_file`, `remove_file` or `delete`."
+        summary:
+          type: string
+          description: Hermes's one-line summary of the write.
+        origin:
+          type: string
+          description: "`foreground` (during a conversation) or `background_review` (Hermes's own review after one)."
+        created_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        target:
+          type: [string, 'null']
+          description: "Memory: `memory` (the agent's notes) or `user` (what it knows about the person). `null` for skills."
+        name:
+          type: [string, 'null']
+          description: Skills only — the skill's name, with the file inside it when the write is to one (`name/file`).
+        content:
+          type: [string, 'null']
+          description: The new text (a memory entry, a skill's `SKILL.md` or file, the replacement of a patch), cut to 20 000 characters; for a memory batch, one line per operation.
+        old_text:
+          type: [string, 'null']
+          description: The text it replaces or removes, when the write says.
+    PendingWriteList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingWrite'
+    PendingWriteApplied:
+      type: object
+      required: [id, kind, applied]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [memory, skills]
+        applied:
+          type: boolean
+          const: true
     AgentSettings:
       type: object
       required: [sections]

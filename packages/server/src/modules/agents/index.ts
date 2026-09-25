@@ -28,7 +28,7 @@
  * test process, so the service is kept per Socket.IO server (one per app), the same way
  * `auth` keeps its context.
  */
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -61,6 +61,17 @@ import { QR_PLATFORMS, pairWhatsApp, testMcpServer, type HermesApiCall } from '.
 import { namedHermesProfiles } from './hermes-profiles.js';
 import { telegramGetMe } from './telegram-api.js';
 import { SettingError, readTelegramSettings, writeTelegramSettings } from './telegram-settings.js';
+import { HermesSettingError, readHermesSettings, writeHermesSettings } from './hermes-settings.js';
+import {
+  PendingWriteError,
+  approvePendingWrite,
+  hermesPythonRunner,
+  listPendingWrites,
+  pendingWriteExists,
+  rejectPendingWrite,
+  type HermesPython,
+  type PendingKind,
+} from './hermes-pending-writes.js';
 import {
   hermesCliRunner,
   installPlugin,
@@ -234,6 +245,11 @@ export interface AgentsOverrides {
    * home), in place of the real `hermes` — for the tests and the e2e hub.
    */
   hermesCli?: HermesCli;
+  /**
+   * Hermes's interpreter as approving a pending memory or skill write runs it, in place of the
+   * real one — for the tests and the e2e hub.
+   */
+  hermesPython?: HermesPython;
   /** Between two questions to Hermes while a pairing runs. Default 1 s. */
   pairingPollMs?: number;
   /** Telegram's Bot API as linking asks it (`getMe`), scripted — for the tests and the e2e hub. */
@@ -284,6 +300,8 @@ interface AgentsContext {
   hermesApi(): HermesApiCall | null;
   /** Hermes's own command, or `null` where the hub does not supervise Hermes. */
   hermesCli(): HermesCli | null;
+  /** Hermes's own Python, or `null` where the hub does not supervise Hermes. */
+  hermesPython(): HermesPython | null;
   pairingPollMs: number;
   /** How linking asks Telegram who a bot is. */
   telegramFetch: typeof fetch;
@@ -488,6 +506,17 @@ function contextOf(app: FastifyInstance): AgentsContext {
       const command = runtime.executable();
       if (mode !== 'managed' || !home || !command) return null;
       return hermesCliRunner({ command, env: () => runtime.cliEnv() });
+    },
+    hermesPython: () => {
+      if (own.hermesPython) return own.hermesPython;
+      const { mode, home } = runtime.status();
+      const command = runtime.executable();
+      if (mode !== 'managed' || !home || !command) return null;
+      // The interpreter of Hermes's own venv, beside its `hermes` entry point (as the TUI
+      // gateway is started).
+      const python = path.join(path.dirname(command), 'python');
+      if (!existsSync(python)) return null;
+      return hermesPythonRunner({ python, env: () => runtime.cliEnv() });
     },
     pairingPollMs: own.pairingPollMs ?? 1000,
     telegramFetch: own.telegramFetch ?? fetch,
@@ -708,23 +737,6 @@ export const agentsModule = defineModule({
         service.update(scopeOf(request), params.agent_id as string, body as AgentPatchInput),
     });
 
-    defineRoute(app, deps, {
-      operationId: 'agents.getSettings',
-      handler: (request, { params }) => ({
-        sections: service.settings(scopeOf(request), params.agent_id as string),
-      }),
-    });
-
-    defineRoute(app, deps, {
-      operationId: 'agents.updateSettings',
-      handler: (request, { params, body }) =>
-        service.updateSettings(
-          scopeOf(request),
-          params.agent_id as string,
-          body as { section: string; values: Record<string, unknown> },
-        ),
-    });
-
     /**
      * Skills. They are folders in the agent's own home (`skills.ts`), so the hub has to
      * know where that home is — which it only does for the runtime it supervises. An
@@ -777,6 +789,164 @@ export const agentsModule = defineModule({
       }
       return api;
     };
+
+    /**
+     * Settings. Hermes's are its own keys in the selected profile's `config.yaml` and `.env`
+     * (`hermes-settings.ts`, contract decision §58); any other agent's are the form its adapter
+     * declares, stored by the hub.
+     */
+    const isHermes = (request: FastifyRequest, agentId: string): boolean =>
+      contextOf(request.server).service.get(scopeOf(request), agentId, request.language).kind ===
+      'hermes';
+
+    const settingFault = (error: unknown): never => {
+      if (error instanceof HermesSettingError) {
+        if (error.reason === 'config_unreadable') {
+          throw new HubError('state_invalid', { details: { reason: 'config_unreadable' } });
+        }
+        if (error.reason === 'section_unknown') {
+          throw notFound({ resource: 'settings_section', id: error.key });
+        }
+        throw new HubError('validation_failed', {
+          details: { field: `values.${error.key}`, reason: error.reason },
+        });
+      }
+      throw error;
+    };
+
+    defineRoute(app, deps, {
+      operationId: 'agents.getSettings',
+      handler: (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const scope = scopeOf(request);
+        if (!isHermes(request, agentId)) return { sections: service.settings(scope, agentId) };
+        const { home } = toolHome(request, agentId, 'settings_are_hermes_only');
+        try {
+          return { sections: readHermesSettings(home, scope.isDefault) };
+        } catch (error) {
+          return settingFault(error);
+        }
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.updateSettings',
+      handler: async (request, { params, body }) => {
+        const agentId = params.agent_id as string;
+        const scope = scopeOf(request);
+        const input = body as { section: string; values: Record<string, unknown> };
+        if (!isHermes(request, agentId)) return service.updateSettings(scope, agentId, input);
+        const { home, profile } = toolHome(request, agentId, 'settings_are_hermes_only');
+        let section;
+        try {
+          section = writeHermesSettings(home, scope.isDefault, input.section, input.values ?? {});
+        } catch (error) {
+          return settingFault(error);
+        }
+        request.log.info(
+          { profile, section: input.section, keys: Object.keys(input.values ?? {}) },
+          'agents: hermes settings saved',
+        );
+        // The values reach Hermes: the hub's conversations from the next message (a fresh TUI
+        // gateway), a named profile's messaging gateway restarted now. The default profile's
+        // proxy needs the whole of Hermes restarted, which is a job the page can follow.
+        const context = contextOf(request.server);
+        await context.runtime.settingsChanged(profile).catch((error: unknown) => {
+          request.log.warn({ err: error, profile }, 'agents: hermes did not take the settings');
+        });
+        let restartJobId: string | null = null;
+        if (section.applies === 'restart' && scope.isDefault) {
+          const managed = context.runtime.status().mode === 'managed';
+          if (managed) {
+            restartJobId = service.restart(scope, actorOf(request), agentId, {
+              managed: () => true,
+              restart: () => context.runtime.restart(),
+            }).id;
+          }
+        }
+        return { section, restart_job_id: restartJobId };
+      },
+    });
+
+    /**
+     * Memory and skill writes waiting for review (`hermes-pending-writes.ts`): Hermes's own
+     * queue in the selected profile, approved by Hermes's own code.
+     */
+    const pendingFault = (error: unknown): never => {
+      if (error instanceof PendingWriteError) {
+        if (error.reason === 'pending_not_found') throw notFound({ resource: 'pending_write' });
+        if (error.reason === 'pending_id_invalid') {
+          throw new HubError('validation_failed', {
+            details: { field: 'write_id', reason: error.reason },
+          });
+        }
+        throw new HubError('state_invalid', {
+          details: { reason: error.reason, message: error.hermesMessage },
+        });
+      }
+      throw error;
+    };
+    const pendingKind = (raw: unknown): PendingKind => {
+      if (raw === 'memory' || raw === 'skills') return raw;
+      throw new HubError('validation_failed', {
+        details: { field: 'write_kind', reason: 'kind_invalid' },
+      });
+    };
+
+    defineRoute(app, deps, {
+      operationId: 'agents.listPendingWrites',
+      handler: (request, { params }) => {
+        const { home } = toolHome(
+          request,
+          params.agent_id as string,
+          'pending_writes_are_hermes_only',
+        );
+        return { items: listPendingWrites(home) };
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.approvePendingWrite',
+      handler: async (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const { home, profile } = toolHome(request, agentId, 'pending_writes_are_hermes_only');
+        const kind = pendingKind(params.write_kind);
+        const id = params.write_id as string;
+        const python = contextOf(request.server).hermesPython();
+        try {
+          if (!python) {
+            // Checked after the record, so a write that is not there is still a 404.
+            if (!pendingWriteExists(home, kind, id))
+              throw new PendingWriteError('pending_not_found');
+            throw new HubError('state_invalid', {
+              details: { agent_id: agentId, reason: 'hermes_not_supervised' },
+            });
+          }
+          await approvePendingWrite(python, home, kind, id);
+        } catch (error) {
+          return pendingFault(error);
+        }
+        request.log.info({ profile, kind, id }, 'agents: pending write approved');
+        return { id, kind, applied: true };
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.rejectPendingWrite',
+      status: 204,
+      handler: (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const { home, profile } = toolHome(request, agentId, 'pending_writes_are_hermes_only');
+        const kind = pendingKind(params.write_kind);
+        try {
+          rejectPendingWrite(home, kind, params.write_id as string);
+        } catch (error) {
+          return pendingFault(error);
+        }
+        request.log.info({ profile, kind, id: params.write_id }, 'agents: pending write rejected');
+        return null;
+      },
+    });
 
     /** Hermes's own command for the plugin pages, or the reason there is none. */
     const hermesCliOf = (request: FastifyRequest, agentId: string): HermesCli => {
