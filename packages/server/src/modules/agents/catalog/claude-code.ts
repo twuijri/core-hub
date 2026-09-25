@@ -15,7 +15,7 @@ export const claudeCode: CatalogEntry = {
   // Claude Code reads the Anthropic key from the standard variable.
   credentials: { anthropic: 'ANTHROPIC_API_KEY' },
   health: { kind: 'command', args: ['--version'] },
-  capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'skills', 'worktrees', 'resume'],
+  capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'skills', 'worktrees', 'resume', 'config_files'],
   sections: ['skills', 'mcp', 'settings'],
   // The bridge names a `Task` delegation and its end; the subagent's own tools arrive flat,
   // without a parent id, and it offers no stop or steer of one subagent (§56).

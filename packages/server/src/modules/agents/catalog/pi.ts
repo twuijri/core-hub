@@ -38,7 +38,7 @@ export const pi: CatalogEntry = {
   },
   health: { kind: 'command', args: ['--version'], binary: 'pi' },
   // Pi runs its tools without asking (its design), so no `approvals`.
-  capabilities: ['streaming', 'tools', 'resume'],
+  capabilities: ['streaming', 'tools', 'resume', 'config_files'],
   sections: ['settings'],
   // Not verified that its ACP stream marks a delegation, so none is claimed (§56): an
   // unmarked tool call stays the parent's (added when #114 and #140 were integrated).
