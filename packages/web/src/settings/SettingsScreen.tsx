@@ -15,7 +15,6 @@ import { UsersTab } from '../people/UsersTab.js';
 import { WorkspacesTab } from '../people/WorkspacesTab.js';
 import { AboutTab } from './AboutTab.js';
 import { AccountTab } from './AccountTab.js';
-import { AuditReport } from './AuditReport.js';
 import { DisplayTab } from './DisplayTab.js';
 import { KnowledgeTab } from './KnowledgeTab.js';
 import { LogsTool } from './LogsTool.js';
