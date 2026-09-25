@@ -1062,3 +1062,52 @@ Rejected: a `session_category.*` realtime event (another person's new category s
 fetch, which is enough for a rare change; the moves themselves already travel as
 `session.updated`); a separate `moveSession` operation (the patch already carries the field, and
 `bulkUpdate` moves many at once); per-person categories (above).
+
+## 55. Channel conversations are Hermes's, read through its server, never copied into the hub
+
+Telegram, WhatsApp and the other messaging channels reach the agent through Hermes's gateway,
+and Hermes keeps those conversations in its own session store (`state.db` of each profile); the
+hub never sees them. The chats list had groups «تيليجرام» / «واتساب» (§54) with nothing to put
+in them. Proposed here — owner to confirm:
+
+- **Read, not copied.** Two operations read them from Hermes's internal server (ADR 0015) the
+  way Hermes's own desktop app does — `GET /api/sessions?profile=&sources=…&order=recent` and
+  `GET /api/sessions/{id}/messages` (`hermes_cli/web_routers/sessions.py`, `v2026.9.14`):
+  `sessions.listChannelConversations` (`GET /channel-conversations`, `profiles=all` across every
+  permitted profile as ADR 0016, `channel=` to narrow) and `sessions.listChannelMessages`
+  (`GET /channel-conversations/{id}/messages`). They are **not** `Session`s: a new
+  `ChannelConversation` (Hermes's id, profile, platform, the other party's name and id, chat
+  type, the latest message, Hermes's preview, count, times) and `ChannelMessage` (the person's
+  and the agent's text; tool calls, tool results and system text left out). Copying them into
+  the hub's tables would make two stores of one conversation that drift, and the hub cannot
+  write to Hermes's side anyway.
+- **Read-only.** Nothing writes to Hermes; the reply is made on the channel. The web opens one as
+  a transcript in the chat's look, with «محادثة من تيليجرام — للقراءة فقط؛ الرد يكون من
+  تيليجرام» where the composer would be.
+- **Which sources are channels**: `telegram`, `whatsapp` (and `whatsapp_cloud`, shown as
+  `whatsapp`), `discord`, `slack`, `signal`, `matrix`, `mattermost`, `email`, `sms`,
+  `dingtalk`, `feishu`, `wecom`, `weixin`, `bluebubbles`, `qqbot` — Hermes's messaging
+  platforms. The TUI the hub's own chats run in, `cli`, `api_server`, `webhook`, `cron` are not,
+  so a hub chat is never listed twice, and asking for one by id here is `404`.
+- **Up to 100 per profile**, Hermes's own page cap, most recent first; Hermes's archived ones are
+  left out, and the list shows them in the active and "all" views, not in the archive.
+- **Where they cannot be read, the list says why** — still `200`, with `unavailable[]` per
+  profile: `hermes_not_managed` (the hub does not supervise Hermes, so there is no server to
+  ask), `profile_not_in_hermes`, `hermes_unreachable` (with Hermes's words; what was read before
+  is still listed). Opening one then is `503 service_unavailable`.
+- **Kept briefly, asked again when Hermes's store changed.** The hub keeps what it read per Hermes
+  profile and asks again only when that profile's `state.db` / `state.db-wal` changed size or
+  time since, never sooner than 5 s, and at the latest after 5 minutes; with no store to compare,
+  after 20 s. The latest message of each conversation is read once per change (20 per call at
+  most; the rest show Hermes's preview meanwhile). So a list polled while it is open costs Hermes
+  nothing while nothing happens, and Hermes's server still stops after its 10 idle minutes.
+- **Polling, not an event.** Hermes announces nothing when a channel message arrives (its
+  `/api/events` is the dashboard chat's own channel), so the web asks every 45 s while the list is
+  on screen and the tab visible, and every 30 s while a transcript is open.
+
+Rejected: a realtime event fed by the hub polling Hermes in the background (a server loop for
+every profile whether or not anyone is looking); reading `state.db` directly (Hermes's private
+schema, which ADR 0015 chose not to depend on); showing them as `Session`s with `source: channel`
+(every operation on a session — rename, archive, run, delete — would have to refuse them).
+Not built: "Continue in Core Hub" (a hub chat seeded with the transcript as context) — proposed
+as the next step.

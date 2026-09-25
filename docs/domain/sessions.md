@@ -193,3 +193,11 @@ row keeps the same ids in `attachment_ids`.
   to resume through the adapter.
 - Raw tool input containing secrets: redacted before insert; the redaction
   policy is the adapter's.
+
+## Channel conversations (not stored here)
+
+Conversations on Telegram, WhatsApp and the other messaging channels are Hermes's: its gateway
+receives them and its own session store keeps them. This module stores nothing of them; it reads
+them on demand through Hermes's internal server (`channel-conversations.ts`, contract decision
+§55) and keeps the last read in memory per Hermes profile, until that profile's `state.db`
+changes. They are `ChannelConversation` / `ChannelMessage` on the wire, never `session` rows.

@@ -48,6 +48,7 @@ import {
   sessionRunsFor,
   sessionTurnsFor,
   workflowApprovalsFor,
+  type ChannelSource,
 } from './sessions/index.js';
 import { roomsModule } from './rooms/index.js';
 import {
@@ -211,16 +212,32 @@ registerChannelSource((app) => {
   const dashboard = hermesDashboardFor(app);
   const root = hermesRuntimeFor(app).status().home;
   if (!dashboard || !root) return null;
+  return hermesChannelSourceOver(dashboard, root, (workspace) => {
+    const row = listWorkspacesFor(requireSqlite(app.hub.database), {
+      id: '',
+      role: 'owner',
+    }).find((each) => each.id === workspace);
+    if (!row) return null;
+    return row.isDefault ? RUNTIME_DEFAULT_PROFILE : row.slug;
+  });
+});
+
+/**
+ * Channel conversations over one dashboard server and Hermes's root home (the real-Hermes test
+ * hands in its own). `profileOf` names the Hermes profile a workspace is; one Hermes has not
+ * made yet (no folder) is none.
+ */
+export function hermesChannelSourceOver(
+  dashboard: HermesDashboard,
+  root: string,
+  profileOf: (workspace: string) => string | null,
+): ChannelSource {
   const homeOf = (profile: string) =>
     profile === RUNTIME_DEFAULT_PROFILE ? root : path.join(root, 'profiles', profile);
   return {
     hermesProfile(workspace) {
-      const row = listWorkspacesFor(requireSqlite(app.hub.database), {
-        id: '',
-        role: 'owner',
-      }).find((each) => each.id === workspace);
-      if (!row) return null;
-      const profile = row.isDefault ? RUNTIME_DEFAULT_PROFILE : row.slug;
+      const profile = profileOf(workspace);
+      if (!profile) return null;
       try {
         return statSync(homeOf(profile)).isDirectory() ? profile : null;
       } catch {
@@ -254,7 +271,7 @@ registerChannelSource((app) => {
       return parts.every((part) => part === '-') ? null : parts.join('|');
     },
   };
-});
+}
 
 /**
  * A workspace is a Hermes profile (ADR 0014). `auth` owns workspaces, `agents` knows where
