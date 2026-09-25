@@ -62,8 +62,12 @@ $ pnpm scripts:test
 $ python3 -c "import yaml; yaml.safe_load(open(f))"  # ci.yml و ios-signed.yml
 ok .github/workflows/ci.yml
 ok .github/workflows/ios-signed.yml
+$ pnpm lint
+All matched files use Prettier code style!
+$ pnpm change-record:check
+change-record  OK — 1 record(s) valid
 ```
-(`pnpm lint` و`pnpm change-record:check` ونتيجة CI تُضاف أدناه.)
+CI: تُضاف نتيجته بعد التشغيل.
 
 ## المخاطر والرجوع
 - لم يُجرَّب على App Store Connect الحقيقي؛ الاختبارات على خادم وهمي فقط. أول تشغيل يدوي بـ
