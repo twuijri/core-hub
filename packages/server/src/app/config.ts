@@ -50,10 +50,9 @@ const envSchema = z.object({
     .min(8, 'HUB_ADMIN_PASSWORD must be at least 8 characters')
     .optional(),
   /**
-   * The release this image is. The workspace's package.json files stay at 0.0.0 on
-   * purpose — a release is a git tag, not a commit that bumps five files — so the image
-   * build stamps the tag here (`packages/server/Dockerfile`) and the hub reports it on
-   * /api/v1/health and /api/v1/meta. Empty outside an image: a working tree is no release.
+   * The release this image is, stamped by the image build (`packages/server/Dockerfile`) and
+   * reported on /api/v1/health and /api/v1/meta. When it is empty the hub reports the root
+   * package.json's version, the one every deliverable carries (`readVersion`, docs/RELEASING.md).
    */
   COREHUB_VERSION: z.string().trim().optional(),
   /**
@@ -174,7 +173,7 @@ export interface HubConfig {
   bootstrapAdminPassword: string | undefined;
   /** PATH and the variables spawned agents inherit (see `HostEnv`). */
   hostEnv: HostEnv;
-  /** The stamped release version, or `undefined` for a working tree (`COREHUB_VERSION`). */
+  /** The stamped release version (`COREHUB_VERSION`); `undefined` falls back to the root package.json's. */
   version: string | undefined;
   /** Variables that were read under their old (Majlis) name; logged once at boot. */
   deprecatedEnv?: readonly string[];

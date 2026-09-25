@@ -7,7 +7,19 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Firebase (FCM) reads its project from app/google-services.json, which is never committed: the
+// signed-build workflow writes it from a secret. A pull request, a fork or a local build has no
+// file and builds without the plugin; Firebase Messaging is still linked, never starts, and the
+// app says push is not in this build and keeps polling (BuildConfig.FIREBASE, PushManager).
+val hasFirebase = file("google-services.json").exists()
+if (hasFirebase) apply(plugin = "com.google.gms.google-services")
+
 val repoRoot = rootProject.file("../..")
+
+// One version for every Core Hub deliverable (owner, 2026-09-26): the root package.json's.
+// `pnpm version:check` fails if versionName stops being read from it (docs/RELEASING.md).
+@Suppress("UNCHECKED_CAST")
+val rootVersion = (JsonSlurper().parse(File(repoRoot, "package.json")) as Map<String, Any?>)["version"] as String
 
 /**
  * The shared design tokens (packages/ui-tokens/tokens.json) and the product's names
@@ -242,19 +254,40 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "hub.core.android"
+        // The store identity (owner, 2026-09-25): Firebase's Android app and the Play listing use
+        // it. The Kotlin packages keep `hub.core.android` (the `namespace`); the two need not match.
+        applicationId = "com.twuijri.corehub"
         // 26 (Android 8.0): the generated client speaks java.time (dateLibrary java8), which
         // Android has from API 26 without core-library desugaring; adaptive icons and the
         // notification channels the app posts to are 26+ as well. Below 26 is ~1% of devices.
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // The signed-build workflow stamps its run number + 100 so each build a store sees is newer,
+        // and newer than the old app's (same id, up to 63). A local or pull-request build is 1.
+        versionCode = providers.environmentVariable("COREHUB_ANDROID_VERSION_CODE").orNull?.toIntOrNull() ?: 1
+        versionName = rootVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("boolean", "FIREBASE", hasFirebase.toString())
+    }
+
+    // A signed release needs the keystore (docs/RELEASING.md): CI writes it from the repository's
+    // secrets and passes its path and passwords in these variables. Without them a release build
+    // stays unsigned, as on a pull request or a fork.
+    val releaseKeystore = providers.environmentVariable("COREHUB_ANDROID_KEYSTORE").orNull
+    if (releaseKeystore != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = providers.environmentVariable("COREHUB_ANDROID_KEYSTORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("COREHUB_ANDROID_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("COREHUB_ANDROID_KEY_PASSWORD").get()
+            }
+        }
     }
 
     buildTypes {
         release {
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -309,6 +342,8 @@ dependencies {
     implementation(libs.commonmark)
     implementation(libs.commonmark.tables)
     implementation(libs.commonmark.strikethrough)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { memoryDb } from '../../../tests/unit/helpers.js';
 import { ReportService, isoDate, moneyOf, windowOf } from './reports.js';
-import { auditEvents, usageRecords } from './schema.js';
+import { usageRecords } from './schema.js';
 
 const OWNER = '01J8QK3ZR2W7M5N4P6T8V9X0HM';
 const WORKSPACE = '01J8QK3ZR2W7M5N4P6T8V9X0PF';
@@ -122,81 +122,6 @@ describe('the usage report', () => {
       now: NOW,
     });
     expect((priced?.data.totals as { cost_source: string }).cost_source).toBe('estimated');
-  });
-});
-
-describe('the logs report', () => {
-  it('reads the audit trail, newest first, and calls an audit event what it is', () => {
-    const db = memoryDb();
-    for (const [i, action] of ['agent.installed', 'secret.created'].entries()) {
-      db.insert(auditEvents)
-        .values({
-          id: `e${i}`,
-          ownerId: OWNER,
-          workspace: WORKSPACE,
-          actorKind: 'user',
-          actorId: OWNER,
-          action,
-          summary: `did ${action}`,
-          createdAt: new Date(NOW - (2 - i) * 1000),
-        })
-        .run();
-    }
-    const report = new ReportService(db).build({
-      kind: 'logs',
-      workspace: null,
-      days: 30,
-      now: NOW,
-    });
-    const entries = report?.data.entries as Array<Record<string, unknown>>;
-    expect(entries.map((e) => e.action)).toEqual(['secret.created', 'agent.installed']);
-    expect(entries[0]).toMatchObject({ level: 'info', source: 'audit' });
-  });
-
-  it('filters by the word asked for', () => {
-    const db = memoryDb();
-    db.insert(auditEvents)
-      .values({
-        id: 'e1',
-        ownerId: OWNER,
-        workspace: WORKSPACE,
-        actorKind: 'user',
-        action: 'agent.installed',
-        createdAt: new Date(NOW),
-      })
-      .run();
-    const report = new ReportService(db).build({
-      kind: 'logs',
-      workspace: null,
-      days: 30,
-      q: 'secret',
-      now: NOW,
-    });
-    expect(report?.data.entries).toEqual([]);
-  });
-});
-
-describe('the performance report', () => {
-  it('always knows this process, even with no history at all', () => {
-    const report = new ReportService(memoryDb()).build({
-      kind: 'performance',
-      workspace: null,
-      days: 30,
-      now: NOW,
-    });
-    expect(report?.data.current).toMatchObject({ node_version: process.version });
-    expect(report?.data.samples).toEqual([]);
-  });
-
-  it('keeps the samples it was given', () => {
-    const db = memoryDb();
-    const reports = new ReportService(db);
-    reports.sample({ id: 's1', ownerId: OWNER, at: NOW - 1000, activeRuns: 2, queuedJobs: 1 });
-    const report = reports.build({ kind: 'performance', workspace: null, days: 30, now: NOW });
-    const samples = report?.data.samples as Array<Record<string, unknown>>;
-    expect(samples).toHaveLength(1);
-    expect(samples[0]).toMatchObject({ active_runs: 2, queued_jobs: 1 });
-    expect(samples[0]?.memory_bytes).toBeGreaterThan(0);
   });
 });
 

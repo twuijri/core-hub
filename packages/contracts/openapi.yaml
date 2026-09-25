@@ -4774,6 +4774,10 @@ paths:
       operationId: agents.getAvatar
       tags: [agents]
       summary: Fetch the agent's avatar image
+      description: >-
+        The picture `agents.update` stored for the agent (PNG or JPEG, at most 512 KB, one per
+        agent for the whole hub — the registry is the hub's, not a profile's). An agent whose
+        `avatar.kind` is `generated` has none (`404`): the client draws it from `seed`.
       x-rt-events: []
       responses:
         '200':
@@ -4783,9 +4787,10 @@ paths:
               schema:
                 type: string
                 format: binary
-            image/svg+xml:
+            image/jpeg:
               schema:
                 type: string
+                format: binary
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -6178,7 +6183,18 @@ paths:
     get:
       operationId: agents.getJourney
       tags: [agents]
-      summary: Read the agent's journey graph (skills and tools it has used, clustered)
+      summary: Read what the agent has learned in the profile, as a graph (skills and memories)
+      description: >-
+        Hermes's own learning graph for the profile in `X-Hub-Profile` — what Hermes's
+        `hermes journey` and its server's `GET /api/learning/graph` give, read through that
+        server (ADR 0015): the profile's skills that the agent made or has used (a skill Hermes
+        ships, or one nobody used, is not in it), and each entry of `MEMORY.md` and `USER.md` as
+        a node of its own. Links are Hermes's: a skill's declared `related_skills`, and each
+        memory to the skills whose names or words it shares. Hermes decides every value; the
+        hub only renames the fields. Only where the hub supervises Hermes: otherwise `409
+        state_invalid` with `details.reason = hermes_not_supervised`; an agent that is not
+        Hermes is `409 state_invalid`, `journey_is_hermes_only`; Hermes's server not answering is
+        `503`, `hermes_api_unavailable`.
       x-rt-events: []
       responses:
         '200':
@@ -6190,21 +6206,53 @@ paths:
               example:
                 nodes:
                   - id: web-research
-                    label: 'بحث على الويب'
+                    label: web-research
                     kind: skill
                     category: research
                     use_count: 12
+                    pinned: true
+                    state: active
+                    agent_created: false
+                    memory_source: null
+                    learned_at: '2026-09-20T10:00:00Z'
+                  - id: summarize-pdf
+                    label: summarize-pdf
+                    kind: skill
+                    category: research
+                    use_count: 0
                     pinned: false
+                    state: active
+                    agent_created: true
+                    memory_source: null
+                    learned_at: '2026-09-25T16:08:51Z'
+                  - id: 'memory:memory:0'
+                    label: 'يفضّل الشخص البحث بالعربية'
+                    kind: memory
+                    category: memory
+                    use_count: 0
+                    pinned: false
+                    state: active
+                    agent_created: false
+                    memory_source: memory
+                    learned_at: '2026-09-25T16:08:51Z'
                 edges:
-                  - source: web-research
-                    target: summarize-pdf
+                  - source: summarize-pdf
+                    target: web-research
+                  - source: 'memory:memory:0'
+                    target: web-research
                 clusters:
                   - category: research
                     count: 2
+                  - category: memory
+                    count: 1
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   # ---------------------------------------------------------------- plugins (agent-local)
   /agents/{agent_id}/plugins:
     parameters:
@@ -11846,7 +11894,7 @@ paths:
     get:
       operationId: models.getDefaults
       tags: [models]
-      summary: The profile's default model, fallback chain and auxiliary-role assignments
+      summary: The profile's default model, fallback chain, image model and auxiliary-role assignments
       description: >-
         The choices in effect for the profile in `X-Hub-Profile`. A role the profile chose
         is its own; a role it left alone is the `default` profile's — the same model on the
@@ -11870,6 +11918,10 @@ paths:
                 fallbacks:
                   - provider_id: 01J8QK3ZR2W7M5N4P6T8V9X0PW
                     model: llama3.1:70b
+                image:
+                  provider_id: 01J8QK3ZR2W7M5N4P6T8V9X0PW
+                  model: gemini-3.1-flash-image
+                inherited: [image]
                 auxiliary:
                   tasks:
                     - key: title
@@ -12742,7 +12794,11 @@ paths:
       operationId: devices.listRequests
       tags: [devices]
       summary: Capability requests addressed to the caller's devices (location, camera, …)
-      description: A device answers the ones addressed to it; a user sees all of theirs. Realtime delivery is `request.created` on `/rt/devices`.
+      description: >-
+        A device lists the ones addressed to it (a paired app catching up after a reconnect:
+        `status=pending`); a person lists those addressed to any of their devices, in the profile
+        in `X-Hub-Profile`, oldest first. A request past its `expires_at` is listed as `expired`.
+        Realtime delivery is `request.created` on `/rt/devices`, to the addressed device only.
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: device_id
@@ -12800,7 +12856,15 @@ paths:
       operationId: devices.createRequest
       tags: [devices]
       summary: Ask a device for a capability (used by adapters and integrations with the `device` scope)
-      description: A job; the requesting run waits for `respond`. A device that lacks the capability answers `denied` automatically at the server.
+      description: >-
+        A job (`device_request`) that ends when the device answers: `succeeded` when it fulfils,
+        `failed` when it declines, fails or lets `timeout_ms` pass (the request is then `expired`
+        with `timeout`), `cancelled` when the job is cancelled (so is the request). The job
+        carries only `{request_id, status}`: what the device sends stays in the request, which
+        only its person and the device read. Only the device's own person may ask it — their web
+        session, or a token of theirs with the `device` scope (else `403`); anyone else's device,
+        an admin's included, is `404`. A device that lacks the capability, or switched it off, is
+        answered `denied` with `unavailable` by the hub at once, without being asked.
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -12896,7 +12960,13 @@ paths:
       operationId: devices.respondRequest
       tags: [devices]
       summary: The device answers — fulfil, deny or report failure
-      description: Only the addressed device may respond. Error codes are fixed per capability (see `DeviceRequestResponse`).
+      description: >-
+        Only the addressed device may respond, with its own token (anyone else: `403`). Once:
+        a request that is no longer pending — answered, expired, cancelled — is `409 conflict`
+        with `details.reason = request_not_pending`. `fulfilled` needs `result` in its
+        capability's shape (`location`: `latitude`, `longitude`, `accuracy_m`, `captured_at`;
+        otherwise `400`); `denied` defaults its error to `permission_denied`, `failed` to
+        `failed`. Error codes are fixed (see `DeviceRequestError`).
       requestBody:
         required: true
         content:
@@ -12911,7 +12981,7 @@ paths:
                 accuracy_m: 120
                 captured_at: '2026-09-21T13:06:10Z'
               error: null
-      x-rt-events: [request.completed, job.completed, job.failed, message.created]
+      x-rt-events: [request.completed, job.completed, job.failed]
       responses:
         '200':
           description: The request after the answer.
@@ -13296,7 +13366,7 @@ paths:
               enabled: true
               key_id: ABC123DEFG
               team_id: DEF123GHIJ
-              bundle_id: hub.core.ios
+              bundle_id: com.twuijri.corehub
               environment: production
               private_key: "-----BEGIN PRIVATE KEY-----\n…\n-----END PRIVATE KEY-----"
       x-rt-events: []
@@ -13315,7 +13385,7 @@ paths:
                 details:
                   key_id: ABC123DEFG
                   team_id: DEF123GHIJ
-                  bundle_id: hub.core.ios
+                  bundle_id: com.twuijri.corehub
                   environment: production
                   private_key: '[stored]'
                 devices: 0
@@ -14745,25 +14815,22 @@ paths:
       - name: kind
         in: path
         required: true
-        description: Which screen's data — `logs`, `usage`, `performance` or `skills`.
+        description: Which report — `usage` or `skills`.
         schema:
           type: string
-          enum: [logs, usage, performance, skills]
+          enum: [usage, skills]
     get:
       operationId: audit.getReport
       tags: [audit]
-      summary: The Logs, Usage, Performance and Skills usage reports in one open shape
+      summary: The Usage and Skills usage reports of one profile in one open shape
       description: |
-        Global for `logs` and `performance` (admin); workspace-scoped for `usage` and `skills`.
-        The Usage and Skills usage screens read the typed `audit.getUsage` and
-        `audit.getSkillUsage` (contract decision §50); `skills` here answers the header's profile
-        with the same body as `audit.getSkillUsage` in `data`.
+        Workspace-scoped: the header's profile. The Usage and Skills usage screens read the typed
+        `audit.getUsage` and `audit.getSkillUsage` (contract decision §50); `skills` here answers
+        the header's profile with the same body as `audit.getSkillUsage` in `data`. Logs and
+        Performance are `audit.listLogLines` and `audit.getLivePerformance` (§51); the `logs` and
+        `performance` kinds that were here are gone (§75).
       parameters:
-        - name: X-Hub-Profile
-          in: header
-          required: false
-          schema:
-            $ref: '#/components/schemas/ProfileSlug'
+        - $ref: '#/components/parameters/Profile'
         - name: days
           in: query
           schema:
@@ -14771,15 +14838,6 @@ paths:
             minimum: 1
             maximum: 365
             default: 30
-        - name: q
-          in: query
-          schema:
-            type: string
-        - name: level
-          in: query
-          schema:
-            type: string
-            enum: [error, warn, info, debug]
       x-rt-events: []
       responses:
         '200':
@@ -18723,6 +18781,10 @@ components:
           type: string
           maxLength: 80
         avatar:
+          description: >-
+            `image` with a PNG or JPEG data URL (at most 512 KB) stores the agent's picture,
+            served by `agents.getAvatar`; `generated` or `null` removes it, and the agent is
+            drawn from its slug again. A picture that is not one of the two is `400`.
           oneOf:
             - $ref: '#/components/schemas/AvatarInput'
             - type: 'null'
@@ -19320,27 +19382,67 @@ components:
           type: [integer, 'null']
     Journey:
       type: object
+      description: >-
+        What the agent has learned in one profile (Hermes's learning graph). `nodes` carry
+        Hermes's ids unchanged — a skill's name, or `memory:<memory|profile>:<n>` for a memory,
+        where `n` counts the entries of `MEMORY.md` and then of `USER.md` together (so the first
+        `USER.md` entry after two `MEMORY.md` ones is `memory:profile:2`) — so a client can name
+        them the way Hermes does.
       required: [nodes, edges, clusters]
       properties:
         nodes:
           type: array
           items:
             type: object
-            required: [id, label, kind, category, use_count, pinned]
+            required:
+              [
+                id,
+                label,
+                kind,
+                category,
+                use_count,
+                pinned,
+                state,
+                agent_created,
+                memory_source,
+                learned_at,
+              ]
             properties:
               id:
                 type: string
               label:
                 type: string
+                description: A skill's name; a memory's first line (Hermes cuts it at 80 characters).
               kind:
                 type: string
-                enum: [skill, tool, plugin]
+                enum: [skill, memory]
               category:
                 type: [string, 'null']
+                description: The skill's category (its folder, or its front matter); `memory` for a memory.
               use_count:
                 type: integer
+                description: How often the agent used the skill (Hermes's count); always 0 for a memory.
               pinned:
                 type: boolean
+                description: Pinned in Hermes, so its curator leaves the skill alone.
+              state:
+                type: string
+                enum: [active, stale, archived]
+                description: Hermes's curator state of the skill; a memory is `active`.
+              agent_created:
+                type: boolean
+                description: The agent wrote this skill itself (Hermes's `created_by = agent`).
+              memory_source:
+                type: [string, 'null']
+                enum: [memory, user, null]
+                description: For a memory, the file it is in (`MEMORY.md` or `USER.md`); null for a skill.
+              learned_at:
+                oneOf:
+                  - $ref: '#/components/schemas/Timestamp'
+                  - type: 'null'
+                description: >-
+                  Hermes's time for the node: a skill's last use (or its file's time when never
+                  recorded), a memory file's time.
         edges:
           type: array
           items:
@@ -19353,6 +19455,7 @@ components:
                 type: string
         clusters:
           type: array
+          description: How many nodes each category has, the largest first.
           items:
             type: object
             required: [category, count]
@@ -21708,7 +21811,12 @@ components:
       enum: [chat, embedding, stt, tts]
     ModelCapability:
       type: string
-      enum: [vision, tools, reasoning, audio, streaming]
+      description: >-
+        `image_output`: the model answers with images — a Images-API model (gpt-image, Imagen,
+        FLUX …) or a chat model that draws (`gemini-*-image`). Said by the provider where it says
+        it (OpenRouter's output modalities), else read from the model's id (decision §72). Only
+        such a model can be the profile's image model.
+      enum: [vision, tools, reasoning, audio, streaming, image_output]
     ModelPricing:
       type: object
       required: [input_per_million, output_per_million]
@@ -22108,8 +22216,9 @@ components:
           type: array
           description: >-
             The roles whose value is the `default` profile's, because this profile chose
-            none (decision §37): `default` for the chat model (with its fallbacks), else an
-            auxiliary task key. Always empty in the `default` profile.
+            none (decision §37): `default` for the chat model (with its fallbacks), `image` for
+            the image model (decision §72), else an auxiliary task key. Always empty in the
+            `default` profile.
           items:
             type: string
         default:
@@ -22126,6 +22235,16 @@ components:
             by every agent of the profile after the model that agent runs on.
           items:
             $ref: '#/components/schemas/ModelRef'
+        image:
+          description: >-
+            The model that draws and edits images for this profile (the Models → Images tab,
+            decision §72): a model with `image_output` on one of the profile's chat providers —
+            there are no separate image providers. Hermes's `image_generate` tool and the hub's
+            image skills both use it. Inherited from the `default` profile like the chat model;
+            null when neither chose one.
+          oneOf:
+            - $ref: '#/components/schemas/ModelRef'
+            - type: 'null'
         auxiliary:
           type: object
           required: [tasks, assignments]
@@ -22149,6 +22268,14 @@ components:
       type: object
       properties:
         default:
+          oneOf:
+            - $ref: '#/components/schemas/ModelRef'
+            - type: 'null'
+        image:
+          description: >-
+            The profile's image model (decision §72). It must be a model with `image_output` on
+            a provider the hub holds the key of (or that needs none); `null` goes back to
+            inheriting the `default` profile's.
           oneOf:
             - $ref: '#/components/schemas/ModelRef'
             - type: 'null'
@@ -23468,7 +23595,7 @@ components:
       properties:
         kind:
           type: string
-          enum: [logs, usage, performance, skills]
+          enum: [usage, skills]
         period:
           type: object
           required: [from, to]
@@ -23483,7 +23610,7 @@ components:
           $ref: '#/components/schemas/Timestamp'
         data:
           type: object
-          description: Kind-specific; fixed in Phase 4 (usage totals and breakdowns, runtime processes, skill counts, log entries with ISO timestamps and byte sizes).
+          description: Kind-specific (usage totals and breakdowns; the Skills usage body of `audit.getSkillUsage`).
           additionalProperties: true
     TerminalSession:
       type: object

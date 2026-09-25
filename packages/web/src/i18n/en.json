@@ -703,11 +703,11 @@
       "auxiliary": "Defaults",
       "ensembles": "Ensembles",
       "stt_providers": "Speech to text",
-      "tts_providers": "Text to speech"
+      "tts_providers": "Text to speech",
+      "images": "Images"
     },
     "providers": {
       "hint": "The providers you added. A shared one is added once and every profile uses it; a profile's own is used only in that profile, instead of a shared one of the same kind.",
-      "empty": "No provider of this kind is configured.",
       "none": "No providers yet. Add the first one and its models arrive with it."
     },
     "provider": {
@@ -759,8 +759,6 @@
       "http_error": "The provider answered with an error."
     },
     "refresh_all": "Refresh model cache",
-    "filter": "Show",
-    "filter_all": "All providers",
     "more_models": "+{count} more",
     "row": {
       "provider": "Provider",
@@ -871,7 +869,11 @@
       "try": "Try the voice",
       "try_text": "Hello. This is how replies will sound.",
       "try_failed": "The voice could not be played: {detail}",
-      "add_hint": "Add OpenAI (it brings its speech rows with the same key), ElevenLabs, or your own OpenAI-compatible speech server with Add provider → Custom."
+      "add_hint": "Add OpenAI (it brings its speech rows with the same key), ElevenLabs, or your own OpenAI-compatible speech server with Add provider → Custom.",
+      "add_stt": "Add a speech-to-text provider",
+      "add_tts": "Add a text-to-speech provider",
+      "none_stt": "No speech-to-text provider yet. Speech usually has providers of its own; add one here.",
+      "none_tts": "No text-to-speech provider yet. Speech usually has providers of its own; add one here."
     },
     "signin": {
       "signed_in": "Signed in",
@@ -890,6 +892,15 @@
       "failed": "The sign-in did not finish.",
       "retry": "Start again",
       "close": "Close"
+    },
+    "images": {
+      "hint": "The model this profile draws and edits images with. It comes from your chat providers — there are no separate image providers. A profile that chooses none uses the default profile's.",
+      "model": "Image model",
+      "none": "None of your chat providers offers an image model.",
+      "none_hint": "Add or refresh a provider that has one — for example a proxy that serves gemini-3.1-flash-image, or OpenAI with gpt-image — and it appears here.",
+      "to_providers": "Go to Providers",
+      "clear": "Use the default profile’s",
+      "used_by": "Hermes's image tool and the image skills (generate, edit, remove background) use this model with its provider's key. Nothing else to set up."
     }
   },
   "working_dir": {
@@ -1418,14 +1429,7 @@
     "cost": "Cost",
     "cost_unknown": "No published price",
     "model": "Model",
-    "by_model": "By model",
-    "no_entries": "Nothing in this period.",
-    "uptime": "Uptime",
-    "seconds": "{count} seconds",
-    "memory": "Memory",
-    "node": "Node",
-    "no_samples": "No samples stored yet.",
-    "samples_n": "{count} samples"
+    "by_model": "By model"
   },
   "usage": {
     "profile": "Profile",

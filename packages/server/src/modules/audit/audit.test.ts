@@ -252,17 +252,21 @@ describe('audit: the report route', () => {
     }
   });
 
-  it('gives the hub-wide reports without a workspace at all', async () => {
+  it('has no Logs or Performance report any more: those screens read the live endpoints (§75)', async () => {
     const hub = await signedInHub();
     try {
       for (const kind of ['logs', 'performance']) {
-        const response = await hub.app.inject({
+        const response = await authed(hub, hub.token, {
           method: 'GET',
           url: `/api/v1/audit/reports/${kind}`,
-          headers: { authorization: `Bearer ${hub.token}` },
         });
-        expect(response.statusCode, kind).toBe(200);
+        expect(response.statusCode, kind).toBe(400);
       }
+      const live = await authed(hub, hub.token, {
+        method: 'GET',
+        url: '/api/v1/audit/performance/live',
+      });
+      expect(live.statusCode).toBe(200);
     } finally {
       await hub.close();
     }

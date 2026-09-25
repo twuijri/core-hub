@@ -25,5 +25,17 @@ describe('the Core Hub mark', () => {
     expect(html).toContain(COREHUB_MARK_PATH);
     expect(html).toContain("fill='%230b6b5d'");
     expect(html).toContain("fill='%23fff'");
+    expect(html).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />');
+  });
+
+  // scripts/icons/build-icons.mjs draws every app icon from this path; the Android icons are
+  // vector drawables, so the path itself is in them.
+  it('is the Android launcher and notification icon too', () => {
+    const res = resolve(process.cwd(), '../../apps/android/app/src/main/res/drawable');
+    for (const file of ['ic_launcher_foreground.xml', 'ic_notice.xml']) {
+      const xml = readFileSync(resolve(res, file), 'utf8');
+      expect(xml).toContain(`android:pathData="${COREHUB_MARK_PATH}"`);
+      expect(xml).toContain('android:fillType="evenOdd"');
+    }
   });
 });

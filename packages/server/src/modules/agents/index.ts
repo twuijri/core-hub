@@ -17,12 +17,15 @@
  * Hermes's own `hermes plugins` command against the selected profile's home
  * (`hermes-plugins.ts`).
  *
+ * `agents.getAvatar` serves the picture `agents.update` stored (`avatars.ts`); an agent without
+ * one is drawn from its slug by the client.
+ *
  * Still documented 501 stubs, with the reason:
- * - `agents.getAvatar` — every agent is a `generated` avatar drawn from its slug until
- *   the `knowledge` module stores attachments.
- * - presets, journey and config files —
- *   each is a read or a write against the agent's own home through its adapter, and that
- *   adapter surface (the Hermes gateway RPC) arrives with the `sessions` module.
+ * - presets and config files — each waits for an owner decision (the change record
+ *   `docs/changes/2026-09-26-twuijri-close-501-stubs.md` says which).
+ *
+ * `agents.getJourney` is Hermes's own learning graph for the selected profile, read from
+ * Hermes's server (`hermes-journey.ts`).
  *
  * Composition note: the module object is a singleton shared by every `buildServer()` in a
  * test process, so the service is kept per Socket.IO server (one per app), the same way
@@ -59,6 +62,8 @@ import { HERMES_ENTRY } from './catalog/index.js';
 import { HermesRuntime, type HermesRuntimeStatus, type Spawner } from './hermes-runtime.js';
 import { HermesDashboard, type DashboardSpawner } from './hermes-dashboard.js';
 import { QR_PLATFORMS, pairWhatsApp, testMcpServer, type HermesApiCall } from './hermes-tools.js';
+import { readJourney } from './hermes-journey.js';
+import { AgentAvatars } from './avatars.js';
 import { namedHermesProfiles } from './hermes-profiles.js';
 import { RunLeases } from './hub-tools/leases.js';
 import { HUB_SERVER_NAME } from './hub-tools/block.js';
@@ -640,6 +645,7 @@ function contextOf(app: FastifyInstance): AgentsContext {
   const registry = own.updates?.registry ?? createPackageRegistry();
   const service = new AgentsService({
     db: requireSqlite(hub.database),
+    avatars: new AgentAvatars(path.join(hub.config.dataDir, 'avatars', 'agents')),
     log: app.log,
     realtime: createRealtime(hub.io),
     audit: auditFor(app),
@@ -1557,6 +1563,32 @@ export const agentsModule = defineModule({
           config: server.config,
           language: request.language,
         });
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.getAvatar',
+      handler: async (request, { params }, reply) => {
+        const agentId = params.agent_id as string;
+        const picture = contextOf(request.server).service.avatar(agentId);
+        if (!picture) throw notFound({ resource: 'agent_avatar', id: agentId });
+        return reply
+          .type(picture.mime)
+          .header('cache-control', 'private, no-cache')
+          .send(picture.bytes);
+      },
+    });
+
+    /**
+     * Journey: what Hermes has learned in the selected profile, read from Hermes's own server
+     * (`hermes-journey.ts`). Hermes decides every node; the hub renames the fields.
+     */
+    defineRoute(app, deps, {
+      operationId: 'agents.getJourney',
+      handler: async (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const { profile } = toolHome(request, agentId, 'journey_is_hermes_only');
+        return readJourney(hermesApiOf(request, agentId), profile);
       },
     });
 

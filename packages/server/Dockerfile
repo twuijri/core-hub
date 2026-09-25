@@ -18,9 +18,10 @@ RUN corepack enable
 WORKDIR /app
 
 # The version being released, stamped into both halves of the image: the web bundle prints it
-# before the hub answers, and the hub reports it on /api/v1/health and /api/v1/meta. The
-# workspace's package.json files stay at 0.0.0 — a release is a tag, not a commit.
-ARG COREHUB_VERSION=0.0.0
+# before the hub answers, and the hub reports it on /api/v1/health and /api/v1/meta. The default
+# is the root package.json's version (`pnpm version:check` keeps the two equal); release.yml
+# passes the tag's version, or `<version>-preview.<run>` for a manual preview.
+ARG COREHUB_VERSION=1.1.0
 
 # ---- all dependencies + build -------------------------------------------------------------
 FROM base AS build

@@ -166,6 +166,12 @@ export type AgentEvent =
       toolId?: string | null;
     }
   | { type: 'plan'; entries: { content: string; status: string }[] }
+  /**
+   * A tool of the agent's own made a file the person should get — Hermes's `image_generate`
+   * saves its picture in Hermes's cache, outside the run's output folder. The runner copies it
+   * there, so it is attached to the reply like any file the agent wrote (decision §72).
+   */
+  | { type: 'file.produced'; path: string; toolId: string }
   | {
       /** Cumulative token totals for the turn, as the agent reports them. */
       type: 'usage';
@@ -322,6 +328,26 @@ export interface FallbackModel {
   model: string;
 }
 
+/**
+ * One question answered by the model alone: no tools offered, no turn of the conversation,
+ * nothing written to the agent's history. The hub names a session with it (decision §26).
+ */
+export interface OneshotRequest {
+  prompt: string;
+  /** The answer is a few words; this is the ceiling, with room for a reasoning model. */
+  maxTokens: number;
+  /** Give up after this long; the answer is then `null`. */
+  timeoutMs: number;
+}
+
+/** An adapter that cannot answer a one-shot here (no surface for it); the caller tries another way. */
+export class OneshotUnavailable extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = 'OneshotUnavailable';
+  }
+}
+
 /** A live conversation with one agent. */
 export interface AgentSession {
   readonly id: string;
@@ -351,6 +377,11 @@ export interface AgentSession {
    * after its next tool call. `rejected` = not now; the caller sends it as a message.
    */
   steer?(text: string): Promise<'queued' | 'rejected'>;
+  /**
+   * A one-shot on this conversation's model (`OneshotRequest`): the model answers, the
+   * conversation does not change. Absent when the agent has no such surface.
+   */
+  oneshot?(request: OneshotRequest): Promise<string | null>;
 }
 
 /** What `AgentSession.compress` did, in the contract's `SessionCompression` terms. */
@@ -415,4 +446,9 @@ export interface AgentAdapter {
   /** The settings form for one agent, with the stored values filled in. */
   settings(target: AgentTarget, stored: Record<string, unknown>): SettingsSection[];
   start(target: AgentTarget): Promise<AgentSession>;
+  /**
+   * Optional. A one-shot (`OneshotRequest`) in the target's profile, on the target's model,
+   * outside any conversation. Throws `OneshotUnavailable` when this agent cannot do it here.
+   */
+  oneshot?(target: AgentTarget, request: OneshotRequest): Promise<string | null>;
 }

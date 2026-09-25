@@ -13,7 +13,7 @@
 import type { ModelRole } from './schema.js';
 
 export interface AuxiliaryTask {
-  key: Exclude<ModelRole, 'chat'>;
+  key: Exclude<ModelRole, 'chat' | 'image'>;
   label: { ar: string; en: string };
 }
 

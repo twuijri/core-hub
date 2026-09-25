@@ -14,6 +14,8 @@ zxingCore = "3.5.3"
 commonmark = "0.24.0"
 junit = "4.13.2"
 work = "2.10.1"
+googleServices = "4.4.3"
+firebaseBom = "34.19.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -44,6 +46,8 @@ commonmark-strikethrough = { module = "org.commonmark:commonmark-ext-gfm-striket
 junit = { module = "junit:junit", version.ref = "junit" }
 json = { module = "org.json:json", version = "20240303" }
 snakeyaml = { module = "org.yaml:snakeyaml", version = "2.3" }
+firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
+firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -51,3 +55,4 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }

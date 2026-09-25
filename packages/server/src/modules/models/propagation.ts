@@ -23,6 +23,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSy
 import path from 'node:path';
 import YAML from 'yaml';
 import { MANAGED_MARKER, mergeEnv } from './dotenv.js';
+import { HERMES_IMAGE_PLUGIN } from './images.js';
 
 /** One resolved credential: a family, the names it is known by, and the key itself. */
 export interface ResolvedCredential {
@@ -94,6 +95,19 @@ export interface PropagationState {
    * only the names of the current credentials are owned, as before.
    */
   ownedEnv?: string[];
+  /**
+   * The profile's image model as the variables its Hermes home carries it in (decision §72,
+   * `images.ts` §IMAGE_ENV): address, model, protocol and key. Empty when none is chosen —
+   * the names stay owned (`ownedEnv`), so a choice taken away is taken out of the file.
+   * Absent leaves them alone.
+   */
+  imageEnv?: Record<string, string>;
+  /**
+   * Whether Hermes's `image_generate` tool should draw through the hub's image backend
+   * (`image_gen.provider` + `plugins.enabled`). `false` takes back only what the hub wrote;
+   * absent leaves `config.yaml`'s image keys alone.
+   */
+  hermesImage?: boolean;
 }
 
 // --------------------------------------------------------------- process agents
@@ -167,6 +181,10 @@ export function hermesEnvPlan(home: string, state: PropagationState): HermesEnvP
       values[name] = credential.value;
     }
   }
+  for (const [name, value] of Object.entries(state.imageEnv ?? {})) {
+    owned.add(name);
+    values[name] = value;
+  }
   return { file: path.join(home, '.env'), owned: [...owned], values };
 }
 
@@ -236,10 +254,12 @@ export function writeHermesProviders(
   home: string,
   routes: readonly HermesProviderRoute[],
   fallbacks: readonly HermesModelChoice[] | null = null,
+  image: boolean | null = null,
 ): HermesWriteResult {
   return editHermesConfig(home, (document, result) => {
     applyProviders(document, routes, result);
     applyFallbacks(document, fallbacks, result);
+    applyImage(document, image, result);
   });
 }
 
@@ -264,6 +284,7 @@ export function writeHermesConfiguration(home: string, state: PropagationState):
     applyProviders(document, state.hermesProviders, result);
     applyModel(document, state.hermesModel, result);
     applyFallbacks(document, state.hermesFallbacks ?? null, result);
+    applyImage(document, state.hermesImage ?? null, result);
   });
   return { env, config, dirty: env.dirty || config.dirty };
 }
@@ -279,6 +300,7 @@ export function writeHermesRoute(home: string, state: PropagationState): HermesW
     applyProviders(document, state.hermesProviders, result);
     applyModel(document, state.hermesModel, result);
     applyFallbacks(document, state.hermesFallbacks ?? null, result);
+    applyImage(document, state.hermesImage ?? null, result);
   });
 }
 
@@ -381,6 +403,65 @@ function applyFallbacks(
     fallbacks.map((choice) => ({ provider: choice.provider, model: choice.model })),
   );
   result.changed.push('fallback_providers');
+}
+
+/**
+ * Hermes's `image_generate` tool, pointed at the hub's image backend (decision §72): the
+ * backend's key in `plugins.enabled` (a plugin in a Hermes home loads only when listed there)
+ * and its name in `image_gen.provider` (which backend the tool calls). Read from Hermes's MIT
+ * source: `hermes_cli/plugins_discovery.py` §gate_manifest, `agent/image_gen_registry.py`.
+ *
+ * `false` takes back exactly what the hub wrote: the provider only while it still names the
+ * hub's backend (a person who picked FAL in `hermes tools` keeps FAL), and the hub's entry in
+ * the list. `null` leaves both alone. Other entries and sibling keys are never touched.
+ */
+function applyImage(
+  document: YAML.Document,
+  wanted: boolean | null,
+  result: HermesWriteResult,
+): void {
+  if (wanted === null) return;
+  const block = document.get('image_gen');
+  if (block !== undefined && block !== null && !YAML.isMap(block)) {
+    throw new Error('config.yaml: `image_gen` is not a mapping; refusing to rewrite it');
+  }
+  const provider = document.getIn(['image_gen', 'provider']);
+  const plugins = document.get('plugins');
+  if (plugins !== undefined && plugins !== null && !YAML.isMap(plugins)) {
+    throw new Error('config.yaml: `plugins` is not a mapping; refusing to rewrite it');
+  }
+  const enabled = YAML.isMap(plugins) ? plugins.get('enabled') : undefined;
+  const list = YAML.isSeq(enabled) ? (enabled.toJSON() as unknown[]) : [];
+  const listed = list.includes(HERMES_IMAGE_PLUGIN.key);
+
+  if (wanted) {
+    if (!listed) {
+      if (YAML.isSeq(enabled)) enabled.add(HERMES_IMAGE_PLUGIN.key);
+      else document.setIn(['plugins', 'enabled'], [HERMES_IMAGE_PLUGIN.key]);
+      result.changed.push('plugins.enabled');
+    }
+    if (provider !== HERMES_IMAGE_PLUGIN.name) {
+      if (!YAML.isMap(block)) document.set('image_gen', new YAML.YAMLMap());
+      document.setIn(['image_gen', 'provider'], HERMES_IMAGE_PLUGIN.name);
+      result.changed.push('image_gen.provider');
+    }
+    return;
+  }
+  if (provider === HERMES_IMAGE_PLUGIN.name) {
+    document.deleteIn(['image_gen', 'provider']);
+    const after = document.get('image_gen');
+    if (YAML.isMap(after) && after.items.length === 0) document.delete('image_gen');
+    result.removed.push('image_gen.provider');
+  }
+  if (listed && YAML.isSeq(enabled)) {
+    const index = list.indexOf(HERMES_IMAGE_PLUGIN.key);
+    enabled.delete(index);
+    // A list the hub's entry was alone in goes with it, and so does a `plugins:` left empty.
+    if (enabled.items.length === 0) document.deleteIn(['plugins', 'enabled']);
+    const after = document.get('plugins');
+    if (YAML.isMap(after) && after.items.length === 0) document.delete('plugins');
+    result.removed.push('plugins.enabled');
+  }
 }
 
 /**

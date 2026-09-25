@@ -1,21 +1,28 @@
 #!/usr/bin/env python3
 # Copyright 2026 twuijri — part of Core Hub, licensed under the Apache License, Version 2.0.
-"""Generate, edit or vary images through an image API, reading the provider from the environment.
+"""Generate, edit, vary or cut out images with the image model chosen in Core Hub.
 
-Used by the Core Hub skills `image-generate` and `image-edit` when Hermes's own
-`image_generate` tool is not available or not configured. Standard library only.
+The model is the profile's choice in Core Hub → Models → Images: one of the chat providers'
+image models. Core Hub writes it into the profile's environment; nobody types a key here.
+Used by the Core Hub skills `image-generate` and `image-edit`, and by the Hermes image backend
+Core Hub installs (`image_gen.provider: corehub-images`), so Hermes's `image_generate` tool
+and these skills always draw with the same model. Standard library only.
 
-Providers:
-  openai      OpenAI Images (/images/generations, /images/edits, /images/variations).
-  compatible  Any server speaking the OpenAI Images API at COREHUB_IMAGE_BASE_URL.
-  gemini      Google's Generative Language API: `imagen-*` models through :predict,
-              Gemini image models (`gemini-*-image*`) through :generateContent.
+Protocols (COREHUB_IMAGE_PROVIDER):
+  compatible  The OpenAI Images API (/images/generations, /images/edits, /images/variations)
+              at COREHUB_IMAGE_BASE_URL — gpt-image, DALL·E, Imagen, FLUX … on any host.
+  chat        A chat model that answers with images (/chat/completions with
+              modalities ["image", "text"]) — e.g. gemini-*-image behind cli-proxy-api or
+              OpenRouter.
+  gemini      Google's own API: `imagen-*` through :predict, Gemini image models through
+              :generateContent.
+  openai      `compatible` at api.openai.com.
 
-Environment (names only are ever printed, never values):
-  COREHUB_IMAGE_PROVIDER   openai | compatible | gemini (optional; guessed otherwise)
-  COREHUB_IMAGE_BASE_URL   base URL of the API (optional for openai and gemini)
-  COREHUB_IMAGE_API_KEY    the key (else OPENAI_API_KEY, or GEMINI_API_KEY / GOOGLE_API_KEY)
-  COREHUB_IMAGE_MODEL      model id (optional)
+Environment, written by Core Hub (names only are ever printed, never values):
+  COREHUB_IMAGE_PROVIDER   compatible | chat | gemini | openai
+  COREHUB_IMAGE_BASE_URL   the provider's address
+  COREHUB_IMAGE_MODEL      the model id
+  COREHUB_IMAGE_API_KEY    the provider's key (absent for an endpoint that takes none)
 
 Every command prints one JSON object on stdout. Exit 0 on success, 2 on a refusal or API error.
 """
@@ -30,20 +37,31 @@ import mimetypes
 import os
 import re
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
+from typing import Callable, Mapping
 
-DEFAULTS = {
-    "openai": {"base": "https://api.openai.com/v1", "model": "gpt-image-1"},
-    "compatible": {"base": None, "model": "gpt-image-1"},
-    "gemini": {
-        "base": "https://generativelanguage.googleapis.com/v1beta",
-        "model": "imagen-4.0-generate-001",
-    },
+PROVIDERS = ("compatible", "chat", "gemini", "openai")
+DEFAULT_BASE = {
+    "openai": "https://api.openai.com/v1",
+    "gemini": "https://generativelanguage.googleapis.com/v1beta",
+}
+ENV = {
+    "provider": "COREHUB_IMAGE_PROVIDER",
+    "base": "COREHUB_IMAGE_BASE_URL",
+    "model": "COREHUB_IMAGE_MODEL",
+    "key": "COREHUB_IMAGE_API_KEY",
 }
 TIMEOUT = float(os.environ.get("COREHUB_IMAGE_TIMEOUT", "180"))
+NOT_CHOSEN = (
+    "No image model is chosen for this profile. Choose one in Core Hub: Models → Images. "
+    "لم يُختر نموذج صور لهذا البروفايل؛ اختره في Core Hub: النماذج ← الصور."
+)
+# The Images API families that take `background: transparent` (OpenAI's gpt-image).
+TRANSPARENT_CAPABLE = re.compile(r"(^|[/:._-])(gpt-image|chatgpt-image)", re.I)
 
 
 class Refusal(Exception):
@@ -53,57 +71,44 @@ class Refusal(Exception):
         self.extra = extra
 
 
-def env(name: str) -> str | None:
-    value = os.environ.get(name, "").strip()
-    return value or None
+def resolve(args, environ: Mapping[str, str] | None = None) -> dict:
+    """The protocol, address, model and key: flags first, then what Core Hub wrote."""
+    source = os.environ if environ is None else environ
 
+    def env(name: str) -> str | None:
+        value = (source.get(name) or "").strip()
+        return value or None
 
-def resolve(args) -> dict:
-    """Which provider, where, which model and which key — from flags, then the environment."""
-    provider = (args.provider or env("COREHUB_IMAGE_PROVIDER") or "").lower() or None
+    model = getattr(args, "model", None) or env(ENV["model"])
+    provider = (getattr(args, "provider", None) or env(ENV["provider"]) or "").lower() or None
+    if not model:
+        raise Refusal("image_model_not_chosen", NOT_CHOSEN, choose_in="Models → Images")
     if provider is None:
-        if env("COREHUB_IMAGE_BASE_URL"):
-            provider = "compatible"
-        elif (env("GEMINI_API_KEY") or env("GOOGLE_API_KEY")) and not (
-            env("OPENAI_API_KEY") or env("COREHUB_IMAGE_API_KEY")
-        ):
-            provider = "gemini"
-        else:
-            provider = "openai"
-    if provider not in DEFAULTS:
-        raise Refusal("provider_unknown", f"unknown provider {provider!r}; use openai, compatible or gemini")
-    if provider == "gemini":
-        key_names = ["COREHUB_IMAGE_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"]
-    else:
-        key_names = ["COREHUB_IMAGE_API_KEY", "OPENAI_API_KEY"]
-    key_name = next((name for name in key_names if env(name)), None)
-    base = args.base_url or env("COREHUB_IMAGE_BASE_URL")
-    if not base and provider == "openai":
-        base = env("OPENAI_BASE_URL")
-    base = base or DEFAULTS[provider]["base"]
+        provider = "compatible"
+    if provider not in PROVIDERS:
+        raise Refusal("provider_unknown", f"unknown image protocol {provider!r}; use one of {', '.join(PROVIDERS)}")
+    base = getattr(args, "base_url", None) or env(ENV["base"]) or DEFAULT_BASE.get(provider)
     if not base:
-        raise Refusal("base_url_missing", "set COREHUB_IMAGE_BASE_URL for an OpenAI-compatible image API")
-    model = args.model or env("COREHUB_IMAGE_MODEL") or DEFAULTS[provider]["model"]
+        raise Refusal("image_model_not_chosen", NOT_CHOSEN, choose_in="Models → Images")
     return {
-        "provider": provider,
+        "provider": "compatible" if provider == "openai" else provider,
         "base": base.rstrip("/"),
         "model": model,
-        "key_name": key_name,
-        "key": env(key_name) if key_name else None,
-        "key_names": key_names,
+        "key": env(ENV["key"]),
     }
 
 
 def need_key(cfg: dict) -> str:
+    """The key, or "" for a server that takes none; Google's own API always takes one."""
     if cfg["key"]:
         return cfg["key"]
-    if cfg["provider"] == "compatible":
-        return ""  # a local server may need no key
-    raise Refusal(
-        "api_key_missing",
-        "no API key in the environment; set one of " + ", ".join(cfg["key_names"]),
-        looked_for=cfg["key_names"],
-    )
+    if cfg["provider"] == "gemini":
+        raise Refusal(
+            "api_key_missing",
+            "the provider chosen in Models → Images has no key; add it to that provider in Core Hub",
+            looked_for=[ENV["key"]],
+        )
+    return ""
 
 
 def http(method: str, url: str, headers: dict, body: bytes | None) -> dict:
@@ -175,8 +180,15 @@ def download(url: str) -> bytes:
     try:
         with urllib.request.urlopen(url, timeout=TIMEOUT) as response:
             return response.read()
-    except urllib.error.URLError as error:
+    except (urllib.error.URLError, ValueError) as error:
         raise Refusal("download_failed", f"could not download the generated image: {error}")
+
+
+def image_from_ref(ref: str) -> bytes:
+    """Bytes of a `data:` URI or an http(s) URL the API answered with."""
+    if ref.startswith("data:"):
+        return base64.b64decode(ref.split(",", 1)[1])
+    return download(ref)
 
 
 def openai_images(answer: dict) -> tuple[list[bytes], str | None]:
@@ -191,6 +203,42 @@ def openai_images(answer: dict) -> tuple[list[bytes], str | None]:
             images.append(download(item["url"]))
     revised = next((item.get("revised_prompt") for item in items if item.get("revised_prompt")), None)
     return images, revised
+
+
+DATA_URI = re.compile(r"data:image/[\w.+-]+;base64,[A-Za-z0-9+/=]+")
+
+
+def chat_images(answer: dict) -> tuple[list[bytes], str | None]:
+    """Images from a chat answer: `message.images` (OpenRouter's shape, which proxies copy),
+    image parts of the content, or a `data:` URI in the text."""
+    images: list[bytes] = []
+    text = None
+    for choice in answer.get("choices") or []:
+        message = choice.get("message") or {}
+        for image in message.get("images") or []:
+            if not isinstance(image, dict):
+                continue
+            url = (image.get("image_url") or {}).get("url") or image.get("url")
+            if url:
+                images.append(image_from_ref(url))
+        content = message.get("content")
+        if isinstance(content, list):
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                if part.get("type") == "image_url":
+                    url = (part.get("image_url") or {}).get("url")
+                    if url:
+                        images.append(image_from_ref(url))
+                elif part.get("type") == "text" and part.get("text"):
+                    text = (text + "\n" if text else "") + part["text"]
+        elif isinstance(content, str) and content:
+            if not images:
+                images.extend(image_from_ref(uri) for uri in DATA_URI.findall(content))
+            text = DATA_URI.sub("", content).strip() or None
+    if not images:
+        raise Refusal("no_image", "the model answered without an image", detail=(text or json.dumps(answer))[:500])
+    return images, text
 
 
 def gemini_images(answer: dict) -> tuple[list[bytes], str | None]:
@@ -212,6 +260,11 @@ def gemini_images(answer: dict) -> tuple[list[bytes], str | None]:
     return images, text
 
 
+def data_uri(path: Path) -> str:
+    mime = mimetypes.guess_type(path.name)[0] or "image/png"
+    return f"data:{mime};base64,{base64.b64encode(path.read_bytes()).decode('ascii')}"
+
+
 def inline_part(path: Path) -> dict:
     mime = mimetypes.guess_type(path.name)[0] or "image/png"
     return {"inlineData": {"mimeType": mime, "data": base64.b64encode(path.read_bytes()).decode("ascii")}}
@@ -224,7 +277,7 @@ def gemini_call(cfg: dict, prompt: str, n: int, aspect: str | None, sources: lis
         if sources:
             raise Refusal(
                 "edit_unsupported",
-                "Imagen models do not edit through this API; use a Gemini image model (COREHUB_IMAGE_MODEL)",
+                "Imagen models do not edit through this API; choose a Gemini image model in Models → Images",
             )
         parameters: dict = {"sampleCount": max(1, min(n, 4))}
         if aspect:
@@ -246,6 +299,30 @@ def gemini_call(cfg: dict, prompt: str, n: int, aspect: str | None, sources: lis
     return gemini_images(answer)
 
 
+def chat_call(cfg: dict, prompt: str, n: int, aspect: str | None, sources: list[Path]) -> tuple[list[bytes], str | None]:
+    key = need_key(cfg)
+    content: object = prompt
+    if sources:
+        content = [{"type": "text", "text": prompt}] + [
+            {"type": "image_url", "image_url": {"url": data_uri(path)}} for path in sources
+        ]
+    payload: dict = {
+        "model": cfg["model"],
+        "messages": [{"role": "user", "content": content}],
+        "modalities": ["image", "text"],
+    }
+    if aspect:
+        payload["image_config"] = {"aspect_ratio": aspect}
+    images: list[bytes] = []
+    note = None
+    # One picture an answer: asking for several is several calls.
+    for _ in range(max(1, min(n, 4))):
+        found, text = chat_images(json_post(f"{cfg['base']}/chat/completions", key, payload))
+        images.extend(found)
+        note = note or text
+    return images, note
+
+
 def check_images(paths: list[str]) -> list[Path]:
     found = []
     for name in paths:
@@ -256,64 +333,149 @@ def check_images(paths: list[str]) -> list[Path]:
     return found
 
 
-def run(args) -> dict:
-    cfg = resolve(args)
+def has_alpha(data: bytes) -> bool:
+    """True for a PNG that can be transparent (an alpha channel, or a tRNS chunk)."""
+    if not data.startswith(b"\x89PNG\r\n\x1a\n") or len(data) < 26:
+        return False
+    if data[25] in (4, 6):
+        return True
+    return b"tRNS" in data[:4096]
+
+
+REMOVE_BG_TRANSPARENT = (
+    "Remove the background completely. Keep the main subject exactly as it is — its shape, "
+    "edges, colours, details and position — and make everything else fully transparent."
+)
+
+
+def remove_bg_prompt(colour: str) -> str:
+    return (
+        "Cut out the main subject and place it on a perfectly flat, solid "
+        f"{colour} background with no shadow, gradient, texture or other objects. Keep the "
+        "subject exactly as it is — its shape, edges, colours, details and position."
+    )
+
+
+def call(
+    cfg: dict,
+    command: str,
+    prompt: str,
+    sources: list[Path],
+    *,
+    mask: Path | None = None,
+    n: int = 1,
+    size: str | None = None,
+    aspect: str | None = None,
+    quality: str | None = None,
+    background: str | None = None,
+) -> tuple[list[bytes], str | None]:
+    """One request to the chosen model: `generate`, `edit` or `vary`. The library entry the
+    Hermes backend uses; `run` below is the command line around it."""
+    n = max(1, min(n, 4))
+    if cfg["provider"] in ("gemini", "chat"):
+        if command == "vary":
+            prompt = prompt or "Create a variation of this image: same subject, style and palette, new composition."
+        speak = gemini_call if cfg["provider"] == "gemini" else chat_call
+        return speak(cfg, prompt, n, aspect, sources)
+    key = need_key(cfg)
+    if command == "generate":
+        payload = {"model": cfg["model"], "prompt": prompt, "n": n}
+        if size:
+            payload["size"] = size
+        if quality:
+            payload["quality"] = quality
+        if background:
+            payload["background"] = background
+        answer = json_post(f"{cfg['base']}/images/generations", key, payload)
+    elif command == "edit":
+        files = [("image[]" if len(sources) > 1 else "image", path) for path in sources]
+        if mask:
+            files.append(("mask", mask))
+        fields = {"model": cfg["model"], "prompt": prompt, "n": n, "size": size, "quality": quality}
+        if background:
+            fields["background"] = background
+            fields["output_format"] = "png"
+        answer = multipart_post(f"{cfg['base']}/images/edits", key, fields, files)
+    elif prompt:  # vary with a direction is an edit
+        answer = multipart_post(
+            f"{cfg['base']}/images/edits",
+            key,
+            {"model": cfg["model"], "prompt": prompt, "n": n, "size": size},
+            [("image", sources[0])],
+        )
+    else:
+        answer = multipart_post(
+            f"{cfg['base']}/images/variations",
+            key,
+            {"model": cfg["model"], "n": n, "size": size},
+            [("image", sources[0])],
+        )
+    return openai_images(answer)
+
+
+def remove_background(cfg: dict, source: Path, out: Path, colour: str, size: str | None) -> dict:
+    """Cut the subject out with the image model's edit endpoint. A gpt-image model is asked
+    for transparency outright; any other model puts the subject on a flat colour, which the
+    bundled, model-free `image-convert transparent-bg` then clears."""
+    transparent_capable = cfg["provider"] == "compatible" and bool(TRANSPARENT_CAPABLE.search(cfg["model"]))
+    images, note = call(
+        cfg,
+        "edit",
+        REMOVE_BG_TRANSPARENT if transparent_capable else remove_bg_prompt(colour),
+        [source],
+        size=size,
+        background="transparent" if transparent_capable else None,
+    )
+    files = save(images[:1], out, f"{source.stem}-cutout", "png")
+    transparent = has_alpha(images[0])
+    result = {
+        "ok": True,
+        "command": "remove-bg",
+        "provider": cfg["provider"],
+        "model": cfg["model"],
+        "files": files,
+        "transparent": transparent,
+        "note": note,
+    }
+    if not transparent:
+        result["background"] = None if transparent_capable else colour
+        result["next"] = (
+            "python3 <image-convert skill_dir>/scripts/image_tools.py transparent-bg " + files[0]
+        )
+    return result
+
+
+def run(args, environ: Mapping[str, str] | None = None) -> dict:
+    cfg = resolve(args, environ)
     if args.command == "providers":
         return {
+            "ok": True,
             "provider": cfg["provider"],
             "base_url": cfg["base"],
             "model": cfg["model"],
-            "key_from": cfg["key_name"],
-            "keys_looked_for": cfg["key_names"],
+            "key_from": ENV["key"] if cfg["key"] else None,
         }
 
-    prompt = (args.prompt or "").strip()
+    prompt = (getattr(args, "prompt", None) or "").strip()
     if args.command in ("generate", "edit") and not prompt:
         raise Refusal("prompt_missing", "a prompt is required")
     sources = check_images(getattr(args, "image", None) or [])
     mask = check_images([args.mask])[0] if getattr(args, "mask", None) else None
-    n = max(1, min(args.n, 4))
 
-    if cfg["provider"] == "gemini":
-        if args.command == "vary":
-            prompt = prompt or "Create a variation of this image: same subject, style and palette, new composition."
-        images, note = gemini_call(cfg, prompt, n, args.aspect, sources)
-    else:
-        key = need_key(cfg)
-        if args.command == "generate":
-            payload = {"model": cfg["model"], "prompt": prompt, "n": n}
-            if args.size:
-                payload["size"] = args.size
-            if args.quality:
-                payload["quality"] = args.quality
-            answer = json_post(f"{cfg['base']}/images/generations", key, payload)
-        elif args.command == "edit":
-            files = [("image[]" if len(sources) > 1 else "image", path) for path in sources]
-            if mask:
-                files.append(("mask", mask))
-            answer = multipart_post(
-                f"{cfg['base']}/images/edits",
-                key,
-                {"model": cfg["model"], "prompt": prompt, "n": n, "size": args.size, "quality": args.quality},
-                files,
-            )
-        else:  # vary
-            if prompt:
-                answer = multipart_post(
-                    f"{cfg['base']}/images/edits",
-                    key,
-                    {"model": cfg["model"], "prompt": prompt, "n": n, "size": args.size},
-                    [("image", sources[0])],
-                )
-            else:
-                answer = multipart_post(
-                    f"{cfg['base']}/images/variations",
-                    key,
-                    {"model": args.model or env("COREHUB_IMAGE_MODEL") or "dall-e-2", "n": n, "size": args.size},
-                    [("image", sources[0])],
-                )
-        images, note = openai_images(answer)
+    if args.command == "remove-bg":
+        return remove_background(cfg, sources[0], Path(args.out), args.bg_color, args.size)
 
+    images, note = call(
+        cfg,
+        args.command,
+        prompt,
+        sources,
+        mask=mask,
+        n=args.n,
+        size=args.size,
+        aspect=args.aspect,
+        quality=args.quality,
+    )
     files = save(images, Path(args.out), prompt or sources[0].stem, args.format)
     return {
         "ok": True,
@@ -325,18 +487,49 @@ def run(args) -> dict:
     }
 
 
+def materialize(ref: str, folder: str) -> Path:
+    """A local file for a source image given as a path, a `data:` URI or an http(s) URL —
+    what Hermes's tool hands a backend."""
+    if ref.startswith(("http://", "https://", "data:")):
+        path = Path(folder) / f"source-{uuid.uuid4().hex[:8]}.png"
+        path.write_bytes(image_from_ref(ref))
+        return path
+    return check_images([ref])[0]
+
+
+def draw(
+    prompt: str,
+    *,
+    sources: list[str] | None = None,
+    aspect: str | None = None,
+    size: str | None = None,
+    get: Callable[[str], str | None] | None = None,
+) -> dict:
+    """For the Hermes backend: one image, as bytes. `get` reads a variable through Hermes's
+    secret scope (a profile's `.env` before the process environment); absent, the
+    environment is read."""
+    values = {name: (get(name) if get else os.environ.get(name)) or "" for name in ENV.values()}
+    cfg = resolve(argparse.Namespace(provider=None, base_url=None, model=None), values)
+    with tempfile.TemporaryDirectory(prefix="corehub-image-") as folder:
+        paths = [materialize(ref, folder) for ref in (sources or [])]
+        images, note = call(
+            cfg, "edit" if paths else "generate", prompt, paths, n=1, size=size, aspect=aspect,
+        )
+    return {"image": images[0], "model": cfg["model"], "provider": cfg["provider"], "note": note}
+
+
 def parser() -> argparse.ArgumentParser:
     main = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = main.add_subparsers(dest="command", required=True)
 
     def common(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--provider", choices=sorted(DEFAULTS))
+        p.add_argument("--provider", choices=PROVIDERS, help="override the protocol Core Hub chose")
         p.add_argument("--base-url")
-        p.add_argument("--model")
+        p.add_argument("--model", help="override the model chosen in Models → Images")
         p.add_argument("--n", type=int, default=1, help="how many images, 1-4")
-        p.add_argument("--size", help="e.g. 1024x1024, 1536x1024, 1024x1536 (OpenAI-style APIs)")
-        p.add_argument("--aspect", help="e.g. 1:1, 16:9, 9:16 (Gemini/Imagen)")
-        p.add_argument("--quality", help="low | medium | high | auto (OpenAI-style APIs)")
+        p.add_argument("--size", help="e.g. 1024x1024, 1536x1024, 1024x1536 (Images API)")
+        p.add_argument("--aspect", help="e.g. 1:1, 16:9, 9:16 (Gemini and chat image models)")
+        p.add_argument("--quality", help="low | medium | high | auto (Images API)")
         p.add_argument("--format", default="png", help="file extension to save as (default png)")
         p.add_argument("--out", default="images", help="folder to save into (default ./images)")
 
@@ -355,8 +548,17 @@ def parser() -> argparse.ArgumentParser:
     vary.add_argument("--prompt", help="what to keep or change (optional)")
     common(vary)
 
-    providers = sub.add_parser("providers", help="which provider, model and key name would be used")
-    providers.add_argument("--provider", choices=sorted(DEFAULTS))
+    remove = sub.add_parser("remove-bg", help="cut the subject out of its background with the image model")
+    remove.add_argument("--image", action="append", required=True)
+    remove.add_argument(
+        "--bg-color",
+        default="pure green (#00FF00)",
+        help="the flat colour a model without transparency puts the subject on (default pure green)",
+    )
+    common(remove)
+
+    providers = sub.add_parser("providers", help="which protocol, address and model would be used")
+    providers.add_argument("--provider", choices=PROVIDERS)
     providers.add_argument("--base-url")
     providers.add_argument("--model")
     return main

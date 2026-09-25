@@ -43,6 +43,8 @@ import hub.core.android.ui.screens.SearchScreen
 import hub.core.android.ui.screens.SettingsPageScreen
 import hub.core.android.ui.screens.SettingsScreen
 import hub.core.android.ui.screens.TasksScreen
+import hub.core.android.phone.PushPayload
+import kotlinx.coroutines.launch
 import hub.core.android.phone.Share
 import hub.core.android.phone.ThisDevicePage
 import hub.core.android.ui.screens.ShellViewModel
@@ -92,12 +94,24 @@ class MainActivity : ComponentActivity() {
     private fun handle(intent: Intent?) {
         // «Share to Core Hub»: the shared text becomes a new chat's draft.
         Share.textOf(intent)?.let { graph.sharedText.value = it }
+        // A push the system showed (the app was in the background): FCM opens this activity with
+        // the push's `data` as extras; the tap leads where the notice is about.
+        pushExtras(intent)?.let(PushPayload::path)?.let {
+            pendingPath = it
+            return
+        }
         val data = intent?.dataString ?: return
         when (val link = DeepLink.parse(data)) {
             is DeepLink.Pair -> pendingPairing = link.request
             is DeepLink.Open -> pendingPath = link.path
             else -> Unit
         }
+    }
+
+    private fun pushExtras(intent: Intent?): Map<String, String?>? {
+        val extras = intent?.extras ?: return null
+        if (extras.getString(PushPayload.TYPE) == null) return null
+        return PushPayload.KEYS.associateWith { extras.getString(it) }
     }
 }
 
@@ -109,6 +123,7 @@ private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Uni
         ConnectScreen(pendingPairing, onPairingHandled)
         return
     }
+    val leave = androidx.compose.runtime.rememberCoroutineScope()
     if (pendingPairing != null) {
         // Already signed in: pairing again moves this phone to that hub, so ask first.
         AlertDialog(
@@ -116,7 +131,7 @@ private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Uni
             title = { Text(stringResource(R.string.pair_switch_title)) },
             text = { Text(stringResource(R.string.pair_switch_body, pendingPairing.hub)) },
             confirmButton = {
-                TextButton(onClick = { graph.realtime.close(); graph.store.save(null) }) { Text(stringResource(R.string.pair_switch_confirm)) }
+                TextButton(onClick = { leave.launch { graph.signOut(logout = false) } }) { Text(stringResource(R.string.pair_switch_confirm)) }
             },
             dismissButton = { TextButton(onClick = onPairingHandled) { Text(stringResource(R.string.cancel)) } },
         )

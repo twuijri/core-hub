@@ -1,11 +1,11 @@
 /**
- * audit — the immutable audit trail, the usage/cost ledger, performance
- * snapshots, and jobs (long work with progress, invariant 4) with their
- * event log.
+ * audit — the immutable audit trail, the usage/cost ledger, and jobs (long
+ * work with progress, invariant 4) with their event log.
  *
  * Global with a nullable workspace: audit_events, jobs, job_events (a login
- * or a server update has no workspace). Global: performance_snapshots.
- * Scoped: usage_records, skill_uses. Global: audit_counters.
+ * or a server update has no workspace). Scoped: usage_records, skill_uses.
+ * Global: audit_counters. (performance_snapshots was dropped with contract
+ * decision §75: Performance is measured when asked, `live.ts`.)
  *
  * Other modules create jobs and usage records only through this module's
  * public API; they store the returned job id on their own rows
@@ -22,7 +22,6 @@ import {
   text,
   uniqueIndex,
   integer,
-  real,
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 import {
@@ -144,23 +143,6 @@ export const auditCounters = sqliteTable('audit_counters', {
   name: text('name', { length: 64 }).primaryKey(),
   startedAt: timestampMs('started_at').notNull(),
 });
-
-export const performanceSnapshots = sqliteTable(
-  'performance_snapshots',
-  {
-    ...globalColumns(),
-    capturedAt: timestampMs('captured_at').notNull(),
-    cpuPercent: real('cpu_percent'),
-    memoryBytes: integer('memory_bytes'),
-    diskFreeBytes: integer('disk_free_bytes'),
-    dbBytes: integer('db_bytes'),
-    activeRuns: integer('active_runs').notNull().default(0),
-    queuedJobs: integer('queued_jobs').notNull().default(0),
-    connectedClients: integer('connected_clients').notNull().default(0),
-    data: json<Record<string, unknown>>('data').notNull().default(EMPTY_OBJECT),
-  },
-  (t) => [index('performance_snapshots_time_idx').on(t.capturedAt)],
-);
 
 export const jobs = sqliteTable(
   'jobs',

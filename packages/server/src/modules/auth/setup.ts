@@ -12,6 +12,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { ModuleDb } from '../../lib/db.js';
 import { HubError } from '../../lib/errors.js';
 import { newUlid } from '../../db/ids.js';
+import { endPushForOwners } from '../devices/index.js';
 import { hashPassword } from './passwords.js';
 import { appTokens, users, workspaces, type Locale } from './schema.js';
 import type { UserRow } from './serialize.js';
@@ -237,6 +238,7 @@ export function resetOwnerOnBoot(
       .set({ revokedAt: new Date(now) })
       .where(and(inArray(appTokens.userId, owners), isNull(appTokens.revokedAt)))
       .run();
+    endPushForOwners(tx as ModuleDb, owners);
     return owners;
   });
   // Written even when there was no owner to disable: a variable set on the very first boot

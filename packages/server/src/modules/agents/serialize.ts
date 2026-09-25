@@ -6,9 +6,9 @@ import type { agents, agentSettings } from './schema.js';
 import { compareVersions } from './update-policy.js';
 
 /**
- * The contract's `Avatar`. Until the hub stores agent pictures, every agent is a
- * `generated` avatar the client draws from the slug — the same shape `auth` uses for a
- * user without an uploaded image.
+ * The contract's `Avatar`: an uploaded picture (`avatars.ts`), fetched from
+ * `agents.getAvatar`, or a `generated` avatar the client draws from the slug — the same
+ * shape `auth` uses for a user without an uploaded image.
  */
 export interface ContractAvatar {
   kind: 'image' | 'generated';
@@ -107,6 +107,8 @@ export function serializeAgent(
   row: AgentRow,
   options: {
     profile: string;
+    /** An uploaded picture exists (`avatars.ts`). */
+    hasAvatar?: boolean;
     settings: AgentSettingsRow | undefined;
     runtime: RuntimeState;
     /**
@@ -136,8 +138,9 @@ export function serializeAgent(
     name: options.name ?? row.name,
     vendor: row.vendor,
     kind: row.adapterKind,
-    // No avatar store yet (attachments are Phase 4), so every agent is drawn from its slug.
-    avatar: generatedAvatar(row.slug),
+    avatar: options.hasAvatar
+      ? { kind: 'image', url: `/api/v1/agents/${row.id}/avatar`, seed: null }
+      : generatedAvatar(row.slug),
     status: agentStatus(row, enabled),
     enabled,
     install: {

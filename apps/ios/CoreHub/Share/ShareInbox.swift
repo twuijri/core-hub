@@ -6,7 +6,7 @@ import Foundation
 enum ShareInbox {
     /// The App Group both targets belong to (project.yml; registered with the owner's Apple
     /// account when the app is signed — README.md).
-    static let group = "group.io.github.twuijri.corehub"
+    static let group = "group.com.twuijri.corehub"
     static let key = Product.storagePrefix + "share.pending"
 
     static func defaults() -> UserDefaults? { UserDefaults(suiteName: group) }

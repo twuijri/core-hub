@@ -1,18 +1,19 @@
 # devices
 
-Owns: `device`, `device_command`, `push_credential` (moved here from notify on 2026-09-25,
+Owns: `device`, `device_request`, `push_credential` (moved here from notify on 2026-09-25,
 same table; contract decision §66). Schema:
 `packages/server/src/modules/devices/schema.ts`. `devices` is global (a
-device belongs to a user); `device_commands` is scoped. Base columns omitted.
+device belongs to a user); `device_requests` is scoped. Base columns omitted.
 
-Realtime namespace `/rt/devices`: `device.online`, `device.offline`,
-`device_command.queued` (to the device), `device_command.completed` (to the
-requester).
+Realtime namespace `/rt/devices`: `device.online`, `device.offline`, `device.updated`,
+`device.linked`, `device.unlinked`, `request.created` (to the addressed device only: its
+sockets join `device:<id>`), `request.completed` (to the person, whose sockets include the
+device's).
 
 The `device://` rule: an agent that needs the phone's camera, microphone,
-clipboard or location asks the hub; the hub queues a command for a paired
-device, the device answers, the result becomes an attachment or a JSON
-payload for the waiting run.
+clipboard or location asks the hub; the hub sends a capability request to one paired
+device, the device answers, the result stays in the request for the waiting run
+(contract decisions §14, §74).
 
 ## device (global)
 
@@ -45,28 +46,32 @@ pairing token is revoked (`packages/server/src/modules/devices/index.ts`).
 Lifecycle: `paired → revoked` (terminal; revoking also revokes the app
 token). Deleting a revoked device is allowed.
 
-## device_command (scoped)
+## device_request (scoped)
+
+The contract's `DeviceRequest`. Replaced `device_command` (migration `0022`), a design that
+was never written to.
 
 | column | type | meaning |
 |---|---|---|
-| device_id | ulid → device (FK, cascade) | |
-| kind | enum(capture_photo, record_audio, read_clipboard, write_clipboard, open_url, locate, speak, show_notification, custom) | |
-| payload | json | kind-specific arguments |
-| status | enum(queued, sent, acked, completed, failed, expired, cancelled) | |
-| requested_by_kind | enum(user, agent, workflow) | |
-| requested_by_id | ulid? | user, agent or workflow_run |
-| run_id | ulid? → sessions.run | the run waiting for the answer |
-| result | json? | |
-| result_attachment_id | ulid? → knowledge.attachment | photo / recording |
-| error | text? | |
-| sent_at, completed_at | ms? | |
-| expires_at | ms | after which the run gets a `device_timeout` error |
+| owner_id | ulid → user | the person who asked (only a device's own person may ask it) |
+| device_id | ulid → device (FK, cascade) | the one device asked |
+| capability | enum(`CapabilityKind`) | location, camera, microphone, … |
+| purpose | text? | shown in the device's consent sheet |
+| params | json | capability-specific (`location`: `accuracy: coarse \| precise`) |
+| session_id, run_id | ulid? | the conversation / run waiting for it, if any |
+| job_id | ulid → audit.job | the `device_request` job; it carries only `{request_id, status}` |
+| status | enum(pending, fulfilled, denied, failed, expired, cancelled) | only `pending` is not final |
+| expires_at | ms | `created_at + timeout_ms` (default 30 s); after it, `expired` with `timeout` |
+| result | json? | what the device sent; a location is `{latitude, longitude, accuracy_m, captured_at}` |
+| error | json? | `{code, message}`, code from `permission_denied \| unavailable \| timeout \| cancelled \| failed` |
+| answered_at | ms? | when it became final |
 
-Lifecycle: `queued → sent → acked → completed | failed`; `queued | sent →
-expired`; `queued | sent | acked → cancelled`. Terminal: completed, failed,
-expired, cancelled.
+Lifecycle: `pending → fulfilled | denied | failed | expired | cancelled`, once. A capability
+the device did not declare, or switched off, is `denied` with `unavailable` by the hub at
+creation. Expiry runs on a timer and again on every read (a restarted hub has no timers).
 
-Indexes: (device_id, status, created_at) for the device's queue; `run_id`.
+Indexes: (device_id, status, created_at) for the device's catch-up; (workspace, owner_id,
+created_at).
 
 ## push_credential (global)
 
@@ -95,9 +100,9 @@ person with a push registration and answers per device. See contract decision §
 - Devices screen: `devices where owner_id = me` (owner/admin: all), with
   online state from the socket registry and the channel subscription
   (updates module).
-- Device app on connect: `device_commands where device_id and status in
-  (queued, sent)` to catch up, then subscribe.
-- Requester: command by id; the run resumes when `completed`.
+- Device app on connect: `device_requests where device_id and status = pending` to catch
+  up (`devices.listRequests?status=pending`), then subscribe.
+- Requester: request by id; the job ends when the device answers.
 - Revoke: set status/revoked_at, revoke the app token (auth API), emit
   `device.offline`.
 
@@ -106,5 +111,5 @@ person with a push registration and answers per device. See contract decision §
 - Socket ids, online/offline state: the socket registry in memory; the
   database keeps only `last_seen_at`.
 - Media bytes: attachments (knowledge).
-- Location history: a `locate` result is returned to the requester and kept
-  only inside that command row.
+- Location history: a location result is returned to the requester and kept
+  only inside that request row — never in its job, which every member of the profile sees.

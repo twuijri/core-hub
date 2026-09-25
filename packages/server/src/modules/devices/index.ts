@@ -3,12 +3,14 @@
 //
 // What answers (DECISIONS §66): the registry (list, read, rename, unlink, register a
 // browser), push registration, the push senders (Web Push with the hub's own VAPID keys,
-// FCM, APNs) and a test push. Capability requests, the relay and peers stay 501.
+// FCM, APNs) and a test push; and capability requests (DECISIONS §14, §74; `requests.ts`).
+// The relay and peers stay 501 (they wait for the owner: docs/changes/
+// 2026-09-26-twuijri-close-501-stubs.md).
 //
 // `auth` imports this module (pairing creates the device row), so this module does not
 // import `auth`: what it needs from it — the route guards, revoking a token, reaching a
 // person's sockets — is lent by the composition root (`createDevicesModule`).
-import { and, asc, eq, gt } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, ne, or } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
 import { loadOpenApiDocument } from '@corehub/contracts';
@@ -26,9 +28,21 @@ import {
   type SenderUpdate,
 } from './push.js';
 import { parseSubscription } from './webpush.js';
+import {
+  DEFAULT_TIMEOUT_MS,
+  DeviceRequestService,
+  closeRequests,
+  deviceRoom,
+  requestsFor,
+  serializeRequest,
+  workspaceOf,
+  type RequestJobs,
+} from './requests.js';
+import type { Language } from '../../i18n/index.js';
 import type { PushMessage, PushProvider } from './senders.js';
 import {
   devices,
+  type DeviceRequestStatus,
   type CapabilityKind,
   type DeviceConnection,
   type DeviceKind,
@@ -40,6 +54,7 @@ export type { CapabilityKind, DeviceConnection, DeviceKind, DevicePlatform } fro
 export { CAPABILITY_KINDS, DEVICE_CONNECTIONS, DEVICE_KINDS, DEVICE_PLATFORMS } from './schema.js';
 export type { DeliveryResult, Sealer } from './push.js';
 export type { PushMessage, PushProvider } from './senders.js';
+export type { RequestJobHandle, RequestJobs } from './requests.js';
 
 /** What the composition root lends this module (it may not import `auth` or `notify`). */
 export interface DevicesPorts {
@@ -62,6 +77,15 @@ export interface DevicesPorts {
   ): Promise<{ ok: true } | { ok: false; reason: string; detail: string }>;
   /** The hub's data key ring (models). */
   sealer(app: FastifyInstance): Sealer;
+  /** The job runner (audit), for capability requests: a request is a `device_request` job. */
+  jobs(app: FastifyInstance): RequestJobs;
+  /** A person's language, for the hub's own sentences in a request (auth). */
+  userLanguage(app: FastifyInstance, userId: string): Language;
+  /**
+   * Is this `app_tokens` row (a sign-in session or a pairing token) still good — not revoked,
+   * not expired, its person active (auth)? A push registration lives only as long as it.
+   */
+  sessionLive(db: ModuleDb, tokenId: string, now: number): boolean;
 }
 
 /** Test seams: fakes for the push services, and permission to call 127.0.0.1. */
@@ -95,6 +119,7 @@ export function pushFor(app: FastifyInstance): PushService {
     dataDir: app.hub.config.dataDir,
     env: (app.hub.config as { push?: PushEnvInput }).push,
     sealer: lent.sealer(app),
+    sessionLive: (tokenId, at) => lent.sessionLive(requireSqlite(app.hub.database), tokenId, at),
     checkEndpoint: async (endpoint) => {
       if (!allowPrivate && !endpoint.startsWith('https://')) return 'the endpoint is not https';
       const verdict = await lent.checkAddress(endpoint, allowPrivate);
@@ -181,7 +206,50 @@ export function findDevice(db: ModuleDb, id: string): DeviceRow | null {
 }
 
 /** Nothing is pushed to a device that is gone: its push registration goes with it. */
-const REVOKED_PUSH = { pushProvider: 'none' as const, pushToken: null, pushRegisteredAt: null };
+const REVOKED_PUSH = {
+  pushProvider: 'none' as const,
+  pushToken: null,
+  pushRegisteredAt: null,
+  pushSessionId: null,
+};
+
+/**
+ * A sign-in ended (sign-out, a revoked token, a password change, a re-pair): the push
+ * registrations it made are forgotten, so nothing reaches a phone that is no longer signed
+ * in. A row registered before `push_session_id` existed answers to its pairing token.
+ * Returns the devices that lost their registration.
+ */
+export function endPushForSessions(db: ModuleDb, tokenIds: readonly string[]): DeviceRow[] {
+  if (tokenIds.length === 0) return [];
+  return db
+    .update(devices)
+    .set(REVOKED_PUSH)
+    .where(
+      and(
+        ne(devices.pushProvider, 'none'),
+        or(
+          inArray(devices.pushSessionId, [...tokenIds]),
+          and(isNull(devices.pushSessionId), inArray(devices.appTokenId, [...tokenIds])),
+        ),
+      ),
+    )
+    .returning()
+    .all();
+}
+
+/**
+ * A person can no longer sign in at all (disabled, deleted, the owner reset): every push
+ * registration of theirs goes, a browser's included.
+ */
+export function endPushForOwners(db: ModuleDb, userIds: readonly string[]): DeviceRow[] {
+  if (userIds.length === 0) return [];
+  return db
+    .update(devices)
+    .set(REVOKED_PUSH)
+    .where(and(ne(devices.pushProvider, 'none'), inArray(devices.ownerId, [...userIds])))
+    .returning()
+    .all();
+}
 
 /** Marks the device revoked when its pairing token is revoked; null when no device holds it. */
 export function revokeDeviceByToken(
@@ -330,7 +398,10 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
       if (!document) throw new Error('packages/contracts/openapi.yaml is required (ADR 0003)');
       const deps = { contract: createContractIndex(document), guards: lent.guards };
       databases.set(app.hub.io, requireSqlite(app.hub.database));
-      app.addHook('onClose', async () => services.get(app.hub.io)?.close());
+      app.addHook('onClose', async () => {
+        services.get(app.hub.io)?.close();
+        closeRequests(app);
+      });
       const dbOf = (request: FastifyRequest) => requireSqlite(request.server.hub.database);
       const view = (request: FastifyRequest, row: DeviceRow) =>
         serializeDevice(row, {
@@ -577,6 +648,9 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             .set({
               pushProvider: input.provider,
               pushToken: push.sealToken(token),
+              // A phone's token lives as long as the sign-in that registered it. A browser's
+              // subscription is the browser's own: it stays until turned off or unlinked.
+              pushSessionId: input.provider === 'webpush' ? null : principal.tokenId,
               pushLocale: input.locale ?? principal.user.locale ?? 'ar',
               pushRegisteredAt: new Date(at),
               lastSeenAt: new Date(at),
@@ -624,6 +698,123 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             status: result?.ok ? 'sent' : 'failed',
             error: result?.ok ? null : (result?.error ?? 'not sent'),
           };
+        },
+      });
+
+      // ---------------------------------------------------------------- capability requests
+
+      const requests = (request: FastifyRequest) =>
+        requestsFor(
+          request.server,
+          () =>
+            new DeviceRequestService({
+              db: requireSqlite(request.server.hub.database),
+              io: request.server.hub.io,
+              jobs: lent.jobs(request.server),
+              now,
+              languageOf: (userId) => lent.userLanguage(request.server, userId),
+            }),
+        );
+
+      /** The request, if the caller may see it: the person who asked, or the device asked. */
+      const visibleRequest = (request: FastifyRequest, id: string) => {
+        const principal = principalOf(request);
+        const row = requests(request).find(workspaceOf(request), id);
+        if (!row) throw notFound({ resource: 'device_request', id });
+        const asked = principal.deviceId === row.deviceId;
+        if (row.ownerId !== principal.user.id && !asked) {
+          throw notFound({ resource: 'device_request', id });
+        }
+        return row;
+      };
+
+      defineRoute(app, deps, {
+        operationId: 'devices.listRequests',
+        handler: (request, { query }) => {
+          const principal = principalOf(request);
+          // A device sees what was asked of it; a person sees what was asked of their devices.
+          const wanted = (query.device_id as string | undefined) ?? null;
+          const deviceId = principal.deviceId ?? wanted;
+          if (principal.deviceId && wanted && wanted !== principal.deviceId) {
+            return { items: [], next_cursor: null };
+          }
+          return requests(request).list({
+            workspace: workspaceOf(request),
+            userId: principal.user.id,
+            deviceId,
+            status: (query.status as DeviceRequestStatus | undefined) ?? null,
+            cursor: query.cursor as string | undefined,
+            limit: query.limit as number | undefined,
+          });
+        },
+      });
+
+      defineRoute(app, deps, {
+        operationId: 'devices.createRequest',
+        status: 202,
+        handler: (request, { body }) => {
+          const principal = principalOf(request);
+          if (!principal.scopes.includes('device') && !principal.scopes.includes('admin')) {
+            throw new HubError('forbidden', {
+              messageKey: 'auth.scope_insufficient',
+              details: { required_scope: 'device' },
+            });
+          }
+          const input = body as {
+            device_id: string;
+            capability: CapabilityKind;
+            purpose?: string | null;
+            params?: Record<string, unknown>;
+            session_id?: string | null;
+            timeout_ms?: number;
+          };
+          const device = findDevice(dbOf(request), input.device_id);
+          // Only the device's own person may ask it; anyone else's device is not there.
+          if (!device || device.status !== 'paired' || device.ownerId !== principal.user.id) {
+            throw notFound({ resource: 'device', id: input.device_id });
+          }
+          const { jobId, request: row } = requests(request).create({
+            workspace: workspaceOf(request),
+            ownerId: principal.user.id,
+            device,
+            capability: input.capability,
+            purpose: input.purpose?.trim() || null,
+            params: input.params ?? {},
+            sessionId: input.session_id ?? null,
+            timeoutMs: input.timeout_ms ?? DEFAULT_TIMEOUT_MS,
+          });
+          return { job_id: jobId, request_id: row.id };
+        },
+      });
+
+      defineRoute(app, deps, {
+        operationId: 'devices.getRequest',
+        handler: (request, { params }) =>
+          serializeRequest(
+            visibleRequest(request, params.request_id as string),
+            workspaceOf(request).slug,
+          ),
+      });
+
+      defineRoute(app, deps, {
+        operationId: 'devices.respondRequest',
+        handler: (request, { params, body }) => {
+          const principal = principalOf(request);
+          const row = visibleRequest(request, params.request_id as string);
+          if (principal.deviceId !== row.deviceId) {
+            throw new HubError('forbidden', { details: { reason: 'not_the_addressed_device' } });
+          }
+          const workspace = workspaceOf(request);
+          const next = requests(request).respond(
+            workspace,
+            row,
+            body as {
+              status: 'fulfilled' | 'denied' | 'failed';
+              result?: unknown;
+              error?: unknown;
+            },
+          );
+          return serializeRequest(next, workspace.slug);
         },
       });
 
@@ -694,6 +885,8 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
       namespace.on('connection', (socket) => {
         const deviceId = deviceOfSocket(socket.data);
         if (!deviceId) return;
+        // What is asked of this device reaches this device only (`request.created`).
+        void socket.join(deviceRoom(deviceId));
         const announce = (event: 'device.online' | 'device.offline', online: boolean) => {
           const db = databases.get(io);
           if (!db || !ports) return;

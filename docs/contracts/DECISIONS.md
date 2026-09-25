@@ -443,6 +443,15 @@ a failure costs the caller nothing. The fallback, whenever that call is refused
 or unsupported by the adapter, is the first user message trimmed on a word
 boundary.
 
+The one-shot offers the model **no tools** and leaves nothing in the agent's
+history (2026-09-26): a title is not worth a model writing a file or sending a
+message on its way to six words. Hermes answers it with its own tool-free
+`llm.oneshot` on the conversation's model (the open conversation lends it, or a
+throwaway session in the same profile does, and no prompt is ever submitted);
+an agent without such a call is not handed a turn — the conversation's model is
+asked directly through the provider the hub knows, and without one the fallback
+names it.
+
 No field was added for it. A person's own title is one they sent in
 `SessionPatch.title`, so the hub marks the row when the patch carries a
 non-empty string and never overwrites it afterwards; `title: null` hands the
@@ -2114,3 +2123,172 @@ rather than in Settings.
 Rejected: a copy per skill in the hub's database (two truths that can disagree); overwriting on
 upgrade (loses the person's edits); marking library skills read-only like Hermes's built-ins (a library
 skill is meant to be adapted, and the edit kept); a flag file per skill (one manifest is one atomic write).
+
+## 72. The image model is a role on the chat providers, and the hub hands it to Hermes and the skills
+
+The Models page (2026-09-25). The owner: «موديلات تحويل النص لصوت والصوت لنص تنتقل لتبويباتها ما
+نخليها هنا», and an Images tab («الصور») with no image providers of its own: the image model is
+picked from the chat providers that already offer one (for example `gemini-3.1-flash-image` behind
+cli-proxy-api). Added: `ModelCapability: image_output`, `ModelDefaults.image` and
+`ModelDefaultsWrite.image` (`ModelRef` or `null`), and `image` among `ModelDefaults.inherited`.
+
+- **A role, like the chat model.** Stored as the `image` role of the profile's model defaults; a
+  profile that chose none uses the `default` profile's — the same model on the provider of the same
+  slug this profile uses (§37) — and `null` goes back to inheriting. Only a model with
+  `image_output` on a chat provider the hub can draw with is accepted (`400` otherwise): not a
+  provider signed in through Hermes (its credential is Hermes's), not Anthropic or Ollama.
+- **`image_output`** is the provider's word where it gives one (OpenRouter's output modalities) and
+  otherwise the model's id (`image`, `dall-e`, `imagen`, `flux` …), so a catalogue fetched before
+  this decision offers its image models too.
+- **How it is spoken to** follows the provider and the model: Google's own API (`gemini`); an
+  OpenAI-compatible endpoint with an Images-API family — gpt-image, DALL·E, Imagen, FLUX —
+  (`compatible`, `/images/generations` and `/images/edits`); any other model that draws on an
+  OpenAI-compatible endpoint (`chat`, `/chat/completions` with `modalities: ["image","text"]`, the
+  picture in `message.images`).
+- **Where it goes.** Into every Hermes home the hub writes (the root for the default profile, each
+  named profile's own where it differs), as four variables the hub owns —
+  `COREHUB_IMAGE_PROVIDER`, `COREHUB_IMAGE_BASE_URL`, `COREHUB_IMAGE_MODEL`,
+  `COREHUB_IMAGE_API_KEY` (the chosen provider's key) — removed when no model is chosen. The image
+  skills declare them, which is how Hermes hands them to the terminal; nobody types a key.
+- **Hermes's own `image_generate` tool** draws through a backend the hub installs,
+  `plugins/image_gen/corehub-images/`, listed in `plugins.enabled` and named in
+  `image_gen.provider` (Hermes's MIT source, v2026.9.14: a user plugin loads only when listed; the
+  tool calls the backend `image_gen.provider` names). None of Hermes's own backends takes an
+  arbitrary OpenAI-compatible address, key and model. The backend runs the same `image_api.py` as
+  the skills, reading the four variables through Hermes's secret scope, so the tool and the skills
+  never draw with different models. With no model chosen the hub takes back only what it wrote —
+  a backend somebody picked in `hermes tools` stays.
+- **The picture comes back on the reply** (2026-09-26, found in the first real Hermes turn). Hermes
+  saves what `image_generate` draws in its own `cache/images/`, outside the run's output folder, so
+  the conversation only had the model's words. The Hermes adapter reports a successful
+  `image_generate` answer with a local path as `file.produced`, and the runner copies that file into
+  the run's output folder, where the engine attaches it to the reply as an `image` part like any file
+  the agent left there. A copy (Hermes's cache stays), never a link, a folder or a file over 25 MB;
+  a URL answer (a backend that returns a link) is left to the model's words. No contract change.
+- **Background removal** through the model: `image-edit remove-bg` asks a gpt-image model for
+  transparency outright and any other model for the subject on a flat colour, which the bundled,
+  model-free `image-convert transparent-bg` then clears. No local model is added to the image.
+
+Proposed, owner to confirm: the id patterns that make a model an image model and pick its protocol;
+removing the Providers tab's "Show" filter (with only chat providers left it filtered nothing);
+the speech tabs' add button inside the tab rather than in the header (NAVIGATION §3 keeps the
+header's two actions on Providers); pure green as the default flat colour for a cut-out.
+
+Rejected: image providers of their own (the owner: there are none — the chat providers have the
+models); pointing Hermes at its bundled `openai`/`openrouter` backends (they reach only their own
+service, so cli-proxy-api and custom endpoints would not work); a second copy of the image
+protocols inside the backend (two implementations drift); keeping `OPENAI_API_KEY`/`GEMINI_API_KEY`
+as fallbacks in the skills (Hermes hides them from the terminal, and they would draw with a model
+nobody chose).
+
+## 73. The Journey is Hermes's own learning graph, read in the selected profile
+
+`agents.getJourney` was a 501 with a schema for "skills and tools it has used". Hermes already
+draws this: its learning graph (`agent/learning_graph.py`), shown by `hermes journey`, its TUI's
+`/journey` and its desktop panel, served by its own server as
+`GET /api/learning/graph?profile=` (ADR 0015). The hub reads that and renames the fields;
+Hermes decides every node, edge and cluster.
+
+- **What a node is**: a skill of the profile that the agent wrote or has used (Hermes leaves out
+  its bundled skills and ones nobody used), or one entry of `MEMORY.md` / `USER.md`. So `kind` is
+  `skill | memory` — `tool` and `plugin` were never returned and are gone from the enum (no
+  implementation or client ever used them). Added, all Hermes's: `state` (its curator's
+  `active | stale | archived`), `agent_created`, `memory_source` (`memory | user`; Hermes calls
+  `USER.md` `profile`, the hub's memory model calls it `user`, §12) and `learned_at` (Hermes's
+  epoch seconds as ISO time).
+- **Ids are Hermes's**, unchanged (a skill's name, `memory:<memory|profile>:<n>`), so a later
+  edit or delete can name a node the way Hermes's own `/api/learning/node` does.
+- **Only where the hub supervises Hermes**, like plugins and pairing: `409 state_invalid`
+  `hermes_not_supervised` elsewhere, `journey_is_hermes_only` for another agent,
+  `hermes_profile_absent` for a profile Hermes does not have, `503 hermes_api_unavailable` when
+  Hermes's server does not answer.
+
+Proposed — owner to confirm: read only. Hermes can also edit and delete a node (a skill is
+archived, a memory entry removed); the hub's memory and skills pages already do both, so no
+second way is added here. No web page yet: `navigation.json` has no Journey destination, so
+drawing the graph is a navigation decision for the owner (Hermes declares the `journey`
+section, and the data is there).
+
+Rejected: running `hermes journey --json` (Rich's console printer, and a Python start per
+request); the hub computing a graph from its own run history (Hermes already has the answer, and
+the numbers would disagree with Hermes's own screens).
+
+## 74. A capability request reaches one device, is answered once, and its result stays in the request
+
+The four `/device-requests` operations were 501; §14 had fixed their shape (a job, fixed error
+codes, one location shape) and ADR 0022 sends a hub on a server through them to reach the
+person's own computer. What they now do, proposed — owner to confirm:
+
+- **Only the device's own person may ask it**: their web session, or a token of theirs with the
+  `device` scope (a run token has only `read`/`write`, so an agent cannot ask yet — that is the
+  MCP `devices` group, not built). Anyone else's device, an admin's included, is `404`: an admin
+  may not ask someone's phone where it is.
+- **One device hears it**: `request.created` goes only to the addressed device's sockets (they
+  join `device:<id>` on `/rt/devices`); `request.completed` goes to the person, whose sockets
+  include the device's. A device catches up with `listRequests?status=pending`.
+- **A capability the device did not declare, or switched off, is declined by the hub** at once
+  (`denied`, `unavailable`); the device is not bothered.
+- **Answered once, by that device only** (its own token; anyone else `403`); a request that is
+  no longer pending is `409 request_not_pending`. `fulfilled` must carry its capability's shape
+  (`location`: `latitude`, `longitude`, `accuracy_m`, `captured_at`), else `400`.
+- **The job follows the request**: `succeeded` when fulfilled, `failed` when declined
+  (`forbidden`), failed, or unanswered by `expires_at` (`timeout_ms`, default 30 s; the request
+  becomes `expired`/`timeout`), `cancelled` with the job. **The job carries only
+  `{request_id, status}`**: every member of the profile sees its jobs, so a location stays in the
+  request, which only the person and the device read.
+- **The table is `device_requests`** (migration `0022`), the contract's shape; it replaces
+  `device_commands`, a design that was never written to.
+- `message.created` is no longer listed on `respondRequest`: nothing writes the answer into a
+  conversation yet. When an agent can ask (the MCP `devices` group), the answer goes back to it
+  as the tool's result.
+
+Known limit: a hub that restarts while a request is pending leaves that request's job
+`running` (the runner has no restart recovery); the request itself still expires on its next
+read. No push wakes a device that is not connected; it sees the request when it next connects.
+
+## 75. `audit.getReport` loses its `logs` and `performance` kinds
+
+Since §51 the web's Logs and Performance read `audit.listLogLines` and `audit.getLivePerformance`,
+and §51 kept the old kinds "for the CLI and older clients". On 2026-09-26 the Android and iOS apps
+moved to the live endpoints too (Android had no Logs or Performance screen; iOS read the old
+kinds). Nothing in the repository asks for `logs` or `performance` any more — not the web, the
+CLI, the desktop shell or either app — and the apps only talk to hubs of their own version.
+Proposed here — owner to confirm:
+
+- **`audit.getReport` answers `usage` and `skills` only.** The `kind` enum (path and
+  `AuditReport.kind`) is `[usage, skills]`; asking for `logs` or `performance` is `400`. Both
+  kinds are a profile's own, so `X-Hub-Profile` is now the required `Profile` parameter, as on
+  every scoped operation. The `q` and `level` query parameters, which only the logs kind read, are
+  gone.
+- **The minute-by-minute sampler stops, and `performance_snapshots` is dropped** (migration
+  `0024`). Its rows fed only the old performance kind; Performance is measured when asked (§51).
+  The audit trail and job events the logs kind merged are unchanged — they are still written and
+  still read by everything else that reads them.
+- Swift and Kotlin clients are regenerated from the contract; the iOS Usage page is the only
+  caller left and passes its profile, as it did.
+
+Rejected: keeping the kinds deprecated (a shape nobody calls is a shape nobody tests); keeping the
+sampler for a future history screen (history is the live endpoint's `history`, and a table that
+fills itself for nobody is waste).
+
+## 76. An agent's picture is a file beside the people's and profiles', one per agent for the hub
+
+`agents.getAvatar` was 501 and `agents.update` refused any `avatar` "until attachments exist"
+(Phase 4, done). People and profiles already keep an uploaded picture as a file
+(`<DATA_DIR>/avatars/<kind>/<id>`, PNG or JPEG, 512 KB, a data URL in, `docs/domain/auth.md`).
+Agents now do the same, proposed — owner to confirm:
+
+- `agents.update` with `avatar: {kind: image, data_url}` stores `<DATA_DIR>/avatars/agents/<id>`
+  with `auth`'s own rule (the same decoder); `generated` or `null` removes it. A bad picture is
+  `400` and nothing else in the patch is applied.
+- The agent reads `avatar: {kind: image, url: /api/v1/agents/<id>/avatar}`, and
+  `agents.getAvatar` serves the bytes (`image/png` or `image/jpeg`; the contract's
+  `image/svg+xml` is gone — the hub never draws one, the client draws a generated avatar from
+  `seed`); without a picture it is `404`.
+- **No column, no migration**: whether there is a picture is whether the file is there, and its
+  type comes from its first bytes. The registry row is the hub's (global), so the picture is one
+  per agent for every profile — as its name is.
+
+No web control to set it yet (no planned surface: the agent card has no edit sheet); the API,
+the CLI and the phones can. Rejected: a knowledge attachment (attachments are profile-scoped and
+an agent row is not); an `avatar_mime` column (a migration for what the file already says).

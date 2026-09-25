@@ -14,14 +14,31 @@
  *
  * The pure translation is asserted separately (`toRunnerEvent`).
  */
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { io as connect, type Socket } from 'socket.io-client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { authed, drainJobs, signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
 import { scriptedHermes } from './adapters/hermes.test.js';
 import type { HermesRunEvent } from './adapters/hermes.js';
-import { AgentRunner, approvalChoices, failureCode, toRunnerEvent, toolKindOf } from './runner.js';
+import {
+  AgentRunner,
+  approvalChoices,
+  failureCode,
+  handOver,
+  toRunnerEvent,
+  toolKindOf,
+} from './runner.js';
 import type { AdapterSet } from './adapters/index.js';
-import type { AgentEvent, AgentSession } from './adapters/types.js';
+import { OneshotUnavailable, type AgentEvent, type AgentSession } from './adapters/types.js';
 import type { AgentsService } from './service.js';
 import { capturingLogger } from '../../../tests/unit/helpers.js';
 import type { ModelsOverrides } from '../models/index.js';
@@ -222,12 +239,9 @@ describe('agent runner: a Hermes turn through the composed app', () => {
       'session.updated',
       'session.updated',
     ]);
-    // The title question went to Hermes as a conversation of its own, never appended to
-    // the one it is about.
-    expect(harness.hermes.calls.ask).toHaveLength(1);
-    expect(harness.hermes.calls.ask[0]).toMatchObject({
-      session_id: `corehub-ask-${sessionId.toLowerCase()}`,
-    });
+    // The title was never asked as a run: the run surface offers the model every tool of the
+    // profile, and has no tool-free call, so the session was named from its first message.
+    expect(harness.hermes.calls.ask).toHaveLength(0);
     const completed = harness.events.find((e) => e.event === 'run.completed')!;
     expect(completed.payload.run).toMatchObject({
       status: 'succeeded',
@@ -651,5 +665,284 @@ describe('agent runner: a live session whose process went away between turns', (
     expect((await drain('r2')).at(-1)).toMatchObject({ type: 'completed' });
     expect(opened).toHaveLength(2);
     expect(opened[1]!.ref).toBe('stored-1');
+  });
+});
+
+describe('agent runner: a picture an agent tool saved outside the run (decision §72)', () => {
+  const folder = () => mkdtempSync(path.join(tmpdir(), 'corehub-handover-'));
+
+  it('copies it into the run’s output folder before the run ends, and leaves the original', async () => {
+    const cache = folder();
+    const work = folder();
+    const picture = path.join(cache, 'corehub_20260925_1.png');
+    writeFileSync(picture, 'png-bytes');
+    const out = path.join(work, 'out');
+    const adapter = {
+      async start() {
+        return {
+          id: 'stored-1',
+          async send() {
+            return { stopReason: 'completed' };
+          },
+          async *stream(): AsyncIterable<AgentEvent> {
+            yield {
+              type: 'tool.started',
+              id: 't1',
+              title: 'image_generate',
+              kind: 'image_generate',
+            };
+            yield { type: 'tool.completed', id: 't1', title: 'image_generate', output: '{}' };
+            yield { type: 'file.produced', path: picture, toolId: 't1' };
+            yield { type: 'message.delta', text: 'here' };
+            yield { type: 'run.completed', stopReason: 'completed' };
+          },
+          async respond() {},
+          async interrupt() {},
+          async close() {},
+        };
+      },
+    };
+    const service = {
+      loadAgent: () => ({ id: 'agent-1', installState: 'installed', adapterKind: 'hermes' }),
+      selectionFor: () => ({ model: null, provider: null, providerId: null }),
+      fallbacksFor: () => [],
+      providerSlugOf: () => null,
+      targetFor: () => ({ sessionRef: null }),
+    };
+    const runner = new AgentRunner({
+      service: service as unknown as AgentsService,
+      adapters: { byKind: () => adapter } as unknown as AdapterSet,
+      log: capturingLogger().logger,
+    });
+    await runner.start({
+      runId: 'r1',
+      sessionId: 'S1',
+      workspace: 'w',
+      agentId: 'agent-1',
+      agentSessionRef: null,
+      workingDir: work,
+      model: null,
+      provider: null,
+      reasoningEffort: null,
+      prompt: [{ type: 'text' as const, text: 'draw a fox' }],
+      files: { inputDir: path.join(work, 'in'), outputDir: out },
+      allowedTools: [],
+    });
+    const events = [];
+    for await (const event of runner.stream('r1')) events.push(event);
+    // Nothing of its own reaches the session events: the file is on disk for the engine.
+    expect(events.map((event) => event.type)).toEqual([
+      'tool_started',
+      'tool_completed',
+      'message_delta',
+      'completed',
+    ]);
+    expect(readdirSync(out)).toEqual(['corehub_20260925_1.png']);
+    expect(readFileSync(path.join(out, 'corehub_20260925_1.png'), 'utf8')).toBe('png-bytes');
+    expect(existsSync(picture)).toBe(true);
+  });
+
+  it('refuses a link, a folder, a missing file or a run with no output folder, and never overwrites', () => {
+    const cache = folder();
+    const out = path.join(folder(), 'out');
+    const picture = path.join(cache, 'a.png');
+    writeFileSync(picture, 'one');
+    const link = path.join(cache, 'link.png');
+    symlinkSync('/etc/hostname', link);
+    expect(handOver(picture, null)).toEqual({ ok: false, reason: 'no_output_folder' });
+    expect(handOver('cache/a.png', out)).toEqual({ ok: false, reason: 'not_absolute' });
+    expect(handOver(path.join(cache, 'gone.png'), out)).toEqual({ ok: false, reason: 'missing' });
+    expect(handOver(link, out)).toEqual({ ok: false, reason: 'not_a_file' });
+    expect(handOver(cache, out)).toEqual({ ok: false, reason: 'not_a_file' });
+    // The same name twice (two drawings saved under one name) keeps both.
+    expect(handOver(picture, out)).toEqual({ ok: true, path: path.join(out, 'a.png') });
+    writeFileSync(picture, 'two');
+    expect(handOver(picture, out)).toEqual({ ok: true, path: path.join(out, 'a-2.png') });
+    expect(readFileSync(path.join(out, 'a.png'), 'utf8')).toBe('one');
+    expect(readFileSync(path.join(out, 'a-2.png'), 'utf8')).toBe('two');
+  });
+});
+
+describe('agent runner: naming a conversation offers the model no tools (decision §26)', () => {
+  type Sent = { adapter: string; text: string };
+  const ask = {
+    workspace: 'w',
+    agentId: 'agent-1',
+    sessionId: 'S1',
+    prompt: 'Name this conversation.',
+    model: null,
+    provider: null,
+    timeoutMs: 5_000,
+  };
+
+  /** An agent with tools: every turn it is handed is recorded, and answers "title". */
+  function toolAgent(kind: string, sent: Sent[], extra: Record<string, unknown> = {}) {
+    return {
+      ...extra,
+      async start() {
+        const queue: AgentEvent[] = [];
+        let wake: (() => void) | null = null;
+        const session = {
+          id: `${kind}-stored`,
+          async send(prompt: { text: string }) {
+            sent.push({ adapter: kind, text: prompt.text });
+            queue.push({ type: 'message.delta', text: `${kind} title` });
+            queue.push({ type: 'run.completed', stopReason: 'completed' });
+            wake?.();
+            return { stopReason: 'completed' };
+          },
+          async *stream(): AsyncIterable<AgentEvent> {
+            for (;;) {
+              const next = queue.shift();
+              if (next) {
+                yield next;
+                if (next.type === 'run.completed') return;
+                continue;
+              }
+              await new Promise<void>((resolve) => (wake = resolve));
+            }
+          },
+          async respond() {},
+          async interrupt() {},
+          async close() {},
+        };
+        return session;
+      },
+    };
+  }
+
+  function runnerWith(
+    adapters: Record<string, unknown>,
+    selection = { model: 'gpt-x', provider: 'openai', providerId: 'prov-1' },
+  ) {
+    const service = {
+      loadAgent: () => ({ id: 'agent-1', installState: 'installed', adapterKind: 'hermes' }),
+      selectionFor: () => selection,
+      fallbacksFor: () => [],
+      providerSlugOf: () => null,
+      targetFor: (_row: unknown, _workspace: unknown, input: { sessionRef: string | null }) => ({
+        slug: 'hermes',
+        workspace: 'w',
+        profile: 'work',
+        settings: { system_prompt: 'the agent’s own' },
+        sessionRef: input.sessionRef,
+        model: selection.model,
+        modelProvider: selection.provider,
+        modelProviderId: selection.providerId,
+      }),
+    };
+    return new AgentRunner({
+      service: service as unknown as AgentsService,
+      adapters: {
+        byKind: (kind: string) => {
+          const adapter = adapters[kind];
+          if (!adapter) throw new Error(`no adapter ${kind}`);
+          return adapter;
+        },
+      } as unknown as AdapterSet,
+      log: capturingLogger().logger,
+    });
+  }
+
+  it('asks the agent’s own one-shot on the conversation’s profile and model, and hands it no turn', async () => {
+    const sent: Sent[] = [];
+    const oneshots: Array<{ target: Record<string, unknown>; prompt: string }> = [];
+    const hermes = toolAgent('hermes', sent, {
+      async oneshot(target: Record<string, unknown>, request: { prompt: string }) {
+        oneshots.push({ target, prompt: request.prompt });
+        return 'Streaming explained';
+      },
+    });
+    const runner = runnerWith({ hermes, builtin: toolAgent('builtin', sent) });
+    await expect(runner.ask(ask)).resolves.toBe('Streaming explained');
+    expect(sent).toEqual([]);
+    expect(oneshots).toHaveLength(1);
+    expect(oneshots[0]!.target).toMatchObject({
+      profile: 'work',
+      model: 'gpt-x',
+      modelProvider: 'openai',
+    });
+    expect(oneshots[0]!.prompt).toBe('Name this conversation.');
+    expect(runner.busy).toBe(false);
+  });
+
+  it('lends the open conversation when there is one, instead of opening another', async () => {
+    const sent: Sent[] = [];
+    const lent: string[] = [];
+    let adapterOneshots = 0;
+    const hermes = {
+      ...toolAgent('hermes', sent),
+      async start() {
+        const session = await toolAgent('hermes', sent).start();
+        return Object.assign(session, {
+          async oneshot(request: { prompt: string }) {
+            lent.push(request.prompt);
+            return 'Lent title';
+          },
+        });
+      },
+      async oneshot() {
+        adapterOneshots += 1;
+        return 'Throwaway title';
+      },
+    };
+    const runner = runnerWith({ hermes });
+    await runner.start({
+      runId: 'r1',
+      sessionId: 'S1',
+      workspace: 'w',
+      agentId: 'agent-1',
+      agentSessionRef: null,
+      workingDir: null,
+      model: null,
+      provider: null,
+      reasoningEffort: null,
+      prompt: [{ type: 'text' as const, text: 'hi' }],
+      files: null,
+      allowedTools: [],
+    });
+    for await (const _event of runner.stream('r1')) void _event;
+    await expect(runner.ask(ask)).resolves.toBe('Lent title');
+    expect(lent).toEqual(['Name this conversation.']);
+    expect(adapterOneshots).toBe(0);
+    // The one turn is the person's; the title added none.
+    expect(sent.map((s) => s.text)).toEqual(['hi']);
+  });
+
+  it('asks the model straight from its provider when the agent has no one-shot, never the agent', async () => {
+    const sent: Sent[] = [];
+    const starts: Array<Record<string, unknown>> = [];
+    const builtin = toolAgent('builtin', sent);
+    const direct = {
+      async start(target: Record<string, unknown>) {
+        starts.push(target);
+        return builtin.start();
+      },
+    };
+    const runner = runnerWith({ hermes: toolAgent('acp', sent), builtin: direct });
+    await expect(runner.ask(ask)).resolves.toBe('builtin title');
+    expect(sent).toEqual([{ adapter: 'builtin', text: 'Name this conversation.' }]);
+    // Not the agent's system prompt, not its conversation.
+    expect(starts[0]).toMatchObject({ settings: {}, sessionRef: null, modelProviderId: 'prov-1' });
+  });
+
+  it('falls back to the provider when the agent cannot do a one-shot here, and to nothing without one', async () => {
+    const sent: Sent[] = [];
+    const unavailable = toolAgent('hermes', sent, {
+      async oneshot() {
+        throw new OneshotUnavailable('no TUI gateway');
+      },
+    });
+    const runner = runnerWith({ hermes: unavailable, builtin: toolAgent('builtin', sent) });
+    await expect(runner.ask(ask)).resolves.toBe('builtin title');
+    expect(sent.map((s) => s.adapter)).toEqual(['builtin']);
+
+    const none: Sent[] = [];
+    const bare = runnerWith(
+      { hermes: toolAgent('acp', none), builtin: toolAgent('builtin', none) },
+      { model: 'claude', provider: null, providerId: null } as never,
+    );
+    await expect(bare.ask(ask)).resolves.toBeNull();
+    expect(none).toEqual([]);
   });
 });

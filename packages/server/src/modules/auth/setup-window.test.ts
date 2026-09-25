@@ -7,6 +7,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authed, capturingLogger, testHub } from '../../../tests/unit/helpers.js';
+import { sql } from 'drizzle-orm';
+import { requireSqlite } from '../../lib/db.js';
+import { findDevice, registerPairedDevice } from '../devices/index.js';
 import { OWNER_RESET_MARKER, SETUP_TOKEN_FILE } from './setup.js';
 
 const T0 = new Date('2026-09-25T09:00:00.000Z');
@@ -170,6 +173,29 @@ describe('auth: COREHUB_RESET_OWNER=1 (ADR 0019)', () => {
       payload: { username: 'noura', password: 'admin-password-1', role: 'admin' },
     });
     expect(admin.statusCode).toBe(201);
+    // The owner's phone receives push (set on the row as the devices module keeps it).
+    const firstDb = requireSqlite(first.app.hub.database);
+    const { device: phone } = registerPairedDevice(
+      firstDb,
+      {
+        ownerId: owner.user.id,
+        deviceKey: 'owner-phone',
+        name: 'iPhone',
+        platform: 'ios',
+        kind: 'phone',
+        brand: null,
+        model: null,
+        appVersion: null,
+        capabilities: [],
+        connection: 'lan',
+        appTokenId: '01J8QK3ZR2W7M5N4P6T8V9X0TK',
+      },
+      Date.now(),
+    );
+    firstDb.run(
+      sql`update devices set push_provider = 'apns', push_token = 'sealed' where id = ${phone.id}`,
+    );
+    expect(findDevice(firstDb, phone.id)).toMatchObject({ pushProvider: 'apns' });
     await first.app.close();
 
     // Somebody else got there first; the operator restarts with the variable set.
@@ -196,6 +222,11 @@ describe('auth: COREHUB_RESET_OWNER=1 (ADR 0019)', () => {
       });
       expect(refresh.statusCode).toBe(401);
       expect(await meta(reset)).toMatchObject({ setup_required: true, setup_open: true });
+      // …and nothing more is pushed to the old owner's phone.
+      expect(findDevice(requireSqlite(reset.app.hub.database), phone.id)).toMatchObject({
+        pushProvider: 'none',
+        pushToken: null,
+      });
 
       // The old owner's name is still taken: nothing was deleted.
       expect((await setup(reset, OWNER)).statusCode).toBe(409);

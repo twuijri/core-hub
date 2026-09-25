@@ -174,7 +174,8 @@ struct KnowledgePage: View {
     }
 }
 
-/// Logs, Usage and Performance: the hub's audit reports, shown as the hub writes them.
+/// Usage: the hub's usage report for the profile, shown as the hub writes it. Logs and
+/// Performance read their own live endpoints (LiveTools.swift, contract decision §51).
 struct AuditPage: View {
     let kind: AuditAPI.Kind_auditGetReport
     @Environment(AppModel.self) private var app
@@ -182,15 +183,12 @@ struct AuditPage: View {
 
     var body: some View {
         AsyncContent(key: "\(kind.rawValue)/\(app.currentProfile)") {
-            let profile = kind == .performance ? nil : app.currentProfile
+            let profile = app.currentProfile
             return try await app.api.call {
                 try await AuditAPI.auditGetReport(kind: kind, xHubProfile: profile, apiConfiguration: $0)
             }
         } content: { report, reload in
             List {
-                if kind == .performance {
-                    Text(l10n("settings.global_note")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
-                }
                 FactRow(label: l10n("audit.period"), value: "\(report.period.from.shortText(app.language)) – \(report.period.to.shortText(app.language))")
                 ForEach(report.data.keys.sorted(), id: \.self) { key in
                     JSONOutline(label: key, value: report.data[key] ?? .null)

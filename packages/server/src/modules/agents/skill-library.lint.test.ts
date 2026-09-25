@@ -65,8 +65,10 @@ function frontMatter(text: string): FrontMatter {
   return parse(match[1]!) as FrontMatter;
 }
 
-const skillFolders = readdirSync(LIBRARY_SOURCE).filter((name) =>
-  statSync(path.join(LIBRARY_SOURCE, name)).isDirectory(),
+// `_hermes-plugin` is not a skill: the library carries the Hermes image backend the models module
+// installs (decision §72), and `readLibrary` never seeds a folder without a SKILL.md.
+const skillFolders = readdirSync(LIBRARY_SOURCE).filter(
+  (name) => !name.startsWith('_') && statSync(path.join(LIBRARY_SOURCE, name)).isDirectory(),
 );
 
 describe('the skills Core Hub ships', () => {
@@ -325,18 +327,28 @@ describe.skipIf(!PY)('the library’s helper scripts (Python 3)', () => {
   describe('image-generate / image-edit against a scripted image endpoint', () => {
     let server: Server;
     let base = '';
-    const seen: Array<{ url: string; auth: string | undefined; google: string | undefined }> = [];
-    // A 1×1 PNG.
+    const seen: Array<{
+      url: string;
+      auth: string | undefined;
+      google: string | undefined;
+      body: string;
+    }> = [];
+    // A 1×1 PNG with no alpha (colour type 2), and one with an alpha channel (colour type 6).
     const PNG =
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const RGB = Buffer.from(PNG, 'base64');
+    RGB[25] = 2;
+    const OPAQUE = RGB.toString('base64');
     beforeAll(async () => {
       server = createServer((request, response) => {
-        request.resume();
+        let body = '';
+        request.on('data', (chunk: Buffer) => (body += chunk.toString('latin1')));
         request.on('end', () => {
           seen.push({
             url: request.url ?? '',
             auth: request.headers.authorization,
             google: request.headers['x-goog-api-key'] as string | undefined,
+            body,
           });
           response.setHeader('content-type', 'application/json');
           if (request.url?.includes('refuse')) {
@@ -348,7 +360,27 @@ describe.skipIf(!PY)('the library’s helper scripts (Python 3)', () => {
             response.end(
               JSON.stringify({
                 candidates: [
-                  { content: { parts: [{ inlineData: { mimeType: 'image/png', data: PNG } }] } },
+                  { content: { parts: [{ inlineData: { mimeType: 'image/png', data: OPAQUE } }] } },
+                ],
+              }),
+            );
+          } else if (request.url?.endsWith('/chat/completions')) {
+            // OpenRouter's shape, which cli-proxy-api copies: the picture in `message.images`.
+            response.end(
+              JSON.stringify({
+                choices: [
+                  {
+                    message: {
+                      role: 'assistant',
+                      content: 'Here is the fox.',
+                      images: [
+                        {
+                          type: 'image_url',
+                          image_url: { url: `data:image/png;base64,${OPAQUE}` },
+                        },
+                      ],
+                    },
+                  },
                 ],
               }),
             );
@@ -364,27 +396,72 @@ describe.skipIf(!PY)('the library’s helper scripts (Python 3)', () => {
     });
     afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
 
-    it('generates through an OpenAI-compatible endpoint, sending the key and never printing it', async () => {
+    /** What Core Hub writes into a profile for its image model (decision §72). */
+    const chosen = (over: Record<string, string> = {}) => ({
+      COREHUB_IMAGE_PROVIDER: 'compatible',
+      COREHUB_IMAGE_BASE_URL: `${base}/v1`,
+      COREHUB_IMAGE_MODEL: 'gpt-image-1',
+      COREHUB_IMAGE_API_KEY: 'sk-secret-123',
+      ...over,
+    });
+
+    it('generates with the model Core Hub chose, sending the key and never printing it', async () => {
       const result = await run(
         'image-generate/scripts/image_api.py',
         ['generate', '--prompt', 'a red fox', '--out', 'out'],
-        {
-          cwd: dir,
-          env: { COREHUB_IMAGE_BASE_URL: `${base}/v1`, COREHUB_IMAGE_API_KEY: 'sk-secret-123' },
-        },
+        { cwd: dir, env: chosen() },
       );
-      expect(result.json).toMatchObject({ ok: true, provider: 'compatible' });
+      expect(result.json).toMatchObject({ ok: true, provider: 'compatible', model: 'gpt-image-1' });
       const file = (result.json.files as string[])[0]!;
       expect(readFileSync(path.join(dir, file)).subarray(1, 4).toString()).toBe('PNG');
       expect(seen.at(-1)).toMatchObject({
         url: '/v1/images/generations',
         auth: 'Bearer sk-secret-123',
       });
+      expect(JSON.parse(seen.at(-1)!.body)).toMatchObject({ model: 'gpt-image-1' });
       expect(result.stdout + result.stderr).not.toContain('sk-secret-123');
     });
 
+    it('says to choose an image model in Models → Images when none is chosen — no key hunt', async () => {
+      // A key in the environment under the old names is not a choice: the model is the hub's.
+      const none = await run('image-generate/scripts/image_api.py', ['generate', '--prompt', 'x'], {
+        cwd: dir,
+        env: { OPENAI_API_KEY: 'sk-old', GEMINI_API_KEY: 'g-old', COREHUB_IMAGE_API_KEY: 'k' },
+      });
+      expect(none.code).toBe(2);
+      expect(none.json).toMatchObject({ ok: false, error: 'image_model_not_chosen' });
+      expect(String(none.json.message)).toContain('Models → Images');
+      expect(String(none.json.message)).toContain('النماذج ← الصور');
+    });
+
+    it('draws with a chat image model behind an OpenAI-compatible proxy (cli-proxy-api)', async () => {
+      const result = await run(
+        'image-generate/scripts/image_api.py',
+        ['generate', '--prompt', 'a red fox', '--aspect', '16:9', '--out', 'out'],
+        {
+          cwd: dir,
+          env: chosen({
+            COREHUB_IMAGE_PROVIDER: 'chat',
+            COREHUB_IMAGE_MODEL: 'gemini-3.1-flash-image',
+          }),
+        },
+      );
+      expect(result.json).toMatchObject({ ok: true, provider: 'chat', note: 'Here is the fox.' });
+      expect(seen.at(-1)).toMatchObject({
+        url: '/v1/chat/completions',
+        auth: 'Bearer sk-secret-123',
+      });
+      expect(JSON.parse(seen.at(-1)!.body)).toMatchObject({
+        model: 'gemini-3.1-flash-image',
+        modalities: ['image', 'text'],
+        image_config: { aspect_ratio: '16:9' },
+      });
+      const file = (result.json.files as string[])[0]!;
+      expect(readFileSync(path.join(dir, file)).subarray(1, 4).toString()).toBe('PNG');
+    });
+
     it('edits and varies an image, and reports a refusal in the provider’s words', async () => {
-      const env = { COREHUB_IMAGE_BASE_URL: `${base}/v1` };
+      const env = chosen({ COREHUB_IMAGE_API_KEY: '' });
       const edit = await run(
         'image-edit/scripts/image_api.py',
         ['edit', '--image', 'photo.png', '--prompt', 'make it blue', '--out', 'out'],
@@ -392,6 +469,8 @@ describe.skipIf(!PY)('the library’s helper scripts (Python 3)', () => {
       );
       expect(edit.json).toMatchObject({ ok: true, command: 'edit' });
       expect(seen.at(-1)?.url).toBe('/v1/images/edits');
+      // An endpoint that takes no key is asked without one.
+      expect(seen.at(-1)?.auth).toBeUndefined();
       const vary = await run(
         'image-edit/scripts/image_api.py',
         ['vary', '--image', 'photo.png', '--out', 'out'],
@@ -402,39 +481,83 @@ describe.skipIf(!PY)('the library’s helper scripts (Python 3)', () => {
       const refused = await run(
         'image-generate/scripts/image_api.py',
         ['generate', '--prompt', 'x'],
-        { cwd: dir, env: { COREHUB_IMAGE_BASE_URL: `${base}/refuse` } },
+        { cwd: dir, env: chosen({ COREHUB_IMAGE_BASE_URL: `${base}/refuse` }) },
       );
       expect(refused.code).toBe(2);
       expect(refused.json).toMatchObject({ ok: false, error: 'api_error', status: 400 });
       expect(String(refused.json.detail)).toContain('prompt refused');
     });
 
-    it('uses Gemini/Imagen with the Gemini key, and says which key is missing', async () => {
+    it('uses Google’s own API for a Gemini provider, with the provider’s key', async () => {
       const gemini = await run(
         'image-generate/scripts/image_api.py',
-        [
-          'generate',
-          '--prompt',
-          'a cat',
-          '--provider',
-          'gemini',
-          '--aspect',
-          '16:9',
-          '--out',
-          'out',
-        ],
-        { cwd: dir, env: { COREHUB_IMAGE_BASE_URL: `${base}/v1beta`, GEMINI_API_KEY: 'g-key' } },
+        ['generate', '--prompt', 'a cat', '--aspect', '16:9', '--out', 'out'],
+        {
+          cwd: dir,
+          env: chosen({
+            COREHUB_IMAGE_PROVIDER: 'gemini',
+            COREHUB_IMAGE_BASE_URL: `${base}/v1beta`,
+            COREHUB_IMAGE_MODEL: 'imagen-4.0-generate-001',
+            COREHUB_IMAGE_API_KEY: 'g-key',
+          }),
+        },
       );
       expect(gemini.json).toMatchObject({ ok: true, provider: 'gemini' });
       expect(seen.at(-1)).toMatchObject({
         url: '/v1beta/models/imagen-4.0-generate-001:predict',
         google: 'g-key',
       });
-      const none = await run('image-generate/scripts/image_api.py', ['generate', '--prompt', 'x'], {
-        cwd: dir,
+      const keyless = await run(
+        'image-generate/scripts/image_api.py',
+        ['generate', '--prompt', 'x'],
+        {
+          cwd: dir,
+          env: chosen({
+            COREHUB_IMAGE_PROVIDER: 'gemini',
+            COREHUB_IMAGE_BASE_URL: `${base}/v1beta`,
+            COREHUB_IMAGE_API_KEY: '',
+          }),
+        },
+      );
+      expect(keyless.json).toMatchObject({ ok: false, error: 'api_key_missing' });
+      expect(keyless.json.looked_for).toEqual(['COREHUB_IMAGE_API_KEY']);
+    });
+
+    it('removes a background: transparent from gpt-image, a flat colour and the next step otherwise', async () => {
+      const direct = await run(
+        'image-edit/scripts/image_api.py',
+        ['remove-bg', '--image', 'photo.png', '--out', 'out'],
+        { cwd: dir, env: chosen() },
+      );
+      expect(direct.json).toMatchObject({ ok: true, command: 'remove-bg', transparent: true });
+      expect(direct.json.next).toBeUndefined();
+      expect(seen.at(-1)?.url).toBe('/v1/images/edits');
+      expect(seen.at(-1)?.body).toContain('name="background"\r\n\r\ntransparent');
+      expect(seen.at(-1)?.body).toContain('Remove the background completely');
+
+      const flat = await run(
+        'image-edit/scripts/image_api.py',
+        ['remove-bg', '--image', 'photo.png', '--out', 'out'],
+        {
+          cwd: dir,
+          env: chosen({
+            COREHUB_IMAGE_PROVIDER: 'chat',
+            COREHUB_IMAGE_MODEL: 'gemini-3.1-flash-image',
+          }),
+        },
+      );
+      expect(flat.json).toMatchObject({
+        ok: true,
+        transparent: false,
+        background: 'pure green (#00FF00)',
       });
-      expect(none.json).toMatchObject({ ok: false, error: 'api_key_missing' });
-      expect(none.json.looked_for).toEqual(['COREHUB_IMAGE_API_KEY', 'OPENAI_API_KEY']);
+      expect(String(flat.json.next)).toContain('transparent-bg');
+      const sent = JSON.parse(seen.at(-1)!.body) as {
+        messages: { content: { type: string; text?: string }[] }[];
+      };
+      // The source goes to the model's edit path with the cut-out instruction.
+      expect(sent.messages[0]!.content.map((part) => part.type)).toEqual(['text', 'image_url']);
+      expect(sent.messages[0]!.content[0]!.text).toContain('pure green (#00FF00)');
     });
   });
 

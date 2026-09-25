@@ -38,7 +38,12 @@ interface Sent {
   duration: string | null;
 }
 
-function renderComposer(options: { sttReady: boolean; transcript?: string }) {
+function renderComposer(options: {
+  sttReady: boolean;
+  transcript?: string;
+  /** Holds the preferences answer back until it resolves (a slow hub). */
+  preferencesGate?: Promise<void>;
+}) {
   const store = new SessionStore(memoryStorage());
   store.save({
     profile: 'default',
@@ -64,14 +69,16 @@ function renderComposer(options: { sttReady: boolean; transcript?: string }) {
     }
     if (url.endsWith('/auth/me/preferences')) {
       served.add('preferences');
-      return json({
-        voice: {
-          input_mode: 'device',
-          dictation_language: 'ar',
-          output_mode: 'server',
-          auto_speak: false,
-        },
-      });
+      const answer = () =>
+        json({
+          voice: {
+            input_mode: 'device',
+            dictation_language: 'ar',
+            output_mode: 'server',
+            auto_speak: false,
+          },
+        });
+      return options.preferencesGate ? options.preferencesGate.then(answer) : answer();
     }
     if (url.endsWith('/models/speech/transcriptions')) {
       const form = init.body as FormData;
@@ -157,10 +164,9 @@ const input = () => screen.getByTestId('composer-input') as HTMLTextAreaElement;
 
 describe('dictation', () => {
   it('records, sends the take to the hub, and puts the words in the composer for review', async () => {
-    const { sent, served } = renderComposer({ sttReady: true });
-    // The engine and the language are known once the settings are read.
-    await waitFor(() => expect(served.has('speech') && served.has('preferences')).toBe(true));
-    await act(async () => {});
+    const { sent } = renderComposer({ sttReady: true });
+    // The engine and the language are known once the settings are read: the mic waits for both.
+    await waitFor(() => expect(mic()).toBeEnabled());
     fireEvent.change(input(), { target: { value: 'Please' } });
 
     fireEvent.click(mic());
@@ -218,9 +224,9 @@ describe('dictation', () => {
       abort() {}
     }
     (window as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition = FakeRecognition;
-    const { sent, served } = renderComposer({ sttReady: false });
-    await waitFor(() => expect(served.has('preferences')).toBe(true));
-    await act(async () => {});
+    const { sent } = renderComposer({ sttReady: false });
+    // Pressed only once the preference is applied, not merely requested.
+    await waitFor(() => expect(mic()).toBeEnabled());
     fireEvent.click(mic());
     await waitFor(() => expect(screen.getByTestId('dictation-browser')).toBeInTheDocument());
     // The preference said Arabic; the recognizer needs a full tag.
@@ -228,5 +234,44 @@ describe('dictation', () => {
     fireEvent.click(mic());
     await waitFor(() => expect(input().value).toBe('hello there'));
     expect(sent).toHaveLength(0);
+  });
+
+  it('waits for the dictation language before it can listen, so a quick press is never in the wrong language', async () => {
+    const made: { lang: string }[] = [];
+    class FakeRecognition {
+      lang = '';
+      continuous = false;
+      interimResults = true;
+      onstart: (() => void) | null = null;
+      onresult: ((event: unknown) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
+      onend: (() => void) | null = null;
+      start() {
+        made.push(this);
+        this.onstart?.();
+      }
+      stop() {
+        this.onend?.();
+      }
+      abort() {}
+    }
+    (window as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition = FakeRecognition;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { served } = renderComposer({ sttReady: false, preferencesGate: gate });
+    await waitFor(() => expect(served.has('speech') && served.has('preferences')).toBe(true));
+    // The speech settings are in, the preferences are not: the mic says it is loading.
+    await act(async () => {});
+    expect(mic()).toBeDisabled();
+    expect(mic()).toHaveAttribute('aria-label', 'Loading…');
+    fireEvent.click(mic());
+    expect(made).toHaveLength(0);
+
+    release();
+    await waitFor(() => expect(mic()).toBeEnabled());
+    expect(mic()).toHaveAttribute('aria-label', 'Dictate');
+    fireEvent.click(mic());
+    await waitFor(() => expect(made).toHaveLength(1));
+    expect(made[0]?.lang).toBe('ar-SA');
   });
 });

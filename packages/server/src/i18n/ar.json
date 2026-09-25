@@ -227,5 +227,14 @@
       "failed": "تعثّرت المهمة {task} «{title}»: {reason}",
       "cancelled": "أُوقفت المهمة {task} «{title}»."
     }
+  },
+  "devices": {
+    "request": {
+      "capability_off": "هذا الجهاز لا يقدّم «{capability}»، أو أنها مطفأة فيه.",
+      "timeout": "لم يُجب الجهاز في الوقت المحدد.",
+      "denied": "رفض الجهاز الطلب.",
+      "failed": "لم يستطع الجهاز تنفيذ المطلوب.",
+      "cancelled": "أُلغي الطلب."
+    }
   }
 }

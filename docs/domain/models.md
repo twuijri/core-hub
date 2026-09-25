@@ -132,7 +132,7 @@ never touches a manual row, an alias or a visibility choice.
 
 | column | type | meaning |
 |---|---|---|
-| role | enum(chat, coding, title, summary, embedding) | unique per workspace |
+| role | enum(chat, coding, title, summary, embedding, image) | unique per workspace; `image` since migration 0021 (DECISIONS §72) |
 | model_id | ulid → model (FK, cascade) | |
 | fallback_model_ids | json<string[]> | ordered chain tried when the primary fails |
 

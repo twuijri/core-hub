@@ -44,6 +44,7 @@ import type {
   AgentSession,
   CompressOutcome,
   FallbackModel,
+  OneshotRequest,
   PromptInput,
 } from './types.js';
 
@@ -399,6 +400,21 @@ function text(value: unknown): string | null {
   }
 }
 
+/**
+ * The picture Hermes's own `image_generate` tool drew, or null. Its answer is
+ * `{"success": true, "image": "<path>", …}` (Hermes's MIT source, `tools/image_generation_tool.py`
+ * and `agent/image_gen_provider.py` `success_response`); a backend that saves the file — the
+ * hub's `corehub-images` among them — gives an absolute path under Hermes's `cache/images/`,
+ * one that answers with a link gives a URL, which is left to the model's words.
+ */
+export function producedImageOf(tool: string, result: unknown): string | null {
+  if (tool !== 'image_generate' || !result || typeof result !== 'object') return null;
+  const answer = result as { success?: unknown; image?: unknown };
+  if (answer.success !== true || typeof answer.image !== 'string') return null;
+  const image = answer.image.trim();
+  return image.startsWith('/') ? image : null;
+}
+
 function capped(value: string | null): string | null {
   return value && value.length > MAX_OUTPUT ? `${value.slice(0, MAX_OUTPUT)}…` : value;
 }
@@ -440,6 +456,14 @@ export class HermesTuiSession implements AgentSession {
 
   /** Hermes said it is compressing inside the turn in flight; `finished` is still owed. */
   private compressing = false;
+
+  /**
+   * Hermes builds a session's agent after `session.create` has answered, and says so with
+   * `session.info` (or `error` when the build failed). A one-shot lends that agent's model, so
+   * it waits for this; a turn does not need to, Hermes holds the prompt until the build ends.
+   */
+  private built = false;
+  private readonly builtWaiters = new Set<(ok: boolean) => void>();
 
   /** What this conversation is running on, so a turn that names something else switches. */
   private current: { model: string | null; provider: string | null; effort: string | null } = {
@@ -717,6 +741,45 @@ export class HermesTuiSession implements AgentSession {
     }
   }
 
+  /**
+   * One question for this conversation's model, with no tools and no turn: Hermes's
+   * `llm.oneshot` (`tui_gateway/methods_session.py`, `agent/oneshot.py` in its MIT source)
+   * calls the model once with the session's provider, model and key, offers it no tools and
+   * writes nothing to the conversation or to `state.db`. The session's agent has to be built
+   * for its model to be lent — without it Hermes would answer on the root profile's
+   * auxiliary model — so this waits for the build first. `null` when nothing usable came back.
+   */
+  async oneshot(request: OneshotRequest): Promise<string | null> {
+    if (this.closed) throw new HubError('state_invalid', { message: 'Hermes session is closed' });
+    if (!(await this.whenBuilt(request.timeoutMs))) return null;
+    const result = await this.channel.request('llm.oneshot', {
+      session_id: this.liveId,
+      input: request.prompt,
+      task: 'title_generation',
+      max_tokens: request.maxTokens,
+    });
+    const answer = typeof result.text === 'string' ? result.text.trim() : '';
+    return answer === '' ? null : answer;
+  }
+
+  private whenBuilt(timeoutMs: number): Promise<boolean> {
+    if (this.built) return Promise.resolve(true);
+    return new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => settle(false), timeoutMs);
+      const settle = (ok: boolean) => {
+        clearTimeout(timer);
+        this.builtWaiters.delete(settle);
+        resolve(ok);
+      };
+      this.builtWaiters.add(settle);
+    });
+  }
+
+  private markBuilt(ok: boolean): void {
+    if (ok) this.built = true;
+    for (const waiter of [...this.builtWaiters]) waiter(ok);
+  }
+
   async respond(approvalId: string, optionId: string): Promise<void> {
     const answer = this.approvals.get(approvalId);
     if (!answer) throw new HubError('state_invalid', { details: { reason: 'unknown_approval' } });
@@ -741,6 +804,7 @@ export class HermesTuiSession implements AgentSession {
   async close(): Promise<void> {
     if (this.isClosed) return;
     this.isClosed = true;
+    this.markBuilt(false);
     this.subagentSignals.endAll();
     this.detach();
     this.stopExit();
@@ -761,6 +825,7 @@ export class HermesTuiSession implements AgentSession {
       if (signal) this.subagentSignals.emit(signal);
       return;
     }
+    if (type === 'session.info' || type === 'message.complete') this.markBuilt(true);
     switch (type) {
       case 'message.delta': {
         const delta = text(payload.text);
@@ -806,6 +871,8 @@ export class HermesTuiSession implements AgentSession {
           output: capped(text(payload.result_text) ?? text(payload.summary) ?? text(result)),
           raw: payload,
         });
+        const picture = failed ? null : producedImageOf(String(payload.name ?? ''), result);
+        if (picture) this.queue.push({ type: 'file.produced', path: picture, toolId: id });
         return;
       }
       case 'status.update': {
@@ -832,8 +899,12 @@ export class HermesTuiSession implements AgentSession {
         this.finish(payload);
         return;
       case 'error': {
-        // An error with no turn in flight is Hermes talking about the session, not a run.
-        if (!this.turn) return;
+        // An error with no turn in flight is Hermes talking about the session, not a run —
+        // its agent could not be built, for one.
+        if (!this.turn) {
+          if (!this.built) this.markBuilt(false);
+          return;
+        }
         this.queue.push({
           type: 'run.failed',
           error: text(payload.message) ?? 'Hermes reported an error',

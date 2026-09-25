@@ -20,13 +20,16 @@
  */
 import { derived } from '@corehub/contracts';
 import type { FastifyBaseLogger } from 'fastify';
+import { constants as fsConstants, copyFileSync, lstatSync, mkdirSync } from 'node:fs';
+import path from 'node:path';
 import { HubError, agentUnavailable } from '../../lib/errors.js';
 import type { AdapterSet } from './adapters/index.js';
-import type {
-  AgentEvent,
-  AgentSession,
-  ApprovalOption,
-  PromptInput as RunnerPromptInput,
+import {
+  OneshotUnavailable,
+  type AgentEvent,
+  type AgentSession,
+  type ApprovalOption,
+  type PromptInput as RunnerPromptInput,
 } from './adapters/types.js';
 import type {
   AgentRunnerPort,
@@ -54,6 +57,12 @@ import type { RunLeases } from './hub-tools/leases.js';
  * Ekko). The card shows it counting down; at zero the hub answers Hermes with a skip.
  */
 export const QUESTION_WAIT_MS = 5 * 60_000;
+
+/**
+ * The ceiling for a one-shot's answer. A title is a handful of tokens; the rest is room for a
+ * model that reasons before it answers and counts that against the same limit.
+ */
+export const ASK_MAX_TOKENS = 512;
 
 /** How a hub decision maps onto the options an agent offered, per approval. */
 type DecisionMap = Map<RunnerDecision, string>;
@@ -84,6 +93,8 @@ interface LiveRun {
   questions: Set<string>;
   /** Tools in flight, by id, so an end can be matched to what started. */
   tools: Map<string, { name: string; input: unknown }>;
+  /** Where files for the person go this turn (`sessions`' output folder), if anywhere. */
+  outputDir: string | null;
 }
 
 export interface AgentRunnerDeps {
@@ -132,6 +143,7 @@ export class AgentRunner implements AgentRunnerPort {
       decisions: new Map(),
       questions: new Set(),
       tools: new Map(),
+      outputDir: request.files?.outputDir ?? null,
     };
     this.runs.set(request.runId, run);
     // From here until the run ends, a call to the hub's own tools from this profile may act
@@ -364,33 +376,77 @@ export class AgentRunner implements AgentRunnerPort {
   }
 
   /**
-   * One question, answered once, in a conversation of its own that is closed again
-   * immediately (`RunnerAskRequest`). The hub names a session with it.
+   * One question answered by the model alone (`RunnerAskRequest`): the hub names a session
+   * with it. It is never a turn of an agent that has tools — a title is not worth the risk of
+   * a model writing a file or sending a message on its way to six words (the defect of
+   * 2026-09-26: every profile tool was offered to the naming request). In order:
    *
-   * Three things make it safe to run beside a live chat:
+   * 1. The agent's own tool-free one-shot on the model of the conversation being named: the
+   *    live conversation lends its model when it is open (Hermes: `llm.oneshot` with its
+   *    session), else the adapter opens a throwaway one in the same profile and model.
+   * 2. Otherwise the conversation's model directly, through the provider the hub knows (the
+   *    `builtin` adapter, which offers no tools), when the selection names one.
+   * 3. Otherwise `null`, and the caller names the session from its first message.
    *
-   * - its agent session is **never** put in `this.sessions`, and its ref is not the hub
-   *   session's, so the question is not appended to the conversation it asks about and
-   *   nothing evicts the live one;
-   * - it produces no `LiveRun`, so `busy` stays false and the models module may still
-   *   recycle the runtime — a title is not work worth blocking a provider change for;
-   * - it is bounded. Past `timeoutMs` the session is closed and the caller gets `null`,
-   *   which every caller must already handle.
+   * Nothing here produces a `LiveRun`, so `busy` stays false; nothing is put in
+   * `this.sessions`; and it is bounded by `timeoutMs` — past it the caller gets `null`.
    */
   async ask(request: RunnerAskRequest): Promise<string | null> {
-    const { service, adapters } = this.deps;
     const row = await this.readyRow(request.agentId);
     if (row.installState !== 'installed') return null;
+    try {
+      return await withDeadline(this.askToolFree(row, request), request.timeoutMs);
+    } catch (error) {
+      this.deps.log.info(
+        { err: error, agentId: row.id, sessionId: request.sessionId },
+        'agents: the agent answered no question',
+      );
+      return null;
+    }
+  }
+
+  private async askToolFree(
+    row: ReturnType<AgentsService['loadAgent']>,
+    request: RunnerAskRequest,
+  ): Promise<string | null> {
+    const { service, adapters } = this.deps;
+    const oneshot = {
+      prompt: request.prompt,
+      maxTokens: ASK_MAX_TOKENS,
+      timeoutMs: request.timeoutMs,
+    };
+
+    const live = this.sessions.get(request.sessionId);
+    if (live && !isClosed(live.session) && live.session.oneshot) {
+      return live.session.oneshot(oneshot);
+    }
+
     const target = service.targetFor(row, request.workspace, {
-      // A conversation of its own: `-ask-` keeps it apart from the chat's own ref for
-      // every adapter that keys conversations by the id we hand it.
-      sessionRef: mintSessionRef(row.adapterKind, `ask-${request.sessionId}`),
+      sessionRef: null,
       cwd: null,
       model: request.model,
       provider: request.provider,
       reasoningEffort: null,
     });
-    const session = await adapters.byKind(row.adapterKind).start(target);
+    const adapter = adapters.byKind(row.adapterKind);
+    if (adapter.oneshot) {
+      try {
+        return await adapter.oneshot(target, oneshot);
+      } catch (error) {
+        if (!(error instanceof OneshotUnavailable)) throw error;
+      }
+    }
+
+    // The conversation's model straight from its provider: the `builtin` adapter is one model
+    // request with no tools, whatever agent the conversation itself runs on.
+    if (!target.modelProviderId || !target.model) return null;
+    const direct = adapters.byKind('builtin');
+    const session = await direct.start({
+      ...target,
+      // The agent's own settings (a system prompt, for the `builtin` agent) are not the question.
+      settings: {},
+      sessionRef: null,
+    });
     let text = '';
     try {
       const collect = (async () => {
@@ -399,29 +455,15 @@ export class AgentRunner implements AgentRunnerPort {
           if (event.type === 'run.completed' || event.type === 'run.failed') return;
         }
       })();
-      const selection = service.selectionFor(row, request.workspace, {
-        model: request.model,
-        provider: request.provider,
-      });
-      await withDeadline(
-        Promise.all([
-          session.send({
-            text: request.prompt,
-            model: selection.model,
-            modelProvider: selection.provider,
-            modelProviderId: selection.providerId,
-            // A title is worth the same fallback a turn gets (contract decision §54).
-            fallbacks: service.fallbacksFor(request.workspace, selection),
-          }),
-          collect,
-        ]),
-        request.timeoutMs,
-      );
-    } catch (error) {
-      this.deps.log.info(
-        { err: error, agentId: row.id, sessionId: request.sessionId },
-        'agents: the agent answered no question',
-      );
+      await Promise.all([
+        session.send({
+          text: request.prompt,
+          model: target.model,
+          modelProvider: target.modelProvider ?? null,
+          modelProviderId: target.modelProviderId,
+        }),
+        collect,
+      ]);
     } finally {
       await session.close().catch(() => undefined);
     }
@@ -486,6 +528,18 @@ export class AgentRunner implements AgentRunnerPort {
   }
 
   private translate(run: LiveRun, event: AgentEvent): RunnerEvent[] {
+    if (event.type === 'file.produced') {
+      const copied = handOver(event.path, run.outputDir);
+      if (copied.ok) {
+        this.deps.log.debug({ runId: run.runId, file: copied.path }, 'agents: produced file');
+      } else {
+        this.deps.log.warn(
+          { runId: run.runId, file: event.path, reason: copied.reason },
+          'agents: a file the agent produced could not be handed to the reply',
+        );
+      }
+      return [];
+    }
     if (event.type === 'tool.started') {
       const started = { name: event.name ?? event.title, input: event.input };
       this.deps.leases?.toolStarted(run.runId, started.name, started.input);
@@ -841,5 +895,56 @@ export function toRunnerEvent(event: AgentEvent, ctx: TranslateContext): RunnerE
     case 'plan':
       // No `/rt/sessions` event carries a plan yet; it is not a message.
       return null;
+    case 'file.produced':
+      // Handled by `translate`: the file is copied into the run's output folder, and the
+      // engine attaches it to the reply when the run ends.
+      return null;
+  }
+}
+
+/** What an image or other file a tool made is allowed to be before it is handed over. */
+const HANDOVER_MAX_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Copy a file an agent's own tool produced (`file.produced`) into the run's output folder, where
+ * the sessions engine picks up whatever the turn leaves for the person (decision §72: Hermes's
+ * `image_generate` saves into its own cache). A copy, so the agent's cache stays as it was; a
+ * link, a folder, a file that is gone or too large, or a run without an output folder is refused
+ * and said why — the turn itself never fails for it.
+ */
+export function handOver(
+  source: string,
+  outputDir: string | null,
+): { ok: true; path: string } | { ok: false; reason: string } {
+  if (!outputDir) return { ok: false, reason: 'no_output_folder' };
+  if (!path.isAbsolute(source)) return { ok: false, reason: 'not_absolute' };
+  let stats;
+  try {
+    stats = lstatSync(source);
+  } catch {
+    return { ok: false, reason: 'missing' };
+  }
+  if (!stats.isFile()) return { ok: false, reason: 'not_a_file' };
+  if (stats.size > HANDOVER_MAX_BYTES) return { ok: false, reason: 'too_large' };
+  const name = path.basename(source);
+  const extension = path.extname(name);
+  const stem = name.slice(0, name.length - extension.length);
+  try {
+    mkdirSync(outputDir, { recursive: true });
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const target = path.join(
+        outputDir,
+        attempt === 0 ? name : `${stem}-${attempt + 1}${extension}`,
+      );
+      try {
+        copyFileSync(source, target, fsConstants.COPYFILE_EXCL);
+        return { ok: true, path: target };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      }
+    }
+    return { ok: false, reason: 'name_taken' };
+  } catch (error) {
+    return { ok: false, reason: (error as NodeJS.ErrnoException).code ?? 'copy_failed' };
   }
 }

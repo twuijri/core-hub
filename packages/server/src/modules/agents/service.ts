@@ -28,7 +28,8 @@ import { HubError, agentUnavailable, conflict, notFound, stateInvalid } from '..
 import { newUlid } from '../../db/ids.js';
 import { t, type Language } from '../../i18n/index.js';
 import type { AuditService, JobRow, JobRunner } from '../audit/index.js';
-import type { WorkspaceScope } from '../auth/index.js';
+import { decodeAvatarDataUrl, type DecodedAvatar, type WorkspaceScope } from '../auth/index.js';
+import type { AgentAvatars } from './avatars.js';
 import {
   CATALOG,
   assertCatalogIsWellFormed,
@@ -72,6 +73,8 @@ export interface Actor {
 
 export interface AgentsServiceOptions {
   db: ModuleDb;
+  /** Where uploaded agent pictures live (`avatars.ts`); absent, every agent is drawn. */
+  avatars?: AgentAvatars;
   log: FastifyBaseLogger;
   realtime: Realtime;
   audit: AuditService;
@@ -255,12 +258,8 @@ export class AgentsService implements UpdatePolicyStore {
       // `models` owns providers and models; none exist, so nothing can be pointed at.
       throw notFound({ resource: 'model' });
     }
-    if (patch.avatar != null) {
-      throw stateInvalid({
-        field: 'avatar',
-        reason: 'agent avatars are attachments; the knowledge module that stores them is Phase 4',
-      });
-    }
+    // A picture is checked before anything is written, so a bad one changes nothing.
+    const avatar = patch.avatar === undefined ? undefined : this.avatarPatch(patch.avatar);
     const at = this.now();
     const changes: Partial<typeof agents.$inferInsert> = { updatedAt: at };
     if (patch.name !== undefined) changes.name = patch.name;
@@ -273,7 +272,12 @@ export class AgentsService implements UpdatePolicyStore {
       }
       changes.autoUpdate = patch.auto_update;
     }
-    if (Object.keys(changes).length > 1) {
+    if (avatar !== undefined) {
+      const store = this.avatarStore();
+      if (avatar) store.write(id, avatar);
+      else store.remove(id);
+    }
+    if (Object.keys(changes).length > 1 || avatar !== undefined) {
       this.db.update(agents).set(changes).where(eq(agents.id, id)).run();
     }
     const settings = this.ensureSettings(scope, id, row.ownerId);
@@ -285,6 +289,34 @@ export class AgentsService implements UpdatePolicyStore {
         .run();
     }
     return this.announce(this.loadAgent(id), scope);
+  }
+
+  /**
+   * The picture an `agents.update` asks for: an uploaded PNG or JPEG (`auth`'s data-URL rule,
+   * 512 KB), or back to the one drawn from the slug (`generated` or `null`). Null = remove.
+   */
+  private avatarPatch(input: unknown): DecodedAvatar | null {
+    if (input === null) return null;
+    const avatar = input as { kind?: unknown; data_url?: unknown };
+    if (avatar.kind === 'generated') return null;
+    if (avatar.kind === 'image' && typeof avatar.data_url === 'string') {
+      this.avatarStore();
+      return decodeAvatarDataUrl(avatar.data_url);
+    }
+    throw new HubError('validation_failed', { details: { field: 'avatar', reason: 'invalid' } });
+  }
+
+  private avatarStore(): AgentAvatars {
+    if (!this.options.avatars) {
+      throw stateInvalid({ field: 'avatar', reason: 'this hub stores no agent pictures' });
+    }
+    return this.options.avatars;
+  }
+
+  /** The agent's uploaded picture, or null when it is drawn from its slug. */
+  avatar(id: string): { mime: string; bytes: Buffer } | null {
+    this.loadAgent(id);
+    return this.options.avatars?.read(id) ?? null;
   }
 
   updateSettings(
@@ -1066,6 +1098,7 @@ export class AgentsService implements UpdatePolicyStore {
   ): ContractAgent {
     return serializeAgent(row, {
       profile: scope.slug,
+      hasAvatar: this.options.avatars?.has(row.id) ?? false,
       settings,
       runtime: this.runtimeOf(row),
       defaultModel: this.defaultModelOf(row, scope.id),

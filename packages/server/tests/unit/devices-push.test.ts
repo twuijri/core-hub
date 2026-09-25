@@ -10,13 +10,14 @@ import { requireSqlite } from '../../src/lib/db.js';
 import { overrideDevices } from '../../src/modules/devices/index.js';
 import { devices } from '../../src/modules/devices/schema.js';
 import { notificationDeliveries } from '../../src/modules/notify/schema.js';
+import { appTokens } from '../../src/modules/auth/schema.js';
 import {
   fakeFcm,
   startFakeApns,
   startFakePushService,
   type FakePushService,
 } from '../../src/modules/devices/testing/fake-push.js';
-import { authed, signedInHub, type TestHub } from './helpers.js';
+import { TEST_ADMIN_PASSWORD, authed, signedInHub, type TestHub } from './helpers.js';
 
 type Json = Record<string, unknown>;
 type Hub = TestHub & { token: string; userId: string };
@@ -372,6 +373,178 @@ describe('devices: push registration and delivery', () => {
   });
 });
 
+/** A hub whose FCM sender is a fake, so a phone can register a token. */
+async function fcmHub() {
+  const fcm = fakeFcm();
+  overrideDevices({ fetchImpl: fcm.fetchImpl, fcmBaseUrl: 'https://fcm.fake' });
+  const hub = await hubWith({ COREHUB_FCM_SERVICE_ACCOUNT: serviceAccountJson() });
+  return { fcm, hub };
+}
+
+/** Another sign-in with a password, as the phone app does when it is not paired. */
+async function signIn(hub: Hub, username = 'admin', password = TEST_ADMIN_PASSWORD) {
+  const response = await hub.app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: { username, password },
+  });
+  expect(response.statusCode, response.body).toBe(200);
+  return (response.json() as { access_token: string }).access_token;
+}
+
+/** The iOS path without pairing: the phone registers itself, then its token. */
+async function passwordPhone(hub: Hub, token: string, key: string): Promise<string> {
+  const device = await authed(hub, token, {
+    method: 'POST',
+    url: '/api/v1/devices',
+    payload: { device_key: key, name: 'iPhone', platform: 'ios', kind: 'phone' },
+  });
+  // 201 the first time, 200 when the same install registers again.
+  expect([200, 201], device.body).toContain(device.statusCode);
+  const id = (device.json() as { id: string }).id;
+  const push = await authed(hub, token, {
+    method: 'PUT',
+    url: `/api/v1/devices/${id}/push`,
+    payload: { provider: 'fcm', token: `fcm-token-${key}-0123456789` },
+  });
+  expect(push.statusCode, push.body).toBe(200);
+  return id;
+}
+
+const pushOf = (hub: Hub, deviceId: string) =>
+  requireSqlite(hub.app.hub.database).select().from(devices).where(eq(devices.id, deviceId)).get()!;
+
+describe('devices: a push registration ends with the sign-in that made it', () => {
+  it('forgets the token when that sign-in signs out, and keeps the other sign-ins', async () => {
+    const { fcm, hub } = await fcmHub();
+    const phone = await signIn(hub);
+    const id = await passwordPhone(hub, phone, 'iphone-a');
+    const kept = await passwordPhone(hub, hub.token, 'iphone-b');
+    expect(pushOf(hub, id)).toMatchObject({ pushProvider: 'fcm' });
+
+    const out = await authed(hub, phone, { method: 'POST', url: '/api/v1/auth/logout' });
+    expect(out.statusCode).toBe(204);
+    expect(pushOf(hub, id)).toMatchObject({ pushProvider: 'none', pushToken: null });
+    expect(pushOf(hub, kept)).toMatchObject({ pushProvider: 'fcm' });
+
+    await testNotice(hub);
+    await vi.waitFor(() => expect(fcm.sent).toHaveLength(1));
+    expect(fcm.sent[0]!.body).toMatchObject({
+      message: { token: 'fcm-token-iphone-b-0123456789' },
+    });
+  });
+
+  it('forgets the other sign-ins’ tokens when the person changes their password', async () => {
+    const { hub } = await fcmHub();
+    const phone = await signIn(hub);
+    const id = await passwordPhone(hub, phone, 'iphone-a');
+    const own = await passwordPhone(hub, hub.token, 'iphone-b');
+    const changed = await authed(hub, hub.token, {
+      method: 'POST',
+      url: '/api/v1/auth/me/password',
+      payload: { current_password: TEST_ADMIN_PASSWORD, new_password: 'owner-password-2' },
+    });
+    expect(changed.statusCode, changed.body).toBe(204);
+    expect(pushOf(hub, id).pushProvider).toBe('none');
+    // The sign-in that made the change stays, and so does its phone's token.
+    expect(pushOf(hub, own).pushProvider).toBe('fcm');
+  });
+
+  it('forgets a person’s tokens when an admin resets their password, disables or deletes them', async () => {
+    const { hub } = await fcmHub();
+    const created = await authed(hub, hub.token, {
+      method: 'POST',
+      url: '/api/v1/auth/users',
+      payload: {
+        username: 'mem',
+        password: 'mem-password-1',
+        role: 'member',
+        profiles: ['default'],
+      },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const userId = (created.json() as { id: string }).id;
+    const patch = (payload: Json) =>
+      authed(hub, hub.token, { method: 'PATCH', url: `/api/v1/auth/users/${userId}`, payload });
+
+    const first = await passwordPhone(hub, await signIn(hub, 'mem', 'mem-password-1'), 'mem-1');
+    expect((await patch({ password: 'mem-password-2' })).statusCode).toBe(200);
+    expect(pushOf(hub, first).pushProvider).toBe('none');
+
+    const second = await passwordPhone(hub, await signIn(hub, 'mem', 'mem-password-2'), 'mem-1');
+    expect(second).toBe(first);
+    expect(pushOf(hub, first).pushProvider).toBe('fcm');
+    expect((await patch({ status: 'disabled' })).statusCode).toBe(200);
+    expect(pushOf(hub, first).pushProvider).toBe('none');
+
+    expect((await patch({ status: 'active' })).statusCode).toBe(200);
+    await passwordPhone(hub, await signIn(hub, 'mem', 'mem-password-2'), 'mem-1');
+    expect(pushOf(hub, first).pushProvider).toBe('fcm');
+    const deleted = await authed(hub, hub.token, {
+      method: 'DELETE',
+      url: `/api/v1/auth/users/${userId}`,
+    });
+    expect(deleted.statusCode).toBe(204);
+    expect(pushOf(hub, first).pushProvider).toBe('none');
+  });
+
+  it('pushes nothing through a sign-in that expired, and forgets its token', async () => {
+    const { fcm, hub } = await fcmHub();
+    const phone = await signIn(hub);
+    const id = await passwordPhone(hub, phone, 'iphone-a');
+    const session = pushOf(hub, id).pushSessionId!;
+    expect(session).toBeTruthy();
+    // Nobody signed out: the refresh token simply ran out while the phone was away.
+    requireSqlite(hub.app.hub.database)
+      .update(appTokens)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(appTokens.id, session))
+      .run();
+
+    await testNotice(hub);
+    await vi.waitFor(() => expect(pushOf(hub, id).pushProvider).toBe('none'));
+    expect(fcm.sent).toHaveLength(0);
+  });
+
+  it('forgets a paired phone’s token when it is paired again', async () => {
+    const { hub } = await fcmHub();
+    const phone = await pairPhone(hub, 'phone-key');
+    const registered = await authed(hub, phone.appToken, {
+      method: 'PUT',
+      url: `/api/v1/devices/${phone.deviceId}/push`,
+      payload: { provider: 'fcm', token: 'fcm-registration-token-123' },
+    });
+    expect(registered.statusCode, registered.body).toBe(200);
+    const again = await pairPhone(hub, 'phone-key');
+    expect(again.deviceId).toBe(phone.deviceId);
+    expect(pushOf(hub, phone.deviceId).pushProvider).toBe('none');
+  });
+
+  it('forgets a token FCM calls invalid', async () => {
+    const { fcm, hub } = await fcmHub();
+    const id = await passwordPhone(hub, hub.token, 'iphone-a');
+    fcm.invalid.add('fcm-token-iphone-a-0123456789');
+    await testNotice(hub);
+    await vi.waitFor(() => expect(pushOf(hub, id).pushProvider).toBe('none'));
+  });
+
+  it('leaves a browser’s subscription with the browser when a sign-in ends', async () => {
+    const service = await fakePush();
+    const hub = await hubWith();
+    const other = await signIn(hub);
+    const device = await authed(hub, other, {
+      method: 'POST',
+      url: '/api/v1/devices',
+      payload: browser(),
+    });
+    const id = (device.json() as { id: string }).id;
+    const put = await subscribe(hub, id, service.subscribe('laptop').subscription, other);
+    expect(put.statusCode, put.body).toBe(200);
+    await authed(hub, other, { method: 'POST', url: '/api/v1/auth/logout' });
+    expect(pushOf(hub, id).pushProvider).toBe('webpush');
+  });
+});
+
 function serviceAccountJson(): string {
   const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
   return JSON.stringify({
@@ -496,7 +669,7 @@ describe('devices: the senders', () => {
       payload: {
         key_id: 'ABC123DEFG',
         team_id: 'DEF123GHIJ',
-        bundle_id: 'hub.core.ios',
+        bundle_id: 'com.twuijri.corehub',
         environment: 'sandbox',
         private_key: privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(),
       },
@@ -516,7 +689,7 @@ describe('devices: the senders', () => {
     expect(test.json()).toEqual({ provider: 'apns', status: 'sent', error: null });
     expect(apns.received[0]).toMatchObject({
       token,
-      headers: { 'apns-topic': 'hub.core.ios' },
+      headers: { 'apns-topic': 'com.twuijri.corehub' },
       body: { aps: { alert: { title: 'إشعار تجريبي' } } },
     });
   });
