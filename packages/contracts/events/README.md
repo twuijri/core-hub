@@ -25,7 +25,7 @@ user-level events on `/rt/devices` (devices, pairing, notices).
 
 ## Connecting and subscribing (client → server)
 
-Handshake `auth: { token, profile }` on every namespace except `/rt/devices`,
+Handshake `auth: { token, profile }` on every namespace except `/rt/devices` and `/rt/terminal`,
 where `profile` is optional. Acks are always `{ ok: true }` or
 `{ ok: false, error, code }` with a code from the fixed list in
 `docs/contracts/README.md` §4.
@@ -68,6 +68,22 @@ same token cannot bring it back.
 | `/rt/schedules` | `unsubscribe` | same | stop |
 | `/rt/devices` | *(none)* | — | a device's own events arrive on connect; the socket also marks the device online/offline |
 | `/rt/jobs` | *(none)* | — | every job of the profile arrives on connect |
+| `/rt/terminal` | `open` | `{ profile, cols, rows }` | start a shell in `DATA_DIR/workspaces/<profile>`; ack `{ ok: true, session: TerminalSession }`, or `conflict` (`details.reason: terminal_limit`) when `max_sessions` already run |
+| `/rt/terminal` | `attach` | `{ terminal_id }` | show a live session on this socket (after a reload); ack `{ ok: true, session, backlog }`, where `backlog` is the session's recent output to repaint the screen with; `not_found` for a session that is gone |
+| `/rt/terminal` | `input` | `{ terminal_id, data }` | keystrokes and pasted text, as typed |
+| `/rt/terminal` | `resize` | `{ terminal_id, cols, rows }` | the emulator's new size |
+| `/rt/terminal` | `close` | `{ terminal_id }` | end the session (`terminal.exited` with `reason: closed`) |
+
+### The owner's terminal (`/rt/terminal`)
+
+The web terminal (DECISIONS §60) is a shell on the hub's host. It is the one namespace where
+typing goes over the socket rather than HTTP — a keystroke is not an action with an
+idempotency key. Its handshake is refused with `forbidden` unless the hub runs with
+`COREHUB_WEB_TERMINAL=1` **and** the token is the owner's: an admin or a member never
+connects. A session belongs to the owner, not to the socket: a dropped or reloaded page
+attaches again (`GET /terminal` lists what is live) until the session sits idle past the
+hub's timeout. Output reaches only the sockets attached to that session. Every start and
+end is in the audit log.
 
 ### Resuming a session (`after_seq`)
 
@@ -229,6 +245,14 @@ message.
 | `job.failed` | the jobs kernel module, for every job of the workspace | `job`: `Job` | The job failed; `job.error` is the error envelope. Profile-wide. |
 | `job.cancelled` | the jobs kernel module, for every job of the workspace | `job`: `Job` | The job was cancelled. Profile-wide. |
 | `agent.updated` | agents module (install/update/uninstall/restart jobs, discovery, settings, skills/MCP/memory/channel changes) | `agent`: `Agent` | The registry entry of an agent changed. Carried on /rt/jobs because it is always the outcome of hub-level work. Profile-wide. |
+
+
+### `/rt/terminal` — 2 events
+
+| Event | Emitted by | Payload | Notes |
+|---|---|---|---|
+| `terminal.output` | terminal module | `terminal_id`: `Ulid`, `data`: `string` | What the shell wrote, escape sequences included. Only to the sockets attached to the session; `profile` is the session's. |
+| `terminal.exited` | terminal module | `terminal_id`: `Ulid`, `reason`: `exited`\|`closed`\|`idle`\|`shutdown`, `exit_code`: `integer`\|`null` | The session ended. To the sockets attached to it. |
 
 
 ## Rules

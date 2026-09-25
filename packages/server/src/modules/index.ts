@@ -77,6 +77,7 @@ import { createNotifier, notifyModule } from './notify/index.js';
 import { updatesModule } from './updates/index.js';
 import { auditModule } from './audit/index.js';
 import { pluginsModule } from './plugins/index.js';
+import { terminalModule } from './terminal/index.js';
 
 // The one wiring line the sessions module asked for: its ports come from `agents` (the
 // registry and the runner over the adapters), `auth` (who is asking, in which workspace)
@@ -442,4 +443,5 @@ export const modules: readonly HubModule[] = [
   updatesModule,
   auditModule,
   pluginsModule,
+  terminalModule,
 ];

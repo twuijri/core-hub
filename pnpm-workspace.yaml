@@ -9,4 +9,5 @@ allowBuilds:
   better-sqlite3: true
   esbuild: true
   argon2: true
+  node-pty: true
   '@openapitools/openapi-generator-cli': false

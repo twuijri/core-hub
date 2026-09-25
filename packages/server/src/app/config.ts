@@ -12,6 +12,8 @@ export const ENV_KEYS = [
   'COREHUB_SETUP_OPEN_MINUTES',
   'COREHUB_RESET_OWNER',
   'COREHUB_TASK_AUTO_START_MAX',
+  'COREHUB_WEB_TERMINAL',
+  'COREHUB_WEB_TERMINAL_IDLE_MINUTES',
 ] as const;
 export type EnvKey = (typeof ENV_KEYS)[number];
 export type EnvSource = Partial<Record<EnvKey, string | undefined>> & {
@@ -77,6 +79,22 @@ const envSchema = z.object({
     .min(1, 'COREHUB_TASK_AUTO_START_MAX must be at least 1')
     .max(50, 'COREHUB_TASK_AUTO_START_MAX must be at most 50')
     .default(2),
+  /**
+   * The owner's web terminal (DECISIONS §60): a shell on this host, as the hub's own user,
+   * reachable from the browser by the owner account only. Off unless this is `1`.
+   */
+  COREHUB_WEB_TERMINAL: z
+    .enum(['0', '1', 'true', 'false'], {
+      message: 'COREHUB_WEB_TERMINAL must be 1 (on) or 0 (off)',
+    })
+    .optional(),
+  /** Minutes a web terminal session may sit with nobody typing before the hub closes it. */
+  COREHUB_WEB_TERMINAL_IDLE_MINUTES: z.coerce
+    .number()
+    .int('COREHUB_WEB_TERMINAL_IDLE_MINUTES must be a whole number of minutes')
+    .min(1, 'COREHUB_WEB_TERMINAL_IDLE_MINUTES must be at least 1')
+    .max(1440, 'COREHUB_WEB_TERMINAL_IDLE_MINUTES must be at most 1440 (one day)')
+    .default(15),
 });
 
 export type DatabaseConfig = { kind: 'sqlite'; file: string } | { kind: 'postgres'; url: string };
@@ -119,7 +137,20 @@ export interface HubConfig {
   resetOwner: boolean;
   /** Runs started by `auto_start` at once per profile (`COREHUB_TASK_AUTO_START_MAX`, 2). */
   taskAutoStartMax: number;
+  /** The owner's web terminal: off unless `COREHUB_WEB_TERMINAL=1` (DECISIONS §60). */
+  webTerminal: WebTerminalConfig;
 }
+
+export interface WebTerminalConfig {
+  enabled: boolean;
+  /** Idle sessions close after this long (`COREHUB_WEB_TERMINAL_IDLE_MINUTES`, 15). */
+  idleMs: number;
+  /** Sessions open at once, hub-wide. Fixed: the owner asked for at most three. */
+  maxSessions: number;
+}
+
+/** The web terminal's cap on sessions open at once (owner, 2026-09-25). */
+export const WEB_TERMINAL_MAX_SESSIONS = 3;
 
 export class ConfigError extends Error {
   constructor(message: string) {
@@ -154,6 +185,11 @@ export function loadConfig(
     setupOpenMinutes: env.COREHUB_SETUP_OPEN_MINUTES,
     resetOwner: env.COREHUB_RESET_OWNER === '1' || env.COREHUB_RESET_OWNER === 'true',
     taskAutoStartMax: env.COREHUB_TASK_AUTO_START_MAX,
+    webTerminal: {
+      enabled: env.COREHUB_WEB_TERMINAL === '1' || env.COREHUB_WEB_TERMINAL === 'true',
+      idleMs: env.COREHUB_WEB_TERMINAL_IDLE_MINUTES * 60_000,
+      maxSessions: WEB_TERMINAL_MAX_SESSIONS,
+    },
   };
 }
 
