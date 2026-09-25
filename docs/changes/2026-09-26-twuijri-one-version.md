@@ -1,5 +1,5 @@
 # نسخة واحدة لكل مخرجات كور هب، تبدأ من 1.1.0
-المسؤول: twuijri · الفرع: chore/one-version-1.1.0 · الحالة: review
+المسؤول: twuijri · الفرع: chore/one-version-1.1.0 · الحالة: done
 
 ## المشكلة والهدف
 كانت كل حزمة `0.0.0`، والمركز خارج الصورة يقول `0.0.0`، وتطبيق أندرويد `versionName = "0.1.0"`
@@ -69,7 +69,14 @@ $ pnpm --filter @corehub/web build                     → الحزمة تحمل
 $ COREHUB_VERSION=1.1.0-preview.7 pnpm --filter @corehub/web build → الحزمة تحمل `1.1.0-preview.7`
 ```
 
-CI على #144: انظر «التسليم».
+CI على #144 عند الإيداع `80812eb` (كل التشغيلات ناجحة):
+
+```
+CI (run 36163262163): success — كل المهام، ومنها "Lint, typecheck, contracts, client tests, build":
+  One version everywhere (root package.json; docs/RELEASING.md)  version: 1.1.0 everywhere (8 places)
+  Docker image builds and answers /health: success
+Android: success · iOS: success · Desktop installers: success · Change record: success
+```
 
 لم يُشغَّل: أي سير عمل موقّع أو `release.yml` (لم يوافق المالك على رفع TestFlight ولا صورة المعاينة)،
 فحساب `run_number + 100` وملصق الصورة لم يُريا على بناء حقيقي؛ ولا `xcodegen` محليًا (لا ماك).
@@ -81,6 +88,6 @@ CI على #144: انظر «التسليم».
 - الرجوع: revert لهذا الفرع يعيد `0.0.0` و`0.1.0` وأرقام التشغيل كما كانت.
 
 ## التسليم والخطوة التالية
-- دُمج في `night/2026-09-26` (#144).
+- دُمج في `night/2026-09-26` (#144) عند `80812eb`؛ CI أخضر.
 - الخطوة التالية للمالك: عند الموافقة، تشغيل `ios-signed.yml` برفع TestFlight للتحقق من 1.1.0 (1xx)،
   ثم وسم `v1.1.0` على `main` بعد دمج #143 و#144.
