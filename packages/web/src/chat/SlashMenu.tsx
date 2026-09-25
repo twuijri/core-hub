@@ -1,5 +1,5 @@
 /**
- * The `/` menu above the composer (decision §52): the commands the session's agent takes,
+ * The `/` menu above the composer (decision §57): the commands the session's agent takes,
  * or the skills after `/skill `, each with a line saying what it does.
  *
  * Focus never leaves the textarea — the person keeps typing to filter — so the list is a

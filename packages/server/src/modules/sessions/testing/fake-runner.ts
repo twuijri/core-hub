@@ -66,7 +66,7 @@ export interface FakeRunnerOptions {
    */
   answer?: string | null | ((request: AgentAskRequest) => string | null | Promise<string | null>);
   /**
-   * What `compress` answers (decision §52); a function may throw to play a refusal.
+   * What `compress` answers (decision §57); a function may throw to play a refusal.
    * `undefined` leaves the runner without `compress`, as an agent that cannot.
    */
   compress?:

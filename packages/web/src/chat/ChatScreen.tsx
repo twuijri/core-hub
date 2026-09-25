@@ -251,7 +251,7 @@ export function OpenSession({
   const approval = useApprovalMode(agentId);
 
   const run = activeRun(state);
-  // The composer's `/` commands (decision §52): what this conversation's agent takes.
+  // The composer's `/` commands (decision §57): what this conversation's agent takes.
   const slash = useChatCommands({
     sessionId,
     state,

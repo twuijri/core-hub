@@ -189,7 +189,7 @@ export class AgentRunner implements AgentRunnerPort {
   }
 
   /**
-   * Compress the conversation's context between turns (decision §52). The agent session is
+   * Compress the conversation's context between turns (decision §57). The agent session is
    * the one the next run would use, so what is compressed is what the next turn reads.
    */
   async compress(request: RunnerCompressRequest): Promise<RunnerCompressResult> {
@@ -434,7 +434,7 @@ export class AgentRunner implements AgentRunnerPort {
   }
 }
 
-/** The agent has no such command (decision §52): `409 state_invalid`, said plainly. */
+/** The agent has no such command (decision §57): `409 state_invalid`, said plainly. */
 function commandUnsupported(command: string, agent: string): HubError {
   return new HubError('state_invalid', {
     details: { reason: 'command_unsupported', command, agent },

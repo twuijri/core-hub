@@ -1109,7 +1109,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
   });
 
   /**
-   * `compression` is Hermes's where the hub supervises it (decision §52): read from the
+   * `compression` is Hermes's where the hub supervises it (decision §57): read from the
    * profile's `config.yaml`, so a value changed there by hand is the value shown here.
    */
   const withRuntimeCompression = (row: WorkspaceRow, settings: WorkspaceHubSettings) => {
@@ -1161,7 +1161,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
           : {}),
       };
       // Where Hermes reads them, first: a value the runtime refused is not stored as if it
-      // applied (decision §52). The patch merges onto what Hermes has now.
+      // applied (decision §57). The patch merges onto what Hermes has now.
       const mirror = profileMirrorFor(app);
       if (mirror?.writeCompression) {
         const current = withRuntimeCompression(row, hubSettingsOf(row)).compression;

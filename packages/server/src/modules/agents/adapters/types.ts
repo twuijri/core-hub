@@ -291,7 +291,7 @@ export interface AgentSession {
   interrupt(): Promise<void>;
   close(): Promise<void>;
   /**
-   * Compress the conversation's context now, between turns (decision §52). Absent when the
+   * Compress the conversation's context now, between turns (decision §57). Absent when the
    * agent has no such thing; the hub then refuses the command rather than pretend.
    */
   compress?(focus: string | null): Promise<CompressOutcome>;

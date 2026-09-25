@@ -1,5 +1,5 @@
 /**
- * A profile's automatic compression in Hermes's own `config.yaml` (decision §52): the keys
+ * A profile's automatic compression in Hermes's own `config.yaml` (decision §57): the keys
  * Hermes reads, its defaults when they are absent, and a write that leaves the rest of the
  * file as it was.
  */

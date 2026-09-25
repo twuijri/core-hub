@@ -1,5 +1,5 @@
 /**
- * The composer's agent commands at the sessions boundary (decision §52), over the real HTTP
+ * The composer's agent commands at the sessions boundary (decision §57), over the real HTTP
  * routes and the real `/rt/sessions` socket, with the agent played by the scripted runner:
  *
  * - `sessions.compress` brackets the work with `context.compression` and then says the new

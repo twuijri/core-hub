@@ -657,7 +657,7 @@ summary.tool-head:hover {
   }
 }
 
-/* The ring is a button now: pressed, it opens the details and Compress (decision §52). */
+/* The ring is a button now: pressed, it opens the details and Compress (decision §57). */
 button.context-ring {
   border: 0;
   background: transparent;
@@ -754,7 +754,7 @@ button.context-ring {
   }
 }
 
-/* The `/` menu, floating above the composer's surface (decision §52). */
+/* The `/` menu, floating above the composer's surface (decision §57). */
 .slash-menu {
   display: flex;
   flex-direction: column;

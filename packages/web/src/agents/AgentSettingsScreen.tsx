@@ -59,7 +59,7 @@ export function AgentSettingsScreen() {
       {settings.isError && <Notice tone="danger">{describeError(settings.error, t)}</Notice>}
       {save.isError && <Notice tone="danger">{describeError(save.error, t)}</Notice>}
       {agent && <UpdatesCard agent={agent} />}
-      {/* Hermes's own compression keys for this profile (decision §52). */}
+      {/* Hermes's own compression keys for this profile (decision §57). */}
       {agent?.capabilities.includes('compress') && <CompressionSettingsCard />}
       {settings.data && settings.data.sections.length === 0 && (
         <EmptyState icon={<IconSettings size={20} />} title={t('agents.settings_none')} />

@@ -1,5 +1,5 @@
 /**
- * What the composer's `/` commands do in an open conversation (decision §52).
+ * What the composer's `/` commands do in an open conversation (decision §57).
  *
  * The composer knows the commands and reads them out of the text (`slashCommands.ts`); this
  * hook is the conversation's side: which commands its agent takes, and carrying each one out

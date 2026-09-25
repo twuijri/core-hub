@@ -1,5 +1,5 @@
 /**
- * Automatic context compression for the selected profile (decision §52), on the Hermes
+ * Automatic context compression for the selected profile (decision §57), on the Hermes
  * agent's Settings page: that is where a person tunes how Hermes behaves, and these are
  * Hermes's own keys in the profile's `config.yaml` (`compression.*`, `model.context_length`),
  * which the hub reads and writes through `auth.getProfileSettings` / `updateProfileSettings`.

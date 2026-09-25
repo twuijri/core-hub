@@ -2742,7 +2742,7 @@ paths:
       summary: Compress the conversation's context now
       description: |
         Asks the session's agent to summarise the older part of the conversation so the
-        model's window has room again (Hermes `/compress`, decision §52). Only between
+        model's window has room again (Hermes `/compress`, decision §57). Only between
         turns: while a run is in flight the answer is `409 already_running`. An agent that
         cannot compress (its `capabilities` lack `compress`, or its live surface does not
         offer it) answers `409 state_invalid` with `details.reason: command_unsupported`.
@@ -2800,7 +2800,7 @@ paths:
       summary: Send guidance into a running turn without stopping it
       description: |
         The agent reads the text after its next tool call and carries on (Hermes
-        `session.steer`, decision §52). No message is added to the transcript and the run
+        `session.steer`, decision §57). No message is added to the transcript and the run
         is not interrupted. A run that is not in flight answers `409 state_invalid`; an
         agent that cannot be steered answers `409 state_invalid` with
         `details.reason: command_unsupported`. `rejected` means the agent refused this
@@ -13619,7 +13619,7 @@ components:
         compression:
           type: object
           description: |
-            Automatic context compression for this profile's conversations (decision §52).
+            Automatic context compression for this profile's conversations (decision §57).
             Where the hub supervises Hermes these are Hermes's own keys in the profile's
             `config.yaml` — `compression.enabled`, `compression.threshold`,
             `compression.target_ratio`, `compression.protect_first_n`,
@@ -14983,7 +14983,7 @@ components:
         ]
       description: |
         What an agent can do. The last six are the composer's `/` commands the agent itself
-        carries out (decision §52): `compress` (`sessions.compress`), `steer`
+        carries out (decision §57): `compress` (`sessions.compress`), `steer`
         (`sessions.steerRun`), and `goals`, `plans`, `learn`, `skill_commands` — a message
         that starts with `/goal`, `/plan`, `/learn` or `/skill <name>` is the agent's
         command rather than text for the model. A client offers a command only when the

@@ -140,7 +140,7 @@ export interface ComposerProps {
   /** Three suggestions, shown only while the chat is empty. */
   starters?: readonly string[];
   /**
-   * The `/` commands the session's agent takes (`slashCommands.ts`, decision §52). Empty:
+   * The `/` commands the session's agent takes (`slashCommands.ts`, decision §57). Empty:
    * no menu, and every `/text` is an ordinary message.
    */
   commands?: readonly SlashCommand[];

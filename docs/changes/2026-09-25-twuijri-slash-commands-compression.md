@@ -24,7 +24,7 @@
 الهدف: أوامر «/» حقيقية من قدرات Hermes نفسه، وضغط يدوي وتلقائي يُرى، وعدّاد يقول مصدر رقمه.
 
 ## القرار والموافقات
-**مقترح — بانتظار تأكيد المالك** (DECISIONS §52):
+**مقترح — بانتظار تأكيد المالك** (DECISIONS §57):
 1. **الأمر يظهر فقط إن كان وكيل المحادثة يقدر عليه.** ست قدرات جديدة في `AgentCapability`:
    `compress`, `steer`, `goals`, `plans`, `learn`, `skill_commands` — لـ Hermes وحده في
    الكتالوج. أوامر الخادم `/new` و`/fork` و`/archive` و`/model` و`/clear-screen` لكل وكيل
@@ -65,7 +65,7 @@
   `null` = نافذة النموذج)، ووصف يربط الحقول بمفاتيح Hermes.
 - `AgentCapability` + `compress`, `steer`, `goals`, `plans`, `learn`, `skill_commands`.
 - `events/common.schema.json` ونسخ `ContextUsage` في أحداث الجلسة، و`events/README.md`.
-- `docs/contracts/DECISIONS.md` §52 (§47–§51 مأخوذة في طلبات دمج مفتوحة #105–#117، فأخذتُ التالي الحرّ).
+- `docs/contracts/DECISIONS.md` §57 (§47–§51 مأخوذة في طلبات دمج مفتوحة #105–#117، فأخذتُ التالي الحرّ).
 
 ## الملفات والتأثير
 - الخادم — المحوّل: `agents/adapters/hermes-tui.ts` (`commandTurn` لـ `/goal`/`/plan`/`/learn`/
@@ -165,7 +165,7 @@ db:generate + db:migrate (SQLite and PostgreSQL)        pass  1m32s
 - الرجوع: إرجاع طلب الدمج. لا هجرة قاعدة بيانات؛ `metadata.context` حقل JSON يُتجاهل.
 
 ## التسليم والخطوة التالية
-- المالك يؤكّد قرارات §52 (خصوصًا: أوامر Hermes كرسائل، و`/skill` داخل الرسالة نفسها، ومكان بطاقة
+- المالك يؤكّد قرارات §57 (خصوصًا: أوامر Hermes كرسائل، و`/skill` داخل الرسالة نفسها، ومكان بطاقة
   الضغط في إعدادات Hermes).
 - لاحقًا: عرض تفصيل النافذة حسب الفئة (`session.context_breakdown` في Hermes)، و`/btw` و`/queue`
   إن أرادها المالك، وربط `Session.context` لوكلاء غير Hermes إن أبلغوا عنه.

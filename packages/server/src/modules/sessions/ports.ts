@@ -190,7 +190,7 @@ export type AgentEvent =
   | { type: 'context'; usedTokens: number; windowTokens?: number | null; estimated?: boolean }
   /**
    * The agent is compressing the conversation's context on its own inside this run, because
-   * the window was filling up (decision §52). `finished` follows before the run ends.
+   * the window was filling up (decision §57). `finished` follows before the run ends.
    */
   | { type: 'compression'; phase: 'started' | 'finished' }
   | { type: 'completed' }
@@ -226,7 +226,7 @@ export interface AgentAskRequest {
 }
 
 /**
- * Compress a conversation's context now, between runs (`sessions.compress`, decision §52).
+ * Compress a conversation's context now, between runs (`sessions.compress`, decision §57).
  * The fields a run of this session would open the agent's conversation with, so the agent
  * compresses the same one.
  */
@@ -272,7 +272,7 @@ export interface AgentRunner {
    */
   ask?(request: AgentAskRequest): Promise<string | null>;
   /**
-   * Optional (decision §52). A runner without it cannot compress, and `sessions.compress`
+   * Optional (decision §57). A runner without it cannot compress, and `sessions.compress`
    * says so (`409 state_invalid`, `command_unsupported`); so does one whose adapter throws
    * `HubError('state_invalid', {reason: 'command_unsupported'})`.
    */

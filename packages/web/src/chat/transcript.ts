@@ -14,7 +14,7 @@ export interface ChatState {
   approvals: Record<string, Approval>;
   context: Session['context'];
   /**
-   * The agent compressing this conversation's context (`context.compression`, decision §52):
+   * The agent compressing this conversation's context (`context.compression`, decision §57):
    * `running` between `started` and its end, then the last outcome until the next one.
    */
   compression: Compression | null;

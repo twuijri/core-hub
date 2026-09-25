@@ -1,5 +1,5 @@
 /**
- * The composer's `/` commands (decision §52): what each one is, when it is offered, and how
+ * The composer's `/` commands (decision §57): what each one is, when it is offered, and how
  * the text in the composer is read as one.
  *
  * Three kinds, by who carries the command out:

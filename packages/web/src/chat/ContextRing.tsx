@@ -1,6 +1,6 @@
 /**
  * How full the model's window is, as a ring beside the mic — and, pressed, the details and
- * a way to compress (decision §52).
+ * a way to compress (decision §57).
  *
  * Owner decision, 2026-09-22: «جنب المايك يكون فيه دائره مثل حقة الكلود يكون فيها عدد
  * الكونتكست». The number is never invented, and it always says where it came from:

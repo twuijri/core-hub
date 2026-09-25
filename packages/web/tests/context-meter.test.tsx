@@ -1,4 +1,4 @@
-// The context meter beside the composer (decision §52): which count it shows and how it says
+// The context meter beside the composer (decision §57): which count it shows and how it says
 // where the count came from, the details and the Compress button it opens to, and the
 // progress the chat shows while the agent compresses.
 import { cleanup, render, screen, waitFor } from '@testing-library/react';

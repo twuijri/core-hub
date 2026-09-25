@@ -509,7 +509,7 @@ export class HermesTuiSession implements AgentSession {
 
   /**
    * A message that starts with one of Hermes's own commands (`/goal`, `/plan`, `/learn`,
-   * `/skill <name>`) is Hermes's to carry out, not text for the model (decision §52). Hermes's
+   * `/skill <name>`) is Hermes's to carry out, not text for the model (decision §57). Hermes's
    * `command.dispatch` answers with a prompt to run — the plan prompt, the skill loaded into
    * the turn — or with output of its own, which is then the turn's whole reply (`null` here).
    * Anything else goes to the model exactly as typed.
@@ -546,7 +546,7 @@ export class HermesTuiSession implements AgentSession {
   }
 
   /**
-   * Hermes's `session.compress` (decision §52): only between turns. Its answer carries the
+   * Hermes's `session.compress` (decision §57): only between turns. Its answer carries the
    * before/after estimate and the window as it now stands, which is what the meter shows.
    */
   async compress(focus: string | null): Promise<CompressOutcome> {
@@ -879,7 +879,7 @@ function strings(value: unknown): string[] {
     : [];
 }
 
-/** The commands Hermes carries out itself, by the word after `/` (decision §52). */
+/** The commands Hermes carries out itself, by the word after `/` (decision §57). */
 export const HERMES_COMMANDS = ['goal', 'plan', 'learn', 'skill'] as const;
 const SKILL_NAME = /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/;
 

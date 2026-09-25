@@ -65,7 +65,7 @@ export const AGENT_CAPABILITIES = [
   'journey',
   'jobs',
   'tasks',
-  // The composer's `/` commands the agent carries out itself (decision §52).
+  // The composer's `/` commands the agent carries out itself (decision §57).
   'compress',
   'steer',
   'goals',

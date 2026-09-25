@@ -1,6 +1,6 @@
 /**
  * A profile's automatic context compression, where Hermes reads it: the profile's
- * `config.yaml` (decision §52).
+ * `config.yaml` (decision §57).
  *
  * What Hermes does with these keys (read in its MIT source at v2026.9.14,
  * `hermes_cli/config_defaults.py` §compression, `tui_gateway/session_compression.py`

@@ -1,6 +1,6 @@
 /**
  * A profile's automatic context compression is Hermes's, where the hub supervises Hermes
- * (decision §52): `auth.getProfileSettings` reads it from the runtime, and
+ * (decision §57): `auth.getProfileSettings` reads it from the runtime, and
  * `auth.updateProfileSettings` writes it there before storing it — a value the runtime
  * refused is never reported as saved. The runtime is a recording fake of the mirror port.
  */
