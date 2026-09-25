@@ -98,7 +98,8 @@ installers stay unsigned (`desktop.yml`).
 - **App IDs**: `com.twuijri.corehub` (Push Notifications, App Groups) and
   `com.twuijri.corehub.share` (App Groups), each with `group.com.twuijri.corehub` **assigned**
   in its App Groups configuration; a profile carries only the groups assigned there.
-- **TestFlight**: an app record in App Store Connect for `com.twuijri.corehub`, and an app
-  icon in the app (none yet) — App Store Connect refuses a build without one.
+- **TestFlight**: an app record in App Store Connect for `com.twuijri.corehub`. The app icon
+  App Store Connect requires is in the app (`apps/ios/CoreHub/Resources/Assets.xcassets`, made by
+  `pnpm icons:build`).
 - **Play**: nothing yet; the signed AAB is ready for an internal-testing track when the owner
-  decides.
+  decides. The listing's 512 px icon is `apps/android/store/icon-512.png`.

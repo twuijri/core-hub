@@ -16,6 +16,7 @@
 - اختبار الإملاء الصوتي المتقلّب، وتجربة نموذج الصور في دور هرمز حقيقي (والصورة تعود إلى الردّ) — `fix/voice-test-and-image-e2e` — `docs/changes/2026-09-26-twuijri-voice-test-image-e2e.md`
 - تطبيقا الجوال يسجّلان رمز FCM/APNs عند المركز ويفتحان الإشعار المضغوط، والفحص الدوري فقط بلا دفع — `feat/apps-push-registration` — `docs/changes/2026-09-26-twuijri-apps-push-registration.md`
 - تسمية المحادثة بلا أدوات عبر `llm.oneshot` في هرمز (ولا جلسة في سجله)، وحذف `AuditReport` الميت في الويب — `fix/title-no-tools-audit-cleanup` — `docs/changes/2026-09-26-twuijri-title-no-tools.md`
+- أيقونات التطبيقات من شعار كور هب: iOS (`AppIcon` مع الداكن والملوّن)، أندرويد (التكيفية والإشعار)، سطح المكتب (`.icns` و`.ico` ولينكس والصينية) و`apple-touch-icon` — `feat/app-icons` — `docs/changes/2026-09-26-twuijri-app-icons.md`
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 انظر سجل كل مهمة.

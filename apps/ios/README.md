@@ -45,8 +45,9 @@ extension), with the App Group `group.com.twuijri.corehub`, in the owner's team 
 (`DEVELOPMENT_TEAM` in `project.yml`; Xcode signs automatically on a developer's Mac). A signed
 App Store build and an optional TestFlight upload come from `.github/workflows/ios-signed.yml`,
 run by hand or by a release tag, never on a pull request — how it signs and what the owner sets in
-the Apple consoles: `docs/RELEASING.md`. An app icon (none yet) is still needed before TestFlight
-accepts a build.
+the Apple consoles: `docs/RELEASING.md`. The app icon (`CoreHub/Resources/Assets.xcassets/AppIcon`,
+named by `ASSETCATALOG_COMPILER_APPICON_NAME` in `project.yml`) is generated from the Core Hub mark
+by `pnpm icons:build` at the repository root; never edit its PNGs by hand.
 
 ## Notifications — push, and the fallback
 
