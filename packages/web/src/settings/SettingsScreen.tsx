@@ -27,6 +27,7 @@ import { UsagePage } from './usage/UsagePage.js';
 import { ThemeTool } from './ThemeTool.js';
 import { FilesTool } from '../workspace-files/FilesTool.js';
 import { ThisDeviceTab } from './ThisDeviceTab.js';
+import { TerminalTool } from '../terminal/TerminalTool.js';
 
 /**
  * Which section draws which destination.
@@ -61,6 +62,8 @@ const SECTIONS: Record<string, () => ReactElement> = {
   performance: () => <PerformanceTool />,
   // The selected profile's working folder (DECISIONS §65).
   files: () => <FilesTool />,
+  // The owner's shell on the hub (DECISIONS §70); the emulator itself loads only here.
+  terminal: () => <TerminalTool />,
 };
 
 export function SettingsScreen({ id }: { id: string }) {

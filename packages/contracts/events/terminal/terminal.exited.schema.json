@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/terminal/terminal.exited.schema.json",
+  "title": "/rt/terminal · terminal.exited",
+  "description": "The session ended: the shell exited, the owner closed it, it sat idle past the timeout, or the hub stopped. To the sockets attached to it. Emitted by: terminal module.",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "terminal.exited"
+    },
+    "namespace": {
+      "const": "/rt/terminal"
+    },
+    "profile": {
+      "$ref": "#/$defs/ProfileSlug"
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["terminal_id", "reason", "exit_code"],
+      "properties": {
+        "terminal_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["exited", "closed", "idle", "shutdown"],
+          "description": "`exited`: the shell ended by itself; `closed`: the owner closed it; `idle`: nobody typed for the idle timeout; `shutdown`: the hub stopped."
+        },
+        "exit_code": {
+          "type": ["integer", "null"]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "terminal.exited",
+      "namespace": "/rt/terminal",
+      "profile": "default",
+      "ts": "2026-09-25T10:15:04Z",
+      "seq": 42,
+      "payload": {
+        "terminal_id": "01J8QK3ZR2W7M5N4P6T8V9X0TM",
+        "reason": "idle",
+        "exit_code": null
+      }
+    }
+  ],
+  "$defs": {
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}

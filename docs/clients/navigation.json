@@ -166,6 +166,10 @@
     "back_to_agents": {
       "en": "Back to agents",
       "ar": "رجوع إلى الوكلاء"
+    },
+    "terminal": {
+      "en": "Terminal",
+      "ar": "الطرفية"
     }
   },
   "destinations": [
@@ -476,6 +480,19 @@
       "note": "The selected profile's working folder (${DATA_DIR}/workspaces/<profile>): browse, upload, download, zip, new folder, rename, move, copy, delete, preview, edit text, attach to a chat. A file manager only — no shell, no commands (DECISIONS §65). Owner and admin; follows the top-bar profile chip."
     },
     {
+      "id": "terminal",
+      "title": "terminal",
+      "level": "settings",
+      "module": "terminal",
+      "entry": {
+        "kind": "settings-tool"
+      },
+      "roles": ["owner"],
+      "surfaces": ["web"],
+      "global": true,
+      "note": "A shell on the hub's host (DECISIONS §70). The owner only — not admins (owner, 2026-09-25) — and only while the hub runs with COREHUB_WEB_TERMINAL=1: a client shows the entry only when GET /terminal answers 200."
+    },
+    {
       "id": "agent_skills",
       "title": "skills",
       "module": "agents",
@@ -589,7 +606,8 @@
     "workspaces",
     "updates",
     "plugins",
-    "files"
+    "files",
+    "terminal"
   ],
   "agentLevel": [
     "agent_skills",
@@ -668,6 +686,7 @@
       "workspaces": "/settings/workspaces",
       "updates": "/settings/updates",
       "plugins": "/settings/plugins",
+      "terminal": "/settings/terminal",
       "files": "/settings/files",
       "agent_skills": "/agents/:agentId/skills",
       "agent_mcp": "/agents/:agentId/mcp",

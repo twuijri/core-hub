@@ -11,6 +11,8 @@ export const NAMESPACES = {
   tasks: '/rt/tasks',
   schedules: '/rt/schedules',
   rooms: '/rt/rooms',
+  // The owner's web terminal (DECISIONS §70); the hub refuses everyone else's handshake.
+  terminal: '/rt/terminal',
 } as const;
 export type NamespaceName = keyof typeof NAMESPACES;
 

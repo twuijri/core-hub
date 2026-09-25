@@ -6,7 +6,9 @@
 // starts on demand (ADR 0015), starts against the sealed code and keeps its token. The two
 // channels the hub links itself need no download (docs/changes/2026-09-25-twuijri-image-channel-deps.md):
 // Hermes's Telegram, Discord and Slack clients import with no network at all, and a profile's WhatsApp bridge,
-// prepared the way the hub prepares it, resolves Baileys from the image through its link.
+// prepared the way the hub prepares it, resolves Baileys from the image through its link. The
+// owner's web terminal (DECISIONS §70) gets a shell on a real PTY there, as the hub's own user,
+// and that shell cannot write the sealed code either.
 //
 //   node scripts/image-sealed-check.mjs <image>        (CI: core-hub:ci)
 //
@@ -107,6 +109,20 @@ await new Promise((resolve) => child.on('exit', resolve));
 console.log(JSON.stringify(result));
 `;
 
+/**
+ * Runs inside the container, from the hub's own package: open a shell on a real PTY the way the
+ * owner's web terminal does (DECISIONS §70) and, in it, try to change the sealed code. Prints
+ * `uid=… app=… hermes=…`.
+ */
+const PTY_PROBE = `
+const pty = require('node-pty');
+const line = 'echo "uid=$(id -u) app=$( (echo x >> /app/packages/server/dist/main.js) 2>/dev/null && echo written || echo denied) hermes=$( (echo x >> /opt/hermes/src/tui_gateway/server.py) 2>/dev/null && echo written || echo denied)"';
+const shell = pty.spawn('/bin/bash', ['-c', line], { cols: 200, rows: 24, cwd: '/data', env: { PATH: '/usr/bin:/bin' } });
+let out = '';
+shell.onData((data) => (out += data));
+shell.onExit(() => console.log(out.trim()));
+`;
+
 const first = `${tag}-a`;
 const second = `${tag}-b`;
 try {
@@ -122,6 +138,17 @@ try {
   check("Hermes's own code cannot be edited", patched === null);
   const hubPatched = run(first, 'echo x >> /app/packages/server/dist/main.js', { allowFail: true });
   check("the hub's own code cannot be edited", hubPatched === null);
+
+  // The owner's web terminal: its PTY loads in the image, its shell is the hub's user (never
+  // root), and that shell cannot change the sealed code either.
+  const ptyShell = docker(['exec', '-w', '/app/packages/server', first, 'node', '-e', PTY_PROBE], {
+    allowFail: true,
+  });
+  check(
+    "the web terminal's PTY gives the hub's own user, who cannot write /app or /opt/hermes",
+    ptyShell === 'uid=10001 app=denied hermes=denied',
+    ptyShell ?? 'no PTY',
+  );
 
   const version = run(first, 'hermes --version', { allowFail: true });
   check('hermes runs', Boolean(version), version?.split('\n')[0] ?? '');

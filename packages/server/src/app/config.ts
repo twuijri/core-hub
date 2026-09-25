@@ -19,6 +19,8 @@ export const ENV_KEYS = [
   'COREHUB_APNS_BUNDLE_ID',
   'COREHUB_APNS_KEY',
   'COREHUB_APNS_ENVIRONMENT',
+  'COREHUB_WEB_TERMINAL',
+  'COREHUB_WEB_TERMINAL_IDLE_MINUTES',
 ] as const;
 export type EnvKey = (typeof ENV_KEYS)[number];
 export type EnvSource = Partial<Record<EnvKey, string | undefined>> & {
@@ -108,6 +110,22 @@ const envSchema = z.object({
       message: 'COREHUB_APNS_ENVIRONMENT must be production or sandbox',
     })
     .optional(),
+  /**
+   * The owner's web terminal (DECISIONS §70): a shell on this host, as the hub's own user,
+   * reachable from the browser by the owner account only. Off unless this is `1`.
+   */
+  COREHUB_WEB_TERMINAL: z
+    .enum(['0', '1', 'true', 'false'], {
+      message: 'COREHUB_WEB_TERMINAL must be 1 (on) or 0 (off)',
+    })
+    .optional(),
+  /** Minutes a web terminal session may sit with nobody typing before the hub closes it. */
+  COREHUB_WEB_TERMINAL_IDLE_MINUTES: z.coerce
+    .number()
+    .int('COREHUB_WEB_TERMINAL_IDLE_MINUTES must be a whole number of minutes')
+    .min(1, 'COREHUB_WEB_TERMINAL_IDLE_MINUTES must be at least 1')
+    .max(1440, 'COREHUB_WEB_TERMINAL_IDLE_MINUTES must be at most 1440 (one day)')
+    .default(15),
 });
 
 /**
@@ -168,7 +186,20 @@ export interface HubConfig {
   taskAutoStartMax: number;
   /** Push senders' credentials from the environment (all optional). */
   push?: PushEnv;
+  /** The owner's web terminal: off unless `COREHUB_WEB_TERMINAL=1` (DECISIONS §70). */
+  webTerminal: WebTerminalConfig;
 }
+
+export interface WebTerminalConfig {
+  enabled: boolean;
+  /** Idle sessions close after this long (`COREHUB_WEB_TERMINAL_IDLE_MINUTES`, 15). */
+  idleMs: number;
+  /** Sessions open at once, hub-wide. Fixed: the owner asked for at most three. */
+  maxSessions: number;
+}
+
+/** The web terminal's cap on sessions open at once (owner, 2026-09-25). */
+export const WEB_TERMINAL_MAX_SESSIONS = 3;
 
 export class ConfigError extends Error {
   constructor(message: string) {
@@ -213,6 +244,11 @@ export function loadConfig(
         key: env.COREHUB_APNS_KEY,
         environment: env.COREHUB_APNS_ENVIRONMENT,
       },
+    },
+    webTerminal: {
+      enabled: env.COREHUB_WEB_TERMINAL === '1' || env.COREHUB_WEB_TERMINAL === 'true',
+      idleMs: env.COREHUB_WEB_TERMINAL_IDLE_MINUTES * 60_000,
+      maxSessions: WEB_TERMINAL_MAX_SESSIONS,
     },
   };
 }

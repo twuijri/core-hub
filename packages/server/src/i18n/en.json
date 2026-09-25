@@ -213,6 +213,12 @@
       "duplicate": "Hermes lists more than one plugin by this name; the one shown is the one its commands act on."
     }
   },
+  "terminal": {
+    "disabled": "The terminal is not enabled on this hub.",
+    "owner_only": "The terminal is for the hub's owner only.",
+    "limit": "Three terminals are open already. Close one first.",
+    "web_only": "The terminal opens only from a signed-in browser, not with an app token."
+  },
   "rooms": {
     "report": {
       "started": "{agent} started {task} “{title}”.",

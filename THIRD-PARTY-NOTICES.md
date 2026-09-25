@@ -64,6 +64,21 @@ MIT License · Copyright (c) 2026 Arjun Barrett (as the package's `LICENSE` says
 > OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 > OTHER DEALINGS IN THE SOFTWARE.
 
+## The web terminal's two libraries
+
+The owner's web terminal (DECISIONS §70) is built on two npm packages. They are dependencies,
+not copied source — the rule at the end of this file would leave them out — but both are
+**redistributed** in a form their `node_modules` copy does not travel with, so they are noted
+here on the owner's request (2026-09-25):
+
+| Package | Version | Licence | Where it ships |
+|---|---|---|---|
+| [`node-pty`](https://github.com/microsoft/node-pty) | `1.1.0` | MIT — Copyright (c) 2012-2015 Christopher Jeffrey; (c) 2016 Daniel Imms; (c) 2018-present Microsoft Corporation | compiled into the image (`build/Release/pty.node`, `packages/server/Dockerfile`) |
+| [`@xterm/xterm`](https://github.com/xtermjs/xterm.js) and [`@xterm/addon-fit`](https://github.com/xtermjs/xterm.js) | `6.0.0`, `0.11.0` | MIT — Copyright (c) 2017-2019 The xterm.js authors; (c) 2014-2016 SourceLair Private Company; (c) 2012-2013 Christopher Jeffrey | bundled into the web client's lazily loaded Terminal chunk |
+
+Both under the MIT licence quoted in full above (lobe-icons), with the copyright lines in the
+table. Their `LICENSE` files are in their packages in `node_modules`.
+
 ## Ideas taken, code not taken
 
 Two entries would be expected here by a reader of `packages/web/src/ui/` and are

@@ -1168,3 +1168,19 @@ button.files-name:focus-visible {
   background: var(--ch-color-accent-soft);
   color: var(--ch-color-accent-soft-text);
 }
+
+/* The owner's web terminal (terminal/XtermPane.tsx): one screen per tab, the code-block
+   colours, always left to right — a shell lays its output out by columns. */
+.ch-terminal-screen {
+  block-size: min(70vh, 36rem);
+  padding: var(--ch-space-2);
+  border-radius: var(--ch-radius-md);
+  border: 1px solid var(--ch-color-border);
+  background: var(--ch-color-code-bg);
+  direction: ltr;
+  text-align: start;
+  overflow: hidden;
+}
+.ch-terminal-screen[hidden] {
+  display: none;
+}

@@ -55,6 +55,8 @@ tags:
     description: Usage and cost, skills usage, logs and performance reports.
   - name: plugins
     description: 'Phase 4 stub: hub plugins (Docker / MCP based). One endpoint reserved.'
+  - name: terminal
+    description: The owner's web terminal — a shell on the hub's host, off unless `COREHUB_WEB_TERMINAL=1`. Owner only. Sessions run over `/rt/terminal`.
 security:
   - bearer: []
 paths:
@@ -112,7 +114,15 @@ paths:
                 contract_version: 1.0.0
                 api_versions: [v1]
                 realtime_namespaces:
-                  [/rt/sessions, /rt/rooms, /rt/tasks, /rt/schedules, /rt/devices, /rt/jobs]
+                  [
+                    /rt/sessions,
+                    /rt/rooms,
+                    /rt/tasks,
+                    /rt/schedules,
+                    /rt/devices,
+                    /rt/jobs,
+                    /rt/terminal,
+                  ]
                 locales: [ar, en]
                 setup_required: false
                 setup_open: false
@@ -1408,7 +1418,15 @@ paths:
                   contract_version: 1.0.0
                   api_versions: [v1]
                   realtime_namespaces:
-                    [/rt/sessions, /rt/rooms, /rt/tasks, /rt/schedules, /rt/devices, /rt/jobs]
+                    [
+                      /rt/sessions,
+                      /rt/rooms,
+                      /rt/tasks,
+                      /rt/schedules,
+                      /rt/devices,
+                      /rt/jobs,
+                      /rt/terminal,
+                    ]
                   locales: [ar, en]
                   setup_required: false
                   setup_open: false
@@ -15042,6 +15060,65 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '501':
           $ref: '#/components/responses/NotImplemented'
+  # ================================================================== terminal
+  /terminal:
+    get:
+      operationId: terminal.get
+      tags: [terminal]
+      summary: The web terminal's state and the owner's live terminal sessions
+      description: |
+        The web terminal is a shell on the hub's host, running as the hub's own user, in
+        `DATA_DIR/workspaces/<profile>` (DECISIONS §70). It exists only when the hub runs with
+        `COREHUB_WEB_TERMINAL=1`, and only the owner — not an admin, not a member — may use it.
+        An admin or a member gets `403 forbidden` (`required_role: owner`); the owner of a hub
+        where it is off gets `403 forbidden` with `details.reason: terminal_disabled`. A client
+        shows the Terminal entry only on a `200`.
+
+        Sessions are opened, typed into, resized and closed over `/rt/terminal`
+        (`events/README.md`). They outlive the socket that opened them, so this list is how a
+        reloaded page finds the sessions it can attach to again. A session nobody typed into
+        for `idle_timeout_seconds` is closed by the hub; at most `max_sessions` run at once.
+        Every start and end is written to the audit log (`terminal.opened`, `terminal.closed`).
+      x-scope: global
+      x-roles: [owner]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The terminal is on and the caller is the owner.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalStatus'
+              example:
+                enabled: true
+                pty: true
+                shell: /bin/bash
+                idle_timeout_seconds: 900
+                max_sessions: 3
+                sessions:
+                  - id: 01J8QK3ZR2W7M5N4P6T8V9X0TM
+                    profile: default
+                    cwd: /data/workspaces/default
+                    cols: 120
+                    rows: 32
+                    attached: false
+                    started_at: '2026-09-25T10:00:00Z'
+                    last_active_at: '2026-09-25T10:04:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: |
+            Not the owner (`details.required_role: owner`), or the hub runs without
+            `COREHUB_WEB_TERMINAL=1` (`details.reason: terminal_disabled`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'الطرفية غير مفعّلة في هذا المركز.'
+                code: forbidden
+                details:
+                  reason: terminal_disabled
 webhooks:
   hubEvent:
     post:
@@ -23266,6 +23343,77 @@ components:
           type: object
           description: Kind-specific; fixed in Phase 4 (usage totals and breakdowns, runtime processes, skill counts, log entries with ISO timestamps and byte sizes).
           additionalProperties: true
+    TerminalSession:
+      type: object
+      description: One shell the owner opened from the web terminal. It lives on the hub, not in the page.
+      required: [id, profile, cwd, cols, rows, attached, started_at, last_active_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Ulid'
+        profile:
+          $ref: '#/components/schemas/ProfileSlug'
+        cwd:
+          type: string
+          description: Where the shell started — `DATA_DIR/workspaces/<profile>`.
+        cols:
+          type: integer
+          minimum: 2
+          maximum: 500
+        rows:
+          type: integer
+          minimum: 2
+          maximum: 200
+        attached:
+          type: boolean
+          description: A socket is showing it right now.
+        started_at:
+          $ref: '#/components/schemas/Timestamp'
+        last_active_at:
+          $ref: '#/components/schemas/Timestamp'
+          description: The last keystroke, resize or attach. The idle timeout counts from here.
+      example:
+        id: 01J8QK3ZR2W7M5N4P6T8V9X0TM
+        profile: default
+        cwd: /data/workspaces/default
+        cols: 120
+        rows: 32
+        attached: true
+        started_at: '2026-09-25T10:00:00Z'
+        last_active_at: '2026-09-25T10:04:00Z'
+    TerminalStatus:
+      type: object
+      required: [enabled, pty, shell, idle_timeout_seconds, max_sessions, sessions]
+      properties:
+        enabled:
+          type: boolean
+          description: Always true in a `200`; a hub without the terminal answers `403`.
+        pty:
+          type: boolean
+          description: |
+            True when sessions are real pseudo-terminals. False when the hub fell back to a
+            plain shell without one (no line editing, no full-screen programs) because its
+            PTY library could not load.
+        shell:
+          type: string
+          description: The shell every session runs.
+        idle_timeout_seconds:
+          type: integer
+          minimum: 60
+        max_sessions:
+          type: integer
+          minimum: 1
+        sessions:
+          type: array
+          description: The owner's live sessions, oldest first.
+          items:
+            $ref: '#/components/schemas/TerminalSession'
+      example:
+        enabled: true
+        pty: true
+        shell: /bin/bash
+        idle_timeout_seconds: 900
+        max_sessions: 3
+        sessions: []
     LivePerformance:
       type: object
       required: [at, interval_seconds, host, hub, processes, profiles, history]

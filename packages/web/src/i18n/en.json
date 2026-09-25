@@ -47,6 +47,7 @@
     "agent_memory": "Memory",
     "agent_channels": "Channels",
     "back_to_agents": "Back to agents",
+    "terminal": "Terminal",
     "files": "Files"
   },
   "common": {
@@ -2586,6 +2587,32 @@
     },
     "model": "Model: {model}",
     "fallback": "Fell back from {failed}"
+  },
+  "terminal": {
+    "warning": "This is a terminal on the server, with the hub account's permissions.",
+    "warning_detail": "Whatever you type runs on the hub's host as the hub's own user, in the profile's folder. Opening and closing a terminal is written to the logs.",
+    "no_pty": "This hub has no PTY: commands run and print, but there is no line editing and full-screen programs do not work.",
+    "idle": "A terminal nobody types in closes after {minutes} minutes. At most {max} are open at once.",
+    "new": "New terminal",
+    "tab": "Terminal {n}",
+    "close": "Close {name}",
+    "copy": "Copy",
+    "paste": "Paste",
+    "copy_hint": "Ctrl+Shift+C copies the selection, Ctrl+Shift+V pastes.",
+    "clipboard_denied": "The browser did not allow the clipboard. Use Ctrl+Shift+V or the browser's own paste.",
+    "limit": "{max} terminals are open already. Close one first.",
+    "empty": "No terminal open",
+    "empty_body": "A new terminal starts in the {profile} profile's folder.",
+    "disabled": "The terminal is not enabled on this hub.",
+    "disabled_body": "It is off unless the hub is started with COREHUB_WEB_TERMINAL=1, and even then only the owner sees it.",
+    "connecting": "Connecting to the terminal…",
+    "ended": "This terminal has ended: {reason}",
+    "reason_exited": "the shell exited",
+    "reason_closed": "it was closed",
+    "reason_idle": "nobody typed for too long",
+    "reason_shutdown": "the hub stopped",
+    "gone": "This terminal is no longer on the hub.",
+    "folder": "Folder:"
   },
   "this_device": {
     "not_desktop": "This page belongs to the desktop and phone apps.",
