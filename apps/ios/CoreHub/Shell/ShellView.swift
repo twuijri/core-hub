@@ -117,8 +117,8 @@ struct ShellView: View {
     private var content: some View {
         switch main {
         case .newChat:
-            NewChatScreen(opened: { sessionID, profile, text in
-                firstMessages.put(sessionID, text)
+            NewChatScreen(opened: { sessionID, profile, message in
+                firstMessages.put(sessionID, message)
                 seed = nil
                 main = .chat(sessionID: sessionID, profile: profile)
             }, seed: seed)
@@ -162,9 +162,9 @@ struct ShellView: View {
 
 /// Not view state: taking a message must not redraw the shell.
 final class FirstMessages {
-    private var pending: [String: String] = [:]
+    private var pending: [String: OutgoingMessage] = [:]
 
-    func put(_ sessionID: String, _ text: String) { pending[sessionID] = text }
+    func put(_ sessionID: String, _ message: OutgoingMessage) { pending[sessionID] = message }
 
-    func take(_ sessionID: String) -> String? { pending.removeValue(forKey: sessionID) }
+    func take(_ sessionID: String) -> OutgoingMessage? { pending.removeValue(forKey: sessionID) }
 }

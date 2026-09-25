@@ -5,12 +5,13 @@ import SwiftUI
 
 struct NewChatScreen: View {
     /// Opens the conversation the first message made.
-    let opened: (_ sessionID: String, _ profile: String, _ firstMessage: String) -> Void
+    let opened: (_ sessionID: String, _ profile: String, _ firstMessage: OutgoingMessage) -> Void
     /// Text shared from another app, put in the composer to review before sending.
     var seed: String? = nil
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @State private var draft = ""
+    @State private var tray: AttachmentTray?
     @State private var agentID: String?
     @State private var creating = false
     @State private var error: String?
@@ -56,13 +57,18 @@ struct NewChatScreen: View {
                 busy: false,
                 sending: creating || chosen == nil,
                 onSend: start,
-                onStop: {}
+                onStop: {},
+                attachments: tray,
+                profile: app.currentProfile
             )
         }
         .padding(.horizontal, Space.s3)
         .padding(.bottom, Space.s2)
         .background(Tone.bg)
-.onAppear { if let seed, draft.isEmpty { draft = seed } }
+        .onAppear {
+            if tray == nil { tray = AttachmentTray(app: app) }
+            if let seed, draft.isEmpty { draft = seed }
+        }
         .navigationTitle(l10n("nav.new_chat"))
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("screen.new_chat")
@@ -93,7 +99,7 @@ struct NewChatScreen: View {
 
     private func start() {
         guard let agent = chosen else { return }
-        let text = draft
+        let message = OutgoingMessage(text: draft, attachments: tray?.attachments ?? [])
         let profile = app.currentProfile
         let key = ULID.make()
         creating = true
@@ -110,7 +116,8 @@ struct NewChatScreen: View {
                     )
                 }
                 draft = ""
-                opened(session.id, session.profile, text)
+                tray?.clear()
+                opened(session.id, session.profile, message)
             } catch {
                 self.error = HubFailure(error).describe(l10n)
             }

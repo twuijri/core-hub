@@ -12,6 +12,7 @@ struct ChatScreen: View {
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @State private var draft = ""
+    @State private var tray: AttachmentTray?
     /// The latest message is on screen (the list's bottom marker is laid out).
     @State private var atBottom = true
     /// The keyboard started opening while the reader was at the latest message.
@@ -39,6 +40,7 @@ struct ChatScreen: View {
         .navigationTitle(fixedTitle ?? model.state.title ?? l10n("sessions.untitled"))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
+            if tray == nil { tray = AttachmentTray(app: app) }
             model.start()
             LocalNotices.shared.openSessionID = model.sessionID
         }
@@ -127,11 +129,14 @@ struct ChatScreen: View {
                 busy: model.state.isBusy,
                 sending: model.sending,
                 onSend: {
-                    let text = draft
+                    let message = OutgoingMessage(text: draft, attachments: tray?.attachments ?? [])
                     draft = ""
-                    Task { await model.send(text) }
+                    tray?.clear()
+                    Task { await model.send(message) }
                 },
-                onStop: { Task { await model.stopRun() } }
+                onStop: { Task { await model.stopRun() } },
+                attachments: tray,
+                profile: model.profile
             )
         }
         .padding(.horizontal, Space.s3)
@@ -206,6 +211,16 @@ struct MessageRow: View {
     private var personBubble: some View {
         HStack {
             Spacer(minLength: Space.s12)
+            VStack(alignment: .trailing, spacing: Space.s1) {
+                if !message.text.isEmpty { personText }
+                MessageAttachments(content: message.content)
+            }
+        }
+        .accessibilityIdentifier("message.user")
+    }
+
+    private var personText: some View {
+        HStack {
             Text(message.text)
                 .font(.system(size: FontSize.sizeMd))
                 .foregroundStyle(Tone.userBubbleText)
@@ -216,7 +231,6 @@ struct MessageRow: View {
                 .background(Tone.userBubble, in: BubbleShape(tightCorner: .topTrailing))
                 .overlay(BubbleShape(tightCorner: .topTrailing).stroke(Tone.userBubbleBorder, lineWidth: 1))
         }
-        .accessibilityIdentifier("message.user")
     }
 
     private var agentCard: some View {
@@ -230,6 +244,7 @@ struct MessageRow: View {
             if !message.text.isEmpty {
                 MarkdownView(text: message.text)
             }
+            MessageAttachments(content: message.content)
             switch message.status {
             case .failed:
                 NoticeView(text: l10n("chat.failed", ["message": run?.error?.error ?? "—"]), tone: .danger)

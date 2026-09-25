@@ -13,7 +13,10 @@ import UserNotifications
 enum PushState: Equatable {
     /// Not signed in, or not tried yet.
     case idle
-    /// The person has not allowed notifications: nothing can be shown, push or not.
+    /// iOS has not asked the person yet (`.notDetermined`): the app asks, once a launch.
+    case waiting
+    /// The person turned notifications off: nothing can be shown, push or not. Only the
+    /// iPhone's Settings can change it; the app never asks again.
     case notAllowed
     /// The hub has no APNs sender (Device connections → Push senders).
     case noSender
@@ -21,6 +24,41 @@ enum PushState: Equatable {
     case active
     /// iOS or the hub refused; the background look goes on and the next launch tries again.
     case failed
+}
+
+extension PushState {
+    /// What the permission alone decides; nil when notifications are allowed and the phone
+    /// goes on to register with the hub.
+    static func before(registering status: UNAuthorizationStatus) -> PushState? {
+        switch status {
+        case .authorized, .provisional, .ephemeral: return nil
+        case .notDetermined: return .waiting
+        case .denied: return .notAllowed
+        @unknown default: return .notAllowed
+        }
+    }
+
+    /// Worth trying again when the app comes back to the front: not tried yet, the person may
+    /// have changed Settings, or the hub may have been given an APNs sender since.
+    var retriesOnForeground: Bool {
+        switch self {
+        case .idle, .waiting, .notAllowed, .noSender, .failed: return true
+        case .active: return false
+        }
+    }
+}
+
+/// When to show iOS's notification prompt: only while iOS has not asked yet, only with the app
+/// in front (iOS drops an alert asked for from the background), and at most once a launch — a
+/// person who closes it without answering is asked again next launch, never nagged in a loop.
+struct PermissionPrompt {
+    private(set) var askedThisLaunch = false
+
+    mutating func shouldAsk(status: UNAuthorizationStatus, appActive: Bool) -> Bool {
+        guard status == .notDetermined, appActive, !askedThisLaunch else { return false }
+        askedThisLaunch = true
+        return true
+    }
 }
 
 /// What the registrar needs from the hub, so its rules are tested without a network.
@@ -149,19 +187,38 @@ final class PushCenter {
     private(set) var state: PushState = .idle
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private var token: String?
+    @ObservationIgnored private var prompt = PermissionPrompt()
+    @ObservationIgnored private var starting = false
 
     var isActive: Bool { state == .active }
 
-    /// After each sign-in and at each launch while signed in. Asking for permission happens once
-    /// right after sign-in (AppModel.finishSignIn); here the answer decides whether to register.
+    /// After each sign-in, at each launch while signed in, and when the app comes to the front
+    /// in a state worth retrying (`retriesOnForeground`). While iOS has not asked yet, the app
+    /// asks here — in front, after a moment so a closing sheet or the QR scanner is gone — once
+    /// a launch; with a yes, or a yes given earlier, the phone registers for push with the hub.
     func start(app: AppModel) async {
         self.app = app
-        switch await LocalNotices.shared.status() {
-        case .authorized, .provisional, .ephemeral:
-            UIApplication.shared.registerForRemoteNotifications()
-        default:
-            state = .notAllowed
+        guard !starting else { return }
+        starting = true
+        defer { starting = false }
+        var status = await LocalNotices.shared.status()
+        let active = UIApplication.shared.applicationState == .active
+        if prompt.shouldAsk(status: status, appActive: active) {
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            _ = await LocalNotices.shared.requestPermission()
+            status = await LocalNotices.shared.status()
         }
+        if let before = PushState.before(registering: status) {
+            state = before
+            return
+        }
+        UIApplication.shared.registerForRemoteNotifications()
+    }
+
+    /// The app came to the front: try again what may have changed meanwhile.
+    func foreground(app: AppModel) async {
+        guard state.retriesOnForeground else { return }
+        await start(app: app)
     }
 
     /// iOS gave a device token (the app delegate); it may change, so each one is sent.

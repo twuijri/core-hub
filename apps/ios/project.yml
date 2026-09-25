@@ -67,7 +67,8 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.twuijri.corehub
             CFBundleURLSchemes: [corehub]
-        NSCameraUsageDescription: Core Hub uses the camera to scan the pairing code your hub shows on the web.
+        NSCameraUsageDescription: Core Hub uses the camera to scan the pairing code your hub shows on the web, and to take photos you attach to a message.
+        NSPhotoLibraryUsageDescription: Core Hub attaches the photos you choose to your messages.
         NSLocalNetworkUsageDescription: Core Hub connects to your hub on your local network.
         # iOS wakes the app now and then to look at the hub's notices (LocalNotices.swift).
         UIBackgroundModes: [fetch]
