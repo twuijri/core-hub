@@ -61,7 +61,17 @@ $ pnpm build && PLAYWRIGHT_CHANNEL=chrome playwright test zzzzzz-rooms.spec.ts
 ```
 اختبار العقد يمرّ على العمليات الخمس بحالة نجاح وفشل، ويتحقق من كل حدث على `/rt/rooms`
 (`message.delta`، `reasoning.delta`، `tool.*`، `run.completed`، `run.cancelled`، `handoff.updated`،
-`room.cleared`) مقابل مخططه. CI: يُكمَّل بعد الدفع.
+`room.cleared`) مقابل مخططه.
+
+CI على #137 (التشغيل 36107708334) — كلها خضراء:
+```
+Lint, typecheck, contracts, tests, build	pass	18m49s
+Web smoke journeys (Playwright against the real hub)	pass	4m16s
+db:generate + db:migrate (SQLite and PostgreSQL)	pass	1m1s
+Docker image builds and answers /health	pass	3m11s
+PR adds or updates a change record	pass	11s
+PR leaves graphify-out/ to the code-map bot	pass	11s
+```
 
 ## المخاطر والرجوع
 - مُثبت أمام وكلاء مكتوبين بالسيناريو، **لا أمام تشغيل Hermes حقيقي** بعد.
