@@ -14,12 +14,29 @@
  *
  * The pure translation is asserted separately (`toRunnerEvent`).
  */
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { io as connect, type Socket } from 'socket.io-client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { authed, drainJobs, signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
 import { scriptedHermes } from './adapters/hermes.test.js';
 import type { HermesRunEvent } from './adapters/hermes.js';
-import { AgentRunner, approvalChoices, failureCode, toRunnerEvent, toolKindOf } from './runner.js';
+import {
+  AgentRunner,
+  approvalChoices,
+  failureCode,
+  handOver,
+  toRunnerEvent,
+  toolKindOf,
+} from './runner.js';
 import type { AdapterSet } from './adapters/index.js';
 import type { AgentEvent, AgentSession } from './adapters/types.js';
 import type { AgentsService } from './service.js';
@@ -651,5 +668,100 @@ describe('agent runner: a live session whose process went away between turns', (
     expect((await drain('r2')).at(-1)).toMatchObject({ type: 'completed' });
     expect(opened).toHaveLength(2);
     expect(opened[1]!.ref).toBe('stored-1');
+  });
+});
+
+describe('agent runner: a picture an agent tool saved outside the run (decision §72)', () => {
+  const folder = () => mkdtempSync(path.join(tmpdir(), 'corehub-handover-'));
+
+  it('copies it into the run’s output folder before the run ends, and leaves the original', async () => {
+    const cache = folder();
+    const work = folder();
+    const picture = path.join(cache, 'corehub_20260925_1.png');
+    writeFileSync(picture, 'png-bytes');
+    const out = path.join(work, 'out');
+    const adapter = {
+      async start() {
+        return {
+          id: 'stored-1',
+          async send() {
+            return { stopReason: 'completed' };
+          },
+          async *stream(): AsyncIterable<AgentEvent> {
+            yield {
+              type: 'tool.started',
+              id: 't1',
+              title: 'image_generate',
+              kind: 'image_generate',
+            };
+            yield { type: 'tool.completed', id: 't1', title: 'image_generate', output: '{}' };
+            yield { type: 'file.produced', path: picture, toolId: 't1' };
+            yield { type: 'message.delta', text: 'here' };
+            yield { type: 'run.completed', stopReason: 'completed' };
+          },
+          async respond() {},
+          async interrupt() {},
+          async close() {},
+        };
+      },
+    };
+    const service = {
+      loadAgent: () => ({ id: 'agent-1', installState: 'installed', adapterKind: 'hermes' }),
+      selectionFor: () => ({ model: null, provider: null, providerId: null }),
+      fallbacksFor: () => [],
+      providerSlugOf: () => null,
+      targetFor: () => ({ sessionRef: null }),
+    };
+    const runner = new AgentRunner({
+      service: service as unknown as AgentsService,
+      adapters: { byKind: () => adapter } as unknown as AdapterSet,
+      log: capturingLogger().logger,
+    });
+    await runner.start({
+      runId: 'r1',
+      sessionId: 'S1',
+      workspace: 'w',
+      agentId: 'agent-1',
+      agentSessionRef: null,
+      workingDir: work,
+      model: null,
+      provider: null,
+      reasoningEffort: null,
+      prompt: [{ type: 'text' as const, text: 'draw a fox' }],
+      files: { inputDir: path.join(work, 'in'), outputDir: out },
+      allowedTools: [],
+    });
+    const events = [];
+    for await (const event of runner.stream('r1')) events.push(event);
+    // Nothing of its own reaches the session events: the file is on disk for the engine.
+    expect(events.map((event) => event.type)).toEqual([
+      'tool_started',
+      'tool_completed',
+      'message_delta',
+      'completed',
+    ]);
+    expect(readdirSync(out)).toEqual(['corehub_20260925_1.png']);
+    expect(readFileSync(path.join(out, 'corehub_20260925_1.png'), 'utf8')).toBe('png-bytes');
+    expect(existsSync(picture)).toBe(true);
+  });
+
+  it('refuses a link, a folder, a missing file or a run with no output folder, and never overwrites', () => {
+    const cache = folder();
+    const out = path.join(folder(), 'out');
+    const picture = path.join(cache, 'a.png');
+    writeFileSync(picture, 'one');
+    const link = path.join(cache, 'link.png');
+    symlinkSync('/etc/hostname', link);
+    expect(handOver(picture, null)).toEqual({ ok: false, reason: 'no_output_folder' });
+    expect(handOver('cache/a.png', out)).toEqual({ ok: false, reason: 'not_absolute' });
+    expect(handOver(path.join(cache, 'gone.png'), out)).toEqual({ ok: false, reason: 'missing' });
+    expect(handOver(link, out)).toEqual({ ok: false, reason: 'not_a_file' });
+    expect(handOver(cache, out)).toEqual({ ok: false, reason: 'not_a_file' });
+    // The same name twice (two drawings saved under one name) keeps both.
+    expect(handOver(picture, out)).toEqual({ ok: true, path: path.join(out, 'a.png') });
+    writeFileSync(picture, 'two');
+    expect(handOver(picture, out)).toEqual({ ok: true, path: path.join(out, 'a-2.png') });
+    expect(readFileSync(path.join(out, 'a.png'), 'utf8')).toBe('one');
+    expect(readFileSync(path.join(out, 'a-2.png'), 'utf8')).toBe('two');
   });
 });

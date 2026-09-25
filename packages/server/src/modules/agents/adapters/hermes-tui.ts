@@ -399,6 +399,21 @@ function text(value: unknown): string | null {
   }
 }
 
+/**
+ * The picture Hermes's own `image_generate` tool drew, or null. Its answer is
+ * `{"success": true, "image": "<path>", …}` (Hermes's MIT source, `tools/image_generation_tool.py`
+ * and `agent/image_gen_provider.py` `success_response`); a backend that saves the file — the
+ * hub's `corehub-images` among them — gives an absolute path under Hermes's `cache/images/`,
+ * one that answers with a link gives a URL, which is left to the model's words.
+ */
+export function producedImageOf(tool: string, result: unknown): string | null {
+  if (tool !== 'image_generate' || !result || typeof result !== 'object') return null;
+  const answer = result as { success?: unknown; image?: unknown };
+  if (answer.success !== true || typeof answer.image !== 'string') return null;
+  const image = answer.image.trim();
+  return image.startsWith('/') ? image : null;
+}
+
 function capped(value: string | null): string | null {
   return value && value.length > MAX_OUTPUT ? `${value.slice(0, MAX_OUTPUT)}…` : value;
 }
@@ -806,6 +821,8 @@ export class HermesTuiSession implements AgentSession {
           output: capped(text(payload.result_text) ?? text(payload.summary) ?? text(result)),
           raw: payload,
         });
+        const picture = failed ? null : producedImageOf(String(payload.name ?? ''), result);
+        if (picture) this.queue.push({ type: 'file.produced', path: picture, toolId: id });
         return;
       }
       case 'status.update': {

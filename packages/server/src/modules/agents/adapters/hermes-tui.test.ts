@@ -312,6 +312,49 @@ describe('Hermes over the TUI gateway', () => {
     expect(uses).toEqual(['arxiv', null]);
   });
 
+  it('hands on the picture Hermes’s image_generate saved, and nothing another tool names (§72)', async () => {
+    // Frames as tui_gateway/tool_progress.py sends them: `image_generate`'s parsed answer, as
+    // the hub's `corehub-images` backend gives it, a failed drawing, a backend that answers with
+    // a link, and another tool whose answer happens to have an `image` field.
+    const gateway = fakeGateway((method, _params, api) => {
+      if (method === 'session.create') return { session_id: 's', stored_session_id: 'st' };
+      if (method === 'prompt.submit') {
+        setImmediate(() => {
+          const done = (tool_id: string, name: string, result: Json) =>
+            api.event('s', 'tool.complete', { tool_id, name, args: {}, result });
+          done('i1', 'image_generate', {
+            success: true,
+            image: '/data/hermes/cache/images/corehub_20260925_1.png',
+            provider: 'corehub-images',
+          });
+          done('i2', 'image_generate', { success: false, error: 'image_model_not_chosen' });
+          done('i3', 'image_generate', { success: true, image: 'https://fal.example/a.png' });
+          done('i4', 'vision_analyze', { success: true, image: '/tmp/looked-at.png' });
+          api.event('s', 'message.complete', { text: 'here', status: 'complete' });
+        });
+        return { status: 'streaming' };
+      }
+      return {};
+    });
+    const session = await HermesTuiSession.open(channelOver(gateway), null);
+    const reading = collect(session, terminal);
+    await session.send({ text: 'draw a fox' });
+    const events = await reading;
+    expect(events.filter((e) => e.type === 'file.produced')).toEqual([
+      {
+        type: 'file.produced',
+        path: '/data/hermes/cache/images/corehub_20260925_1.png',
+        toolId: 'i1',
+      },
+    ]);
+    // The tool calls themselves are reported as before.
+    expect(
+      events
+        .filter((e) => e.type === 'tool.completed' || e.type === 'tool.failed')
+        .map((e) => e.type),
+    ).toEqual(['tool.completed', 'tool.failed', 'tool.completed', 'tool.completed']);
+  });
+
   it("records each turn's own tokens, though Hermes reports its session's running total", async () => {
     // Hermes's `message.complete` usage adds up across the turns of a live session; a
     // counter that goes down means it started the session's agent afresh.
