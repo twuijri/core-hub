@@ -1,5 +1,5 @@
 /**
- * The hub's own tools (contract decision §47), through the routes a person and an agent use:
+ * The hub's own tools (contract decision §58), through the routes a person and an agent use:
  *
  * - the card switches them on per profile, which writes one `corehub` block into that
  *   profile's Hermes `config.yaml` and its key into the profile's `.env` — and off again;

@@ -4685,7 +4685,7 @@ paths:
         may write, and the last calls made. Only for Hermes: another agent answers
         `409 state_invalid` with `details.reason = skills_are_hermes_only`. `available` is
         false (with `unavailable_reason`) where the hub has no Hermes home to write the
-        server into. Off until an admin switches it on (contract decision §47).
+        server into. Off until an admin switches it on (contract decision §58).
       x-rt-events: []
       responses:
         '200':
@@ -4709,7 +4709,7 @@ paths:
         `config.yaml` (marked as the hub's, kept in sync at every boot) and a fresh key into
         the profile's `.env`; switching off removes both and the key stops working. The key
         only identifies the profile: a call acts as the person whose run is live in that
-        profile, never as an admin (contract decision §47). Groups not named keep their
+        profile, never as an admin (contract decision §58). Groups not named keep their
         state. Hermes reads its MCP servers when a conversation's gateway starts, so the hub
         starts a new one for the next conversation.
       x-roles: [owner, admin]
@@ -4758,7 +4758,7 @@ paths:
         profile, and acts as the person who owns it, with that person's permissions in that
         profile only and never an admin's, through the same checks as the REST API. A tool
         refused this way is a JSON-RPC result with `isError: true` and the hub's error code,
-        not an HTTP error (contract decision §47).
+        not an HTTP error (contract decision §58).
       security: []
       x-scope: global
       requestBody:
@@ -15313,7 +15313,7 @@ components:
           type: integer
     HubToolGroupId:
       type: string
-      description: A group of the hub's own tools (contract decision §47).
+      description: A group of the hub's own tools (contract decision §58).
       enum: [tasks, schedules, conversations, notifications, workflows, files]
     HubTool:
       type: object

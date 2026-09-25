@@ -126,7 +126,7 @@ export interface AgentRunRequest {
   allowedTools: string[];
   /**
    * The person the run acts for (the session's owner). The hub's own tools act as this
-   * person, in this workspace only (contract decision §47); absent, they refuse.
+   * person, in this workspace only (contract decision §58); absent, they refuse.
    */
   userId?: string | null;
 }

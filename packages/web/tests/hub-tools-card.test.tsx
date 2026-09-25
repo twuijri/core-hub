@@ -1,5 +1,5 @@
 /**
- * The «أدوات كور هب» / "Core Hub tools" card on an agent's MCP page (contract decision §47):
+ * The «أدوات كور هب» / "Core Hub tools" card on an agent's MCP page (contract decision §58):
  * the groups with what each does, the switches (the whole thing, each group, each group's
  * changes), the last calls in the hub's words, and Test — which asks Hermes to connect to the
  * block the hub wrote, like any server row. The block itself is not a row to edit.

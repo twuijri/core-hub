@@ -1,5 +1,5 @@
 /**
- * The hub's own tools, as an agent sees them (contract decision §47).
+ * The hub's own tools, as an agent sees them (contract decision §58).
  *
  * **Every tool is a REST call the person could make.** A tool builds one request of the
  * contract from its arguments and sends it through the hub's own HTTP stack as the run's

@@ -209,7 +209,7 @@ export interface RunnerRunRequest {
   prompt: RunnerPromptBlock[];
   files: RunnerFileExchange | null;
   allowedTools: string[];
-  /** The person the run acts for; the hub's own tools act as them (contract decision §47). */
+  /** The person the run acts for; the hub's own tools act as them (contract decision §58). */
   userId?: string | null;
 }
 

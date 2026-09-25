@@ -1,4 +1,4 @@
-// `pnpm contract:test`: the hub's own tools (contract decision §47) through the generated
+// `pnpm contract:test`: the hub's own tools (contract decision §58) through the generated
 // client over real HTTP — the card's two operations and the MCP endpoint, every answer
 // validated against the schema the contract documents for its status.
 import { mkdirSync, readFileSync } from 'node:fs';

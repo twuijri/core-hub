@@ -272,9 +272,9 @@ interface AgentsContext {
   service: AgentsService;
   adapters: AdapterSet;
   runner: AgentRunner;
-  /** Who each live run acts for, for the hub's own tools (contract decision §47). */
+  /** Who each live run acts for, for the hub's own tools (contract decision §58). */
   leases: RunLeases;
-  /** The hub's own tools: settings, the profile block, the MCP endpoint (§47). */
+  /** The hub's own tools: settings, the profile block, the MCP endpoint (§58). */
   hubTools: HubToolsService;
   runtime: HermesRuntime;
   dashboard: HermesDashboard;
@@ -349,7 +349,7 @@ export function registerHubToolsNotify(factory: (app: FastifyInstance) => HubToo
 }
 
 /**
- * Where Hermes reaches the hub's MCP server (contract decision §47): this process, on the
+ * Where Hermes reaches the hub's MCP server (contract decision §58): this process, on the
  * loopback — Hermes runs beside the hub (ADR 0008). The port the server listens on once it
  * does, the configured one before.
  */
@@ -441,7 +441,7 @@ function contextOf(app: FastifyInstance): AgentsContext {
         ...own.adapterOptions?.hermes,
       },
       // A coding agent over ACP gets the hub's own tools in its session, when the profile
-      // offers them and the agent can reach an HTTP server (contract decision §47).
+      // offers them and the agent can reach an HTTP server (contract decision §58).
       acp: {
         mcpServers: (target: AgentTarget) =>
           target.workspace
@@ -558,7 +558,7 @@ export function hermesDashboardFor(app: FastifyInstance): HermesDashboard | null
   return dashboard.available() ? dashboard : null;
 }
 
-/** The hub's own tools of this app (contract decision §47). */
+/** The hub's own tools of this app (contract decision §58). */
 export function hubToolsFor(app: FastifyInstance): HubToolsService {
   return contextOf(app).hubTools;
 }
@@ -687,7 +687,7 @@ export const agentsModule = defineModule({
       const mode = await ctx.runtime.start();
       app.log.info({ mode, endpoint: ctx.runtime.endpoint }, 'agents: hermes runtime');
       migrateMemoryOfEveryProfile(ctx.runtime.status().home, app.log);
-      // The hub's own tools go back into every profile that has them on (§47).
+      // The hub's own tools go back into every profile that has them on (§58).
       ctx.hubTools.syncAll();
     });
     // Again once the port is known for certain (a hub on port 0 learns it only now).
@@ -972,7 +972,7 @@ export const agentsModule = defineModule({
      * file, and Hermes — the one that will run the server — is the one that tries it. The
      * rows themselves still claim nothing: `connected` stays false until Hermes starts.
      */
-    /** The block the hub writes for its own tools is edited from their card only (§47). */
+    /** The block the hub writes for its own tools is edited from their card only (§58). */
     const refuseManaged = (name: string): void => {
       if (name === HUB_SERVER_NAME) {
         throw new HubError('conflict', { details: { reason: 'mcp_managed', name } });

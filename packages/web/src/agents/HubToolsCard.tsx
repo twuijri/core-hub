@@ -1,6 +1,6 @@
 /**
  * «أدوات كور هب» / "Core Hub tools": the hub offers itself to this agent as an MCP server, in
- * groups (contract decision §47).
+ * groups (contract decision §58).
  *
  * **Off until an admin switches it on.** On, every group reads and none writes; each group's
  * writes are a second, separate switch — creating a task, pausing a schedule, telling the

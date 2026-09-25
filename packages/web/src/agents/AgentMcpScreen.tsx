@@ -66,7 +66,7 @@ export function AgentMcpScreen() {
 
   const agent = agents.data?.find((entry) => entry.id === agentId);
   const title = agent ? t('mcp.title_of', { name: agent.name }) : t('nav.agent_mcp');
-  // The hub's own block is the card's (contract decision §47), not a row to edit here.
+  // The hub's own block is the card's (contract decision §58), not a row to edit here.
   const hubTools = useHubTools(agentId);
   const managed = hubTools.data?.server_name ?? 'corehub';
   const items = (servers.data?.items ?? []).filter((server) => server.name !== managed);

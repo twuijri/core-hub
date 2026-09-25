@@ -439,7 +439,7 @@ export class HermesRuntime {
 
   /**
    * The next conversation starts a new TUI gateway, which reads the profiles' MCP servers
-   * afresh (the hub's own tools were switched, contract decision §47). The running one is
+   * afresh (the hub's own tools were switched, contract decision §58). The running one is
    * retired, not killed, for the reason `setProviderEnv` gives.
    */
   refreshTui(): void {

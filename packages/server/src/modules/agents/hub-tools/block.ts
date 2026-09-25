@@ -1,6 +1,6 @@
 /**
  * The one MCP server block the hub writes into a profile's Hermes `config.yaml`, and the key
- * beside it in the profile's `.env` (contract decision §47).
+ * beside it in the profile's `.env` (contract decision §58).
  *
  * The block is Hermes's own shape for an HTTP server — `url`, `headers` — and its bearer
  * is `${COREHUB_MCP_TOKEN}`, which Hermes fills from the profile's `.env` when it connects

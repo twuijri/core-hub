@@ -1,5 +1,5 @@
 /**
- * The hub's own tools (contract decision §47): per-profile settings, the block written into
+ * The hub's own tools (contract decision §58): per-profile settings, the block written into
  * the profile's Hermes config, and the MCP endpoint's calls.
  *
  * Who a call acts as is decided in three steps, and each can only narrow:
@@ -81,7 +81,7 @@ function newKey(): string {
   return `${HUB_KEY_PREFIX}${randomBytes(24).toString('hex')}`;
 }
 
-/** Switched on for the first time: every group reads, none writes (§47, proposed). */
+/** Switched on for the first time: every group reads, none writes (§58, proposed). */
 const DEFAULT_GROUP: HubToolGroupState = { enabled: true, allowWrites: false };
 
 export class HubToolsService {
