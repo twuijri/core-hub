@@ -1,5 +1,5 @@
 # تسمية المحادثة بلا أدوات، وحذف بقايا `AuditReport` في الويب
-المسؤول: twuijri · الفرع: fix/title-no-tools-audit-cleanup · الحالة: in-progress
+المسؤول: twuijri · الفرع: fix/title-no-tools-audit-cleanup · الحالة: review
 
 ## المشكلة والهدف
 1. **تسمية المحادثة تعرض على النموذج كل الأدوات.** بعد أول رد يسأل الهب وكيل الجلسة «Name this
@@ -40,3 +40,95 @@
      معروف (`providerId`).
    - وإلا لا يُسأل أحد، ويُسمّى العنوان من أول رسالة (`fallbackTitle`) كما يحدث اليوم عند الفشل.
 2. **لا تغيير في العقد ولا في ما يراه الشخص:** العنوان نفسه، في الوقت نفسه، بالحدث نفسه (`session.updated`).
+3. **أثر جانبي مقصود:** وكيل ACP (Claude Code، Codex…) لا يُسأل بعد اليوم عن العنوان بدور كامل؛ إن كان لنموذجه مزوّد
+   يعرفه الهب سُئل النموذج مباشرة، وإلا سُمّيت المحادثة من أول رسالة. العنوان أبسط أحيانًا، ولا أداة تعمل بسببه.
+
+### الجزء الثاني: `AuditReport`
+- `packages/web/src/settings/AuditReport.tsx` لم يعد يستورده أي ملف منذ #108 و#117 (حُذف استيراده في سجل التكامل
+  ٢٠٢٦-٠٩-٢٥)، ولم يبقَ فيه إلا فرعا `logs`/`performance` → **ميت، حُذف**. ومعه ما لم يستعمله غيره: سبعة مفاتيح ترجمة
+  في `audit.*` (`no_entries`، `uptime`، `seconds`، `memory`، `node`، `no_samples`، `samples_n`) بالعربية والإنجليزية،
+  وقاعدتا CSS ‏`.log-entry` و`.log-entry-time`. المفاتيح `audit.period`/`days`/`between` وغيرها باقية لأن صفحة
+  الاستخدام تستعملها.
+- **العقد والخادم باقيان كما هما:** `audit.getReport` بنوعيه `logs` و`performance` ما زال يستعمله تطبيق iOS
+  (`apps/ios/CoreHub/Settings/ManagementPages.swift`، `AuditPage` → `AuditAPI.auditGetReport` من شاشتي السجلات والأداء
+  في `SettingsScreen.swift`)، وسجل #117 نفسه أبقاه للعملاء الأقدم. حذفه يكسر iOS، ومجلد iOS خارج هذه المهمة. فلا
+  تغيير في `packages/contracts` ولا توليد عملاء ولا حاجة لـ`contracts:check-clients`.
+
+## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
+لا شيء في `packages/contracts`. فقرة جديدة تحت قرار التسمية في `docs/contracts/DECISIONS.md` (§26 «The hub names a
+session, unless a person did»): السؤال بلا أدوات ولا يترك شيئًا في سجل الوكيل، والترتيب أعلاه. داخل الخادم:
+`OneshotRequest` و`OneshotUnavailable`، و`AgentSession.oneshot?` و`AgentAdapter.oneshot?` (اختياريان).
+
+## الملفات والتأثير
+- الخادم: `packages/server/src/modules/agents/runner.ts` (`ask()` → `askToolFree()`، `ASK_MAX_TOKENS`)،
+  `adapters/types.ts` (الأنواع أعلاه)، `adapters/hermes-tui.ts` (`HermesTuiSession.oneshot()` وانتظار بناء الوكيل
+  عبر `session.info`/`error`)، `adapters/hermes.ts` (`oneshot()` بجلسة مؤقتة عبر TUI، و`OneshotUnavailable` بدونه)،
+  `tests/container/fake-provider.mjs` (تعليق فقط).
+- الاختبارات: `runner.test.ts` (أربعة اختبارات جديدة، وتعديل توقّع قديم كان يثبت أن السؤال يذهب دورًا عبر
+  `/v1/runs` — صار يثبت العكس)، `adapters/hermes-tui.test.ts` (ثلاثة جديدة)، `adapters/hermes-oneshot.real.test.ts`
+  (جديد، هرمز الحقيقي).
+- الويب: حذف `packages/web/src/settings/AuditReport.tsx`؛ `src/i18n/ar.json` و`en.json` (سبعة مفاتيح)؛
+  `src/styles/screens.css` (`.log-entry*`).
+- التوثيق: `docs/contracts/DECISIONS.md` (§26)، `docs/STATUS.md` (سطر sessions)، فهرس الليلة.
+- لا مساس بـ`apps/android` ولا `apps/ios` ولا `.github/workflows`.
+
+## الفحوص (الأوامر ونواتجها الفعلية)
+كلها عبر `mj-run`. هرمز الحقيقي: الصورة المحلية `core-hub:morechannels` (هرمز فيها مبني من v2026.9.14)، حاوية
+`--rm` واحدة يشغّلها الاختبار ويزيلها؛ لم تُلمس حاويات المالك ولا المنفذ 8642.
+
+الاختبارات الجديدة على الكود القديم (نسخة `runner.ts` من رأس الفرع قبل التغيير) — تفشل كلها لأن الوكيل أُعطي دورًا:
+```
+     × asks the agent’s own one-shot on the conversation’s profile and model, and hands it no turn 7ms
+     × lends the open conversation when there is one, instead of opening another 1ms
+     × asks the model straight from its provider when the agent has no one-shot, never the agent 1ms
+     × falls back to the provider when the agent cannot do a one-shot here, and to nothing without one 1ms
+AssertionError: expected 'hermes title' to be 'Streaming explained' // Object.is equality
+AssertionError: expected 'acp title' to be 'builtin title' // Object.is equality
+      Tests  4 failed | 26 skipped (30)
+```
+هرمز الحقيقي (`COREHUB_HERMES_IMAGE=core-hub:morechannels … vitest run src/modules/agents/adapters/hermes-oneshot.real.test.ts`):
+سؤال التسمية وصل النموذج بلا `tools` وبرسالة مستخدم واحدة، و`session.list` لم يتغيّر؛ ودور محادثة عادي للمقارنة
+عرض على النموذج **19 أداة** (العدد نفسه الذي رُصد في التشغيل الحقيقي) وخُزّن في `session.list`؛ ثم أعارت المحادثة
+المفتوحة نموذجها لسؤال بلا أدوات.
+```
+ RUN  v5.0.1 /home/twuijri/project/corehub-wt-titlefix/packages/server
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  18:21:15
+   Duration  15.16s (tests 99%, transform 1%)
+```
+الملفات التي لمستها (`vitest run runner.test.ts hermes-tui.test.ts hermes.test.ts naming.test.ts hermes-oneshot.real.test.ts`،
+الأخير مُتخطّى بلا صورة):
+```
+ Test Files  4 passed | 1 skipped (5)
+      Tests  79 passed | 2 skipped (81)
+```
+الويب (`vitest run tests/i18n.test.ts tests/logical-css.test.ts`):
+```
+ Test Files  2 passed (2)
+      Tests  269 passed (269)
+```
+```
+$ pnpm i18n:check
+i18n:check  web: 2558 keys, ar/en in parity
+i18n:check  ios: 280 keys, ar/en in parity
+i18n:check  OK
+$ pnpm lint
+All matched files use Prettier code style!
+$ pnpm typecheck
+exit=0
+```
+CI على #144: يُملأ بعد الدفع.
+
+## المخاطر والرجوع
+- **انتظار بناء الوكيل:** الجلسة المؤقتة تنتظر `session.info`؛ إن ضاع الحدث (سباق نظري لو وصل قبل أن نربط الجلسة)
+  ينتهي السؤال عند المهلة (٢٠ ث) ويُسمّى العنوان من أول رسالة — لا شيء أسوأ من اليوم عند الفشل.
+- **كلفة:** الجلسة المؤقتة تبني وكيلًا (كما كان يحدث قبل)، لكنها نادرة: الغالب أن المحادثة مفتوحة فتُعار.
+- **ACP:** عنوان أبسط حين لا يعرف الهب مزوّد النموذج (انظر القرار ٣).
+- الرجوع: `git revert` للالتزام؛ لا ترحيل ولا تغيير عقد.
+
+## التسليم والخطوة التالية
+مدموج في `night/2026-09-26` (#144). للمالك: تأكيد القرار (السؤال بلا أدوات، والتراجع إلى المزوّد المباشر أو أول
+رسالة لغير هرمز). مقترح لاحق: إن أراد المالك عناوين هرمز نفسه (`agent/title_generator.py` يسمّي جلساته بعد أول دور)
+فقد تُقرأ من `session.list` بدل سؤال ثانٍ.
