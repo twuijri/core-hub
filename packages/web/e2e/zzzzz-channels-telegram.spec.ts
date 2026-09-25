@@ -72,14 +72,19 @@ test('31. Telegram linked by a bot token: the steps, the bot named, approvals, a
     'رمز اقتران',
   );
 
-  // ---- The stranger who messaged the bot waits here, and is approved.
+  await shot(page, 'agent-channels-telegram-linked-ar-light');
+
+  // ---- The stranger who messaged the bot waits under «الموافقات», and is approved there.
+  await page.getByTestId('approvals-open').click();
   const noura = page.getByTestId('pairing-request-5d1e2f3a4b5c6d7e');
   await expect(noura).toContainText('تيليجرام', { timeout: 15_000 });
   await expect(noura).toContainText('Noura');
-  await shot(page, 'agent-channels-telegram-linked-ar-light');
+  await expect(page.getByTestId('pairing-pending-telegram')).toBeVisible();
   await page.getByTestId('pairing-approve-5d1e2f3a4b5c6d7e').click();
   await expect(noura).toHaveCount(0);
   await expect(page.getByTestId('pairing-sender-555666777')).toContainText('تيليجرام');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('approvals-sheet')).toHaveCount(0);
 
   // ---- Telegram's own settings: show the model's thinking, and answer in groups only when
   // mentioned — saved together, read back from the profile's files.

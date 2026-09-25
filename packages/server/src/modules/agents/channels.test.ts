@@ -16,9 +16,12 @@ import {
   listChannels,
   putChannel,
   readEnv,
+  setWhatsAppMode,
   unlinkTelegram,
   unlinkWhatsApp,
   whatsappBridgePort,
+  whatsappMode,
+  withAllowedOwner,
   writeEnvValue,
 } from './channels.js';
 import { STORED } from './mcp.js';
@@ -268,6 +271,62 @@ describe('WhatsApp, whose identity is a session and not a field', () => {
     });
     expect(read(dir)).toContain('bridge_port: 3004');
     expect(activeChannels(dir)).toEqual([]);
+  });
+});
+
+describe("WhatsApp's mode: a number for the agent, or the person's own", () => {
+  it("reads Hermes's rule: as written, `self-chat` when nothing is, null for a word it does not know", () => {
+    expect(whatsappMode({ WHATSAPP_MODE: 'bot' })).toBe('bot');
+    expect(whatsappMode({ WHATSAPP_MODE: ' Self-Chat ' })).toBe('self-chat');
+    expect(whatsappMode({})).toBe('self-chat');
+    expect(whatsappMode({ WHATSAPP_MODE: 'personal' })).toBeNull();
+  });
+
+  it('is on the linked channel, and only there', () => {
+    const dir = home('');
+    paired(dir);
+    expect(getChannel(dir, 'whatsapp')?.link?.mode).toBe('bot');
+    const unlinked = home('');
+    writeFileSync(path.join(unlinked, '.env'), 'WHATSAPP_ENABLED=true\nWHATSAPP_MODE=bot\n');
+    expect(getChannel(unlinked, 'whatsapp')?.link?.mode).toBeNull();
+  });
+
+  it('puts the owner on the allowlist once, keeping everyone already there', () => {
+    expect(withAllowedOwner(undefined, '966500000000')).toBe('966500000000');
+    expect(withAllowedOwner('15551234567, 966522222222', '966500000000')).toBe(
+      '15551234567,966522222222,966500000000',
+    );
+    expect(withAllowedOwner('+966500000000', '966500000000')).toBe('+966500000000');
+    expect(withAllowedOwner('*', '966500000000')).toBe('*');
+  });
+
+  it('switches to self-chat with the owner allowed, and back to bot, the phone still linked', () => {
+    const dir = home('platforms:\n  whatsapp:\n    enabled: true\n');
+    paired(dir);
+    writeEnvValue(dir, 'WHATSAPP_ALLOWED_USERS', '15551234567');
+    const personal = setWhatsAppMode(dir, 'self-chat');
+    expect(personal).toMatchObject({
+      enabled: true,
+      configured: true,
+      link: { linked: true, mode: 'self-chat', accountPhone: '966500000000' },
+    });
+    expect(readEnv(dir)).toMatchObject({
+      WHATSAPP_ENABLED: 'true',
+      WHATSAPP_MODE: 'self-chat',
+      WHATSAPP_DM_POLICY: 'pairing',
+      WHATSAPP_ALLOWED_USERS: '15551234567,966500000000',
+      OPENAI_API_KEY: 'sk-x',
+    });
+    expect(setWhatsAppMode(dir, 'bot').link).toMatchObject({ linked: true, mode: 'bot' });
+    expect(readEnv(dir).WHATSAPP_MODE).toBe('bot');
+  });
+
+  it('refuses a profile with no linked phone, and a mode Hermes does not have', () => {
+    expect(() => setWhatsAppMode(home(''), 'self-chat')).toThrow(/channel_not_linked/);
+    const dir = home('');
+    paired(dir);
+    expect(() => setWhatsAppMode(dir, 'personal' as 'bot')).toThrow(/channel_mode_invalid/);
+    expect(readEnv(dir).WHATSAPP_MODE).toBe('bot');
   });
 });
 

@@ -6902,7 +6902,10 @@ paths:
                       Hermes; null otherwise. `applies` says when a channel change takes effect:
                       `now` in a named profile (the hub starts, restarts or stops that profile's
                       gateway itself), `on_restart` in the default profile, whose gateway also
-                      carries the API server and waits for Hermes's Restart.
+                      carries the API server and waits for Hermes's Restart. Linking WhatsApp
+                      (`agents.loginChannel`) and changing its mode (`agents.setChannelMode`)
+                      restart the gateway in either profile; a channel whose gateway still has to
+                      restart says so in `Channel.restart_needed`.
                     oneOf:
                       - $ref: '#/components/schemas/ChannelGateway'
                       - type: 'null'
@@ -6920,6 +6923,7 @@ paths:
                     exclusive: true
                     status: online
                     error: null
+                    restart_needed: false
                     login: null
                     link: null
                     fields:
@@ -7024,13 +7028,26 @@ paths:
         `job.progress` whose `progress.message` is a line for the person and whose `result` is
         `{status, qr, expires_at}` — `status` is `installing`, `starting` or `waiting`, `qr` the
         text to draw as a QR code (null until there is one), `expires_at` when Hermes gives the
-        code up (ten minutes). Paired, the hub enables the channel in the profile's Hermes home
-        and the job succeeds with `{status: connected, account_name, account_phone}`; the agent
-        answers on it after its next restart. An expired code fails the job with
+        code up (ten minutes). The body's `mode` says how the number will be used (see
+        `ChannelLoginRequest`); without it the number is linked as `bot`, the mode every link had
+        before the choice existed. Paired, the hub enables the channel in the profile's Hermes
+        home with that mode (`WHATSAPP_MODE`; for `self-chat` the account's own number is added to
+        `WHATSAPP_ALLOWED_USERS`, as Hermes's own onboarding does), then starts or restarts the
+        messaging gateway that serves the profile — the default profile's included — so the agent
+        answers without a manual Restart; the job succeeds with `{status: connected,
+        account_name, account_phone, mode, applies: now}`. An expired code fails the job with
         `state_invalid`, a pairing Hermes reports as failed with `agent_error` — both in
         Hermes's words. `jobs.cancel` stops the pairing in Hermes too.
       x-roles: [owner, admin]
       x-rt-events: [job.queued, job.progress, job.completed, job.failed, agent.updated]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelLoginRequest'
+            example:
+              mode: self-chat
       responses:
         '202':
           description: Login started.
@@ -7092,6 +7109,7 @@ paths:
                 exclusive: true
                 status: offline
                 error: null
+                restart_needed: false
                 login: qr
                 link:
                   linked: false
@@ -7099,7 +7117,71 @@ paths:
                   account_name: null
                   account_phone: null
                   account_username: null
+                  mode: null
                 fields: []
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /agents/{agent_id}/channels/{platform}/mode:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/Platform'
+    put:
+      operationId: agents.setChannelMode
+      tags: [agents]
+      summary: Change how a linked WhatsApp number is used — a number dedicated to the agent, or the person's own number through "Message yourself" (admin)
+      description: >-
+        WhatsApp only. Writes `WHATSAPP_MODE` in the profile's `.env` (for `self-chat` the linked
+        account's own number is also added to `WHATSAPP_ALLOWED_USERS`, so Hermes treats the
+        person writing to themselves as the owner and not as a stranger to pair), with the
+        messaging gateway that serves the profile held down while it is written and started again
+        afterwards — the default profile's included — so the new mode is live when the answer
+        arrives. The phone stays linked. Any other platform answers `409 state_invalid` with
+        `details.reason = mode_not_supported`; a profile with no linked WhatsApp answers `409`
+        with `details.reason = not_linked`.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelModeWrite'
+            example:
+              mode: self-chat
+      responses:
+        '200':
+          description: Changed; the channel as it now reads.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Channel'
+              example:
+                platform: whatsapp
+                label: whatsapp
+                enabled: true
+                configured: true
+                exclusive: true
+                status: unknown
+                error: null
+                restart_needed: false
+                login: qr
+                link:
+                  linked: true
+                  account_id: '966500000000:3@s.whatsapp.net'
+                  account_name: Office
+                  account_phone: '966500000000'
+                  account_username: null
+                  mode: self-chat
+                fields: []
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -7173,6 +7255,7 @@ paths:
                 exclusive: true
                 status: unknown
                 error: null
+                restart_needed: false
                 login: token
                 link:
                   linked: true
@@ -7180,6 +7263,7 @@ paths:
                   account_name: Office bot
                   account_phone: null
                   account_username: office_helper_bot
+                  mode: null
                 fields: []
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -19985,7 +20069,19 @@ components:
     Channel:
       type: object
       required:
-        [platform, label, enabled, configured, exclusive, status, error, login, link, fields]
+        [
+          platform,
+          label,
+          enabled,
+          configured,
+          exclusive,
+          status,
+          error,
+          restart_needed,
+          login,
+          link,
+          fields,
+        ]
       properties:
         platform:
           type: string
@@ -20003,6 +20099,14 @@ components:
           enum: [online, offline, error, unknown]
         error:
           type: [string, 'null']
+        restart_needed:
+          type: boolean
+          description: >-
+            True when the channel is switched on and linked but the messaging gateway serving the
+            profile, although running, started before it and does not serve it: Hermes reads its
+            channels only when it starts, so the channel stays `offline` until that gateway
+            restarts. A client says so on the channel and offers `agents.restart`. Always false
+            where the hub does not run Hermes.
         login:
           type: [string, 'null']
           enum: [qr, token, credentials, null]
@@ -20027,7 +20131,7 @@ components:
             $ref: '#/components/schemas/ChannelField'
     ChannelLink:
       type: object
-      required: [linked, account_id, account_name, account_phone, account_username]
+      required: [linked, account_id, account_name, account_phone, account_username, mode]
       properties:
         linked:
           type: boolean
@@ -20045,6 +20149,37 @@ components:
             Telegram's bot @username (people open it at `https://t.me/<account_username>`), the
             Discord, Slack or Mattermost bot's user name, the Matrix user id, the email address.
             Null for WhatsApp.
+        mode:
+          description: >-
+            WhatsApp only, null for every other platform: how Hermes uses the linked number, read
+            from the profile's `WHATSAPP_MODE`. `bot` — a number dedicated to the agent: other
+            people message it and a new sender gets a pairing code to approve; the account owner's
+            own messages are not taken as requests. `self-chat` — the person's own number: only
+            what the account owner writes in their own "Message yourself" chat reaches the agent,
+            the agent answers there, and nobody else who messages the number is answered or sent a
+            pairing code. With no `WHATSAPP_MODE` Hermes runs `self-chat`, and it reads so; a value
+            Hermes does not know reads as null.
+          type: [string, 'null']
+          enum: [bot, self-chat, null]
+    ChannelLoginRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        mode:
+          type: string
+          enum: [bot, self-chat]
+          default: bot
+          description: >-
+            How the number being linked will be used (`ChannelLink.mode`). A client asks the
+            person; it does not guess from the number.
+    ChannelModeWrite:
+      type: object
+      additionalProperties: false
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [bot, self-chat]
     ChannelGateway:
       type: object
       required: [profile, state, applies, error]

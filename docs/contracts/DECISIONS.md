@@ -2575,3 +2575,45 @@ plans, not Free, against the plan's Codex usage). Proposed, owner to confirm:
 Rejected: an OpenAI-Images-API shim in the hub (CLI Proxy API's shape — the hub would hold the
 token); pointing Hermes at its own `openai-codex` image backend (the skills would then draw with a
 different implementation than the tool, which §72 rejected).
+
+## 85. A WhatsApp number is linked as the agent's or as the person's own, asked, and answers at once
+
+The owner (2026-09-26, live hub 1.1.0, reported — not a proposal): he re-linked WhatsApp in the
+default profile with his **personal** number; the Channels card read «مربوط» but «غير متصل», and
+the agent answered neither him nor a friend who linked his own number the same way.
+
+Observed (ADR 0012; Hermes v2026.9.14, MIT): Hermes's WhatsApp has two modes, set by
+`WHATSAPP_MODE` in the profile's `.env` and handed by its adapter to the bridge. In `bot` the
+number is a separate one for the agent: other people message it, a new sender gets a pairing
+code, and what the account owner types from the phone is dropped. In `self-chat` the number is
+the person's own: only what the owner writes in their own "Message yourself" chat reaches Hermes,
+replies go to the same chat with a short signature, and the bridge drops everyone else's messages
+before Hermes sees them, so nobody else gets an answer or a pairing code. The hub always wrote
+`bot`, so a personal number never answered its owner. Separately, the hub never restarted the
+default profile's gateway after a link (it carries the API server, so every change there waited
+for Restart): that gateway kept running without WhatsApp, which is the `offline`. Proposed,
+owner to confirm:
+
+- **Asked, never guessed.** `agents.loginChannel` takes `mode` (`bot` | `self-chat`); a client
+  asks «بوت (رقم مخصص للوكيل)» / "Bot (a number for the agent)" or «أنا (مراسلة نفسي)» / "Me
+  (Message yourself)" with neither chosen. Without `mode` the hub links `bot`, as before, and
+  links made before keep `bot` (their `.env` says so). For `self-chat` the linked number is added
+  to `WHATSAPP_ALLOWED_USERS` — what Hermes's own onboarding writes — so the gateway takes the
+  owner as allowed and does not pair them in their own chat; whoever else is listed stays.
+- **Changed in place.** `agents.setChannelMode` (WhatsApp only; `409 mode_not_supported`
+  elsewhere, `409 not_linked` with no phone) rewrites the mode with the profile's gateway held down
+  and started again. `ChannelLink.mode` reads it (no `WHATSAPP_MODE` is Hermes's `self-chat`).
+- **A link answers at once, in every profile.** After a link and a mode change the hub restarts
+  the gateway that serves the profile — the default one too, held down for a moment like a hub
+  tools change (§79). Other channel edits in the default profile still wait for Restart.
+  `Channel.restart_needed` is true when a running gateway does not name a switched-on, linked
+  channel (Hermes names every platform it starts with), and a client offers Restart there; a
+  platform Hermes reports `connecting` reads `unknown`, and the web reads again until it is not.
+- **Approvals in one place** (the owner, same day): the web's waiting senders and approved
+  senders leave the bottom of the Channels page for one «الموافقات» / "Approvals" button in its
+  header with the count, opening a panel grouped by platform; the «بانتظارك» inbox approves or
+  denies a waiting sender itself. No contract change.
+
+Rejected: guessing the mode from the number, which cannot be known; Hermes's own `…/apply`,
+which runs `hermes gateway restart` and in a container starts a second gateway inside the
+dashboard process.

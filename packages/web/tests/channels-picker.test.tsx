@@ -9,7 +9,7 @@
  *   the rest alphabetically in the reader's language, each with its badges;
  * - picking a platform opens that platform's own form.
  */
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Agent } from '../src/types.js';
@@ -364,10 +364,17 @@ describe('The platform picker', () => {
     expect(within(buzz).getByTestId('platform-field-BUZZ_RELAY_URL')).toBeTruthy();
     fireEvent.keyDown(buzz, { key: 'Escape' });
 
-    // WhatsApp pairs by QR: its own dialog, which starts Hermes's pairing.
+    // WhatsApp pairs by QR: its own dialog asks first how the number is used, then starts
+    // Hermes's pairing in that mode.
     fireEvent.click(within(await openPicker()).getByTestId('platform-option-whatsapp'));
-    expect(await screen.findByTestId('channel-pair')).toBeTruthy();
-    expect(posted.some((path) => path.endsWith('/channels/whatsapp/login'))).toBe(true);
+    const pair = await screen.findByTestId('channel-pair');
+    expect(within(pair).getByTestId('channel-pair-mode')).toBeTruthy();
+    expect(posted.some((path) => path.endsWith('/channels/whatsapp/login'))).toBe(false);
+    fireEvent.click(within(pair).getAllByRole('radio')[0]!);
+    fireEvent.click(within(pair).getByTestId('channel-pair-continue'));
+    await waitFor(() =>
+      expect(posted.some((path) => path.endsWith('/channels/whatsapp/login'))).toBe(true),
+    );
   });
 });
 

@@ -4,11 +4,13 @@
  * for approval — against the real hub with Hermes's pairing scripted on its own files
  * (`e2e/hub.ts`):
  *
- * - the WhatsApp row reads «مربوط» with the account, Unlink instead of Pair by QR, and the plain
- *   steps — message the number from another account, approve the first request here — with the
- *   warning about a personal number;
- * - «طلبات بانتظار الموافقة» lists two senders; one is approved and moves to the approved list,
- *   the other is turned down; the approved one is revoked behind a confirm;
+ * - the WhatsApp row reads «مربوط» with the account, its mode («بوت»), Unlink instead of Pair by
+ *   QR, and the plain steps — message the number from another account, approve the first request
+ *   under «الموافقات» — with the warning about a personal number;
+ * - «الموافقات» in the header counts two senders and opens the panel: one is approved and moves
+ *   to the approved senders, the other is denied; the approved one is removed behind a confirm;
+ * - «تغيير الوضع» switches the number to «أنا (مراسلة نفسي)», and the card says to write to the
+ *   agent in "Message yourself";
  * - Unlink, behind a confirm, forgets the phone and the row leaves the list.
  *
  * It runs after journey 23 (`zz-agent-tools`), which links WhatsApp; run on its own, it links
@@ -58,6 +60,8 @@ test('30. a linked WhatsApp: how to use it, the senders waiting for approval, an
     // Run on its own: link it the way journey 23 does.
     await page.getByTestId('platform-picker-open').click();
     await page.getByTestId('platform-option-whatsapp').click();
+    await page.getByTestId('channel-pair-mode-choice').getByRole('radio').first().click();
+    await page.getByTestId('channel-pair-continue').click();
     await expect(page.getByTestId('channel-pair-done')).toContainText('مكتب المركز', {
       timeout: 30_000,
     });
@@ -73,11 +77,17 @@ test('30. a linked WhatsApp: how to use it, the senders waiting for approval, an
   // How to use it, in WhatsApp's own card while somebody waits.
   const how = page.getByTestId('channel-list').getByTestId('channel-how-to-use');
   await expect(how).toContainText('من حساب واتساب آخر');
-  await expect(how).toContainText('طلبات بانتظار الموافقة');
+  await expect(how).toContainText('الموافقات');
   await expect(page.getByTestId('channel-personal-warning')).toContainText('رقمك الشخصي');
+  await expect(page.getByTestId('channel-mode-whatsapp')).toHaveAttribute('data-mode', 'bot');
 
-  // ---- Who is waiting.
-  const section = page.getByTestId('pairing-section');
+  // ---- Who is waiting: one button in the header, not a list under the cards.
+  await expect(page.getByTestId('pairing-section')).toHaveCount(0);
+  const approvals = page.getByTestId('approvals-open');
+  await expect(approvals).toHaveAttribute('data-count', '2', { timeout: 15_000 });
+  await expect(page.getByTestId('channel-waiting-whatsapp')).toBeVisible();
+  await approvals.click();
+  const section = page.getByTestId('approvals-sheet').getByTestId('pairing-section');
   await expect(section.getByRole('heading', { name: 'طلبات بانتظار الموافقة' })).toBeVisible();
   const sara = page.getByTestId('pairing-request-3f9a1c0e7b2d4a55');
   await expect(sara).toContainText('سارة');
@@ -96,6 +106,20 @@ test('30. a linked WhatsApp: how to use it, the senders waiting for approval, an
   await page.getByTestId('pairing-revoke-966500000001@s.whatsapp.net').click();
   await page.getByTestId('confirm-yes').click();
   await expect(page.getByTestId('pairing-approved-none')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('approvals-sheet')).toHaveCount(0);
+
+  // ---- «أنا (مراسلة نفسي)»: the person's own number, written to in "Message yourself".
+  await page.getByTestId('channel-mode-change-whatsapp').click();
+  const modeDialog = page.getByTestId('channel-mode-dialog');
+  await modeDialog.getByRole('radio').nth(1).click();
+  await modeDialog.getByTestId('channel-mode-save').click();
+  await expect(modeDialog).toHaveCount(0);
+  await expect(page.getByTestId('channel-mode-whatsapp')).toHaveAttribute('data-mode', 'self-chat');
+  // Nobody is approved any more, so the card's steps are open by themselves.
+  await expect(page.getByTestId('channel-how-to-use')).toContainText('مراسلة نفسي');
+  await expect(page.getByTestId('channel-personal-warning')).toHaveCount(0);
+  await shot(page, 'agent-channels-self-chat-ar-light');
 
   // ---- Unlink, behind a confirm; the row leaves the list.
   await page.getByTestId('channel-unlink-whatsapp').click();

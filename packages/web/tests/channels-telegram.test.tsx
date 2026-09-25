@@ -332,7 +332,9 @@ describe('Link Telegram', () => {
       true,
     );
     fireEvent.keyDown(screen.getByTestId('platform-picker'), { key: 'Escape' });
-    // A Telegram stranger waiting for approval is listed like any other.
+    // A Telegram stranger waiting for approval is listed like any other, under «الموافقات» —
+    // reached from the header, or from the card that has somebody waiting.
+    fireEvent.click(await screen.findByTestId('channel-waiting-telegram'));
     expect((await screen.findByTestId('pairing-request-cccccccccccccccc')).textContent).toMatch(
       /تيليجرام|Telegram/,
     );

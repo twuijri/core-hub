@@ -130,11 +130,13 @@ import {
   unlinkTelegram,
   unlinkPlatform,
   readEnv,
+  setWhatsAppMode,
   telegramToken,
   TELEGRAM_TOKEN,
   whatsappLink,
   whatsappSessionDir,
   type Channel,
+  type WhatsAppMode,
 } from './channels.js';
 import { stopOrphanBridge, type GatewayStatus } from './hermes-gateways.js';
 import { approvePairing, denyPairing, listPairing, revokePairing } from './hermes-pairing.js';
@@ -390,6 +392,14 @@ const overrides = new WeakMap<SocketServer, AgentsOverrides>();
  */
 export function overrideAgents(next: AgentsOverrides | null): void {
   pendingOverrides = next;
+}
+
+/** What the gateway serving a profile says about one of its channels (`channelStatus`). */
+interface ChannelHealth {
+  status: string;
+  error: string | null;
+  /** Switched on and linked, but the running gateway started before it (`restart_needed`). */
+  restartNeeded: boolean;
 }
 
 interface AgentsContext {
@@ -1837,29 +1847,41 @@ export const agentsModule = defineModule({
       request: FastifyRequest,
       profile: string,
       channel: Channel,
-    ): { status: string; error: string | null } => {
+    ): ChannelHealth => {
       const { runtime } = contextOf(request.server);
-      if (runtime.status().mode !== 'managed') return { status: 'unknown', error: null };
-      if (!channel.enabled || !channel.configured) return { status: 'offline', error: null };
+      const health = (status: string, error: string | null, restartNeeded = false) => ({
+        status,
+        error,
+        restartNeeded,
+      });
+      if (runtime.status().mode !== 'managed') return health('unknown', null);
+      if (!channel.enabled || !channel.configured) return health('offline', null);
       const record = runtime.gatewayRecord(profile);
       const platform = record?.platforms[channel.platform];
+      if (record && !platform && record.gatewayState === 'running') {
+        // Hermes names every platform it was started with (`connecting` first), so a running
+        // gateway that does not name this one started before it was switched on.
+        return health('offline', null, true);
+      }
       if (!record || !platform) {
         const gateway = runtime.gateways().find((entry) => entry.profile === profile);
-        return {
-          status: gateway && gateway.state === 'starting' ? 'unknown' : 'offline',
-          error: gateway?.lastError ?? null,
-        };
+        return health(
+          gateway && gateway.state === 'starting' ? 'unknown' : 'offline',
+          gateway?.lastError ?? null,
+        );
       }
-      if (platform.state === 'connected') return { status: 'online', error: null };
+      if (platform.state === 'connected') return health('online', null);
       if (platform.state === 'fatal' || platform.state === 'error') {
-        return { status: 'error', error: platform.errorMessage };
+        return health('error', platform.errorMessage);
       }
-      return { status: 'offline', error: platform.errorMessage };
+      // Still signing in after a (re)start: not known yet, rather than `offline`.
+      if (platform.state === 'connecting') return health('unknown', null);
+      return health('offline', platform.errorMessage);
     };
 
     const toChannel = (
       channel: Channel,
-      health: { status: string; error: string | null } = { status: 'unknown', error: null },
+      health: ChannelHealth = { status: 'unknown', error: null, restartNeeded: false },
     ): Record<string, unknown> => ({
       platform: channel.platform,
       // The platform's own name. A table of pretty labels would go stale the moment
@@ -1870,6 +1892,7 @@ export const agentsModule = defineModule({
       exclusive: channel.exclusive,
       status: health.status,
       error: health.error,
+      restart_needed: health.restartNeeded,
       login: (QR_PLATFORMS as readonly string[]).includes(channel.platform)
         ? 'qr'
         : (TOKEN_PLATFORMS as readonly string[]).includes(channel.platform)
@@ -1884,6 +1907,7 @@ export const agentsModule = defineModule({
             account_name: channel.link.accountName,
             account_phone: channel.link.accountPhone,
             account_username: channel.link.accountUsername,
+            mode: channel.link.mode,
           }
         : null,
       fields: channel.fields.map((field) => ({
@@ -2070,6 +2094,40 @@ export const agentsModule = defineModule({
           return unlinkWhatsApp(home);
         });
         request.log.info({ profile }, 'agents: WhatsApp unlinked');
+        return toChannel(channel, channelStatus(request, profile, channel));
+      },
+    });
+
+    /**
+     * How a linked WhatsApp number is used (`channels.ts` §whatsappMode): written with the gateway
+     * that serves the profile held down, then started again — the default profile's too — so the
+     * new mode is live when the answer arrives.
+     */
+    defineRoute(app, deps, {
+      operationId: 'agents.setChannelMode',
+      handler: async (request, { params, body }) => {
+        const agentId = params.agent_id as string;
+        const platform = params.platform as string;
+        const { home, profile } = toolHome(request, agentId);
+        if (platform !== 'whatsapp') {
+          throw new HubError('state_invalid', {
+            details: { agent_id: agentId, platform, reason: 'mode_not_supported' },
+          });
+        }
+        if (!whatsappLink(home).linked) {
+          throw new HubError('state_invalid', {
+            details: { agent_id: agentId, platform, reason: 'not_linked' },
+          });
+        }
+        const mode = (body as { mode: WhatsAppMode }).mode;
+        const { runtime } = contextOf(request.server);
+        let channel: Channel;
+        try {
+          channel = await runtime.withGatewayStopped(profile, () => setWhatsAppMode(home, mode));
+        } catch (error) {
+          return channelFault(error);
+        }
+        request.log.info({ profile, mode }, 'agents: WhatsApp mode changed');
         return toChannel(channel, channelStatus(request, profile, channel));
       },
     });
@@ -2387,10 +2445,10 @@ export const agentsModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'agents.loginChannel',
       status: 202,
-      handler: (request, { params }) => {
+      handler: (request, { params, body }) => {
         const agentId = params.agent_id as string;
         const platform = params.platform as string;
-        const { profile } = toolHome(request, agentId);
+        const { home, profile } = toolHome(request, agentId);
         if (!(QR_PLATFORMS as readonly string[]).includes(platform)) {
           throw new HubError('state_invalid', {
             details: { agent_id: agentId, platform, reason: 'login_not_supported' },
@@ -2400,6 +2458,9 @@ export const agentsModule = defineModule({
         const scope = scopeOf(request);
         const language = request.language;
         const pollMs = contextOf(request.server).pairingPollMs;
+        // Asked of the person, never guessed from the number; `bot` is what every link was before.
+        const mode: WhatsAppMode = (body as { mode?: WhatsAppMode } | undefined)?.mode ?? 'bot';
+        const allowedUsers = readEnv(home).WHATSAPP_ALLOWED_USERS;
         const job = jobRunnerFor(request.server).start(
           {
             kind: 'agents.channel_login',
@@ -2407,16 +2468,22 @@ export const agentsModule = defineModule({
             ownerId: actorOf(request).userId,
             entityKind: 'agent',
             entityId: agentId,
-            input: { platform, profile },
+            input: { platform, profile, mode },
             message: t('jobs.channel_login.started', language),
           },
           async (handle) => {
-            const outcome = await pairWhatsApp(api, handle, { profile, language, pollMs });
-            // Linked: a named profile's gateway starts now and answers the number; the default
-            // profile's picks it up at Hermes's next restart (`channelGateway` §applies).
+            const outcome = await pairWhatsApp(api, handle, {
+              profile,
+              language,
+              pollMs,
+              mode,
+              ...(allowedUsers === undefined ? {} : { allowedUsers }),
+            });
+            // Linked: the gateway that serves the profile starts, or starts again, now — the
+            // default profile's too — so the number is answered without anyone pressing Restart.
             if (outcome.status === 'connected') {
               await contextOf(app)
-                .runtime.channelsChanged(profile)
+                .runtime.channelLinked(profile)
                 .catch((error: unknown) => {
                   app.log.warn(
                     { err: error, profile },
@@ -2424,7 +2491,7 @@ export const agentsModule = defineModule({
                   );
                 });
             }
-            return { ...outcome, applies: profile === 'default' ? 'on_restart' : 'now' };
+            return { ...outcome, applies: 'now' };
           },
         );
         return { job_id: job.id };

@@ -432,6 +432,11 @@ export interface Channel {
   status: 'online' | 'offline' | 'error' | 'unknown';
   error: string | null;
   /**
+   * On and linked, but the running gateway started before it and does not serve it: Hermes
+   * needs a restart to connect it. Optional only for a hub older than this field.
+   */
+  restart_needed?: boolean;
+  /**
    * `qr` pairs by a code (WhatsApp); `token` links by a bot token (Telegram); `credentials` links
    * by the variables `agents.listChannelPlatforms` declares (Discord, Slack, …).
    */
@@ -448,7 +453,15 @@ export interface ChannelLink {
   account_phone: string | null;
   /** The account's handle as the platform named it, without an @ (Telegram's bot, Discord's…). */
   account_username: string | null;
+  /** WhatsApp: how the linked number is used; null elsewhere, absent from an older hub. */
+  mode?: WhatsAppMode | null;
 }
+
+/**
+ * How a linked WhatsApp number is used: `bot`, a number for the agent that other people message;
+ * `self-chat`, the person's own number, talking to the agent in "Message yourself".
+ */
+export type WhatsAppMode = 'bot' | 'self-chat';
 
 /** A platform the hub links, and what it takes (`agents.listChannelPlatforms`). */
 export interface ChannelPlatform {
@@ -514,10 +527,16 @@ export function useChannels(agentId: string | undefined) {
         })
       ).data as unknown as { items: Channel[]; gateway: ChannelGateway | null },
     enabled: !!session && !!agentId,
-    // A gateway that is starting says so; read again until it has said how it went.
+    // A gateway that is starting, or a channel still signing in after a (re)start, says so; read
+    // again until it has said how it went — so a fresh link ends «متصل» with nobody reloading.
     refetchInterval: (query) => {
-      const data = query.state.data as { gateway: ChannelGateway | null } | undefined;
-      return data?.gateway?.state === 'starting' ? 3000 : false;
+      const data = query.state.data as
+        { items?: Channel[]; gateway: ChannelGateway | null } | undefined;
+      if (data?.gateway?.state === 'starting') return 3000;
+      const signingIn = (data?.items ?? []).some(
+        (channel) => channel.enabled && channel.configured && channel.status === 'unknown',
+      );
+      return data?.gateway && signingIn ? 3000 : false;
     },
   });
 }
@@ -838,17 +857,37 @@ export interface PairingState {
   account_phone?: string | null;
   /** When the agent answers on it: at once (a named profile) or after Hermes's restart. */
   applies?: 'now' | 'on_restart';
+  /** How the linked number is used, as it was linked. */
+  mode?: WhatsAppMode;
 }
 
+/** Pair by QR (`agents.loginChannel`), in the mode the person chose. */
 export function useLoginChannel(agentId: string | undefined) {
   const { client } = useAuth();
   return useMutation({
-    mutationFn: async (platform: string) =>
+    mutationFn: async (input: { platform: string; mode?: WhatsAppMode }) =>
       (
         await client.request('post', '/agents/{agent_id}/channels/{platform}/login', {
-          params: { agent_id: agentId ?? '', platform },
+          params: { agent_id: agentId ?? '', platform: input.platform },
+          ...(input.mode ? { body: { mode: input.mode } as never } : {}),
         })
       ).data as { job_id: string },
+  });
+}
+
+/** How a linked WhatsApp number is used (`agents.setChannelMode`); the hub restarts its gateway. */
+export function useSetChannelMode(agentId: string | undefined) {
+  const { client } = useAuth();
+  const invalidate = useChannelInvalidation(agentId);
+  return useMutation({
+    mutationFn: async (input: { platform: string; mode: WhatsAppMode }) =>
+      (
+        await client.request('put', '/agents/{agent_id}/channels/{platform}/mode', {
+          params: { agent_id: agentId ?? '', platform: input.platform },
+          body: { mode: input.mode } as never,
+        })
+      ).data as unknown as Channel,
+    onSuccess: invalidate,
   });
 }
 

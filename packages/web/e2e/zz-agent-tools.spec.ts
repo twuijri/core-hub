@@ -134,6 +134,13 @@ test('23. the agent tools ask Hermes: an MCP test, a skill pack imported, WhatsA
   await page.getByTestId('platform-picker-open').click();
   await page.getByTestId('platform-picker-search').fill('واتساب');
   await page.getByTestId('platform-option-whatsapp').click();
+  // How the number is used is asked first, and nothing is picked for the person.
+  const pairMode = page.getByTestId('channel-pair-mode-choice');
+  await expect(pairMode).toContainText('بوت (رقم مخصص للوكيل)');
+  await expect(pairMode).toContainText('أنا (مراسلة نفسي)');
+  await expect(page.getByTestId('channel-pair-continue')).toBeDisabled();
+  await pairMode.getByRole('radio').first().click();
+  await page.getByTestId('channel-pair-continue').click();
   const qr = page.getByTestId('channel-pair-qr');
   await expect(qr).toHaveAttribute('data-qr', 'https://wa.me/e2e#first-code');
   await expect(qr.locator('svg')).toBeVisible();
