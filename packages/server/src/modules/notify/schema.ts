@@ -16,7 +16,6 @@ import {
   EMPTY_ARRAY,
   EMPTY_OBJECT,
   bool,
-  globalColumns,
   inList,
   json,
   scopedColumns,

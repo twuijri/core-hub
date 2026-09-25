@@ -115,7 +115,9 @@ describe('Web Push cryptography (RFC 8291, RFC 8292)', () => {
     expect(
       parseSubscription(JSON.stringify({ ...good, keys: { ...good.keys, p256dh: 'AAAA' } })),
     ).toBeNull();
-    expect(parseSubscription(JSON.stringify({ ...good, endpoint: 'file:///etc/passwd' }))).toBeNull();
+    expect(
+      parseSubscription(JSON.stringify({ ...good, endpoint: 'file:///etc/passwd' })),
+    ).toBeNull();
   });
 });
 
@@ -187,9 +189,7 @@ function serviceAccount(tokenUri = 'https://oauth.fake/token') {
 describe('the FCM sender', () => {
   it('reads a service account and names what is missing', () => {
     expect(() => parseServiceAccount('{')).toThrow(/not JSON/);
-    expect(() => parseServiceAccount('{"project_id":"x"}')).toThrow(
-      /client_email, private_key/,
-    );
+    expect(() => parseServiceAccount('{"project_id":"x"}')).toThrow(/client_email, private_key/);
     expect(parseServiceAccount(serviceAccount().json)).toMatchObject({
       projectId: 'core-hub-test',
       tokenUri: 'https://oauth.fake/token',

@@ -107,7 +107,7 @@ export async function startFakePushService(): Promise<FakePushService> {
     request.on('end', () => {
       const name = decodeURIComponent((request.url ?? '').replace(/^\/push\//, ''));
       const browser = browsers.get(name);
-      let payload: Record<string, unknown> | null = null;
+      let payload: Record<string, unknown> | null;
       try {
         payload = browser
           ? (JSON.parse(browser.open(Buffer.concat(chunks))) as Record<string, unknown>)
@@ -162,7 +162,8 @@ export function fakeFcm(): FakeFcm {
       const url = String(input);
       if (url.endsWith('/token')) {
         const form = new URLSearchParams(String(init?.body ?? ''));
-        if (!form.get('assertion')) return Response.json({ error: 'invalid_grant' }, { status: 400 });
+        if (!form.get('assertion'))
+          return Response.json({ error: 'invalid_grant' }, { status: 400 });
         state.signIns += 1;
         state.assertions.push(form.get('assertion')!);
         return Response.json({ access_token: `fake-access-${state.signIns}`, expires_in: 3600 });
@@ -199,7 +200,11 @@ export function fakeFcm(): FakeFcm {
 
 export interface FakeApns {
   origin: string;
-  received: Array<{ token: string; headers: http2.IncomingHttpHeaders; body: Record<string, unknown> }>;
+  received: Array<{
+    token: string;
+    headers: http2.IncomingHttpHeaders;
+    body: Record<string, unknown>;
+  }>;
   /** APNs answers 410 Unregistered for these tokens. */
   unregistered: Set<string>;
   close(): Promise<void>;
@@ -217,10 +222,7 @@ export async function startFakeApns(): Promise<FakeApns> {
       received.push({
         token,
         headers,
-        body: JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as Record<
-          string,
-          unknown
-        >,
+        body: JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as Record<string, unknown>,
       });
       if (unregistered.has(token)) {
         stream.respond({ ':status': 410, 'content-type': 'application/json' });

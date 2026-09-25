@@ -302,7 +302,8 @@ export function fcmSender(credentials: FcmCredentials, options: FcmOptions = {})
             details?: Array<{ errorCode?: string }>;
           };
         };
-        if (response.ok) return { ok: true, providerRef: body.name ?? null, error: null, gone: false };
+        if (response.ok)
+          return { ok: true, providerRef: body.name ?? null, error: null, gone: false };
         if (response.status === 401 && attempt === 0) {
           access = null;
           continue;

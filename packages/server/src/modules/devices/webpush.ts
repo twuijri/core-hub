@@ -47,7 +47,9 @@ export function loadOrCreateVapidKeys(dataDir: string): VapidKeys {
     if (typeof parsed.publicKey === 'string' && typeof parsed.privateKey === 'string') {
       return { publicKey: parsed.publicKey, privateKey: parsed.privateKey };
     }
-    throw new Error(`${file} is not a VAPID key file ({ publicKey, privateKey }); not replacing it`);
+    throw new Error(
+      `${file} is not a VAPID key file ({ publicKey, privateKey }); not replacing it`,
+    );
   }
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const keys = generateVapidKeys();
