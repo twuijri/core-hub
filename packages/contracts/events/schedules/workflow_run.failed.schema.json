@@ -78,12 +78,47 @@
           ],
           "error": null,
           "started_at": "2026-09-21T09:00:00Z",
-          "finished_at": null
+          "finished_at": null,
+          "limits": {
+            "max_duration_seconds": 1800,
+            "max_cost": {
+              "amount": "2.00",
+              "currency": "USD"
+            },
+            "step_timeout_seconds": 600
+          },
+          "cost": {
+            "amount": "0.0412",
+            "currency": "USD"
+          },
+          "stopped_by": null
         }
       }
     }
   ],
   "$defs": {
+    "Money": {
+      "type": "object",
+      "description": "Decimal amount as a string plus ISO-4217 currency.",
+      "required": ["amount", "currency"],
+      "properties": {
+        "amount": {
+          "type": "string",
+          "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3
+        }
+      },
+      "examples": [
+        {
+          "amount": "0.0123",
+          "currency": "USD"
+        }
+      ]
+    },
     "ProfileSlug": {
       "type": "string",
       "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
@@ -147,6 +182,33 @@
       "maxLength": 26,
       "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
     },
+    "WorkflowLimits": {
+      "type": "object",
+      "description": "What one run of a workflow may take (DECISIONS §57). Each is `null` for no limit. Time a run spends waiting for a person at an approval counts toward none of them.",
+      "required": ["max_duration_seconds", "max_cost", "step_timeout_seconds"],
+      "properties": {
+        "max_duration_seconds": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 604800
+        },
+        "max_cost": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Money"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "step_timeout_seconds": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 86400
+        }
+      }
+    },
     "WorkflowRun": {
       "allOf": [
         {
@@ -163,7 +225,10 @@
             "steps",
             "error",
             "started_at",
-            "finished_at"
+            "finished_at",
+            "limits",
+            "cost",
+            "stopped_by"
           ],
           "properties": {
             "workflow_id": {
@@ -206,6 +271,30 @@
               "oneOf": [
                 {
                   "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "limits": {
+              "$ref": "#/$defs/WorkflowLimits"
+            },
+            "cost": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Money"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stopped_by": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": ["max_duration", "max_cost", "step_timeout"]
                 },
                 {
                   "type": "null"

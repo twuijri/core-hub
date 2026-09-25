@@ -5817,6 +5817,38 @@
         }
       ]
     },
+    "SchedulePreviewRequest": {
+      "type": "object",
+      "required": ["trigger"],
+      "properties": {
+        "trigger": {
+          "$ref": "#/$defs/ScheduleTrigger"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "How many next times; 3 when not given."
+        }
+      }
+    },
+    "SchedulePreview": {
+      "type": "object",
+      "required": ["timezone", "next_runs"],
+      "properties": {
+        "timezone": {
+          "type": "string",
+          "description": "The trigger's zone, the one to show the times in."
+        },
+        "next_runs": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/$defs/Timestamp"
+          }
+        }
+      }
+    },
     "WorkflowNode": {
       "type": "object",
       "required": [
@@ -5933,7 +5965,8 @@
             "status",
             "active_run_id",
             "run_count",
-            "schedule_count"
+            "schedule_count",
+            "limits"
           ],
           "properties": {
             "name": {
@@ -5978,6 +6011,9 @@
             "schedule_count": {
               "type": "integer",
               "description": "Enabled schedules targeting this workflow."
+            },
+            "limits": {
+              "$ref": "#/$defs/WorkflowLimits"
             }
           }
         }
@@ -6008,6 +6044,14 @@
           "items": {
             "$ref": "#/$defs/WorkflowEdge"
           }
+        },
+        "limits": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkflowLimits"
+            }
+          ],
+          "description": "Replaces the workflow's limits as a whole; a new workflow without it has none. A cost limit in a currency other than USD, or not above zero, is `409` with `details.reason = limit_invalid` and `details.field`."
         }
       }
     },
@@ -6120,7 +6164,10 @@
             "steps",
             "error",
             "started_at",
-            "finished_at"
+            "finished_at",
+            "limits",
+            "cost",
+            "stopped_by"
           ],
           "properties": {
             "workflow_id": {
@@ -6168,10 +6215,105 @@
                   "type": "null"
                 }
               ]
+            },
+            "limits": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/WorkflowLimits"
+                }
+              ],
+              "description": "The limits this run works under: the workflow's when it started, with what the run itself asked for (`WorkflowRunRequest.limits`) over them. A rerun from a step keeps the limits of the run it repeats."
+            },
+            "cost": {
+              "description": "What the run's agent steps cost so far by the hub's estimate (the per-turn estimate of `Usage.cost`, summed); `null` while no turn of it has a price.",
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Money"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stopped_by": {
+              "description": "Which limit ended the run, when one did (DECISIONS §57): `max_duration` or `max_cost` stopped it at once, the step working then cancelled; `step_timeout` is a step that ran out of time with no `failure` edge to take. The run is then `failed` and `error` says the same in words. `null` otherwise.",
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": ["max_duration", "max_cost", "step_timeout"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           }
         }
       ]
+    },
+    "WorkflowLimits": {
+      "type": "object",
+      "description": "What one run of a workflow may take (DECISIONS §57). Each is `null` for no limit. Time a run spends waiting for a person at an approval counts toward none of them.",
+      "required": ["max_duration_seconds", "max_cost", "step_timeout_seconds"],
+      "properties": {
+        "max_duration_seconds": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 604800,
+          "description": "Time budget: the longest the run may work, in seconds (at most a week). Past it the run stops, the step working then cancelled (`stopped_by: max_duration`)."
+        },
+        "max_cost": {
+          "description": "Cost budget, in USD: the most the run's agent turns may cost by the hub's estimate, the same one a conversation's `Usage.cost` shows. Checked while a step works and after it; past it the run stops, the step working then cancelled (`stopped_by: max_cost`). A turn whose model has no price counts as nothing.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Money"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "step_timeout_seconds": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 86400,
+          "description": "The longest any one step may work, in seconds (at most a day). A step past it is cancelled and fails (\"timed out\"); its `failure` edges are followed, and with none the run stops (`stopped_by: step_timeout`)."
+        }
+      },
+      "example": {
+        "max_duration_seconds": 1800,
+        "max_cost": {
+          "amount": "2.00",
+          "currency": "USD"
+        },
+        "step_timeout_seconds": 600
+      }
+    },
+    "WorkflowLimitsOverride": {
+      "type": "object",
+      "description": "One run's own limits: a field given replaces the workflow's for this run only, `null` lifts it, and a field left out keeps the workflow's.",
+      "properties": {
+        "max_duration_seconds": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 604800
+        },
+        "max_cost": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Money"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "step_timeout_seconds": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 86400
+        }
+      }
     },
     "WorkflowRunRequest": {
       "type": "object",
@@ -6185,8 +6327,13 @@
             "type": "string"
           }
         },
+        "limits": {
+          "$ref": "#/$defs/WorkflowLimitsOverride"
+        },
         "timeout_ms": {
-          "type": ["integer", "null"]
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "The run's time budget in milliseconds, rounded up to whole seconds — the older spelling of `limits.max_duration_seconds`, which wins when both are given."
         }
       }
     },

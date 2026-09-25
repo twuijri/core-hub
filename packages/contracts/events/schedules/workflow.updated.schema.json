@@ -63,12 +63,42 @@
           "status": "running",
           "active_run_id": "01J8QK3ZR2W7M5N4P6T8V9X0WR",
           "run_count": 5,
-          "schedule_count": 1
+          "schedule_count": 1,
+          "limits": {
+            "max_duration_seconds": 1800,
+            "max_cost": {
+              "amount": "2.00",
+              "currency": "USD"
+            },
+            "step_timeout_seconds": 600
+          }
         }
       }
     }
   ],
   "$defs": {
+    "Money": {
+      "type": "object",
+      "description": "Decimal amount as a string plus ISO-4217 currency.",
+      "required": ["amount", "currency"],
+      "properties": {
+        "amount": {
+          "type": "string",
+          "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3
+        }
+      },
+      "examples": [
+        {
+          "amount": "0.0123",
+          "currency": "USD"
+        }
+      ]
+    },
     "ProfileSlug": {
       "type": "string",
       "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
@@ -131,7 +161,8 @@
             "status",
             "active_run_id",
             "run_count",
-            "schedule_count"
+            "schedule_count",
+            "limits"
           ],
           "properties": {
             "name": {
@@ -176,6 +207,9 @@
             "schedule_count": {
               "type": "integer",
               "description": "Enabled schedules targeting this workflow."
+            },
+            "limits": {
+              "$ref": "#/$defs/WorkflowLimits"
             }
           }
         }
@@ -197,6 +231,33 @@
         "route": {
           "type": "string",
           "enum": ["always", "success", "failure"]
+        }
+      }
+    },
+    "WorkflowLimits": {
+      "type": "object",
+      "description": "What one run of a workflow may take (DECISIONS §57). Each is `null` for no limit. Time a run spends waiting for a person at an approval counts toward none of them.",
+      "required": ["max_duration_seconds", "max_cost", "step_timeout_seconds"],
+      "properties": {
+        "max_duration_seconds": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 604800
+        },
+        "max_cost": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Money"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "step_timeout_seconds": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 86400
         }
       }
     },
