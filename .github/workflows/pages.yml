@@ -1,0 +1,62 @@
+name: Download page
+
+# The download page (site/) on GitHub Pages: https://twuijri.github.io/core-hub/.
+# It is static; the visitor's browser reads the latest release from the GitHub API, so a new
+# release needs no redeploy. This runs only when the page, its tokens or its mark change, or by
+# hand (Actions → Download page → Run workflow).
+#
+# One-time owner step before the first run: Settings → Pages → Build and deployment → Source:
+# "GitHub Actions" (docs/RELEASING.md §The download page). Until then the deploy job fails.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'packages/ui-tokens/tokens.json'
+      - 'docs/assets/core-hub-mark-*.svg'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deployment at a time; a newer push waits instead of cancelling one in progress.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the download page
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable pnpm
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      # Only the page and what it builds from (the design tokens).
+      - run: pnpm install --frozen-lockfile --filter "@corehub/site..."
+      - run: pnpm --filter @corehub/site test
+      - run: pnpm --filter "@corehub/site..." build
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site/dist
+
+  deploy:
+    name: Publish to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

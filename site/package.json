@@ -1,0 +1,22 @@
+{
+  "name": "@corehub/site",
+  "version": "1.1.1",
+  "private": true,
+  "description": "The Core Hub download page (GitHub Pages): plain HTML, CSS and JS, assembled into dist/ by build.mjs.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "serve": "node serve.mjs"
+  },
+  "dependencies": {
+    "@corehub/ui-tokens": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "lucide-static": "1.48.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
+  }
+}

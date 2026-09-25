@@ -90,7 +90,7 @@ an artifact. A release keeps them for 14 days. A release's Android `versionCode`
 | Workflow | Makes | Secrets |
 |---|---|---|
 | `android-signed.yml` | signed `app-release.apk` + `app-release.aab`, Firebase configured | `ANDROID_TEST_KEYSTORE_B64`, `ANDROID_TEST_KEYSTORE_PASSWORD`, `ANDROID_TEST_KEY_ALIAS`, `ANDROID_TEST_KEY_PASSWORD`, `GOOGLE_SERVICES_JSON` |
-| `ios-signed.yml` | App Store archive and `.ipa` (app + share extension); TestFlight when `upload_testflight` is ticked | `IOS_CSC_LINK`, `IOS_CSC_KEY_PASSWORD`, `ASC_API_KEY_ID`, `ASC_API_KEY_P8`, `ASC_API_ISSUER_ID` |
+| `ios-signed.yml` | App Store archive and `.ipa` (app + share extension); TestFlight when `upload_testflight` is ticked, then the TestFlight groups in `testflight_groups` (default `Owner`) | `IOS_CSC_LINK`, `IOS_CSC_KEY_PASSWORD`, `ASC_API_KEY_ID`, `ASC_API_KEY_P8`, `ASC_API_ISSUER_ID` |
 | `desktop-signed.yml` | macOS dmg signed with Developer ID and notarised | `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` |
 
 How each handles its secrets: they reach only the steps that need them, as environment
@@ -133,6 +133,26 @@ export `COREHUB_ANDROID_KEYSTORE` (a path), `COREHUB_ANDROID_KEYSTORE_PASSWORD`,
    `production`, which push needs) and the signature.
 5. `upload_testflight` (a manual run only, off by default) uploads with `xcrun altool` and the
    same key.
+6. After the upload, `apps/ios/scripts/testflight-distribute.mjs` adds the build to the TestFlight
+   groups named in `testflight_groups` (comma-separated, default `Owner`; empty adds none). App
+   Store Connect adds builds to an internal group by itself only when they come from Xcode's own
+   upload ("Automatic for Xcode Builds"), not from altool, so without this step each build had to
+   be added by hand. With the same key it finds the app by bundle id, waits until App Store
+   Connect has processed the build (`processingState` `VALID`), and adds it to each group.
+   - **Internal groups** (such as `Owner`) get the build straight away; no review.
+   - **External groups** get it too, but their testers see it only after **Beta App Review**
+     approves it. The workflow never submits for review; that stays the owner's step in App Store
+     Connect.
+   - **Slow processing**: after 30 minutes the step stops waiting and leaves a warning, not a
+     failure; the upload succeeded, and the build can be added by hand (TestFlight → the group →
+     Builds → +).
+   - **Missing export compliance** (`MISSING_EXPORT_COMPLIANCE`) is a warning: the app declares
+     `ITSAppUsesNonExemptEncryption = false`, so it should not happen; if it does, answer it on the
+     build in TestFlight. The build is still added and becomes installable once answered.
+   - A build Apple rejected, an unknown app or an unknown group name fails the step; the error
+     lists the app's groups.
+
+   The script's tests run in CI (`pnpm scripts:test`) against a fake App Store Connect.
 
 On a developer's Mac, Xcode signs automatically with team `58QWJ228ZE`
 (`DEVELOPMENT_TEAM` in `apps/ios/project.yml`).
@@ -182,7 +202,9 @@ Once, and again when the listing or the screenshots change:
 For each version:
 
 1. **A build.** Actions → *iOS signed build* → Run workflow with **upload_testflight** ticked.
-   Wait until App Store Connect has processed the build (TestFlight shows it).
+   The run waits until App Store Connect has processed the build and adds it to the `Owner`
+   TestFlight group (or the groups in **testflight_groups**), so it reaches the owner's devices
+   without adding it by hand.
 2. **Pick the build.** App Store Connect → the app → the version in "Prepare for Submission" →
    **Build** → choose the build from TestFlight.
 3. **App Review Information.** Tick **Sign-in required** and enter the demo account's username
@@ -231,6 +253,54 @@ image (`release.yml`) and iOS (`ios-signed.yml`) still run on the tag on their o
 Microsoft Store package (**v1.1.0** does) gets its release without the `.msix`, and its notes say
 the Store package starts with a later version. For the Store, release a version made after this
 change (for example 1.1.1: bump the root `package.json`, `pnpm version:check --write`, merge, tag).
+
+## The download page (`site/`, GitHub Pages)
+
+**https://twuijri.github.io/core-hub/** — one static page, Arabic first with an English toggle,
+light and dark with the system. It offers the latest release's files for the visitor's system
+(Windows `.exe`, the Apple silicon `.dmg`, Linux AppImage and `.deb`, the Android `.apk`), the
+store buttons, and a short "Run your own hub" section with the Docker image.
+
+- **Always current, no redeploy per release.** The browser reads
+  `GET /repos/twuijri/core-hub/releases/latest` and picks each file by name
+  (`site/src/releases.js`). `site/tests/releases.test.ts` checks those patterns against
+  `apps/desktop/scripts/release-assets.mjs` and against the real v1.1.1 release, so renaming a file
+  there fails the test. When the API cannot be read (offline, rate-limited: 60 calls an hour per
+  visitor), every button points at the releases page instead, never at a guessed URL.
+- **Store buttons** are switched in `site/src/config.js`. Each shows *Coming soon* until its
+  `enabled` is `true` and its `url` is an `https://` link:
+  - **Microsoft Store:** `microsoftStore.enabled = true` once the listing is certified. The URL is
+    already `https://apps.microsoft.com/detail/9MT62R5V3P5N`.
+  - **Google Play:** `googlePlay.enabled = true` when the app is live there.
+  - **App Store:** set `appStore.url` to the App Store link (`https://apps.apple.com/app/id…`) and
+    `enabled = true`.
+
+  Merging that change to `main` republishes the page.
+- **Publishing** is `.github/workflows/pages.yml`. It runs on a push to `main` that touches
+  `site/**` (or the tokens or the mark), or by hand from Actions → *Download page* → *Run
+  workflow*. It builds `site/dist` (`pnpm --filter "@corehub/site..." build`) and deploys it with
+  `actions/upload-pages-artifact` and `actions/deploy-pages`. Only the deploy job gets
+  `pages: write` and `id-token: write`.
+- **Local preview:** `pnpm --filter "@corehub/site..." build && pnpm --filter @corehub/site serve`,
+  then open `http://127.0.0.1:4173/core-hub/`.
+
+**Owner, one time:**
+
+1. Repository **Settings → Pages → Build and deployment → Source: "GitHub Actions"**.
+2. Actions → *Download page* → *Run workflow* on `main` (or merge any change under `site/`).
+3. The page is at https://twuijri.github.io/core-hub/. The *github-pages* environment it creates
+   accepts deployments from `main` only by default; leave it that way.
+
+**Optional custom domain** (for example `download.<your domain>`):
+
+1. At the DNS provider, add a `CNAME` record from that name to `twuijri.github.io`.
+2. Settings → Pages → **Custom domain**: enter the name and save; wait for the DNS check, then tick
+   **Enforce HTTPS**.
+3. Optionally verify the domain under your account's Settings → Pages, so no other repository can
+   claim it.
+
+With the Actions source no `CNAME` file is needed in `site/`. The page's links are relative, so it
+works at `/core-hub/` and at a domain root alike.
 
 ## Windows
 
